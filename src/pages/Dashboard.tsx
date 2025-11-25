@@ -1,28 +1,132 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { 
   LayoutDashboard, 
-  Plus, 
   Search,
   Calendar,
   Users,
   Settings,
   LogOut,
-  MoreVertical
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ProjectColumn } from "@/components/ProjectColumn";
+import { AddProjectDialog } from "@/components/AddProjectDialog";
+import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+interface Project {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  due_date: string | null;
+  assignees: string[];
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const handleLogout = () => {
     navigate("/");
   };
+
+  const fetchProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setProjects(data || []);
+    } catch (error) {
+      console.error("Erro ao buscar projetos:", error);
+      toast({
+        title: "Erro ao carregar projetos",
+        description: "Não foi possível carregar os projetos. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  const handleEdit = (project: Project) => {
+    setEditingProject(project);
+    setEditDialogOpen(true);
+  };
+
+  const handleDelete = async (projectId: string) => {
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .delete()
+        .eq("id", projectId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Projeto excluído!",
+        description: "O projeto foi removido com sucesso.",
+      });
+      
+      fetchProjects();
+    } catch (error) {
+      console.error("Erro ao excluir projeto:", error);
+      toast({
+        title: "Erro ao excluir projeto",
+        description: "Não foi possível excluir o projeto. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleStatusChange = async (projectId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .update({ status: newStatus })
+        .eq("id", projectId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Status atualizado!",
+        description: "O projeto foi movido para outra coluna.",
+      });
+      
+      fetchProjects();
+    } catch (error) {
+      console.error("Erro ao atualizar status:", error);
+      toast({
+        title: "Erro ao atualizar status",
+        description: "Não foi possível atualizar o status. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const filteredProjects = projects.filter((project) =>
+    project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    project.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const todoProjects = filteredProjects.filter((p) => p.status === "todo");
+  const inProgressProjects = filteredProjects.filter((p) => p.status === "in-progress");
+  const doneProjects = filteredProjects.filter((p) => p.status === "done");
 
   return (
     <div className="min-h-screen bg-background">
@@ -71,70 +175,54 @@ const Dashboard = () => {
             />
           </div>
           
-          <Button className="gap-2">
-            <Plus className="w-4 h-4" />
-            Novo Projeto
-          </Button>
+          <AddProjectDialog onProjectAdded={fetchProjects} />
         </div>
 
         {/* Pipeline Board */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <ProjectColumn
-            title="A Fazer"
-            status="todo"
-            color="muted"
-            projects={[
-              {
-                id: "1",
-                title: "Redesign do Website",
-                description: "Modernizar a interface e melhorar UX",
-                priority: "high",
-                dueDate: "2024-02-15",
-                assignees: ["JD", "MS"],
-              },
-              {
-                id: "2",
-                title: "Integração API",
-                description: "Conectar sistema com APIs externas",
-                priority: "medium",
-                dueDate: "2024-02-20",
-                assignees: ["RP"],
-              },
-            ]}
-          />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <p className="text-muted-foreground">Carregando projetos...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <ProjectColumn
+              title="A Fazer"
+              status="todo"
+              color="muted"
+              projects={todoProjects}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onStatusChange={handleStatusChange}
+            />
 
-          <ProjectColumn
-            title="Em Progresso"
-            status="in-progress"
-            color="info"
-            projects={[
-              {
-                id: "3",
-                title: "Desenvolvimento Mobile",
-                description: "Criar app iOS e Android",
-                priority: "high",
-                dueDate: "2024-02-10",
-                assignees: ["JD", "RP", "MS"],
-              },
-            ]}
-          />
+            <ProjectColumn
+              title="Em Progresso"
+              status="in-progress"
+              color="info"
+              projects={inProgressProjects}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onStatusChange={handleStatusChange}
+            />
 
-          <ProjectColumn
-            title="Concluído"
-            status="done"
-            color="success"
-            projects={[
-              {
-                id: "4",
-                title: "Setup Inicial",
-                description: "Configuração do ambiente de desenvolvimento",
-                priority: "low",
-                dueDate: "2024-01-30",
-                assignees: ["MS"],
-              },
-            ]}
-          />
-        </div>
+            <ProjectColumn
+              title="Concluído"
+              status="done"
+              color="success"
+              projects={doneProjects}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onStatusChange={handleStatusChange}
+            />
+          </div>
+        )}
+
+        <EditProjectDialog
+          project={editingProject}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          onProjectUpdated={fetchProjects}
+        />
       </main>
     </div>
   );

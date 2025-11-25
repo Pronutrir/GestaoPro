@@ -1,0 +1,230 @@
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+interface Project {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  due_date: string | null;
+  assignees: string[];
+}
+
+interface EditProjectDialogProps {
+  project: Project | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onProjectUpdated: () => void;
+}
+
+export const EditProjectDialog = ({
+  project,
+  open,
+  onOpenChange,
+  onProjectUpdated,
+}: EditProjectDialogProps) => {
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    status: "todo",
+    priority: "medium",
+    due_date: "",
+    assignees: "",
+  });
+
+  useEffect(() => {
+    if (project) {
+      setFormData({
+        title: project.title,
+        description: project.description || "",
+        status: project.status,
+        priority: project.priority,
+        due_date: project.due_date || "",
+        assignees: project.assignees.join(", "),
+      });
+    }
+  }, [project]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!project) return;
+
+    setIsLoading(true);
+
+    try {
+      const assigneesArray = formData.assignees
+        .split(",")
+        .map((a) => a.trim())
+        .filter((a) => a);
+
+      const { error } = await supabase
+        .from("projects")
+        .update({
+          title: formData.title,
+          description: formData.description,
+          status: formData.status,
+          priority: formData.priority,
+          due_date: formData.due_date || null,
+          assignees: assigneesArray,
+        })
+        .eq("id", project.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Projeto atualizado!",
+        description: "As alterações foram salvas com sucesso.",
+      });
+
+      onOpenChange(false);
+      onProjectUpdated();
+    } catch (error) {
+      console.error("Erro ao atualizar projeto:", error);
+      toast({
+        title: "Erro ao atualizar projeto",
+        description: "Não foi possível atualizar o projeto. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!project) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[525px]">
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>Editar Projeto</DialogTitle>
+            <DialogDescription>
+              Faça as alterações necessárias no projeto.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-title">Título *</Label>
+              <Input
+                id="edit-title"
+                value={formData.title}
+                onChange={(e) =>
+                  setFormData({ ...formData, title: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-description">Descrição</Label>
+              <Textarea
+                id="edit-description"
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+                rows={3}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, status: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todo">A Fazer</SelectItem>
+                    <SelectItem value="in-progress">Em Progresso</SelectItem>
+                    <SelectItem value="done">Concluído</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-priority">Prioridade</Label>
+                <Select
+                  value={formData.priority}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, priority: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Baixa</SelectItem>
+                    <SelectItem value="medium">Média</SelectItem>
+                    <SelectItem value="high">Alta</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-due_date">Data de Entrega</Label>
+              <Input
+                id="edit-due_date"
+                type="date"
+                value={formData.due_date}
+                onChange={(e) =>
+                  setFormData({ ...formData, due_date: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-assignees">
+                Membros (separados por vírgula)
+              </Label>
+              <Input
+                id="edit-assignees"
+                placeholder="JD, MS, RP"
+                value={formData.assignees}
+                onChange={(e) =>
+                  setFormData({ ...formData, assignees: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? "Salvando..." : "Salvar Alterações"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
