@@ -38,6 +38,7 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
     priority: "medium",
     due_date: "",
     assignees: "",
+    budget_planned: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,6 +58,8 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
         priority: formData.priority,
         due_date: formData.due_date || null,
         assignees: assigneesArray,
+        budget_planned: parseFloat(formData.budget_planned) || 0,
+        budget_used: 0,
       });
 
       if (error) throw error;
@@ -73,6 +76,7 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
         priority: "medium",
         due_date: "",
         assignees: "",
+        budget_planned: "",
       });
       setOpen(false);
       onProjectAdded();
@@ -129,6 +133,33 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
+                <Label htmlFor="budget_planned">Orçamento Planejado (R$)</Label>
+                <Input
+                  id="budget_planned"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0,00"
+                  value={formData.budget_planned}
+                  onChange={(e) =>
+                    setFormData({ ...formData, budget_planned: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="due_date">Data de Entrega</Label>
+                <Input
+                  id="due_date"
+                  type="date"
+                  value={formData.due_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, due_date: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
                 <Label htmlFor="status">Status</Label>
                 <Select
                   value={formData.status}
@@ -164,17 +195,6 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="due_date">Data de Entrega</Label>
-              <Input
-                id="due_date"
-                type="date"
-                value={formData.due_date}
-                onChange={(e) =>
-                  setFormData({ ...formData, due_date: e.target.value })
-                }
-              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="assignees">

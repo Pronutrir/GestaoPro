@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Calendar, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,6 +48,7 @@ const priorityColors = {
 };
 
 export const ProjectColumn = ({ title, status, color, projects, onEdit, onDelete, onStatusChange }: ProjectColumnProps) => {
+  const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
 
@@ -76,8 +78,9 @@ export const ProjectColumn = ({ title, status, color, projects, onEdit, onDelete
 
       <div className="space-y-3">
         {projects.map((project) => (
-          <Card key={project.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer">
-            <div className="space-y-3">
+        <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer"
+          onClick={() => navigate(`/project/${project.id}`)}>
+          <div className="space-y-3">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <h4 className="font-medium text-foreground mb-1">

@@ -1,0 +1,345 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  LayoutDashboard,
+  TrendingUp,
+  DollarSign,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+
+interface DashboardStats {
+  totalProjects: number;
+  todoProjects: number;
+  inProgressProjects: number;
+  completedProjects: number;
+  totalBudgetPlanned: number;
+  totalBudgetUsed: number;
+  completionRate: number;
+}
+
+const Overview = () => {
+  const navigate = useNavigate();
+  const [stats, setStats] = useState<DashboardStats>({
+    totalProjects: 0,
+    todoProjects: 0,
+    inProgressProjects: 0,
+    completedProjects: 0,
+    totalBudgetPlanned: 0,
+    totalBudgetUsed: 0,
+    completionRate: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const { data: projects, error } = await supabase
+        .from("projects")
+        .select("status, budget_planned, budget_used");
+
+      if (error) throw error;
+
+      const todoCount = projects?.filter((p) => p.status === "todo").length || 0;
+      const inProgressCount =
+        projects?.filter((p) => p.status === "in-progress").length || 0;
+      const completedCount =
+        projects?.filter((p) => p.status === "done").length || 0;
+      const total = projects?.length || 0;
+
+      const totalPlanned =
+        projects?.reduce((sum, p) => sum + (Number(p.budget_planned) || 0), 0) ||
+        0;
+      const totalUsed =
+        projects?.reduce((sum, p) => sum + (Number(p.budget_used) || 0), 0) || 0;
+
+      setStats({
+        totalProjects: total,
+        todoProjects: todoCount,
+        inProgressProjects: inProgressCount,
+        completedProjects: completedCount,
+        totalBudgetPlanned: totalPlanned,
+        totalBudgetUsed: totalUsed,
+        completionRate: total > 0 ? (completedCount / total) * 100 : 0,
+      });
+    } catch (error) {
+      console.error("Erro ao buscar estatísticas:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const budgetProgress =
+    stats.totalBudgetPlanned > 0
+      ? (stats.totalBudgetUsed / stats.totalBudgetPlanned) * 100
+      : 0;
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b border-border bg-card sticky top-0 z-10">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
+                <LayoutDashboard className="w-5 h-5 text-primary-foreground" />
+              </div>
+              <h1 className="text-xl font-bold text-foreground">
+                Pipeline de Gestão de Projetos
+              </h1>
+            </div>
+
+            <Button onClick={() => navigate("/projects")}>
+              Ver Todos os Projetos
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="container mx-auto px-6 py-8">
+        <div className="space-y-8">
+          {/* Title */}
+          <div>
+            <h2 className="text-3xl font-bold text-foreground mb-2">
+              Dashboard Geral
+            </h2>
+            <p className="text-muted-foreground">
+              Visão geral do progresso e investimentos dos projetos
+            </p>
+          </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-muted-foreground">Carregando dados...</p>
+            </div>
+          ) : (
+            <>
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <Card className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <LayoutDashboard className="w-6 h-6 text-primary" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Total de Projetos
+                    </p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {stats.totalProjects}
+                    </p>
+                  </div>
+                </Card>
+
+                <Card className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-info/10 rounded-lg flex items-center justify-center">
+                      <Clock className="w-6 h-6 text-info" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Em Progresso
+                    </p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {stats.inProgressProjects}
+                    </p>
+                  </div>
+                </Card>
+
+                <Card className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-success/10 rounded-lg flex items-center justify-center">
+                      <CheckCircle2 className="w-6 h-6 text-success" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Concluídos
+                    </p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {stats.completedProjects}
+                    </p>
+                  </div>
+                </Card>
+
+                <Card className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-warning/10 rounded-lg flex items-center justify-center">
+                      <AlertCircle className="w-6 h-6 text-warning" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">A Fazer</p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {stats.todoProjects}
+                    </p>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Budget and Progress Cards */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Budget Card */}
+                <Card className="p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <DollarSign className="w-5 h-5 text-primary" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-foreground">
+                      Controle de Investimento
+                    </h3>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-muted-foreground">
+                          Orçamento Planejado
+                        </span>
+                        <span className="text-sm font-medium text-foreground">
+                          R$ {stats.totalBudgetPlanned.toLocaleString("pt-BR")}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          Valor Utilizado
+                        </span>
+                        <span className="text-sm font-medium text-foreground">
+                          R$ {stats.totalBudgetUsed.toLocaleString("pt-BR")}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          Progresso de Utilização
+                        </span>
+                        <span className="font-medium text-foreground">
+                          {budgetProgress.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all"
+                          style={{ width: `${Math.min(budgetProgress, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-border">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          Saldo Disponível
+                        </span>
+                        <span
+                          className={`text-lg font-bold ${
+                            stats.totalBudgetPlanned - stats.totalBudgetUsed >= 0
+                              ? "text-success"
+                              : "text-destructive"
+                          }`}
+                        >
+                          R${" "}
+                          {(
+                            stats.totalBudgetPlanned - stats.totalBudgetUsed
+                          ).toLocaleString("pt-BR")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Completion Rate Card */}
+                <Card className="p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5 text-success" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-foreground">
+                      Taxa de Conclusão
+                    </h3>
+                  </div>
+
+                  <div className="flex items-center justify-center py-8">
+                    <div className="relative w-48 h-48">
+                      <svg className="w-full h-full -rotate-90">
+                        <circle
+                          cx="96"
+                          cy="96"
+                          r="88"
+                          stroke="currentColor"
+                          strokeWidth="12"
+                          fill="none"
+                          className="text-muted"
+                        />
+                        <circle
+                          cx="96"
+                          cy="96"
+                          r="88"
+                          stroke="currentColor"
+                          strokeWidth="12"
+                          fill="none"
+                          strokeDasharray={`${
+                            (stats.completionRate / 100) * 553
+                          } 553`}
+                          className="text-success transition-all"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-4xl font-bold text-foreground">
+                          {stats.completionRate.toFixed(0)}%
+                        </span>
+                        <span className="text-sm text-muted-foreground mt-1">
+                          Concluído
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 pt-6 border-t border-border">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-warning">
+                        {stats.todoProjects}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        A Fazer
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-info">
+                        {stats.inProgressProjects}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Em Progresso
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-success">
+                        {stats.completedProjects}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Concluídos
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            </>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default Overview;

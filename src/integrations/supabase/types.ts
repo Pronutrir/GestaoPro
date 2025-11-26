@@ -14,9 +14,84 @@ export type Database = {
   }
   public: {
     Tables: {
+      activities: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          description: string | null
+          id: string
+          project_id: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          project_id: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          project_id?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activities_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      investment_history: {
+        Row: {
+          amount: number
+          description: string | null
+          id: string
+          project_id: string
+          recorded_at: string
+        }
+        Insert: {
+          amount: number
+          description?: string | null
+          id?: string
+          project_id: string
+          recorded_at?: string
+        }
+        Update: {
+          amount?: number
+          description?: string | null
+          id?: string
+          project_id?: string
+          recorded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "investment_history_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           assignees: string[] | null
+          budget_planned: number | null
+          budget_used: number | null
           created_at: string
           description: string | null
           due_date: string | null
@@ -28,6 +103,8 @@ export type Database = {
         }
         Insert: {
           assignees?: string[] | null
+          budget_planned?: number | null
+          budget_used?: number | null
           created_at?: string
           description?: string | null
           due_date?: string | null
@@ -39,6 +116,8 @@ export type Database = {
         }
         Update: {
           assignees?: string[] | null
+          budget_planned?: number | null
+          budget_used?: number | null
           created_at?: string
           description?: string | null
           due_date?: string | null
