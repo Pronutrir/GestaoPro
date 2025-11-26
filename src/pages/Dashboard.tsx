@@ -7,6 +7,7 @@ import {
   Users,
   Settings,
   LogOut,
+  Home,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ProjectColumn } from "@/components/ProjectColumn";
@@ -144,6 +145,9 @@ const Dashboard = () => {
             </div>
 
             <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
+                <Home className="w-5 h-5" />
+              </Button>
               <Button variant="ghost" size="icon">
                 <Calendar className="w-5 h-5" />
               </Button>
