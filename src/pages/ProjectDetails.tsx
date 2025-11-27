@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
 import {
@@ -29,6 +30,8 @@ interface Project {
   assignees: string[];
   budget_planned: number;
   budget_used: number;
+  owner: string | null;
+  blockers: string | null;
 }
 
 interface Activity {
@@ -38,6 +41,11 @@ interface Activity {
   status: string;
   completed_at: string | null;
   created_at: string;
+  assigned_to: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  cost: number;
+  hours: number;
 }
 
 const ProjectDetails = () => {
@@ -48,6 +56,11 @@ const ProjectDetails = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newActivity, setNewActivity] = useState("");
+  const [newActivityAssigned, setNewActivityAssigned] = useState("");
+  const [newActivityStartDate, setNewActivityStartDate] = useState("");
+  const [newActivityEndDate, setNewActivityEndDate] = useState("");
+  const [newActivityCost, setNewActivityCost] = useState("");
+  const [newActivityHours, setNewActivityHours] = useState("");
   const [newInvestment, setNewInvestment] = useState("");
   const [investmentDescription, setInvestmentDescription] = useState("");
   const [showAddActivity, setShowAddActivity] = useState(false);
@@ -102,6 +115,11 @@ const ProjectDetails = () => {
         project_id: id,
         title: newActivity,
         status: "pending",
+        assigned_to: newActivityAssigned || null,
+        start_date: newActivityStartDate || null,
+        end_date: newActivityEndDate || null,
+        cost: parseFloat(newActivityCost) || 0,
+        hours: parseFloat(newActivityHours) || 0,
       });
 
       if (error) throw error;
@@ -112,6 +130,11 @@ const ProjectDetails = () => {
       });
 
       setNewActivity("");
+      setNewActivityAssigned("");
+      setNewActivityStartDate("");
+      setNewActivityEndDate("");
+      setNewActivityCost("");
+      setNewActivityHours("");
       setShowAddActivity(false);
       fetchProjectData();
     } catch (error) {
@@ -266,6 +289,25 @@ const ProjectDetails = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Activities */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Project Info Card */}
+            <Card className="p-6">
+              <h2 className="text-lg font-semibold text-foreground mb-4">Informações do Projeto</h2>
+              <div className="space-y-3">
+                {project.owner && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Responsável:</span>
+                    <span className="font-medium text-foreground">{project.owner}</span>
+                  </div>
+                )}
+                {project.blockers && (
+                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                    <p className="text-xs font-medium text-destructive mb-1">⚠️ Bloqueios</p>
+                    <p className="text-sm text-foreground">{project.blockers}</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+
             <Card className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold text-foreground">Atividades</h2>
@@ -280,12 +322,52 @@ const ProjectDetails = () => {
               </div>
 
               {showAddActivity && (
-                <div className="mb-6 p-4 border border-border rounded-lg">
+                <div className="mb-6 p-4 border border-border rounded-lg space-y-3">
                   <Input
-                    placeholder="Nome da atividade"
+                    placeholder="Nome da atividade *"
                     value={newActivity}
                     onChange={(e) => setNewActivity(e.target.value)}
-                    className="mb-3"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      placeholder="Responsável"
+                      value={newActivityAssigned}
+                      onChange={(e) => setNewActivityAssigned(e.target.value)}
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Horas estimadas"
+                      value={newActivityHours}
+                      onChange={(e) => setNewActivityHours(e.target.value)}
+                      step="0.5"
+                      min="0"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Início</Label>
+                      <Input
+                        type="date"
+                        value={newActivityStartDate}
+                        onChange={(e) => setNewActivityStartDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Fim</Label>
+                      <Input
+                        type="date"
+                        value={newActivityEndDate}
+                        onChange={(e) => setNewActivityEndDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <Input
+                    type="number"
+                    placeholder="Custo (R$)"
+                    value={newActivityCost}
+                    onChange={(e) => setNewActivityCost(e.target.value)}
+                    step="0.01"
+                    min="0"
                   />
                   <div className="flex gap-2">
                     <Button onClick={handleAddActivity}>Salvar</Button>
@@ -294,6 +376,11 @@ const ProjectDetails = () => {
                       onClick={() => {
                         setShowAddActivity(false);
                         setNewActivity("");
+                        setNewActivityAssigned("");
+                        setNewActivityStartDate("");
+                        setNewActivityEndDate("");
+                        setNewActivityCost("");
+                        setNewActivityHours("");
                       }}
                     >
                       Cancelar
@@ -322,7 +409,7 @@ const ProjectDetails = () => {
                       />
                       <div className="flex-1">
                         <p
-                          className={`text-sm ${
+                          className={`text-sm font-medium ${
                             activity.status === "completed"
                               ? "line-through text-muted-foreground"
                               : "text-foreground"
@@ -330,9 +417,35 @@ const ProjectDetails = () => {
                         >
                           {activity.title}
                         </p>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {activity.assigned_to && (
+                            <span className="text-xs text-muted-foreground">
+                              👤 {activity.assigned_to}
+                            </span>
+                          )}
+                          {activity.hours > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              ⏱️ {activity.hours}h
+                            </span>
+                          )}
+                          {activity.cost > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              💰 R$ {activity.cost.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                        {(activity.start_date || activity.end_date) && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {activity.start_date &&
+                              new Date(activity.start_date).toLocaleDateString("pt-BR")}
+                            {activity.start_date && activity.end_date && " → "}
+                            {activity.end_date &&
+                              new Date(activity.end_date).toLocaleDateString("pt-BR")}
+                          </p>
+                        )}
                         {activity.completed_at && (
                           <p className="text-xs text-muted-foreground mt-1">
-                            Concluída em{" "}
+                            ✓ Concluída em{" "}
                             {new Date(activity.completed_at).toLocaleDateString("pt-BR")}
                           </p>
                         )}
