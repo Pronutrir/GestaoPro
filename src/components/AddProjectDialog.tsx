@@ -39,6 +39,8 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
     due_date: "",
     assignees: "",
     budget_planned: "",
+    owner: "",
+    blockers: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,6 +62,8 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
         assignees: assigneesArray,
         budget_planned: parseFloat(formData.budget_planned) || 0,
         budget_used: 0,
+        owner: formData.owner,
+        blockers: formData.blockers,
       });
 
       if (error) throw error;
@@ -77,6 +81,8 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
         due_date: "",
         assignees: "",
         budget_planned: "",
+        owner: "",
+        blockers: "",
       });
       setOpen(false);
       onProjectAdded();
@@ -207,6 +213,29 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
                 onChange={(e) =>
                   setFormData({ ...formData, assignees: e.target.value })
                 }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="owner">Responsável pelo Projeto</Label>
+              <Input
+                id="owner"
+                placeholder="Nome do responsável"
+                value={formData.owner}
+                onChange={(e) =>
+                  setFormData({ ...formData, owner: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="blockers">Bloqueios/Impedimentos</Label>
+              <Textarea
+                id="blockers"
+                placeholder="Descreva possíveis bloqueios ou impedimentos..."
+                value={formData.blockers}
+                onChange={(e) =>
+                  setFormData({ ...formData, blockers: e.target.value })
+                }
+                rows={2}
               />
             </div>
           </div>

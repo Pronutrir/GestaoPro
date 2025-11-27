@@ -16,31 +16,46 @@ export type Database = {
     Tables: {
       activities: {
         Row: {
+          assigned_to: string | null
           completed_at: string | null
+          cost: number | null
           created_at: string
           description: string | null
+          end_date: string | null
+          hours: number | null
           id: string
           project_id: string
+          start_date: string | null
           status: string
           title: string
           updated_at: string
         }
         Insert: {
+          assigned_to?: string | null
           completed_at?: string | null
+          cost?: number | null
           created_at?: string
           description?: string | null
+          end_date?: string | null
+          hours?: number | null
           id?: string
           project_id: string
+          start_date?: string | null
           status?: string
           title: string
           updated_at?: string
         }
         Update: {
+          assigned_to?: string | null
           completed_at?: string | null
+          cost?: number | null
           created_at?: string
           description?: string | null
+          end_date?: string | null
+          hours?: number | null
           id?: string
           project_id?: string
+          start_date?: string | null
           status?: string
           title?: string
           updated_at?: string
@@ -90,12 +105,14 @@ export type Database = {
       projects: {
         Row: {
           assignees: string[] | null
+          blockers: string | null
           budget_planned: number | null
           budget_used: number | null
           created_at: string
           description: string | null
           due_date: string | null
           id: string
+          owner: string | null
           priority: string
           status: string
           title: string
@@ -103,12 +120,14 @@ export type Database = {
         }
         Insert: {
           assignees?: string[] | null
+          blockers?: string | null
           budget_planned?: number | null
           budget_used?: number | null
           created_at?: string
           description?: string | null
           due_date?: string | null
           id?: string
+          owner?: string | null
           priority?: string
           status?: string
           title: string
@@ -116,12 +135,14 @@ export type Database = {
         }
         Update: {
           assignees?: string[] | null
+          blockers?: string | null
           budget_planned?: number | null
           budget_used?: number | null
           created_at?: string
           description?: string | null
           due_date?: string | null
           id?: string
+          owner?: string | null
           priority?: string
           status?: string
           title?: string

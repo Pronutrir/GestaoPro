@@ -30,6 +30,8 @@ interface Project {
   due_date: string | null;
   assignees: string[];
   budget_planned: number;
+  owner: string | null;
+  blockers: string | null;
 }
 
 interface EditProjectDialogProps {
@@ -55,6 +57,8 @@ export const EditProjectDialog = ({
     due_date: "",
     assignees: "",
     budget_planned: "",
+    owner: "",
+    blockers: "",
   });
 
   useEffect(() => {
@@ -67,6 +71,8 @@ export const EditProjectDialog = ({
         due_date: project.due_date || "",
         assignees: project.assignees.join(", "),
         budget_planned: project.budget_planned?.toString() || "0",
+        owner: project.owner || "",
+        blockers: project.blockers || "",
       });
     }
   }, [project]);
@@ -93,6 +99,8 @@ export const EditProjectDialog = ({
           due_date: formData.due_date || null,
           assignees: assigneesArray,
           budget_planned: parseFloat(formData.budget_planned) || 0,
+          owner: formData.owner,
+          blockers: formData.blockers,
         })
         .eq("id", project.id);
 
@@ -228,6 +236,29 @@ export const EditProjectDialog = ({
                 onChange={(e) =>
                   setFormData({ ...formData, assignees: e.target.value })
                 }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-owner">Responsável pelo Projeto</Label>
+              <Input
+                id="edit-owner"
+                placeholder="Nome do responsável"
+                value={formData.owner}
+                onChange={(e) =>
+                  setFormData({ ...formData, owner: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-blockers">Bloqueios/Impedimentos</Label>
+              <Textarea
+                id="edit-blockers"
+                placeholder="Descreva possíveis bloqueios ou impedimentos..."
+                value={formData.blockers}
+                onChange={(e) =>
+                  setFormData({ ...formData, blockers: e.target.value })
+                }
+                rows={2}
               />
             </div>
           </div>
