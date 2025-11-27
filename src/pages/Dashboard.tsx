@@ -25,6 +25,8 @@ interface Project {
   priority: string;
   due_date: string | null;
   assignees: string[];
+  budget_planned: number;
+  budget_used: number;
 }
 
 const Dashboard = () => {

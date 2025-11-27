@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { EditProjectDialog } from "@/components/EditProjectDialog";
 import {
   ArrowLeft,
   Plus,
@@ -51,6 +52,8 @@ const ProjectDetails = () => {
   const [investmentDescription, setInvestmentDescription] = useState("");
   const [showAddActivity, setShowAddActivity] = useState(false);
   const [showAddInvestment, setShowAddInvestment] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -230,19 +233,30 @@ const ProjectDetails = () => {
                 {project.description || "Sem descrição"}
               </p>
             </div>
-            <Badge
-              className={
-                project.priority === "high"
-                  ? "bg-destructive"
-                  : project.priority === "medium"
-                  ? "bg-warning"
-                  : "bg-muted"
-              }
-            >
-              {project.priority === "high" && "Alta"}
-              {project.priority === "medium" && "Média"}
-              {project.priority === "low" && "Baixa"}
-            </Badge>
+            <div className="flex items-center gap-3">
+              <Badge
+                className={
+                  project.priority === "high"
+                    ? "bg-destructive"
+                    : project.priority === "medium"
+                    ? "bg-warning"
+                    : "bg-muted"
+                }
+              >
+                {project.priority === "high" && "Alta"}
+                {project.priority === "medium" && "Média"}
+                {project.priority === "low" && "Baixa"}
+              </Badge>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditingProject(project);
+                  setEditDialogOpen(true);
+                }}
+              >
+                Editar Projeto
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -475,6 +489,13 @@ const ProjectDetails = () => {
             )}
           </div>
         </div>
+
+        <EditProjectDialog
+          project={editingProject}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          onProjectUpdated={fetchProjectData}
+        />
       </main>
     </div>
   );

@@ -92,17 +92,23 @@ export const ProjectColumn = ({ title, status, color, projects, onEdit, onDelete
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2" onClick={(e) => e.stopPropagation()}>
                       <MoreVertical className="w-4 h-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => onEdit(project)}>
+                    <DropdownMenuItem onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(project);
+                    }}>
                       <Pencil className="w-4 h-4 mr-2" />
                       Editar
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => handleDeleteClick(project.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClick(project.id);
+                      }}
                       className="text-destructive focus:text-destructive"
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
