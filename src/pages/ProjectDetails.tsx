@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
+import { EditActivityDialog } from "@/components/EditActivityDialog";
 import {
   ArrowLeft,
   Plus,
@@ -16,6 +17,8 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -67,6 +70,12 @@ const ProjectDetails = () => {
   const [showAddInvestment, setShowAddInvestment] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+  const [editActivityDialogOpen, setEditActivityDialogOpen] = useState(false);
+  const [activityInvestments, setActivityInvestments] = useState<Record<string, any[]>>({});
+  const [showAddActivityInvestment, setShowAddActivityInvestment] = useState<string | null>(null);
+  const [newActivityInvestment, setNewActivityInvestment] = useState("");
+  const [activityInvestmentDescription, setActivityInvestmentDescription] = useState("");
 
   useEffect(() => {
     if (id) {
@@ -95,6 +104,27 @@ const ProjectDetails = () => {
 
       if (activitiesError) throw activitiesError;
       setActivities(activitiesData || []);
+
+      // Buscar investimentos de cada atividade
+      if (activitiesData && activitiesData.length > 0) {
+        const activityIds = activitiesData.map(a => a.id);
+        const { data: investmentsData, error: investmentsError } = await supabase
+          .from("activity_investments")
+          .select("*")
+          .in("activity_id", activityIds)
+          .order("recorded_at", { ascending: false });
+
+        if (!investmentsError && investmentsData) {
+          const investmentsByActivity: Record<string, any[]> = {};
+          investmentsData.forEach((inv) => {
+            if (!investmentsByActivity[inv.activity_id]) {
+              investmentsByActivity[inv.activity_id] = [];
+            }
+            investmentsByActivity[inv.activity_id].push(inv);
+          });
+          setActivityInvestments(investmentsByActivity);
+        }
+      }
     } catch (error) {
       console.error("Erro ao buscar dados do projeto:", error);
       toast({
@@ -209,6 +239,67 @@ const ProjectDetails = () => {
       toast({
         title: "Erro ao registrar investimento",
         description: "Não foi possível registrar o investimento.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddActivityInvestment = async (activityId: string) => {
+    const amount = parseFloat(newActivityInvestment);
+    if (!amount || amount <= 0) return;
+
+    try {
+      const { error } = await supabase
+        .from("activity_investments")
+        .insert({
+          activity_id: activityId,
+          amount: amount,
+          description: activityInvestmentDescription,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Investimento adicionado!",
+        description: `R$ ${amount.toFixed(2)} registrado na atividade.`,
+      });
+
+      setNewActivityInvestment("");
+      setActivityInvestmentDescription("");
+      setShowAddActivityInvestment(null);
+      fetchProjectData();
+    } catch (error) {
+      console.error("Erro ao adicionar investimento:", error);
+      toast({
+        title: "Erro ao adicionar investimento",
+        description: "Não foi possível registrar o investimento.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteActivity = async (activityId: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta atividade?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("activities")
+        .delete()
+        .eq("id", activityId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Atividade excluída!",
+        description: "A atividade foi removida com sucesso.",
+      });
+
+      fetchProjectData();
+    } catch (error) {
+      console.error("Erro ao excluir atividade:", error);
+      toast({
+        title: "Erro ao excluir atividade",
+        description: "Não foi possível excluir a atividade.",
         variant: "destructive",
       });
     }
@@ -398,63 +489,180 @@ const ProjectDetails = () => {
                   activities.map((activity) => (
                     <div
                       key={activity.id}
-                      className="flex items-start gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
+                      className="border border-border rounded-lg p-4 space-y-3"
                     >
-                      <Checkbox
-                        checked={activity.status === "completed"}
-                        onCheckedChange={() =>
-                          handleToggleActivity(activity.id, activity.status)
-                        }
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <p
-                          className={`text-sm font-medium ${
-                            activity.status === "completed"
-                              ? "line-through text-muted-foreground"
-                              : "text-foreground"
-                          }`}
-                        >
-                          {activity.title}
-                        </p>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {activity.assigned_to && (
-                            <span className="text-xs text-muted-foreground">
-                              👤 {activity.assigned_to}
-                            </span>
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          checked={activity.status === "completed"}
+                          onCheckedChange={() =>
+                            handleToggleActivity(activity.id, activity.status)
+                          }
+                          className="mt-1"
+                        />
+                        <div className="flex-1">
+                          <p
+                            className={`text-sm font-medium ${
+                              activity.status === "completed"
+                                ? "line-through text-muted-foreground"
+                                : "text-foreground"
+                            }`}
+                          >
+                            {activity.title}
+                          </p>
+                          {activity.description && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {activity.description}
+                            </p>
                           )}
-                          {activity.hours > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              ⏱️ {activity.hours}h
-                            </span>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {activity.assigned_to && (
+                              <span className="text-xs text-muted-foreground">
+                                👤 {activity.assigned_to}
+                              </span>
+                            )}
+                            {activity.hours > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                ⏱️ {activity.hours}h
+                              </span>
+                            )}
+                            {activity.cost > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                💰 R$ {activity.cost.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                          {(activity.start_date || activity.end_date) && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {activity.start_date &&
+                                new Date(activity.start_date).toLocaleDateString("pt-BR")}
+                              {activity.start_date && activity.end_date && " → "}
+                              {activity.end_date &&
+                                new Date(activity.end_date).toLocaleDateString("pt-BR")}
+                            </p>
                           )}
-                          {activity.cost > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              💰 R$ {activity.cost.toFixed(2)}
-                            </span>
+                          {activity.completed_at && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              ✓ Concluída em{" "}
+                              {new Date(activity.completed_at).toLocaleDateString("pt-BR")}
+                            </p>
                           )}
                         </div>
-                        {(activity.start_date || activity.end_date) && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {activity.start_date &&
-                              new Date(activity.start_date).toLocaleDateString("pt-BR")}
-                            {activity.start_date && activity.end_date && " → "}
-                            {activity.end_date &&
-                              new Date(activity.end_date).toLocaleDateString("pt-BR")}
-                          </p>
+                        <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingActivity(activity);
+                              setEditActivityDialogOpen(true);
+                            }}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleDeleteActivity(activity.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                          {activity.status === "completed" ? (
+                            <CheckCircle2 className="w-4 h-4 text-success mt-2" />
+                          ) : (
+                            <Circle className="w-4 h-4 text-muted-foreground mt-2" />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Activity Investments */}
+                      <div className="border-t border-border pt-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-semibold text-foreground">
+                            Orçamento da Atividade
+                          </h4>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              setShowAddActivityInvestment(
+                                showAddActivityInvestment === activity.id ? null : activity.id
+                              )
+                            }
+                          >
+                            <Plus className="w-3 h-3" />
+                          </Button>
+                        </div>
+
+                        {showAddActivityInvestment === activity.id && (
+                          <div className="space-y-2 mb-3 p-2 bg-accent/50 rounded">
+                            <Input
+                              type="number"
+                              placeholder="Valor (R$)"
+                              value={newActivityInvestment}
+                              onChange={(e) => setNewActivityInvestment(e.target.value)}
+                              step="0.01"
+                              min="0"
+                            />
+                            <Input
+                              placeholder="Descrição"
+                              value={activityInvestmentDescription}
+                              onChange={(e) => setActivityInvestmentDescription(e.target.value)}
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => handleAddActivityInvestment(activity.id)}
+                              >
+                                Adicionar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setShowAddActivityInvestment(null);
+                                  setNewActivityInvestment("");
+                                  setActivityInvestmentDescription("");
+                                }}
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
+                          </div>
                         )}
-                        {activity.completed_at && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            ✓ Concluída em{" "}
-                            {new Date(activity.completed_at).toLocaleDateString("pt-BR")}
-                          </p>
+
+                        <div className="space-y-1">
+                          {activityInvestments[activity.id]?.length > 0 ? (
+                            activityInvestments[activity.id].map((inv) => (
+                              <div
+                                key={inv.id}
+                                className="text-xs flex justify-between items-center p-2 bg-accent/30 rounded"
+                              >
+                                <span className="text-muted-foreground">
+                                  {inv.description || "Sem descrição"}
+                                </span>
+                                <span className="font-medium text-foreground">
+                                  R$ {Number(inv.amount).toFixed(2)}
+                                </span>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground text-center py-2">
+                              Nenhum investimento registrado
+                            </p>
+                          )}
+                        </div>
+
+                        {activityInvestments[activity.id]?.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-border text-xs font-semibold flex justify-between">
+                            <span className="text-muted-foreground">Total:</span>
+                            <span className="text-foreground">
+                              R${" "}
+                              {activityInvestments[activity.id]
+                                .reduce((sum, inv) => sum + Number(inv.amount), 0)
+                                .toFixed(2)}
+                            </span>
+                          </div>
                         )}
                       </div>
-                      {activity.status === "completed" ? (
-                        <CheckCircle2 className="w-4 h-4 text-success" />
-                      ) : (
-                        <Circle className="w-4 h-4 text-muted-foreground" />
-                      )}
                     </div>
                   ))
                 )}
@@ -608,6 +816,12 @@ const ProjectDetails = () => {
           open={editDialogOpen}
           onOpenChange={setEditDialogOpen}
           onProjectUpdated={fetchProjectData}
+        />
+        <EditActivityDialog
+          activity={editingActivity}
+          open={editActivityDialogOpen}
+          onOpenChange={setEditActivityDialogOpen}
+          onActivityUpdated={fetchProjectData}
         />
       </main>
     </div>
