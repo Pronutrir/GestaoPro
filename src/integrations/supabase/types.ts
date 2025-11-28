@@ -70,6 +70,30 @@ export type Database = {
           },
         ]
       }
+      activity_investments: {
+        Row: {
+          activity_id: string
+          amount: number
+          description: string | null
+          id: string
+          recorded_at: string
+        }
+        Insert: {
+          activity_id: string
+          amount: number
+          description?: string | null
+          id?: string
+          recorded_at?: string
+        }
+        Update: {
+          activity_id?: string
+          amount?: number
+          description?: string | null
+          id?: string
+          recorded_at?: string
+        }
+        Relationships: []
+      }
       investment_history: {
         Row: {
           amount: number
