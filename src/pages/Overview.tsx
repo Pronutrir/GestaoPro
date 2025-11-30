@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -20,6 +21,7 @@ interface DashboardStats {
   totalBudgetPlanned: number;
   totalBudgetUsed: number;
   completionRate: number;
+  blockedProjects: number;
 }
 
 const Overview = () => {
@@ -32,6 +34,7 @@ const Overview = () => {
     totalBudgetPlanned: 0,
     totalBudgetUsed: 0,
     completionRate: 0,
+    blockedProjects: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -43,7 +46,7 @@ const Overview = () => {
     try {
       const { data: projects, error } = await supabase
         .from("projects")
-        .select("status, budget_planned, budget_used");
+        .select("status, budget_planned, budget_used, blockers");
 
       if (error) throw error;
 
@@ -53,6 +56,8 @@ const Overview = () => {
       const completedCount =
         projects?.filter((p) => p.status === "done").length || 0;
       const total = projects?.length || 0;
+      const blockedCount = 
+        projects?.filter((p) => p.blockers && p.blockers.trim() !== "").length || 0;
 
       const totalPlanned =
         projects?.reduce((sum, p) => sum + (Number(p.budget_planned) || 0), 0) ||
@@ -68,6 +73,7 @@ const Overview = () => {
         totalBudgetPlanned: totalPlanned,
         totalBudgetUsed: totalUsed,
         completionRate: total > 0 ? (completedCount / total) * 100 : 0,
+        blockedProjects: blockedCount,
       });
     } catch (error) {
       console.error("Erro ao buscar estatísticas:", error);
@@ -96,9 +102,21 @@ const Overview = () => {
               </h1>
             </div>
 
-            <Button onClick={() => navigate("/projects")}>
-              Ver Todos os Projetos
-            </Button>
+            <div className="flex items-center gap-3">
+              {stats.blockedProjects > 0 && (
+                <Button
+                  variant="destructive"
+                  onClick={() => navigate("/blocked-projects")}
+                  className="gap-2"
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  {stats.blockedProjects} Bloqueios
+                </Button>
+              )}
+              <Button onClick={() => navigate("/projects")}>
+                Ver Todos os Projetos
+              </Button>
+            </div>
           </div>
         </div>
       </header>

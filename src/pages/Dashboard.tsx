@@ -8,6 +8,7 @@ import {
   Settings,
   LogOut,
   Home,
+  AlertTriangle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ProjectColumn } from "@/components/ProjectColumn";
@@ -39,6 +40,7 @@ const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [blockedCount, setBlockedCount] = useState(0);
 
   const handleLogout = () => {
     navigate("/");
@@ -53,6 +55,10 @@ const Dashboard = () => {
 
       if (error) throw error;
       setProjects(data || []);
+      
+      // Count blocked projects
+      const blocked = data?.filter((p) => p.blockers && p.blockers.trim() !== "").length || 0;
+      setBlockedCount(blocked);
     } catch (error) {
       console.error("Erro ao buscar projetos:", error);
       toast({
@@ -149,6 +155,17 @@ const Dashboard = () => {
             </div>
 
             <div className="flex items-center gap-4">
+              {blockedCount > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => navigate("/blocked-projects")}
+                  className="gap-2"
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  {blockedCount} Bloqueios
+                </Button>
+              )}
               <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
                 <Home className="w-5 h-5" />
               </Button>
