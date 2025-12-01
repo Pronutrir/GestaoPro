@@ -9,6 +9,10 @@ import {
   LogOut,
   Home,
   AlertTriangle,
+  Clock,
+  CheckCircle,
+  FolderOpen,
+  Archive,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ProjectColumn } from "@/components/ProjectColumn";
@@ -203,6 +207,69 @@ const Dashboard = () => {
           </div>
           
           <AddProjectDialog onProjectAdded={fetchProjects} />
+        </div>
+
+        {/* Statistics */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+          <div className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
+                <Clock className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">A Fazer</p>
+                <p className="text-2xl font-bold text-foreground">{todoProjects.length}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-info/10 rounded-lg flex items-center justify-center">
+                <FolderOpen className="w-5 h-5 text-info" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Em Progresso</p>
+                <p className="text-2xl font-bold text-foreground">{inProgressProjects.length}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-destructive/10 rounded-lg flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-destructive" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Bloqueio</p>
+                <p className="text-2xl font-bold text-foreground">{blockedProjects.length}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-secondary/30 rounded-lg flex items-center justify-center">
+                <Archive className="w-5 h-5 text-secondary-foreground" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Gaveta</p>
+                <p className="text-2xl font-bold text-foreground">{drawerProjects.length}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center">
+                <CheckCircle className="w-5 h-5 text-success" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Concluído</p>
+                <p className="text-2xl font-bold text-foreground">{doneProjects.length}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Pipeline Board */}
