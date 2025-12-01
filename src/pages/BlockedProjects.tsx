@@ -48,6 +48,7 @@ const BlockedProjects = () => {
         .select("*")
         .not("blockers", "is", null)
         .neq("blockers", "")
+        .neq("status", "done")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
