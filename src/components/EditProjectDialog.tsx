@@ -202,6 +202,8 @@ export const EditProjectDialog = ({
                   <SelectContent>
                     <SelectItem value="todo">A Fazer</SelectItem>
                     <SelectItem value="in-progress">Em Progresso</SelectItem>
+                    <SelectItem value="blocked">Bloqueio</SelectItem>
+                    <SelectItem value="drawer">Gaveta</SelectItem>
                     <SelectItem value="done">Concluído</SelectItem>
                   </SelectContent>
                 </Select>
