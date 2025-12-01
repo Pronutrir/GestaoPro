@@ -137,6 +137,8 @@ const Dashboard = () => {
 
   const todoProjects = filteredProjects.filter((p) => p.status === "todo");
   const inProgressProjects = filteredProjects.filter((p) => p.status === "in-progress");
+  const blockedProjects = filteredProjects.filter((p) => p.status === "blocked");
+  const drawerProjects = filteredProjects.filter((p) => p.status === "drawer");
   const doneProjects = filteredProjects.filter((p) => p.status === "done");
 
   return (
@@ -209,7 +211,7 @@ const Dashboard = () => {
             <p className="text-muted-foreground">Carregando projetos...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             <ProjectColumn
               title="A Fazer"
               status="todo"
@@ -225,6 +227,26 @@ const Dashboard = () => {
               status="in-progress"
               color="info"
               projects={inProgressProjects}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onStatusChange={handleStatusChange}
+            />
+
+            <ProjectColumn
+              title="Bloqueio"
+              status="blocked"
+              color="destructive"
+              projects={blockedProjects}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onStatusChange={handleStatusChange}
+            />
+
+            <ProjectColumn
+              title="Gaveta"
+              status="drawer"
+              color="secondary"
+              projects={drawerProjects}
               onEdit={handleEdit}
               onDelete={handleDelete}
               onStatusChange={handleStatusChange}
