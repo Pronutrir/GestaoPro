@@ -7,8 +7,9 @@ import {
   TrendingUp,
   DollarSign,
   CheckCircle2,
-  Clock,
-  AlertCircle,
+  Lightbulb,
+  Beaker,
+  Rocket,
   AlertTriangle,
   Archive,
 } from "lucide-react";
@@ -16,11 +17,12 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface DashboardStats {
   totalProjects: number;
-  todoProjects: number;
-  inProgressProjects: number;
+  ideacaoProjects: number;
+  pocProjects: number;
+  mvpProjects: number;
   blockedProjects: number;
   drawerProjects: number;
-  completedProjects: number;
+  emExecucaoProjects: number;
   totalBudgetPlanned: number;
   totalBudgetUsed: number;
   completionRate: number;
@@ -30,11 +32,12 @@ const Overview = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({
     totalProjects: 0,
-    todoProjects: 0,
-    inProgressProjects: 0,
+    ideacaoProjects: 0,
+    pocProjects: 0,
+    mvpProjects: 0,
     blockedProjects: 0,
     drawerProjects: 0,
-    completedProjects: 0,
+    emExecucaoProjects: 0,
     totalBudgetPlanned: 0,
     totalBudgetUsed: 0,
     completionRate: 0,
@@ -53,18 +56,16 @@ const Overview = () => {
 
       if (error) throw error;
 
-      const todoCount = projects?.filter((p) => p.status === "todo").length || 0;
-      const inProgressCount =
-        projects?.filter((p) => p.status === "in-progress").length || 0;
+      const ideacaoCount = projects?.filter((p) => p.status === "ideacao").length || 0;
+      const pocCount = projects?.filter((p) => p.status === "poc").length || 0;
+      const mvpCount = projects?.filter((p) => p.status === "mvp").length || 0;
       const blockedStatusCount =
         projects?.filter((p) => p.status === "blocked").length || 0;
       const drawerCount =
         projects?.filter((p) => p.status === "drawer").length || 0;
-      const completedCount =
-        projects?.filter((p) => p.status === "done").length || 0;
+      const emExecucaoCount =
+        projects?.filter((p) => p.status === "em-execucao").length || 0;
       const total = projects?.length || 0;
-      const blockedCount = 
-        projects?.filter((p) => p.blockers && p.blockers.trim() !== "").length || 0;
 
       const totalPlanned =
         projects?.reduce((sum, p) => sum + (Number(p.budget_planned) || 0), 0) ||
@@ -74,14 +75,15 @@ const Overview = () => {
 
       setStats({
         totalProjects: total,
-        todoProjects: todoCount,
-        inProgressProjects: inProgressCount,
+        ideacaoProjects: ideacaoCount,
+        pocProjects: pocCount,
+        mvpProjects: mvpCount,
         blockedProjects: blockedStatusCount,
         drawerProjects: drawerCount,
-        completedProjects: completedCount,
+        emExecucaoProjects: emExecucaoCount,
         totalBudgetPlanned: totalPlanned,
         totalBudgetUsed: totalUsed,
-        completionRate: total > 0 ? (completedCount / total) * 100 : 0,
+        completionRate: total > 0 ? (emExecucaoCount / total) * 100 : 0,
       });
     } catch (error) {
       console.error("Erro ao buscar estatísticas:", error);
@@ -139,7 +141,7 @@ const Overview = () => {
           ) : (
             <>
               {/* Stats Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
                 <Card className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -159,13 +161,13 @@ const Overview = () => {
                 <Card className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-warning/10 rounded-lg flex items-center justify-center">
-                      <AlertCircle className="w-6 h-6 text-warning" />
+                      <Lightbulb className="w-6 h-6 text-warning" />
                     </div>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">A Fazer</p>
+                    <p className="text-sm text-muted-foreground mb-1">Ideação</p>
                     <p className="text-3xl font-bold text-foreground">
-                      {stats.todoProjects}
+                      {stats.ideacaoProjects}
                     </p>
                   </div>
                 </Card>
@@ -173,15 +175,27 @@ const Overview = () => {
                 <Card className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-info/10 rounded-lg flex items-center justify-center">
-                      <Clock className="w-6 h-6 text-info" />
+                      <Beaker className="w-6 h-6 text-info" />
                     </div>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">
-                      Em Progresso
-                    </p>
+                    <p className="text-sm text-muted-foreground mb-1">POC</p>
                     <p className="text-3xl font-bold text-foreground">
-                      {stats.inProgressProjects}
+                      {stats.pocProjects}
+                    </p>
+                  </div>
+                </Card>
+
+                <Card className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-accent/10 rounded-lg flex items-center justify-center">
+                      <Rocket className="w-6 h-6 text-accent-foreground" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">MVP</p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {stats.mvpProjects}
                     </p>
                   </div>
                 </Card>
@@ -226,10 +240,10 @@ const Overview = () => {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">
-                      Concluídos
+                      Em Execução
                     </p>
                     <p className="text-3xl font-bold text-foreground">
-                      {stats.completedProjects}
+                      {stats.emExecucaoProjects}
                     </p>
                   </div>
                 </Card>
@@ -314,7 +328,7 @@ const Overview = () => {
                       <TrendingUp className="w-5 h-5 text-success" />
                     </div>
                     <h3 className="text-lg font-semibold text-foreground">
-                      Taxa de Conclusão
+                      Taxa de Execução
                     </h3>
                   </div>
 
@@ -348,27 +362,35 @@ const Overview = () => {
                           {stats.completionRate.toFixed(0)}%
                         </span>
                         <span className="text-sm text-muted-foreground mt-1">
-                          Concluído
+                          Em Execução
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-5 gap-3 pt-6 border-t border-border">
+                  <div className="grid grid-cols-6 gap-2 pt-6 border-t border-border">
                     <div className="text-center">
                       <p className="text-xl font-bold text-warning">
-                        {stats.todoProjects}
+                        {stats.ideacaoProjects}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        A Fazer
+                        Ideação
                       </p>
                     </div>
                     <div className="text-center">
                       <p className="text-xl font-bold text-info">
-                        {stats.inProgressProjects}
+                        {stats.pocProjects}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Em Progresso
+                        POC
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xl font-bold text-accent-foreground">
+                        {stats.mvpProjects}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        MVP
                       </p>
                     </div>
                     <div className="text-center">
@@ -389,10 +411,10 @@ const Overview = () => {
                     </div>
                     <div className="text-center">
                       <p className="text-xl font-bold text-success">
-                        {stats.completedProjects}
+                        {stats.emExecucaoProjects}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Concluídos
+                        Em Execução
                       </p>
                     </div>
                   </div>

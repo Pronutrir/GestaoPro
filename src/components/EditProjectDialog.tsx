@@ -52,7 +52,7 @@ export const EditProjectDialog = ({
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    status: "todo",
+    status: "ideacao",
     priority: "medium",
     due_date: "",
     assignees: "",
@@ -200,11 +200,12 @@ export const EditProjectDialog = ({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todo">A Fazer</SelectItem>
-                    <SelectItem value="in-progress">Em Progresso</SelectItem>
+                    <SelectItem value="ideacao">Ideação</SelectItem>
+                    <SelectItem value="poc">POC</SelectItem>
+                    <SelectItem value="mvp">MVP</SelectItem>
                     <SelectItem value="blocked">Bloqueio</SelectItem>
                     <SelectItem value="drawer">Gaveta</SelectItem>
-                    <SelectItem value="done">Concluído</SelectItem>
+                    <SelectItem value="em-execucao">Em Execução</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

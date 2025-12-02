@@ -9,9 +9,10 @@ import {
   LogOut,
   Home,
   AlertTriangle,
-  Clock,
+  Lightbulb,
+  Beaker,
+  Rocket,
   CheckCircle,
-  FolderOpen,
   Archive,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -139,11 +140,12 @@ const Dashboard = () => {
     project.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const todoProjects = filteredProjects.filter((p) => p.status === "todo");
-  const inProgressProjects = filteredProjects.filter((p) => p.status === "in-progress");
+  const ideacaoProjects = filteredProjects.filter((p) => p.status === "ideacao");
+  const pocProjects = filteredProjects.filter((p) => p.status === "poc");
+  const mvpProjects = filteredProjects.filter((p) => p.status === "mvp");
   const blockedProjects = filteredProjects.filter((p) => p.status === "blocked");
   const drawerProjects = filteredProjects.filter((p) => p.status === "drawer");
-  const doneProjects = filteredProjects.filter((p) => p.status === "done");
+  const emExecucaoProjects = filteredProjects.filter((p) => p.status === "em-execucao");
 
   return (
     <div className="min-h-screen bg-background">
@@ -210,15 +212,15 @@ const Dashboard = () => {
         </div>
 
         {/* Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
           <div className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
-                <Clock className="w-5 h-5 text-muted-foreground" />
+              <div className="w-10 h-10 bg-warning/10 rounded-lg flex items-center justify-center">
+                <Lightbulb className="w-5 h-5 text-warning" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">A Fazer</p>
-                <p className="text-2xl font-bold text-foreground">{todoProjects.length}</p>
+                <p className="text-sm text-muted-foreground">Ideação</p>
+                <p className="text-2xl font-bold text-foreground">{ideacaoProjects.length}</p>
               </div>
             </div>
           </div>
@@ -226,11 +228,23 @@ const Dashboard = () => {
           <div className="bg-card border border-border rounded-lg p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-info/10 rounded-lg flex items-center justify-center">
-                <FolderOpen className="w-5 h-5 text-info" />
+                <Beaker className="w-5 h-5 text-info" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Em Progresso</p>
-                <p className="text-2xl font-bold text-foreground">{inProgressProjects.length}</p>
+                <p className="text-sm text-muted-foreground">POC</p>
+                <p className="text-2xl font-bold text-foreground">{pocProjects.length}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center">
+                <Rocket className="w-5 h-5 text-accent-foreground" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">MVP</p>
+                <p className="text-2xl font-bold text-foreground">{mvpProjects.length}</p>
               </div>
             </div>
           </div>
@@ -265,8 +279,8 @@ const Dashboard = () => {
                 <CheckCircle className="w-5 h-5 text-success" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Concluído</p>
-                <p className="text-2xl font-bold text-foreground">{doneProjects.length}</p>
+                <p className="text-sm text-muted-foreground">Em Execução</p>
+                <p className="text-2xl font-bold text-foreground">{emExecucaoProjects.length}</p>
               </div>
             </div>
           </div>
@@ -278,22 +292,32 @@ const Dashboard = () => {
             <p className="text-muted-foreground">Carregando projetos...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
             <ProjectColumn
-              title="A Fazer"
-              status="todo"
-              color="muted"
-              projects={todoProjects}
+              title="Ideação"
+              status="ideacao"
+              color="warning"
+              projects={ideacaoProjects}
               onEdit={handleEdit}
               onDelete={handleDelete}
               onStatusChange={handleStatusChange}
             />
 
             <ProjectColumn
-              title="Em Progresso"
-              status="in-progress"
+              title="POC"
+              status="poc"
               color="info"
-              projects={inProgressProjects}
+              projects={pocProjects}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onStatusChange={handleStatusChange}
+            />
+
+            <ProjectColumn
+              title="MVP"
+              status="mvp"
+              color="accent"
+              projects={mvpProjects}
               onEdit={handleEdit}
               onDelete={handleDelete}
               onStatusChange={handleStatusChange}
@@ -320,10 +344,10 @@ const Dashboard = () => {
             />
 
             <ProjectColumn
-              title="Concluído"
-              status="done"
+              title="Em Execução"
+              status="em-execucao"
               color="success"
-              projects={doneProjects}
+              projects={emExecucaoProjects}
               onEdit={handleEdit}
               onDelete={handleDelete}
               onStatusChange={handleStatusChange}
