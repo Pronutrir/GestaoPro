@@ -22,6 +22,16 @@ import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 
 interface Project {
   id: string;
@@ -35,6 +45,7 @@ interface Project {
   budget_used: number;
   owner: string | null;
   blockers: string | null;
+  display_order: number;
 }
 
 const Dashboard = () => {
@@ -62,11 +73,23 @@ const Dashboard = () => {
     navigate("/");
   };
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   const fetchProjects = async () => {
     try {
       const { data, error } = await supabase
         .from("projects")
         .select("*")
+        .order("display_order", { ascending: true })
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -84,6 +107,54 @@ const Dashboard = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (!over || active.id === over.id) return;
+
+    const activeProject = projects.find((p) => p.id === active.id);
+    const overProject = projects.find((p) => p.id === over.id);
+    
+    if (!activeProject || !overProject) return;
+    
+    // Only reorder within the same status column
+    if (activeProject.status !== overProject.status) return;
+
+    const statusProjects = projects.filter((p) => p.status === activeProject.status);
+    const oldIndex = statusProjects.findIndex((p) => p.id === active.id);
+    const newIndex = statusProjects.findIndex((p) => p.id === over.id);
+
+    const reorderedProjects = arrayMove(statusProjects, oldIndex, newIndex);
+
+    // Update local state immediately for smooth UX
+    const updatedProjects = projects.map((p) => {
+      if (p.status !== activeProject.status) return p;
+      const newOrder = reorderedProjects.findIndex((rp) => rp.id === p.id);
+      return { ...p, display_order: newOrder };
+    });
+    setProjects(updatedProjects);
+
+    // Update database
+    try {
+      const updates = reorderedProjects.map((project, index) => 
+        supabase
+          .from("projects")
+          .update({ display_order: index })
+          .eq("id", project.id)
+      );
+      
+      await Promise.all(updates);
+    } catch (error) {
+      console.error("Erro ao reordenar projetos:", error);
+      toast({
+        title: "Erro ao reordenar",
+        description: "Não foi possível salvar a nova ordem. Tente novamente.",
+        variant: "destructive",
+      });
+      fetchProjects(); // Revert to server state
     }
   };
 
@@ -336,79 +407,85 @@ const Dashboard = () => {
             <p className="text-muted-foreground">Carregando projetos...</p>
           </div>
         ) : (
-          <div className={`grid gap-6 ${statusFilter ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-6"}`}>
-            {(!statusFilter || statusFilter === "ideacao") && (
-              <ProjectColumn
-                title="Ideação"
-                status="ideacao"
-                color="warning"
-                projects={ideacaoProjects}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onStatusChange={handleStatusChange}
-              />
-            )}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <div className={`grid gap-6 ${statusFilter ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-6"}`}>
+              {(!statusFilter || statusFilter === "ideacao") && (
+                <ProjectColumn
+                  title="Ideação"
+                  status="ideacao"
+                  color="warning"
+                  projects={ideacaoProjects}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onStatusChange={handleStatusChange}
+                />
+              )}
 
-            {(!statusFilter || statusFilter === "poc") && (
-              <ProjectColumn
-                title="POC"
-                status="poc"
-                color="info"
-                projects={pocProjects}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onStatusChange={handleStatusChange}
-              />
-            )}
+              {(!statusFilter || statusFilter === "poc") && (
+                <ProjectColumn
+                  title="POC"
+                  status="poc"
+                  color="info"
+                  projects={pocProjects}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onStatusChange={handleStatusChange}
+                />
+              )}
 
-            {(!statusFilter || statusFilter === "mvp") && (
-              <ProjectColumn
-                title="MVP"
-                status="mvp"
-                color="accent"
-                projects={mvpProjects}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onStatusChange={handleStatusChange}
-              />
-            )}
+              {(!statusFilter || statusFilter === "mvp") && (
+                <ProjectColumn
+                  title="MVP"
+                  status="mvp"
+                  color="accent"
+                  projects={mvpProjects}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onStatusChange={handleStatusChange}
+                />
+              )}
 
-            {(!statusFilter || statusFilter === "blocked") && (
-              <ProjectColumn
-                title="Bloqueio"
-                status="blocked"
-                color="destructive"
-                projects={blockedProjects}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onStatusChange={handleStatusChange}
-              />
-            )}
+              {(!statusFilter || statusFilter === "blocked") && (
+                <ProjectColumn
+                  title="Bloqueio"
+                  status="blocked"
+                  color="destructive"
+                  projects={blockedProjects}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onStatusChange={handleStatusChange}
+                />
+              )}
 
-            {(!statusFilter || statusFilter === "drawer") && (
-              <ProjectColumn
-                title="Gaveta"
-                status="drawer"
-                color="secondary"
-                projects={drawerProjects}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onStatusChange={handleStatusChange}
-              />
-            )}
+              {(!statusFilter || statusFilter === "drawer") && (
+                <ProjectColumn
+                  title="Gaveta"
+                  status="drawer"
+                  color="secondary"
+                  projects={drawerProjects}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onStatusChange={handleStatusChange}
+                />
+              )}
 
-            {(!statusFilter || statusFilter === "em-execucao") && (
-              <ProjectColumn
-                title="Em Execução"
-                status="em-execucao"
-                color="success"
-                projects={emExecucaoProjects}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onStatusChange={handleStatusChange}
-              />
-            )}
-          </div>
+              {(!statusFilter || statusFilter === "em-execucao") && (
+                <ProjectColumn
+                  title="Em Execução"
+                  status="em-execucao"
+                  color="success"
+                  projects={emExecucaoProjects}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onStatusChange={handleStatusChange}
+                />
+              )}
+            </div>
+          </DndContext>
         )}
 
         <EditProjectDialog

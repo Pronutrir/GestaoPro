@@ -134,6 +134,7 @@ export type Database = {
           budget_used: number | null
           created_at: string
           description: string | null
+          display_order: number | null
           due_date: string | null
           id: string
           owner: string | null
@@ -149,6 +150,7 @@ export type Database = {
           budget_used?: number | null
           created_at?: string
           description?: string | null
+          display_order?: number | null
           due_date?: string | null
           id?: string
           owner?: string | null
@@ -164,6 +166,7 @@ export type Database = {
           budget_used?: number | null
           created_at?: string
           description?: string | null
+          display_order?: number | null
           due_date?: string | null
           id?: string
           owner?: string | null
