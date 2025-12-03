@@ -15,7 +15,7 @@ import {
   CheckCircle,
   Archive,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ProjectColumn } from "@/components/ProjectColumn";
 import { AddProjectDialog } from "@/components/AddProjectDialog";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
@@ -39,6 +39,7 @@ interface Project {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
@@ -46,6 +47,16 @@ const Dashboard = () => {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [blockedCount, setBlockedCount] = useState(0);
+  
+  const statusFilter = searchParams.get("status");
+
+  const handleStatusFilter = (status: string | null) => {
+    if (status) {
+      setSearchParams({ status });
+    } else {
+      setSearchParams({});
+    }
+  };
 
   const handleLogout = () => {
     navigate("/");
@@ -213,7 +224,10 @@ const Dashboard = () => {
 
         {/* Statistics */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-          <div className="bg-card border border-border rounded-lg p-4">
+          <div 
+            className={`bg-card border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${statusFilter === "ideacao" ? "border-warning ring-2 ring-warning/30" : "border-border"}`}
+            onClick={() => handleStatusFilter(statusFilter === "ideacao" ? null : "ideacao")}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-warning/10 rounded-lg flex items-center justify-center">
                 <Lightbulb className="w-5 h-5 text-warning" />
@@ -225,7 +239,10 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-lg p-4">
+          <div 
+            className={`bg-card border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${statusFilter === "poc" ? "border-info ring-2 ring-info/30" : "border-border"}`}
+            onClick={() => handleStatusFilter(statusFilter === "poc" ? null : "poc")}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-info/10 rounded-lg flex items-center justify-center">
                 <Beaker className="w-5 h-5 text-info" />
@@ -237,7 +254,10 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-lg p-4">
+          <div 
+            className={`bg-card border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${statusFilter === "mvp" ? "border-accent ring-2 ring-accent/30" : "border-border"}`}
+            onClick={() => handleStatusFilter(statusFilter === "mvp" ? null : "mvp")}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center">
                 <Rocket className="w-5 h-5 text-accent-foreground" />
@@ -249,7 +269,10 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-lg p-4">
+          <div 
+            className={`bg-card border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${statusFilter === "blocked" ? "border-destructive ring-2 ring-destructive/30" : "border-border"}`}
+            onClick={() => handleStatusFilter(statusFilter === "blocked" ? null : "blocked")}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-destructive/10 rounded-lg flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 text-destructive" />
@@ -261,7 +284,10 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-lg p-4">
+          <div 
+            className={`bg-card border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${statusFilter === "drawer" ? "border-secondary ring-2 ring-secondary/30" : "border-border"}`}
+            onClick={() => handleStatusFilter(statusFilter === "drawer" ? null : "drawer")}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-secondary/30 rounded-lg flex items-center justify-center">
                 <Archive className="w-5 h-5 text-secondary-foreground" />
@@ -273,7 +299,10 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-lg p-4">
+          <div 
+            className={`bg-card border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${statusFilter === "em-execucao" ? "border-success ring-2 ring-success/30" : "border-border"}`}
+            onClick={() => handleStatusFilter(statusFilter === "em-execucao" ? null : "em-execucao")}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center">
                 <CheckCircle className="w-5 h-5 text-success" />
@@ -286,72 +315,99 @@ const Dashboard = () => {
           </div>
         </div>
 
+        {statusFilter && (
+          <div className="mb-4 flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Filtrando por:</span>
+            <Button variant="outline" size="sm" onClick={() => handleStatusFilter(null)} className="gap-2">
+              {statusFilter === "ideacao" && "Ideação"}
+              {statusFilter === "poc" && "POC"}
+              {statusFilter === "mvp" && "MVP"}
+              {statusFilter === "blocked" && "Bloqueio"}
+              {statusFilter === "drawer" && "Gaveta"}
+              {statusFilter === "em-execucao" && "Em Execução"}
+              <span className="text-xs">×</span>
+            </Button>
+          </div>
+        )}
+
         {/* Pipeline Board */}
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <p className="text-muted-foreground">Carregando projetos...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
-            <ProjectColumn
-              title="Ideação"
-              status="ideacao"
-              color="warning"
-              projects={ideacaoProjects}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onStatusChange={handleStatusChange}
-            />
+          <div className={`grid gap-6 ${statusFilter ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-6"}`}>
+            {(!statusFilter || statusFilter === "ideacao") && (
+              <ProjectColumn
+                title="Ideação"
+                status="ideacao"
+                color="warning"
+                projects={ideacaoProjects}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onStatusChange={handleStatusChange}
+              />
+            )}
 
-            <ProjectColumn
-              title="POC"
-              status="poc"
-              color="info"
-              projects={pocProjects}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onStatusChange={handleStatusChange}
-            />
+            {(!statusFilter || statusFilter === "poc") && (
+              <ProjectColumn
+                title="POC"
+                status="poc"
+                color="info"
+                projects={pocProjects}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onStatusChange={handleStatusChange}
+              />
+            )}
 
-            <ProjectColumn
-              title="MVP"
-              status="mvp"
-              color="accent"
-              projects={mvpProjects}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onStatusChange={handleStatusChange}
-            />
+            {(!statusFilter || statusFilter === "mvp") && (
+              <ProjectColumn
+                title="MVP"
+                status="mvp"
+                color="accent"
+                projects={mvpProjects}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onStatusChange={handleStatusChange}
+              />
+            )}
 
-            <ProjectColumn
-              title="Bloqueio"
-              status="blocked"
-              color="destructive"
-              projects={blockedProjects}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onStatusChange={handleStatusChange}
-            />
+            {(!statusFilter || statusFilter === "blocked") && (
+              <ProjectColumn
+                title="Bloqueio"
+                status="blocked"
+                color="destructive"
+                projects={blockedProjects}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onStatusChange={handleStatusChange}
+              />
+            )}
 
-            <ProjectColumn
-              title="Gaveta"
-              status="drawer"
-              color="secondary"
-              projects={drawerProjects}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onStatusChange={handleStatusChange}
-            />
+            {(!statusFilter || statusFilter === "drawer") && (
+              <ProjectColumn
+                title="Gaveta"
+                status="drawer"
+                color="secondary"
+                projects={drawerProjects}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onStatusChange={handleStatusChange}
+              />
+            )}
 
-            <ProjectColumn
-              title="Em Execução"
-              status="em-execucao"
-              color="success"
-              projects={emExecucaoProjects}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onStatusChange={handleStatusChange}
-            />
+            {(!statusFilter || statusFilter === "em-execucao") && (
+              <ProjectColumn
+                title="Em Execução"
+                status="em-execucao"
+                color="success"
+                projects={emExecucaoProjects}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onStatusChange={handleStatusChange}
+              />
+            )}
           </div>
         )}
 

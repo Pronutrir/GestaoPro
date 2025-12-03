@@ -142,7 +142,10 @@ const Overview = () => {
             <>
               {/* Stats Cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                <Card className="p-6">
+                <Card 
+                  className="p-6 cursor-pointer transition-all hover:shadow-md hover:border-primary"
+                  onClick={() => navigate("/projects")}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
                       <LayoutDashboard className="w-6 h-6 text-primary" />
@@ -158,7 +161,10 @@ const Overview = () => {
                   </div>
                 </Card>
 
-                <Card className="p-6">
+                <Card 
+                  className="p-6 cursor-pointer transition-all hover:shadow-md hover:border-warning"
+                  onClick={() => navigate("/projects?status=ideacao")}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-warning/10 rounded-lg flex items-center justify-center">
                       <Lightbulb className="w-6 h-6 text-warning" />
@@ -172,7 +178,10 @@ const Overview = () => {
                   </div>
                 </Card>
 
-                <Card className="p-6">
+                <Card 
+                  className="p-6 cursor-pointer transition-all hover:shadow-md hover:border-info"
+                  onClick={() => navigate("/projects?status=poc")}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-info/10 rounded-lg flex items-center justify-center">
                       <Beaker className="w-6 h-6 text-info" />
@@ -186,7 +195,10 @@ const Overview = () => {
                   </div>
                 </Card>
 
-                <Card className="p-6">
+                <Card 
+                  className="p-6 cursor-pointer transition-all hover:shadow-md hover:border-accent"
+                  onClick={() => navigate("/projects?status=mvp")}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-accent/10 rounded-lg flex items-center justify-center">
                       <Rocket className="w-6 h-6 text-accent-foreground" />
@@ -200,7 +212,10 @@ const Overview = () => {
                   </div>
                 </Card>
 
-                <Card className="p-6">
+                <Card 
+                  className="p-6 cursor-pointer transition-all hover:shadow-md hover:border-destructive"
+                  onClick={() => navigate("/projects?status=blocked")}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-destructive/10 rounded-lg flex items-center justify-center">
                       <AlertTriangle className="w-6 h-6 text-destructive" />
@@ -216,7 +231,10 @@ const Overview = () => {
                   </div>
                 </Card>
 
-                <Card className="p-6">
+                <Card 
+                  className="p-6 cursor-pointer transition-all hover:shadow-md hover:border-secondary"
+                  onClick={() => navigate("/projects?status=drawer")}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-secondary/30 rounded-lg flex items-center justify-center">
                       <Archive className="w-6 h-6 text-secondary-foreground" />
@@ -232,7 +250,10 @@ const Overview = () => {
                   </div>
                 </Card>
 
-                <Card className="p-6">
+                <Card 
+                  className="p-6 cursor-pointer transition-all hover:shadow-md hover:border-success"
+                  onClick={() => navigate("/projects?status=em-execucao")}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 bg-success/10 rounded-lg flex items-center justify-center">
                       <CheckCircle2 className="w-6 h-6 text-success" />
