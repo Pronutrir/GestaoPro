@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { forwardRef } from "react";
 
 interface Project {
   id: string;
@@ -40,6 +41,7 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick }: Sortable
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -49,19 +51,21 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick }: Sortable
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
   };
 
   return (
     <Card
       ref={setNodeRef}
       style={style}
-      className="p-4 hover:shadow-md transition-shadow cursor-pointer"
+      className={`p-4 hover:shadow-md transition-shadow cursor-pointer ${isDragging ? "shadow-lg ring-2 ring-primary" : ""}`}
       onClick={() => navigate(`/project/${project.id}`)}
     >
       <div className="space-y-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2 flex-1">
             <button
+              ref={setActivatorNodeRef}
               {...attributes}
               {...listeners}
               className="cursor-grab active:cursor-grabbing p-1 hover:bg-muted rounded touch-none"
