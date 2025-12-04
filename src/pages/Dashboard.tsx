@@ -119,42 +119,42 @@ const Dashboard = () => {
     const overProject = projects.find((p) => p.id === over.id);
     
     if (!activeProject || !overProject) return;
-    
-    // Only reorder within the same status column
     if (activeProject.status !== overProject.status) return;
 
-    const statusProjects = projects.filter((p) => p.status === activeProject.status);
+    const statusProjects = projects
+      .filter((p) => p.status === activeProject.status)
+      .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+    
     const oldIndex = statusProjects.findIndex((p) => p.id === active.id);
     const newIndex = statusProjects.findIndex((p) => p.id === over.id);
 
+    if (oldIndex === newIndex) return;
+
     const reorderedProjects = arrayMove(statusProjects, oldIndex, newIndex);
 
-    // Update local state immediately for smooth UX
-    const updatedProjects = projects.map((p) => {
+    // Update local state immediately
+    setProjects(prev => prev.map((p) => {
       if (p.status !== activeProject.status) return p;
       const newOrder = reorderedProjects.findIndex((rp) => rp.id === p.id);
       return { ...p, display_order: newOrder };
-    });
-    setProjects(updatedProjects);
+    }));
 
     // Update database
     try {
-      const updates = reorderedProjects.map((project, index) => 
-        supabase
+      for (let i = 0; i < reorderedProjects.length; i++) {
+        const { error } = await supabase
           .from("projects")
-          .update({ display_order: index })
-          .eq("id", project.id)
-      );
-      
-      await Promise.all(updates);
+          .update({ display_order: i })
+          .eq("id", reorderedProjects[i].id);
+        if (error) throw error;
+      }
     } catch (error) {
-      console.error("Erro ao reordenar projetos:", error);
+      console.error("Erro ao reordenar:", error);
       toast({
         title: "Erro ao reordenar",
-        description: "Não foi possível salvar a nova ordem. Tente novamente.",
         variant: "destructive",
       });
-      fetchProjects(); // Revert to server state
+      fetchProjects();
     }
   };
 
@@ -222,12 +222,14 @@ const Dashboard = () => {
     project.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const ideacaoProjects = filteredProjects.filter((p) => p.status === "ideacao");
-  const pocProjects = filteredProjects.filter((p) => p.status === "poc");
-  const mvpProjects = filteredProjects.filter((p) => p.status === "mvp");
-  const blockedProjects = filteredProjects.filter((p) => p.status === "blocked");
-  const drawerProjects = filteredProjects.filter((p) => p.status === "drawer");
-  const emExecucaoProjects = filteredProjects.filter((p) => p.status === "em-execucao");
+  const sortByOrder = (arr: Project[]) => [...arr].sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+  
+  const ideacaoProjects = sortByOrder(filteredProjects.filter((p) => p.status === "ideacao"));
+  const pocProjects = sortByOrder(filteredProjects.filter((p) => p.status === "poc"));
+  const mvpProjects = sortByOrder(filteredProjects.filter((p) => p.status === "mvp"));
+  const blockedProjects = sortByOrder(filteredProjects.filter((p) => p.status === "blocked"));
+  const drawerProjects = sortByOrder(filteredProjects.filter((p) => p.status === "drawer"));
+  const emExecucaoProjects = sortByOrder(filteredProjects.filter((p) => p.status === "em-execucao"));
 
   return (
     <div className="min-h-screen bg-background">
