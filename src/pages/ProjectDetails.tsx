@@ -246,7 +246,7 @@ const ProjectDetails = () => {
 
   const handleAddActivityInvestment = async (activityId: string) => {
     const amount = parseFloat(newActivityInvestment);
-    if (!amount || amount <= 0) return;
+    if (!amount || amount <= 0 || !project) return;
 
     try {
       const { error } = await supabase
@@ -259,9 +259,16 @@ const ProjectDetails = () => {
 
       if (error) throw error;
 
+      // Atualizar budget_used do projeto
+      const newBudgetUsed = Number(project.budget_used) + amount;
+      await supabase
+        .from("projects")
+        .update({ budget_used: newBudgetUsed })
+        .eq("id", id);
+
       toast({
         title: "Investimento adicionado!",
-        description: `R$ ${amount.toFixed(2)} registrado na atividade.`,
+        description: `R$ ${amount.toFixed(2)} registrado na atividade e projeto.`,
       });
 
       setNewActivityInvestment("");
@@ -273,6 +280,35 @@ const ProjectDetails = () => {
       toast({
         title: "Erro ao adicionar investimento",
         description: "Não foi possível registrar o investimento.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteActivityInvestment = async (investmentId: string, amount: number) => {
+    if (!confirm("Excluir este investimento?") || !project) return;
+
+    try {
+      const { error } = await supabase
+        .from("activity_investments")
+        .delete()
+        .eq("id", investmentId);
+
+      if (error) throw error;
+
+      // Atualizar budget_used do projeto
+      const newBudgetUsed = Math.max(0, Number(project.budget_used) - amount);
+      await supabase
+        .from("projects")
+        .update({ budget_used: newBudgetUsed })
+        .eq("id", id);
+
+      toast({ title: "Investimento excluído!" });
+      fetchProjectData();
+    } catch (error) {
+      console.error("Erro ao excluir investimento:", error);
+      toast({
+        title: "Erro ao excluir",
         variant: "destructive",
       });
     }
@@ -640,14 +676,22 @@ const ProjectDetails = () => {
                             activityInvestments[activity.id].map((inv) => (
                               <div
                                 key={inv.id}
-                                className="text-xs flex justify-between items-center p-2 bg-accent/30 rounded"
+                                className="text-xs flex justify-between items-center p-2 bg-accent/30 rounded group"
                               >
-                                <span className="text-muted-foreground">
+                                <span className="text-muted-foreground flex-1">
                                   {inv.description || "Sem descrição"}
                                 </span>
-                                <span className="font-medium text-foreground">
+                                <span className="font-semibold text-foreground mr-2">
                                   R$ {Number(inv.amount).toFixed(2)}
                                 </span>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
+                                  onClick={() => handleDeleteActivityInvestment(inv.id, Number(inv.amount))}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
                               </div>
                             ))
                           ) : (
