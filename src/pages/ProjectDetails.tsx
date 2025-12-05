@@ -489,19 +489,19 @@ const ProjectDetails = () => {
                   activities.map((activity) => (
                     <div
                       key={activity.id}
-                      className="border border-border rounded-lg p-4 space-y-3"
+                      className="border border-border rounded-lg p-5 space-y-4 bg-card hover:shadow-md transition-shadow"
                     >
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-start gap-4">
                         <Checkbox
                           checked={activity.status === "completed"}
                           onCheckedChange={() =>
                             handleToggleActivity(activity.id, activity.status)
                           }
-                          className="mt-1"
+                          className="mt-1 h-5 w-5"
                         />
                         <div className="flex-1">
                           <p
-                            className={`text-sm font-medium ${
+                            className={`text-base font-semibold ${
                               activity.status === "completed"
                                 ? "line-through text-muted-foreground"
                                 : "text-foreground"
@@ -510,30 +510,33 @@ const ProjectDetails = () => {
                             {activity.title}
                           </p>
                           {activity.description && (
-                            <p className="text-xs text-muted-foreground mt-1">
+                            <p className="text-sm text-muted-foreground mt-1">
                               {activity.description}
                             </p>
                           )}
-                          <div className="flex flex-wrap gap-2 mt-2">
+                          
+                          {/* Métricas da Atividade */}
+                          <div className="flex flex-wrap gap-3 mt-3">
                             {activity.assigned_to && (
-                              <span className="text-xs text-muted-foreground">
+                              <Badge variant="outline" className="text-sm font-medium">
                                 👤 {activity.assigned_to}
-                              </span>
+                              </Badge>
                             )}
                             {activity.hours > 0 && (
-                              <span className="text-xs text-muted-foreground">
+                              <Badge variant="secondary" className="text-sm font-semibold">
                                 ⏱️ {activity.hours}h
-                              </span>
+                              </Badge>
                             )}
                             {activity.cost > 0 && (
-                              <span className="text-xs text-muted-foreground">
+                              <Badge className="bg-success/20 text-success border-success/30 text-sm font-bold">
                                 💰 R$ {activity.cost.toFixed(2)}
-                              </span>
+                              </Badge>
                             )}
                           </div>
+                          
                           {(activity.start_date || activity.end_date) && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {activity.start_date &&
+                            <p className="text-sm text-muted-foreground mt-2 flex items-center gap-1">
+                              📅 {activity.start_date &&
                                 new Date(activity.start_date).toLocaleDateString("pt-BR")}
                               {activity.start_date && activity.end_date && " → "}
                               {activity.end_date &&
@@ -541,34 +544,37 @@ const ProjectDetails = () => {
                             </p>
                           )}
                           {activity.completed_at && (
-                            <p className="text-xs text-muted-foreground mt-1">
+                            <p className="text-sm text-success mt-2 font-medium">
                               ✓ Concluída em{" "}
                               {new Date(activity.completed_at).toLocaleDateString("pt-BR")}
                             </p>
                           )}
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex gap-2">
                           <Button
                             size="icon"
-                            variant="ghost"
+                            variant="outline"
                             onClick={() => {
                               setEditingActivity(activity);
                               setEditActivityDialogOpen(true);
                             }}
+                            title="Editar atividade"
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
                           <Button
                             size="icon"
-                            variant="ghost"
+                            variant="outline"
+                            className="text-destructive hover:bg-destructive/10"
                             onClick={() => handleDeleteActivity(activity.id)}
+                            title="Excluir atividade"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
                           {activity.status === "completed" ? (
-                            <CheckCircle2 className="w-4 h-4 text-success mt-2" />
+                            <CheckCircle2 className="w-5 h-5 text-success mt-2" />
                           ) : (
-                            <Circle className="w-4 h-4 text-muted-foreground mt-2" />
+                            <Circle className="w-5 h-5 text-muted-foreground mt-2" />
                           )}
                         </div>
                       </div>

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { User, Calendar, Clock, DollarSign } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -53,8 +54,8 @@ export const EditActivityDialog = ({
         assigned_to: activity.assigned_to || "",
         start_date: activity.start_date || "",
         end_date: activity.end_date || "",
-        cost: activity.cost?.toString() || "",
-        hours: activity.hours?.toString() || "",
+        cost: activity.cost?.toString() || "0",
+        hours: activity.hours?.toString() || "0",
       });
     }
   }, [activity]);
@@ -98,43 +99,56 @@ export const EditActivityDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Editar Atividade</DialogTitle>
+          <DialogTitle className="text-xl font-bold">Editar Atividade</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="title">Título *</Label>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="title" className="text-sm font-semibold text-foreground">
+              Título *
+            </Label>
             <Input
               id="title"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               required
+              className="font-medium"
             />
           </div>
 
-          <div>
-            <Label htmlFor="description">Descrição</Label>
+          <div className="space-y-2">
+            <Label htmlFor="description" className="text-sm font-semibold text-foreground">
+              Descrição
+            </Label>
             <Textarea
               id="description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
+              placeholder="Descreva a atividade..."
             />
           </div>
 
-          <div>
-            <Label htmlFor="assigned_to">Responsável</Label>
+          <div className="space-y-2">
+            <Label htmlFor="assigned_to" className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <User className="w-4 h-4" />
+              Responsável
+            </Label>
             <Input
               id="assigned_to"
               value={formData.assigned_to}
               onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+              placeholder="Nome do responsável"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="start_date">Data de Início</Label>
+            <div className="space-y-2">
+              <Label htmlFor="start_date" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                Data de Início
+              </Label>
               <Input
                 id="start_date"
                 type="date"
@@ -142,8 +156,11 @@ export const EditActivityDialog = ({
                 onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
               />
             </div>
-            <div>
-              <Label htmlFor="end_date">Data de Fim</Label>
+            <div className="space-y-2">
+              <Label htmlFor="end_date" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                Data de Fim
+              </Label>
               <Input
                 id="end_date"
                 type="date"
@@ -153,36 +170,49 @@ export const EditActivityDialog = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="hours">Horas</Label>
-              <Input
-                id="hours"
-                type="number"
-                step="0.5"
-                min="0"
-                value={formData.hours}
-                onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="cost">Custo (R$)</Label>
-              <Input
-                id="cost"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.cost}
-                onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-              />
+          <div className="p-4 bg-accent/30 rounded-lg border border-border space-y-4">
+            <h3 className="text-sm font-bold text-foreground">Recursos da Atividade</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="hours" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-primary" />
+                  Horas Estimadas
+                </Label>
+                <Input
+                  id="hours"
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={formData.hours}
+                  onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
+                  className="font-semibold text-lg"
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cost" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-success" />
+                  Custo (R$)
+                </Label>
+                <Input
+                  id="cost"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.cost}
+                  onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+                  className="font-semibold text-lg"
+                  placeholder="0.00"
+                />
+              </div>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit">Salvar</Button>
+            <Button type="submit">Salvar Alterações</Button>
           </DialogFooter>
         </form>
       </DialogContent>
