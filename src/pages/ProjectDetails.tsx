@@ -76,6 +76,7 @@ const ProjectDetails = () => {
   const [showAddActivityInvestment, setShowAddActivityInvestment] = useState<string | null>(null);
   const [newActivityInvestment, setNewActivityInvestment] = useState("");
   const [activityInvestmentDescription, setActivityInvestmentDescription] = useState("");
+  const [editingInvestment, setEditingInvestment] = useState<{id: string; amount: string; description: string; originalAmount: number} | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -311,6 +312,39 @@ const ProjectDetails = () => {
         title: "Erro ao excluir",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleEditActivityInvestment = async () => {
+    if (!editingInvestment || !project) return;
+    const newAmount = parseFloat(editingInvestment.amount);
+    if (!newAmount || newAmount <= 0) return;
+
+    try {
+      const { error } = await supabase
+        .from("activity_investments")
+        .update({
+          amount: newAmount,
+          description: editingInvestment.description || null,
+        })
+        .eq("id", editingInvestment.id);
+
+      if (error) throw error;
+
+      // Atualizar budget_used do projeto com a diferença
+      const diff = newAmount - editingInvestment.originalAmount;
+      const newBudgetUsed = Math.max(0, Number(project.budget_used) + diff);
+      await supabase
+        .from("projects")
+        .update({ budget_used: newBudgetUsed })
+        .eq("id", id);
+
+      toast({ title: "Investimento atualizado!" });
+      setEditingInvestment(null);
+      fetchProjectData();
+    } catch (error) {
+      console.error("Erro ao editar investimento:", error);
+      toast({ title: "Erro ao editar", variant: "destructive" });
     }
   };
 
@@ -674,25 +708,61 @@ const ProjectDetails = () => {
                         <div className="space-y-1">
                           {activityInvestments[activity.id]?.length > 0 ? (
                             activityInvestments[activity.id].map((inv) => (
-                              <div
-                                key={inv.id}
-                                className="text-xs flex justify-between items-center p-2 bg-accent/30 rounded group"
-                              >
-                                <span className="text-muted-foreground flex-1">
-                                  {inv.description || "Sem descrição"}
-                                </span>
-                                <span className="font-semibold text-foreground mr-2">
-                                  R$ {Number(inv.amount).toFixed(2)}
-                                </span>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
-                                  onClick={() => handleDeleteActivityInvestment(inv.id, Number(inv.amount))}
+                              editingInvestment?.id === inv.id ? (
+                                <div key={inv.id} className="p-2 bg-accent/50 rounded space-y-2">
+                                  <Input
+                                    type="number"
+                                    value={editingInvestment.amount}
+                                    onChange={(e) => setEditingInvestment({...editingInvestment, amount: e.target.value})}
+                                    className="h-8 text-sm"
+                                    step="0.01"
+                                    min="0"
+                                  />
+                                  <Input
+                                    value={editingInvestment.description}
+                                    onChange={(e) => setEditingInvestment({...editingInvestment, description: e.target.value})}
+                                    className="h-8 text-sm"
+                                    placeholder="Descrição"
+                                  />
+                                  <div className="flex gap-1">
+                                    <Button size="sm" onClick={handleEditActivityInvestment}>Salvar</Button>
+                                    <Button size="sm" variant="outline" onClick={() => setEditingInvestment(null)}>Cancelar</Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div
+                                  key={inv.id}
+                                  className="text-xs flex justify-between items-center p-2 bg-accent/30 rounded group"
                                 >
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              </div>
+                                  <span className="text-muted-foreground flex-1">
+                                    {inv.description || "Sem descrição"}
+                                  </span>
+                                  <span className="font-semibold text-foreground mr-2">
+                                    R$ {Number(inv.amount).toFixed(2)}
+                                  </span>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                                    onClick={() => setEditingInvestment({
+                                      id: inv.id,
+                                      amount: String(inv.amount),
+                                      description: inv.description || "",
+                                      originalAmount: Number(inv.amount)
+                                    })}
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
+                                    onClick={() => handleDeleteActivityInvestment(inv.id, Number(inv.amount))}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              )
                             ))
                           ) : (
                             <p className="text-xs text-muted-foreground text-center py-2">
