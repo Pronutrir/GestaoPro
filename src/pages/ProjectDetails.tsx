@@ -76,7 +76,8 @@ const ProjectDetails = () => {
   const [showAddActivityInvestment, setShowAddActivityInvestment] = useState<string | null>(null);
   const [newActivityInvestment, setNewActivityInvestment] = useState("");
   const [activityInvestmentDescription, setActivityInvestmentDescription] = useState("");
-  const [editingInvestment, setEditingInvestment] = useState<{id: string; amount: string; description: string; originalAmount: number} | null>(null);
+  const [editingInvestment, setEditingInvestment] = useState<{id: string; amount: string; description: string; originalAmount: number; type: 'activity' | 'project'} | null>(null);
+  const [projectInvestments, setProjectInvestments] = useState<any[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -126,6 +127,15 @@ const ProjectDetails = () => {
           setActivityInvestments(investmentsByActivity);
         }
       }
+
+      // Buscar investimentos do projeto
+      const { data: projInvestments } = await supabase
+        .from("investment_history")
+        .select("*")
+        .eq("project_id", id)
+        .order("recorded_at", { ascending: false });
+      
+      setProjectInvestments(projInvestments || []);
     } catch (error) {
       console.error("Erro ao buscar dados do projeto:", error);
       toast({
@@ -315,14 +325,15 @@ const ProjectDetails = () => {
     }
   };
 
-  const handleEditActivityInvestment = async () => {
+  const handleEditInvestment = async () => {
     if (!editingInvestment || !project) return;
     const newAmount = parseFloat(editingInvestment.amount);
     if (!newAmount || newAmount <= 0) return;
 
     try {
+      const table = editingInvestment.type === 'project' ? 'investment_history' : 'activity_investments';
       const { error } = await supabase
-        .from("activity_investments")
+        .from(table)
         .update({
           amount: newAmount,
           description: editingInvestment.description || null,
@@ -345,6 +356,31 @@ const ProjectDetails = () => {
     } catch (error) {
       console.error("Erro ao editar investimento:", error);
       toast({ title: "Erro ao editar", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteProjectInvestment = async (investmentId: string, amount: number) => {
+    if (!confirm("Excluir este investimento?") || !project) return;
+
+    try {
+      const { error } = await supabase
+        .from("investment_history")
+        .delete()
+        .eq("id", investmentId);
+
+      if (error) throw error;
+
+      const newBudgetUsed = Math.max(0, Number(project.budget_used) - amount);
+      await supabase
+        .from("projects")
+        .update({ budget_used: newBudgetUsed })
+        .eq("id", id);
+
+      toast({ title: "Investimento excluído!" });
+      fetchProjectData();
+    } catch (error) {
+      console.error("Erro ao excluir investimento:", error);
+      toast({ title: "Erro ao excluir", variant: "destructive" });
     }
   };
 
@@ -725,7 +761,7 @@ const ProjectDetails = () => {
                                     placeholder="Descrição"
                                   />
                                   <div className="flex gap-1">
-                                    <Button size="sm" onClick={handleEditActivityInvestment}>Salvar</Button>
+                                    <Button size="sm" onClick={handleEditInvestment}>Salvar</Button>
                                     <Button size="sm" variant="outline" onClick={() => setEditingInvestment(null)}>Cancelar</Button>
                                   </div>
                                 </div>
@@ -748,7 +784,8 @@ const ProjectDetails = () => {
                                       id: inv.id,
                                       amount: String(inv.amount),
                                       description: inv.description || "",
-                                      originalAmount: Number(inv.amount)
+                                      originalAmount: Number(inv.amount),
+                                      type: 'activity'
                                     })}
                                   >
                                     <Pencil className="w-3 h-3" />
@@ -907,6 +944,74 @@ const ProjectDetails = () => {
                           Cancelar
                         </Button>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Lista de Investimentos do Projeto */}
+                  {projectInvestments.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <h4 className="text-sm font-semibold text-foreground">Histórico de Gastos</h4>
+                      {projectInvestments.map((inv) => (
+                        editingInvestment?.id === inv.id && editingInvestment.type === 'project' ? (
+                          <div key={inv.id} className="p-3 bg-accent/50 rounded space-y-2">
+                            <Input
+                              type="number"
+                              value={editingInvestment.amount}
+                              onChange={(e) => setEditingInvestment({...editingInvestment, amount: e.target.value})}
+                              className="h-8 text-sm"
+                              step="0.01"
+                              min="0"
+                            />
+                            <Input
+                              value={editingInvestment.description}
+                              onChange={(e) => setEditingInvestment({...editingInvestment, description: e.target.value})}
+                              className="h-8 text-sm"
+                              placeholder="Descrição"
+                            />
+                            <div className="flex gap-1">
+                              <Button size="sm" onClick={handleEditInvestment}>Salvar</Button>
+                              <Button size="sm" variant="outline" onClick={() => setEditingInvestment(null)}>Cancelar</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            key={inv.id}
+                            className="text-sm flex justify-between items-center p-3 bg-accent/30 rounded group"
+                          >
+                            <div className="flex-1">
+                              <span className="text-muted-foreground text-xs">
+                                {new Date(inv.recorded_at).toLocaleDateString("pt-BR")}
+                              </span>
+                              <p className="text-xs text-muted-foreground">{inv.description || "Sem descrição"}</p>
+                            </div>
+                            <span className="font-semibold text-foreground mr-2">
+                              R$ {Number(inv.amount).toFixed(2)}
+                            </span>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                              onClick={() => setEditingInvestment({
+                                id: inv.id,
+                                amount: String(inv.amount),
+                                description: inv.description || "",
+                                originalAmount: Number(inv.amount),
+                                type: 'project'
+                              })}
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
+                              onClick={() => handleDeleteProjectInvestment(inv.id, Number(inv.amount))}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        )
+                      ))}
                     </div>
                   )}
                 </div>
