@@ -257,7 +257,7 @@ const ProjectDetails = () => {
 
   const handleAddActivityInvestment = async (activityId: string) => {
     const amount = parseFloat(newActivityInvestment);
-    if (!amount || amount <= 0 || !project) return;
+    if (isNaN(amount) || amount < 0 || !project) return;
 
     try {
       const { error } = await supabase
