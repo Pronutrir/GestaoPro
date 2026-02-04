@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { User, Calendar, Clock, DollarSign } from "lucide-react";
+import { User, Calendar, Clock, DollarSign, Layers } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -20,6 +20,12 @@ interface Activity {
   end_date: string | null;
   cost: number;
   hours: number;
+  phase_id: string | null;
+}
+
+interface Phase {
+  id: string;
+  title: string;
 }
 
 interface EditActivityDialogProps {
@@ -27,6 +33,7 @@ interface EditActivityDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onActivityUpdated: () => void;
+  phases?: Phase[];
 }
 
 export const EditActivityDialog = ({
@@ -34,6 +41,7 @@ export const EditActivityDialog = ({
   open,
   onOpenChange,
   onActivityUpdated,
+  phases = [],
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
@@ -44,6 +52,7 @@ export const EditActivityDialog = ({
     end_date: "",
     cost: "",
     hours: "",
+    phase_id: "",
   });
 
   useEffect(() => {
@@ -56,6 +65,7 @@ export const EditActivityDialog = ({
         end_date: activity.end_date || "",
         cost: activity.cost?.toString() || "0",
         hours: activity.hours?.toString() || "0",
+        phase_id: activity.phase_id || "",
       });
     }
   }, [activity]);
@@ -75,6 +85,7 @@ export const EditActivityDialog = ({
           end_date: formData.end_date || null,
           cost: parseFloat(formData.cost) || 0,
           hours: parseFloat(formData.hours) || 0,
+          phase_id: formData.phase_id || null,
         })
         .eq("id", activity.id);
 
@@ -142,6 +153,28 @@ export const EditActivityDialog = ({
               placeholder="Nome do responsável"
             />
           </div>
+
+          {phases.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="phase_id" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Layers className="w-4 h-4" />
+                Fase
+              </Label>
+              <select
+                id="phase_id"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={formData.phase_id}
+                onChange={(e) => setFormData({ ...formData, phase_id: e.target.value })}
+              >
+                <option value="">Sem fase</option>
+                {phases.map((phase) => (
+                  <option key={phase.id} value={phase.id}>
+                    {phase.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
