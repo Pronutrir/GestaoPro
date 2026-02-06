@@ -6,23 +6,22 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { EditActivityDialog } from "@/components/EditActivityDialog";
 import { PhaseManager } from "@/components/PhaseManager";
+import { TimelineView } from "@/components/TimelineView";
 import {
   ArrowLeft,
   Plus,
   Calendar,
-  DollarSign,
   CheckCircle2,
   Circle,
-  Clock,
   Pencil,
   Trash2,
   Layers,
   ListTodo,
+  GanttChart,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -79,20 +78,15 @@ const ProjectDetails = () => {
   const [newActivityEndDate, setNewActivityEndDate] = useState("");
   const [newActivityCost, setNewActivityCost] = useState("");
   const [newActivityHours, setNewActivityHours] = useState("");
-  const [newInvestment, setNewInvestment] = useState("");
-  const [investmentDescription, setInvestmentDescription] = useState("");
+  const [newActivityPhaseId, setNewActivityPhaseId] = useState("");
   const [showAddActivity, setShowAddActivity] = useState(false);
-  const [showAddInvestment, setShowAddInvestment] = useState(false);
+  const [showAddPhase, setShowAddPhase] = useState(false);
+  const [newPhaseTitle, setNewPhaseTitle] = useState("");
+  const [newPhaseDescription, setNewPhaseDescription] = useState("");
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [editActivityDialogOpen, setEditActivityDialogOpen] = useState(false);
-  const [activityInvestments, setActivityInvestments] = useState<Record<string, any[]>>({});
-  const [showAddActivityInvestment, setShowAddActivityInvestment] = useState<string | null>(null);
-  const [newActivityInvestment, setNewActivityInvestment] = useState("");
-  const [activityInvestmentDescription, setActivityInvestmentDescription] = useState("");
-  const [editingInvestment, setEditingInvestment] = useState<{id: string; amount: string; description: string; originalAmount: number; type: 'activity' | 'project'} | null>(null);
-  const [projectInvestments, setProjectInvestments] = useState<any[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -131,36 +125,6 @@ const ProjectDetails = () => {
 
       if (activitiesError) throw activitiesError;
       setActivities(activitiesData || []);
-
-      // Buscar investimentos de cada atividade
-      if (activitiesData && activitiesData.length > 0) {
-        const activityIds = activitiesData.map(a => a.id);
-        const { data: investmentsData, error: investmentsError } = await supabase
-          .from("activity_investments")
-          .select("*")
-          .in("activity_id", activityIds)
-          .order("recorded_at", { ascending: false });
-
-        if (!investmentsError && investmentsData) {
-          const investmentsByActivity: Record<string, any[]> = {};
-          investmentsData.forEach((inv) => {
-            if (!investmentsByActivity[inv.activity_id]) {
-              investmentsByActivity[inv.activity_id] = [];
-            }
-            investmentsByActivity[inv.activity_id].push(inv);
-          });
-          setActivityInvestments(investmentsByActivity);
-        }
-      }
-
-      // Buscar investimentos do projeto
-      const { data: projInvestments } = await supabase
-        .from("investment_history")
-        .select("*")
-        .eq("project_id", id)
-        .order("recorded_at", { ascending: false });
-      
-      setProjectInvestments(projInvestments || []);
     } catch (error) {
       console.error("Erro ao buscar dados do projeto:", error);
       toast({
@@ -173,7 +137,37 @@ const ProjectDetails = () => {
     }
   };
 
-  const [newActivityPhaseId, setNewActivityPhaseId] = useState("");
+  const handleAddPhase = async () => {
+    if (!newPhaseTitle.trim() || !id) return;
+
+    try {
+      const maxOrder = phases.reduce((max, p) => Math.max(max, p.display_order), 0);
+      const { error } = await supabase.from("phases").insert({
+        project_id: id,
+        title: newPhaseTitle,
+        description: newPhaseDescription || null,
+        display_order: maxOrder + 1,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Fase criada!",
+        description: "A fase foi adicionada ao projeto.",
+      });
+
+      setNewPhaseTitle("");
+      setNewPhaseDescription("");
+      setShowAddPhase(false);
+      fetchProjectData();
+    } catch (error) {
+      console.error("Erro ao criar fase:", error);
+      toast({
+        title: "Erro ao criar fase",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleAddActivity = async () => {
     if (!newActivity.trim() || !id) return;
@@ -240,179 +234,6 @@ const ProjectDetails = () => {
     }
   };
 
-  const handleAddInvestment = async () => {
-    const amount = parseFloat(newInvestment);
-    if (!amount || amount <= 0 || !id || !project) return;
-
-    try {
-      // Adicionar ao histórico
-      const { error: historyError } = await supabase
-        .from("investment_history")
-        .insert({
-          project_id: id,
-          amount: amount,
-          description: investmentDescription,
-        });
-
-      if (historyError) throw historyError;
-
-      // Atualizar budget_used do projeto
-      const newBudgetUsed = Number(project.budget_used) + amount;
-      const { error: updateError } = await supabase
-        .from("projects")
-        .update({ budget_used: newBudgetUsed })
-        .eq("id", id);
-
-      if (updateError) throw updateError;
-
-      toast({
-        title: "Investimento registrado!",
-        description: `R$ ${amount.toFixed(2)} adicionado ao projeto.`,
-      });
-
-      setNewInvestment("");
-      setInvestmentDescription("");
-      setShowAddInvestment(false);
-      fetchProjectData();
-    } catch (error) {
-      console.error("Erro ao registrar investimento:", error);
-      toast({
-        title: "Erro ao registrar investimento",
-        description: "Não foi possível registrar o investimento.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleAddActivityInvestment = async (activityId: string) => {
-    const amount = parseFloat(newActivityInvestment);
-    if (isNaN(amount) || amount < 0 || !project) return;
-
-    try {
-      const { error } = await supabase
-        .from("activity_investments")
-        .insert({
-          activity_id: activityId,
-          amount: amount,
-          description: activityInvestmentDescription,
-        });
-
-      if (error) throw error;
-
-      // Atualizar budget_used do projeto
-      const newBudgetUsed = Number(project.budget_used) + amount;
-      await supabase
-        .from("projects")
-        .update({ budget_used: newBudgetUsed })
-        .eq("id", id);
-
-      toast({
-        title: "Investimento adicionado!",
-        description: `R$ ${amount.toFixed(2)} registrado na atividade e projeto.`,
-      });
-
-      setNewActivityInvestment("");
-      setActivityInvestmentDescription("");
-      setShowAddActivityInvestment(null);
-      fetchProjectData();
-    } catch (error) {
-      console.error("Erro ao adicionar investimento:", error);
-      toast({
-        title: "Erro ao adicionar investimento",
-        description: "Não foi possível registrar o investimento.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleDeleteActivityInvestment = async (investmentId: string, amount: number) => {
-    if (!confirm("Excluir este investimento?") || !project) return;
-
-    try {
-      const { error } = await supabase
-        .from("activity_investments")
-        .delete()
-        .eq("id", investmentId);
-
-      if (error) throw error;
-
-      // Atualizar budget_used do projeto
-      const newBudgetUsed = Math.max(0, Number(project.budget_used) - amount);
-      await supabase
-        .from("projects")
-        .update({ budget_used: newBudgetUsed })
-        .eq("id", id);
-
-      toast({ title: "Investimento excluído!" });
-      fetchProjectData();
-    } catch (error) {
-      console.error("Erro ao excluir investimento:", error);
-      toast({
-        title: "Erro ao excluir",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleEditInvestment = async () => {
-    if (!editingInvestment || !project) return;
-    const newAmount = parseFloat(editingInvestment.amount);
-    if (!newAmount || newAmount <= 0) return;
-
-    try {
-      const table = editingInvestment.type === 'project' ? 'investment_history' : 'activity_investments';
-      const { error } = await supabase
-        .from(table)
-        .update({
-          amount: newAmount,
-          description: editingInvestment.description || null,
-        })
-        .eq("id", editingInvestment.id);
-
-      if (error) throw error;
-
-      // Atualizar budget_used do projeto com a diferença
-      const diff = newAmount - editingInvestment.originalAmount;
-      const newBudgetUsed = Math.max(0, Number(project.budget_used) + diff);
-      await supabase
-        .from("projects")
-        .update({ budget_used: newBudgetUsed })
-        .eq("id", id);
-
-      toast({ title: "Investimento atualizado!" });
-      setEditingInvestment(null);
-      fetchProjectData();
-    } catch (error) {
-      console.error("Erro ao editar investimento:", error);
-      toast({ title: "Erro ao editar", variant: "destructive" });
-    }
-  };
-
-  const handleDeleteProjectInvestment = async (investmentId: string, amount: number) => {
-    if (!confirm("Excluir este investimento?") || !project) return;
-
-    try {
-      const { error } = await supabase
-        .from("investment_history")
-        .delete()
-        .eq("id", investmentId);
-
-      if (error) throw error;
-
-      const newBudgetUsed = Math.max(0, Number(project.budget_used) - amount);
-      await supabase
-        .from("projects")
-        .update({ budget_used: newBudgetUsed })
-        .eq("id", id);
-
-      toast({ title: "Investimento excluído!" });
-      fetchProjectData();
-    } catch (error) {
-      console.error("Erro ao excluir investimento:", error);
-      toast({ title: "Erro ao excluir", variant: "destructive" });
-    }
-  };
-
   const handleDeleteActivity = async (activityId: string) => {
     if (!confirm("Tem certeza que deseja excluir esta atividade?")) return;
 
@@ -462,10 +283,6 @@ const ProjectDetails = () => {
   const completedActivities = activities.filter((a) => a.status === "completed").length;
   const activityProgress =
     activities.length > 0 ? (completedActivities / activities.length) * 100 : 0;
-  const budgetProgress =
-    project.budget_planned > 0
-      ? (project.budget_used / project.budget_planned) * 100
-      : 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -512,132 +329,211 @@ const ProjectDetails = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Activities */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Left Column - Main Content */}
+          <div className="lg:col-span-3 space-y-6">
             {/* Project Info Card */}
             <Card className="p-6">
-              <h2 className="text-lg font-semibold text-foreground mb-4">Informações do Projeto</h2>
-              <div className="space-y-3">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-foreground">Informações do Projeto</h2>
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="text-muted-foreground">Progresso:</span>
+                  <span className="font-medium text-foreground">
+                    {completedActivities}/{activities.length} tarefas ({activityProgress.toFixed(0)}%)
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {project.owner && (
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-muted-foreground">Responsável:</span>
                     <span className="font-medium text-foreground">{project.owner}</span>
                   </div>
                 )}
-                {project.blockers && (
-                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                    <p className="text-xs font-medium text-destructive mb-1">⚠️ Bloqueios</p>
-                    <p className="text-sm text-foreground">{project.blockers}</p>
+                {project.due_date && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">Prazo:</span>
+                    <span className="font-medium text-foreground">
+                      {new Date(project.due_date).toLocaleDateString("pt-BR")}
+                    </span>
                   </div>
                 )}
+                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-success transition-all"
+                    style={{ width: `${activityProgress}%` }}
+                  />
+                </div>
               </div>
+              {project.blockers && (
+                <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <p className="text-xs font-medium text-destructive mb-1">⚠️ Bloqueios</p>
+                  <p className="text-sm text-foreground">{project.blockers}</p>
+                </div>
+              )}
             </Card>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <div className="flex items-center justify-between mb-4">
-                <TabsList>
-                  <TabsTrigger value="phases" className="gap-2">
-                    <Layers className="w-4 h-4" />
-                    Fases
-                  </TabsTrigger>
-                  <TabsTrigger value="activities" className="gap-2">
-                    <ListTodo className="w-4 h-4" />
-                    Todas Atividades
-                  </TabsTrigger>
-                </TabsList>
-                <Button
-                  size="sm"
-                  onClick={() => setShowAddActivity(!showAddActivity)}
-                  className="gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Nova Atividade
-                </Button>
-              </div>
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={showAddPhase ? "secondary" : "default"}
+                onClick={() => {
+                  setShowAddPhase(!showAddPhase);
+                  setShowAddActivity(false);
+                }}
+                className="gap-2"
+              >
+                <Layers className="w-4 h-4" />
+                Nova Fase
+              </Button>
+              <Button
+                size="sm"
+                variant={showAddActivity ? "secondary" : "outline"}
+                onClick={() => {
+                  setShowAddActivity(!showAddActivity);
+                  setShowAddPhase(false);
+                }}
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Nova Atividade
+              </Button>
+            </div>
 
-              {showAddActivity && (
-                <Card className="mb-6 p-4 border-primary/20 bg-primary/5 space-y-3">
+            {/* Add Phase Form */}
+            {showAddPhase && (
+              <Card className="p-4 border-primary/20 bg-primary/5 space-y-3">
+                <Input
+                  placeholder="Nome da fase *"
+                  value={newPhaseTitle}
+                  onChange={(e) => setNewPhaseTitle(e.target.value)}
+                />
+                <Input
+                  placeholder="Descrição (opcional)"
+                  value={newPhaseDescription}
+                  onChange={(e) => setNewPhaseDescription(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleAddPhase}>
+                    Criar Fase
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setShowAddPhase(false);
+                      setNewPhaseTitle("");
+                      setNewPhaseDescription("");
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </Card>
+            )}
+
+            {/* Add Activity Form */}
+            {showAddActivity && (
+              <Card className="p-4 border-primary/20 bg-primary/5 space-y-3">
+                <Input
+                  placeholder="Nome da atividade *"
+                  value={newActivity}
+                  onChange={(e) => setNewActivity(e.target.value)}
+                />
+                <div className="grid grid-cols-2 gap-3">
                   <Input
-                    placeholder="Nome da atividade *"
-                    value={newActivity}
-                    onChange={(e) => setNewActivity(e.target.value)}
+                    placeholder="Responsável"
+                    value={newActivityAssigned}
+                    onChange={(e) => setNewActivityAssigned(e.target.value)}
                   />
-                  <div className="grid grid-cols-2 gap-3">
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={newActivityPhaseId}
+                    onChange={(e) => setNewActivityPhaseId(e.target.value)}
+                  >
+                    <option value="">Sem fase</option>
+                    {phases.map((phase) => (
+                      <option key={phase.id} value={phase.id}>
+                        {phase.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    type="number"
+                    placeholder="Horas estimadas"
+                    value={newActivityHours}
+                    onChange={(e) => setNewActivityHours(e.target.value)}
+                    step="0.5"
+                    min="0"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Custo (R$)"
+                    value={newActivityCost}
+                    onChange={(e) => setNewActivityCost(e.target.value)}
+                    step="0.01"
+                    min="0"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Início</Label>
                     <Input
-                      placeholder="Responsável"
-                      value={newActivityAssigned}
-                      onChange={(e) => setNewActivityAssigned(e.target.value)}
+                      type="date"
+                      value={newActivityStartDate}
+                      onChange={(e) => setNewActivityStartDate(e.target.value)}
                     />
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={newActivityPhaseId}
-                      onChange={(e) => setNewActivityPhaseId(e.target.value)}
-                    >
-                      <option value="">Sem fase</option>
-                      {phases.map((phase) => (
-                        <option key={phase.id} value={phase.id}>
-                          {phase.title}
-                        </option>
-                      ))}
-                    </select>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Fim</Label>
                     <Input
-                      type="number"
-                      placeholder="Horas estimadas"
-                      value={newActivityHours}
-                      onChange={(e) => setNewActivityHours(e.target.value)}
-                      step="0.5"
-                      min="0"
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Custo (R$)"
-                      value={newActivityCost}
-                      onChange={(e) => setNewActivityCost(e.target.value)}
-                      step="0.01"
-                      min="0"
+                      type="date"
+                      value={newActivityEndDate}
+                      onChange={(e) => setNewActivityEndDate(e.target.value)}
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Início</Label>
-                      <Input
-                        type="date"
-                        value={newActivityStartDate}
-                        onChange={(e) => setNewActivityStartDate(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Fim</Label>
-                      <Input
-                        type="date"
-                        value={newActivityEndDate}
-                        onChange={(e) => setNewActivityEndDate(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button onClick={handleAddActivity}>Salvar</Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowAddActivity(false);
-                        setNewActivity("");
-                        setNewActivityAssigned("");
-                        setNewActivityStartDate("");
-                        setNewActivityEndDate("");
-                        setNewActivityCost("");
-                        setNewActivityHours("");
-                        setNewActivityPhaseId("");
-                      }}
-                    >
-                      Cancelar
-                    </Button>
-                  </div>
-                </Card>
-              )}
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleAddActivity}>Salvar</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowAddActivity(false);
+                      setNewActivity("");
+                      setNewActivityAssigned("");
+                      setNewActivityStartDate("");
+                      setNewActivityEndDate("");
+                      setNewActivityCost("");
+                      setNewActivityHours("");
+                      setNewActivityPhaseId("");
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </Card>
+            )}
+
+            {/* Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="mb-4">
+                <TabsTrigger value="phases" className="gap-2">
+                  <Layers className="w-4 h-4" />
+                  Fases
+                </TabsTrigger>
+                <TabsTrigger value="activities" className="gap-2">
+                  <ListTodo className="w-4 h-4" />
+                  Todas Atividades
+                </TabsTrigger>
+                <TabsTrigger value="timeline" className="gap-2">
+                  <GanttChart className="w-4 h-4" />
+                  Cronograma
+                </TabsTrigger>
+              </TabsList>
 
               <TabsContent value="phases" className="mt-0">
                 <PhaseManager
@@ -665,7 +561,7 @@ const ProjectDetails = () => {
                       activities.map((activity) => (
                         <div
                           key={activity.id}
-                          className="border border-border rounded-lg p-5 space-y-4 bg-card hover:shadow-md transition-shadow"
+                          className="border border-border rounded-lg p-4 space-y-3 bg-card hover:shadow-md transition-shadow"
                         >
                           <div className="flex items-start gap-4">
                             <Checkbox
@@ -691,32 +587,32 @@ const ProjectDetails = () => {
                                 </p>
                               )}
                               
-                              {/* Métricas da Atividade */}
-                              <div className="flex flex-wrap gap-3 mt-3">
+                              {/* Activity Metrics */}
+                              <div className="flex flex-wrap gap-2 mt-2">
                                 {activity.phase_id && (
-                                  <Badge className="bg-primary/20 text-primary border-primary/30 text-sm">
+                                  <Badge className="bg-primary/20 text-primary border-primary/30 text-xs">
                                     📁 {phases.find(p => p.id === activity.phase_id)?.title || "Fase"}
                                   </Badge>
                                 )}
                                 {activity.assigned_to && (
-                                  <Badge variant="outline" className="text-sm font-medium">
+                                  <Badge variant="outline" className="text-xs">
                                     👤 {activity.assigned_to}
                                   </Badge>
                                 )}
                                 {activity.hours > 0 && (
-                                  <Badge variant="secondary" className="text-sm font-semibold">
+                                  <Badge variant="secondary" className="text-xs">
                                     ⏱️ {activity.hours}h
                                   </Badge>
                                 )}
                                 {activity.cost > 0 && (
-                                  <Badge className="bg-success/20 text-success border-success/30 text-sm font-bold">
+                                  <Badge className="bg-success/20 text-success border-success/30 text-xs">
                                     💰 R$ {activity.cost.toFixed(2)}
                                   </Badge>
                                 )}
                               </div>
                               
                               {(activity.start_date || activity.end_date) && (
-                                <p className="text-sm text-muted-foreground mt-2 flex items-center gap-1">
+                                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                                   📅 {activity.start_date &&
                                     new Date(activity.start_date).toLocaleDateString("pt-BR")}
                                   {activity.start_date && activity.end_date && " → "}
@@ -725,7 +621,7 @@ const ProjectDetails = () => {
                                 </p>
                               )}
                               {activity.completed_at && (
-                                <p className="text-sm text-success mt-2 font-medium">
+                                <p className="text-xs text-success mt-1">
                                   ✓ Concluída em{" "}
                                   {new Date(activity.completed_at).toLocaleDateString("pt-BR")}
                                 </p>
@@ -753,347 +649,72 @@ const ProjectDetails = () => {
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                               {activity.status === "completed" ? (
-                                <CheckCircle2 className="w-5 h-5 text-success mt-2" />
+                                <CheckCircle2 className="w-5 h-5 text-success" />
                               ) : (
-                                <Circle className="w-5 h-5 text-muted-foreground mt-2" />
+                                <Circle className="w-5 h-5 text-muted-foreground" />
                               )}
                             </div>
-                          </div>
-
-                          {/* Activity Investments */}
-                          <div className="border-t border-border pt-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <h4 className="text-xs font-semibold text-foreground">
-                                Orçamento da Atividade
-                              </h4>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  setShowAddActivityInvestment(
-                                    showAddActivityInvestment === activity.id ? null : activity.id
-                                  )
-                                }
-                              >
-                                <Plus className="w-3 h-3" />
-                              </Button>
-                            </div>
-
-                            {showAddActivityInvestment === activity.id && (
-                              <div className="space-y-2 mb-3 p-2 bg-accent/50 rounded">
-                                <Input
-                                  type="number"
-                                  placeholder="Valor (R$)"
-                                  value={newActivityInvestment}
-                                  onChange={(e) => setNewActivityInvestment(e.target.value)}
-                                  step="0.01"
-                                  min="0"
-                                />
-                                <Input
-                                  placeholder="Descrição"
-                                  value={activityInvestmentDescription}
-                                  onChange={(e) => setActivityInvestmentDescription(e.target.value)}
-                                />
-                                <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleAddActivityInvestment(activity.id)}
-                                  >
-                                    Adicionar
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setShowAddActivityInvestment(null);
-                                      setNewActivityInvestment("");
-                                      setActivityInvestmentDescription("");
-                                    }}
-                                  >
-                                    Cancelar
-                                  </Button>
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="space-y-1">
-                              {activityInvestments[activity.id]?.length > 0 ? (
-                                activityInvestments[activity.id].map((inv) => (
-                                  editingInvestment?.id === inv.id ? (
-                                    <div key={inv.id} className="p-2 bg-accent/50 rounded space-y-2">
-                                      <Input
-                                        type="number"
-                                        value={editingInvestment.amount}
-                                        onChange={(e) => setEditingInvestment({...editingInvestment, amount: e.target.value})}
-                                        className="h-8 text-sm"
-                                        step="0.01"
-                                        min="0"
-                                      />
-                                      <Input
-                                        value={editingInvestment.description}
-                                        onChange={(e) => setEditingInvestment({...editingInvestment, description: e.target.value})}
-                                        className="h-8 text-sm"
-                                        placeholder="Descrição"
-                                      />
-                                      <div className="flex gap-1">
-                                        <Button size="sm" onClick={handleEditInvestment}>Salvar</Button>
-                                        <Button size="sm" variant="outline" onClick={() => setEditingInvestment(null)}>Cancelar</Button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div
-                                      key={inv.id}
-                                      className="text-xs flex justify-between items-center p-2 bg-accent/30 rounded group"
-                                    >
-                                      <span className="text-muted-foreground flex-1">
-                                        {inv.description || "Sem descrição"}
-                                      </span>
-                                      <span className="font-semibold text-foreground mr-2">
-                                        R$ {Number(inv.amount).toFixed(2)}
-                                      </span>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                                        onClick={() => setEditingInvestment({
-                                          id: inv.id,
-                                          amount: String(inv.amount),
-                                          description: inv.description || "",
-                                          originalAmount: Number(inv.amount),
-                                          type: 'activity'
-                                        })}
-                                      >
-                                        <Pencil className="w-3 h-3" />
-                                      </Button>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
-                                        onClick={() => handleDeleteActivityInvestment(inv.id, Number(inv.amount))}
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </Button>
-                                    </div>
-                                  )
-                                ))
-                              ) : (
-                                <p className="text-xs text-muted-foreground text-center py-2">
-                                  Nenhum investimento registrado
-                                </p>
-                              )}
-                            </div>
-
-                            {activityInvestments[activity.id]?.length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-border text-xs font-semibold flex justify-between">
-                                <span className="text-muted-foreground">Total:</span>
-                                <span className="text-foreground">
-                                  R${" "}
-                                  {activityInvestments[activity.id]
-                                    .reduce((sum, inv) => sum + Number(inv.amount), 0)
-                                    .toFixed(2)}
-                                </span>
-                              </div>
-                            )}
                           </div>
                         </div>
                       ))
                     )}
                   </div>
-
-                  {activities.length > 0 && (
-                    <div className="mt-6 pt-6 border-t border-border">
-                      <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-muted-foreground">Progresso</span>
-                        <span className="font-medium text-foreground">
-                          {completedActivities} de {activities.length} concluídas (
-                          {activityProgress.toFixed(0)}%)
-                        </span>
-                      </div>
-                      <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-success transition-all"
-                          style={{ width: `${activityProgress}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="timeline" className="mt-0">
+                <TimelineView
+                  phases={phases}
+                  activities={activities}
+                  projectDueDate={project.due_date}
+                  onActivityClick={(activity) => {
+                    setEditingActivity(activity);
+                    setEditActivityDialogOpen(true);
+                  }}
+                />
               </TabsContent>
             </Tabs>
           </div>
 
-          {/* Right Column - Investment */}
+          {/* Right Column - Summary */}
           <div className="space-y-6">
+            {/* Quick Stats */}
             <Card className="p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-5 h-5 text-primary" />
+              <h3 className="font-semibold text-foreground mb-4">Resumo</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Total de Fases</span>
+                  <Badge variant="outline">{phases.length}</Badge>
                 </div>
-                <h2 className="text-lg font-semibold text-foreground">Investimento</h2>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">Planejado</span>
-                    <span className="text-sm font-medium text-foreground">
-                      R$ {project.budget_planned?.toLocaleString("pt-BR") || "0,00"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Utilizado</span>
-                    <span className="text-sm font-medium text-foreground">
-                      R$ {project.budget_used?.toLocaleString("pt-BR") || "0,00"}
-                    </span>
-                  </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Total de Tarefas</span>
+                  <Badge variant="outline">{activities.length}</Badge>
                 </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Utilização</span>
-                    <span className="font-medium text-foreground">
-                      {budgetProgress.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all ${
-                        budgetProgress > 100 ? "bg-destructive" : "bg-primary"
-                      }`}
-                      style={{ width: `${Math.min(budgetProgress, 100)}%` }}
-                    />
-                  </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Concluídas</span>
+                  <Badge className="bg-success/20 text-success">{completedActivities}</Badge>
                 </div>
-
-                <div className="pt-4 border-t border-border">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-sm text-muted-foreground">Saldo</span>
-                    <span
-                      className={`text-lg font-bold ${
-                        project.budget_planned - project.budget_used >= 0
-                          ? "text-success"
-                          : "text-destructive"
-                      }`}
-                    >
-                      R${" "}
-                      {(
-                        project.budget_planned - project.budget_used
-                      ).toLocaleString("pt-BR")}
-                    </span>
-                  </div>
-
-                  <Button
-                    className="w-full gap-2"
-                    onClick={() => setShowAddInvestment(!showAddInvestment)}
-                  >
-                    <Plus className="w-4 h-4" />
-                    Registrar Gasto
-                  </Button>
-
-                  {showAddInvestment && (
-                    <div className="mt-4 p-4 border border-border rounded-lg space-y-3">
-                      <Input
-                        type="number"
-                        placeholder="Valor (R$)"
-                        value={newInvestment}
-                        onChange={(e) => setNewInvestment(e.target.value)}
-                        step="0.01"
-                        min="0"
-                      />
-                      <Textarea
-                        placeholder="Descrição (opcional)"
-                        value={investmentDescription}
-                        onChange={(e) => setInvestmentDescription(e.target.value)}
-                        rows={2}
-                      />
-                      <div className="flex gap-2">
-                        <Button onClick={handleAddInvestment} className="flex-1">
-                          Salvar
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setShowAddInvestment(false);
-                            setNewInvestment("");
-                            setInvestmentDescription("");
-                          }}
-                        >
-                          Cancelar
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Lista de Investimentos do Projeto */}
-                  {projectInvestments.length > 0 && (
-                    <div className="mt-4 space-y-2">
-                      <h4 className="text-sm font-semibold text-foreground">Histórico de Gastos</h4>
-                      {projectInvestments.map((inv) => (
-                        editingInvestment?.id === inv.id && editingInvestment.type === 'project' ? (
-                          <div key={inv.id} className="p-3 bg-accent/50 rounded space-y-2">
-                            <Input
-                              type="number"
-                              value={editingInvestment.amount}
-                              onChange={(e) => setEditingInvestment({...editingInvestment, amount: e.target.value})}
-                              className="h-8 text-sm"
-                              step="0.01"
-                              min="0"
-                            />
-                            <Input
-                              value={editingInvestment.description}
-                              onChange={(e) => setEditingInvestment({...editingInvestment, description: e.target.value})}
-                              className="h-8 text-sm"
-                              placeholder="Descrição"
-                            />
-                            <div className="flex gap-1">
-                              <Button size="sm" onClick={handleEditInvestment}>Salvar</Button>
-                              <Button size="sm" variant="outline" onClick={() => setEditingInvestment(null)}>Cancelar</Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div
-                            key={inv.id}
-                            className="text-sm flex justify-between items-center p-3 bg-accent/30 rounded group"
-                          >
-                            <div className="flex-1">
-                              <span className="text-muted-foreground text-xs">
-                                {new Date(inv.recorded_at).toLocaleDateString("pt-BR")}
-                              </span>
-                              <p className="text-xs text-muted-foreground">{inv.description || "Sem descrição"}</p>
-                            </div>
-                            <span className="font-semibold text-foreground mr-2">
-                              R$ {Number(inv.amount).toFixed(2)}
-                            </span>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                              onClick={() => setEditingInvestment({
-                                id: inv.id,
-                                amount: String(inv.amount),
-                                description: inv.description || "",
-                                originalAmount: Number(inv.amount),
-                                type: 'project'
-                              })}
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
-                              onClick={() => handleDeleteProjectInvestment(inv.id, Number(inv.amount))}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        )
-                      ))}
-                    </div>
-                  )}
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Pendentes</span>
+                  <Badge variant="secondary">{activities.length - completedActivities}</Badge>
                 </div>
               </div>
             </Card>
+
+            {/* Hours Summary */}
+            {activities.some(a => a.hours > 0) && (
+              <Card className="p-6">
+                <h3 className="font-semibold text-foreground mb-4">Horas</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Estimadas</span>
+                    <span className="font-medium text-foreground">
+                      {activities.reduce((sum, a) => sum + (a.hours || 0), 0)}h
+                    </span>
+                  </div>
+                </div>
+              </Card>
+            )}
 
             {project.due_date && (
               <Card className="p-6">
@@ -1101,13 +722,14 @@ const ProjectDetails = () => {
                   <div className="w-10 h-10 bg-warning/10 rounded-lg flex items-center justify-center">
                     <Calendar className="w-5 h-5 text-warning" />
                   </div>
-                  <h3 className="text-lg font-semibold text-foreground">
-                    Prazo de Entrega
-                  </h3>
+                  <h3 className="font-semibold text-foreground">Prazo</h3>
                 </div>
                 <p className="text-2xl font-bold text-foreground">
                   {new Date(project.due_date).toLocaleDateString("pt-BR")}
                 </p>
+                {new Date(project.due_date) < new Date() && (
+                  <Badge className="mt-2 bg-destructive">Atrasado</Badge>
+                )}
               </Card>
             )}
           </div>
