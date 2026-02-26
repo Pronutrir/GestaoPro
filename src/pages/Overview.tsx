@@ -7,6 +7,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import {
   LayoutDashboard, TrendingUp, DollarSign, CheckCircle2, Lightbulb,
   Beaker, Rocket, AlertTriangle, Archive, Clock, Flag, CalendarClock, ListTodo,
+  Users, BarChart3,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -181,6 +182,12 @@ const Overview = () => {
             </div>
             <div className="flex items-center gap-3">
               <NotificationBell />
+              <Button variant="outline" onClick={() => navigate("/team")} className="gap-2">
+                <Users className="w-4 h-4" /> Equipe
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/reports")} className="gap-2">
+                <BarChart3 className="w-4 h-4" /> Relatórios
+              </Button>
               <Button onClick={() => navigate("/projects")}>Ver Projetos</Button>
             </div>
           </div>

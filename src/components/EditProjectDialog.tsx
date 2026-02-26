@@ -32,6 +32,8 @@ interface Project {
   budget_planned: number;
   owner: string | null;
   blockers: string | null;
+  category?: string;
+  program?: string | null;
 }
 
 interface EditProjectDialogProps {
@@ -59,6 +61,8 @@ export const EditProjectDialog = ({
     budget_planned: "",
     owner: "",
     blockers: "",
+    category: "general",
+    program: "",
   });
 
   useEffect(() => {
@@ -73,6 +77,8 @@ export const EditProjectDialog = ({
         budget_planned: project.budget_planned?.toString() || "0",
         owner: project.owner || "",
         blockers: project.blockers || "",
+        category: (project as any).category || "general",
+        program: (project as any).program || "",
       });
     }
   }, [project]);
@@ -101,6 +107,8 @@ export const EditProjectDialog = ({
           budget_planned: parseFloat(formData.budget_planned) || 0,
           owner: formData.owner,
           blockers: formData.blockers,
+          category: formData.category || "general",
+          program: formData.program || null,
         })
         .eq("id", project.id);
 
@@ -251,6 +259,35 @@ export const EditProjectDialog = ({
                   setFormData({ ...formData, owner: e.target.value })
                 }
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-category">Categoria</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={(value) => setFormData({ ...formData, category: value })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="general">Geral</SelectItem>
+                    <SelectItem value="produto">Produto</SelectItem>
+                    <SelectItem value="infraestrutura">Infraestrutura</SelectItem>
+                    <SelectItem value="marketing">Marketing</SelectItem>
+                    <SelectItem value="operacoes">Operações</SelectItem>
+                    <SelectItem value="tecnologia">Tecnologia</SelectItem>
+                    <SelectItem value="rh">RH</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-program">Programa</Label>
+                <Input
+                  id="edit-program"
+                  placeholder="Nome do programa (opcional)"
+                  value={formData.program}
+                  onChange={(e) => setFormData({ ...formData, program: e.target.value })}
+                />
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-blockers">Bloqueios/Impedimentos</Label>
