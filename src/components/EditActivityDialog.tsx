@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { User, Calendar, Clock, DollarSign, Layers } from "lucide-react";
+import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -21,6 +22,9 @@ interface Activity {
   cost: number;
   hours: number;
   phase_id: string | null;
+  priority?: string;
+  tags?: string[];
+  parent_id?: string | null;
 }
 
 interface Phase {
@@ -34,6 +38,7 @@ interface EditActivityDialogProps {
   onOpenChange: (open: boolean) => void;
   onActivityUpdated: () => void;
   phases?: Phase[];
+  allActivities?: Activity[];
 }
 
 export const EditActivityDialog = ({
@@ -42,6 +47,7 @@ export const EditActivityDialog = ({
   onOpenChange,
   onActivityUpdated,
   phases = [],
+  allActivities = [],
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
@@ -53,7 +59,11 @@ export const EditActivityDialog = ({
     cost: "",
     hours: "",
     phase_id: "",
+    priority: "medium",
+    tags: [] as string[],
+    parent_id: "",
   });
+  const [newTag, setNewTag] = useState("");
 
   useEffect(() => {
     if (activity) {
@@ -66,9 +76,23 @@ export const EditActivityDialog = ({
         cost: activity.cost?.toString() || "0",
         hours: activity.hours?.toString() || "0",
         phase_id: activity.phase_id || "",
+        priority: activity.priority || "medium",
+        tags: activity.tags || [],
+        parent_id: activity.parent_id || "",
       });
     }
   }, [activity]);
+
+  const handleAddTag = () => {
+    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
+      setFormData({ ...formData, tags: [...formData.tags, newTag.trim()] });
+      setNewTag("");
+    }
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    setFormData({ ...formData, tags: formData.tags.filter((t) => t !== tag) });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,120 +110,138 @@ export const EditActivityDialog = ({
           cost: parseFloat(formData.cost) || 0,
           hours: parseFloat(formData.hours) || 0,
           phase_id: formData.phase_id || null,
+          priority: formData.priority,
+          tags: formData.tags,
+          parent_id: formData.parent_id || null,
         })
         .eq("id", activity.id);
 
       if (error) throw error;
 
-      toast({
-        title: "Atividade atualizada!",
-        description: "As alterações foram salvas com sucesso.",
-      });
-
+      toast({ title: "Atividade atualizada!", description: "As alterações foram salvas." });
       onActivityUpdated();
       onOpenChange(false);
     } catch (error) {
       console.error("Erro ao atualizar atividade:", error);
-      toast({
-        title: "Erro ao atualizar atividade",
-        description: "Não foi possível salvar as alterações.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao atualizar atividade", variant: "destructive" });
     }
   };
 
+  const parentCandidates = allActivities.filter((a) => a.id !== activity?.id);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Editar Atividade</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="title" className="text-sm font-semibold text-foreground">
-              Título *
-            </Label>
-            <Input
-              id="title"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              required
-              className="font-medium"
-            />
+            <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
+            <Input id="title" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} required className="font-medium" />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description" className="text-sm font-semibold text-foreground">
-              Descrição
+            <Label htmlFor="description" className="text-sm font-semibold text-foreground">Descrição</Label>
+            <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} placeholder="Descreva a atividade..." />
+          </div>
+
+          {/* Priority */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Flag className="w-4 h-4" /> Prioridade
             </Label>
-            <Textarea
-              id="description"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows={3}
-              placeholder="Descreva a atividade..."
-            />
+            <div className="flex gap-2">
+              {[
+                { value: "low", label: "Baixa", color: "bg-muted text-muted-foreground" },
+                { value: "medium", label: "Média", color: "bg-warning/20 text-warning" },
+                { value: "high", label: "Alta", color: "bg-destructive/20 text-destructive" },
+              ].map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-all ${
+                    formData.priority === p.value
+                      ? `${p.color} border-current ring-2 ring-current/20`
+                      : "border-border text-muted-foreground hover:border-foreground/30"
+                  }`}
+                  onClick={() => setFormData({ ...formData, priority: p.value })}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tags */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Tag className="w-4 h-4" /> Etiquetas
+            </Label>
+            <div className="flex flex-wrap gap-1 mb-2">
+              {formData.tags.map((tag) => (
+                <Badge key={tag} variant="secondary" className="gap-1 text-xs">
+                  {tag}
+                  <button type="button" onClick={() => handleRemoveTag(tag)}>
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Nova etiqueta..."
+                value={newTag}
+                onChange={(e) => setNewTag(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
+                className="flex-1"
+              />
+              <Button type="button" variant="outline" size="sm" onClick={handleAddTag}>Adicionar</Button>
+            </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="assigned_to" className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <User className="w-4 h-4" />
-              Responsável
+              <User className="w-4 h-4" /> Responsável
             </Label>
-            <Input
-              id="assigned_to"
-              value={formData.assigned_to}
-              onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-              placeholder="Nome do responsável"
-            />
+            <Input id="assigned_to" value={formData.assigned_to} onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })} placeholder="Nome do responsável" />
           </div>
 
-          {phases.length > 0 && (
-            <div className="space-y-2">
-              <Label htmlFor="phase_id" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Layers className="w-4 h-4" />
-                Fase
-              </Label>
-              <select
-                id="phase_id"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={formData.phase_id}
-                onChange={(e) => setFormData({ ...formData, phase_id: e.target.value })}
-              >
-                <option value="">Sem fase</option>
-                {phases.map((phase) => (
-                  <option key={phase.id} value={phase.id}>
-                    {phase.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="grid grid-cols-2 gap-4">
+            {phases.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Layers className="w-4 h-4" /> Fase
+                </Label>
+                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.phase_id} onChange={(e) => setFormData({ ...formData, phase_id: e.target.value })}>
+                  <option value="">Sem fase</option>
+                  {phases.map((phase) => (<option key={phase.id} value={phase.id}>{phase.title}</option>))}
+                </select>
+              </div>
+            )}
+            {parentCandidates.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-foreground">Sub-tarefa de</Label>
+                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.parent_id} onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}>
+                  <option value="">Nenhuma (tarefa principal)</option>
+                  {parentCandidates.map((a) => (<option key={a.id} value={a.id}>{a.title}</option>))}
+                </select>
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="start_date" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                Data de Início
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Data de Início
               </Label>
-              <Input
-                id="start_date"
-                type="date"
-                value={formData.start_date}
-                onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-              />
+              <Input type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="end_date" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                Data de Fim
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Data de Fim
               </Label>
-              <Input
-                id="end_date"
-                type="date"
-                value={formData.end_date}
-                onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-              />
+              <Input type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} />
             </div>
           </div>
 
@@ -207,44 +249,22 @@ export const EditActivityDialog = ({
             <h3 className="text-sm font-bold text-foreground">Recursos da Atividade</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="hours" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-primary" />
-                  Horas Estimadas
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-primary" /> Horas Estimadas
                 </Label>
-                <Input
-                  id="hours"
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={formData.hours}
-                  onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
-                  className="font-semibold text-lg"
-                  placeholder="0"
-                />
+                <Input type="number" step="0.5" min="0" value={formData.hours} onChange={(e) => setFormData({ ...formData, hours: e.target.value })} className="font-semibold text-lg" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="cost" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-success" />
-                  Custo (R$)
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-success" /> Custo (R$)
                 </Label>
-                <Input
-                  id="cost"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.cost}
-                  onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                  className="font-semibold text-lg"
-                  placeholder="0.00"
-                />
+                <Input type="number" step="0.01" min="0" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} className="font-semibold text-lg" />
               </div>
             </div>
           </div>
 
           <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button type="submit">Salvar Alterações</Button>
           </DialogFooter>
         </form>

@@ -24,10 +24,13 @@ export type Database = {
           end_date: string | null
           hours: number | null
           id: string
+          parent_id: string | null
           phase_id: string | null
+          priority: string
           project_id: string
           start_date: string | null
           status: string
+          tags: string[] | null
           title: string
           updated_at: string
         }
@@ -40,10 +43,13 @@ export type Database = {
           end_date?: string | null
           hours?: number | null
           id?: string
+          parent_id?: string | null
           phase_id?: string | null
+          priority?: string
           project_id: string
           start_date?: string | null
           status?: string
+          tags?: string[] | null
           title: string
           updated_at?: string
         }
@@ -56,14 +62,24 @@ export type Database = {
           end_date?: string | null
           hours?: number | null
           id?: string
+          parent_id?: string | null
           phase_id?: string | null
+          priority?: string
           project_id?: string
           start_date?: string | null
           status?: string
+          tags?: string[] | null
           title?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "activities_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "activities_phase_id_fkey"
             columns: ["phase_id"]
@@ -171,6 +187,111 @@ export type Database = {
           },
         ]
       }
+      lessons_learned: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          impact: string | null
+          phase_id: string | null
+          problem: string
+          project_id: string
+          reported_by: string | null
+          solution: string | null
+          suggestion: string | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          id?: string
+          impact?: string | null
+          phase_id?: string | null
+          problem: string
+          project_id: string
+          reported_by?: string | null
+          solution?: string | null
+          suggestion?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          impact?: string | null
+          phase_id?: string | null
+          problem?: string
+          project_id?: string
+          reported_by?: string | null
+          solution?: string | null
+          suggestion?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lessons_learned_phase_id_fkey"
+            columns: ["phase_id"]
+            isOneToOne: false
+            referencedRelation: "phases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_learned_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          activity_id: string | null
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string | null
+          project_id: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          activity_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          project_id?: string | null
+          title: string
+          type: string
+        }
+        Update: {
+          activity_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          project_id?: string | null
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       phases: {
         Row: {
           created_at: string
@@ -202,6 +323,76 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "phases_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_documents: {
+        Row: {
+          activity_id: string | null
+          created_at: string
+          description: string | null
+          file_name: string
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          phase_id: string | null
+          project_id: string
+          updated_at: string
+          uploaded_by: string | null
+          version: number
+        }
+        Insert: {
+          activity_id?: string | null
+          created_at?: string
+          description?: string | null
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          phase_id?: string | null
+          project_id: string
+          updated_at?: string
+          uploaded_by?: string | null
+          version?: number
+        }
+        Update: {
+          activity_id?: string | null
+          created_at?: string
+          description?: string | null
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          phase_id?: string | null
+          project_id?: string
+          updated_at?: string
+          uploaded_by?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_documents_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_documents_phase_id_fkey"
+            columns: ["phase_id"]
+            isOneToOne: false
+            referencedRelation: "phases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_documents_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -259,6 +450,99 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      task_dependencies: {
+        Row: {
+          created_at: string
+          dependency_type: string
+          id: string
+          lag_days: number | null
+          predecessor_id: string
+          successor_id: string
+        }
+        Insert: {
+          created_at?: string
+          dependency_type?: string
+          id?: string
+          lag_days?: number | null
+          predecessor_id: string
+          successor_id: string
+        }
+        Update: {
+          created_at?: string
+          dependency_type?: string
+          id?: string
+          lag_days?: number | null
+          predecessor_id?: string
+          successor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_dependencies_predecessor_id_fkey"
+            columns: ["predecessor_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_dependencies_successor_id_fkey"
+            columns: ["successor_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      time_entries: {
+        Row: {
+          activity_id: string
+          created_at: string
+          description: string | null
+          duration_minutes: number | null
+          ended_at: string | null
+          id: string
+          project_id: string
+          started_at: string
+          user_name: string | null
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          ended_at?: string | null
+          id?: string
+          project_id: string
+          started_at: string
+          user_name?: string | null
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          ended_at?: string | null
+          id?: string
+          project_id?: string
+          started_at?: string
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_entries_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_entries_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
