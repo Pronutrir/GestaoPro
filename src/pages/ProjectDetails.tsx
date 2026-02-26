@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
+import { ActivityComments } from "@/components/ActivityComments";
 import { EditActivityDialog } from "@/components/EditActivityDialog";
 import { PhaseManager } from "@/components/PhaseManager";
 import { TimelineView } from "@/components/TimelineView";
@@ -654,6 +655,11 @@ const ProjectDetails = () => {
                                 <Circle className="w-5 h-5 text-muted-foreground" />
                               )}
                             </div>
+                          </div>
+
+                          {/* Comments Section */}
+                          <div className="border-t border-border pt-3">
+                            <ActivityComments activityId={activity.id} />
                           </div>
                         </div>
                       ))
