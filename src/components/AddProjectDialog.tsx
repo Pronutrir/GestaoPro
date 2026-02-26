@@ -41,6 +41,8 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
     budget_planned: "",
     owner: "",
     blockers: "",
+    category: "general",
+    program: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -64,6 +66,8 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
         budget_used: 0,
         owner: formData.owner,
         blockers: formData.blockers,
+        category: formData.category || "general",
+        program: formData.program || null,
       });
 
       if (error) throw error;
@@ -83,6 +87,8 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
         budget_planned: "",
         owner: "",
         blockers: "",
+        category: "general",
+        program: "",
       });
       setOpen(false);
       onProjectAdded();
@@ -228,6 +234,35 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
                   setFormData({ ...formData, owner: e.target.value })
                 }
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="category">Categoria</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={(value) => setFormData({ ...formData, category: value })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="general">Geral</SelectItem>
+                    <SelectItem value="produto">Produto</SelectItem>
+                    <SelectItem value="infraestrutura">Infraestrutura</SelectItem>
+                    <SelectItem value="marketing">Marketing</SelectItem>
+                    <SelectItem value="operacoes">Operações</SelectItem>
+                    <SelectItem value="tecnologia">Tecnologia</SelectItem>
+                    <SelectItem value="rh">RH</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="program">Programa</Label>
+                <Input
+                  id="program"
+                  placeholder="Nome do programa (opcional)"
+                  value={formData.program}
+                  onChange={(e) => setFormData({ ...formData, program: e.target.value })}
+                />
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="blockers">Bloqueios/Impedimentos</Label>

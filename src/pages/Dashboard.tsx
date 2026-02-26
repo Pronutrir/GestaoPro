@@ -14,6 +14,8 @@ import {
   Rocket,
   CheckCircle,
   Archive,
+  BarChart3,
+  Filter,
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ProjectColumn } from "@/components/ProjectColumn";
@@ -46,6 +48,8 @@ interface Project {
   owner: string | null;
   blockers: string | null;
   display_order: number;
+  category?: string;
+  program?: string | null;
 }
 
 const Dashboard = () => {
@@ -53,6 +57,7 @@ const Dashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -217,10 +222,12 @@ const Dashboard = () => {
     }
   };
 
-  const filteredProjects = projects.filter((project) =>
-    project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    project.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProjects = projects.filter((project) => {
+    const matchesSearch = project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = !categoryFilter || (project.category || "general") === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
 
   const sortByOrder = (arr: Project[]) => [...arr].sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
   
@@ -261,11 +268,11 @@ const Dashboard = () => {
               <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
                 <Home className="w-5 h-5" />
               </Button>
-              <Button variant="ghost" size="icon">
-                <Calendar className="w-5 h-5" />
-              </Button>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" onClick={() => navigate("/team")}>
                 <Users className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => navigate("/reports")}>
+                <BarChart3 className="w-5 h-5" />
               </Button>
               <Button variant="ghost" size="icon">
                 <Settings className="w-5 h-5" />
@@ -292,7 +299,23 @@ const Dashboard = () => {
             />
           </div>
           
-          <AddProjectDialog onProjectAdded={fetchProjects} />
+          <div className="flex items-center gap-2">
+            <select
+              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={categoryFilter || ""}
+              onChange={(e) => setCategoryFilter(e.target.value || null)}
+            >
+              <option value="">Todas Categorias</option>
+              <option value="general">Geral</option>
+              <option value="produto">Produto</option>
+              <option value="infraestrutura">Infraestrutura</option>
+              <option value="marketing">Marketing</option>
+              <option value="operacoes">Operações</option>
+              <option value="tecnologia">Tecnologia</option>
+              <option value="rh">RH</option>
+            </select>
+            <AddProjectDialog onProjectAdded={fetchProjects} />
+          </div>
         </div>
 
         {/* Statistics */}

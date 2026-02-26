@@ -406,6 +406,8 @@ export type Database = {
           blockers: string | null
           budget_planned: number | null
           budget_used: number | null
+          category: string | null
+          completion_percentage: number | null
           created_at: string
           description: string | null
           display_order: number | null
@@ -413,6 +415,7 @@ export type Database = {
           id: string
           owner: string | null
           priority: string
+          program: string | null
           status: string
           title: string
           updated_at: string
@@ -422,6 +425,8 @@ export type Database = {
           blockers?: string | null
           budget_planned?: number | null
           budget_used?: number | null
+          category?: string | null
+          completion_percentage?: number | null
           created_at?: string
           description?: string | null
           display_order?: number | null
@@ -429,6 +434,7 @@ export type Database = {
           id?: string
           owner?: string | null
           priority?: string
+          program?: string | null
           status?: string
           title: string
           updated_at?: string
@@ -438,6 +444,8 @@ export type Database = {
           blockers?: string | null
           budget_planned?: number | null
           budget_used?: number | null
+          category?: string | null
+          completion_percentage?: number | null
           created_at?: string
           description?: string | null
           display_order?: number | null
@@ -445,6 +453,7 @@ export type Database = {
           id?: string
           owner?: string | null
           priority?: string
+          program?: string | null
           status?: string
           title?: string
           updated_at?: string
