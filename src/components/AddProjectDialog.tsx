@@ -237,10 +237,10 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="category">Setor</Label>
+                <Label htmlFor="category">Setores Responsáveis</Label>
                 <Input
                   id="category"
-                  placeholder="Ex: TI, Marketing, RH..."
+                  placeholder="Ex: TI, Marketing, RH (separados por vírgula)"
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 />
