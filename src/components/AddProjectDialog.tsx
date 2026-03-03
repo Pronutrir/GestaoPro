@@ -41,7 +41,7 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
     budget_planned: "",
     owner: "",
     blockers: "",
-    category: "general",
+    category: "",
     program: "",
   });
 
@@ -237,22 +237,13 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="category">Categoria</Label>
-                <Select
+                <Label htmlFor="category">Setor</Label>
+                <Input
+                  id="category"
+                  placeholder="Ex: TI, Marketing, RH..."
                   value={formData.category}
-                  onValueChange={(value) => setFormData({ ...formData, category: value })}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="general">Geral</SelectItem>
-                    <SelectItem value="produto">Produto</SelectItem>
-                    <SelectItem value="infraestrutura">Infraestrutura</SelectItem>
-                    <SelectItem value="marketing">Marketing</SelectItem>
-                    <SelectItem value="operacoes">Operações</SelectItem>
-                    <SelectItem value="tecnologia">Tecnologia</SelectItem>
-                    <SelectItem value="rh">RH</SelectItem>
-                  </SelectContent>
-                </Select>
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="program">Programa</Label>
