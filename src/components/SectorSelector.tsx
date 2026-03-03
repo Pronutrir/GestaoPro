@@ -10,7 +10,7 @@ interface SectorSelectorProps {
   label?: string;
 }
 
-export const SectorSelector = ({ selected, onChange, label = "Setores Interessados" }: SectorSelectorProps) => {
+export const SectorSelector = ({ selected, onChange, label = "Setores" }: SectorSelectorProps) => {
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
