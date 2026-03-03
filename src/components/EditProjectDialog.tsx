@@ -61,7 +61,7 @@ export const EditProjectDialog = ({
     budget_planned: "",
     owner: "",
     blockers: "",
-    category: "general",
+    category: "",
     program: "",
   });
 
@@ -262,22 +262,13 @@ export const EditProjectDialog = ({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="edit-category">Categoria</Label>
-                <Select
+                <Label htmlFor="edit-category">Setor</Label>
+                <Input
+                  id="edit-category"
+                  placeholder="Ex: TI, Marketing, RH..."
                   value={formData.category}
-                  onValueChange={(value) => setFormData({ ...formData, category: value })}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="general">Geral</SelectItem>
-                    <SelectItem value="produto">Produto</SelectItem>
-                    <SelectItem value="infraestrutura">Infraestrutura</SelectItem>
-                    <SelectItem value="marketing">Marketing</SelectItem>
-                    <SelectItem value="operacoes">Operações</SelectItem>
-                    <SelectItem value="tecnologia">Tecnologia</SelectItem>
-                    <SelectItem value="rh">RH</SelectItem>
-                  </SelectContent>
-                </Select>
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-program">Programa</Label>
