@@ -19,14 +19,19 @@ export const SectorSelector = ({ selected, onChange, label = "Setores" }: Sector
     });
   }, []);
 
-  const available = sectors.filter((s) => !selected.includes(s.name));
+  // Filter selected to only include valid sector names
+  const sectorNames = sectors.map((s) => s.name);
+  const validSelected = selected.filter((s) => sectorNames.includes(s));
+  const available = sectors.filter((s) => !validSelected.includes(s.name));
 
-  const toggle = (name: string) => {
-    if (selected.includes(name)) {
-      onChange(selected.filter((s) => s !== name));
-    } else {
-      onChange([...selected, name]);
+  const add = (name: string) => {
+    if (!validSelected.includes(name)) {
+      onChange([...validSelected, name]);
     }
+  };
+
+  const remove = (name: string) => {
+    onChange(validSelected.filter((s) => s !== name));
   };
 
   return (
@@ -34,10 +39,10 @@ export const SectorSelector = ({ selected, onChange, label = "Setores" }: Sector
       <Label>{label}</Label>
 
       {/* Selected */}
-      {selected.length > 0 && (
+      {validSelected.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {selected.map((name) => (
-            <Badge key={name} className="gap-1 cursor-pointer" onClick={() => toggle(name)}>
+          {validSelected.map((name) => (
+            <Badge key={name} className="gap-1 cursor-pointer" onClick={() => remove(name)}>
               {name}
               <X className="w-3 h-3" />
             </Badge>
@@ -53,7 +58,7 @@ export const SectorSelector = ({ selected, onChange, label = "Setores" }: Sector
               key={sector.id}
               variant="outline"
               className="cursor-pointer hover:bg-primary/10 transition-colors"
-              onClick={() => toggle(sector.name)}
+              onClick={() => add(sector.name)}
             >
               {sector.name}
             </Badge>
