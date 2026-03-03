@@ -62,7 +62,7 @@ const Settings = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Building2 className="w-5 h-5" />
-              Setores Interessados
+              Setores
             </CardTitle>
             <CardDescription>
               Cadastre os setores que podem ser partes interessadas nos projetos. Eles aparecerão como opções na criação e edição de projetos.
