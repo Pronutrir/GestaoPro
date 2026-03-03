@@ -5,6 +5,7 @@ import {
   BarChart3,
   AlertTriangle,
   FolderKanban,
+  Settings,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -26,6 +27,7 @@ const navItems = [
   { path: "/team", label: "Equipe", icon: Users },
   { path: "/reports", label: "Relatórios", icon: BarChart3 },
   { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle },
+  { path: "/settings", label: "Configurações", icon: Settings },
 ];
 
 export function AppSidebar() {

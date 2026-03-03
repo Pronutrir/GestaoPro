@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { SectorSelector } from "@/components/SectorSelector";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -260,25 +261,18 @@ export const EditProjectDialog = ({
                 }
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-category">Setores Responsáveis</Label>
-                <Input
-                  id="edit-category"
-                  placeholder="Ex: TI, Marketing, RH (separados por vírgula)"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-program">Programa</Label>
-                <Input
-                  id="edit-program"
-                  placeholder="Nome do programa (opcional)"
-                  value={formData.program}
-                  onChange={(e) => setFormData({ ...formData, program: e.target.value })}
-                />
-              </div>
+            <SectorSelector
+              selected={formData.category ? formData.category.split(",").map(s => s.trim()).filter(Boolean) : []}
+              onChange={(sectors) => setFormData({ ...formData, category: sectors.join(", ") })}
+            />
+            <div className="grid gap-2">
+              <Label htmlFor="edit-program">Programa</Label>
+              <Input
+                id="edit-program"
+                placeholder="Nome do programa (opcional)"
+                value={formData.program}
+                onChange={(e) => setFormData({ ...formData, program: e.target.value })}
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-blockers">Bloqueios/Impedimentos</Label>
