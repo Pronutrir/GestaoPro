@@ -81,6 +81,7 @@ export const PhaseManager = ({
   const [editingPhase, setEditingPhase] = useState<Phase | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [quickAddTitle, setQuickAddTitle] = useState<Record<string, string>>({});
 
   const togglePhase = (phaseId: string) => {
     const newExpanded = new Set(expandedPhases);
@@ -211,6 +212,27 @@ export const PhaseManager = ({
     } catch (error) {
       console.error("Erro ao reordenar:", error);
       toast({ title: "Erro ao reordenar", variant: "destructive" });
+    }
+  };
+
+  const handleQuickAddActivity = async (phaseId: string) => {
+    const title = quickAddTitle[phaseId]?.trim();
+    if (!title) return;
+    try {
+      const phaseActivities = getActivitiesForPhase(phaseId);
+      const maxOrder = phaseActivities.reduce((max, a) => Math.max(max, a.display_order ?? 0), 0);
+      const { error } = await supabase.from("activities").insert({
+        project_id: projectId,
+        title,
+        phase_id: phaseId,
+        display_order: maxOrder + 1,
+      });
+      if (error) throw error;
+      setQuickAddTitle((prev) => ({ ...prev, [phaseId]: "" }));
+      onDataChanged();
+    } catch (error) {
+      console.error("Erro ao criar atividade:", error);
+      toast({ title: "Erro ao criar atividade", variant: "destructive" });
     }
   };
 
@@ -355,10 +377,10 @@ export const PhaseManager = ({
                     </div>
                   </CollapsibleTrigger>
 
-                  <CollapsibleContent>
+                    <CollapsibleContent>
                     <div className="border-t border-border p-4 bg-accent/20 space-y-2">
                       {phaseActivities.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
+                        <p className="text-sm text-muted-foreground text-center py-2">
                           Nenhuma tarefa nesta fase
                         </p>
                       ) : (
@@ -379,6 +401,18 @@ export const PhaseManager = ({
                           </SortableContext>
                         </DndContext>
                       )}
+                      <div className="flex gap-2 pt-2">
+                        <Input
+                          placeholder="Adicionar tarefa rápida..."
+                          value={quickAddTitle[phase.id] || ""}
+                          onChange={(e) => setQuickAddTitle((prev) => ({ ...prev, [phase.id]: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleQuickAddActivity(phase.id); }}
+                          className="h-8 text-sm"
+                        />
+                        <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => handleQuickAddActivity(phase.id)}>
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
