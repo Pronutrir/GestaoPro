@@ -33,6 +33,11 @@ import {
   Flag,
   ChevronRight,
 } from "lucide-react";
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { SortableActivityCard } from "@/components/SortableActivityCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -102,6 +107,11 @@ const ProjectDetails = () => {
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [editActivityDialogOpen, setEditActivityDialogOpen] = useState(false);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
   useEffect(() => {
     if (id) fetchProjectData();
   }, [id]);
@@ -119,7 +129,7 @@ const ProjectDetails = () => {
       setPhases(phasesData || []);
 
       const { data: activitiesData, error: activitiesError } = await supabase
-        .from("activities").select("*").eq("project_id", id).order("created_at", { ascending: false });
+        .from("activities").select("*").eq("project_id", id).order("display_order", { ascending: true }).order("created_at", { ascending: false });
       if (activitiesError) throw activitiesError;
       setActivities(activitiesData || []);
     } catch (error) {
@@ -186,6 +196,30 @@ const ProjectDetails = () => {
       fetchProjectData();
     } catch (error) {
       toast({ title: "Erro ao excluir atividade", variant: "destructive" });
+    }
+  };
+
+  const handleActivityDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const parentActs = activities.filter((a) => !a.parent_id);
+    const oldIndex = parentActs.findIndex((a) => a.id === active.id);
+    const newIndex = parentActs.findIndex((a) => a.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(parentActs, oldIndex, newIndex);
+    // Optimistic update
+    const otherActivities = activities.filter((a) => a.parent_id);
+    setActivities([
+      ...reordered.map((a, i) => ({ ...a, display_order: i })),
+      ...otherActivities,
+    ]);
+    try {
+      for (let i = 0; i < reordered.length; i++) {
+        await supabase.from("activities").update({ display_order: i }).eq("id", reordered[i].id);
+      }
+    } catch {
+      toast({ title: "Erro ao reordenar atividades", variant: "destructive" });
+      fetchProjectData();
     }
   };
 
@@ -427,13 +461,21 @@ const ProjectDetails = () => {
 
               <TabsContent value="activities" className="mt-0">
                 <Card className="p-6">
-                  <div className="space-y-3">
-                    {activities.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-8">Nenhuma atividade cadastrada</p>
-                    ) : (
-                      parentActivities.map((activity) => renderActivityCard(activity))
-                    )}
-                  </div>
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleActivityDragEnd}>
+                    <SortableContext items={parentActivities.map(a => a.id)} strategy={verticalListSortingStrategy}>
+                      <div className="space-y-3">
+                        {activities.length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-8">Nenhuma atividade cadastrada</p>
+                        ) : (
+                          parentActivities.map((activity) => (
+                            <SortableActivityCard key={activity.id} id={activity.id}>
+                              {renderActivityCard(activity)}
+                            </SortableActivityCard>
+                          ))
+                        )}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
                 </Card>
               </TabsContent>
 

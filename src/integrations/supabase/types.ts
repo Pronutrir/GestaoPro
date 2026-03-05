@@ -21,6 +21,7 @@ export type Database = {
           cost: number | null
           created_at: string
           description: string | null
+          display_order: number | null
           end_date: string | null
           hours: number | null
           id: string
@@ -40,6 +41,7 @@ export type Database = {
           cost?: number | null
           created_at?: string
           description?: string | null
+          display_order?: number | null
           end_date?: string | null
           hours?: number | null
           id?: string
@@ -59,6 +61,7 @@ export type Database = {
           cost?: number | null
           created_at?: string
           description?: string | null
+          display_order?: number | null
           end_date?: string | null
           hours?: number | null
           id?: string
