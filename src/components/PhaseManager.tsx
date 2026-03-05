@@ -18,6 +18,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { SortableActivityCard } from "@/components/SortableActivityCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -42,6 +47,7 @@ interface Activity {
   cost: number;
   hours: number;
   phase_id: string | null;
+  display_order?: number | null;
 }
 
 interface PhaseManagerProps {
@@ -64,6 +70,10 @@ export const PhaseManager = ({
   onToggleActivity,
 }: PhaseManagerProps) => {
   const { toast } = useToast();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set(phases.map(p => p.id)));
   const [showAddPhase, setShowAddPhase] = useState(false);
   const [newPhaseTitle, setNewPhaseTitle] = useState("");
@@ -175,6 +185,32 @@ export const PhaseManager = ({
     } catch (error) {
       console.error("Erro ao mover atividade:", error);
       toast({ title: "Erro ao mover", variant: "destructive" });
+    }
+  };
+
+  const handleActivityDragEnd = async (event: DragEndEvent, phaseId: string | null) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const currentActivities = getActivitiesForPhase(phaseId)
+      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+    const oldIndex = currentActivities.findIndex((a) => a.id === active.id);
+    const newIndex = currentActivities.findIndex((a) => a.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(currentActivities, oldIndex, newIndex);
+    
+    try {
+      for (let i = 0; i < reordered.length; i++) {
+        await supabase
+          .from("activities")
+          .update({ display_order: i })
+          .eq("id", reordered[i].id);
+      }
+      onDataChanged();
+    } catch (error) {
+      console.error("Erro ao reordenar:", error);
+      toast({ title: "Erro ao reordenar", variant: "destructive" });
     }
   };
 
@@ -326,17 +362,22 @@ export const PhaseManager = ({
                           Nenhuma tarefa nesta fase
                         </p>
                       ) : (
-                        phaseActivities.map((activity) => (
-                          <ActivityCard
-                            key={activity.id}
-                            activity={activity}
-                            phases={phases}
-                            onEdit={onEditActivity}
-                            onDelete={onDeleteActivity}
-                            onToggle={onToggleActivity}
-                            onMoveToPhase={handleMoveActivity}
-                          />
-                        ))
+                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleActivityDragEnd(e, phase.id)}>
+                          <SortableContext items={phaseActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map(a => a.id)} strategy={verticalListSortingStrategy}>
+                            {phaseActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map((activity) => (
+                              <SortableActivityCard key={activity.id} id={activity.id}>
+                                <ActivityCard
+                                  activity={activity}
+                                  phases={phases}
+                                  onEdit={onEditActivity}
+                                  onDelete={onDeleteActivity}
+                                  onToggle={onToggleActivity}
+                                  onMoveToPhase={handleMoveActivity}
+                                />
+                              </SortableActivityCard>
+                            ))}
+                          </SortableContext>
+                        </DndContext>
                       )}
                     </div>
                   </CollapsibleContent>
@@ -353,19 +394,22 @@ export const PhaseManager = ({
             <h3 className="font-semibold text-muted-foreground">Tarefas sem fase</h3>
             <Badge variant="secondary">{unassignedActivities.length}</Badge>
           </div>
-          <div className="space-y-2">
-            {unassignedActivities.map((activity) => (
-              <ActivityCard
-                key={activity.id}
-                activity={activity}
-                phases={phases}
-                onEdit={onEditActivity}
-                onDelete={onDeleteActivity}
-                onToggle={onToggleActivity}
-                onMoveToPhase={handleMoveActivity}
-              />
-            ))}
-          </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleActivityDragEnd(e, null)}>
+            <SortableContext items={unassignedActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map(a => a.id)} strategy={verticalListSortingStrategy}>
+              {unassignedActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map((activity) => (
+                <SortableActivityCard key={activity.id} id={activity.id}>
+                  <ActivityCard
+                    activity={activity}
+                    phases={phases}
+                    onEdit={onEditActivity}
+                    onDelete={onDeleteActivity}
+                    onToggle={onToggleActivity}
+                    onMoveToPhase={handleMoveActivity}
+                  />
+                </SortableActivityCard>
+              ))}
+            </SortableContext>
+          </DndContext>
         </Card>
       )}
     </div>

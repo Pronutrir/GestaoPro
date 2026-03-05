@@ -76,6 +76,7 @@ interface Activity {
   cost: number;
   hours: number;
   phase_id: string | null;
+  display_order?: number | null;
   priority?: string;
   tags?: string[];
   parent_id?: string | null;
