@@ -287,6 +287,9 @@ export const EditProjectDialog = ({
                 rows={2}
               />
             </div>
+            {project && (
+              <ProjectMembersManager projectId={project.id} />
+            )}
           </div>
           <DialogFooter>
             <Button
