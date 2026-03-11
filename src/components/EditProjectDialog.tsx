@@ -271,7 +271,7 @@ export const EditProjectDialog = ({
                 rows={2}
               />
             </div>
-            {project && (
+            {project && isAdmin && (
               <ProjectMembersManager projectId={project.id} />
             )}
           </div>

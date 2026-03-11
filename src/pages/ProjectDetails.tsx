@@ -458,6 +458,7 @@ const ProjectDetails = () => {
                   onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
                   onDeleteActivity={handleDeleteActivity}
                   onToggleActivity={handleToggleActivity}
+                  isAdmin={isAdmin}
                 />
               </TabsContent>
 
@@ -470,6 +471,7 @@ const ProjectDetails = () => {
                   onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
                   onDeleteActivity={handleDeleteActivity}
                   onToggleActivity={handleToggleActivity}
+                  isAdmin={isAdmin}
                 />
               </TabsContent>
 

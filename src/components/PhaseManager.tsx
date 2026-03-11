@@ -554,14 +554,16 @@ const ActivityCard = ({
         >
           <Pencil className="w-3 h-3" />
         </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7 text-destructive"
-          onClick={() => onDelete(activity.id)}
-        >
-          <Trash2 className="w-3 h-3" />
-        </Button>
+        {isAdmin && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-destructive"
+            onClick={() => onDelete(activity.id)}
+          >
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        )}
       </div>
     </div>
   );
