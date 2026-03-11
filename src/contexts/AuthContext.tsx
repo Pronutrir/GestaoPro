@@ -30,12 +30,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   const fetchUserData = async (userId: string) => {
-    const [{ data: profileData }, { data: roleData }] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", userId).single(),
-      supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle(),
-    ]);
-    setProfile(profileData);
-    setIsAdmin(!!roleData);
+    try {
+      const [{ data: profileData }, { data: roleData }] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", userId).single(),
+        supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle(),
+      ]);
+      setProfile(profileData);
+      setIsAdmin(!!roleData);
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      setProfile(null);
+      setIsAdmin(false);
+    }
   };
 
   useEffect(() => {
