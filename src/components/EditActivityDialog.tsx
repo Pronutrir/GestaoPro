@@ -50,6 +50,7 @@ export const EditActivityDialog = ({
   onActivityUpdated,
   phases = [],
   allActivities = [],
+  projectId,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
