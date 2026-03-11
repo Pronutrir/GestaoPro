@@ -47,6 +47,7 @@ import { SortableContext, verticalListSortingStrategy, arrayMove, sortableKeyboa
 import { SortableActivityCard } from "@/components/SortableActivityCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Project {
   id: string;
@@ -93,6 +94,7 @@ const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -306,9 +308,11 @@ const ProjectDetails = () => {
             <Button size="icon" variant="outline" onClick={() => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}>
               <Pencil className="w-4 h-4" />
             </Button>
-            <Button size="icon" variant="outline" className="text-destructive hover:bg-destructive/10" onClick={() => handleDeleteActivity(activity.id)}>
-              <Trash2 className="w-4 h-4" />
-            </Button>
+            {isAdmin && (
+              <Button size="icon" variant="outline" className="text-destructive hover:bg-destructive/10" onClick={() => handleDeleteActivity(activity.id)}>
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
             {activity.status === "completed" ? <CheckCircle2 className="w-5 h-5 text-success" /> : <Circle className="w-5 h-5 text-muted-foreground" />}
           </div>
         </div>
@@ -379,15 +383,17 @@ const ProjectDetails = () => {
               </div>
             </Card>
 
-            {/* Action Buttons */}
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant={showAddPhase ? "secondary" : "default"} onClick={() => { setShowAddPhase(!showAddPhase); setShowAddActivity(false); }} className="gap-2">
-                <Layers className="w-4 h-4" /> Nova Fase
-              </Button>
-              <Button size="sm" variant={showAddActivity ? "secondary" : "outline"} onClick={() => { setShowAddActivity(!showAddActivity); setShowAddPhase(false); }} className="gap-2">
-                <Plus className="w-4 h-4" /> Nova Atividade
-              </Button>
-            </div>
+            {/* Action Buttons - Admin only */}
+            {isAdmin && (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant={showAddPhase ? "secondary" : "default"} onClick={() => { setShowAddPhase(!showAddPhase); setShowAddActivity(false); }} className="gap-2">
+                  <Layers className="w-4 h-4" /> Nova Fase
+                </Button>
+                <Button size="sm" variant={showAddActivity ? "secondary" : "outline"} onClick={() => { setShowAddActivity(!showAddActivity); setShowAddPhase(false); }} className="gap-2">
+                  <Plus className="w-4 h-4" /> Nova Atividade
+                </Button>
+              </div>
+            )}
 
             {/* Add Phase Form */}
             {showAddPhase && (
@@ -452,6 +458,7 @@ const ProjectDetails = () => {
                   onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
                   onDeleteActivity={handleDeleteActivity}
                   onToggleActivity={handleToggleActivity}
+                  isAdmin={isAdmin}
                 />
               </TabsContent>
 
@@ -464,6 +471,7 @@ const ProjectDetails = () => {
                   onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
                   onDeleteActivity={handleDeleteActivity}
                   onToggleActivity={handleToggleActivity}
+                  isAdmin={isAdmin}
                 />
               </TabsContent>
 

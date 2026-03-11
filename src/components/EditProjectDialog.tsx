@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Project {
   id: string;
@@ -51,6 +52,7 @@ export const EditProjectDialog = ({
   onProjectUpdated,
 }: EditProjectDialogProps) => {
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
@@ -269,7 +271,7 @@ export const EditProjectDialog = ({
                 rows={2}
               />
             </div>
-            {project && (
+            {project && isAdmin && (
               <ProjectMembersManager projectId={project.id} />
             )}
           </div>

@@ -58,6 +58,7 @@ interface PhaseManagerProps {
   onEditActivity: (activity: Activity) => void;
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, status: string) => void;
+  isAdmin?: boolean;
 }
 
 export const PhaseManager = ({
@@ -68,6 +69,7 @@ export const PhaseManager = ({
   onEditActivity,
   onDeleteActivity,
   onToggleActivity,
+  isAdmin = false,
 }: PhaseManagerProps) => {
   const { toast } = useToast();
   const sensors = useSensors(
@@ -246,10 +248,12 @@ export const PhaseManager = ({
           <Layers className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold text-foreground">Fases do Projeto</h2>
         </div>
-        <Button size="sm" onClick={() => setShowAddPhase(!showAddPhase)} className="gap-2">
-          <Plus className="w-4 h-4" />
-          Nova Fase
-        </Button>
+        {isAdmin && (
+          <Button size="sm" onClick={() => setShowAddPhase(!showAddPhase)} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Nova Fase
+          </Button>
+        )}
       </div>
 
       {/* Add Phase Form */}
@@ -350,28 +354,30 @@ export const PhaseManager = ({
                               </span>
                             </div>
                           </div>
-                          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8"
-                              onClick={() => {
-                                setEditingPhase(phase);
-                                setEditTitle(phase.title);
-                                setEditDescription(phase.description || "");
-                              }}
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-destructive"
-                              onClick={() => handleDeletePhase(phase.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
+                          {isAdmin && (
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  setEditingPhase(phase);
+                                  setEditTitle(phase.title);
+                                  setEditDescription(phase.description || "");
+                                }}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-destructive"
+                                onClick={() => handleDeletePhase(phase.id)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -388,31 +394,34 @@ export const PhaseManager = ({
                           <SortableContext items={phaseActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map(a => a.id)} strategy={verticalListSortingStrategy}>
                             {phaseActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map((activity) => (
                               <SortableActivityCard key={activity.id} id={activity.id}>
-                                <ActivityCard
-                                  activity={activity}
-                                  phases={phases}
-                                  onEdit={onEditActivity}
-                                  onDelete={onDeleteActivity}
-                                  onToggle={onToggleActivity}
-                                  onMoveToPhase={handleMoveActivity}
-                                />
+                  <ActivityCard
+                    activity={activity}
+                    phases={phases}
+                    onEdit={onEditActivity}
+                    onDelete={onDeleteActivity}
+                    onToggle={onToggleActivity}
+                    onMoveToPhase={handleMoveActivity}
+                    isAdmin={isAdmin}
+                  />
                               </SortableActivityCard>
                             ))}
                           </SortableContext>
                         </DndContext>
                       )}
-                      <div className="flex gap-2 pt-2">
-                        <Input
-                          placeholder="Adicionar tarefa rápida..."
-                          value={quickAddTitle[phase.id] || ""}
-                          onChange={(e) => setQuickAddTitle((prev) => ({ ...prev, [phase.id]: e.target.value }))}
-                          onKeyDown={(e) => { if (e.key === "Enter") handleQuickAddActivity(phase.id); }}
-                          className="h-8 text-sm"
-                        />
-                        <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => handleQuickAddActivity(phase.id)}>
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      {isAdmin && (
+                        <div className="flex gap-2 pt-2">
+                          <Input
+                            placeholder="Adicionar tarefa rápida..."
+                            value={quickAddTitle[phase.id] || ""}
+                            onChange={(e) => setQuickAddTitle((prev) => ({ ...prev, [phase.id]: e.target.value }))}
+                            onKeyDown={(e) => { if (e.key === "Enter") handleQuickAddActivity(phase.id); }}
+                            className="h-8 text-sm"
+                          />
+                          <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => handleQuickAddActivity(phase.id)}>
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
@@ -439,6 +448,7 @@ export const PhaseManager = ({
                     onDelete={onDeleteActivity}
                     onToggle={onToggleActivity}
                     onMoveToPhase={handleMoveActivity}
+                    isAdmin={isAdmin}
                   />
                 </SortableActivityCard>
               ))}
@@ -458,6 +468,7 @@ interface ActivityCardProps {
   onDelete: (activityId: string) => void;
   onToggle: (activityId: string, status: string) => void;
   onMoveToPhase: (activityId: string, phaseId: string | null) => void;
+  isAdmin?: boolean;
 }
 
 const ActivityCard = ({
@@ -467,6 +478,7 @@ const ActivityCard = ({
   onDelete,
   onToggle,
   onMoveToPhase,
+  isAdmin = false,
 }: ActivityCardProps) => {
   const [showPhaseSelector, setShowPhaseSelector] = useState(false);
 
@@ -542,14 +554,16 @@ const ActivityCard = ({
         >
           <Pencil className="w-3 h-3" />
         </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7 text-destructive"
-          onClick={() => onDelete(activity.id)}
-        >
-          <Trash2 className="w-3 h-3" />
-        </Button>
+        {isAdmin && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-destructive"
+            onClick={() => onDelete(activity.id)}
+          >
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -71,6 +71,7 @@ interface ActivityKanbanProps {
   onEditActivity: (activity: Activity) => void;
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
+  isAdmin?: boolean;
 }
 
 function SortableKanbanCard({
@@ -79,12 +80,14 @@ function SortableKanbanCard({
   onEdit,
   onDelete,
   onToggle,
+  isAdmin,
 }: {
   activity: Activity;
   phases: Phase[];
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
+  isAdmin?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -104,6 +107,7 @@ function SortableKanbanCard({
         onDelete={onDelete}
         onToggle={onToggle}
         dragListeners={listeners}
+        isAdmin={isAdmin}
       />
     </div>
   );
@@ -116,6 +120,7 @@ function KanbanCard({
   onDelete,
   onToggle,
   dragListeners,
+  isAdmin,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -123,6 +128,7 @@ function KanbanCard({
   onDelete: () => void;
   onToggle: () => void;
   dragListeners?: any;
+  isAdmin?: boolean;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -209,14 +215,16 @@ function KanbanCard({
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEdit}>
           <Pencil className="w-3.5 h-3.5" />
         </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6 text-destructive hover:text-destructive"
-          onClick={onDelete}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </Button>
+        {isAdmin && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 text-destructive hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -251,6 +259,7 @@ export const ActivityKanban = ({
   onEditActivity,
   onDeleteActivity,
   onToggleActivity,
+  isAdmin = false,
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
@@ -404,6 +413,7 @@ export const ActivityKanban = ({
                         onEdit={() => onEditActivity(activity)}
                         onDelete={() => onDeleteActivity(activity.id)}
                         onToggle={() => onToggleActivity(activity.id, activity.status)}
+                        isAdmin={isAdmin}
                       />
                     ))
                   )}
