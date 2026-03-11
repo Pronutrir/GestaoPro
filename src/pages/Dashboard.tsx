@@ -16,6 +16,7 @@ import { AddProjectDialog } from "@/components/AddProjectDialog";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { AppLayout } from "@/components/AppLayout";
 import { Input } from "@/components/ui/input";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -34,6 +35,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
+  const { filterProjects } = useProjectAccess();
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -56,7 +58,8 @@ const Dashboard = () => {
       const { data, error } = await supabase.from("projects").select("*")
         .order("display_order", { ascending: true }).order("created_at", { ascending: false });
       if (error) throw error;
-      setProjects(data || []);
+      const filtered = await filterProjects(data || []);
+      setProjects(filtered);
     } catch (error) {
       toast({ title: "Erro ao carregar projetos", variant: "destructive" });
     } finally { setIsLoading(false); }

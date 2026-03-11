@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { SectorSelector } from "@/components/SectorSelector";
+import { ProjectMembersManager } from "@/components/ProjectMembersManager";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -286,6 +287,9 @@ export const EditProjectDialog = ({
                 rows={2}
               />
             </div>
+            {project && (
+              <ProjectMembersManager projectId={project.id} />
+            )}
           </div>
           <DialogFooter>
             <Button

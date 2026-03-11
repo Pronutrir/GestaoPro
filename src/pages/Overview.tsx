@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +60,7 @@ const COLORS = {
 
 const Overview = () => {
   const navigate = useNavigate();
+  const { filterProjects } = useProjectAccess();
   const [projects, setProjects] = useState<Project[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
@@ -76,9 +78,14 @@ const Overview = () => {
         supabase.from("time_entries").select("duration_minutes, project_id, created_at"),
       ]);
 
-      if (projectsRes.data) setProjects(projectsRes.data);
-      if (activitiesRes.data) setActivities(activitiesRes.data);
-      if (timeRes.data) setTimeEntries(timeRes.data);
+      const allProjects = projectsRes.data || [];
+      const filtered = await filterProjects(allProjects);
+      setProjects(filtered);
+
+      // Filter activities to only show those from accessible projects
+      const projectIds = new Set(filtered.map(p => p.id));
+      if (activitiesRes.data) setActivities(activitiesRes.data.filter(a => projectIds.has(a.project_id)));
+      if (timeRes.data) setTimeEntries(timeRes.data.filter(t => projectIds.has(t.project_id)));
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
     } finally {
