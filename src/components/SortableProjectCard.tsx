@@ -27,6 +27,7 @@ interface SortableProjectCardProps {
   project: Project;
   onEdit: (project: Project) => void;
   onDeleteClick: (projectId: string) => void;
+  isAdmin?: boolean;
 }
 
 const priorityColors: Record<string, string> = {
