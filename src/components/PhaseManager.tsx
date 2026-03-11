@@ -354,28 +354,30 @@ export const PhaseManager = ({
                               </span>
                             </div>
                           </div>
-                          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8"
-                              onClick={() => {
-                                setEditingPhase(phase);
-                                setEditTitle(phase.title);
-                                setEditDescription(phase.description || "");
-                              }}
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-destructive"
-                              onClick={() => handleDeletePhase(phase.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
+                          {isAdmin && (
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  setEditingPhase(phase);
+                                  setEditTitle(phase.title);
+                                  setEditDescription(phase.description || "");
+                                }}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-destructive"
+                                onClick={() => handleDeletePhase(phase.id)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
