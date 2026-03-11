@@ -40,6 +40,7 @@ interface Meeting {
   participants: string[];
   created_at: string;
   created_by: string | null;
+  responsible: string | null;
 }
 
 interface MeetingDecision {
@@ -100,6 +101,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
     minutes: "",
     phase_id: "",
     participants: [] as string[],
+    responsible: "",
   });
 
   const getProfile = (id: string) => profiles.find((p) => p.id === id);
@@ -142,7 +144,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
   };
 
   const resetForm = () => {
-    setForm({ title: "", meeting_date: "", start_time: "", end_time: "", location: "", agenda: "", minutes: "", phase_id: "", participants: [] });
+    setForm({ title: "", meeting_date: "", start_time: "", end_time: "", location: "", agenda: "", minutes: "", phase_id: "", participants: [], responsible: "" });
     setEditingId(null);
     setShowForm(false);
   };
@@ -164,6 +166,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       minutes: form.minutes || null,
       phase_id: form.phase_id || null,
       participants: form.participants,
+      responsible: form.responsible || null,
     };
 
     if (!editingId) {
@@ -194,6 +197,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       minutes: m.minutes || "",
       phase_id: m.phase_id || "",
       participants: m.participants || [],
+      responsible: m.responsible || "",
     });
     setEditingId(m.id);
     setShowForm(true);
@@ -280,6 +284,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
             placeholder="Título da reunião *"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
+          />
+          <Input
+            placeholder="Proponente / Responsável pela reunião"
+            value={form.responsible}
+            onChange={(e) => setForm({ ...form, responsible: e.target.value })}
           />
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -448,6 +457,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                         )}
                         {meeting.participants?.length > 0 && (
                           <span>{meeting.participants.length} participante(s)</span>
+                        )}
+                        {meeting.responsible && (
+                          <span className="flex items-center gap-1 font-medium text-foreground">
+                            👤 {meeting.responsible}
+                          </span>
                         )}
                         {meeting.phase_id && (
                           <Badge variant="secondary" className="text-[10px]">
