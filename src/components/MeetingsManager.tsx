@@ -285,6 +285,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
           />
+          <Input
+            placeholder="Proponente / Responsável pela reunião"
+            value={form.responsible}
+            onChange={(e) => setForm({ ...form, responsible: e.target.value })}
+          />
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs text-muted-foreground">Data</Label>
