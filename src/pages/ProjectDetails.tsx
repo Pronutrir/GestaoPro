@@ -342,13 +342,25 @@ const ProjectDetails = () => {
                       <span className="font-medium text-foreground">{project.owner}</span>
                     </div>
                   )}
-                  {project.due_date && (
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-muted-foreground">Prazo:</span>
-                      <span className="font-medium text-foreground">{new Date(project.due_date).toLocaleDateString("pt-BR")}</span>
-                    </div>
-                  )}
+                  {project.due_date && (() => {
+                    const dueDate = new Date(project.due_date);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    dueDate.setHours(0, 0, 0, 0);
+                    const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                    const isOverdue = diffDays < 0;
+                    const isUrgent = diffDays >= 0 && diffDays <= 7;
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-muted-foreground">Prazo:</span>
+                        <span className="font-medium text-foreground">{new Date(project.due_date).toLocaleDateString("pt-BR")}</span>
+                        <span className={`font-medium text-xs px-1.5 py-0.5 rounded ${isOverdue ? "bg-destructive/10 text-destructive" : isUrgent ? "bg-warning/10 text-warning" : "text-muted-foreground"}`}>
+                          {isOverdue ? `${Math.abs(diffDays)}d atrasado` : diffDays === 0 ? "Hoje!" : `${diffDays}d restantes`}
+                        </span>
+                      </div>
+                    );
+                  })()}
                   {project.blockers && (
                     <div className="flex items-center gap-1.5 text-destructive">
                       <span>⚠️</span>
