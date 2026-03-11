@@ -47,31 +47,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let mounted = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    // Safety timeout to prevent infinite loading
+    const safetyTimer = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn("Auth loading safety timeout reached");
+        setLoading(false);
+      }
+    }, 5000);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchUserData(session.user.id);
-      } else {
+      if (!session?.user) {
         setProfile(null);
         setIsAdmin(false);
+        setLoading(false);
+        return;
       }
-      if (mounted) setLoading(false);
+      // Don't await inside onAuthStateChange - use setTimeout to avoid deadlocks
+      setTimeout(() => {
+        if (!mounted) return;
+        fetchUserData(session.user.id).finally(() => {
+          if (mounted) setLoading(false);
+        });
+      }, 0);
     });
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        await fetchUserData(session.user.id);
+        fetchUserData(session.user.id).finally(() => {
+          if (mounted) setLoading(false);
+        });
+      } else {
+        setLoading(false);
       }
+    }).catch(() => {
       if (mounted) setLoading(false);
     });
 
     return () => {
       mounted = false;
+      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, []);
