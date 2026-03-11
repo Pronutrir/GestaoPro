@@ -173,32 +173,6 @@ export const EditActivityDialog = ({
             </div>
           </div>
 
-          {/* Tags */}
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Tag className="w-4 h-4" /> Etiquetas
-            </Label>
-            <div className="flex flex-wrap gap-1 mb-2">
-              {formData.tags.map((tag) => (
-                <Badge key={tag} variant="secondary" className="gap-1 text-xs">
-                  {tag}
-                  <button type="button" onClick={() => handleRemoveTag(tag)}>
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Nova etiqueta..."
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
-                className="flex-1"
-              />
-              <Button type="button" variant="outline" size="sm" onClick={handleAddTag}>Adicionar</Button>
-            </div>
-          </div>
 
           <div className="space-y-2">
             <Label htmlFor="assigned_to" className="text-sm font-semibold text-foreground flex items-center gap-2">
