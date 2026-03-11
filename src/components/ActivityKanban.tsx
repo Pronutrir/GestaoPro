@@ -215,14 +215,16 @@ function KanbanCard({
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEdit}>
           <Pencil className="w-3.5 h-3.5" />
         </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6 text-destructive hover:text-destructive"
-          onClick={onDelete}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </Button>
+        {isAdmin && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 text-destructive hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        )}
       </div>
     </div>
   );
