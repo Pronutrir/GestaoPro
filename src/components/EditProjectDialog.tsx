@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { SectorSelector } from "@/components/SectorSelector";
+import { ProjectMembersManager } from "@/components/ProjectMembersManager";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
