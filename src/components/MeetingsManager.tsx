@@ -196,15 +196,14 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
     fetchMeetings();
   };
 
-  const addParticipant = () => {
-    if (newParticipant.trim() && !form.participants.includes(newParticipant.trim())) {
-      setForm({ ...form, participants: [...form.participants, newParticipant.trim()] });
-      setNewParticipant("");
+  const addParticipant = (userId: string) => {
+    if (userId && !form.participants.includes(userId)) {
+      setForm({ ...form, participants: [...form.participants, userId] });
     }
   };
 
-  const removeParticipant = (p: string) => {
-    setForm({ ...form, participants: form.participants.filter((x) => x !== p) });
+  const removeParticipant = (userId: string) => {
+    setForm({ ...form, participants: form.participants.filter((x) => x !== userId) });
   };
 
   const handleAddDecision = async (meetingId: string) => {
