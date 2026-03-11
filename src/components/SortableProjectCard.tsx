@@ -77,7 +77,7 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick }: Sortable
               <h4 className="font-medium text-foreground mb-1">
                 {project.title}
               </h4>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground line-clamp-2">
                 {project.description || "Sem descrição"}
               </p>
             </div>
