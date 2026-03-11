@@ -41,15 +41,6 @@ import {
   Circle,
   Pencil,
   Trash2,
-  Layers,
-  ListTodo,
-  GanttChart,
-  Clock,
-  BookOpen,
-  FileText,
-  Flag,
-  ChevronRight,
-} from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from "@dnd-kit/core";
