@@ -19,6 +19,7 @@ import { DocumentManager } from "@/components/DocumentManager";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
+import { MeetingsManager } from "@/components/MeetingsManager";
 import {
   ArrowLeft,
   Plus,
@@ -37,6 +38,7 @@ import {
   ChevronRight,
   Settings2,
   Kanban,
+  Users,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
@@ -425,6 +427,7 @@ const ProjectDetails = () => {
                 <TabsTrigger value="timeline" className="gap-2"><GanttChart className="w-4 h-4" />Cronograma</TabsTrigger>
                 <TabsTrigger value="timetracking" className="gap-2"><Clock className="w-4 h-4" />Tempo</TabsTrigger>
                 <TabsTrigger value="documents" className="gap-2"><FileText className="w-4 h-4" />Documentos</TabsTrigger>
+                <TabsTrigger value="meetings" className="gap-2"><Users className="w-4 h-4" />Reuniões</TabsTrigger>
                 <TabsTrigger value="lessons" className="gap-2"><BookOpen className="w-4 h-4" />Lições</TabsTrigger>
                 <TabsTrigger value="workflow" className="gap-2"><Settings2 className="w-4 h-4" />Workflow</TabsTrigger>
               </TabsList>
@@ -463,6 +466,23 @@ const ProjectDetails = () => {
                 <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
               </TabsContent>
 
+              <TabsContent value="meetings" className="mt-0">
+                <MeetingsManager
+                  projectId={id!}
+                  phases={phases}
+                  onCreateActivity={async (title, assignedTo) => {
+                    await supabase.from("activities").insert({
+                      project_id: id!,
+                      title,
+                      assigned_to: assignedTo || null,
+                      status: "pending",
+                      priority: "medium",
+                    });
+                    fetchProjectData();
+                  }}
+                />
+              </TabsContent>
+
               <TabsContent value="lessons" className="mt-0">
                 <LessonsLearned projectId={id!} phases={phases} />
               </TabsContent>
@@ -477,6 +497,7 @@ const ProjectDetails = () => {
         <EditActivityDialog
           activity={editingActivity} open={editActivityDialogOpen} onOpenChange={setEditActivityDialogOpen}
           onActivityUpdated={fetchProjectData} phases={phases} allActivities={activities}
+          projectId={id!}
         />
       </main>
     </AppLayout>

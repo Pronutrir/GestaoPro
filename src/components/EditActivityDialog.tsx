@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ActivityLogbook } from "@/components/ActivityLogbook";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +40,7 @@ interface EditActivityDialogProps {
   onActivityUpdated: () => void;
   phases?: Phase[];
   allActivities?: Activity[];
+  projectId?: string;
 }
 
 export const EditActivityDialog = ({
@@ -48,6 +50,7 @@ export const EditActivityDialog = ({
   onActivityUpdated,
   phases = [],
   allActivities = [],
+  projectId,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
@@ -236,6 +239,13 @@ export const EditActivityDialog = ({
               </div>
             </div>
           </div>
+
+          {/* Diário de Bordo */}
+          {activity && projectId && (
+            <div className="border-t border-border pt-4">
+              <ActivityLogbook activityId={activity.id} projectId={projectId} />
+            </div>
+          )}
 
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

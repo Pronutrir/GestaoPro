@@ -168,6 +168,48 @@ export type Database = {
         }
         Relationships: []
       }
+      activity_log_entries: {
+        Row: {
+          activity_id: string
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          promoted_to_lesson_id: string | null
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          created_by?: string | null
+          description: string
+          id?: string
+          promoted_to_lesson_id?: string | null
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          promoted_to_lesson_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_entries_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_log_entries_promoted_to_lesson_id_fkey"
+            columns: ["promoted_to_lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons_learned"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       investment_history: {
         Row: {
           amount: number
@@ -250,6 +292,140 @@ export type Database = {
           },
           {
             foreignKeyName: "lessons_learned_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_actions: {
+        Row: {
+          activity_id: string | null
+          assigned_to: string | null
+          created_at: string
+          description: string
+          due_date: string | null
+          id: string
+          is_completed: boolean
+          meeting_id: string
+        }
+        Insert: {
+          activity_id?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          description: string
+          due_date?: string | null
+          id?: string
+          is_completed?: boolean
+          meeting_id: string
+        }
+        Update: {
+          activity_id?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          description?: string
+          due_date?: string | null
+          id?: string
+          is_completed?: boolean
+          meeting_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_actions_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_actions_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_decisions: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          meeting_id: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          meeting_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          meeting_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_decisions_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meetings: {
+        Row: {
+          agenda: string | null
+          created_at: string
+          id: string
+          location: string | null
+          meeting_date: string | null
+          minutes: string | null
+          participants: string[] | null
+          phase_id: string | null
+          project_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          agenda?: string | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          meeting_date?: string | null
+          minutes?: string | null
+          participants?: string[] | null
+          phase_id?: string | null
+          project_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          agenda?: string | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          meeting_date?: string | null
+          minutes?: string | null
+          participants?: string[] | null
+          phase_id?: string | null
+          project_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meetings_phase_id_fkey"
+            columns: ["phase_id"]
+            isOneToOne: false
+            referencedRelation: "phases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetings_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
