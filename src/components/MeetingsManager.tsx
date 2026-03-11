@@ -54,6 +54,14 @@ interface MeetingAction {
   is_completed: boolean;
 }
 
+interface Profile {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  sector: string | null;
+  role_title: string | null;
+}
+
 interface Phase {
   id: string;
   title: string;
