@@ -327,9 +327,8 @@ const ProjectDetails = () => {
 
   return (
     <AppLayout title={project.title}>
-      <main className="container mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3 space-y-6">
+      <main className="px-6 py-8">
+        <div className="space-y-6">
             {/* Project Info Card */}
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
