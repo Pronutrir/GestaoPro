@@ -76,6 +76,7 @@ interface MeetingsManagerProps {
 export const MeetingsManager = ({ projectId, phases, onCreateActivity }: MeetingsManagerProps) => {
   const { toast } = useToast();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -83,7 +84,6 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
   const [actions, setActions] = useState<Record<string, MeetingAction[]>>({});
   const [newDecision, setNewDecision] = useState("");
   const [newAction, setNewAction] = useState({ description: "", assigned_to: "", due_date: "" });
-  const [newParticipant, setNewParticipant] = useState("");
 
   const [form, setForm] = useState({
     title: "",
@@ -97,9 +97,17 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
     participants: [] as string[],
   });
 
+  const getProfile = (id: string) => profiles.find((p) => p.id === id);
+
   useEffect(() => {
     fetchMeetings();
+    fetchProfiles();
   }, [projectId]);
+
+  const fetchProfiles = async () => {
+    const { data } = await supabase.from("profiles").select("id, email, full_name, sector, role_title");
+    if (data) setProfiles(data);
+  };
 
   const fetchMeetings = async () => {
     const { data } = await supabase
