@@ -76,6 +76,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
   const [form, setForm] = useState({
     title: "",
     meeting_date: "",
+    start_time: "",
+    end_time: "",
     location: "",
     agenda: "",
     minutes: "",
