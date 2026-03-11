@@ -31,6 +31,8 @@ interface Meeting {
   phase_id: string | null;
   title: string;
   meeting_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
   location: string | null;
   agenda: string | null;
   minutes: string | null;
