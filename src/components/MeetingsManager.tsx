@@ -403,6 +403,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
             const isExpanded = expandedId === meeting.id;
             const meetingDecisions = decisions[meeting.id] || [];
             const meetingActions = actions[meeting.id] || [];
+            const canEditMeeting = isAdmin || meeting.created_by === user?.id;
 
             return (
               <div key={meeting.id} className="border border-border rounded-lg bg-card overflow-hidden">
