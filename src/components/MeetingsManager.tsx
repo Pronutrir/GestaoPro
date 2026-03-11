@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Users,
   Plus,
@@ -18,6 +19,8 @@ import {
   Zap,
   X,
   Clock,
+  Building2,
+  Briefcase,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -51,6 +54,14 @@ interface MeetingAction {
   is_completed: boolean;
 }
 
+interface Profile {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  sector: string | null;
+  role_title: string | null;
+}
+
 interface Phase {
   id: string;
   title: string;
@@ -65,6 +76,7 @@ interface MeetingsManagerProps {
 export const MeetingsManager = ({ projectId, phases, onCreateActivity }: MeetingsManagerProps) => {
   const { toast } = useToast();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -72,7 +84,6 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
   const [actions, setActions] = useState<Record<string, MeetingAction[]>>({});
   const [newDecision, setNewDecision] = useState("");
   const [newAction, setNewAction] = useState({ description: "", assigned_to: "", due_date: "" });
-  const [newParticipant, setNewParticipant] = useState("");
 
   const [form, setForm] = useState({
     title: "",
@@ -86,9 +97,17 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
     participants: [] as string[],
   });
 
+  const getProfile = (id: string) => profiles.find((p) => p.id === id);
+
   useEffect(() => {
     fetchMeetings();
+    fetchProfiles();
   }, [projectId]);
+
+  const fetchProfiles = async () => {
+    const { data } = await supabase.from("profiles").select("id, email, full_name, sector, role_title");
+    if (data) setProfiles(data);
+  };
 
   const fetchMeetings = async () => {
     const { data } = await supabase
@@ -177,15 +196,14 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
     fetchMeetings();
   };
 
-  const addParticipant = () => {
-    if (newParticipant.trim() && !form.participants.includes(newParticipant.trim())) {
-      setForm({ ...form, participants: [...form.participants, newParticipant.trim()] });
-      setNewParticipant("");
+  const addParticipant = (userId: string) => {
+    if (userId && !form.participants.includes(userId)) {
+      setForm({ ...form, participants: [...form.participants, userId] });
     }
   };
 
-  const removeParticipant = (p: string) => {
-    setForm({ ...form, participants: form.participants.filter((x) => x !== p) });
+  const removeParticipant = (userId: string) => {
+    setForm({ ...form, participants: form.participants.filter((x) => x !== userId) });
   };
 
   const handleAddDecision = async (meetingId: string) => {
@@ -305,28 +323,50 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
           {/* Participants */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Participantes</Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Nome do participante"
-                value={newParticipant}
-                onChange={(e) => setNewParticipant(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addParticipant())}
-                className="text-sm"
-              />
-              <Button size="sm" variant="outline" type="button" onClick={addParticipant}>
-                <Plus className="w-3 h-3" />
-              </Button>
-            </div>
+            {(() => {
+              const available = profiles.filter((p) => !form.participants.includes(p.id));
+              return available.length > 0 ? (
+                <Select onValueChange={(val) => addParticipant(val)}>
+                  <SelectTrigger className="text-sm h-9">
+                    <SelectValue placeholder="Adicionar participante..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {available.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.full_name || p.email}
+                        {p.sector ? ` — ${p.sector}` : ""}
+                        {p.role_title ? ` (${p.role_title})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-xs text-muted-foreground">Todos os usuários já foram adicionados.</p>
+              );
+            })()}
             {form.participants.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {form.participants.map((p) => (
-                  <Badge key={p} variant="secondary" className="gap-1 text-xs">
-                    {p}
-                    <button onClick={() => removeParticipant(p)}>
-                      <X className="w-3 h-3" />
-                    </button>
-                  </Badge>
-                ))}
+              <div className="space-y-1">
+                {form.participants.map((userId) => {
+                  const prof = getProfile(userId);
+                  return (
+                    <div key={userId} className="flex items-center justify-between p-2 rounded border border-border bg-accent/10">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{prof?.full_name || prof?.email || userId}</span>
+                        <div className="flex gap-2 text-xs text-muted-foreground">
+                          {prof?.sector && (
+                            <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{prof.sector}</span>
+                          )}
+                          {prof?.role_title && (
+                            <span className="flex items-center gap-1"><Briefcase className="w-3 h-3" />{prof.role_title}</span>
+                          )}
+                        </div>
+                      </div>
+                      <button onClick={() => removeParticipant(userId)} className="text-muted-foreground hover:text-destructive">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -432,10 +472,21 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                     {meeting.participants?.length > 0 && (
                       <div>
                         <h4 className="text-xs font-semibold text-muted-foreground mb-1">👥 Participantes</h4>
-                        <div className="flex flex-wrap gap-1">
-                          {meeting.participants.map((p, i) => (
-                            <Badge key={i} variant="outline" className="text-xs">{p}</Badge>
-                          ))}
+                        <div className="space-y-1">
+                          {meeting.participants.map((pId, i) => {
+                            const prof = getProfile(pId);
+                            return (
+                              <div key={i} className="flex items-center gap-2 text-sm">
+                                <span className="font-medium">{prof?.full_name || prof?.email || pId}</span>
+                                {prof?.sector && (
+                                  <Badge variant="outline" className="text-[10px] gap-1"><Building2 className="w-2.5 h-2.5" />{prof.sector}</Badge>
+                                )}
+                                {prof?.role_title && (
+                                  <Badge variant="secondary" className="text-[10px] gap-1"><Briefcase className="w-2.5 h-2.5" />{prof.role_title}</Badge>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
