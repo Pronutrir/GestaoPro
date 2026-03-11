@@ -40,6 +40,7 @@ interface Meeting {
   participants: string[];
   created_at: string;
   created_by: string | null;
+  responsible: string | null;
 }
 
 interface MeetingDecision {
