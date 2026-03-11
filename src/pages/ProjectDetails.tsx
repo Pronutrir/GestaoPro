@@ -275,9 +275,6 @@ const ProjectDetails = () => {
               {activity.assigned_to && <Badge variant="outline" className="text-xs">👤 {activity.assigned_to}</Badge>}
               {activity.hours > 0 && <Badge variant="secondary" className="text-xs">⏱️ {activity.hours}h</Badge>}
               {activity.cost > 0 && <Badge className="bg-success/20 text-success border-success/30 text-xs">💰 R$ {activity.cost.toFixed(2)}</Badge>}
-              {activity.tags?.map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs bg-info/20 text-info">{tag}</Badge>
-              ))}
             </div>
 
             {(activity.start_date || activity.end_date) && (
