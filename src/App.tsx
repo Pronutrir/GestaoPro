@@ -3,6 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Dashboard from "./pages/Dashboard";
@@ -21,18 +23,20 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Overview />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/projects" element={<Dashboard />} />
-          <Route path="/project/:id" element={<ProjectDetails />} />
-          <Route path="/blocked-projects" element={<BlockedProjects />} />
-          <Route path="/team" element={<TeamView />} />
-           <Route path="/reports" element={<Reports />} />
-           <Route path="/settings" element={<Settings />} />
-           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
+            <Route path="/projects" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/project/:id" element={<ProtectedRoute><ProjectDetails /></ProtectedRoute>} />
+            <Route path="/blocked-projects" element={<ProtectedRoute><BlockedProjects /></ProtectedRoute>} />
+            <Route path="/team" element={<ProtectedRoute><TeamView /></ProtectedRoute>} />
+            <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
