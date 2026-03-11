@@ -466,6 +466,23 @@ const ProjectDetails = () => {
                 <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
               </TabsContent>
 
+              <TabsContent value="meetings" className="mt-0">
+                <MeetingsManager
+                  projectId={id!}
+                  phases={phases}
+                  onCreateActivity={async (title, assignedTo) => {
+                    await supabase.from("activities").insert({
+                      project_id: id!,
+                      title,
+                      assigned_to: assignedTo || null,
+                      status: "pending",
+                      priority: "medium",
+                    });
+                    fetchProjectData();
+                  }}
+                />
+              </TabsContent>
+
               <TabsContent value="lessons" className="mt-0">
                 <LessonsLearned projectId={id!} phases={phases} />
               </TabsContent>
