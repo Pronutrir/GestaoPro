@@ -197,6 +197,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       minutes: m.minutes || "",
       phase_id: m.phase_id || "",
       participants: m.participants || [],
+      responsible: m.responsible || "",
     });
     setEditingId(m.id);
     setShowForm(true);
