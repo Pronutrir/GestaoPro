@@ -503,5 +503,6 @@ const Overview = () => {
       </main>
     </AppLayout>
   );
+};
 
 export default Overview;
