@@ -58,6 +58,7 @@ interface PhaseManagerProps {
   onEditActivity: (activity: Activity) => void;
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, status: string) => void;
+  isAdmin?: boolean;
 }
 
 export const PhaseManager = ({
