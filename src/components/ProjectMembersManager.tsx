@@ -129,7 +129,7 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
             <SelectContent>
               {availableUsers.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
-                  {p.full_name || p.email}
+                  {p.full_name || p.email}{p.sector ? ` — ${p.sector}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
