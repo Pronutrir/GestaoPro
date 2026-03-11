@@ -458,9 +458,6 @@ const ProjectDetails = () => {
                 <TimelineView phases={phases} activities={activities} projectDueDate={project.due_date} onActivityClick={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }} />
               </TabsContent>
 
-              <TabsContent value="timetracking" className="mt-0">
-                <TimeTracker projectId={id!} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
-              </TabsContent>
 
               <TabsContent value="documents" className="mt-0">
                 <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
