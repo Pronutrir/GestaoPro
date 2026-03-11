@@ -427,6 +427,7 @@ const ProjectDetails = () => {
                 <TabsTrigger value="timeline" className="gap-2"><GanttChart className="w-4 h-4" />Cronograma</TabsTrigger>
                 <TabsTrigger value="timetracking" className="gap-2"><Clock className="w-4 h-4" />Tempo</TabsTrigger>
                 <TabsTrigger value="documents" className="gap-2"><FileText className="w-4 h-4" />Documentos</TabsTrigger>
+                <TabsTrigger value="meetings" className="gap-2"><Users className="w-4 h-4" />Reuniões</TabsTrigger>
                 <TabsTrigger value="lessons" className="gap-2"><BookOpen className="w-4 h-4" />Lições</TabsTrigger>
                 <TabsTrigger value="workflow" className="gap-2"><Settings2 className="w-4 h-4" />Workflow</TabsTrigger>
               </TabsList>
