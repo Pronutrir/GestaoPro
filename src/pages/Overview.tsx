@@ -171,30 +171,7 @@ const Overview = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card sticky top-0 z-10">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-                <LayoutDashboard className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <h1 className="text-xl font-bold text-foreground">Pipeline de Gestão de Projetos</h1>
-            </div>
-            <div className="flex items-center gap-3">
-              <NotificationBell />
-              <Button variant="outline" onClick={() => navigate("/team")} className="gap-2">
-                <Users className="w-4 h-4" /> Equipe
-              </Button>
-              <Button variant="outline" onClick={() => navigate("/reports")} className="gap-2">
-                <BarChart3 className="w-4 h-4" /> Relatórios
-              </Button>
-              <Button onClick={() => navigate("/projects")}>Ver Projetos</Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
+    <AppLayout title="Pipeline de Gestão de Projetos">
       <main className="container mx-auto px-6 py-8 space-y-8">
         <div>
           <h2 className="text-3xl font-bold text-foreground mb-2">Dashboard Geral</h2>
