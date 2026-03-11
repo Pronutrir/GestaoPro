@@ -308,9 +308,11 @@ const ProjectDetails = () => {
             <Button size="icon" variant="outline" onClick={() => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}>
               <Pencil className="w-4 h-4" />
             </Button>
-            <Button size="icon" variant="outline" className="text-destructive hover:bg-destructive/10" onClick={() => handleDeleteActivity(activity.id)}>
-              <Trash2 className="w-4 h-4" />
-            </Button>
+            {isAdmin && (
+              <Button size="icon" variant="outline" className="text-destructive hover:bg-destructive/10" onClick={() => handleDeleteActivity(activity.id)}>
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
             {activity.status === "completed" ? <CheckCircle2 className="w-5 h-5 text-success" /> : <Circle className="w-5 h-5 text-muted-foreground" />}
           </div>
         </div>
