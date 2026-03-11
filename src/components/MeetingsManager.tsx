@@ -472,10 +472,21 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                     {meeting.participants?.length > 0 && (
                       <div>
                         <h4 className="text-xs font-semibold text-muted-foreground mb-1">👥 Participantes</h4>
-                        <div className="flex flex-wrap gap-1">
-                          {meeting.participants.map((p, i) => (
-                            <Badge key={i} variant="outline" className="text-xs">{p}</Badge>
-                          ))}
+                        <div className="space-y-1">
+                          {meeting.participants.map((pId, i) => {
+                            const prof = getProfile(pId);
+                            return (
+                              <div key={i} className="flex items-center gap-2 text-sm">
+                                <span className="font-medium">{prof?.full_name || prof?.email || pId}</span>
+                                {prof?.sector && (
+                                  <Badge variant="outline" className="text-[10px] gap-1"><Building2 className="w-2.5 h-2.5" />{prof.sector}</Badge>
+                                )}
+                                {prof?.role_title && (
+                                  <Badge variant="secondary" className="text-[10px] gap-1"><Briefcase className="w-2.5 h-2.5" />{prof.role_title}</Badge>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
