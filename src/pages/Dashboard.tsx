@@ -58,7 +58,8 @@ const Dashboard = () => {
       const { data, error } = await supabase.from("projects").select("*")
         .order("display_order", { ascending: true }).order("created_at", { ascending: false });
       if (error) throw error;
-      setProjects(data || []);
+      const filtered = await filterProjects(data || []);
+      setProjects(filtered);
     } catch (error) {
       toast({ title: "Erro ao carregar projetos", variant: "destructive" });
     } finally { setIsLoading(false); }
