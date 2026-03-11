@@ -85,7 +85,7 @@ export function AppSidebar() {
             {profile.full_name || profile.email}
           </p>
         )}
-        <SidebarMenuButton onClick={signOut} className="w-full hover:bg-destructive/10 hover:text-destructive">
+        <SidebarMenuButton onClick={handleSignOut} className="w-full hover:bg-destructive/10 hover:text-destructive">
           <LogOut className="mr-2 h-4 w-4" />
           {!collapsed && <span>Sair</span>}
         </SidebarMenuButton>
