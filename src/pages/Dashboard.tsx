@@ -35,7 +35,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
-  const { filterProjects } = useProjectAccess();
+  const { filterProjects, isAdmin, loading: authLoading } = useProjectAccess();
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -88,7 +88,7 @@ const Dashboard = () => {
     } catch { toast({ title: "Erro ao reordenar", variant: "destructive" }); fetchProjects(); }
   };
 
-  useEffect(() => { fetchProjects(); }, []);
+  useEffect(() => { if (!authLoading) fetchProjects(); }, [authLoading, isAdmin]);
 
   const handleEdit = (project: Project) => { setEditingProject(project); setEditDialogOpen(true); };
   const handleDelete = async (projectId: string) => {

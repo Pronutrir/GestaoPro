@@ -60,15 +60,15 @@ const COLORS = {
 
 const Overview = () => {
   const navigate = useNavigate();
-  const { filterProjects } = useProjectAccess();
+  const { filterProjects, isAdmin, loading: authLoading } = useProjectAccess();
   const [projects, setProjects] = useState<Project[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetchAllData();
-  }, []);
+    if (!authLoading) fetchAllData();
+  }, [authLoading, isAdmin]);
 
   const fetchAllData = async () => {
     try {
