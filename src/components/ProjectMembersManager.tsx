@@ -94,7 +94,12 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
                 ) : (
                   <User className="w-4 h-4 text-muted-foreground" />
                 )}
-                <span className="text-sm font-medium">{m.profile?.full_name || m.profile?.email}</span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">{m.profile?.full_name || m.profile?.email}</span>
+                  {m.profile?.sector && (
+                    <span className="text-xs text-muted-foreground">{m.profile.sector}</span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Select value={m.role} onValueChange={(v) => handleChangeRole(m.id, v)}>
