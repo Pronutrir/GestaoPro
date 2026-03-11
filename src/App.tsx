@@ -14,6 +14,7 @@ import BlockedProjects from "./pages/BlockedProjects";
 import TeamView from "./pages/TeamView";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import Timeline from "./pages/Timeline";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/project/:id" element={<ProtectedRoute><ProjectDetails /></ProtectedRoute>} />
             <Route path="/blocked-projects" element={<ProtectedRoute><BlockedProjects /></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><TeamView /></ProtectedRoute>} />
+            <Route path="/timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

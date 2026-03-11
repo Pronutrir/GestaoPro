@@ -7,6 +7,7 @@ import {
   FolderKanban,
   Settings,
   LogOut,
+  GanttChart,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -26,6 +27,7 @@ import {
 const allNavItems = [
   { path: "/", label: "Visão Geral", icon: Home, adminOnly: false },
   { path: "/projects", label: "Projetos", icon: FolderKanban, adminOnly: false },
+  { path: "/timeline", label: "Cronograma", icon: GanttChart, adminOnly: false },
   { path: "/team", label: "Equipe", icon: Users, adminOnly: false },
   { path: "/reports", label: "Relatórios", icon: BarChart3, adminOnly: true },
   { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, adminOnly: true },
