@@ -5,7 +5,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 
 export const AppLayout = ({ children, title }: { children: ReactNode; title?: string }) => {
   return (
-    <SidebarProvider defaultOpen={true}>
+    <SidebarProvider defaultOpen={false}>
       <div className="min-h-screen flex w-full">
         <AppSidebar />
 
