@@ -116,10 +116,12 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
           <FileText className="w-5 h-5 text-primary" />
           Documentos ({documents.length})
         </h3>
-        <Button size="sm" variant={showForm ? "secondary" : "default"} onClick={() => setShowForm(!showForm)} className="gap-1">
-          <Plus className="w-4 h-4" />
-          {showForm ? "Cancelar" : "Novo Documento"}
-        </Button>
+        {isAdmin && (
+          <Button size="sm" variant={showForm ? "secondary" : "default"} onClick={() => setShowForm(!showForm)} className="gap-1">
+            <Plus className="w-4 h-4" />
+            {showForm ? "Cancelar" : "Novo Documento"}
+          </Button>
+        )}
       </div>
 
       {showForm && (
