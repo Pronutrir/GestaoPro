@@ -468,6 +468,7 @@ interface ActivityCardProps {
   onDelete: (activityId: string) => void;
   onToggle: (activityId: string, status: string) => void;
   onMoveToPhase: (activityId: string, phaseId: string | null) => void;
+  isAdmin?: boolean;
 }
 
 const ActivityCard = ({
@@ -477,6 +478,7 @@ const ActivityCard = ({
   onDelete,
   onToggle,
   onMoveToPhase,
+  isAdmin = false,
 }: ActivityCardProps) => {
   const [showPhaseSelector, setShowPhaseSelector] = useState(false);
 
