@@ -69,6 +69,7 @@ export const PhaseManager = ({
   onEditActivity,
   onDeleteActivity,
   onToggleActivity,
+  isAdmin = false,
 }: PhaseManagerProps) => {
   const { toast } = useToast();
   const sensors = useSensors(
