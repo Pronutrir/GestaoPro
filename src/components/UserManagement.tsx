@@ -25,11 +25,17 @@ interface UserRole {
   role: string;
 }
 
+interface Sector {
+  id: string;
+  name: string;
+}
+
 export const UserManagement = () => {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [roles, setRoles] = useState<UserRole[]>([]);
+  const [sectors, setSectors] = useState<Sector[]>([]);
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
@@ -50,16 +56,18 @@ export const UserManagement = () => {
     new_password: "",
   });
 
-  const fetchUsers = async () => {
-    const [{ data: profilesData }, { data: rolesData }] = await Promise.all([
+  const fetchData = async () => {
+    const [{ data: profilesData }, { data: rolesData }, { data: sectorsData }] = await Promise.all([
       supabase.from("profiles").select("*").order("full_name"),
       supabase.from("user_roles").select("user_id, role"),
+      supabase.from("sectors").select("id, name").order("name"),
     ]);
     if (profilesData) setProfiles(profilesData);
     if (rolesData) setRoles(rolesData as UserRole[]);
+    if (sectorsData) setSectors(sectorsData);
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const getUserRole = (userId: string) => {
     const r = roles.find((r) => r.user_id === userId);
@@ -81,7 +89,7 @@ export const UserManagement = () => {
       toast({ title: "Usuário criado!", description: `${form.full_name} foi adicionado.` });
       setForm({ email: "", password: "", full_name: "", sector: "", role_title: "", role: "user" });
       setOpen(false);
-      fetchUsers();
+      fetchData();
     } catch (error: any) {
       toast({ title: "Erro ao criar usuário", description: error.message, variant: "destructive" });
     }
@@ -120,7 +128,7 @@ export const UserManagement = () => {
       toast({ title: "Usuário atualizado!" });
       setEditOpen(false);
       setEditingUser(null);
-      fetchUsers();
+      fetchData();
     } catch (error: any) {
       toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
     }
@@ -128,6 +136,18 @@ export const UserManagement = () => {
   };
 
   if (!isAdmin) return null;
+
+  const SectorSelect = ({ value, onValueChange }: { value: string; onValueChange: (v: string) => void }) => (
+    <Select value={value || "_none"} onValueChange={(v) => onValueChange(v === "_none" ? "" : v)}>
+      <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="_none">Nenhum</SelectItem>
+        {sectors.map((s) => (
+          <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 
   return (
     <Card>
@@ -166,7 +186,7 @@ export const UserManagement = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label>Setor</Label>
-                    <Input value={form.sector} onChange={(e) => setForm({ ...form, sector: e.target.value })} placeholder="TI" />
+                    <SectorSelect value={form.sector} onValueChange={(v) => setForm({ ...form, sector: v })} />
                   </div>
                   <div className="grid gap-2">
                     <Label>Cargo</Label>
@@ -246,7 +266,7 @@ export const UserManagement = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label>Setor</Label>
-                  <Input value={editForm.sector} onChange={(e) => setEditForm({ ...editForm, sector: e.target.value })} />
+                  <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} />
                 </div>
                 <div className="grid gap-2">
                   <Label>Cargo</Label>
