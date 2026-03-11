@@ -101,6 +101,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
     minutes: "",
     phase_id: "",
     participants: [] as string[],
+    responsible: "",
   });
 
   const getProfile = (id: string) => profiles.find((p) => p.id === id);
