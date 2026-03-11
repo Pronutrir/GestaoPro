@@ -332,38 +332,38 @@ const ProjectDetails = () => {
       <main className="px-6 py-8">
         <div className="space-y-6">
             {/* Project Info Card */}
-            <Card className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-foreground">Informações do Projeto</h2>
+            <Card className="px-5 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-6 text-sm">
+                  <h2 className="text-sm font-semibold text-foreground">Informações do Projeto</h2>
+                  {project.owner && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground">Responsável:</span>
+                      <span className="font-medium text-foreground">{project.owner}</span>
+                    </div>
+                  )}
+                  {project.due_date && (
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-muted-foreground">Prazo:</span>
+                      <span className="font-medium text-foreground">{new Date(project.due_date).toLocaleDateString("pt-BR")}</span>
+                    </div>
+                  )}
+                  {project.blockers && (
+                    <div className="flex items-center gap-1.5 text-destructive">
+                      <span>⚠️</span>
+                      <span className="font-medium text-xs">{project.blockers}</span>
+                    </div>
+                  )}
+                </div>
                 <div className="flex items-center gap-3 text-sm">
                   <span className="text-muted-foreground">Progresso:</span>
                   <span className="font-medium text-foreground">{completedActivities}/{activities.length} tarefas ({activityProgress.toFixed(0)}%)</span>
+                  <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-success transition-all" style={{ width: `${activityProgress}%` }} />
+                  </div>
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {project.owner && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">Responsável:</span>
-                    <span className="font-medium text-foreground">{project.owner}</span>
-                  </div>
-                )}
-                {project.due_date && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Calendar className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Prazo:</span>
-                    <span className="font-medium text-foreground">{new Date(project.due_date).toLocaleDateString("pt-BR")}</span>
-                  </div>
-                )}
-                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-success transition-all" style={{ width: `${activityProgress}%` }} />
-                </div>
-              </div>
-              {project.blockers && (
-                <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                  <p className="text-xs font-medium text-destructive mb-1">⚠️ Bloqueios</p>
-                  <p className="text-sm text-foreground">{project.blockers}</p>
-                </div>
-              )}
             </Card>
 
             {/* Action Buttons */}
