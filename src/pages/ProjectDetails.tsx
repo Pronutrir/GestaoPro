@@ -357,7 +357,7 @@ const ProjectDetails = () => {
                         <span className="font-semibold text-foreground">Entrega em:</span>
                         <span className="font-semibold text-foreground">{dueDate.toLocaleDateString("pt-BR")}</span>
                         <span className={`font-bold text-xs px-2 py-0.5 rounded-full animate-pulse ${isOverdue ? "bg-destructive/80 text-destructive-foreground" : isUrgent ? "bg-warning/80 text-warning-foreground" : "bg-success/80 text-success-foreground"}`}>
-                          {isOverdue ? `${Math.abs(diffDays)}d atrasado` : diffDays === 0 ? "Hoje!" : `${diffDays}d restantes`}
+                          {isOverdue ? `${Math.abs(diffDays)}d atrasado` : diffDays === 0 ? "Hoje!" : `${diffDays} D Restantes`}
                         </span>
                       </div>
                     );
