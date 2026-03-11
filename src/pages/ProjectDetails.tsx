@@ -17,6 +17,8 @@ import { TimeTracker } from "@/components/TimeTracker";
 import { LessonsLearned } from "@/components/LessonsLearned";
 import { DocumentManager } from "@/components/DocumentManager";
 import { NotificationBell } from "@/components/NotificationBell";
+import { ActivityKanban } from "@/components/ActivityKanban";
+import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import {
   ArrowLeft,
   Plus,
@@ -33,6 +35,8 @@ import {
   FileText,
   Flag,
   ChevronRight,
+  Settings2,
+  Kanban,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
@@ -91,7 +95,7 @@ const ProjectDetails = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("phases");
+  const [activeTab, setActiveTab] = useState("kanban");
   const [newActivity, setNewActivity] = useState("");
   const [newActivityAssigned, setNewActivityAssigned] = useState("");
   const [newActivityStartDate, setNewActivityStartDate] = useState("");
@@ -418,11 +422,12 @@ const ProjectDetails = () => {
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="mb-4 flex-wrap h-auto gap-1">
                 <TabsTrigger value="phases" className="gap-2"><Layers className="w-4 h-4" />Fases</TabsTrigger>
-                <TabsTrigger value="activities" className="gap-2"><ListTodo className="w-4 h-4" />Atividades</TabsTrigger>
+                <TabsTrigger value="kanban" className="gap-2"><Kanban className="w-4 h-4" />Kanban</TabsTrigger>
                 <TabsTrigger value="timeline" className="gap-2"><GanttChart className="w-4 h-4" />Cronograma</TabsTrigger>
                 <TabsTrigger value="timetracking" className="gap-2"><Clock className="w-4 h-4" />Tempo</TabsTrigger>
                 <TabsTrigger value="documents" className="gap-2"><FileText className="w-4 h-4" />Documentos</TabsTrigger>
                 <TabsTrigger value="lessons" className="gap-2"><BookOpen className="w-4 h-4" />Lições</TabsTrigger>
+                <TabsTrigger value="workflow" className="gap-2"><Settings2 className="w-4 h-4" />Workflow</TabsTrigger>
               </TabsList>
 
               <TabsContent value="phases" className="mt-0">
@@ -435,24 +440,16 @@ const ProjectDetails = () => {
                 />
               </TabsContent>
 
-              <TabsContent value="activities" className="mt-0">
-                <Card className="p-6">
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleActivityDragEnd}>
-                    <SortableContext items={parentActivities.map(a => a.id)} strategy={verticalListSortingStrategy}>
-                      <div className="space-y-3">
-                        {activities.length === 0 ? (
-                          <p className="text-sm text-muted-foreground text-center py-8">Nenhuma atividade cadastrada</p>
-                        ) : (
-                          parentActivities.map((activity) => (
-                            <SortableActivityCard key={activity.id} id={activity.id}>
-                              {renderActivityCard(activity)}
-                            </SortableActivityCard>
-                          ))
-                        )}
-                      </div>
-                    </SortableContext>
-                  </DndContext>
-                </Card>
+              <TabsContent value="kanban" className="mt-0">
+                <ActivityKanban
+                  projectId={id!}
+                  activities={activities}
+                  phases={phases}
+                  onDataChanged={fetchProjectData}
+                  onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+                  onDeleteActivity={handleDeleteActivity}
+                  onToggleActivity={handleToggleActivity}
+                />
               </TabsContent>
 
               <TabsContent value="timeline" className="mt-0">
@@ -469,6 +466,10 @@ const ProjectDetails = () => {
 
               <TabsContent value="lessons" className="mt-0">
                 <LessonsLearned projectId={id!} phases={phases} />
+              </TabsContent>
+
+              <TabsContent value="workflow" className="mt-0">
+                <WorkflowStageManager projectId={id!} />
               </TabsContent>
             </Tabs>
           </div>
