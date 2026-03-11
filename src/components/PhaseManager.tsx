@@ -448,6 +448,7 @@ export const PhaseManager = ({
                     onDelete={onDeleteActivity}
                     onToggle={onToggleActivity}
                     onMoveToPhase={handleMoveActivity}
+                    isAdmin={isAdmin}
                   />
                 </SortableActivityCard>
               ))}
