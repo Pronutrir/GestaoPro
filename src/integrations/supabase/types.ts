@@ -380,6 +380,7 @@ export type Database = {
         Row: {
           agenda: string | null
           created_at: string
+          end_time: string | null
           id: string
           location: string | null
           meeting_date: string | null
@@ -387,12 +388,14 @@ export type Database = {
           participants: string[] | null
           phase_id: string | null
           project_id: string
+          start_time: string | null
           title: string
           updated_at: string
         }
         Insert: {
           agenda?: string | null
           created_at?: string
+          end_time?: string | null
           id?: string
           location?: string | null
           meeting_date?: string | null
@@ -400,12 +403,14 @@ export type Database = {
           participants?: string[] | null
           phase_id?: string | null
           project_id: string
+          start_time?: string | null
           title: string
           updated_at?: string
         }
         Update: {
           agenda?: string | null
           created_at?: string
+          end_time?: string | null
           id?: string
           location?: string | null
           meeting_date?: string | null
@@ -413,6 +418,7 @@ export type Database = {
           participants?: string[] | null
           phase_id?: string | null
           project_id?: string
+          start_time?: string | null
           title?: string
           updated_at?: string
         }

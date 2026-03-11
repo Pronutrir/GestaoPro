@@ -17,6 +17,7 @@ import {
   CheckSquare,
   Zap,
   X,
+  Clock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -76,6 +77,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
   const [form, setForm] = useState({
     title: "",
     meeting_date: "",
+    start_time: "",
+    end_time: "",
     location: "",
     agenda: "",
     minutes: "",
@@ -115,7 +118,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
   };
 
   const resetForm = () => {
-    setForm({ title: "", meeting_date: "", location: "", agenda: "", minutes: "", phase_id: "", participants: [] });
+    setForm({ title: "", meeting_date: "", start_time: "", end_time: "", location: "", agenda: "", minutes: "", phase_id: "", participants: [] });
     setEditingId(null);
     setShowForm(false);
   };
@@ -130,6 +133,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       project_id: projectId,
       title: form.title,
       meeting_date: form.meeting_date || null,
+      start_time: form.start_time || null,
+      end_time: form.end_time || null,
       location: form.location || null,
       agenda: form.agenda || null,
       minutes: form.minutes || null,
@@ -154,6 +159,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
     setForm({
       title: m.title,
       meeting_date: m.meeting_date ? m.meeting_date.slice(0, 16) : "",
+      start_time: (m as any).start_time || "",
+      end_time: (m as any).end_time || "",
       location: m.location || "",
       agenda: m.agenda || "",
       minutes: m.minutes || "",
@@ -249,10 +256,10 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
           />
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs text-muted-foreground">Data/Hora</Label>
+              <Label className="text-xs text-muted-foreground">Data</Label>
               <Input
-                type="datetime-local"
-                value={form.meeting_date}
+                type="date"
+                value={form.meeting_date ? form.meeting_date.slice(0, 10) : ""}
                 onChange={(e) => setForm({ ...form, meeting_date: e.target.value })}
               />
             </div>
@@ -262,6 +269,24 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                 placeholder="Sala 3 ou https://meet..."
                 value={form.location}
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground">Horário de Início</Label>
+              <Input
+                type="time"
+                value={form.start_time}
+                onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Horário de Término</Label>
+              <Input
+                type="time"
+                value={form.end_time}
+                onChange={(e) => setForm({ ...form, end_time: e.target.value })}
               />
             </div>
           </div>
@@ -345,7 +370,24 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                         {meeting.meeting_date && (
                           <span className="flex items-center gap-1">
                             <CalendarDays className="w-3 h-3" />
-                            {new Date(meeting.meeting_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                            {new Date(meeting.meeting_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                          </span>
+                        )}
+                        {((meeting as any).start_time || (meeting as any).end_time) && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {(meeting as any).start_time?.slice(0, 5) || "?"} – {(meeting as any).end_time?.slice(0, 5) || "?"}
+                            {(meeting as any).start_time && (meeting as any).end_time && (() => {
+                              const [sh, sm] = (meeting as any).start_time.split(":").map(Number);
+                              const [eh, em] = (meeting as any).end_time.split(":").map(Number);
+                              const diff = (eh * 60 + em) - (sh * 60 + sm);
+                              if (diff > 0) {
+                                const h = Math.floor(diff / 60);
+                                const m = diff % 60;
+                                return <span className="text-primary font-medium ml-1">({h > 0 ? `${h}h` : ""}{m > 0 ? `${m}min` : ""})</span>;
+                              }
+                              return null;
+                            })()}
                           </span>
                         )}
                         {meeting.location && (
