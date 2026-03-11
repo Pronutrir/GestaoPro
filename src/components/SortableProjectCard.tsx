@@ -36,7 +36,7 @@ const priorityColors: Record<string, string> = {
   high: "bg-destructive text-destructive-foreground",
 };
 
-export const SortableProjectCard = ({ project, onEdit, onDeleteClick }: SortableProjectCardProps) => {
+export const SortableProjectCard = ({ project, onEdit, onDeleteClick, isAdmin = false }: SortableProjectCardProps) => {
   const navigate = useNavigate();
   const {
     attributes,
