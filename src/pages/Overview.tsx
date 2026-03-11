@@ -78,9 +78,14 @@ const Overview = () => {
         supabase.from("time_entries").select("duration_minutes, project_id, created_at"),
       ]);
 
-      if (projectsRes.data) setProjects(projectsRes.data);
-      if (activitiesRes.data) setActivities(activitiesRes.data);
-      if (timeRes.data) setTimeEntries(timeRes.data);
+      const allProjects = projectsRes.data || [];
+      const filtered = await filterProjects(allProjects);
+      setProjects(filtered);
+
+      // Filter activities to only show those from accessible projects
+      const projectIds = new Set(filtered.map(p => p.id));
+      if (activitiesRes.data) setActivities(activitiesRes.data.filter(a => projectIds.has(a.project_id)));
+      if (timeRes.data) setTimeEntries(timeRes.data.filter(t => projectIds.has(t.project_id)));
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
     } finally {
