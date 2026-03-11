@@ -458,6 +458,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                         {meeting.participants?.length > 0 && (
                           <span>{meeting.participants.length} participante(s)</span>
                         )}
+                        {meeting.responsible && (
+                          <span className="flex items-center gap-1 font-medium text-foreground">
+                            👤 {meeting.responsible}
+                          </span>
+                        )}
                         {meeting.phase_id && (
                           <Badge variant="secondary" className="text-[10px]">
                             {phases.find((p) => p.id === meeting.phase_id)?.title}
