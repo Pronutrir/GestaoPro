@@ -13,7 +13,7 @@ import { ActivityComments } from "@/components/ActivityComments";
 import { EditActivityDialog } from "@/components/EditActivityDialog";
 import { PhaseManager } from "@/components/PhaseManager";
 import { TimelineView } from "@/components/TimelineView";
-import { TimeTracker } from "@/components/TimeTracker";
+
 import { LessonsLearned } from "@/components/LessonsLearned";
 import { DocumentManager } from "@/components/DocumentManager";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -31,7 +31,7 @@ import {
   Layers,
   ListTodo,
   GanttChart,
-  Clock,
+  
   BookOpen,
   FileText,
   Flag,
@@ -425,7 +425,7 @@ const ProjectDetails = () => {
                 <TabsTrigger value="phases" className="gap-2"><Layers className="w-4 h-4" />Fases</TabsTrigger>
                 <TabsTrigger value="kanban" className="gap-2"><Kanban className="w-4 h-4" />Kanban</TabsTrigger>
                 <TabsTrigger value="timeline" className="gap-2"><GanttChart className="w-4 h-4" />Cronograma</TabsTrigger>
-                <TabsTrigger value="timetracking" className="gap-2"><Clock className="w-4 h-4" />Tempo</TabsTrigger>
+                
                 <TabsTrigger value="documents" className="gap-2"><FileText className="w-4 h-4" />Documentos</TabsTrigger>
                 <TabsTrigger value="meetings" className="gap-2"><Users className="w-4 h-4" />Reuniões</TabsTrigger>
                 <TabsTrigger value="lessons" className="gap-2"><BookOpen className="w-4 h-4" />Lições</TabsTrigger>
@@ -458,9 +458,6 @@ const ProjectDetails = () => {
                 <TimelineView phases={phases} activities={activities} projectDueDate={project.due_date} onActivityClick={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }} />
               </TabsContent>
 
-              <TabsContent value="timetracking" className="mt-0">
-                <TimeTracker projectId={id!} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
-              </TabsContent>
 
               <TabsContent value="documents" className="mt-0">
                 <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
