@@ -255,10 +255,10 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
           />
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs text-muted-foreground">Data/Hora</Label>
+              <Label className="text-xs text-muted-foreground">Data</Label>
               <Input
-                type="datetime-local"
-                value={form.meeting_date}
+                type="date"
+                value={form.meeting_date ? form.meeting_date.slice(0, 10) : ""}
                 onChange={(e) => setForm({ ...form, meeting_date: e.target.value })}
               />
             </div>
@@ -268,6 +268,24 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                 placeholder="Sala 3 ou https://meet..."
                 value={form.location}
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground">Horário de Início</Label>
+              <Input
+                type="time"
+                value={form.start_time}
+                onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Horário de Término</Label>
+              <Input
+                type="time"
+                value={form.end_time}
+                onChange={(e) => setForm({ ...form, end_time: e.target.value })}
               />
             </div>
           </div>
