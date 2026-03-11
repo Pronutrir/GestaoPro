@@ -47,6 +47,7 @@ import { SortableContext, verticalListSortingStrategy, arrayMove, sortableKeyboa
 import { SortableActivityCard } from "@/components/SortableActivityCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Project {
   id: string;
