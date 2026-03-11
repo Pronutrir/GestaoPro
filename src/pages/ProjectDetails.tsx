@@ -38,6 +38,7 @@ import {
   ChevronRight,
   Settings2,
   Kanban,
+  Users,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
