@@ -19,6 +19,7 @@ import { DocumentManager } from "@/components/DocumentManager";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
+import { MeetingsManager } from "@/components/MeetingsManager";
 import {
   ArrowLeft,
   Plus,
