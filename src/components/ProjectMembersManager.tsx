@@ -11,6 +11,7 @@ interface Profile {
   id: string;
   email: string;
   full_name: string;
+  sector: string | null;
 }
 
 interface ProjectMember {
