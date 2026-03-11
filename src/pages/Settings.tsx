@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Plus, X, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { UserManagement } from "@/components/UserManagement";
 
 interface Sector {
   id: string;
@@ -21,10 +22,7 @@ const Settings = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchSectors = async () => {
-    const { data, error } = await supabase
-      .from("sectors")
-      .select("*")
-      .order("name");
+    const { data, error } = await supabase.from("sectors").select("*").order("name");
     if (!error && data) setSectors(data);
   };
 
@@ -58,6 +56,7 @@ const Settings = () => {
   return (
     <AppLayout title="Configurações">
       <div className="max-w-2xl mx-auto space-y-6">
+        <UserManagement />
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -65,35 +64,24 @@ const Settings = () => {
               Setores
             </CardTitle>
             <CardDescription>
-              Cadastre os setores que podem ser partes interessadas nos projetos. Eles aparecerão como opções na criação e edição de projetos.
+              Cadastre os setores que podem ser partes interessadas nos projetos.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-2">
-              <Input
-                placeholder="Nome do setor (ex: TI, Marketing, RH...)"
-                value={newSector}
-                onChange={(e) => setNewSector(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              />
+              <Input placeholder="Nome do setor (ex: TI, Marketing, RH...)" value={newSector} onChange={(e) => setNewSector(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
               <Button onClick={handleAdd} disabled={isLoading || !newSector.trim()} className="gap-1 shrink-0">
                 <Plus className="w-4 h-4" /> Adicionar
               </Button>
             </div>
-
             {sectors.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                Nenhum setor cadastrado ainda. Adicione o primeiro acima.
-              </p>
+              <p className="text-sm text-muted-foreground text-center py-6">Nenhum setor cadastrado ainda.</p>
             ) : (
               <div className="flex flex-wrap gap-2 pt-2">
                 {sectors.map((sector) => (
                   <Badge key={sector.id} variant="secondary" className="text-sm py-1.5 px-3 gap-1.5">
                     {sector.name}
-                    <button
-                      onClick={() => handleDelete(sector)}
-                      className="ml-1 hover:text-destructive transition-colors"
-                    >
+                    <button onClick={() => handleDelete(sector)} className="ml-1 hover:text-destructive transition-colors">
                       <X className="w-3 h-3" />
                     </button>
                   </Badge>

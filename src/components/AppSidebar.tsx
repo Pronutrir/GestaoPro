@@ -6,9 +6,11 @@ import {
   AlertTriangle,
   FolderKanban,
   Settings,
+  LogOut,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 import {
   Sidebar,
@@ -34,6 +36,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const { signOut, profile, isAdmin } = useAuth();
 
   return (
     <Sidebar collapsible="offcanvas">
@@ -69,6 +72,18 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      <div className="mt-auto p-4 border-t border-border">
+        {!collapsed && profile && (
+          <p className="text-xs text-muted-foreground mb-2 truncate">
+            {profile.full_name || profile.email}
+          </p>
+        )}
+        <SidebarMenuButton onClick={signOut} className="w-full hover:bg-destructive/10 hover:text-destructive">
+          <LogOut className="mr-2 h-4 w-4" />
+          {!collapsed && <span>Sair</span>}
+        </SidebarMenuButton>
+      </div>
     </Sidebar>
   );
 }
