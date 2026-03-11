@@ -220,14 +220,16 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 opacity-0 group-hover:opacity-100 text-destructive"
-                  onClick={() => handleDelete(doc.id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                {isAdmin && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 opacity-0 group-hover:opacity-100 text-destructive"
+                    onClick={() => handleDelete(doc.id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
