@@ -40,6 +40,7 @@ interface EditActivityDialogProps {
   onActivityUpdated: () => void;
   phases?: Phase[];
   allActivities?: Activity[];
+  projectId?: string;
 }
 
 export const EditActivityDialog = ({
