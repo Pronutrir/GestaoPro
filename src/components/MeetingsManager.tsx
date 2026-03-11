@@ -31,6 +31,8 @@ interface Meeting {
   phase_id: string | null;
   title: string;
   meeting_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
   location: string | null;
   agenda: string | null;
   minutes: string | null;
@@ -178,8 +180,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
     setForm({
       title: m.title,
       meeting_date: m.meeting_date ? m.meeting_date.slice(0, 16) : "",
-      start_time: (m as any).start_time || "",
-      end_time: (m as any).end_time || "",
+      start_time: m.start_time || "",
+      end_time: m.end_time || "",
       location: m.location || "",
       agenda: m.agenda || "",
       minutes: m.minutes || "",
@@ -413,13 +415,13 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                             {new Date(meeting.meeting_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })}
                           </span>
                         )}
-                        {((meeting as any).start_time || (meeting as any).end_time) && (
+                        {(meeting.start_time || meeting.end_time) && (
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            {(meeting as any).start_time?.slice(0, 5) || "?"} – {(meeting as any).end_time?.slice(0, 5) || "?"}
-                            {(meeting as any).start_time && (meeting as any).end_time && (() => {
-                              const [sh, sm] = (meeting as any).start_time.split(":").map(Number);
-                              const [eh, em] = (meeting as any).end_time.split(":").map(Number);
+                            {meeting.start_time?.slice(0, 5) || "?"} – {meeting.end_time?.slice(0, 5) || "?"}
+                            {meeting.start_time && meeting.end_time && (() => {
+                              const [sh, sm] = meeting.start_time!.split(":").map(Number);
+                              const [eh, em] = meeting.end_time!.split(":").map(Number);
                               const diff = (eh * 60 + em) - (sh * 60 + sm);
                               if (diff > 0) {
                                 const h = Math.floor(diff / 60);
