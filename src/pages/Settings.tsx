@@ -2,10 +2,9 @@ import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, X, Building2, UserCircle, Save } from "lucide-react";
+import { Plus, X, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,32 +18,12 @@ interface Sector {
 
 const Settings = () => {
   const { toast } = useToast();
-  const { user, profile, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [newSector, setNewSector] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [editingSectorId, setEditingSectorId] = useState<string | null>(null);
   const [editingSectorName, setEditingSectorName] = useState("");
-
-  // Profile self-edit
-  const [profileForm, setProfileForm] = useState({
-    full_name: "",
-    sector: "",
-    role_title: "",
-  });
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [profileSaving, setProfileSaving] = useState(false);
-
-  useEffect(() => {
-    if (profile) {
-      setProfileForm({
-        full_name: profile.full_name || "",
-        sector: profile.sector || "",
-        role_title: profile.role_title || "",
-      });
-    }
-  }, [profile]);
 
   const fetchSectors = async () => {
     const { data, error } = await supabase.from("sectors").select("*").order("name");
@@ -91,124 +70,9 @@ const Settings = () => {
     }
   };
 
-  const handleSaveProfile = async () => {
-    if (!user) return;
-    setProfileSaving(true);
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          full_name: profileForm.full_name,
-          sector: profileForm.sector || null,
-          role_title: profileForm.role_title || null,
-        })
-        .eq("id", user.id);
-      if (error) throw error;
-      toast({ title: "Perfil atualizado!" });
-    } catch (error: any) {
-      toast({ title: "Erro ao salvar perfil", description: error.message, variant: "destructive" });
-    }
-    setProfileSaving(false);
-  };
-
-  const handleChangePassword = async () => {
-    if (!newPassword.trim()) {
-      toast({ title: "Digite a nova senha", variant: "destructive" });
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast({ title: "As senhas não conferem", variant: "destructive" });
-      return;
-    }
-    if (newPassword.length < 6) {
-      toast({ title: "A senha deve ter no mínimo 6 caracteres", variant: "destructive" });
-      return;
-    }
-    setProfileSaving(true);
-    try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
-      toast({ title: "Senha alterada com sucesso!" });
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (error: any) {
-      toast({ title: "Erro ao alterar senha", description: error.message, variant: "destructive" });
-    }
-    setProfileSaving(false);
-  };
-
   return (
     <AppLayout title="Configurações">
       <div className="max-w-2xl mx-auto space-y-6">
-        {/* Meu Perfil */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserCircle className="w-5 h-5" />
-              Meu Perfil
-            </CardTitle>
-            <CardDescription>Atualize suas informações pessoais e senha.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4">
-              <div className="grid gap-2">
-                <Label>Nome Completo</Label>
-                <Input
-                  value={profileForm.full_name}
-                  onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Setor</Label>
-                  <Input
-                    value={profileForm.sector}
-                    onChange={(e) => setProfileForm({ ...profileForm, sector: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Cargo</Label>
-                  <Input
-                    value={profileForm.role_title}
-                    onChange={(e) => setProfileForm({ ...profileForm, role_title: e.target.value })}
-                  />
-                </div>
-              </div>
-              <Button onClick={handleSaveProfile} disabled={profileSaving} className="w-fit gap-1">
-                <Save className="w-4 h-4" />
-                {profileSaving ? "Salvando..." : "Salvar Perfil"}
-              </Button>
-            </div>
-
-            <div className="border-t border-border pt-4 mt-4">
-              <h4 className="text-sm font-semibold text-foreground mb-3">Alterar Senha</h4>
-              <div className="grid gap-3">
-                <div className="grid gap-2">
-                  <Label>Nova Senha</Label>
-                  <Input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Mínimo 6 caracteres"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Confirmar Nova Senha</Label>
-                  <Input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Repita a nova senha"
-                  />
-                </div>
-                <Button variant="outline" onClick={handleChangePassword} disabled={profileSaving} className="w-fit">
-                  {profileSaving ? "Alterando..." : "Alterar Senha"}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* User Management (admin only) */}
         <UserManagement />
 
