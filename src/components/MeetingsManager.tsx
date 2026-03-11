@@ -456,14 +456,16 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEdit(meeting)}>
-                      <Pencil className="w-3 h-3" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(meeting.id)}>
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
+                  {(isAdmin || meeting.created_by === user?.id) && (
+                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEdit(meeting)}>
+                        <Pencil className="w-3 h-3" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(meeting.id)}>
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Expanded Content */}
