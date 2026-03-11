@@ -35,7 +35,7 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
   const fetchData = async () => {
     const [{ data: membersData }, { data: profilesData }] = await Promise.all([
       supabase.from("project_members").select("*").eq("project_id", projectId),
-      supabase.from("profiles").select("id, email, full_name"),
+      supabase.from("profiles").select("id, email, full_name, sector"),
     ]);
 
     if (profilesData) setProfiles(profilesData);
