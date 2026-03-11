@@ -79,6 +79,7 @@ interface MeetingsManagerProps {
 
 export const MeetingsManager = ({ projectId, phases, onCreateActivity }: MeetingsManagerProps) => {
   const { toast } = useToast();
+  const { isAdmin, user } = useAuth();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
