@@ -519,24 +519,28 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                         {meetingDecisions.map((d) => (
                           <div key={d.id} className="flex items-center justify-between text-sm p-2 bg-accent/20 rounded group">
                             <span>{d.description}</span>
-                            <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive" onClick={() => handleDeleteDecision(d.id, meeting.id)}>
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
+                            {canEditMeeting && (
+                              <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive" onClick={() => handleDeleteDecision(d.id, meeting.id)}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            )}
                           </div>
                         ))}
                       </div>
-                      <div className="flex gap-2 mt-2">
-                        <Input
-                          placeholder="Nova decisão..."
-                          value={newDecision}
-                          onChange={(e) => setNewDecision(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleAddDecision(meeting.id)}
-                          className="text-sm h-8"
-                        />
-                        <Button size="sm" variant="outline" className="h-8" onClick={() => handleAddDecision(meeting.id)}>
-                          <Plus className="w-3 h-3" />
-                        </Button>
-                      </div>
+                      {canEditMeeting && (
+                        <div className="flex gap-2 mt-2">
+                          <Input
+                            placeholder="Nova decisão..."
+                            value={newDecision}
+                            onChange={(e) => setNewDecision(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleAddDecision(meeting.id)}
+                            className="text-sm h-8"
+                          />
+                          <Button size="sm" variant="outline" className="h-8" onClick={() => handleAddDecision(meeting.id)}>
+                            <Plus className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions */}
@@ -550,7 +554,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                             <div className="flex items-center gap-2">
                               <button
                                 className={`w-4 h-4 rounded border flex items-center justify-center ${a.is_completed ? "bg-primary border-primary text-primary-foreground" : "border-border"}`}
-                                onClick={() => handleToggleAction(a, meeting.id)}
+                                onClick={() => canEditMeeting && handleToggleAction(a, meeting.id)}
+                                disabled={!canEditMeeting}
                               >
                                 {a.is_completed && <span className="text-xs">✓</span>}
                               </button>
@@ -560,44 +565,48 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                               {a.assigned_to && <Badge variant="outline" className="text-[10px]">👤 {a.assigned_to}</Badge>}
                               {a.due_date && <Badge variant="secondary" className="text-[10px]">📅 {new Date(a.due_date).toLocaleDateString("pt-BR")}</Badge>}
                             </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                              {onCreateActivity && !a.activity_id && (
-                                <Button size="icon" variant="ghost" className="h-6 w-6" title="Criar atividade no Kanban" onClick={() => handlePromoteToActivity(a, meeting.id)}>
-                                  <Zap className="w-3 h-3 text-primary" />
+                            {canEditMeeting && (
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                                {onCreateActivity && !a.activity_id && (
+                                  <Button size="icon" variant="ghost" className="h-6 w-6" title="Criar atividade no Kanban" onClick={() => handlePromoteToActivity(a, meeting.id)}>
+                                    <Zap className="w-3 h-3 text-primary" />
+                                  </Button>
+                                )}
+                                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDeleteAction(a.id, meeting.id)}>
+                                  <Trash2 className="w-3 h-3" />
                                 </Button>
-                              )}
-                              <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDeleteAction(a.id, meeting.id)}>
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
-                      <div className="grid grid-cols-3 gap-2 mt-2">
-                        <Input
-                          placeholder="Descrição da ação"
-                          value={newAction.description}
-                          onChange={(e) => setNewAction({ ...newAction, description: e.target.value })}
-                          className="text-sm h-8 col-span-1"
-                        />
-                        <Input
-                          placeholder="Responsável"
-                          value={newAction.assigned_to}
-                          onChange={(e) => setNewAction({ ...newAction, assigned_to: e.target.value })}
-                          className="text-sm h-8"
-                        />
-                        <div className="flex gap-1">
+                      {canEditMeeting && (
+                        <div className="grid grid-cols-3 gap-2 mt-2">
                           <Input
-                            type="date"
-                            value={newAction.due_date}
-                            onChange={(e) => setNewAction({ ...newAction, due_date: e.target.value })}
+                            placeholder="Descrição da ação"
+                            value={newAction.description}
+                            onChange={(e) => setNewAction({ ...newAction, description: e.target.value })}
+                            className="text-sm h-8 col-span-1"
+                          />
+                          <Input
+                            placeholder="Responsável"
+                            value={newAction.assigned_to}
+                            onChange={(e) => setNewAction({ ...newAction, assigned_to: e.target.value })}
                             className="text-sm h-8"
                           />
-                          <Button size="sm" variant="outline" className="h-8" onClick={() => handleAddAction(meeting.id)}>
-                            <Plus className="w-3 h-3" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Input
+                              type="date"
+                              value={newAction.due_date}
+                              onChange={(e) => setNewAction({ ...newAction, due_date: e.target.value })}
+                              className="text-sm h-8"
+                            />
+                            <Button size="sm" variant="outline" className="h-8" onClick={() => handleAddAction(meeting.id)}>
+                              <Plus className="w-3 h-3" />
+                            </Button>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                 )}
