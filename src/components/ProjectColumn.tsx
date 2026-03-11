@@ -83,6 +83,7 @@ export const ProjectColumn = ({
               project={project}
               onEdit={onEdit}
               onDeleteClick={handleDeleteClick}
+              isAdmin={isAdmin}
             />
           ))}
         </div>
