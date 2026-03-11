@@ -323,28 +323,50 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
           {/* Participants */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Participantes</Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Nome do participante"
-                value={newParticipant}
-                onChange={(e) => setNewParticipant(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addParticipant())}
-                className="text-sm"
-              />
-              <Button size="sm" variant="outline" type="button" onClick={addParticipant}>
-                <Plus className="w-3 h-3" />
-              </Button>
-            </div>
+            {(() => {
+              const available = profiles.filter((p) => !form.participants.includes(p.id));
+              return available.length > 0 ? (
+                <Select onValueChange={(val) => addParticipant(val)}>
+                  <SelectTrigger className="text-sm h-9">
+                    <SelectValue placeholder="Adicionar participante..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {available.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.full_name || p.email}
+                        {p.sector ? ` — ${p.sector}` : ""}
+                        {p.role_title ? ` (${p.role_title})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-xs text-muted-foreground">Todos os usuários já foram adicionados.</p>
+              );
+            })()}
             {form.participants.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {form.participants.map((p) => (
-                  <Badge key={p} variant="secondary" className="gap-1 text-xs">
-                    {p}
-                    <button onClick={() => removeParticipant(p)}>
-                      <X className="w-3 h-3" />
-                    </button>
-                  </Badge>
-                ))}
+              <div className="space-y-1">
+                {form.participants.map((userId) => {
+                  const prof = getProfile(userId);
+                  return (
+                    <div key={userId} className="flex items-center justify-between p-2 rounded border border-border bg-accent/10">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{prof?.full_name || prof?.email || userId}</span>
+                        <div className="flex gap-2 text-xs text-muted-foreground">
+                          {prof?.sector && (
+                            <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{prof.sector}</span>
+                          )}
+                          {prof?.role_title && (
+                            <span className="flex items-center gap-1"><Briefcase className="w-3 h-3" />{prof.role_title}</span>
+                          )}
+                        </div>
+                      </div>
+                      <button onClick={() => removeParticipant(userId)} className="text-muted-foreground hover:text-destructive">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
