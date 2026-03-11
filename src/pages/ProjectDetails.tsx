@@ -467,6 +467,10 @@ const ProjectDetails = () => {
               <TabsContent value="lessons" className="mt-0">
                 <LessonsLearned projectId={id!} phases={phases} />
               </TabsContent>
+
+              <TabsContent value="workflow" className="mt-0">
+                <WorkflowStageManager projectId={id!} />
+              </TabsContent>
             </Tabs>
           </div>
 
