@@ -16,6 +16,7 @@ import { AddProjectDialog } from "@/components/AddProjectDialog";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { AppLayout } from "@/components/AppLayout";
 import { Input } from "@/components/ui/input";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
