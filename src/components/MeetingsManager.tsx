@@ -158,6 +158,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
     setForm({
       title: m.title,
       meeting_date: m.meeting_date ? m.meeting_date.slice(0, 16) : "",
+      start_time: (m as any).start_time || "",
+      end_time: (m as any).end_time || "",
       location: m.location || "",
       agenda: m.agenda || "",
       minutes: m.minutes || "",
