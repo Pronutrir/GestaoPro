@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { FileText, Plus, Trash2, ExternalLink, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ProjectDocument {
   id: string;
