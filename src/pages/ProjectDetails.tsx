@@ -31,7 +31,7 @@ import {
   Layers,
   ListTodo,
   GanttChart,
-  Clock,
+  
   BookOpen,
   FileText,
   Flag,
