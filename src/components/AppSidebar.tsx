@@ -23,13 +23,13 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const navItems = [
-  { path: "/", label: "Visão Geral", icon: Home },
-  { path: "/projects", label: "Projetos", icon: FolderKanban },
-  { path: "/team", label: "Equipe", icon: Users },
-  { path: "/reports", label: "Relatórios", icon: BarChart3 },
-  { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle },
-  { path: "/settings", label: "Configurações", icon: Settings },
+const allNavItems = [
+  { path: "/", label: "Visão Geral", icon: Home, adminOnly: false },
+  { path: "/projects", label: "Projetos", icon: FolderKanban, adminOnly: false },
+  { path: "/team", label: "Equipe", icon: Users, adminOnly: false },
+  { path: "/reports", label: "Relatórios", icon: BarChart3, adminOnly: true },
+  { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, adminOnly: true },
+  { path: "/settings", label: "Configurações", icon: Settings, adminOnly: true },
 ];
 
 export function AppSidebar() {
