@@ -16,7 +16,6 @@ const Setup = () => {
   const [form, setForm] = useState({ email: "", password: "", full_name: "" });
 
   useEffect(() => {
-    // Check if any admin exists
     supabase.from("user_roles").select("id").eq("role", "admin").limit(1).then(({ data }) => {
       setHasAdmin(data && data.length > 0);
     });
@@ -31,34 +30,17 @@ const Setup = () => {
     if (!form.email || !form.password || !form.full_name) return;
     setIsLoading(true);
 
-    // Sign up the first user
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: { data: { full_name: form.full_name } },
-    });
-
-    if (signUpError) {
-      toast({ title: "Erro", description: signUpError.message, variant: "destructive" });
-      setIsLoading(false);
-      return;
-    }
-
-    if (signUpData.user) {
-      // Create profile and admin role
-      await supabase.from("profiles").insert({
-        id: signUpData.user.id,
-        email: form.email,
-        full_name: form.full_name,
+    try {
+      const { data, error } = await supabase.functions.invoke("initial-setup", {
+        body: form,
       });
-      await supabase.from("user_roles").insert({
-        user_id: signUpData.user.id,
-        role: "admin",
-      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       toast({ title: "Admin criado com sucesso!", description: "Faça login para continuar." });
-      await supabase.auth.signOut();
       navigate("/login");
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
     }
     setIsLoading(false);
   };
