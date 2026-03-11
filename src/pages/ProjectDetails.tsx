@@ -35,6 +35,20 @@ import {
   FileText,
   Flag,
   ChevronRight,
+  Settings2,
+  Kanban,
+} from "lucide-react";
+  Circle,
+  Pencil,
+  Trash2,
+  Layers,
+  ListTodo,
+  GanttChart,
+  Clock,
+  BookOpen,
+  FileText,
+  Flag,
+  ChevronRight,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
