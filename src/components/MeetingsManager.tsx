@@ -415,13 +415,13 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                             {new Date(meeting.meeting_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })}
                           </span>
                         )}
-                        {((meeting as any).start_time || (meeting as any).end_time) && (
+                        {(meeting.start_time || meeting.end_time) && (
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            {(meeting as any).start_time?.slice(0, 5) || "?"} – {(meeting as any).end_time?.slice(0, 5) || "?"}
-                            {(meeting as any).start_time && (meeting as any).end_time && (() => {
-                              const [sh, sm] = (meeting as any).start_time.split(":").map(Number);
-                              const [eh, em] = (meeting as any).end_time.split(":").map(Number);
+                            {meeting.start_time?.slice(0, 5) || "?"} – {meeting.end_time?.slice(0, 5) || "?"}
+                            {meeting.start_time && meeting.end_time && (() => {
+                              const [sh, sm] = meeting.start_time!.split(":").map(Number);
+                              const [eh, em] = meeting.end_time!.split(":").map(Number);
                               const diff = (eh * 60 + em) - (sh * 60 + sm);
                               if (diff > 0) {
                                 const h = Math.floor(diff / 60);
