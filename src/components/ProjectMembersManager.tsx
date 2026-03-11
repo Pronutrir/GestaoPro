@@ -11,6 +11,7 @@ interface Profile {
   id: string;
   email: string;
   full_name: string;
+  sector: string | null;
 }
 
 interface ProjectMember {
@@ -34,7 +35,7 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
   const fetchData = async () => {
     const [{ data: membersData }, { data: profilesData }] = await Promise.all([
       supabase.from("project_members").select("*").eq("project_id", projectId),
-      supabase.from("profiles").select("id, email, full_name"),
+      supabase.from("profiles").select("id, email, full_name, sector"),
     ]);
 
     if (profilesData) setProfiles(profilesData);
@@ -93,7 +94,12 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
                 ) : (
                   <User className="w-4 h-4 text-muted-foreground" />
                 )}
-                <span className="text-sm font-medium">{m.profile?.full_name || m.profile?.email}</span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">{m.profile?.full_name || m.profile?.email}</span>
+                  {m.profile?.sector && (
+                    <span className="text-xs text-muted-foreground">{m.profile.sector}</span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Select value={m.role} onValueChange={(v) => handleChangeRole(m.id, v)}>

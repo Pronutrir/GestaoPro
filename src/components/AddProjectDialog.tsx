@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { SectorSelector } from "@/components/SectorSelector";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -213,19 +212,6 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="assignees">
-                Membros (separados por vírgula)
-              </Label>
-              <Input
-                id="assignees"
-                placeholder="JD, MS, RP"
-                value={formData.assignees}
-                onChange={(e) =>
-                  setFormData({ ...formData, assignees: e.target.value })
-                }
-              />
-            </div>
-            <div className="grid gap-2">
               <Label htmlFor="owner">Responsável pelo Projeto</Label>
               <Input
                 id="owner"
@@ -236,10 +222,6 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
                 }
               />
             </div>
-            <SectorSelector
-              selected={formData.category ? formData.category.split(",").map(s => s.trim()).filter(Boolean) : []}
-              onChange={(sectors) => setFormData({ ...formData, category: sectors.join(", ") })}
-            />
             <div className="grid gap-2">
               <Label htmlFor="program">Programa</Label>
               <Input
