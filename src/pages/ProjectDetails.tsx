@@ -381,15 +381,17 @@ const ProjectDetails = () => {
               </div>
             </Card>
 
-            {/* Action Buttons */}
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant={showAddPhase ? "secondary" : "default"} onClick={() => { setShowAddPhase(!showAddPhase); setShowAddActivity(false); }} className="gap-2">
-                <Layers className="w-4 h-4" /> Nova Fase
-              </Button>
-              <Button size="sm" variant={showAddActivity ? "secondary" : "outline"} onClick={() => { setShowAddActivity(!showAddActivity); setShowAddPhase(false); }} className="gap-2">
-                <Plus className="w-4 h-4" /> Nova Atividade
-              </Button>
-            </div>
+            {/* Action Buttons - Admin only */}
+            {isAdmin && (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant={showAddPhase ? "secondary" : "default"} onClick={() => { setShowAddPhase(!showAddPhase); setShowAddActivity(false); }} className="gap-2">
+                  <Layers className="w-4 h-4" /> Nova Fase
+                </Button>
+                <Button size="sm" variant={showAddActivity ? "secondary" : "outline"} onClick={() => { setShowAddActivity(!showAddActivity); setShowAddPhase(false); }} className="gap-2">
+                  <Plus className="w-4 h-4" /> Nova Atividade
+                </Button>
+              </div>
+            )}
 
             {/* Add Phase Form */}
             {showAddPhase && (
