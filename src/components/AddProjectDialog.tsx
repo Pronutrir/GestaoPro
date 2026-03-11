@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SectorSelector } from "@/components/SectorSelector";
+import { Button } from "@/components/ui/button";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
