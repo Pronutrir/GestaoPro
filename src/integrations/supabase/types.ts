@@ -389,6 +389,7 @@ export type Database = {
           participants: string[] | null
           phase_id: string | null
           project_id: string
+          responsible: string | null
           start_time: string | null
           title: string
           updated_at: string
@@ -405,6 +406,7 @@ export type Database = {
           participants?: string[] | null
           phase_id?: string | null
           project_id: string
+          responsible?: string | null
           start_time?: string | null
           title: string
           updated_at?: string
@@ -421,6 +423,7 @@ export type Database = {
           participants?: string[] | null
           phase_id?: string | null
           project_id?: string
+          responsible?: string | null
           start_time?: string | null
           title?: string
           updated_at?: string
