@@ -413,6 +413,7 @@ export const ActivityKanban = ({
                         onEdit={() => onEditActivity(activity)}
                         onDelete={() => onDeleteActivity(activity.id)}
                         onToggle={() => onToggleActivity(activity.id, activity.status)}
+                        isAdmin={isAdmin}
                       />
                     ))
                   )}
