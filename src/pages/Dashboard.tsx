@@ -35,7 +35,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
-  const { filterProjects } = useProjectAccess();
+  const { filterProjects, isAdmin, loading: authLoading } = useProjectAccess();
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);

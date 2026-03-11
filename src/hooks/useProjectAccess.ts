@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
  * Admins see all projects; regular users see only projects they're assigned to.
  */
 export const useProjectAccess = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
 
   const filterProjects = async <T extends { id: string }>(projects: T[]): Promise<T[]> => {
     if (isAdmin || !user) return projects;
@@ -21,5 +21,5 @@ export const useProjectAccess = () => {
     return projects.filter((p) => allowedIds.has(p.id));
   };
 
-  return { filterProjects, isAdmin, user };
+  return { filterProjects, isAdmin, user, loading };
 };
