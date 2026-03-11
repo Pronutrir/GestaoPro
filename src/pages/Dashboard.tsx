@@ -88,7 +88,7 @@ const Dashboard = () => {
     } catch { toast({ title: "Erro ao reordenar", variant: "destructive" }); fetchProjects(); }
   };
 
-  useEffect(() => { fetchProjects(); }, []);
+  useEffect(() => { if (!authLoading) fetchProjects(); }, [authLoading, isAdmin]);
 
   const handleEdit = (project: Project) => { setEditingProject(project); setEditDialogOpen(true); };
   const handleDelete = async (projectId: string) => {
