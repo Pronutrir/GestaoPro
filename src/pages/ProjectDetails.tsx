@@ -13,7 +13,7 @@ import { ActivityComments } from "@/components/ActivityComments";
 import { EditActivityDialog } from "@/components/EditActivityDialog";
 import { PhaseManager } from "@/components/PhaseManager";
 import { TimelineView } from "@/components/TimelineView";
-import { TimeTracker } from "@/components/TimeTracker";
+
 import { LessonsLearned } from "@/components/LessonsLearned";
 import { DocumentManager } from "@/components/DocumentManager";
 import { NotificationBell } from "@/components/NotificationBell";
