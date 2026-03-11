@@ -34,6 +34,7 @@ export type Database = {
           tags: string[] | null
           title: string
           updated_at: string
+          workflow_stage_id: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -54,6 +55,7 @@ export type Database = {
           tags?: string[] | null
           title: string
           updated_at?: string
+          workflow_stage_id?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -74,6 +76,7 @@ export type Database = {
           tags?: string[] | null
           title?: string
           updated_at?: string
+          workflow_stage_id?: string | null
         }
         Relationships: [
           {
@@ -95,6 +98,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_workflow_stage_id_fkey"
+            columns: ["workflow_stage_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_stages"
             referencedColumns: ["id"]
           },
         ]
@@ -668,6 +678,44 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      workflow_stages: {
+        Row: {
+          color: string
+          created_at: string
+          display_order: number
+          id: string
+          is_final: boolean
+          project_id: string
+          title: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_final?: boolean
+          project_id: string
+          title: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_final?: boolean
+          project_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_stages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
