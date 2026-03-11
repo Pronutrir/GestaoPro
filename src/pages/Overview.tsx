@@ -60,6 +60,7 @@ const COLORS = {
 
 const Overview = () => {
   const navigate = useNavigate();
+  const { filterProjects } = useProjectAccess();
   const [projects, setProjects] = useState<Project[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
