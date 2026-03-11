@@ -153,7 +153,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       return;
     }
 
-    const payload = {
+    const payload: any = {
       project_id: projectId,
       title: form.title,
       meeting_date: form.meeting_date || null,
@@ -165,6 +165,10 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       phase_id: form.phase_id || null,
       participants: form.participants,
     };
+
+    if (!editingId) {
+      payload.created_by = user?.id || null;
+    }
 
     if (editingId) {
       const { error } = await supabase.from("meetings").update(payload).eq("id", editingId);
