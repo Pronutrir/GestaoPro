@@ -407,18 +407,20 @@ export const PhaseManager = ({
                           </SortableContext>
                         </DndContext>
                       )}
-                      <div className="flex gap-2 pt-2">
-                        <Input
-                          placeholder="Adicionar tarefa rápida..."
-                          value={quickAddTitle[phase.id] || ""}
-                          onChange={(e) => setQuickAddTitle((prev) => ({ ...prev, [phase.id]: e.target.value }))}
-                          onKeyDown={(e) => { if (e.key === "Enter") handleQuickAddActivity(phase.id); }}
-                          className="h-8 text-sm"
-                        />
-                        <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => handleQuickAddActivity(phase.id)}>
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      {isAdmin && (
+                        <div className="flex gap-2 pt-2">
+                          <Input
+                            placeholder="Adicionar tarefa rápida..."
+                            value={quickAddTitle[phase.id] || ""}
+                            onChange={(e) => setQuickAddTitle((prev) => ({ ...prev, [phase.id]: e.target.value }))}
+                            onKeyDown={(e) => { if (e.key === "Enter") handleQuickAddActivity(phase.id); }}
+                            className="h-8 text-sm"
+                          />
+                          <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => handleQuickAddActivity(phase.id)}>
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
