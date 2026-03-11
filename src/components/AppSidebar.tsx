@@ -9,7 +9,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
 import {
@@ -36,7 +36,13 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const navigate = useNavigate();
   const { signOut, profile, isAdmin } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/login");
+  };
 
   return (
     <Sidebar collapsible="offcanvas">
@@ -79,7 +85,7 @@ export function AppSidebar() {
             {profile.full_name || profile.email}
           </p>
         )}
-        <SidebarMenuButton onClick={signOut} className="w-full hover:bg-destructive/10 hover:text-destructive">
+        <SidebarMenuButton onClick={handleSignOut} className="w-full hover:bg-destructive/10 hover:text-destructive">
           <LogOut className="mr-2 h-4 w-4" />
           {!collapsed && <span>Sair</span>}
         </SidebarMenuButton>
