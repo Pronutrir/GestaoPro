@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -324,30 +325,7 @@ const ProjectDetails = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card sticky top-0 z-10">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/projects")}>
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div className="flex-1">
-              <h1 className="text-xl font-bold text-foreground">{project.title}</h1>
-              <p className="text-sm text-muted-foreground">{project.description || "Sem descrição"}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <NotificationBell />
-              <Badge className={project.priority === "high" ? "bg-destructive" : project.priority === "medium" ? "bg-warning" : "bg-muted"}>
-                {project.priority === "high" && "Alta"}{project.priority === "medium" && "Média"}{project.priority === "low" && "Baixa"}
-              </Badge>
-              <Button variant="outline" onClick={() => { setEditingProject(project); setEditDialogOpen(true); }}>
-                Editar Projeto
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
+    <AppLayout title={project.title}>
       <main className="container mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div className="lg:col-span-3 space-y-6">
@@ -547,7 +525,7 @@ const ProjectDetails = () => {
           onActivityUpdated={fetchProjectData} phases={phases} allActivities={activities}
         />
       </main>
-    </div>
+    </AppLayout>
   );
 };
 
