@@ -238,19 +238,6 @@ export const EditProjectDialog = ({
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="edit-assignees">
-                Membros (separados por vírgula)
-              </Label>
-              <Input
-                id="edit-assignees"
-                placeholder="JD, MS, RP"
-                value={formData.assignees}
-                onChange={(e) =>
-                  setFormData({ ...formData, assignees: e.target.value })
-                }
-              />
-            </div>
-            <div className="grid gap-2">
               <Label htmlFor="edit-owner">Responsável pelo Projeto</Label>
               <Input
                 id="edit-owner"
@@ -261,10 +248,6 @@ export const EditProjectDialog = ({
                 }
               />
             </div>
-            <SectorSelector
-              selected={formData.category ? formData.category.split(",").map(s => s.trim()).filter(Boolean) : []}
-              onChange={(sectors) => setFormData({ ...formData, category: sectors.join(", ") })}
-            />
             <div className="grid gap-2">
               <Label htmlFor="edit-program">Programa</Label>
               <Input
