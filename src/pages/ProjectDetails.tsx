@@ -525,7 +525,7 @@ const ProjectDetails = () => {
           onActivityUpdated={fetchProjectData} phases={phases} allActivities={activities}
         />
       </main>
-    </div>
+    </AppLayout>
   );
 };
 
