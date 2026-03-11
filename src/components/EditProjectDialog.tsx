@@ -52,6 +52,7 @@ export const EditProjectDialog = ({
   onProjectUpdated,
 }: EditProjectDialogProps) => {
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
