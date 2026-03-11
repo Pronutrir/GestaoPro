@@ -168,7 +168,7 @@ const TeamView = () => {
           </div>
         )}
       </main>
-    </div>
+    </AppLayout>
   );
 };
 

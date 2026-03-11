@@ -501,8 +501,7 @@ const Overview = () => {
           </>
         )}
       </main>
-    </div>
-  );
+    </AppLayout>
 };
 
 export default Overview;
