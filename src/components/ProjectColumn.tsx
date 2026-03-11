@@ -33,6 +33,7 @@ interface ProjectColumnProps {
   onEdit: (project: Project) => void;
   onDelete: (projectId: string) => void;
   onStatusChange: (projectId: string, newStatus: string) => void;
+  isAdmin?: boolean;
 }
 
 export const ProjectColumn = ({
@@ -43,6 +44,7 @@ export const ProjectColumn = ({
   onEdit,
   onDelete,
   onStatusChange,
+  isAdmin = false,
 }: ProjectColumnProps) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
@@ -81,6 +83,7 @@ export const ProjectColumn = ({
               project={project}
               onEdit={onEdit}
               onDeleteClick={handleDeleteClick}
+              isAdmin={isAdmin}
             />
           ))}
         </div>
