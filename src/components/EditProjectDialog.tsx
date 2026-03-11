@@ -138,7 +138,7 @@ export const EditProjectDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[525px]">
+      <DialogContent className="sm:max-w-[750px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Editar Projeto</DialogTitle>

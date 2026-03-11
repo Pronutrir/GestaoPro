@@ -112,7 +112,7 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
           Novo Projeto
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[525px]">
+      <DialogContent className="sm:max-w-[750px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Criar Novo Projeto</DialogTitle>
