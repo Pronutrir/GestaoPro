@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Dashboard from "./pages/Dashboard";
 import ProjectDetails from "./pages/ProjectDetails";
+import Setup from "./pages/Setup";
 import BlockedProjects from "./pages/BlockedProjects";
 import TeamView from "./pages/TeamView";
 import Reports from "./pages/Reports";
