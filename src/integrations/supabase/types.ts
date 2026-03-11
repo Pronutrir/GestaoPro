@@ -380,6 +380,7 @@ export type Database = {
         Row: {
           agenda: string | null
           created_at: string
+          created_by: string | null
           end_time: string | null
           id: string
           location: string | null
@@ -395,6 +396,7 @@ export type Database = {
         Insert: {
           agenda?: string | null
           created_at?: string
+          created_by?: string | null
           end_time?: string | null
           id?: string
           location?: string | null
@@ -410,6 +412,7 @@ export type Database = {
         Update: {
           agenda?: string | null
           created_at?: string
+          created_by?: string | null
           end_time?: string | null
           id?: string
           location?: string | null

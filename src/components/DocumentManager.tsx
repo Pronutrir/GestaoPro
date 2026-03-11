@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { FileText, Plus, Trash2, ExternalLink, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ProjectDocument {
   id: string;
@@ -40,6 +41,7 @@ interface DocumentManagerProps {
 
 export const DocumentManager = ({ projectId, phases, activities }: DocumentManagerProps) => {
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
@@ -114,10 +116,12 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
           <FileText className="w-5 h-5 text-primary" />
           Documentos ({documents.length})
         </h3>
-        <Button size="sm" variant={showForm ? "secondary" : "default"} onClick={() => setShowForm(!showForm)} className="gap-1">
-          <Plus className="w-4 h-4" />
-          {showForm ? "Cancelar" : "Novo Documento"}
-        </Button>
+        {isAdmin && (
+          <Button size="sm" variant={showForm ? "secondary" : "default"} onClick={() => setShowForm(!showForm)} className="gap-1">
+            <Plus className="w-4 h-4" />
+            {showForm ? "Cancelar" : "Novo Documento"}
+          </Button>
+        )}
       </div>
 
       {showForm && (
@@ -216,14 +220,16 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 opacity-0 group-hover:opacity-100 text-destructive"
-                  onClick={() => handleDelete(doc.id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                {isAdmin && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 opacity-0 group-hover:opacity-100 text-destructive"
+                    onClick={() => handleDelete(doc.id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
