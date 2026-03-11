@@ -248,10 +248,12 @@ export const PhaseManager = ({
           <Layers className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold text-foreground">Fases do Projeto</h2>
         </div>
-        <Button size="sm" onClick={() => setShowAddPhase(!showAddPhase)} className="gap-2">
-          <Plus className="w-4 h-4" />
-          Nova Fase
-        </Button>
+        {isAdmin && (
+          <Button size="sm" onClick={() => setShowAddPhase(!showAddPhase)} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Nova Fase
+          </Button>
+        )}
       </div>
 
       {/* Add Phase Form */}
