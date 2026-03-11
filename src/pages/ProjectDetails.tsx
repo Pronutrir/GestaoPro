@@ -343,7 +343,8 @@ const ProjectDetails = () => {
                     </div>
                   )}
                   {project.due_date && (() => {
-                    const dueDate = new Date(project.due_date);
+                    const dueDateStr = project.due_date.includes('T') ? project.due_date : project.due_date + 'T00:00:00';
+                    const dueDate = new Date(dueDateStr);
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
                     dueDate.setHours(0, 0, 0, 0);
@@ -354,7 +355,7 @@ const ProjectDetails = () => {
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-primary" />
                         <span className="font-semibold text-foreground">Entrega em:</span>
-                        <span className="font-semibold text-foreground">{new Date(project.due_date).toLocaleDateString("pt-BR")}</span>
+                        <span className="font-semibold text-foreground">{dueDate.toLocaleDateString("pt-BR")}</span>
                         <span className={`font-bold text-xs px-2 py-0.5 rounded-full ${isOverdue ? "bg-destructive/15 text-destructive" : isUrgent ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary"}`}>
                           {isOverdue ? `${Math.abs(diffDays)}d atrasado` : diffDays === 0 ? "Hoje!" : `${diffDays}d restantes`}
                         </span>
