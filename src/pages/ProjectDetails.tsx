@@ -17,6 +17,13 @@ import { TimeTracker } from "@/components/TimeTracker";
 import { LessonsLearned } from "@/components/LessonsLearned";
 import { DocumentManager } from "@/components/DocumentManager";
 import { NotificationBell } from "@/components/NotificationBell";
+import { ActivityKanban } from "@/components/ActivityKanban";
+import { WorkflowStageManager } from "@/components/WorkflowStageManager";
+import { TimelineView } from "@/components/TimelineView";
+import { TimeTracker } from "@/components/TimeTracker";
+import { LessonsLearned } from "@/components/LessonsLearned";
+import { DocumentManager } from "@/components/DocumentManager";
+import { NotificationBell } from "@/components/NotificationBell";
 import {
   ArrowLeft,
   Plus,
