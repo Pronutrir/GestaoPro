@@ -350,13 +350,13 @@ const ProjectDetails = () => {
                     dueDate.setHours(0, 0, 0, 0);
                     const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                     const isOverdue = diffDays < 0;
-                    const isUrgent = diffDays >= 0 && diffDays <= 7;
+                    const isUrgent = diffDays >= 0 && diffDays <= 30;
                     return (
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-primary" />
                         <span className="font-semibold text-foreground">Entrega em:</span>
                         <span className="font-semibold text-foreground">{dueDate.toLocaleDateString("pt-BR")}</span>
-                        <span className={`font-bold text-xs px-2 py-0.5 rounded-full animate-pulse ${isOverdue ? "bg-destructive/60 text-destructive" : isUrgent ? "bg-warning/60 text-warning" : "bg-primary/60 text-primary"}`}>
+                        <span className={`font-bold text-xs px-2 py-0.5 rounded-full animate-pulse ${isOverdue ? "bg-destructive/60 text-destructive-foreground" : isUrgent ? "bg-warning/60 text-warning-foreground" : "bg-success/60 text-success-foreground"}`}>
                           {isOverdue ? `${Math.abs(diffDays)}d atrasado` : diffDays === 0 ? "Hoje!" : `${diffDays}d restantes`}
                         </span>
                       </div>
