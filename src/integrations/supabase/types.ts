@@ -438,24 +438,36 @@ export type Database = {
       }
       project_members: {
         Row: {
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_move: boolean
           created_at: string
           id: string
           project_id: string
-          role: string
+          sector: string | null
           user_id: string
         }
         Insert: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_move?: boolean
           created_at?: string
           id?: string
           project_id: string
-          role?: string
+          sector?: string | null
           user_id: string
         }
         Update: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_move?: boolean
           created_at?: string
           id?: string
           project_id?: string
-          role?: string
+          sector?: string | null
           user_id?: string
         }
         Relationships: [
