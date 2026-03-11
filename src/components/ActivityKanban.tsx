@@ -120,6 +120,7 @@ function KanbanCard({
   onDelete,
   onToggle,
   dragListeners,
+  isAdmin,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -127,6 +128,7 @@ function KanbanCard({
   onDelete: () => void;
   onToggle: () => void;
   dragListeners?: any;
+  isAdmin?: boolean;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
