@@ -497,6 +497,7 @@ const ProjectDetails = () => {
         <EditActivityDialog
           activity={editingActivity} open={editActivityDialogOpen} onOpenChange={setEditActivityDialogOpen}
           onActivityUpdated={fetchProjectData} phases={phases} allActivities={activities}
+          projectId={id!}
         />
       </main>
     </AppLayout>
