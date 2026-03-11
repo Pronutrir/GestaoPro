@@ -370,7 +370,24 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                         {meeting.meeting_date && (
                           <span className="flex items-center gap-1">
                             <CalendarDays className="w-3 h-3" />
-                            {new Date(meeting.meeting_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                            {new Date(meeting.meeting_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                          </span>
+                        )}
+                        {((meeting as any).start_time || (meeting as any).end_time) && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {(meeting as any).start_time?.slice(0, 5) || "?"} – {(meeting as any).end_time?.slice(0, 5) || "?"}
+                            {(meeting as any).start_time && (meeting as any).end_time && (() => {
+                              const [sh, sm] = (meeting as any).start_time.split(":").map(Number);
+                              const [eh, em] = (meeting as any).end_time.split(":").map(Number);
+                              const diff = (eh * 60 + em) - (sh * 60 + sm);
+                              if (diff > 0) {
+                                const h = Math.floor(diff / 60);
+                                const m = diff % 60;
+                                return <span className="text-primary font-medium ml-1">({h > 0 ? `${h}h` : ""}{m > 0 ? `${m}min` : ""})</span>;
+                              }
+                              return null;
+                            })()}
                           </span>
                         )}
                         {meeting.location && (
