@@ -166,6 +166,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       minutes: form.minutes || null,
       phase_id: form.phase_id || null,
       participants: form.participants,
+      responsible: form.responsible || null,
     };
 
     if (!editingId) {
