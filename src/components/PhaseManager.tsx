@@ -394,14 +394,15 @@ export const PhaseManager = ({
                           <SortableContext items={phaseActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map(a => a.id)} strategy={verticalListSortingStrategy}>
                             {phaseActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map((activity) => (
                               <SortableActivityCard key={activity.id} id={activity.id}>
-                                <ActivityCard
-                                  activity={activity}
-                                  phases={phases}
-                                  onEdit={onEditActivity}
-                                  onDelete={onDeleteActivity}
-                                  onToggle={onToggleActivity}
-                                  onMoveToPhase={handleMoveActivity}
-                                />
+                  <ActivityCard
+                    activity={activity}
+                    phases={phases}
+                    onEdit={onEditActivity}
+                    onDelete={onDeleteActivity}
+                    onToggle={onToggleActivity}
+                    onMoveToPhase={handleMoveActivity}
+                    isAdmin={isAdmin}
+                  />
                               </SortableActivityCard>
                             ))}
                           </SortableContext>
