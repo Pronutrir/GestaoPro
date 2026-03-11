@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Plus, Shield, User } from "lucide-react";
+import { Users, Plus, Shield, User, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +31,8 @@ export const UserManagement = () => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState({
     email: "",
@@ -39,6 +41,13 @@ export const UserManagement = () => {
     sector: "",
     role_title: "",
     role: "user",
+  });
+  const [editForm, setEditForm] = useState({
+    full_name: "",
+    sector: "",
+    role_title: "",
+    role: "user",
+    new_password: "",
   });
 
   const fetchUsers = async () => {
@@ -75,6 +84,45 @@ export const UserManagement = () => {
       fetchUsers();
     } catch (error: any) {
       toast({ title: "Erro ao criar usuário", description: error.message, variant: "destructive" });
+    }
+    setIsLoading(false);
+  };
+
+  const handleStartEdit = (profile: Profile) => {
+    setEditingUser(profile);
+    setEditForm({
+      full_name: profile.full_name || "",
+      sector: profile.sector || "",
+      role_title: profile.role_title || "",
+      role: getUserRole(profile.id),
+      new_password: "",
+    });
+    setEditOpen(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editingUser) return;
+    setIsLoading(true);
+    try {
+      const body: any = {
+        target_user_id: editingUser.id,
+        full_name: editForm.full_name,
+        sector: editForm.sector,
+        role_title: editForm.role_title,
+        role: editForm.role,
+      };
+      if (editForm.new_password.trim()) {
+        body.new_password = editForm.new_password;
+      }
+      const { data, error } = await supabase.functions.invoke("admin-update-user", { body });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Usuário atualizado!" });
+      setEditOpen(false);
+      setEditingUser(null);
+      fetchUsers();
+    } catch (error: any) {
+      toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
     }
     setIsLoading(false);
   };
@@ -152,7 +200,7 @@ export const UserManagement = () => {
         ) : (
           <div className="space-y-3">
             {profiles.map((p) => (
-              <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
+              <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent/20 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                     {getUserRole(p.id) === "admin" ? (
@@ -172,12 +220,63 @@ export const UserManagement = () => {
                   <Badge variant={getUserRole(p.id) === "admin" ? "default" : "secondary"}>
                     {getUserRole(p.id) === "admin" ? "Admin" : "Usuário"}
                   </Badge>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleStartEdit(p)}>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </CardContent>
+
+      {/* Edit User Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Usuário</DialogTitle>
+          </DialogHeader>
+          {editingUser && (
+            <div className="grid gap-4 py-4">
+              <p className="text-sm text-muted-foreground">{editingUser.email}</p>
+              <div className="grid gap-2">
+                <Label>Nome Completo</Label>
+                <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Setor</Label>
+                  <Input value={editForm.sector} onChange={(e) => setEditForm({ ...editForm, sector: e.target.value })} />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Cargo</Label>
+                  <Input value={editForm.role_title} onChange={(e) => setEditForm({ ...editForm, role_title: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Perfil de Acesso</Label>
+                <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                    <SelectItem value="user">Usuário</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Nova Senha (deixe vazio para não alterar)</Label>
+                <Input type="password" value={editForm.new_password} onChange={(e) => setEditForm({ ...editForm, new_password: e.target.value })} placeholder="Nova senha..." />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
+            <Button onClick={handleUpdate} disabled={isLoading}>
+              {isLoading ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
