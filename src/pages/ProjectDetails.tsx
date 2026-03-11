@@ -327,9 +327,8 @@ const ProjectDetails = () => {
 
   return (
     <AppLayout title={project.title}>
-      <main className="container mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3 space-y-6">
+      <main className="px-6 py-8">
+        <div className="space-y-6">
             {/* Project Info Card */}
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -473,49 +472,6 @@ const ProjectDetails = () => {
               </TabsContent>
             </Tabs>
           </div>
-
-          {/* Right Column */}
-          <div className="space-y-6">
-            <Card className="p-6">
-              <h3 className="font-semibold text-foreground mb-4">Resumo</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">Total de Fases</span><Badge variant="outline">{phases.length}</Badge></div>
-                <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">Total de Tarefas</span><Badge variant="outline">{activities.length}</Badge></div>
-                <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">Concluídas</span><Badge className="bg-success/20 text-success">{completedActivities}</Badge></div>
-                <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">Pendentes</span><Badge variant="secondary">{activities.length - completedActivities}</Badge></div>
-                {activities.some(a => a.priority === "high" && a.status !== "completed") && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Alta Prioridade</span>
-                    <Badge className="bg-destructive/20 text-destructive">{activities.filter(a => a.priority === "high" && a.status !== "completed").length}</Badge>
-                  </div>
-                )}
-              </div>
-            </Card>
-
-            {activities.some(a => a.hours > 0) && (
-              <Card className="p-6">
-                <h3 className="font-semibold text-foreground mb-4">Horas</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Estimadas</span>
-                    <span className="font-medium text-foreground">{activities.reduce((sum, a) => sum + (a.hours || 0), 0)}h</span>
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {project.due_date && (
-              <Card className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-warning/10 rounded-lg flex items-center justify-center"><Calendar className="w-5 h-5 text-warning" /></div>
-                  <h3 className="font-semibold text-foreground">Prazo</h3>
-                </div>
-                <p className="text-2xl font-bold text-foreground">{new Date(project.due_date).toLocaleDateString("pt-BR")}</p>
-                {new Date(project.due_date) < new Date() && <Badge className="mt-2 bg-destructive">Atrasado</Badge>}
-              </Card>
-            )}
-          </div>
-        </div>
 
         <EditProjectDialog project={editingProject} open={editDialogOpen} onOpenChange={setEditDialogOpen} onProjectUpdated={fetchProjectData} />
         <EditActivityDialog

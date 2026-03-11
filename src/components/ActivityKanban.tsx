@@ -2,27 +2,23 @@ import { useState, useEffect, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Plus,
-  Flag,
   Pencil,
   Trash2,
   CheckCircle2,
   Circle,
-  ChevronRight,
   GripVertical,
 } from "lucide-react";
 import {
   DndContext,
-  closestCenter,
+  rectIntersection,
   PointerSensor,
   useSensor,
   useSensors,
   DragEndEvent,
-  DragOverEvent,
   DragOverlay,
   DragStartEvent,
+  useDroppable,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -32,7 +28,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { ActivityComments } from "@/components/ActivityComments";
 
 interface WorkflowStage {
   id: string;
@@ -203,7 +198,6 @@ function KanbanCard({
         </div>
       </div>
 
-      {/* Quick actions - visible on hover */}
       <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onToggle}>
           {activity.status === "completed" ? (
@@ -224,6 +218,27 @@ function KanbanCard({
           <Trash2 className="w-3.5 h-3.5" />
         </Button>
       </div>
+    </div>
+  );
+}
+
+function DroppableColumn({
+  stage,
+  children,
+}: {
+  stage: WorkflowStage;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `stage-${stage.id}` });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex-1 p-2 space-y-2 min-h-[120px] rounded-b-xl transition-colors ${
+        isOver ? "bg-primary/5 ring-2 ring-primary/20 ring-inset" : ""
+      }`}
+    >
+      {children}
     </div>
   );
 }
@@ -258,29 +273,19 @@ export const ActivityKanban = ({
     if (data) setStages(data);
   };
 
-  // Group activities by stage
   const activitiesByStage = useMemo(() => {
     const map: Record<string, Activity[]> = {};
-    // Initialize all stages
     stages.forEach((s) => (map[s.id] = []));
-    // "unassigned" bucket for activities without a stage
-    map["__unassigned__"] = [];
 
     const parentActivities = activities.filter((a) => !a.parent_id);
     parentActivities.forEach((a) => {
       if (a.workflow_stage_id && map[a.workflow_stage_id]) {
         map[a.workflow_stage_id].push(a);
-      } else {
-        // Put in first stage if unassigned
-        if (stages.length > 0) {
-          map[stages[0].id].push(a);
-        } else {
-          map["__unassigned__"].push(a);
-        }
+      } else if (stages.length > 0) {
+        map[stages[0].id].push(a);
       }
     });
 
-    // Sort each column by display_order
     Object.keys(map).forEach((key) => {
       map[key].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
     });
@@ -302,15 +307,13 @@ export const ActivityKanban = ({
     const activityId = active.id as string;
     const overId = over.id as string;
 
-    // Determine target stage
     let targetStageId: string | null = null;
 
-    // Check if dropped on a stage column
-    const isStage = stages.some((s) => s.id === overId);
-    if (isStage) {
-      targetStageId = overId;
+    // Dropped on a droppable column
+    if (overId.startsWith("stage-")) {
+      targetStageId = overId.replace("stage-", "");
     } else {
-      // Dropped on another activity - find its stage
+      // Dropped on another activity card — find which stage it belongs to
       const overActivity = activities.find((a) => a.id === overId);
       if (overActivity) {
         targetStageId = overActivity.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
@@ -318,6 +321,11 @@ export const ActivityKanban = ({
     }
 
     if (!targetStageId) return;
+
+    // Check if it actually changed
+    const draggedActivity = activities.find((a) => a.id === activityId);
+    const currentStageId = draggedActivity?.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
+    if (targetStageId === currentStageId) return;
 
     const stage = stages.find((s) => s.id === targetStageId);
     const newStatus = stage?.is_final ? "completed" : "pending";
@@ -349,49 +357,43 @@ export const ActivityKanban = ({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={rectIntersection}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
+      <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
         {stages.map((stage) => {
           const stageActivities = activitiesByStage[stage.id] || [];
           return (
-            <SortableContext
+            <div
               key={stage.id}
-              id={stage.id}
-              items={stageActivities.map((a) => a.id)}
-              strategy={verticalListSortingStrategy}
+              className="flex-shrink-0 w-[260px] bg-muted/30 rounded-xl border border-border/50 flex flex-col"
             >
-              <div
-                className="flex-shrink-0 w-[280px] bg-muted/30 rounded-xl border border-border/50 flex flex-col"
-              >
-                {/* Column Header */}
-                <div className="p-3 border-b border-border/50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full shrink-0"
-                        style={{ backgroundColor: stage.color }}
-                      />
-                      <h3 className="text-sm font-semibold text-foreground">{stage.title}</h3>
-                    </div>
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center">
-                      {stageActivities.length}
-                    </Badge>
+              {/* Column Header */}
+              <div className="p-3 border-b border-border/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: stage.color }}
+                    />
+                    <h3 className="text-sm font-semibold text-foreground">{stage.title}</h3>
                   </div>
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center">
+                    {stageActivities.length}
+                  </Badge>
                 </div>
+              </div>
 
-                {/* Column Body - droppable area */}
-                <div
-                  className="flex-1 p-2 space-y-2 min-h-[100px]"
-                  data-stage-id={stage.id}
+              {/* Droppable Column Body */}
+              <DroppableColumn stage={stage}>
+                <SortableContext
+                  items={stageActivities.map((a) => a.id)}
+                  strategy={verticalListSortingStrategy}
                 >
                   {stageActivities.length === 0 ? (
                     <div className="flex items-center justify-center h-20 border-2 border-dashed border-border/40 rounded-lg">
-                      <p className="text-xs text-muted-foreground/50">
-                        Arraste aqui
-                      </p>
+                      <p className="text-xs text-muted-foreground/50">Arraste aqui</p>
                     </div>
                   ) : (
                     stageActivities.map((activity) => (
@@ -405,16 +407,16 @@ export const ActivityKanban = ({
                       />
                     ))
                   )}
-                </div>
-              </div>
-            </SortableContext>
+                </SortableContext>
+              </DroppableColumn>
+            </div>
           );
         })}
       </div>
 
       <DragOverlay>
         {activeActivity ? (
-          <div className="rotate-2 opacity-90">
+          <div className="rotate-2 opacity-90 w-[260px]">
             <KanbanCard
               activity={activeActivity}
               phases={phases}
