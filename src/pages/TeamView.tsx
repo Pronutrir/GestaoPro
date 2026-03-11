@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, Users, Clock, CheckCircle2, AlertTriangle, Briefcase } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 
 interface Activity {
   id: string;
@@ -33,25 +34,31 @@ interface TimeEntry {
 
 const TeamView = () => {
   const navigate = useNavigate();
+  const { filterProjects, isAdmin, loading: authLoading } = useProjectAccess();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const [actRes, projRes, timeRes] = await Promise.all([
-        supabase.from("activities").select("id, title, status, assigned_to, project_id, hours, end_date, priority"),
-        supabase.from("projects").select("id, title"),
-        supabase.from("time_entries").select("activity_id, duration_minutes, user_name, project_id"),
-      ]);
-      if (actRes.data) setActivities(actRes.data);
-      if (projRes.data) setProjects(projRes.data);
-      if (timeRes.data) setTimeEntries(timeRes.data);
-      setIsLoading(false);
-    };
-    fetchData();
-  }, []);
+    if (!authLoading) fetchData();
+  }, [authLoading, isAdmin]);
+
+  const fetchData = async () => {
+    const [actRes, projRes, timeRes] = await Promise.all([
+      supabase.from("activities").select("id, title, status, assigned_to, project_id, hours, end_date, priority"),
+      supabase.from("projects").select("id, title"),
+      supabase.from("time_entries").select("activity_id, duration_minutes, user_name, project_id"),
+    ]);
+
+    const filteredProjects = await filterProjects(projRes.data || []);
+    setProjects(filteredProjects);
+
+    const projectIds = new Set(filteredProjects.map((p) => p.id));
+    if (actRes.data) setActivities(actRes.data.filter((a) => projectIds.has(a.project_id)));
+    if (timeRes.data) setTimeEntries(timeRes.data.filter((t) => projectIds.has(t.project_id)));
+    setIsLoading(false);
+  };
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
