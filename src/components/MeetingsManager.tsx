@@ -39,6 +39,7 @@ interface Meeting {
   minutes: string | null;
   participants: string[];
   created_at: string;
+  created_by: string | null;
 }
 
 interface MeetingDecision {
