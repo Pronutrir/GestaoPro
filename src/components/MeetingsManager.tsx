@@ -132,6 +132,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       project_id: projectId,
       title: form.title,
       meeting_date: form.meeting_date || null,
+      start_time: form.start_time || null,
+      end_time: form.end_time || null,
       location: form.location || null,
       agenda: form.agenda || null,
       minutes: form.minutes || null,
