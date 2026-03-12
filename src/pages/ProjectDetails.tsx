@@ -570,8 +570,6 @@ const ProjectDetails = () => {
                   onDeleteActivity={handleDeleteActivity}
                   onToggleActivity={handleToggleActivity}
                   isAdmin={isAdmin}
-                  sprintGoal={sprintGoal}
-                  onSprintGoalChange={handleSprintGoalChange}
                 />
               </TabsContent>
 
