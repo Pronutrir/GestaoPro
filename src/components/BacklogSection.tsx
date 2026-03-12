@@ -297,7 +297,7 @@ export const BacklogSection = ({
 
       {/* Modal de configuração para mover */}
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl w-[95vw]">
           <DialogHeader>
             <DialogTitle>Mover {selectedIds.size} atividade(s) para o Kanban</DialogTitle>
           </DialogHeader>
