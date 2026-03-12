@@ -581,7 +581,8 @@ export const ActivityKanban = ({
     const completedAt = stage?.is_final ? new Date().toISOString() : null;
 
     try {
-      await supabase
+      // Fire DB update and immediately trigger refresh — don't wait for notification
+      const updatePromise = supabase
         .from("activities")
         .update({
           workflow_stage_id: targetStageId,
@@ -590,16 +591,18 @@ export const ActivityKanban = ({
         })
         .eq("id", activityId);
 
+      // Send notification in background (don't block)
       if (stage?.is_blocked && draggedActivity) {
-        await supabase.from("notifications").insert({
+        supabase.from("notifications").insert({
           project_id: projectId,
           activity_id: activityId,
           type: "blocked",
           title: "🚫 Atividade bloqueada: " + draggedActivity.title,
           message: `A atividade "${draggedActivity.title}" foi movida para a etapa "${stage.title}" e está bloqueada.`,
-        });
+        }).then(() => {});
       }
 
+      await updatePromise;
       onDataChanged();
     } catch {
       toast({ title: "Erro ao mover atividade", variant: "destructive" });
