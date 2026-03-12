@@ -240,7 +240,18 @@ export const EditActivityDialog = ({
             <Label htmlFor="assigned_to" className="text-sm font-semibold text-foreground flex items-center gap-2">
               <User className="w-4 h-4" /> Responsável
             </Label>
-            <Input id="assigned_to" value={formData.assigned_to} onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })} placeholder="Nome do responsável" />
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={formData.assigned_to}
+              onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+            >
+              <option value="">Sem responsável</option>
+              {members.map((m) => (
+                <option key={m.full_name} value={m.full_name!}>
+                  {m.full_name}{m.sector ? ` (${m.sector})` : ""}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
