@@ -658,6 +658,9 @@ const ActivityCard = ({
           {activity.title}
         </p>
         <div className="flex items-center gap-2 mt-1">
+          {subCount > 0 && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{subCount} sub</Badge>
+          )}
           {activity.assigned_to && (
             <span className="text-xs text-muted-foreground">👤 {activity.assigned_to}</span>
           )}
