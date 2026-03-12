@@ -396,7 +396,14 @@ export const ActivityKanban = ({
   const activeActivity = activeId ? activities.find((a) => a.id === activeId) : null;
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
+    const id = event.active.id as string;
+    if (id.startsWith("col-")) {
+      setActiveId(id);
+      setDragType("column");
+    } else {
+      setActiveId(id);
+      setDragType("card");
+    }
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
