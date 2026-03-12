@@ -191,7 +191,7 @@ const Dashboard = () => {
 
         {/* Pipeline Board */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">Carregando projetos...</p></div>
+          <PipelineSkeleton />
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <div className={`grid gap-6 ${statusFilter ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-6"}`}>

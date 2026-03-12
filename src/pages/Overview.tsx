@@ -214,7 +214,7 @@ const Overview = () => {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">Carregando dados...</p></div>
+          <DashboardSkeleton />
         ) : (
           <>
             {/* KPI Row 1 - Status Cards */}
