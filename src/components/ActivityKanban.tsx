@@ -664,8 +664,6 @@ export const ActivityKanban = ({
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
   const activeColumn = dragType === "column" && activeId ? visibleStages.find((s) => `col-${s.id}` === activeId) : null;
 
-  const totalSP = activities.reduce((sum, a) => sum + ((a as any).story_points || 0), 0);
-  const completedSP = activities.filter(a => a.status === "completed").reduce((sum, a) => sum + ((a as any).story_points || 0), 0);
 
   if (stages.length === 0) {
     return (
