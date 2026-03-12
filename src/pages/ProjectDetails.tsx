@@ -548,6 +548,19 @@ const ProjectDetails = () => {
                 <RisksManager projectId={id!} />
               </TabsContent>
 
+              <TabsContent value="backlog" className="mt-0">
+                <BacklogSection
+                  projectId={id!}
+                  activities={activities}
+                  phases={phases}
+                  onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+                  onDeleteActivity={handleDeleteActivity}
+                  onToggleActivity={handleToggleActivity}
+                  onDataChanged={fetchProjectData}
+                  isAdmin={isAdmin}
+                />
+              </TabsContent>
+
               <TabsContent value="workflow" className="mt-0">
                 <WorkflowStageManager projectId={id!} />
               </TabsContent>
