@@ -691,6 +691,7 @@ export const ActivityKanban = ({
               onEdit={() => {}}
               onDelete={() => {}}
               onToggle={() => {}}
+              onMoveToBacklog={() => {}}
             />
           </div>
         ) : activeColumn ? (
