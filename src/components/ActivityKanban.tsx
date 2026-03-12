@@ -173,11 +173,6 @@ function KanbanCard({
           )}
 
           <div className="flex flex-wrap gap-1">
-            {activity.phase_id && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                {phases.find((p) => p.id === activity.phase_id)?.title || "Fase"}
-              </Badge>
-            )}
             {activity.assigned_to && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                 👤 {activity.assigned_to}
