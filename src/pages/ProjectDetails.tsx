@@ -419,7 +419,7 @@ const ProjectDetails = () => {
                 ]}
               />
 
-              <TabsContent value="phases" className="mt-0 space-y-4">
+              <TabsContent value="phases" className="mt-3 space-y-4">
                 {/* Action Buttons - Admin only, inside Phases tab */}
                 {isAdmin && (
                   <div className="flex flex-wrap gap-2">
