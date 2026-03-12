@@ -117,3 +117,18 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes pulse-overdue {
+  0%, 100% {
+    border-color: hsl(var(--destructive));
+    background-color: hsl(var(--destructive) / 0.08);
+  }
+  50% {
+    border-color: hsl(var(--destructive) / 0.3);
+    background-color: hsl(var(--destructive) / 0.02);
+  }
+}
+
+.animate-pulse-overdue {
+  animation: pulse-overdue 2s ease-in-out infinite;
+}

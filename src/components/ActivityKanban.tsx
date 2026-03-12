@@ -393,13 +393,13 @@ export const ActivityKanban = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 pb-4" style={{ minHeight: 400 }}>
         {stages.filter((s) => s.display_order > 0).map((stage) => {
           const stageActivities = activitiesByStage[stage.id] || [];
           return (
             <div
               key={stage.id}
-              className="flex-shrink-0 w-[260px] bg-muted/30 rounded-xl border border-border/50 flex flex-col"
+              className="min-w-0 bg-muted/30 rounded-xl border border-border/50 flex flex-col"
             >
               {/* Column Header */}
               <div className="p-3 border-b border-border/50">
