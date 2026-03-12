@@ -189,6 +189,10 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                   <ListTodo className="w-3 h-3" />
                   {activities.length} atividades
                 </Badge>
+                <Badge variant="outline" className="gap-1">
+                  <ListTodo className="w-3 h-3" />
+                  {subactivities.length} sub-atividades
+                </Badge>
               </div>
 
               <div className="border border-border rounded-lg p-3 max-h-[200px] overflow-y-auto bg-muted/30">
