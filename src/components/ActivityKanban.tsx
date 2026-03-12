@@ -229,6 +229,11 @@ function KanbanCard({
                 📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR")}
               </Badge>
             )}
+            {(activity as any).story_points > 0 && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-bold">
+                🎯 {(activity as any).story_points} SP
+              </Badge>
+            )}
             {activity.hours > 0 && (
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                 {activity.hours}h
