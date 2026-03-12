@@ -398,6 +398,25 @@ const ProjectDetails = () => {
                 <Button size="sm" variant={showAddActivity ? "secondary" : "outline"} onClick={() => { setShowAddActivity(!showAddActivity); setShowAddPhase(false); }} className="gap-2">
                   <Plus className="w-4 h-4" /> Nova Atividade
                 </Button>
+                <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
+                {phases.length > 0 && (
+                  <Button size="sm" variant="outline" className="gap-2 text-destructive hover:bg-destructive/10" onClick={async () => {
+                    if (!confirm(`Excluir TODAS as ${phases.length} fases?`)) return;
+                    await supabase.from("phases").delete().eq("project_id", id);
+                    toast({ title: `${phases.length} fases excluídas!` }); fetchProjectData();
+                  }}>
+                    <Trash2 className="w-4 h-4" /> Excluir Fases
+                  </Button>
+                )}
+                {activities.length > 0 && (
+                  <Button size="sm" variant="outline" className="gap-2 text-destructive hover:bg-destructive/10" onClick={async () => {
+                    if (!confirm(`Excluir TODAS as ${activities.length} atividades?`)) return;
+                    await supabase.from("activities").delete().eq("project_id", id);
+                    toast({ title: `${activities.length} atividades excluídas!` }); fetchProjectData();
+                  }}>
+                    <Trash2 className="w-4 h-4" /> Excluir Atividades
+                  </Button>
+                )}
               </div>
             )}
 
