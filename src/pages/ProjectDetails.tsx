@@ -127,6 +127,7 @@ const ProjectDetails = () => {
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [editActivityDialogOpen, setEditActivityDialogOpen] = useState(false);
   const [sprintGoal, setSprintGoal] = useState("");
+  const [activeSprintId, setActiveSprintId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -136,10 +137,42 @@ const ProjectDetails = () => {
   useEffect(() => {
     if (id) {
       fetchProjectData();
-      // Generate overdue/deadline notifications for this project
+      fetchActiveSprint();
       supabase.rpc("generate_overdue_notifications", { p_project_id: id }).then();
     }
   }, [id]);
+
+  const fetchActiveSprint = async () => {
+    const { data } = await supabase
+      .from("sprints")
+      .select("*")
+      .eq("project_id", id!)
+      .in("status", ["active", "planning"])
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (data && data.length > 0) {
+      setActiveSprintId(data[0].id);
+      setSprintGoal(data[0].goal || "");
+    }
+  };
+
+  const handleSprintGoalChange = async (goal: string) => {
+    setSprintGoal(goal);
+    if (activeSprintId) {
+      await supabase.from("sprints").update({ goal }).eq("id", activeSprintId);
+    } else {
+      // Create a new sprint automatically
+      const { data } = await supabase.from("sprints").insert({
+        project_id: id!,
+        title: "Sprint 1",
+        goal,
+        start_date: new Date().toISOString().split("T")[0],
+        end_date: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
+        status: "active",
+      }).select().single();
+      if (data) setActiveSprintId(data.id);
+    }
+  };
 
   const fetchProjectData = async () => {
     try {
@@ -398,6 +431,28 @@ const ProjectDetails = () => {
               </div>
             </Card>
 
+            {/* Sprint Goal Card */}
+            {sprintGoal && (
+              <Card className="px-5 py-3 border-primary/20 bg-primary/5">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-primary shrink-0">🎯 Sprint Goal:</span>
+                  <span className="text-sm text-foreground flex-1">{sprintGoal}</span>
+                  {(() => {
+                    const totalSP = activities.reduce((sum, a) => sum + ((a as any).story_points || 0), 0);
+                    const completedSP = activities.filter(a => a.status === "completed").reduce((sum, a) => sum + ((a as any).story_points || 0), 0);
+                    const pct = totalSP > 0 ? Math.round((completedSP / totalSP) * 100) : 0;
+                    return (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-muted-foreground font-medium">{completedSP}/{totalSP} SP ({pct}%)</span>
+                        <div className="w-20 h-1.5 bg-primary/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-primary transition-all duration-500" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </Card>
+            )}
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -516,7 +571,7 @@ const ProjectDetails = () => {
                   onToggleActivity={handleToggleActivity}
                   isAdmin={isAdmin}
                   sprintGoal={sprintGoal}
-                  onSprintGoalChange={(goal) => setSprintGoal(goal)}
+                  onSprintGoalChange={handleSprintGoalChange}
                 />
               </TabsContent>
 
