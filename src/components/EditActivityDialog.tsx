@@ -98,6 +98,7 @@ export const EditActivityDialog = ({
         priority: activity.priority || "medium",
         tags: activity.tags || [],
         parent_id: activity.parent_id || "",
+        story_points: (activity as any).story_points?.toString() || "0",
       });
       fetchSubActivities(activity.id);
     }
