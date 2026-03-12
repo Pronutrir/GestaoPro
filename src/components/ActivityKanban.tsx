@@ -167,7 +167,7 @@ function KanbanCard({
           </div>
 
           {activity.description && (
-            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+            <p className="text-[11px] text-muted-foreground line-clamp-1 mb-1.5">
               {activity.description}
             </p>
           )}
