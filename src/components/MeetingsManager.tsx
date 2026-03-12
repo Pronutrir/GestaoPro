@@ -480,18 +480,52 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
               </div>
             )}
           </div>
-          <Textarea
-            placeholder="Pauta"
-            value={form.agenda}
-            onChange={(e) => setForm({ ...form, agenda: e.target.value })}
-            rows={2}
-          />
-          <Textarea
-            placeholder="Ata / Registro"
-            value={form.minutes}
-            onChange={(e) => setForm({ ...form, minutes: e.target.value })}
-            rows={3}
-          />
+          {/* Template-specific fields */}
+          {form.meeting_type === "daily" && (
+            <div className="space-y-2 p-3 bg-primary/5 rounded-lg border border-primary/20">
+              <p className="text-xs font-semibold text-primary">🏃 Daily Scrum</p>
+              <Textarea placeholder="O que fiz ontem?" value={form.daily_yesterday} onChange={(e) => setForm({ ...form, daily_yesterday: e.target.value })} rows={2} />
+              <Textarea placeholder="O que farei hoje?" value={form.daily_today} onChange={(e) => setForm({ ...form, daily_today: e.target.value })} rows={2} />
+              <Textarea placeholder="Há algum impedimento?" value={form.daily_impediment} onChange={(e) => setForm({ ...form, daily_impediment: e.target.value })} rows={2} className="border-destructive/30" />
+              {form.daily_impediment.trim() && (
+                <p className="text-[10px] text-destructive">⚠️ O impedimento será registrado automaticamente como risco ao salvar</p>
+              )}
+            </div>
+          )}
+
+          {form.meeting_type === "planning" && (
+            <div className="p-3 bg-blue-500/5 rounded-lg border border-blue-500/20">
+              <p className="text-xs font-semibold text-blue-700 mb-2">📋 Sprint Planning</p>
+              <p className="text-xs text-muted-foreground">Use a aba "Backlog" para selecionar e mover atividades para o Kanban durante esta reunião.</p>
+              <Textarea placeholder="Pauta / Objetivos da Sprint" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={3} />
+            </div>
+          )}
+
+          {form.meeting_type === "review" && (
+            <div className="p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
+              <p className="text-xs font-semibold text-emerald-700 mb-2">🎯 Sprint Review</p>
+              <p className="text-xs text-muted-foreground mb-2">Registre o incremento do produto. Anexe links ou documentos pela aba "Entregas".</p>
+              <Textarea placeholder="Ata da Review / Incremento entregue" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} rows={3} />
+            </div>
+          )}
+
+          {form.meeting_type === "retrospective" && (
+            <div className="space-y-2 p-3 bg-purple-500/5 rounded-lg border border-purple-500/20">
+              <p className="text-xs font-semibold text-purple-700">🔄 Sprint Retrospective</p>
+              <Textarea placeholder="O que foi bom?" value={form.retro_good} onChange={(e) => setForm({ ...form, retro_good: e.target.value })} rows={2} />
+              <Textarea placeholder="O que foi ruim?" value={form.retro_bad} onChange={(e) => setForm({ ...form, retro_bad: e.target.value })} rows={2} />
+              <Textarea placeholder="O que melhorar?" value={form.retro_improve} onChange={(e) => setForm({ ...form, retro_improve: e.target.value })} rows={2} />
+              <p className="text-[10px] text-purple-600">💡 Após salvar, você poderá converter em Lição Aprendida</p>
+            </div>
+          )}
+
+          {form.meeting_type === "general" && (
+            <>
+              <Textarea placeholder="Pauta" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={2} />
+              <Textarea placeholder="Ata / Registro" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} rows={3} />
+            </>
+          )}
+
           <Button onClick={handleSubmit}>{editingId ? "Atualizar" : "Criar Reunião"}</Button>
         </div>
       )}
