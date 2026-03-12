@@ -458,40 +458,21 @@ export const PhaseManager = ({
                                     />
                                   </SortableActivityCard>
                                   {isActivityExpanded && (
-                                    <div className="ml-8 space-y-1 border-l-2 border-primary/20 pl-3">
-                                      {subs.map((sub) => (
-                                        <div key={sub.id} className="flex items-center gap-3 p-2 bg-muted/30 rounded-md border border-border/50 group">
-                                          <input
-                                            type="checkbox"
-                                            checked={sub.status === "completed"}
-                                            onChange={() => onToggleActivity(sub.id, sub.status)}
-                                            className="h-3.5 w-3.5 rounded border-input"
-                                          />
-                                          <p className={`text-xs font-medium truncate flex-1 ${sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                                            {sub.title}
-                                          </p>
-                                          {sub.assigned_to && <span className="text-[10px] text-muted-foreground">👤 {sub.assigned_to}</span>}
-                                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditActivity(sub)}><Pencil className="w-3 h-3" /></Button>
-                                            {isAdmin && <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => onDeleteActivity(sub.id)}><Trash2 className="w-3 h-3" /></Button>}
-                                          </div>
-                                        </div>
-                                      ))}
-                                      {isAdmin && (
-                                        <div className="flex gap-2">
-                                          <Input
-                                            placeholder="Nova sub-atividade..."
-                                            value={quickAddSubTitle[activity.id] || ""}
-                                            onChange={(e) => setQuickAddSubTitle((prev) => ({ ...prev, [activity.id]: e.target.value }))}
-                                            onKeyDown={(e) => { if (e.key === "Enter") handleQuickAddSubActivity(activity); }}
-                                            className="h-7 text-xs"
-                                          />
-                                          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => handleQuickAddSubActivity(activity)}>
-                                            <Plus className="w-3 h-3" />
-                                          </Button>
-                                        </div>
-                                      )}
-                                    </div>
+                                    <SubActivityTree
+                                      parentId={activity.id}
+                                      activities={activities}
+                                      getSubActivities={getSubActivities}
+                                      expandedActivities={expandedActivities}
+                                      toggleActivityExpand={toggleActivityExpand}
+                                      onToggleActivity={onToggleActivity}
+                                      onEditActivity={onEditActivity}
+                                      onDeleteActivity={onDeleteActivity}
+                                      quickAddSubTitle={quickAddSubTitle}
+                                      setQuickAddSubTitle={setQuickAddSubTitle}
+                                      handleQuickAddSubActivity={handleQuickAddSubActivity}
+                                      isAdmin={isAdmin}
+                                      depth={1}
+                                    />
                                   )}
                                 </div>
                               );
@@ -550,24 +531,21 @@ export const PhaseManager = ({
                       />
                     </SortableActivityCard>
                     {isActivityExpanded && (
-                      <div className="ml-8 space-y-1 border-l-2 border-primary/20 pl-3">
-                        {subs.map((sub) => (
-                          <div key={sub.id} className="flex items-center gap-3 p-2 bg-muted/30 rounded-md border border-border/50 group">
-                            <input type="checkbox" checked={sub.status === "completed"} onChange={() => onToggleActivity(sub.id, sub.status)} className="h-3.5 w-3.5 rounded border-input" />
-                            <p className={`text-xs font-medium truncate flex-1 ${sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>{sub.title}</p>
-                            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditActivity(sub)}><Pencil className="w-3 h-3" /></Button>
-                              {isAdmin && <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => onDeleteActivity(sub.id)}><Trash2 className="w-3 h-3" /></Button>}
-                            </div>
-                          </div>
-                        ))}
-                        {isAdmin && (
-                          <div className="flex gap-2">
-                            <Input placeholder="Nova sub-atividade..." value={quickAddSubTitle[activity.id] || ""} onChange={(e) => setQuickAddSubTitle((prev) => ({ ...prev, [activity.id]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") handleQuickAddSubActivity(activity); }} className="h-7 text-xs" />
-                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => handleQuickAddSubActivity(activity)}><Plus className="w-3 h-3" /></Button>
-                          </div>
-                        )}
-                      </div>
+                      <SubActivityTree
+                        parentId={activity.id}
+                        activities={activities}
+                        getSubActivities={getSubActivities}
+                        expandedActivities={expandedActivities}
+                        toggleActivityExpand={toggleActivityExpand}
+                        onToggleActivity={onToggleActivity}
+                        onEditActivity={onEditActivity}
+                        onDeleteActivity={onDeleteActivity}
+                        quickAddSubTitle={quickAddSubTitle}
+                        setQuickAddSubTitle={setQuickAddSubTitle}
+                        handleQuickAddSubActivity={handleQuickAddSubActivity}
+                        isAdmin={isAdmin}
+                        depth={1}
+                      />
                     )}
                   </div>
                 );
@@ -575,6 +553,91 @@ export const PhaseManager = ({
             </SortableContext>
           </DndContext>
         </Card>
+      )}
+    </div>
+  );
+};
+
+// Recursive sub-activity tree component
+interface SubActivityTreeProps {
+  parentId: string;
+  activities: Activity[];
+  getSubActivities: (parentId: string) => Activity[];
+  expandedActivities: Set<string>;
+  toggleActivityExpand: (id: string) => void;
+  onToggleActivity: (id: string, status: string) => void;
+  onEditActivity: (activity: Activity) => void;
+  onDeleteActivity: (id: string) => void;
+  quickAddSubTitle: Record<string, string>;
+  setQuickAddSubTitle: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  handleQuickAddSubActivity: (parent: Activity) => void;
+  isAdmin: boolean;
+  depth: number;
+}
+
+const SubActivityTree = ({
+  parentId, activities, getSubActivities, expandedActivities, toggleActivityExpand,
+  onToggleActivity, onEditActivity, onDeleteActivity, quickAddSubTitle, setQuickAddSubTitle,
+  handleQuickAddSubActivity, isAdmin, depth,
+}: SubActivityTreeProps) => {
+  const subs = getSubActivities(parentId);
+  const parentActivity = activities.find(a => a.id === parentId);
+
+  return (
+    <div className="ml-6 space-y-1 border-l-2 border-primary/20 pl-3">
+      {subs.map((sub) => {
+        const subSubs = getSubActivities(sub.id);
+        const isExpanded = expandedActivities.has(sub.id);
+        return (
+          <div key={sub.id} className="space-y-1">
+            <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-md border border-border/50 group">
+              {subSubs.length > 0 ? (
+                <button onClick={() => toggleActivityExpand(sub.id)} className="text-muted-foreground hover:text-foreground">
+                  {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                </button>
+              ) : <div className="w-3.5" />}
+              <input type="checkbox" checked={sub.status === "completed"} onChange={() => onToggleActivity(sub.id, sub.status)} className="h-3.5 w-3.5 rounded border-input" />
+              <p className={`text-xs font-medium truncate flex-1 ${sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>{sub.title}</p>
+              {subSubs.length > 0 && <Badge variant="secondary" className="text-[10px] px-1 py-0">{subSubs.length}</Badge>}
+              {sub.assigned_to && <span className="text-[10px] text-muted-foreground">👤 {sub.assigned_to}</span>}
+              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditActivity(sub)}><Pencil className="w-3 h-3" /></Button>
+                {isAdmin && <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => onDeleteActivity(sub.id)}><Trash2 className="w-3 h-3" /></Button>}
+              </div>
+            </div>
+            {isExpanded && (
+              <SubActivityTree
+                parentId={sub.id}
+                activities={activities}
+                getSubActivities={getSubActivities}
+                expandedActivities={expandedActivities}
+                toggleActivityExpand={toggleActivityExpand}
+                onToggleActivity={onToggleActivity}
+                onEditActivity={onEditActivity}
+                onDeleteActivity={onDeleteActivity}
+                quickAddSubTitle={quickAddSubTitle}
+                setQuickAddSubTitle={setQuickAddSubTitle}
+                handleQuickAddSubActivity={handleQuickAddSubActivity}
+                isAdmin={isAdmin}
+                depth={depth + 1}
+              />
+            )}
+          </div>
+        );
+      })}
+      {isAdmin && parentActivity && (
+        <div className="flex gap-2">
+          <Input
+            placeholder="Nova sub-atividade..."
+            value={quickAddSubTitle[parentId] || ""}
+            onChange={(e) => setQuickAddSubTitle((prev) => ({ ...prev, [parentId]: e.target.value }))}
+            onKeyDown={(e) => { if (e.key === "Enter") handleQuickAddSubActivity(parentActivity); }}
+            className="h-7 text-xs"
+          />
+          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => handleQuickAddSubActivity(parentActivity)}>
+            <Plus className="w-3 h-3" />
+          </Button>
+        </div>
       )}
     </div>
   );
