@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Circle,
   GripVertical,
+  AlertCircle,
 } from "lucide-react";
 import {
   DndContext,
@@ -143,9 +144,13 @@ function KanbanCard({
     }
   };
 
+  const isOverdue = activity.end_date && new Date(activity.end_date) < new Date() && activity.status !== "completed";
+
   return (
     <div
-      className="bg-card border border-border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+      className={`bg-card border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group ${
+        isOverdue ? "border-destructive border-l-[3px] border-l-destructive bg-destructive/5" : "border-border"
+      }`}
       onClick={onEdit}
     >
       <div className="flex items-start gap-2">
@@ -186,11 +191,12 @@ function KanbanCard({
               <Badge
                 variant="outline"
                 className={`text-[10px] px-1.5 py-0 ${
-                  new Date(activity.end_date) < new Date() && activity.status !== "completed"
-                    ? "border-destructive/50 text-destructive"
+                  isOverdue
+                    ? "border-destructive bg-destructive/10 text-destructive font-semibold"
                     : ""
                 }`}
               >
+                {isOverdue && <AlertCircle className="w-2.5 h-2.5 mr-0.5" />}
                 📅 {new Date(activity.end_date).toLocaleDateString("pt-BR")}
               </Badge>
             )}
@@ -381,7 +387,7 @@ export const ActivityKanban = ({
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
-        {stages.map((stage) => {
+        {stages.filter((s) => s.display_order > 0).map((stage) => {
           const stageActivities = activitiesByStage[stage.id] || [];
           return (
             <div

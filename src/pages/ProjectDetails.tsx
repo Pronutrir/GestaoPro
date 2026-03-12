@@ -23,6 +23,7 @@ import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { MeetingsManager } from "@/components/MeetingsManager";
 import { AssumptionsManager } from "@/components/AssumptionsManager";
 import { RisksManager } from "@/components/RisksManager";
+import { BacklogSection } from "@/components/BacklogSection";
 import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
 import {
   ArrowLeft,
@@ -46,6 +47,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   Package,
+  Inbox,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
@@ -477,6 +479,7 @@ const ProjectDetails = () => {
                 <TabsTrigger value="assumptions" className="gap-2"><ShieldCheck className="w-4 h-4" />Premissas</TabsTrigger>
                 <TabsTrigger value="risks" className="gap-2"><AlertTriangle className="w-4 h-4" />Riscos</TabsTrigger>
                 <TabsTrigger value="lessons" className="gap-2"><BookOpen className="w-4 h-4" />Lições</TabsTrigger>
+                <TabsTrigger value="backlog" className="gap-2"><Inbox className="w-4 h-4" />Backlog</TabsTrigger>
                 <TabsTrigger value="workflow" className="gap-2"><Settings2 className="w-4 h-4" />Workflow</TabsTrigger>
               </TabsList>
 
@@ -544,6 +547,19 @@ const ProjectDetails = () => {
 
               <TabsContent value="risks" className="mt-0">
                 <RisksManager projectId={id!} />
+              </TabsContent>
+
+              <TabsContent value="backlog" className="mt-0">
+                <BacklogSection
+                  projectId={id!}
+                  activities={activities}
+                  phases={phases}
+                  onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+                  onDeleteActivity={handleDeleteActivity}
+                  onToggleActivity={handleToggleActivity}
+                  onDataChanged={fetchProjectData}
+                  isAdmin={isAdmin}
+                />
               </TabsContent>
 
               <TabsContent value="workflow" className="mt-0">
