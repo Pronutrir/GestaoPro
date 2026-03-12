@@ -79,7 +79,7 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, isAdmin = 
                 {project.title}
               </h4>
               <p className="text-sm text-muted-foreground line-clamp-2">
-                {project.description || "Sem descrição"}
+                {project.description || <span className="italic text-muted-foreground/60">Clique para adicionar uma descrição</span>}
               </p>
             </div>
           </div>
