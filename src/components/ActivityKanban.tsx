@@ -270,6 +270,54 @@ export const ActivityKanban = ({
   const { toast } = useToast();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const containerRef = useRef<HTMLDivElement>(null);
+  const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
+
+  // Initialize equal column widths when stages change
+  useEffect(() => {
+    const visibleStages = stages.filter((s) => s.display_order > 0);
+    if (visibleStages.length === 0) return;
+    // Only initialize if no widths set yet
+    setColumnWidths((prev) => {
+      const hasAll = visibleStages.every((s) => prev[s.id]);
+      if (hasAll) return prev;
+      const equalWidth = 100 / visibleStages.length;
+      const widths: Record<string, number> = {};
+      visibleStages.forEach((s) => (widths[s.id] = prev[s.id] || equalWidth));
+      return widths;
+    });
+  }, [stages]);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent, stageId: string, currentWidthPct: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!containerRef.current) return;
+    const containerWidth = containerRef.current.offsetWidth;
+    const startWidth = (currentWidthPct / 100) * containerWidth;
+    resizingRef.current = { stageId, startX: e.clientX, startWidth };
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!resizingRef.current || !containerRef.current) return;
+      const diff = ev.clientX - resizingRef.current.startX;
+      const newWidthPx = Math.max(160, resizingRef.current.startWidth + diff);
+      const newWidthPct = (newWidthPx / containerRef.current.offsetWidth) * 100;
+      setColumnWidths((prev) => ({ ...prev, [resizingRef.current!.stageId]: newWidthPct }));
+    };
+
+    const handleMouseUp = () => {
+      resizingRef.current = null;
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
