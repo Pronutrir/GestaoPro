@@ -149,7 +149,7 @@ function KanbanCard({
   return (
     <div
       className={`bg-card border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group ${
-        isOverdue ? "border-destructive border-l-[3px] border-l-destructive bg-destructive/5" : "border-border"
+        isOverdue ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue" : "border-border"
       }`}
       onClick={onEdit}
     >
