@@ -408,6 +408,8 @@ export const ActivityKanban = ({
   onDeleteActivity,
   onToggleActivity,
   isAdmin = false,
+  sprintGoal = "",
+  onSprintGoalChange,
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
