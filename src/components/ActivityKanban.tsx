@@ -393,6 +393,8 @@ export const ActivityKanban = ({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  // Optimistic overrides: activityId -> new workflow_stage_id
+  const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
 
@@ -458,35 +460,38 @@ export const ActivityKanban = ({
     if (data) setStages(data);
   };
 
+  // Clear optimistic moves when activities prop changes (parent refetched)
+  useEffect(() => {
+    setOptimisticMoves({});
+  }, [activities]);
+
   const activitiesByStage = useMemo(() => {
     const map: Record<string, Activity[]> = {};
     stages.forEach((s) => (map[s.id] = []));
 
     activities.forEach((a) => {
-      if (a.workflow_stage_id && map[a.workflow_stage_id]) {
-        map[a.workflow_stage_id].push(a);
+      // Use optimistic override if available
+      const stageId = optimisticMoves[a.id] || a.workflow_stage_id;
+      if (stageId && map[stageId]) {
+        map[stageId].push(a);
       } else if (stages.length > 0) {
         map[stages[0].id].push(a);
       }
     });
 
-    // Build phase order lookup for sorting
     const phaseOrderMap: Record<string, number> = {};
     phases.forEach((p, i) => {
       phaseOrderMap[p.id] = i;
     });
 
-    // Sort by phase display_order first, then by activity display_order (1.0, 1.1, 1.1.1...)
     Object.keys(map).forEach((key) => {
       map[key].sort((a, b) => {
         const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
         const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
         if (phaseA !== phaseB) return phaseA - phaseB;
-        // Within same phase, sort by display_order ascending (smaller first)
         const orderA = a.display_order ?? 9999;
         const orderB = b.display_order ?? 9999;
         if (orderA !== orderB) return orderA - orderB;
-        // Tie-break: parent activities before children
         if (a.parent_id === null && b.parent_id !== null) return -1;
         if (a.parent_id !== null && b.parent_id === null) return 1;
         return 0;
@@ -494,7 +499,7 @@ export const ActivityKanban = ({
     });
 
     return map;
-  }, [activities, stages, phases]);
+  }, [activities, stages, phases, optimisticMoves]);
 
   
 
@@ -576,33 +581,43 @@ export const ActivityKanban = ({
     const currentStageId = draggedActivity?.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
     if (targetStageId === currentStageId) return;
 
+    // Optimistic update — move card instantly in the UI
+    setOptimisticMoves((prev) => ({ ...prev, [activityId]: targetStageId! }));
+
     const stage = stages.find((s) => s.id === targetStageId);
     const newStatus = stage?.is_final ? "completed" : "pending";
     const completedAt = stage?.is_final ? new Date().toISOString() : null;
 
-    try {
-      await supabase
+    // Fire DB update in background
+    Promise.resolve(
+      supabase
         .from("activities")
         .update({
           workflow_stage_id: targetStageId,
           status: newStatus,
           completed_at: completedAt,
         })
-        .eq("id", activityId);
-
-      if (stage?.is_blocked && draggedActivity) {
-        await supabase.from("notifications").insert({
-          project_id: projectId,
-          activity_id: activityId,
-          type: "blocked",
-          title: "🚫 Atividade bloqueada: " + draggedActivity.title,
-          message: `A atividade "${draggedActivity.title}" foi movida para a etapa "${stage.title}" e está bloqueada.`,
+        .eq("id", activityId)
+    )
+      .then(() => onDataChanged())
+      .catch(() => {
+        setOptimisticMoves((prev) => {
+          const next = { ...prev };
+          delete next[activityId];
+          return next;
         });
-      }
+        toast({ title: "Erro ao mover atividade", variant: "destructive" });
+      });
 
-      onDataChanged();
-    } catch {
-      toast({ title: "Erro ao mover atividade", variant: "destructive" });
+    // Send notification in background (don't block)
+    if (stage?.is_blocked && draggedActivity) {
+      supabase.from("notifications").insert({
+        project_id: projectId,
+        activity_id: activityId,
+        type: "blocked",
+        title: "🚫 Atividade bloqueada: " + draggedActivity.title,
+        message: `A atividade "${draggedActivity.title}" foi movida para a etapa "${stage.title}" e está bloqueada.`,
+      }).then(() => {});
     }
   };
 
