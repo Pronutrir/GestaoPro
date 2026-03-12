@@ -23,7 +23,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { SortableActivityCard } from "@/components/SortableActivityCard";
-import { ImportWBSDialog } from "@/components/ImportWBSDialog";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -301,32 +301,6 @@ export const PhaseManager = ({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Layers className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold text-foreground">Fases do Projeto</h2>
-        </div>
-        {isAdmin && (
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => setShowAddPhase(!showAddPhase)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Nova Fase
-            </Button>
-            <ImportWBSDialog projectId={projectId} onDataChanged={onDataChanged} />
-            {phases.length > 0 && (
-              <Button size="sm" variant="outline" className="gap-2 text-destructive hover:bg-destructive/10" onClick={handleDeleteAllPhases}>
-                <Trash2 className="w-4 h-4" /> Excluir Fases
-              </Button>
-            )}
-            {activities.length > 0 && (
-              <Button size="sm" variant="outline" className="gap-2 text-destructive hover:bg-destructive/10" onClick={handleDeleteAllActivities}>
-                <Trash2 className="w-4 h-4" /> Excluir Atividades
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Add Phase Form */}
       {showAddPhase && (
