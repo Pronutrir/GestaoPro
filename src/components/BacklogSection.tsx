@@ -54,27 +54,35 @@ export const BacklogSection = ({
 }: BacklogSectionProps) => {
   const { toast } = useToast();
   const [backlogStageId, setBacklogStageId] = useState<string | null>(null);
+  const [allStageIds, setAllStageIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const fetchBacklogStage = async () => {
+    const fetchStages = async () => {
       const { data } = await supabase
         .from("workflow_stages")
-        .select("id")
+        .select("id, display_order")
         .eq("project_id", projectId)
-        .eq("display_order", 0)
-        .single();
-      if (data) setBacklogStageId(data.id);
+        .order("display_order");
+      if (data) {
+        const backlog = data.find((s) => s.display_order === 0);
+        setBacklogStageId(backlog?.id ?? null);
+        setAllStageIds(new Set(data.filter((s) => s.display_order > 0).map((s) => s.id)));
+      }
     };
-    fetchBacklogStage();
+    fetchStages();
   }, [projectId]);
 
   const phaseOrderMap: Record<string, number> = {};
   phases.forEach((p, i) => { phaseOrderMap[p.id] = i; });
 
+  // Backlog = activities with backlog stage, no stage, or orphaned stage references
   const backlogActivities = activities
     .filter((a) => {
-      if (!backlogStageId) return false;
-      return a.workflow_stage_id === backlogStageId || (!a.workflow_stage_id);
+      if (!a.workflow_stage_id) return true;
+      if (backlogStageId && a.workflow_stage_id === backlogStageId) return true;
+      // Orphaned: stage_id doesn't match any active (non-backlog) stage
+      if (!allStageIds.has(a.workflow_stage_id)) return true;
+      return false;
     })
     .sort((a, b) => {
       const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
