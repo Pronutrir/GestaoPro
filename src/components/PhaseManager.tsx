@@ -615,6 +615,9 @@ interface ActivityCardProps {
   onToggle: (activityId: string, status: string) => void;
   onMoveToPhase: (activityId: string, phaseId: string | null) => void;
   isAdmin?: boolean;
+  subCount?: number;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 const ActivityCard = ({
@@ -625,11 +628,21 @@ const ActivityCard = ({
   onToggle,
   onMoveToPhase,
   isAdmin = false,
+  subCount = 0,
+  isExpanded = false,
+  onToggleExpand,
 }: ActivityCardProps) => {
   const [showPhaseSelector, setShowPhaseSelector] = useState(false);
 
   return (
     <div className="flex items-center gap-3 p-3 bg-card rounded-lg border border-border group">
+      {subCount > 0 ? (
+        <button onClick={onToggleExpand} className="text-muted-foreground hover:text-foreground transition-colors">
+          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </button>
+      ) : (
+        <div className="w-4" />
+      )}
       <input
         type="checkbox"
         checked={activity.status === "completed"}
