@@ -368,14 +368,6 @@ export const PhaseManager = ({
                               >
                                 <Pencil className="w-4 h-4" />
                               </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-8 w-8 text-destructive"
-                                onClick={() => handleDeletePhase(phase.id)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
                             </div>
                           )}
                         </div>

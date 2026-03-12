@@ -144,7 +144,7 @@ function KanbanCard({
   };
 
   return (
-    <div className="bg-card border border-border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow cursor-default group">
+    <div className="bg-card border border-border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-default group">
       <div className="flex items-start gap-2">
         <button
           className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
@@ -156,7 +156,7 @@ function KanbanCard({
           <div className="flex items-center gap-1.5 mb-1">
             {getPriorityIndicator(activity.priority)}
             <p
-              className={`text-sm font-medium truncate ${
+              className={`text-xs font-medium truncate ${
                 activity.status === "completed"
                   ? "line-through text-muted-foreground"
                   : "text-foreground"
@@ -167,7 +167,7 @@ function KanbanCard({
           </div>
 
           {activity.description && (
-            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+            <p className="text-[11px] text-muted-foreground line-clamp-1 mb-1.5">
               {activity.description}
             </p>
           )}
@@ -204,7 +204,7 @@ function KanbanCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onToggle}>
           {activity.status === "completed" ? (
             <CheckCircle2 className="w-3.5 h-3.5 text-success" />
