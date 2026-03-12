@@ -469,17 +469,17 @@ export const ActivityKanban = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div ref={containerRef} className="flex overflow-x-auto pb-4" style={{ minHeight: 400 }}>
+      <div ref={containerRef} className="flex pb-4 w-full" style={{ minHeight: 400 }}>
         {stages.filter((s) => s.display_order > 0).map((stage, idx, arr) => {
           const stageActivities = activitiesByStage[stage.id] || [];
           const widthPct = columnWidths[stage.id] || (100 / arr.length);
           return (
             <div
               key={stage.id}
-              className={`relative flex-shrink-0 rounded-xl border flex flex-col ${
+              className={`relative min-w-0 rounded-xl border flex flex-col overflow-hidden ${
                 stage.is_blocked ? "bg-orange-500/5 border-orange-500/40" : "bg-muted/30 border-border/50"
               }`}
-              style={{ width: `${widthPct}%`, marginRight: idx < arr.length - 1 ? 6 : 0 }}
+              style={{ flex: `0 1 ${widthPct}%`, marginRight: idx < arr.length - 1 ? 6 : 0 }}
             >
               {/* Column Header */}
               <div className="p-3 border-b border-border/50">
