@@ -1053,6 +1053,7 @@ export type Database = {
           created_at: string
           display_order: number
           id: string
+          is_blocked: boolean
           is_final: boolean
           project_id: string
           title: string
@@ -1062,6 +1063,7 @@ export type Database = {
           created_at?: string
           display_order?: number
           id?: string
+          is_blocked?: boolean
           is_final?: boolean
           project_id: string
           title: string
@@ -1071,6 +1073,7 @@ export type Database = {
           created_at?: string
           display_order?: number
           id?: string
+          is_blocked?: boolean
           is_final?: boolean
           project_id?: string
           title?: string
