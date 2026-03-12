@@ -24,25 +24,26 @@ const parseWBS = (text: string): ParsedItem[] => {
   const items: ParsedItem[] = [];
 
   for (const line of lines) {
-    // Match patterns like "1.0", "1.1", "1.1.1", etc followed by text
     const match = line.match(/^(\d+(?:\.\d+)*)\s+(.+)$/);
     if (!match) continue;
 
     const code = match[1];
     const title = match[2].trim();
-    const parts = code.split(".").filter(p => p !== "0"); // remove trailing .0
-
-    // Count meaningful levels: "1.0" = 1 level, "1.1" = 2 levels, "1.1.1" = 3 levels
     const dotParts = code.split(".");
-    let level: "phase" | "activity";
+
+    let level: "phase" | "activity" | "subactivity";
     let parentCode: string | null = null;
 
-    if (dotParts.length <= 2) {
-      // 1.0 or 1.1 = Phase
+    if (dotParts.length === 1 || (dotParts.length === 2 && dotParts[1] === "0")) {
+      // 1 or 1.0 = Phase
       level = "phase";
-    } else {
-      // 1.1.1 = Activity, parent is "1.1"
+    } else if (dotParts.length === 2) {
+      // 1.1 = Activity, parent is phase "1" or "1.0"
       level = "activity";
+      parentCode = dotParts[0] + ".0";
+    } else {
+      // 1.1.1 = Sub-activity, parent is activity "1.1"
+      level = "subactivity";
       parentCode = dotParts.slice(0, 2).join(".");
     }
 
