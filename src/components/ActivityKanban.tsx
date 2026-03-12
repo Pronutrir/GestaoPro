@@ -9,6 +9,7 @@ import {
   Circle,
   GripVertical,
   AlertCircle,
+  Inbox,
 } from "lucide-react";
 import {
   DndContext,
@@ -86,6 +87,7 @@ function SortableKanbanCard({
   onEdit,
   onDelete,
   onToggle,
+  onMoveToBacklog,
   isAdmin,
   isBlocked,
 }: {
@@ -94,6 +96,7 @@ function SortableKanbanCard({
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
+  onMoveToBacklog: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
 }) {
@@ -114,6 +117,7 @@ function SortableKanbanCard({
         onEdit={onEdit}
         onDelete={onDelete}
         onToggle={onToggle}
+        onMoveToBacklog={onMoveToBacklog}
         dragListeners={listeners}
         isAdmin={isAdmin}
         isBlocked={isBlocked}
@@ -128,6 +132,7 @@ function KanbanCard({
   onEdit,
   onDelete,
   onToggle,
+  onMoveToBacklog,
   dragListeners,
   isAdmin,
   isBlocked,
@@ -137,6 +142,7 @@ function KanbanCard({
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
+  onMoveToBacklog: () => void;
   dragListeners?: any;
   isAdmin?: boolean;
   isBlocked?: boolean;
@@ -240,6 +246,9 @@ function KanbanCard({
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEdit} title="Editar">
           <Pencil className="w-3.5 h-3.5" />
         </Button>
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onMoveToBacklog} title="Mover para Backlog">
+          <Inbox className="w-3.5 h-3.5" />
+        </Button>
         {isAdmin && (
           <Button
             size="icon"
@@ -266,6 +275,7 @@ function SortableColumn({
   onEditActivity,
   onDeleteActivity,
   onToggleActivity,
+  onMoveToBacklog,
   isAdmin,
   onResizeStart,
 }: {
@@ -278,6 +288,7 @@ function SortableColumn({
   onEditActivity: (activity: Activity) => void;
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
+  onMoveToBacklog: (activityId: string) => void;
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
 }) {
@@ -336,6 +347,7 @@ function SortableColumn({
                 onEdit={() => onEditActivity(activity)}
                 onDelete={() => onDeleteActivity(activity.id)}
                 onToggle={() => onToggleActivity(activity.id, activity.status)}
+                onMoveToBacklog={() => onMoveToBacklog(activity.id)}
                 isAdmin={isAdmin}
                 isBlocked={stage.is_blocked}
               />
@@ -459,6 +471,21 @@ export const ActivityKanban = ({
       .eq("project_id", projectId)
       .order("display_order");
     if (data) setStages(data);
+  };
+
+  const handleMoveToBacklog = async (activityId: string) => {
+    const backlogStage = stages.find((s) => s.display_order === 0);
+    if (!backlogStage) {
+      toast({ title: "Etapa de Backlog não encontrada", variant: "destructive" });
+      return;
+    }
+    setOptimisticMoves((prev) => ({ ...prev, [activityId]: backlogStage.id }));
+    await supabase
+      .from("activities")
+      .update({ workflow_stage_id: backlogStage.id })
+      .eq("id", activityId);
+    onDataChanged();
+    toast({ title: "Atividade movida para o Backlog" });
   };
 
   // Clear optimistic moves when activities prop changes (parent refetched)
@@ -661,6 +688,7 @@ export const ActivityKanban = ({
                 onEditActivity={onEditActivity}
                 onDeleteActivity={onDeleteActivity}
                 onToggleActivity={onToggleActivity}
+                onMoveToBacklog={handleMoveToBacklog}
                 isAdmin={isAdmin}
                 onResizeStart={handleResizeStart}
               />
@@ -678,6 +706,7 @@ export const ActivityKanban = ({
               onEdit={() => {}}
               onDelete={() => {}}
               onToggle={() => {}}
+              onMoveToBacklog={() => {}}
             />
           </div>
         ) : activeColumn ? (
