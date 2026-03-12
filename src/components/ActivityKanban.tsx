@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Circle,
   GripVertical,
+  AlertCircle,
 } from "lucide-react";
 import {
   DndContext,
