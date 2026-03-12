@@ -534,11 +534,21 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                         {meetingDecisions.map((d) => (
                           <div key={d.id} className="flex items-center justify-between text-sm p-2 bg-accent/20 rounded group">
                             <span>{d.description}</span>
-                            {canEditMeeting && (
-                              <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive" onClick={() => handleDeleteDecision(d.id, meeting.id)}>
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            )}
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                              {canEditMeeting && onCreateActivity && (
+                                <Button size="icon" variant="ghost" className="h-6 w-6" title="Gerar Tarefa" onClick={async () => {
+                                  await onCreateActivity(d.description);
+                                  toast({ title: "Tarefa criada a partir da decisão!" });
+                                }}>
+                                  <Zap className="w-3 h-3 text-primary" />
+                                </Button>
+                              )}
+                              {canEditMeeting && (
+                                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDeleteDecision(d.id, meeting.id)}>
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
