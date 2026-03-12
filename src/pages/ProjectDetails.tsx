@@ -133,7 +133,11 @@ const ProjectDetails = () => {
   );
 
   useEffect(() => {
-    if (id) fetchProjectData();
+    if (id) {
+      fetchProjectData();
+      // Generate overdue/deadline notifications for this project
+      supabase.rpc("generate_overdue_notifications", { p_project_id: id }).then();
+    }
   }, [id]);
 
   const fetchProjectData = async () => {
