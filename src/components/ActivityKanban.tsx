@@ -393,6 +393,8 @@ export const ActivityKanban = ({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  // Optimistic overrides: activityId -> new workflow_stage_id
+  const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
 
