@@ -183,6 +183,14 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       return;
     }
 
+    // Build minutes from template fields
+    let computedMinutes = form.minutes || "";
+    if (form.meeting_type === "daily") {
+      computedMinutes = `**O que fiz ontem:**\n${form.daily_yesterday}\n\n**O que farei hoje:**\n${form.daily_today}\n\n**Impedimentos:**\n${form.daily_impediment}`;
+    } else if (form.meeting_type === "retrospective") {
+      computedMinutes = `**O que foi bom:**\n${form.retro_good}\n\n**O que foi ruim:**\n${form.retro_bad}\n\n**O que melhorar:**\n${form.retro_improve}`;
+    }
+
     const payload: any = {
       project_id: projectId,
       title: form.title,
@@ -191,10 +199,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       end_time: form.end_time || null,
       location: form.location || null,
       agenda: form.agenda || null,
-      minutes: form.minutes || null,
+      minutes: computedMinutes || null,
       phase_id: form.phase_id || null,
       participants: form.participants,
       responsible: form.responsible || null,
+      meeting_type: form.meeting_type,
     };
 
     if (!editingId) {
@@ -209,6 +218,12 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       const { error } = await supabase.from("meetings").insert(payload);
       if (error) { toast({ title: "Erro ao criar", variant: "destructive" }); return; }
       toast({ title: "Reunião criada!" });
+
+      // Auto-create blocker from daily impediment
+      if (form.meeting_type === "daily" && form.daily_impediment.trim() && onCreateBlocker) {
+        await onCreateBlocker(form.daily_impediment.trim());
+        toast({ title: "Impedimento registrado como risco!" });
+      }
     }
     resetForm();
     fetchMeetings();
