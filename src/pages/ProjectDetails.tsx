@@ -42,6 +42,9 @@ import {
   Settings2,
   Kanban,
   Users,
+  ShieldCheck,
+  AlertTriangle,
+  Package,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
