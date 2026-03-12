@@ -408,19 +408,59 @@ export const ActivityKanban = ({
 
   const handleDragEnd = async (event: DragEndEvent) => {
     setActiveId(null);
+    setDragType(null);
     const { active, over } = event;
     if (!over) return;
 
+    // Handle column reordering
+    if (dragType === "column") {
+      const activeColId = (active.id as string).replace("col-", "");
+      const overColId = (over.id as string).replace("col-", "");
+      if (activeColId === overColId) return;
+
+      const visibleStages = stages.filter((s) => s.display_order > 0);
+      const oldIndex = visibleStages.findIndex((s) => s.id === activeColId);
+      const newIndex = visibleStages.findIndex((s) => s.id === overColId);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const reordered = arrayMove(visibleStages, oldIndex, newIndex);
+      // Update local state immediately
+      const backlogStages = stages.filter((s) => s.display_order === 0);
+      const updatedStages = [
+        ...backlogStages,
+        ...reordered.map((s, i) => ({ ...s, display_order: i + 1 })),
+      ];
+      setStages(updatedStages);
+
+      // Persist to database
+      try {
+        await Promise.all(
+          reordered.map((s, i) =>
+            supabase
+              .from("workflow_stages")
+              .update({ display_order: i + 1 })
+              .eq("id", s.id)
+          )
+        );
+        onDataChanged();
+      } catch {
+        toast({ title: "Erro ao reordenar colunas", variant: "destructive" });
+        fetchStages();
+      }
+      return;
+    }
+
+    // Handle card movement between stages
     const activityId = active.id as string;
     const overId = over.id as string;
 
     let targetStageId: string | null = null;
 
-    // Dropped on a droppable column
     if (overId.startsWith("stage-")) {
       targetStageId = overId.replace("stage-", "");
+    } else if (overId.startsWith("col-")) {
+      targetStageId = overId.replace("col-", "");
     } else {
-      // Dropped on another activity card — find which stage it belongs to
       const overActivity = activities.find((a) => a.id === overId);
       if (overActivity) {
         targetStageId = overActivity.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
@@ -429,7 +469,6 @@ export const ActivityKanban = ({
 
     if (!targetStageId) return;
 
-    // Check if it actually changed
     const draggedActivity = activities.find((a) => a.id === activityId);
     const currentStageId = draggedActivity?.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
     if (targetStageId === currentStageId) return;
@@ -448,7 +487,6 @@ export const ActivityKanban = ({
         })
         .eq("id", activityId);
 
-      // Generate blocked notification when moving to a blocked stage
       if (stage?.is_blocked && draggedActivity) {
         await supabase.from("notifications").insert({
           project_id: projectId,
