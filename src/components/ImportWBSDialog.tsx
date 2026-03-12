@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 interface ParsedItem {
   code: string;
   title: string;
-  level: "phase" | "activity";
+  level: "phase" | "activity" | "subactivity";
   parentCode: string | null;
 }
 
