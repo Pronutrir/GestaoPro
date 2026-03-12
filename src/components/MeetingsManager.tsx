@@ -97,7 +97,7 @@ const MEETING_TYPE_COLORS: Record<string, string> = {
   retrospective: "bg-purple-500/20 text-purple-700",
 };
 
-export const MeetingsManager = ({ projectId, phases, onCreateActivity }: MeetingsManagerProps) => {
+export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateBlocker, onCreateLesson }: MeetingsManagerProps) => {
   const { toast } = useToast();
   const { isAdmin, user } = useAuth();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
