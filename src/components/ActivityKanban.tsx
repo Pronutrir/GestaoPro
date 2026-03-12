@@ -144,7 +144,8 @@ function KanbanCard({
     }
   };
 
-  const isOverdue = activity.end_date && new Date(activity.end_date) < new Date() && activity.status !== "completed";
+  const parseDate = (d: string) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day); };
+  const isOverdue = activity.end_date && parseDate(activity.end_date) < new Date() && activity.status !== "completed";
 
   return (
     <div
@@ -197,7 +198,7 @@ function KanbanCard({
                 }`}
               >
                 {isOverdue && <AlertCircle className="w-2.5 h-2.5 mr-0.5" />}
-                📅 {new Date(activity.end_date).toLocaleDateString("pt-BR")}
+                📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR")}
               </Badge>
             )}
             {activity.hours > 0 && (
