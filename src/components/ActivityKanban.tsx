@@ -393,7 +393,7 @@ export const ActivityKanban = ({
     return map;
   }, [activities, stages, phases]);
 
-  const activeActivity = activeId ? activities.find((a) => a.id === activeId) : null;
+  
 
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string;
