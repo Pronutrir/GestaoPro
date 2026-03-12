@@ -671,18 +671,52 @@ export const ActivityKanban = ({
     );
   }
 
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalDraft, setGoalDraft] = useState(sprintGoal);
+
+  const totalSP = activities.reduce((sum, a) => sum + ((a as any).story_points || 0), 0);
+  const completedSP = activities.filter(a => a.status === "completed").reduce((sum, a) => sum + ((a as any).story_points || 0), 0);
+
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={rectIntersection}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext
-        items={visibleStages.map((s) => `col-${s.id}`)}
-        strategy={horizontalListSortingStrategy}
+    <div className="space-y-3">
+      {/* Sprint Goal Banner */}
+      <div className="flex items-center gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
+        <span className="text-sm font-bold text-primary shrink-0">🎯 Sprint Goal:</span>
+        {editingGoal ? (
+          <div className="flex-1 flex gap-2">
+            <input
+              className="flex-1 h-8 rounded-md border border-input bg-background px-3 text-sm"
+              value={goalDraft}
+              onChange={(e) => setGoalDraft(e.target.value)}
+              placeholder="Defina o objetivo da Sprint..."
+              autoFocus
+            />
+            <Button size="sm" className="h-8" onClick={() => { onSprintGoalChange?.(goalDraft); setEditingGoal(false); }}>Salvar</Button>
+            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setGoalDraft(sprintGoal); setEditingGoal(false); }}>Cancelar</Button>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-between">
+            <p className="text-sm text-foreground cursor-pointer hover:text-primary" onClick={() => setEditingGoal(true)}>
+              {sprintGoal || <span className="text-muted-foreground italic">Clique para definir o objetivo da Sprint...</span>}
+            </p>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+              <span className="font-medium">{completedSP}/{totalSP} SP</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={rectIntersection}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
       >
-        <div ref={containerRef} className="flex pb-4 w-full" style={{ minHeight: 400 }}>
+        <SortableContext
+          items={visibleStages.map((s) => `col-${s.id}`)}
+          strategy={horizontalListSortingStrategy}
+        >
+          <div ref={containerRef} className="flex pb-4 w-full" style={{ minHeight: 400 }}>
           {visibleStages.map((stage, idx) => {
             const stageActivities = activitiesByStage[stage.id] || [];
             const widthPct = columnWidths[stage.id] || (100 / visibleStages.length);
