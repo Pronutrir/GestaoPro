@@ -503,6 +503,7 @@ export const ActivityKanban = ({
                         onDelete={() => onDeleteActivity(activity.id)}
                         onToggle={() => onToggleActivity(activity.id, activity.status)}
                         isAdmin={isAdmin}
+                        isBlocked={stage.is_blocked}
                       />
                     ))
                   )}
