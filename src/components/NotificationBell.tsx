@@ -76,6 +76,13 @@ export const NotificationBell = () => {
           bg: "bg-warning/10 border-warning/30",
           pulse: true,
         };
+      case "blocked":
+        return {
+          icon: <Ban className="w-4 h-4" />,
+          color: "text-orange-600",
+          bg: "bg-orange-500/10 border-orange-500/30",
+          pulse: true,
+        };
       default:
         return {
           icon: <Info className="w-4 h-4" />,
