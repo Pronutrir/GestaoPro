@@ -5,8 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -57,6 +56,8 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const [contingency, setContingency] = useState("");
   const [responsible, setResponsible] = useState("");
   const [showMatrix, setShowMatrix] = useState(false);
+  // When user clicks a matrix cell, store the filter to show filtered list
+  const [matrixFilter, setMatrixFilter] = useState<{ prob: string; imp: string } | null>(null);
 
   const fetchData = async () => {
     const { data } = await supabase.from("risks").select("*").eq("project_id", projectId).order("created_at", { ascending: false });
@@ -68,13 +69,6 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const resetForm = () => {
     setDescription(""); setProbability("medium"); setImpact("medium"); setStatus("identified");
     setMitigation(""); setContingency(""); setResponsible(""); setEditingId(null); setShowForm(false);
-  };
-
-  const openFormWithPreset = (prob: string, imp: string) => {
-    resetForm();
-    setProbability(prob);
-    setImpact(imp);
-    setShowForm(true);
   };
 
   const handleSave = async () => {
@@ -136,58 +130,36 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     return "bg-success/20 border-success/40 hover:bg-success/30";
   };
 
-  const MatrixCell = ({ prob, imp }: { prob: string; imp: string }) => {
-    const risks = matrixGrid[`${prob}-${imp}`] || [];
-    const hasRisks = risks.length > 0;
+  // Filtered risks when clicking a matrix cell
+  const filteredRisks = matrixFilter
+    ? items.filter(r => r.probability === matrixFilter.prob && r.impact === matrixFilter.imp && r.status !== "closed")
+    : [];
 
-    const cell = (
-      <div
-        className={`border rounded-lg p-3 text-center min-h-[72px] flex flex-col items-center justify-center transition-all cursor-pointer ${matrixCellColor(prob, imp)}`}
-        onClick={() => {
-          if (!hasRisks && isAdmin) openFormWithPreset(prob, imp);
-        }}
-      >
-        <span className="text-2xl font-bold text-foreground">{risks.length}</span>
-        {hasRisks ? (
-          <span className="text-[10px] text-muted-foreground leading-tight line-clamp-1 mt-0.5">
-            {risks[0].description.slice(0, 25)}{risks[0].description.length > 25 ? "…" : ""}
-          </span>
-        ) : isAdmin ? (
-          <span className="text-[10px] text-muted-foreground/60 mt-0.5">+ Adicionar</span>
-        ) : null}
-      </div>
-    );
-
-    if (!hasRisks) return cell;
-
+  const renderRiskCard = (item: Risk) => {
+    const riskLevel = getRiskLevel(item.probability, item.impact);
     return (
-      <Popover>
-        <PopoverTrigger asChild>{cell}</PopoverTrigger>
-        <PopoverContent className="w-72 p-3 space-y-2" side="right">
-          <p className="text-xs font-semibold text-muted-foreground">
-            P: {LEVEL_LABELS[prob]} × I: {LEVEL_LABELS[imp]} — {risks.length} risco(s)
-          </p>
-          {risks.map(r => (
-            <div key={r.id} className="border rounded p-2 space-y-1">
-              <p className="text-sm font-medium">{r.description}</p>
-              <Badge className={STATUS_MAP[r.status]?.class} variant="outline">
-                {STATUS_MAP[r.status]?.label}
-              </Badge>
-              {r.mitigation && <p className="text-[11px] text-muted-foreground">Mitigação: {r.mitigation}</p>}
-              {isAdmin && (
-                <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => handleEdit(r)}>
-                  <Pencil className="w-3 h-3 mr-1" /> Editar
-                </Button>
-              )}
+      <Card key={item.id} className="p-4 space-y-2">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 space-y-1">
+            <p className="text-sm font-medium text-foreground">{item.description}</p>
+            <div className="flex flex-wrap gap-2">
+              <Badge className={riskLevel.class}>{riskLevel.label}</Badge>
+              <Badge className={PROB_MAP[item.probability]?.class}>P: {PROB_MAP[item.probability]?.label}</Badge>
+              <Badge className={PROB_MAP[item.impact]?.class}>I: {PROB_MAP[item.impact]?.label}</Badge>
+              <Badge className={STATUS_MAP[item.status]?.class}>{STATUS_MAP[item.status]?.label}</Badge>
             </div>
-          ))}
+          </div>
           {isAdmin && (
-            <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => openFormWithPreset(prob, imp)}>
-              <Plus className="w-3 h-3 mr-1" /> Novo risco aqui
-            </Button>
+            <div className="flex gap-1">
+              <Button size="icon" variant="ghost" onClick={() => handleEdit(item)}><Pencil className="w-4 h-4" /></Button>
+              <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
+            </div>
           )}
-        </PopoverContent>
-      </Popover>
+        </div>
+        {item.mitigation && <p className="text-xs text-muted-foreground"><strong>Mitigação:</strong> {item.mitigation}</p>}
+        {item.contingency && <p className="text-xs text-muted-foreground"><strong>Contingência:</strong> {item.contingency}</p>}
+        {item.responsible && <p className="text-xs text-muted-foreground"><strong>Responsável:</strong> {item.responsible}</p>}
+      </Card>
     );
   };
 
@@ -198,7 +170,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
           <AlertTriangle className="w-5 h-5 text-warning" /> Riscos ({items.length})
         </h3>
         <div className="flex gap-2">
-          <Button size="sm" variant={showMatrix ? "secondary" : "outline"} onClick={() => setShowMatrix(!showMatrix)} className="gap-2">
+          <Button size="sm" variant={showMatrix ? "secondary" : "outline"} onClick={() => { setShowMatrix(!showMatrix); setMatrixFilter(null); }} className="gap-2">
             {showMatrix ? "Lista" : "Matriz 3×3"}
           </Button>
           {isAdmin && (
@@ -251,35 +223,77 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
         </Card>
       )}
 
-      {showMatrix && (
+      {/* Risk Matrix 3x3 */}
+      {showMatrix && !matrixFilter && (
         <Card className="p-4">
-          <div className="grid grid-cols-[auto_1fr] gap-3">
-            <div className="flex items-center justify-center">
-              <span className="text-xs font-semibold text-muted-foreground -rotate-90 whitespace-nowrap">Probabilidade</span>
+          <div className="flex items-end gap-2">
+            <div className="flex flex-col items-center mr-2">
+              <span className="text-xs font-semibold text-muted-foreground -rotate-90 whitespace-nowrap mb-8">← Probabilidade →</span>
             </div>
-            <div>
-              <div className="text-center text-xs font-semibold text-muted-foreground mb-2">Impacto</div>
-              <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-1">
-                <div />
-                {(["low", "medium", "high"] as const).map(imp => (
-                  <div key={imp} className="text-center text-[11px] font-medium text-muted-foreground pb-1">
-                    {LEVEL_LABELS[imp]}
-                  </div>
+            <div className="flex-1">
+              <div className="text-center text-xs font-semibold text-muted-foreground mb-2">← Impacto →</div>
+              <div className="grid grid-cols-3 gap-1 mb-1">
+                {["Baixo", "Médio", "Alto"].map(l => (
+                  <div key={l} className="text-center text-[10px] font-medium text-muted-foreground">{l}</div>
                 ))}
-                {(["high", "medium", "low"] as const).map(prob => (
-                  <div key={prob} className="contents">
-                    <div className="text-[11px] font-medium text-muted-foreground flex items-center pr-2 justify-end">
-                      {LEVEL_LABELS[prob]}
-                    </div>
-                    {(["low", "medium", "high"] as const).map(imp => (
-                      <MatrixCell key={`${prob}-${imp}`} prob={prob} imp={imp} />
-                    ))}
-                  </div>
+              </div>
+              {(["high", "medium", "low"] as const).map(prob => (
+                <div key={prob} className="grid grid-cols-3 gap-1 mb-1">
+                  {(["low", "medium", "high"] as const).map(imp => {
+                    const risks = matrixGrid[`${prob}-${imp}`] || [];
+                    return (
+                      <div
+                        key={`${prob}-${imp}`}
+                        className={`border rounded-md p-2 text-center min-h-[56px] flex flex-col items-center justify-center transition-colors cursor-pointer ${matrixCellColor(prob, imp)}`}
+                        onClick={() => setMatrixFilter({ prob, imp })}
+                        title={`Clique para ver riscos: P=${LEVEL_LABELS[prob]}, I=${LEVEL_LABELS[imp]}`}
+                      >
+                        <span className="text-lg font-bold text-foreground">{risks.length}</span>
+                        {risks.length > 0 && (
+                          <span className="text-[9px] text-muted-foreground leading-tight line-clamp-1">
+                            {risks[0].description.slice(0, 20)}...
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+              <div className="grid grid-cols-3 gap-1 mt-1">
+                {["Baixo", "Médio", "Alto"].map((l, i) => (
+                  <div key={i} className="text-center text-[10px] text-muted-foreground">{["🟢", "🟡", "🔴"][i]}</div>
                 ))}
               </div>
             </div>
+            <div className="flex flex-col justify-between h-full ml-2">
+              {["Alta", "Média", "Baixa"].map(l => (
+                <div key={l} className="text-[10px] font-medium text-muted-foreground h-[56px] flex items-center">{l}</div>
+              ))}
+            </div>
           </div>
         </Card>
+      )}
+
+      {/* Filtered list from matrix click */}
+      {showMatrix && matrixFilter && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setMatrixFilter(null)} className="gap-1">
+              <ArrowLeft className="w-4 h-4" /> Voltar à Matriz
+            </Button>
+            <Badge variant="outline" className={matrixCellColor(matrixFilter.prob, matrixFilter.imp)}>
+              P: {LEVEL_LABELS[matrixFilter.prob]} × I: {LEVEL_LABELS[matrixFilter.imp]}
+            </Badge>
+            <span className="text-sm text-muted-foreground">— {filteredRisks.length} risco(s)</span>
+          </div>
+          {filteredRisks.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Nenhum risco mapeado nesta posição.</p>
+          ) : (
+            <div className="space-y-2">
+              {filteredRisks.map(renderRiskCard)}
+            </div>
+          )}
+        </div>
       )}
 
       {!showMatrix && (
@@ -288,33 +302,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
             <p className="text-sm text-muted-foreground text-center py-8">Nenhum risco cadastrado.</p>
           ) : (
             <div className="space-y-2">
-              {items.map(item => {
-                const riskLevel = getRiskLevel(item.probability, item.impact);
-                return (
-                  <Card key={item.id} className="p-4 space-y-2">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 space-y-1">
-                        <p className="text-sm font-medium text-foreground">{item.description}</p>
-                        <div className="flex flex-wrap gap-2">
-                          <Badge className={riskLevel.class}>{riskLevel.label}</Badge>
-                          <Badge className={PROB_MAP[item.probability]?.class}>P: {PROB_MAP[item.probability]?.label}</Badge>
-                          <Badge className={PROB_MAP[item.impact]?.class}>I: {PROB_MAP[item.impact]?.label}</Badge>
-                          <Badge className={STATUS_MAP[item.status]?.class}>{STATUS_MAP[item.status]?.label}</Badge>
-                        </div>
-                      </div>
-                      {isAdmin && (
-                        <div className="flex gap-1">
-                          <Button size="icon" variant="ghost" onClick={() => handleEdit(item)}><Pencil className="w-4 h-4" /></Button>
-                          <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
-                        </div>
-                      )}
-                    </div>
-                    {item.mitigation && <p className="text-xs text-muted-foreground"><strong>Mitigação:</strong> {item.mitigation}</p>}
-                    {item.contingency && <p className="text-xs text-muted-foreground"><strong>Contingência:</strong> {item.contingency}</p>}
-                    {item.responsible && <p className="text-xs text-muted-foreground"><strong>Responsável:</strong> {item.responsible}</p>}
-                  </Card>
-                );
-              })}
+              {items.map(renderRiskCard)}
             </div>
           )}
         </>
