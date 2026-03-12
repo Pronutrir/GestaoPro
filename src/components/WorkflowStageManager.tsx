@@ -276,7 +276,12 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
   };
 
   const handleToggleFinal = async (id: string, current: boolean) => {
-    await supabase.from("workflow_stages").update({ is_final: !current }).eq("id", id);
+    await supabase.from("workflow_stages").update({ is_final: !current, ...(current ? {} : { is_blocked: false }) }).eq("id", id);
+    fetchStages();
+  };
+
+  const handleToggleBlocked = async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_blocked: !current, ...(current ? {} : { is_final: false }) }).eq("id", id);
     fetchStages();
   };
 
