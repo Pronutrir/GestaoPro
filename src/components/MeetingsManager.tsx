@@ -77,7 +77,25 @@ interface MeetingsManagerProps {
   projectId: string;
   phases: Phase[];
   onCreateActivity?: (title: string, assignedTo?: string) => Promise<void>;
+  onCreateBlocker?: (description: string) => Promise<void>;
+  onCreateLesson?: (problem: string, suggestion: string) => Promise<void>;
 }
+
+const MEETING_TYPES = [
+  { value: "general", label: "Geral" },
+  { value: "daily", label: "Daily Scrum" },
+  { value: "planning", label: "Sprint Planning" },
+  { value: "review", label: "Sprint Review" },
+  { value: "retrospective", label: "Sprint Retrospective" },
+];
+
+const MEETING_TYPE_COLORS: Record<string, string> = {
+  general: "bg-muted text-muted-foreground",
+  daily: "bg-primary/20 text-primary",
+  planning: "bg-blue-500/20 text-blue-700",
+  review: "bg-emerald-500/20 text-emerald-700",
+  retrospective: "bg-purple-500/20 text-purple-700",
+};
 
 export const MeetingsManager = ({ projectId, phases, onCreateActivity }: MeetingsManagerProps) => {
   const { toast } = useToast();
