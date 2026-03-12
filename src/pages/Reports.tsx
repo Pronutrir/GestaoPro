@@ -118,7 +118,7 @@ const Reports = () => {
 
   return (
     <AppLayout title="Relatórios & Exportações">
-      <main className="container mx-auto px-6 py-8 space-y-6">
+      <main className="px-4 py-6 space-y-6">
         {isLoading ? (
           <p className="text-muted-foreground text-center py-12">Carregando dados...</p>
         ) : (

@@ -340,7 +340,7 @@ const ProjectDetails = () => {
 
   return (
     <AppLayout title={project.title}>
-      <main className="px-6 py-8">
+      <main className="px-4 py-4">
         <div className="space-y-6">
             {/* Project Info Card */}
             <Card className="px-5 py-3">

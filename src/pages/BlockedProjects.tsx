@@ -42,7 +42,7 @@ const BlockedProjects = () => {
 
   return (
     <AppLayout title="Projetos com Bloqueios">
-      <div className="p-6 space-y-6">
+      <div className="px-4 py-6 space-y-6">
         <Card className="p-6 bg-destructive/10 border-destructive/20">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 bg-destructive rounded-lg flex items-center justify-center shrink-0">

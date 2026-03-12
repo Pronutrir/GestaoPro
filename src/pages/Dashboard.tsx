@@ -131,7 +131,7 @@ const Dashboard = () => {
 
   return (
     <AppLayout title="Pipeline de Projetos">
-      <div className="p-6">
+      <div className="px-4 py-4">
         {/* Toolbar */}
         <div className="flex items-center justify-between mb-6">
           <div className="relative flex-1 max-w-md">

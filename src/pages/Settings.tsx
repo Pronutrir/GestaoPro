@@ -72,7 +72,7 @@ const Settings = () => {
 
   return (
     <AppLayout title="Configurações">
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="px-4 py-6 space-y-6 max-w-4xl">
         {/* User Management (admin only) */}
         <UserManagement />
 
