@@ -20,6 +20,9 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { MeetingsManager } from "@/components/MeetingsManager";
+import { AssumptionsManager } from "@/components/AssumptionsManager";
+import { RisksManager } from "@/components/RisksManager";
+import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
 import {
   ArrowLeft,
   Plus,
@@ -39,6 +42,9 @@ import {
   Settings2,
   Kanban,
   Users,
+  ShieldCheck,
+  AlertTriangle,
+  Package,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
@@ -447,6 +453,9 @@ const ProjectDetails = () => {
                 
                 <TabsTrigger value="documents" className="gap-2"><FileText className="w-4 h-4" />Documentos</TabsTrigger>
                 <TabsTrigger value="meetings" className="gap-2"><Users className="w-4 h-4" />Reuniões</TabsTrigger>
+                <TabsTrigger value="deliveries" className="gap-2"><Package className="w-4 h-4" />Entregas</TabsTrigger>
+                <TabsTrigger value="assumptions" className="gap-2"><ShieldCheck className="w-4 h-4" />Premissas</TabsTrigger>
+                <TabsTrigger value="risks" className="gap-2"><AlertTriangle className="w-4 h-4" />Riscos</TabsTrigger>
                 <TabsTrigger value="lessons" className="gap-2"><BookOpen className="w-4 h-4" />Lições</TabsTrigger>
                 <TabsTrigger value="workflow" className="gap-2"><Settings2 className="w-4 h-4" />Workflow</TabsTrigger>
               </TabsList>
@@ -503,6 +512,18 @@ const ProjectDetails = () => {
 
               <TabsContent value="lessons" className="mt-0">
                 <LessonsLearned projectId={id!} phases={phases} />
+              </TabsContent>
+
+              <TabsContent value="deliveries" className="mt-0">
+                <DeliveryPackagesManager projectId={id!} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
+              </TabsContent>
+
+              <TabsContent value="assumptions" className="mt-0">
+                <AssumptionsManager projectId={id!} />
+              </TabsContent>
+
+              <TabsContent value="risks" className="mt-0">
+                <RisksManager projectId={id!} />
               </TabsContent>
 
               <TabsContent value="workflow" className="mt-0">

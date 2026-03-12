@@ -210,6 +210,133 @@ export type Database = {
           },
         ]
       }
+      assumptions: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string
+          id: string
+          impact: string | null
+          project_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description: string
+          id?: string
+          impact?: string | null
+          project_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          impact?: string | null
+          project_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assumptions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_package_activities: {
+        Row: {
+          activity_id: string
+          created_at: string
+          id: string
+          package_id: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          id?: string
+          package_id: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          id?: string
+          package_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_package_activities_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_package_activities_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_packages: {
+        Row: {
+          created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          project_id: string
+          responsible: string | null
+          sector: string | null
+          start_date: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          project_id: string
+          responsible?: string | null
+          sector?: string | null
+          start_date?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          project_id?: string
+          responsible?: string | null
+          sector?: string | null
+          start_date?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_packages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       investment_history: {
         Row: {
           amount: number
@@ -737,6 +864,59 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      risks: {
+        Row: {
+          category: string | null
+          contingency: string | null
+          created_at: string
+          description: string
+          id: string
+          impact: string
+          mitigation: string | null
+          probability: string
+          project_id: string
+          responsible: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          contingency?: string | null
+          created_at?: string
+          description: string
+          id?: string
+          impact?: string
+          mitigation?: string | null
+          probability?: string
+          project_id: string
+          responsible?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          contingency?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          impact?: string
+          mitigation?: string | null
+          probability?: string
+          project_id?: string
+          responsible?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "risks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sectors: {
         Row: {

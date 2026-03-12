@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 interface ParsedItem {
   code: string;
   title: string;
-  level: "phase" | "activity";
+  level: "phase" | "activity" | "subactivity";
   parentCode: string | null;
 }
 
@@ -24,25 +24,26 @@ const parseWBS = (text: string): ParsedItem[] => {
   const items: ParsedItem[] = [];
 
   for (const line of lines) {
-    // Match patterns like "1.0", "1.1", "1.1.1", etc followed by text
     const match = line.match(/^(\d+(?:\.\d+)*)\s+(.+)$/);
     if (!match) continue;
 
     const code = match[1];
     const title = match[2].trim();
-    const parts = code.split(".").filter(p => p !== "0"); // remove trailing .0
-
-    // Count meaningful levels: "1.0" = 1 level, "1.1" = 2 levels, "1.1.1" = 3 levels
     const dotParts = code.split(".");
-    let level: "phase" | "activity";
+
+    let level: "phase" | "activity" | "subactivity";
     let parentCode: string | null = null;
 
-    if (dotParts.length <= 2) {
-      // 1.0 or 1.1 = Phase
+    if (dotParts.length === 1 || (dotParts.length === 2 && dotParts[1] === "0")) {
+      // 1 or 1.0 = Phase
       level = "phase";
-    } else {
-      // 1.1.1 = Activity, parent is "1.1"
+    } else if (dotParts.length === 2) {
+      // 1.1 = Activity, parent is phase "1" or "1.0"
       level = "activity";
+      parentCode = dotParts[0] + ".0";
+    } else {
+      // 1.1.1 = Sub-activity, parent is activity "1.1"
+      level = "subactivity";
       parentCode = dotParts.slice(0, 2).join(".");
     }
 
@@ -61,6 +62,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
   const parsed = text ? parseWBS(text) : [];
   const phases = parsed.filter(i => i.level === "phase");
   const activities = parsed.filter(i => i.level === "activity");
+  const subactivities = parsed.filter(i => i.level === "subactivity");
 
   const handleImport = async () => {
     if (parsed.length === 0) return;
@@ -96,14 +98,36 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       }
 
       // Create activities linked to their parent phase
+      const activityIdMap: Record<string, string> = {};
+
       for (let i = 0; i < activities.length; i++) {
         const activity = activities[i];
         const phaseId = activity.parentCode ? phaseIdMap[activity.parentCode] : null;
 
-        const { error } = await supabase.from("activities").insert({
+        const { data, error } = await supabase.from("activities").insert({
           project_id: projectId,
           title: `${activity.code} ${activity.title}`,
           phase_id: phaseId,
+          display_order: i,
+        }).select("id").single();
+
+        if (error) throw error;
+        activityIdMap[activity.code] = data.id;
+      }
+
+      // Create sub-activities linked to their parent activity
+      for (let i = 0; i < subactivities.length; i++) {
+        const sub = subactivities[i];
+        const parentId = sub.parentCode ? activityIdMap[sub.parentCode] : null;
+        // Find the phase of the parent activity
+        const parentActivity = activities.find(a => a.code === sub.parentCode);
+        const phaseId = parentActivity?.parentCode ? phaseIdMap[parentActivity.parentCode] : null;
+
+        const { error } = await supabase.from("activities").insert({
+          project_id: projectId,
+          title: `${sub.code} ${sub.title}`,
+          phase_id: phaseId,
+          parent_id: parentId,
           display_order: i,
         });
 
@@ -112,7 +136,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
       toast({
         title: "EAP importada!",
-        description: `${phases.length} fases e ${activities.length} atividades criadas.`,
+        description: `${phases.length} fases, ${activities.length} atividades e ${subactivities.length} sub-atividades criadas.`,
       });
 
       setText("");
@@ -142,8 +166,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         <div className="space-y-4">
           <div>
             <p className="text-sm text-muted-foreground mb-2">
-              Cole a estrutura WBS abaixo. Níveis 1.0 e 1.1 serão criados como <strong>fases</strong>, 
-              e níveis 1.1.1 como <strong>atividades</strong>.
+              Cole a estrutura WBS abaixo. Nível <strong>X.0</strong> = fase, <strong>X.Y</strong> = atividade, 
+              <strong>X.Y.Z</strong> = sub-atividade.
             </p>
             <Textarea
               placeholder={`Exemplo:\n1.0 Gestão do Projeto\n1.1 Iniciação do Projeto\n1.1.1 Elaboração do Termo de Abertura\n1.1.2 Definição dos objetivos`}
@@ -165,6 +189,10 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                   <ListTodo className="w-3 h-3" />
                   {activities.length} atividades
                 </Badge>
+                <Badge variant="outline" className="gap-1">
+                  <ListTodo className="w-3 h-3" />
+                  {subactivities.length} sub-atividades
+                </Badge>
               </div>
 
               <div className="border border-border rounded-lg p-3 max-h-[200px] overflow-y-auto bg-muted/30">
@@ -173,7 +201,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                   <div
                     key={idx}
                     className={`flex items-center gap-2 py-1 ${
-                      item.level === "activity" ? "pl-6" : ""
+                      item.level === "activity" ? "pl-6" : item.level === "subactivity" ? "pl-12" : ""
                     }`}
                   >
                     {item.level === "phase" ? (
