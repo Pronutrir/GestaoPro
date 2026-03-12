@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Bell, Check, Trash2, AlertTriangle, Clock, Info, BellRing, X } from "lucide-react";
+import { Bell, Check, Trash2, AlertTriangle, Clock, Info, BellRing, X, Ban } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 
