@@ -25,6 +25,7 @@ import { AssumptionsManager } from "@/components/AssumptionsManager";
 import { RisksManager } from "@/components/RisksManager";
 import { BacklogSection } from "@/components/BacklogSection";
 import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
+import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft,
   Plus,
