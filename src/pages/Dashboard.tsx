@@ -45,6 +45,8 @@ const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [drawerProject, setDrawerProject] = useState<Project | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const statusFilter = searchParams.get("status");
 
   const handleStatusFilter = (status: string | null) => {
