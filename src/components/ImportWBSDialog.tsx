@@ -201,7 +201,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                   <div
                     key={idx}
                     className={`flex items-center gap-2 py-1 ${
-                      item.level === "activity" ? "pl-6" : ""
+                      item.level === "activity" ? "pl-6" : item.level === "subactivity" ? "pl-12" : ""
                     }`}
                   >
                     {item.level === "phase" ? (
