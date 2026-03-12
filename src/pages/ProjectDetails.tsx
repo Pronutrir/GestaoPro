@@ -46,6 +46,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   Package,
+  Inbox,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
