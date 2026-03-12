@@ -198,7 +198,7 @@ function KanbanCard({
                 }`}
               >
                 {isOverdue && <AlertCircle className="w-2.5 h-2.5 mr-0.5" />}
-                📅 {new Date(activity.end_date).toLocaleDateString("pt-BR")}
+                📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR")}
               </Badge>
             )}
             {activity.hours > 0 && (
