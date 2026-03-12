@@ -51,7 +51,7 @@ const Roadmap = () => {
         .insert({
           title: item.title,
           description: item.description || "",
-          status: "todo",
+          status: "ideacao",
           priority: "medium",
         })
         .select("id")
