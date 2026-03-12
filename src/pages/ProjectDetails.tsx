@@ -514,6 +514,18 @@ const ProjectDetails = () => {
                 <LessonsLearned projectId={id!} phases={phases} />
               </TabsContent>
 
+              <TabsContent value="deliveries" className="mt-0">
+                <DeliveryPackagesManager projectId={id!} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
+              </TabsContent>
+
+              <TabsContent value="assumptions" className="mt-0">
+                <AssumptionsManager projectId={id!} />
+              </TabsContent>
+
+              <TabsContent value="risks" className="mt-0">
+                <RisksManager projectId={id!} />
+              </TabsContent>
+
               <TabsContent value="workflow" className="mt-0">
                 <WorkflowStageManager projectId={id!} />
               </TabsContent>
