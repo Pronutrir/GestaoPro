@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
+import { DashboardSkeleton } from "@/components/SkeletonScreens";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -213,7 +214,7 @@ const Overview = () => {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">Carregando dados...</p></div>
+          <DashboardSkeleton />
         ) : (
           <>
             {/* KPI Row 1 - Status Cards */}

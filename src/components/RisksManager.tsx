@@ -105,17 +105,45 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     return { label: "Baixo", class: "bg-success text-success-foreground" };
   };
 
+  const [showMatrix, setShowMatrix] = useState(false);
+
+  // Risk matrix data: count active risks in each cell
+  const matrixData = (() => {
+    const levels = ["low", "medium", "high"] as const;
+    const grid: Record<string, Risk[]> = {};
+    levels.forEach(p => levels.forEach(i => { grid[`${p}-${i}`] = []; }));
+    items.filter(r => r.status !== "closed").forEach(r => {
+      const key = `${r.probability}-${r.impact}`;
+      if (grid[key]) grid[key].push(r);
+    });
+    return { grid, levels };
+  })();
+
+  const matrixCellColor = (prob: string, imp: string) => {
+    const levels: Record<string, number> = { low: 1, medium: 2, high: 3 };
+    const score = (levels[prob] || 1) * (levels[imp] || 1);
+    if (score >= 6) return "bg-destructive/20 border-destructive/40 hover:bg-destructive/30";
+    if (score >= 4) return "bg-warning/20 border-warning/40 hover:bg-warning/30";
+    if (score >= 2) return "bg-info/20 border-info/40 hover:bg-info/30";
+    return "bg-success/20 border-success/40 hover:bg-success/30";
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold flex items-center gap-2">
           <AlertTriangle className="w-5 h-5 text-warning" /> Riscos ({items.length})
         </h3>
-        {isAdmin && (
-          <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }} className="gap-2">
-            <Plus className="w-4 h-4" /> Novo Risco
+        <div className="flex gap-2">
+          <Button size="sm" variant={showMatrix ? "secondary" : "outline"} onClick={() => setShowMatrix(!showMatrix)} className="gap-2">
+            {showMatrix ? "Lista" : "Matriz 3×3"}
           </Button>
-        )}
+          {isAdmin && (
+            <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }} className="gap-2">
+              <Plus className="w-4 h-4" /> Novo Risco
+            </Button>
+          )}
+        </div>
       </div>
 
       {showForm && (
@@ -160,38 +188,92 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
         </Card>
       )}
 
-      {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-8">Nenhum risco cadastrado.</p>
-      ) : (
-        <div className="space-y-2">
-          {items.map(item => {
-            const riskLevel = getRiskLevel(item.probability, item.impact);
-            return (
-              <Card key={item.id} className="p-4 space-y-2">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium text-foreground">{item.description}</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge className={riskLevel.class}>{riskLevel.label}</Badge>
-                      <Badge className={PROB_MAP[item.probability]?.class}>P: {PROB_MAP[item.probability]?.label}</Badge>
-                      <Badge className={PROB_MAP[item.impact]?.class}>I: {PROB_MAP[item.impact]?.label}</Badge>
-                      <Badge className={STATUS_MAP[item.status]?.class}>{STATUS_MAP[item.status]?.label}</Badge>
-                    </div>
-                  </div>
-                  {isAdmin && (
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" onClick={() => handleEdit(item)}><Pencil className="w-4 h-4" /></Button>
-                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
-                    </div>
-                  )}
+      {/* Risk Matrix 3x3 */}
+      {showMatrix && (
+        <Card className="p-4">
+          <div className="flex items-end gap-2">
+            <div className="flex flex-col items-center mr-2">
+              <span className="text-xs font-semibold text-muted-foreground -rotate-90 whitespace-nowrap mb-8">← Probabilidade →</span>
+            </div>
+            <div className="flex-1">
+              <div className="text-center text-xs font-semibold text-muted-foreground mb-2">← Impacto →</div>
+              <div className="grid grid-cols-3 gap-1 mb-1">
+                {["Baixo", "Médio", "Alto"].map(l => (
+                  <div key={l} className="text-center text-[10px] font-medium text-muted-foreground">{l}</div>
+                ))}
+              </div>
+              {(["high", "medium", "low"] as const).map(prob => (
+                <div key={prob} className="grid grid-cols-3 gap-1 mb-1">
+                  {(["low", "medium", "high"] as const).map(imp => {
+                    const risks = matrixData.grid[`${prob}-${imp}`] || [];
+                    return (
+                      <div
+                        key={`${prob}-${imp}`}
+                        className={`border rounded-md p-2 text-center min-h-[56px] flex flex-col items-center justify-center transition-colors ${matrixCellColor(prob, imp)}`}
+                        title={risks.map(r => r.description).join("\n")}
+                      >
+                        <span className="text-lg font-bold text-foreground">{risks.length}</span>
+                        {risks.length > 0 && (
+                          <span className="text-[9px] text-muted-foreground leading-tight line-clamp-1">
+                            {risks[0].description.slice(0, 20)}...
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                {item.mitigation && <p className="text-xs text-muted-foreground"><strong>Mitigação:</strong> {item.mitigation}</p>}
-                {item.contingency && <p className="text-xs text-muted-foreground"><strong>Contingência:</strong> {item.contingency}</p>}
-                {item.responsible && <p className="text-xs text-muted-foreground"><strong>Responsável:</strong> {item.responsible}</p>}
-              </Card>
-            );
-          })}
-        </div>
+              ))}
+              <div className="grid grid-cols-3 gap-1 mt-1">
+                {["Baixo", "Médio", "Alto"].map((l, i) => (
+                  <div key={i} className="text-center text-[10px] text-muted-foreground">{["🟢", "🟡", "🔴"][i]}</div>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col justify-between h-full ml-2">
+              {["Alta", "Média", "Baixa"].map(l => (
+                <div key={l} className="text-[10px] font-medium text-muted-foreground h-[56px] flex items-center">{l}</div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {!showMatrix && (
+        <>
+          {items.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Nenhum risco cadastrado.</p>
+          ) : (
+            <div className="space-y-2">
+              {items.map(item => {
+                const riskLevel = getRiskLevel(item.probability, item.impact);
+                return (
+                  <Card key={item.id} className="p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 space-y-1">
+                        <p className="text-sm font-medium text-foreground">{item.description}</p>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge className={riskLevel.class}>{riskLevel.label}</Badge>
+                          <Badge className={PROB_MAP[item.probability]?.class}>P: {PROB_MAP[item.probability]?.label}</Badge>
+                          <Badge className={PROB_MAP[item.impact]?.class}>I: {PROB_MAP[item.impact]?.label}</Badge>
+                          <Badge className={STATUS_MAP[item.status]?.class}>{STATUS_MAP[item.status]?.label}</Badge>
+                        </div>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex gap-1">
+                          <Button size="icon" variant="ghost" onClick={() => handleEdit(item)}><Pencil className="w-4 h-4" /></Button>
+                          <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
+                        </div>
+                      )}
+                    </div>
+                    {item.mitigation && <p className="text-xs text-muted-foreground"><strong>Mitigação:</strong> {item.mitigation}</p>}
+                    {item.contingency && <p className="text-xs text-muted-foreground"><strong>Contingência:</strong> {item.contingency}</p>}
+                    {item.responsible && <p className="text-xs text-muted-foreground"><strong>Responsável:</strong> {item.responsible}</p>}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

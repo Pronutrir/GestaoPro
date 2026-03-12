@@ -16,6 +16,7 @@ import { ProjectDrawer } from "@/components/ProjectDrawer";
 import { AddProjectDialog } from "@/components/AddProjectDialog";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { AppLayout } from "@/components/AppLayout";
+import { PipelineSkeleton } from "@/components/SkeletonScreens";
 import { Input } from "@/components/ui/input";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { supabase } from "@/integrations/supabase/client";
@@ -190,7 +191,7 @@ const Dashboard = () => {
 
         {/* Pipeline Board */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">Carregando projetos...</p></div>
+          <PipelineSkeleton />
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <div className={`grid gap-6 ${statusFilter ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-6"}`}>
