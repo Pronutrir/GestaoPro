@@ -581,36 +581,42 @@ export const ActivityKanban = ({
     const currentStageId = draggedActivity?.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
     if (targetStageId === currentStageId) return;
 
+    // Optimistic update — move card instantly in the UI
+    setOptimisticMoves((prev) => ({ ...prev, [activityId]: targetStageId! }));
+
     const stage = stages.find((s) => s.id === targetStageId);
     const newStatus = stage?.is_final ? "completed" : "pending";
     const completedAt = stage?.is_final ? new Date().toISOString() : null;
 
-    try {
-      // Fire DB update and immediately trigger refresh — don't wait for notification
-      const updatePromise = supabase
-        .from("activities")
-        .update({
-          workflow_stage_id: targetStageId,
-          status: newStatus,
-          completed_at: completedAt,
-        })
-        .eq("id", activityId);
+    // Fire DB update in background
+    supabase
+      .from("activities")
+      .update({
+        workflow_stage_id: targetStageId,
+        status: newStatus,
+        completed_at: completedAt,
+      })
+      .eq("id", activityId)
+      .then(() => onDataChanged())
+      .catch(() => {
+        // Revert optimistic move on error
+        setOptimisticMoves((prev) => {
+          const next = { ...prev };
+          delete next[activityId];
+          return next;
+        });
+        toast({ title: "Erro ao mover atividade", variant: "destructive" });
+      });
 
-      // Send notification in background (don't block)
-      if (stage?.is_blocked && draggedActivity) {
-        supabase.from("notifications").insert({
-          project_id: projectId,
-          activity_id: activityId,
-          type: "blocked",
-          title: "🚫 Atividade bloqueada: " + draggedActivity.title,
-          message: `A atividade "${draggedActivity.title}" foi movida para a etapa "${stage.title}" e está bloqueada.`,
-        }).then(() => {});
-      }
-
-      await updatePromise;
-      onDataChanged();
-    } catch {
-      toast({ title: "Erro ao mover atividade", variant: "destructive" });
+    // Send notification in background (don't block)
+    if (stage?.is_blocked && draggedActivity) {
+      supabase.from("notifications").insert({
+        project_id: projectId,
+        activity_id: activityId,
+        type: "blocked",
+        title: "🚫 Atividade bloqueada: " + draggedActivity.title,
+        message: `A atividade "${draggedActivity.title}" foi movida para a etapa "${stage.title}" e está bloqueada.`,
+      }).then(() => {});
     }
   };
 
