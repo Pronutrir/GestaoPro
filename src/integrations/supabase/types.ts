@@ -918,6 +918,68 @@ export type Database = {
           },
         ]
       }
+      roadmap_items: {
+        Row: {
+          confidence: number
+          created_at: string
+          created_by: string | null
+          description: string | null
+          effort: number
+          id: string
+          impact: number
+          project_id: string | null
+          reach: number
+          score: number | null
+          status: string
+          target_quarter: string | null
+          theme: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          confidence?: number
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          effort?: number
+          id?: string
+          impact?: number
+          project_id?: string | null
+          reach?: number
+          score?: number | null
+          status?: string
+          target_quarter?: string | null
+          theme?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          effort?: number
+          id?: string
+          impact?: number
+          project_id?: string | null
+          reach?: number
+          score?: number | null
+          status?: string
+          target_quarter?: string | null
+          theme?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roadmap_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sectors: {
         Row: {
           created_at: string
