@@ -478,6 +478,7 @@ const ProjectDetails = () => {
                 <TabsTrigger value="assumptions" className="gap-2"><ShieldCheck className="w-4 h-4" />Premissas</TabsTrigger>
                 <TabsTrigger value="risks" className="gap-2"><AlertTriangle className="w-4 h-4" />Riscos</TabsTrigger>
                 <TabsTrigger value="lessons" className="gap-2"><BookOpen className="w-4 h-4" />Lições</TabsTrigger>
+                <TabsTrigger value="backlog" className="gap-2"><Inbox className="w-4 h-4" />Backlog</TabsTrigger>
                 <TabsTrigger value="workflow" className="gap-2"><Settings2 className="w-4 h-4" />Workflow</TabsTrigger>
               </TabsList>
 
