@@ -464,7 +464,9 @@ export const ActivityKanban = ({
           return (
             <div
               key={stage.id}
-              className="relative flex-shrink-0 bg-muted/30 rounded-xl border border-border/50 flex flex-col"
+              className={`relative flex-shrink-0 rounded-xl border flex flex-col ${
+                stage.is_blocked ? "bg-orange-500/5 border-orange-500/40" : "bg-muted/30 border-border/50"
+              }`}
               style={{ width: `${widthPct}%`, marginRight: idx < arr.length - 1 ? 6 : 0 }}
             >
               {/* Column Header */}
