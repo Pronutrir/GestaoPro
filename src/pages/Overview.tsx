@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
+import { DashboardSkeleton } from "@/components/SkeletonScreens";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
