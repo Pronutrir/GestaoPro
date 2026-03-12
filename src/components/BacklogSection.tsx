@@ -68,10 +68,12 @@ export const BacklogSection = ({
     fetchBacklogStage();
   }, [projectId]);
 
-  const backlogActivities = activities.filter((a) => {
-    if (!backlogStageId) return false;
-    return a.workflow_stage_id === backlogStageId || (!a.workflow_stage_id);
-  });
+  const backlogActivities = activities
+    .filter((a) => {
+      if (!backlogStageId) return false;
+      return a.workflow_stage_id === backlogStageId || (!a.workflow_stage_id);
+    })
+    .sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999));
 
   const handleMoveToBoard = async (activityId: string) => {
     // Move to "A Fazer" (display_order = 1)
