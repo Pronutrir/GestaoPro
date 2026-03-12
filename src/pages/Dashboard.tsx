@@ -204,6 +204,7 @@ const Dashboard = () => {
         )}
 
         <EditProjectDialog project={editingProject} open={editDialogOpen} onOpenChange={setEditDialogOpen} onProjectUpdated={fetchProjects} />
+        <ProjectDrawer project={drawerProject} open={drawerOpen} onOpenChange={setDrawerOpen} />
       </div>
     </AppLayout>
   );
