@@ -21,97 +21,59 @@ interface ImportWBSDialogProps {
 
 const parseWBS = (text: string): ParsedItem[] => {
   const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-  const items: ParsedItem[] = [];
+  const rawItems: { code: string; title: string }[] = [];
 
   for (const line of lines) {
-    // Support optional dots at end (e.g. "1.1." or "1.1.1.")
     const match = line.match(/^(\d+(?:\.\d+)*)\.?\s+(.+)$/);
     if (!match) continue;
-
-    const code = match[1];
-    const title = match[2].trim();
-    const dotParts = code.split(".");
-
-    items.push({ code, title, level: "phase", parentCode: null }); // temporary
+    rawItems.push({ code: match[1], title: match[2].trim() });
   }
 
-  if (items.length === 0) return items;
+  if (rawItems.length === 0) return [];
 
-  // Auto-detect structure: find the minimum depth used (excluding single-number project titles)
-  const depths = items.map(i => i.code.split(".").length);
+  const depths = rawItems.map(i => i.code.split(".").length);
   const minDepth = Math.min(...depths);
-  const maxDepth = Math.max(...depths);
 
-  // Determine mapping based on structure depth
-  // If min depth is 1 (e.g. "1 Project Title"), skip level 1 as project title
-  // Phases = first meaningful level, Activities = next, Sub-activities = deeper
+  // Detect X.0 pattern (old format)
+  const hasZeroPattern = rawItems.some(i => {
+    const p = i.code.split(".");
+    return p.length === 2 && p[1] === "0";
+  });
+
+  // Determine which depth level = phase
+  // If minDepth=1 → level 1 is project title (skip), level 2 = phase
+  // If minDepth=2 and hasZeroPattern → X.0 = phase
+  // If minDepth=2 no zero → level 2 = phase
+  const phaseDepth = hasZeroPattern ? 2 : (minDepth === 1 ? 2 : minDepth);
+  const activityDepth = phaseDepth + 1;
 
   const result: ParsedItem[] = [];
 
-  for (const item of items) {
+  for (const item of rawItems) {
     const dotParts = item.code.split(".");
     const depth = dotParts.length;
 
-    let level: "phase" | "activity" | "subactivity";
-    let parentCode: string | null = null;
-
-    if (minDepth === 1) {
-      // Structure: 1=project, 1.1=phase, 1.1.1=activity, 1.1.1.1+=subactivity
-      if (depth === 1) continue; // Skip project title line
-      if (depth === 2) {
-        level = "phase";
-      } else if (depth === 3) {
-        level = "activity";
-        parentCode = dotParts.slice(0, 2).join(".");
-      } else {
-        level = "subactivity";
-        parentCode = dotParts.slice(0, 3).join(".");
-      }
-    } else if (minDepth === 2) {
-      // Structure: 1.0/1.1=phase, 1.1/1.2=activity, 1.1.1+=subactivity
-      // Check if there's a X.0 pattern (old format)
-      const hasZeroPattern = items.some(i => {
-        const p = i.code.split(".");
-        return p.length === 2 && p[1] === "0";
-      });
-
-      if (hasZeroPattern) {
-        // Old format: X.0 = phase, X.Y = activity, X.Y.Z = subactivity
-        if (depth === 2 && dotParts[1] === "0") {
-          level = "phase";
-        } else if (depth === 2) {
-          level = "activity";
-          parentCode = dotParts[0] + ".0";
-        } else {
-          level = "subactivity";
-          parentCode = dotParts.slice(0, 2).join(".");
-        }
-      } else {
-        // X.Y = phase, X.Y.Z = activity, X.Y.Z.W+ = subactivity
-        if (depth === 2) {
-          level = "phase";
-        } else if (depth === 3) {
-          level = "activity";
-          parentCode = dotParts.slice(0, 2).join(".");
-        } else {
-          level = "subactivity";
-          parentCode = dotParts.slice(0, 3).join(".");
-        }
-      }
-    } else {
-      // Fallback: first level = phase, second = activity, rest = subactivity
-      if (depth === minDepth) {
-        level = "phase";
-      } else if (depth === minDepth + 1) {
-        level = "activity";
-        parentCode = dotParts.slice(0, minDepth).join(".");
-      } else {
-        level = "subactivity";
-        parentCode = dotParts.slice(0, minDepth + 1).join(".");
-      }
+    // Skip project title (depth < phaseDepth)
+    if (depth < phaseDepth) continue;
+    // Skip X.0 in zero-pattern (it's the phase)
+    if (hasZeroPattern && depth === 2 && dotParts[1] === "0") {
+      result.push({ code: item.code, title: item.title, level: "phase", parentCode: null });
+      continue;
     }
 
-    result.push({ code: item.code, title: item.title, level, parentCode });
+    if (depth === phaseDepth && !hasZeroPattern) {
+      result.push({ code: item.code, title: item.title, level: "phase", parentCode: null });
+    } else if (depth === activityDepth || (hasZeroPattern && depth === 2)) {
+      const parentCode = hasZeroPattern
+        ? dotParts[0] + ".0"
+        : dotParts.slice(0, phaseDepth).join(".");
+      const level = (hasZeroPattern && depth === 2) ? "activity" : "activity";
+      result.push({ code: item.code, title: item.title, level, parentCode });
+    } else {
+      // Levels deeper than activity → subactivity, parent is one level up
+      const parentCode = dotParts.slice(0, depth - 1).join(".");
+      result.push({ code: item.code, title: item.title, level: "subactivity", parentCode });
+    }
   }
 
   return result;
@@ -161,37 +123,39 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         phaseIdMap[phase.code] = data.id;
       }
 
-      // Create activities and sub-activities with sequential display_order per phase
-      const activityIdMap: Record<string, string> = {};
+      // Create all non-phase items in order, tracking IDs for parent chaining
+      const codeIdMap: Record<string, string> = {};
       const phaseOrderCounter: Record<string, number> = {};
+      const nonPhaseItems = parsed.filter(i => i.level !== "phase");
 
-      for (const activity of activities) {
-        const phaseId = activity.parentCode ? phaseIdMap[activity.parentCode] : null;
+      // Helper: find the phase_id for any item by walking up the parent chain
+      const findPhaseId = (item: ParsedItem): string | null => {
+        if (item.parentCode && phaseIdMap[item.parentCode]) return phaseIdMap[item.parentCode];
+        // Walk up to find the phase
+        const dotParts = item.code.split(".");
+        for (let len = dotParts.length - 1; len >= 1; len--) {
+          const ancestor = dotParts.slice(0, len).join(".");
+          if (phaseIdMap[ancestor]) return phaseIdMap[ancestor];
+        }
+        return null;
+      };
+
+      for (const item of nonPhaseItems) {
+        const phaseId = findPhaseId(item);
+        const parentId = item.parentCode ? codeIdMap[item.parentCode] || null : null;
         const phaseKey = phaseId || "__none__";
         if (!(phaseKey in phaseOrderCounter)) phaseOrderCounter[phaseKey] = 0;
 
         const { data, error } = await supabase.from("activities").insert({
           project_id: projectId,
-          title: `${activity.code} ${activity.title}`,
+          title: `${item.code} ${item.title}`,
           phase_id: phaseId,
+          parent_id: parentId,
           display_order: phaseOrderCounter[phaseKey]++,
         }).select("id").single();
 
         if (error) throw error;
-        activityIdMap[activity.code] = data.id;
-
-        // Insert sub-activities right after their parent
-        const childSubs = subactivities.filter(s => s.parentCode === activity.code);
-        for (const sub of childSubs) {
-          const { error: subError } = await supabase.from("activities").insert({
-            project_id: projectId,
-            title: `${sub.code} ${sub.title}`,
-            phase_id: phaseId,
-            parent_id: data.id,
-            display_order: phaseOrderCounter[phaseKey]++,
-          });
-          if (subError) throw subError;
-        }
+        codeIdMap[item.code] = data.id;
       }
 
       toast({
