@@ -144,7 +144,7 @@ function KanbanCard({
   };
 
   return (
-    <div className="bg-card border border-border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow cursor-default group">
+    <div className="bg-card border border-border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-default group">
       <div className="flex items-start gap-2">
         <button
           className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
