@@ -145,7 +145,7 @@ const ProjectDetails = () => {
       setPhases(phasesData || []);
 
       const { data: activitiesData, error: activitiesError } = await supabase
-        .from("activities").select("*").eq("project_id", id).order("display_order", { ascending: true }).order("created_at", { ascending: false });
+        .from("activities").select("*").eq("project_id", id).order("display_order", { ascending: true }).order("created_at", { ascending: true });
       if (activitiesError) throw activitiesError;
       setActivities(activitiesData || []);
     } catch (error) {
