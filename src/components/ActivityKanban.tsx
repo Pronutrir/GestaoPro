@@ -473,6 +473,21 @@ export const ActivityKanban = ({
     if (data) setStages(data);
   };
 
+  const handleMoveToBacklog = async (activityId: string) => {
+    const backlogStage = stages.find((s) => s.display_order === 0);
+    if (!backlogStage) {
+      toast({ title: "Etapa de Backlog não encontrada", variant: "destructive" });
+      return;
+    }
+    setOptimisticMoves((prev) => ({ ...prev, [activityId]: backlogStage.id }));
+    await supabase
+      .from("activities")
+      .update({ workflow_stage_id: backlogStage.id })
+      .eq("id", activityId);
+    onDataChanged();
+    toast({ title: "Atividade movida para o Backlog" });
+  };
+
   // Clear optimistic moves when activities prop changes (parent refetched)
   useEffect(() => {
     setOptimisticMoves({});
