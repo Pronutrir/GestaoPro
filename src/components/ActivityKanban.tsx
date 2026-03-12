@@ -387,7 +387,7 @@ export const ActivityKanban = ({
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
-        {stages.map((stage) => {
+        {stages.filter((s) => s.display_order > 0).map((stage) => {
           const stageActivities = activitiesByStage[stage.id] || [];
           return (
             <div
