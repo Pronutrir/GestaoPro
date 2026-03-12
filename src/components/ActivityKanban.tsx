@@ -659,8 +659,6 @@ export const ActivityKanban = ({
     }
   };
 
-  const [editingGoal, setEditingGoal] = useState(false);
-  const [goalDraft, setGoalDraft] = useState(sprintGoal);
 
   const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
