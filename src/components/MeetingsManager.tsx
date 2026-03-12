@@ -320,6 +320,15 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       toast({ title: "Atividade criada no Kanban!" });
     }
   };
+  const handleSaveAsLesson = async (meeting: Meeting) => {
+    if (!onCreateLesson) return;
+    // Extract retro content from minutes
+    const parts = (meeting.minutes || "").split(/\*\*[^*]+\*\*\n?/);
+    const bad = parts[2]?.trim() || "Problema identificado na retrospectiva";
+    const improve = parts[3]?.trim() || "";
+    await onCreateLesson(bad, improve);
+    toast({ title: "Lição aprendida criada a partir da retrospectiva!" });
+  };
 
   const handleDeleteAction = async (id: string, meetingId: string) => {
     await supabase.from("meeting_actions").delete().eq("id", id);
