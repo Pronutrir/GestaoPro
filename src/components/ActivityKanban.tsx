@@ -286,8 +286,7 @@ export const ActivityKanban = ({
     const map: Record<string, Activity[]> = {};
     stages.forEach((s) => (map[s.id] = []));
 
-    const parentActivities = activities.filter((a) => !a.parent_id);
-    parentActivities.forEach((a) => {
+    activities.forEach((a) => {
       if (a.workflow_stage_id && map[a.workflow_stage_id]) {
         map[a.workflow_stage_id].push(a);
       } else if (stages.length > 0) {
