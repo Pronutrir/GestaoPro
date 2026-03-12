@@ -144,10 +144,14 @@ function KanbanCard({
   };
 
   return (
-    <div className="bg-card border border-border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-default group">
+    <div
+      className="bg-card border border-border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+      onClick={onEdit}
+    >
       <div className="flex items-start gap-2">
         <button
           className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
+          onClick={(e) => e.stopPropagation()}
           {...dragListeners}
         >
           <GripVertical className="w-3.5 h-3.5" />
@@ -199,7 +203,7 @@ function KanbanCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onToggle}>
           {activity.status === "completed" ? (
             <CheckCircle2 className="w-3.5 h-3.5 text-success" />
