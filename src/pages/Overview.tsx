@@ -243,8 +243,15 @@ const Overview = () => {
                   <ListTodo className="w-4 h-4 text-primary" />
                   <span className="text-sm text-muted-foreground">Conclusão de Tarefas</span>
                 </div>
-                <p className="text-3xl font-bold text-foreground">{taskCompletionRate.toFixed(0)}%</p>
-                <p className="text-xs text-muted-foreground mt-1">{completedActivities}/{totalActivities} concluídas</p>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-3xl font-bold text-foreground">{taskCompletionRate.toFixed(0)}%</p>
+                    <p className="text-xs text-muted-foreground mt-1">{completedActivities}/{totalActivities} concluídas</p>
+                  </div>
+                  <div className="w-20">
+                    <Sparkline data={sparklineCompletion} color="hsl(var(--success))" />
+                  </div>
+                </div>
               </Card>
 
               <Card className={`p-5 ${overdueActivities.length > 0 ? "border-destructive/50" : ""}`}>
@@ -252,8 +259,15 @@ const Overview = () => {
                   <AlertTriangle className={`w-4 h-4 ${overdueActivities.length > 0 ? "text-destructive" : "text-muted-foreground"}`} />
                   <span className="text-sm text-muted-foreground">Atrasadas</span>
                 </div>
-                <p className={`text-3xl font-bold ${overdueActivities.length > 0 ? "text-destructive" : "text-foreground"}`}>{overdueActivities.length}</p>
-                <p className="text-xs text-muted-foreground mt-1">tarefas vencidas</p>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className={`text-3xl font-bold ${overdueActivities.length > 0 ? "text-destructive" : "text-foreground"}`}>{overdueActivities.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1">tarefas vencidas</p>
+                  </div>
+                  <div className="w-20">
+                    <Sparkline data={sparklineOverdue} color="hsl(var(--destructive))" />
+                  </div>
+                </div>
               </Card>
 
               <Card className={`p-5 ${upcomingDeadlines.length > 0 ? "border-warning/50" : ""}`}>
