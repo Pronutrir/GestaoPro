@@ -33,6 +33,7 @@ interface ProjectColumnProps {
   onEdit: (project: Project) => void;
   onDelete: (projectId: string) => void;
   onStatusChange: (projectId: string, newStatus: string) => void;
+  onCardClick?: (project: Project) => void;
   isAdmin?: boolean;
 }
 
