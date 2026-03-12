@@ -169,6 +169,32 @@ const Overview = () => {
     return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 10);
   })();
 
+  // Sparkline data: completion trend over last 14 days
+  const sparklineCompletion = (() => {
+    const data: number[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setHours(23, 59, 59);
+      const completed = activities.filter(a => a.completed_at && new Date(a.completed_at) <= d).length;
+      data.push(completed);
+    }
+    return data;
+  })();
+
+  // Sparkline: overdue trend
+  const sparklineOverdue = (() => {
+    const data: number[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const overdue = activities.filter(a => a.status !== "completed" && a.end_date && new Date(a.end_date) < d).length;
+      data.push(overdue);
+    }
+    return data;
+  })();
+
   const statusCards = [
     { key: "ideacao", label: "Ideação", icon: Lightbulb, color: "warning", count: statusCounts.ideacao },
     { key: "poc", label: "POC", icon: Beaker, color: "info", count: statusCounts.poc },
