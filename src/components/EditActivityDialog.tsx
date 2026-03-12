@@ -177,6 +177,7 @@ export const EditActivityDialog = ({
           priority: formData.priority,
           tags: formData.tags,
           parent_id: formData.parent_id || null,
+          story_points: parseInt(formData.story_points) || 0,
         })
         .eq("id", activity.id);
 
