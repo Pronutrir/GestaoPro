@@ -172,7 +172,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   };
 
   const resetForm = () => {
-    setForm({ title: "", meeting_date: "", start_time: "", end_time: "", location: "", agenda: "", minutes: "", phase_id: "", participants: [], responsible: "" });
+    setForm({ title: "", meeting_date: "", start_time: "", end_time: "", location: "", agenda: "", minutes: "", phase_id: "", participants: [], responsible: "", meeting_type: "general", daily_yesterday: "", daily_today: "", daily_impediment: "", retro_good: "", retro_bad: "", retro_improve: "" });
     setEditingId(null);
     setShowForm(false);
   };
