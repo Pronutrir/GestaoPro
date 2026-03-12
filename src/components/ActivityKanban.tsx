@@ -144,7 +144,8 @@ function KanbanCard({
     }
   };
 
-  const isOverdue = activity.end_date && new Date(activity.end_date) < new Date() && activity.status !== "completed";
+  const parseDate = (d: string) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day); };
+  const isOverdue = activity.end_date && parseDate(activity.end_date) < new Date() && activity.status !== "completed";
 
   return (
     <div
