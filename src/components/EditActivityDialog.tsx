@@ -66,7 +66,8 @@ export const EditActivityDialog = ({
     tags: [] as string[],
     parent_id: "",
   });
-  const [newTag, setNewTag] = useState("");
+  const [newSubTitle, setNewSubTitle] = useState("");
+  const [subActivities, setSubActivities] = useState<Activity[]>([]);
 
   useEffect(() => {
     if (activity) {
