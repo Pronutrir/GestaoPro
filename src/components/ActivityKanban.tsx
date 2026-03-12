@@ -80,8 +80,6 @@ interface ActivityKanbanProps {
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   isAdmin?: boolean;
-  sprintGoal?: string;
-  onSprintGoalChange?: (goal: string) => void;
 }
 
 function SortableKanbanCard({
