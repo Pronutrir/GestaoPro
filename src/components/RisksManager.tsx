@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +41,8 @@ const STATUS_MAP: Record<string, { label: string; class: string }> = {
   closed: { label: "Encerrado", class: "bg-success/20 text-success border-success/30" },
 };
 
+const LEVEL_LABELS: Record<string, string> = { low: "Baixo", medium: "Médio", high: "Alto" };
+
 export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
@@ -53,6 +56,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const [mitigation, setMitigation] = useState("");
   const [contingency, setContingency] = useState("");
   const [responsible, setResponsible] = useState("");
+  const [showMatrix, setShowMatrix] = useState(false);
 
   const fetchData = async () => {
     const { data } = await supabase.from("risks").select("*").eq("project_id", projectId).order("created_at", { ascending: false });
@@ -64,6 +68,13 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const resetForm = () => {
     setDescription(""); setProbability("medium"); setImpact("medium"); setStatus("identified");
     setMitigation(""); setContingency(""); setResponsible(""); setEditingId(null); setShowForm(false);
+  };
+
+  const openFormWithPreset = (prob: string, imp: string) => {
+    resetForm();
+    setProbability(prob);
+    setImpact(imp);
+    setShowForm(true);
   };
 
   const handleSave = async () => {
@@ -105,10 +116,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     return { label: "Baixo", class: "bg-success text-success-foreground" };
   };
 
-  const [showMatrix, setShowMatrix] = useState(false);
-
-  // Risk matrix data: count active risks in each cell
-  const matrixData = (() => {
+  const matrixGrid = (() => {
     const levels = ["low", "medium", "high"] as const;
     const grid: Record<string, Risk[]> = {};
     levels.forEach(p => levels.forEach(i => { grid[`${p}-${i}`] = []; }));
@@ -116,7 +124,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
       const key = `${r.probability}-${r.impact}`;
       if (grid[key]) grid[key].push(r);
     });
-    return { grid, levels };
+    return grid;
   })();
 
   const matrixCellColor = (prob: string, imp: string) => {
@@ -126,6 +134,61 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     if (score >= 4) return "bg-warning/20 border-warning/40 hover:bg-warning/30";
     if (score >= 2) return "bg-info/20 border-info/40 hover:bg-info/30";
     return "bg-success/20 border-success/40 hover:bg-success/30";
+  };
+
+  const MatrixCell = ({ prob, imp }: { prob: string; imp: string }) => {
+    const risks = matrixGrid[`${prob}-${imp}`] || [];
+    const hasRisks = risks.length > 0;
+
+    const cell = (
+      <div
+        className={`border rounded-lg p-3 text-center min-h-[72px] flex flex-col items-center justify-center transition-all cursor-pointer ${matrixCellColor(prob, imp)}`}
+        onClick={() => {
+          if (!hasRisks && isAdmin) openFormWithPreset(prob, imp);
+        }}
+      >
+        <span className="text-2xl font-bold text-foreground">{risks.length}</span>
+        {hasRisks ? (
+          <span className="text-[10px] text-muted-foreground leading-tight line-clamp-1 mt-0.5">
+            {risks[0].description.slice(0, 25)}{risks[0].description.length > 25 ? "…" : ""}
+          </span>
+        ) : isAdmin ? (
+          <span className="text-[10px] text-muted-foreground/60 mt-0.5">+ Adicionar</span>
+        ) : null}
+      </div>
+    );
+
+    if (!hasRisks) return cell;
+
+    return (
+      <Popover>
+        <PopoverTrigger asChild>{cell}</PopoverTrigger>
+        <PopoverContent className="w-72 p-3 space-y-2" side="right">
+          <p className="text-xs font-semibold text-muted-foreground">
+            P: {LEVEL_LABELS[prob]} × I: {LEVEL_LABELS[imp]} — {risks.length} risco(s)
+          </p>
+          {risks.map(r => (
+            <div key={r.id} className="border rounded p-2 space-y-1">
+              <p className="text-sm font-medium">{r.description}</p>
+              <Badge className={STATUS_MAP[r.status]?.class} variant="outline">
+                {STATUS_MAP[r.status]?.label}
+              </Badge>
+              {r.mitigation && <p className="text-[11px] text-muted-foreground">Mitigação: {r.mitigation}</p>}
+              {isAdmin && (
+                <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => handleEdit(r)}>
+                  <Pencil className="w-3 h-3 mr-1" /> Editar
+                </Button>
+              )}
+            </div>
+          ))}
+          {isAdmin && (
+            <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => openFormWithPreset(prob, imp)}>
+              <Plus className="w-3 h-3 mr-1" /> Novo risco aqui
+            </Button>
+          )}
+        </PopoverContent>
+      </Popover>
+    );
   };
 
   return (
@@ -188,51 +251,32 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
         </Card>
       )}
 
-      {/* Risk Matrix 3x3 */}
       {showMatrix && (
         <Card className="p-4">
-          <div className="flex items-end gap-2">
-            <div className="flex flex-col items-center mr-2">
-              <span className="text-xs font-semibold text-muted-foreground -rotate-90 whitespace-nowrap mb-8">← Probabilidade →</span>
+          <div className="grid grid-cols-[auto_1fr] gap-3">
+            <div className="flex items-center justify-center">
+              <span className="text-xs font-semibold text-muted-foreground -rotate-90 whitespace-nowrap">Probabilidade</span>
             </div>
-            <div className="flex-1">
-              <div className="text-center text-xs font-semibold text-muted-foreground mb-2">← Impacto →</div>
-              <div className="grid grid-cols-3 gap-1 mb-1">
-                {["Baixo", "Médio", "Alto"].map(l => (
-                  <div key={l} className="text-center text-[10px] font-medium text-muted-foreground">{l}</div>
+            <div>
+              <div className="text-center text-xs font-semibold text-muted-foreground mb-2">Impacto</div>
+              <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-1">
+                <div />
+                {(["low", "medium", "high"] as const).map(imp => (
+                  <div key={imp} className="text-center text-[11px] font-medium text-muted-foreground pb-1">
+                    {LEVEL_LABELS[imp]}
+                  </div>
+                ))}
+                {(["high", "medium", "low"] as const).map(prob => (
+                  <div key={prob} className="contents">
+                    <div className="text-[11px] font-medium text-muted-foreground flex items-center pr-2 justify-end">
+                      {LEVEL_LABELS[prob]}
+                    </div>
+                    {(["low", "medium", "high"] as const).map(imp => (
+                      <MatrixCell key={`${prob}-${imp}`} prob={prob} imp={imp} />
+                    ))}
+                  </div>
                 ))}
               </div>
-              {(["high", "medium", "low"] as const).map(prob => (
-                <div key={prob} className="grid grid-cols-3 gap-1 mb-1">
-                  {(["low", "medium", "high"] as const).map(imp => {
-                    const risks = matrixData.grid[`${prob}-${imp}`] || [];
-                    return (
-                      <div
-                        key={`${prob}-${imp}`}
-                        className={`border rounded-md p-2 text-center min-h-[56px] flex flex-col items-center justify-center transition-colors ${matrixCellColor(prob, imp)}`}
-                        title={risks.map(r => r.description).join("\n")}
-                      >
-                        <span className="text-lg font-bold text-foreground">{risks.length}</span>
-                        {risks.length > 0 && (
-                          <span className="text-[9px] text-muted-foreground leading-tight line-clamp-1">
-                            {risks[0].description.slice(0, 20)}...
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-              <div className="grid grid-cols-3 gap-1 mt-1">
-                {["Baixo", "Médio", "Alto"].map((l, i) => (
-                  <div key={i} className="text-center text-[10px] text-muted-foreground">{["🟢", "🟡", "🔴"][i]}</div>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-col justify-between h-full ml-2">
-              {["Alta", "Média", "Baixa"].map(l => (
-                <div key={l} className="text-[10px] font-medium text-muted-foreground h-[56px] flex items-center">{l}</div>
-              ))}
             </div>
           </div>
         </Card>
