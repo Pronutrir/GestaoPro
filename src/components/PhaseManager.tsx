@@ -458,40 +458,21 @@ export const PhaseManager = ({
                                     />
                                   </SortableActivityCard>
                                   {isActivityExpanded && (
-                                    <div className="ml-8 space-y-1 border-l-2 border-primary/20 pl-3">
-                                      {subs.map((sub) => (
-                                        <div key={sub.id} className="flex items-center gap-3 p-2 bg-muted/30 rounded-md border border-border/50 group">
-                                          <input
-                                            type="checkbox"
-                                            checked={sub.status === "completed"}
-                                            onChange={() => onToggleActivity(sub.id, sub.status)}
-                                            className="h-3.5 w-3.5 rounded border-input"
-                                          />
-                                          <p className={`text-xs font-medium truncate flex-1 ${sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                                            {sub.title}
-                                          </p>
-                                          {sub.assigned_to && <span className="text-[10px] text-muted-foreground">👤 {sub.assigned_to}</span>}
-                                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditActivity(sub)}><Pencil className="w-3 h-3" /></Button>
-                                            {isAdmin && <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => onDeleteActivity(sub.id)}><Trash2 className="w-3 h-3" /></Button>}
-                                          </div>
-                                        </div>
-                                      ))}
-                                      {isAdmin && (
-                                        <div className="flex gap-2">
-                                          <Input
-                                            placeholder="Nova sub-atividade..."
-                                            value={quickAddSubTitle[activity.id] || ""}
-                                            onChange={(e) => setQuickAddSubTitle((prev) => ({ ...prev, [activity.id]: e.target.value }))}
-                                            onKeyDown={(e) => { if (e.key === "Enter") handleQuickAddSubActivity(activity); }}
-                                            className="h-7 text-xs"
-                                          />
-                                          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => handleQuickAddSubActivity(activity)}>
-                                            <Plus className="w-3 h-3" />
-                                          </Button>
-                                        </div>
-                                      )}
-                                    </div>
+                                    <SubActivityTree
+                                      parentId={activity.id}
+                                      activities={activities}
+                                      getSubActivities={getSubActivities}
+                                      expandedActivities={expandedActivities}
+                                      toggleActivityExpand={toggleActivityExpand}
+                                      onToggleActivity={onToggleActivity}
+                                      onEditActivity={onEditActivity}
+                                      onDeleteActivity={onDeleteActivity}
+                                      quickAddSubTitle={quickAddSubTitle}
+                                      setQuickAddSubTitle={setQuickAddSubTitle}
+                                      handleQuickAddSubActivity={handleQuickAddSubActivity}
+                                      isAdmin={isAdmin}
+                                      depth={1}
+                                    />
                                   )}
                                 </div>
                               );

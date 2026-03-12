@@ -278,7 +278,7 @@ export const EditActivityDialog = ({
           </div>
 
           {/* Sub-atividades (Pacotes de Trabalho) */}
-          {activity && !activity.parent_id && projectId && (
+          {activity && projectId && (
             <div className="border-t border-border pt-4 space-y-3">
               <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                 <Layers className="w-4 h-4 text-primary" />
