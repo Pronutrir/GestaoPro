@@ -277,6 +277,46 @@ export const EditActivityDialog = ({
             </div>
           </div>
 
+          {/* Sub-atividades (Pacotes de Trabalho) */}
+          {activity && !activity.parent_id && projectId && (
+            <div className="border-t border-border pt-4 space-y-3">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <Layers className="w-4 h-4 text-primary" />
+                Sub-atividades ({subActivities.length})
+              </h3>
+              {subActivities.length > 0 && (
+                <div className="space-y-1.5">
+                  {subActivities.map((sub) => (
+                    <div key={sub.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded-md border border-border/50 group">
+                      <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={() => handleToggleSubActivity(sub)}>
+                        {sub.status === "completed" ? <CheckCircle2 className="w-3.5 h-3.5 text-success" /> : <Circle className="w-3.5 h-3.5 text-muted-foreground" />}
+                      </Button>
+                      <p className={`text-xs font-medium truncate flex-1 ${sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                        {sub.title}
+                      </p>
+                      {sub.assigned_to && <span className="text-[10px] text-muted-foreground">👤 {sub.assigned_to}</span>}
+                      <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive" onClick={() => handleDeleteSubActivity(sub.id)}>
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Adicionar sub-atividade..."
+                  value={newSubTitle}
+                  onChange={(e) => setNewSubTitle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddSubActivity(); } }}
+                  className="h-8 text-sm"
+                />
+                <Button type="button" size="sm" variant="outline" className="h-8 px-2" onClick={handleAddSubActivity}>
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Diário de Bordo */}
           {activity && projectId && (
             <div className="border-t border-border pt-4">
