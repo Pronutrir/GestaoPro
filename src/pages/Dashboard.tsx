@@ -196,7 +196,8 @@ const Dashboard = () => {
             <div className={`grid gap-6 ${statusFilter ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-6"}`}>
               {statusCards.filter(s => !statusFilter || statusFilter === s.key).map(s => (
                 <ProjectColumn key={s.key} title={s.label} status={s.key} color={s.color} projects={s.projects}
-                  onEdit={handleEdit} onDelete={handleDelete} onStatusChange={handleStatusChange} isAdmin={isAdmin} />
+                  onEdit={handleEdit} onDelete={handleDelete} onStatusChange={handleStatusChange} isAdmin={isAdmin}
+                  onCardClick={(p: Project) => { setDrawerProject(p); setDrawerOpen(true); }} />
               ))}
             </div>
           </DndContext>
