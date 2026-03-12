@@ -314,6 +314,7 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
                 onRename={handleRename}
                 onDelete={handleDelete}
                 onToggleFinal={handleToggleFinal}
+                onToggleBlocked={handleToggleBlocked}
                 onColorChange={handleColorChange}
               />
             ))}
