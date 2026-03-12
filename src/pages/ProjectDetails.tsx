@@ -549,7 +549,7 @@ const ProjectDetails = () => {
                   onToggleActivity={handleToggleActivity}
                   isAdmin={isAdmin}
                   sprintGoal={sprintGoal}
-                  onSprintGoalChange={(goal) => setSprintGoal(goal)}
+                  onSprintGoalChange={handleSprintGoalChange}
                 />
               </TabsContent>
 
