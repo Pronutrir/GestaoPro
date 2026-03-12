@@ -442,25 +442,27 @@ export const ActivityKanban = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
-        {stages.filter((s) => s.display_order > 0).map((stage) => {
+      <div ref={containerRef} className="flex overflow-x-auto pb-4" style={{ minHeight: 400 }}>
+        {stages.filter((s) => s.display_order > 0).map((stage, idx, arr) => {
           const stageActivities = activitiesByStage[stage.id] || [];
+          const widthPct = columnWidths[stage.id] || (100 / arr.length);
           return (
             <div
               key={stage.id}
-              className="flex-1 min-w-[220px] bg-muted/30 rounded-xl border border-border/50 flex flex-col"
+              className="relative flex-shrink-0 bg-muted/30 rounded-xl border border-border/50 flex flex-col"
+              style={{ width: `${widthPct}%`, marginRight: idx < arr.length - 1 ? 6 : 0 }}
             >
               {/* Column Header */}
               <div className="p-3 border-b border-border/50">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <div
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: stage.color }}
                     />
-                    <h3 className="text-sm font-semibold text-foreground">{stage.title}</h3>
+                    <h3 className="text-sm font-semibold text-foreground truncate">{stage.title}</h3>
                   </div>
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center">
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
                     {stageActivities.length}
                   </Badge>
                 </div>
@@ -491,6 +493,16 @@ export const ActivityKanban = ({
                   )}
                 </SortableContext>
               </DroppableColumn>
+
+              {/* Resize Handle */}
+              {idx < arr.length - 1 && (
+                <div
+                  className="absolute top-0 -right-[5px] w-[10px] h-full cursor-col-resize z-10 group flex items-center justify-center"
+                  onMouseDown={(e) => handleResizeStart(e, stage.id, widthPct)}
+                >
+                  <div className="w-[3px] h-8 rounded-full bg-border/50 group-hover:bg-primary/60 transition-colors" />
+                </div>
+              )}
             </div>
           );
         })}
