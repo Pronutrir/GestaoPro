@@ -193,6 +193,11 @@ function KanbanCard({
           )}
 
           <div className="flex flex-wrap gap-1">
+            {isBlocked && (
+              <Badge className="bg-orange-500/20 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0">
+                🚫 Bloqueada
+              </Badge>
+            )}
             {activity.assigned_to && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                 👤 {activity.assigned_to}
