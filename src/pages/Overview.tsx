@@ -179,7 +179,7 @@ const Overview = () => {
 
   return (
     <AppLayout title="Pipeline de Gestão de Projetos">
-      <main className="container mx-auto px-6 py-8 space-y-8">
+      <main className="px-4 py-6 space-y-6">
         <div>
           <h2 className="text-3xl font-bold text-foreground mb-2">Dashboard Geral</h2>
           <p className="text-muted-foreground">KPIs, indicadores de atraso e evolução do portfólio</p>
