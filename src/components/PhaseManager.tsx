@@ -12,6 +12,7 @@ import {
   Trash2,
   Layers,
   CheckCircle2,
+  ArrowRightLeft,
 } from "lucide-react";
 import {
   Collapsible,
