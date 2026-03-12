@@ -41,6 +41,7 @@ interface WorkflowStage {
   display_order: number;
   is_final: boolean;
   is_blocked: boolean;
+  is_visible: boolean;
 }
 
 interface Phase {
@@ -605,7 +606,7 @@ export const ActivityKanban = ({
     }
   };
 
-  const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0), [stages]);
+  const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
   const activeColumn = dragType === "column" && activeId ? visibleStages.find((s) => `col-${s.id}` === activeId) : null;
 

@@ -3,7 +3,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, GripVertical, Pencil, Check, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Trash2, GripVertical, Pencil, Check, X, Eye, EyeOff, Users } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -23,6 +24,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface WorkflowStage {
   id: string;
@@ -32,6 +38,13 @@ interface WorkflowStage {
   display_order: number;
   is_final: boolean;
   is_blocked: boolean;
+  is_visible: boolean;
+}
+
+interface Profile {
+  id: string;
+  full_name: string | null;
+  email: string | null;
 }
 
 interface WorkflowStageManagerProps {
@@ -60,7 +73,11 @@ function SortableStageItem({
   onDelete,
   onToggleFinal,
   onToggleBlocked,
+  onToggleVisible,
   onColorChange,
+  projectMembers,
+  stageMembers,
+  onToggleMember,
 }: {
   stage: WorkflowStage;
   editingId: string | null;
@@ -72,7 +89,11 @@ function SortableStageItem({
   onDelete: (id: string) => void;
   onToggleFinal: (id: string, current: boolean) => void;
   onToggleBlocked: (id: string, current: boolean) => void;
+  onToggleVisible: (id: string, current: boolean) => void;
   onColorChange: (id: string, color: string) => void;
+  projectMembers: Profile[];
+  stageMembers: string[];
+  onToggleMember: (stageId: string, userId: string, isAssigned: boolean) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: stage.id });
@@ -88,7 +109,7 @@ function SortableStageItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 p-3 bg-muted/30 rounded-lg border border-border/50 ${isDragging ? "ring-2 ring-primary" : ""}`}
+      className={`flex items-center gap-3 p-3 bg-muted/30 rounded-lg border border-border/50 ${isDragging ? "ring-2 ring-primary" : ""} ${!stage.is_visible ? "opacity-50" : ""}`}
     >
       <button
         className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground touch-none"
@@ -140,6 +161,58 @@ function SortableStageItem({
           {stage.is_blocked && (
             <Badge className="bg-destructive/20 text-destructive text-[10px]">Bloqueio</Badge>
           )}
+          {stageMembers.length > 0 && (
+            <Badge variant="outline" className="text-[10px]">
+              <Users className="w-2.5 h-2.5 mr-1" />{stageMembers.length}
+            </Badge>
+          )}
+
+          {/* Visibility toggle */}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            title={stage.is_visible ? "Ocultar do Kanban" : "Mostrar no Kanban"}
+            onClick={() => onToggleVisible(stage.id, stage.is_visible)}
+          >
+            {stage.is_visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />}
+          </Button>
+
+          {/* Members popover */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button size="icon" variant="ghost" className="h-7 w-7" title="Membros da etapa">
+                <Users className="w-3.5 h-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3" align="end">
+              <p className="text-xs font-semibold text-foreground mb-2">Participantes desta etapa</p>
+              {projectMembers.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhum membro no projeto.</p>
+              ) : (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {projectMembers.map((member) => {
+                    const isAssigned = stageMembers.includes(member.id);
+                    return (
+                      <label
+                        key={member.id}
+                        className="flex items-center gap-2 p-1.5 rounded hover:bg-muted/50 cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={isAssigned}
+                          onCheckedChange={() => onToggleMember(stage.id, member.id, isAssigned)}
+                        />
+                        <span className="text-xs text-foreground truncate">
+                          {member.full_name || member.email || "Sem nome"}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+
           <Button
             size="sm"
             variant="ghost"
@@ -184,6 +257,8 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
   const [newTitle, setNewTitle] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+  const [projectMembers, setProjectMembers] = useState<Profile[]>([]);
+  const [stageMembersMap, setStageMembersMap] = useState<Record<string, string[]>>({});
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -192,7 +267,12 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
 
   useEffect(() => {
     fetchStages();
+    fetchProjectMembers();
   }, [projectId]);
+
+  useEffect(() => {
+    if (stages.length > 0) fetchStageMembers();
+  }, [stages.length]);
 
   const fetchStages = async () => {
     const { data } = await supabase
@@ -201,6 +281,55 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
       .eq("project_id", projectId)
       .order("display_order");
     if (data) setStages(data);
+  };
+
+  const fetchProjectMembers = async () => {
+    // Get project member user_ids, then fetch their profiles
+    const { data: members } = await supabase
+      .from("project_members")
+      .select("user_id")
+      .eq("project_id", projectId);
+    if (!members || members.length === 0) {
+      setProjectMembers([]);
+      return;
+    }
+    const userIds = members.map((m) => m.user_id);
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", userIds);
+    if (profiles) setProjectMembers(profiles);
+  };
+
+  const fetchStageMembers = async () => {
+    const stageIds = stages.map((s) => s.id);
+    const { data } = await supabase
+      .from("workflow_stage_members")
+      .select("stage_id, user_id")
+      .in("stage_id", stageIds);
+    if (data) {
+      const map: Record<string, string[]> = {};
+      stageIds.forEach((id) => (map[id] = []));
+      data.forEach((row) => {
+        if (map[row.stage_id]) map[row.stage_id].push(row.user_id);
+      });
+      setStageMembersMap(map);
+    }
+  };
+
+  const handleToggleMember = async (stageId: string, userId: string, isAssigned: boolean) => {
+    if (isAssigned) {
+      await supabase
+        .from("workflow_stage_members")
+        .delete()
+        .eq("stage_id", stageId)
+        .eq("user_id", userId);
+    } else {
+      await supabase
+        .from("workflow_stage_members")
+        .insert({ stage_id: stageId, user_id: userId });
+    }
+    fetchStageMembers();
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -285,6 +414,11 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
     fetchStages();
   };
 
+  const handleToggleVisible = async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_visible: !current }).eq("id", id);
+    fetchStages();
+  };
+
   const handleColorChange = async (id: string, color: string) => {
     await supabase.from("workflow_stages").update({ color }).eq("id", id);
     fetchStages();
@@ -295,7 +429,7 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
       <div>
         <h3 className="text-lg font-semibold text-foreground mb-1">Etapas do Workflow</h3>
         <p className="text-sm text-muted-foreground">
-          Arraste para reordenar as colunas do Kanban deste projeto.
+          Arraste para reordenar. Use o ícone 👁 para mostrar/ocultar no Kanban e 👥 para atribuir participantes.
         </p>
       </div>
 
@@ -315,7 +449,11 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
                 onDelete={handleDelete}
                 onToggleFinal={handleToggleFinal}
                 onToggleBlocked={handleToggleBlocked}
+                onToggleVisible={handleToggleVisible}
                 onColorChange={handleColorChange}
+                projectMembers={projectMembers}
+                stageMembers={stageMembersMap[stage.id] || []}
+                onToggleMember={handleToggleMember}
               />
             ))}
           </div>
