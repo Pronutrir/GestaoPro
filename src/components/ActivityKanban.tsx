@@ -305,13 +305,20 @@ export const ActivityKanban = ({
       phaseOrderMap[p.id] = i;
     });
 
-    // Sort by phase order first, then by display_order within phase (matching Phases tab)
+    // Sort by phase display_order first, then by activity display_order (1.0, 1.1, 1.1.1...)
     Object.keys(map).forEach((key) => {
       map[key].sort((a, b) => {
         const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
         const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
         if (phaseA !== phaseB) return phaseA - phaseB;
-        return (a.display_order ?? 0) - (b.display_order ?? 0);
+        // Within same phase, sort by display_order ascending (smaller first)
+        const orderA = a.display_order ?? 9999;
+        const orderB = b.display_order ?? 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        // Tie-break: parent activities before children
+        if (a.parent_id === null && b.parent_id !== null) return -1;
+        if (a.parent_id !== null && b.parent_id === null) return 1;
+        return 0;
       });
     });
 
