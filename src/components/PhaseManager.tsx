@@ -49,6 +49,7 @@ interface Activity {
   hours: number;
   phase_id: string | null;
   display_order?: number | null;
+  parent_id?: string | null;
 }
 
 interface PhaseManagerProps {
