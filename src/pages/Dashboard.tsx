@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ProjectColumn } from "@/components/ProjectColumn";
+import { ProjectDrawer } from "@/components/ProjectDrawer";
 import { AddProjectDialog } from "@/components/AddProjectDialog";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { AppLayout } from "@/components/AppLayout";
@@ -37,11 +38,15 @@ const Dashboard = () => {
   const { toast } = useToast();
   const { filterProjects, isAdmin, loading: authLoading } = useProjectAccess();
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(() => {
+    return localStorage.getItem("dashboard_category_filter") || null;
+  });
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [drawerProject, setDrawerProject] = useState<Project | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const statusFilter = searchParams.get("status");
 
   const handleStatusFilter = (status: string | null) => {
@@ -139,7 +144,7 @@ const Dashboard = () => {
             <Input placeholder="Buscar projetos..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" />
           </div>
           <div className="flex items-center gap-2">
-            <select className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" value={categoryFilter || ""} onChange={e => setCategoryFilter(e.target.value || null)}>
+            <select className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" value={categoryFilter || ""} onChange={e => { const v = e.target.value || null; setCategoryFilter(v); v ? localStorage.setItem("dashboard_category_filter", v) : localStorage.removeItem("dashboard_category_filter"); }}>
               <option value="">Todas Categorias</option>
               <option value="general">Geral</option>
               <option value="produto">Produto</option>
@@ -191,13 +196,15 @@ const Dashboard = () => {
             <div className={`grid gap-6 ${statusFilter ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-6"}`}>
               {statusCards.filter(s => !statusFilter || statusFilter === s.key).map(s => (
                 <ProjectColumn key={s.key} title={s.label} status={s.key} color={s.color} projects={s.projects}
-                  onEdit={handleEdit} onDelete={handleDelete} onStatusChange={handleStatusChange} isAdmin={isAdmin} />
+                  onEdit={handleEdit} onDelete={handleDelete} onStatusChange={handleStatusChange} isAdmin={isAdmin}
+                  onCardClick={(p: Project) => { setDrawerProject(p); setDrawerOpen(true); }} />
               ))}
             </div>
           </DndContext>
         )}
 
         <EditProjectDialog project={editingProject} open={editDialogOpen} onOpenChange={setEditDialogOpen} onProjectUpdated={fetchProjects} />
+        <ProjectDrawer project={drawerProject} open={drawerOpen} onOpenChange={setDrawerOpen} />
       </div>
     </AppLayout>
   );

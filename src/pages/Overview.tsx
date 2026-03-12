@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/NotificationBell";
+import { Sparkline } from "@/components/Sparkline";
 import {
   LayoutDashboard, TrendingUp, DollarSign, CheckCircle2, Lightbulb,
   Beaker, Rocket, AlertTriangle, Archive, Clock, Flag, CalendarClock, ListTodo,
@@ -168,6 +169,32 @@ const Overview = () => {
     return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 10);
   })();
 
+  // Sparkline data: completion trend over last 14 days
+  const sparklineCompletion = (() => {
+    const data: number[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setHours(23, 59, 59);
+      const completed = activities.filter(a => a.completed_at && new Date(a.completed_at) <= d).length;
+      data.push(completed);
+    }
+    return data;
+  })();
+
+  // Sparkline: overdue trend
+  const sparklineOverdue = (() => {
+    const data: number[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const overdue = activities.filter(a => a.status !== "completed" && a.end_date && new Date(a.end_date) < d).length;
+      data.push(overdue);
+    }
+    return data;
+  })();
+
   const statusCards = [
     { key: "ideacao", label: "Ideação", icon: Lightbulb, color: "warning", count: statusCounts.ideacao },
     { key: "poc", label: "POC", icon: Beaker, color: "info", count: statusCounts.poc },
@@ -216,8 +243,15 @@ const Overview = () => {
                   <ListTodo className="w-4 h-4 text-primary" />
                   <span className="text-sm text-muted-foreground">Conclusão de Tarefas</span>
                 </div>
-                <p className="text-3xl font-bold text-foreground">{taskCompletionRate.toFixed(0)}%</p>
-                <p className="text-xs text-muted-foreground mt-1">{completedActivities}/{totalActivities} concluídas</p>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-3xl font-bold text-foreground">{taskCompletionRate.toFixed(0)}%</p>
+                    <p className="text-xs text-muted-foreground mt-1">{completedActivities}/{totalActivities} concluídas</p>
+                  </div>
+                  <div className="w-20">
+                    <Sparkline data={sparklineCompletion} color="hsl(var(--success))" />
+                  </div>
+                </div>
               </Card>
 
               <Card className={`p-5 ${overdueActivities.length > 0 ? "border-destructive/50" : ""}`}>
@@ -225,8 +259,15 @@ const Overview = () => {
                   <AlertTriangle className={`w-4 h-4 ${overdueActivities.length > 0 ? "text-destructive" : "text-muted-foreground"}`} />
                   <span className="text-sm text-muted-foreground">Atrasadas</span>
                 </div>
-                <p className={`text-3xl font-bold ${overdueActivities.length > 0 ? "text-destructive" : "text-foreground"}`}>{overdueActivities.length}</p>
-                <p className="text-xs text-muted-foreground mt-1">tarefas vencidas</p>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className={`text-3xl font-bold ${overdueActivities.length > 0 ? "text-destructive" : "text-foreground"}`}>{overdueActivities.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1">tarefas vencidas</p>
+                  </div>
+                  <div className="w-20">
+                    <Sparkline data={sparklineOverdue} color="hsl(var(--destructive))" />
+                  </div>
+                </div>
               </Card>
 
               <Card className={`p-5 ${upcomingDeadlines.length > 0 ? "border-warning/50" : ""}`}>

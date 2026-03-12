@@ -5,14 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Calendar, MoreVertical, Pencil, Trash2, GripVertical } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { forwardRef } from "react";
+import { useHealthScore } from "@/hooks/useHealthScore";
+import { HealthBadge } from "@/components/HealthBadge";
 
 interface Project {
   id: string;
@@ -27,6 +27,7 @@ interface SortableProjectCardProps {
   project: Project;
   onEdit: (project: Project) => void;
   onDeleteClick: (projectId: string) => void;
+  onCardClick?: (project: Project) => void;
   isAdmin?: boolean;
 }
 
@@ -36,8 +37,8 @@ const priorityColors: Record<string, string> = {
   high: "bg-destructive text-destructive-foreground",
 };
 
-export const SortableProjectCard = ({ project, onEdit, onDeleteClick, isAdmin = false }: SortableProjectCardProps) => {
-  const navigate = useNavigate();
+export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClick, isAdmin = false }: SortableProjectCardProps) => {
+  const { health } = useHealthScore(project.id);
   const {
     attributes,
     listeners,
@@ -59,8 +60,8 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, isAdmin = 
     <Card
       ref={setNodeRef}
       style={style}
-      className={`p-4 hover:shadow-md transition-shadow cursor-pointer ${isDragging ? "shadow-lg ring-2 ring-primary" : ""}`}
-      onClick={() => navigate(`/project/${project.id}`)}
+      className={`p-4 cursor-pointer ${isDragging ? "shadow-lg ring-2 ring-primary" : ""}`}
+      onClick={() => onCardClick?.(project)}
     >
       <div className="space-y-3">
         <div className="flex items-start justify-between">
@@ -75,11 +76,14 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, isAdmin = 
               <GripVertical className="w-4 h-4 text-muted-foreground" />
             </button>
             <div className="flex-1">
-              <h4 className="font-medium text-foreground mb-1">
-                {project.title}
-              </h4>
+              <div className="flex items-center gap-2 mb-1">
+                <h4 className="font-semibold text-foreground">
+                  {project.title}
+                </h4>
+                {health && <HealthBadge health={health} />}
+              </div>
               <p className="text-sm text-muted-foreground line-clamp-2">
-                {project.description || "Sem descrição"}
+                {project.description || <span className="italic text-muted-foreground/60">Clique para adicionar uma descrição</span>}
               </p>
             </div>
           </div>
