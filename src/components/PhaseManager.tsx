@@ -49,6 +49,7 @@ interface Activity {
   hours: number;
   phase_id: string | null;
   display_order?: number | null;
+  parent_id?: string | null;
 }
 
 interface PhaseManagerProps {
@@ -85,6 +86,15 @@ export const PhaseManager = ({
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [quickAddTitle, setQuickAddTitle] = useState<Record<string, string>>({});
+  const [quickAddSubTitle, setQuickAddSubTitle] = useState<Record<string, string>>({});
+  const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
+
+  const toggleActivityExpand = (activityId: string) => {
+    const newSet = new Set(expandedActivities);
+    if (newSet.has(activityId)) newSet.delete(activityId);
+    else newSet.add(activityId);
+    setExpandedActivities(newSet);
+  };
 
   const togglePhase = (phaseId: string) => {
     const newExpanded = new Set(expandedPhases);
@@ -97,7 +107,35 @@ export const PhaseManager = ({
   };
 
   const getActivitiesForPhase = (phaseId: string | null) => {
-    return activities.filter((a) => a.phase_id === phaseId);
+    return activities.filter((a) => a.phase_id === phaseId && !a.parent_id);
+  };
+
+  const getSubActivities = (parentId: string) => {
+    return activities.filter((a) => a.parent_id === parentId)
+      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+  };
+
+  const handleQuickAddSubActivity = async (parentActivity: Activity) => {
+    const title = quickAddSubTitle[parentActivity.id]?.trim();
+    if (!title) return;
+    try {
+      const subs = getSubActivities(parentActivity.id);
+      const maxOrder = subs.reduce((max, a) => Math.max(max, a.display_order ?? 0), 0);
+      const { error } = await supabase.from("activities").insert({
+        project_id: projectId,
+        title,
+        phase_id: parentActivity.phase_id,
+        parent_id: parentActivity.id,
+        display_order: maxOrder + 1,
+      });
+      if (error) throw error;
+      setQuickAddSubTitle((prev) => ({ ...prev, [parentActivity.id]: "" }));
+      setExpandedActivities((prev) => new Set(prev).add(parentActivity.id));
+      onDataChanged();
+    } catch (error) {
+      console.error("Erro ao criar sub-atividade:", error);
+      toast({ title: "Erro ao criar sub-atividade", variant: "destructive" });
+    }
   };
 
   const calculatePhaseProgress = (phaseId: string) => {
@@ -426,19 +464,64 @@ export const PhaseManager = ({
                       ) : (
                         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleActivityDragEnd(e, phase.id)}>
                           <SortableContext items={phaseActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map(a => a.id)} strategy={verticalListSortingStrategy}>
-                            {phaseActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map((activity) => (
-                              <SortableActivityCard key={activity.id} id={activity.id}>
-                  <ActivityCard
-                    activity={activity}
-                    phases={phases}
-                    onEdit={onEditActivity}
-                    onDelete={onDeleteActivity}
-                    onToggle={onToggleActivity}
-                    onMoveToPhase={handleMoveActivity}
-                    isAdmin={isAdmin}
-                  />
-                              </SortableActivityCard>
-                            ))}
+                            {phaseActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map((activity) => {
+                              const subs = getSubActivities(activity.id);
+                              const isActivityExpanded = expandedActivities.has(activity.id);
+                              return (
+                                <div key={activity.id} className="space-y-1">
+                                  <SortableActivityCard id={activity.id}>
+                                    <ActivityCard
+                                      activity={activity}
+                                      phases={phases}
+                                      onEdit={onEditActivity}
+                                      onDelete={onDeleteActivity}
+                                      onToggle={onToggleActivity}
+                                      onMoveToPhase={handleMoveActivity}
+                                      isAdmin={isAdmin}
+                                      subCount={subs.length}
+                                      isExpanded={isActivityExpanded}
+                                      onToggleExpand={() => toggleActivityExpand(activity.id)}
+                                    />
+                                  </SortableActivityCard>
+                                  {isActivityExpanded && (
+                                    <div className="ml-8 space-y-1 border-l-2 border-primary/20 pl-3">
+                                      {subs.map((sub) => (
+                                        <div key={sub.id} className="flex items-center gap-3 p-2 bg-muted/30 rounded-md border border-border/50 group">
+                                          <input
+                                            type="checkbox"
+                                            checked={sub.status === "completed"}
+                                            onChange={() => onToggleActivity(sub.id, sub.status)}
+                                            className="h-3.5 w-3.5 rounded border-input"
+                                          />
+                                          <p className={`text-xs font-medium truncate flex-1 ${sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                                            {sub.title}
+                                          </p>
+                                          {sub.assigned_to && <span className="text-[10px] text-muted-foreground">👤 {sub.assigned_to}</span>}
+                                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditActivity(sub)}><Pencil className="w-3 h-3" /></Button>
+                                            {isAdmin && <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => onDeleteActivity(sub.id)}><Trash2 className="w-3 h-3" /></Button>}
+                                          </div>
+                                        </div>
+                                      ))}
+                                      {isAdmin && (
+                                        <div className="flex gap-2">
+                                          <Input
+                                            placeholder="Nova sub-atividade..."
+                                            value={quickAddSubTitle[activity.id] || ""}
+                                            onChange={(e) => setQuickAddSubTitle((prev) => ({ ...prev, [activity.id]: e.target.value }))}
+                                            onKeyDown={(e) => { if (e.key === "Enter") handleQuickAddSubActivity(activity); }}
+                                            className="h-7 text-xs"
+                                          />
+                                          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => handleQuickAddSubActivity(activity)}>
+                                            <Plus className="w-3 h-3" />
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </SortableContext>
                         </DndContext>
                       )}
@@ -473,19 +556,48 @@ export const PhaseManager = ({
           </div>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleActivityDragEnd(e, null)}>
             <SortableContext items={unassignedActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map(a => a.id)} strategy={verticalListSortingStrategy}>
-              {unassignedActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map((activity) => (
-                <SortableActivityCard key={activity.id} id={activity.id}>
-                  <ActivityCard
-                    activity={activity}
-                    phases={phases}
-                    onEdit={onEditActivity}
-                    onDelete={onDeleteActivity}
-                    onToggle={onToggleActivity}
-                    onMoveToPhase={handleMoveActivity}
-                    isAdmin={isAdmin}
-                  />
-                </SortableActivityCard>
-              ))}
+              {unassignedActivities.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)).map((activity) => {
+                const subs = getSubActivities(activity.id);
+                const isActivityExpanded = expandedActivities.has(activity.id);
+                return (
+                  <div key={activity.id} className="space-y-1">
+                    <SortableActivityCard id={activity.id}>
+                      <ActivityCard
+                        activity={activity}
+                        phases={phases}
+                        onEdit={onEditActivity}
+                        onDelete={onDeleteActivity}
+                        onToggle={onToggleActivity}
+                        onMoveToPhase={handleMoveActivity}
+                        isAdmin={isAdmin}
+                        subCount={subs.length}
+                        isExpanded={isActivityExpanded}
+                        onToggleExpand={() => toggleActivityExpand(activity.id)}
+                      />
+                    </SortableActivityCard>
+                    {isActivityExpanded && (
+                      <div className="ml-8 space-y-1 border-l-2 border-primary/20 pl-3">
+                        {subs.map((sub) => (
+                          <div key={sub.id} className="flex items-center gap-3 p-2 bg-muted/30 rounded-md border border-border/50 group">
+                            <input type="checkbox" checked={sub.status === "completed"} onChange={() => onToggleActivity(sub.id, sub.status)} className="h-3.5 w-3.5 rounded border-input" />
+                            <p className={`text-xs font-medium truncate flex-1 ${sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>{sub.title}</p>
+                            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditActivity(sub)}><Pencil className="w-3 h-3" /></Button>
+                              {isAdmin && <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => onDeleteActivity(sub.id)}><Trash2 className="w-3 h-3" /></Button>}
+                            </div>
+                          </div>
+                        ))}
+                        {isAdmin && (
+                          <div className="flex gap-2">
+                            <Input placeholder="Nova sub-atividade..." value={quickAddSubTitle[activity.id] || ""} onChange={(e) => setQuickAddSubTitle((prev) => ({ ...prev, [activity.id]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") handleQuickAddSubActivity(activity); }} className="h-7 text-xs" />
+                            <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => handleQuickAddSubActivity(activity)}><Plus className="w-3 h-3" /></Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </SortableContext>
           </DndContext>
         </Card>
@@ -503,6 +615,9 @@ interface ActivityCardProps {
   onToggle: (activityId: string, status: string) => void;
   onMoveToPhase: (activityId: string, phaseId: string | null) => void;
   isAdmin?: boolean;
+  subCount?: number;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 const ActivityCard = ({
@@ -513,11 +628,21 @@ const ActivityCard = ({
   onToggle,
   onMoveToPhase,
   isAdmin = false,
+  subCount = 0,
+  isExpanded = false,
+  onToggleExpand,
 }: ActivityCardProps) => {
   const [showPhaseSelector, setShowPhaseSelector] = useState(false);
 
   return (
     <div className="flex items-center gap-3 p-3 bg-card rounded-lg border border-border group">
+      {subCount > 0 ? (
+        <button onClick={onToggleExpand} className="text-muted-foreground hover:text-foreground transition-colors">
+          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </button>
+      ) : (
+        <div className="w-4" />
+      )}
       <input
         type="checkbox"
         checked={activity.status === "completed"}
@@ -533,6 +658,9 @@ const ActivityCard = ({
           {activity.title}
         </p>
         <div className="flex items-center gap-2 mt-1">
+          {subCount > 0 && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{subCount} sub</Badge>
+          )}
           {activity.assigned_to && (
             <span className="text-xs text-muted-foreground">👤 {activity.assigned_to}</span>
           )}
