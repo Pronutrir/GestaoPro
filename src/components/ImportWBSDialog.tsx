@@ -166,8 +166,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         <div className="space-y-4">
           <div>
             <p className="text-sm text-muted-foreground mb-2">
-              Cole a estrutura WBS abaixo. Níveis 1.0 e 1.1 serão criados como <strong>fases</strong>, 
-              e níveis 1.1.1 como <strong>atividades</strong>.
+              Cole a estrutura WBS abaixo. Nível <strong>X.0</strong> = fase, <strong>X.Y</strong> = atividade, 
+              <strong>X.Y.Z</strong> = sub-atividade.
             </p>
             <Textarea
               placeholder={`Exemplo:\n1.0 Gestão do Projeto\n1.1 Iniciação do Projeto\n1.1.1 Elaboração do Termo de Abertura\n1.1.2 Definição dos objetivos`}
