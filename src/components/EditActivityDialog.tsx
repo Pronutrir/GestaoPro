@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ActivityLogbook } from "@/components/ActivityLogbook";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,6 +68,20 @@ export const EditActivityDialog = ({
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
+  const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
+
+  useEffect(() => {
+    if (projectId) {
+      supabase.from("project_members").select("user_id").eq("project_id", projectId).then(({ data: memberData }) => {
+        if (memberData && memberData.length > 0) {
+          const userIds = memberData.map(m => m.user_id);
+          supabase.from("profiles").select("full_name, sector").in("id", userIds).then(({ data: profiles }) => {
+            if (profiles) setMembers(profiles.filter(p => p.full_name));
+          });
+        }
+      });
+    }
+  }, [projectId]);
 
   useEffect(() => {
     if (activity) {
@@ -227,7 +240,18 @@ export const EditActivityDialog = ({
             <Label htmlFor="assigned_to" className="text-sm font-semibold text-foreground flex items-center gap-2">
               <User className="w-4 h-4" /> Responsável
             </Label>
-            <Input id="assigned_to" value={formData.assigned_to} onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })} placeholder="Nome do responsável" />
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={formData.assigned_to}
+              onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+            >
+              <option value="">Sem responsável</option>
+              {members.map((m) => (
+                <option key={m.full_name} value={m.full_name!}>
+                  {m.full_name}{m.sector ? ` (${m.sector})` : ""}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -317,12 +341,8 @@ export const EditActivityDialog = ({
             </div>
           )}
 
-          {/* Diário de Bordo */}
-          {activity && projectId && (
-            <div className="border-t border-border pt-4">
-              <ActivityLogbook activityId={activity.id} projectId={projectId} />
-            </div>
-          )}
+
+
 
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
