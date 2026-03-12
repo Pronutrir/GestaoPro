@@ -347,6 +347,7 @@ function SortableColumn({
                 onEdit={() => onEditActivity(activity)}
                 onDelete={() => onDeleteActivity(activity.id)}
                 onToggle={() => onToggleActivity(activity.id, activity.status)}
+                onMoveToBacklog={() => onMoveToBacklog(activity.id)}
                 isAdmin={isAdmin}
                 isBlocked={stage.is_blocked}
               />
