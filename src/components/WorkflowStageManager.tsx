@@ -31,6 +31,7 @@ interface WorkflowStage {
   color: string;
   display_order: number;
   is_final: boolean;
+  is_blocked: boolean;
 }
 
 interface WorkflowStageManagerProps {
@@ -58,6 +59,7 @@ function SortableStageItem({
   onRename,
   onDelete,
   onToggleFinal,
+  onToggleBlocked,
   onColorChange,
 }: {
   stage: WorkflowStage;
@@ -69,6 +71,7 @@ function SortableStageItem({
   onRename: (id: string) => void;
   onDelete: (id: string) => void;
   onToggleFinal: (id: string, current: boolean) => void;
+  onToggleBlocked: (id: string, current: boolean) => void;
   onColorChange: (id: string, color: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -134,6 +137,9 @@ function SortableStageItem({
           {stage.is_final && (
             <Badge className="bg-success/20 text-success text-[10px]">Final</Badge>
           )}
+          {stage.is_blocked && (
+            <Badge className="bg-destructive/20 text-destructive text-[10px]">Bloqueio</Badge>
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -141,6 +147,14 @@ function SortableStageItem({
             onClick={() => onToggleFinal(stage.id, stage.is_final)}
           >
             {stage.is_final ? "Remover final" : "Marcar final"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => onToggleBlocked(stage.id, stage.is_blocked)}
+          >
+            {stage.is_blocked ? "Remover bloqueio" : "Marcar bloqueio"}
           </Button>
           <Button
             size="icon"
@@ -262,7 +276,12 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
   };
 
   const handleToggleFinal = async (id: string, current: boolean) => {
-    await supabase.from("workflow_stages").update({ is_final: !current }).eq("id", id);
+    await supabase.from("workflow_stages").update({ is_final: !current, ...(current ? {} : { is_blocked: false }) }).eq("id", id);
+    fetchStages();
+  };
+
+  const handleToggleBlocked = async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_blocked: !current, ...(current ? {} : { is_final: false }) }).eq("id", id);
     fetchStages();
   };
 
@@ -295,6 +314,7 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
                 onRename={handleRename}
                 onDelete={handleDelete}
                 onToggleFinal={handleToggleFinal}
+                onToggleBlocked={handleToggleBlocked}
                 onColorChange={handleColorChange}
               />
             ))}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Bell, Check, Trash2, AlertTriangle, Clock, Info, BellRing, X } from "lucide-react";
+import { Bell, Check, Trash2, AlertTriangle, Clock, Info, BellRing, X, Ban } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -74,6 +74,13 @@ export const NotificationBell = () => {
           icon: <Clock className="w-4 h-4" />,
           color: "text-warning",
           bg: "bg-warning/10 border-warning/30",
+          pulse: true,
+        };
+      case "blocked":
+        return {
+          icon: <Ban className="w-4 h-4" />,
+          color: "text-orange-600",
+          bg: "bg-orange-500/10 border-orange-500/30",
           pulse: true,
         };
       default:

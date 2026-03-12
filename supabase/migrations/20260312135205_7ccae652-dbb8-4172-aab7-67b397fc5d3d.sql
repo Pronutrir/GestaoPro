@@ -1,0 +1,1 @@
+ALTER TABLE public.workflow_stages ADD COLUMN is_blocked boolean NOT NULL DEFAULT false;

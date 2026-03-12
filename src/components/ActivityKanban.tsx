@@ -37,6 +37,7 @@ interface WorkflowStage {
   color: string;
   display_order: number;
   is_final: boolean;
+  is_blocked: boolean;
 }
 
 interface Phase {
@@ -82,6 +83,7 @@ function SortableKanbanCard({
   onDelete,
   onToggle,
   isAdmin,
+  isBlocked,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -89,6 +91,7 @@ function SortableKanbanCard({
   onDelete: () => void;
   onToggle: () => void;
   isAdmin?: boolean;
+  isBlocked?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -109,6 +112,7 @@ function SortableKanbanCard({
         onToggle={onToggle}
         dragListeners={listeners}
         isAdmin={isAdmin}
+        isBlocked={isBlocked}
       />
     </div>
   );
@@ -122,6 +126,7 @@ function KanbanCard({
   onToggle,
   dragListeners,
   isAdmin,
+  isBlocked,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -130,6 +135,7 @@ function KanbanCard({
   onToggle: () => void;
   dragListeners?: any;
   isAdmin?: boolean;
+  isBlocked?: boolean;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -147,11 +153,15 @@ function KanbanCard({
   const parseDate = (d: string) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day); };
   const isOverdue = activity.end_date && parseDate(activity.end_date) < new Date() && activity.status !== "completed";
 
+  const cardBorderClass = isBlocked
+    ? "border-orange-500 border-l-[3px] border-l-orange-500 bg-orange-500/5"
+    : isOverdue
+      ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue"
+      : "border-border";
+
   return (
     <div
-      className={`bg-card border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group ${
-        isOverdue ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue" : "border-border"
-      }`}
+      className={`bg-card border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group ${cardBorderClass}`}
       onClick={onEdit}
     >
       <div className="flex items-start gap-2">
@@ -183,6 +193,11 @@ function KanbanCard({
           )}
 
           <div className="flex flex-wrap gap-1">
+            {isBlocked && (
+              <Badge className="bg-orange-500/20 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0">
+                🚫 Bloqueada
+              </Badge>
+            )}
             {activity.assigned_to && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                 👤 {activity.assigned_to}
@@ -421,6 +436,18 @@ export const ActivityKanban = ({
           completed_at: completedAt,
         })
         .eq("id", activityId);
+
+      // Generate blocked notification when moving to a blocked stage
+      if (stage?.is_blocked && draggedActivity) {
+        await supabase.from("notifications").insert({
+          project_id: projectId,
+          activity_id: activityId,
+          type: "blocked",
+          title: "🚫 Atividade bloqueada: " + draggedActivity.title,
+          message: `A atividade "${draggedActivity.title}" foi movida para a etapa "${stage.title}" e está bloqueada.`,
+        });
+      }
+
       onDataChanged();
     } catch {
       toast({ title: "Erro ao mover atividade", variant: "destructive" });
@@ -449,7 +476,9 @@ export const ActivityKanban = ({
           return (
             <div
               key={stage.id}
-              className="relative flex-shrink-0 bg-muted/30 rounded-xl border border-border/50 flex flex-col"
+              className={`relative flex-shrink-0 rounded-xl border flex flex-col ${
+                stage.is_blocked ? "bg-orange-500/5 border-orange-500/40" : "bg-muted/30 border-border/50"
+              }`}
               style={{ width: `${widthPct}%`, marginRight: idx < arr.length - 1 ? 6 : 0 }}
             >
               {/* Column Header */}
@@ -488,6 +517,7 @@ export const ActivityKanban = ({
                         onDelete={() => onDeleteActivity(activity.id)}
                         onToggle={() => onToggleActivity(activity.id, activity.status)}
                         isAdmin={isAdmin}
+                        isBlocked={stage.is_blocked}
                       />
                     ))
                   )}
