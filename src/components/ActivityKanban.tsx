@@ -132,6 +132,7 @@ function KanbanCard({
   onEdit,
   onDelete,
   onToggle,
+  onMoveToBacklog,
   dragListeners,
   isAdmin,
   isBlocked,
@@ -141,6 +142,7 @@ function KanbanCard({
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
+  onMoveToBacklog: () => void;
   dragListeners?: any;
   isAdmin?: boolean;
   isBlocked?: boolean;
