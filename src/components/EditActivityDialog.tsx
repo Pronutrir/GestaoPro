@@ -196,15 +196,6 @@ export const EditActivityDialog = ({
                 </select>
               </div>
             )}
-            {parentCandidates.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold text-foreground">Sub-tarefa de</Label>
-                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.parent_id} onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}>
-                  <option value="">Nenhuma (tarefa principal)</option>
-                  {parentCandidates.map((a) => (<option key={a.id} value={a.id}>{a.title}</option>))}
-                </select>
-              </div>
-            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
