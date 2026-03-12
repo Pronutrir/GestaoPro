@@ -469,20 +469,24 @@ const ProjectDetails = () => {
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="mb-4 flex-wrap h-auto gap-1">
-                <TabsTrigger value="phases" className="gap-2"><Layers className="w-4 h-4" />Fases</TabsTrigger>
-                <TabsTrigger value="kanban" className="gap-2"><Kanban className="w-4 h-4" />Kanban</TabsTrigger>
-                <TabsTrigger value="timeline" className="gap-2"><GanttChart className="w-4 h-4" />Cronograma</TabsTrigger>
-                
-                <TabsTrigger value="documents" className="gap-2"><FileText className="w-4 h-4" />Documentos</TabsTrigger>
-                <TabsTrigger value="meetings" className="gap-2"><Users className="w-4 h-4" />Reuniões</TabsTrigger>
-                <TabsTrigger value="deliveries" className="gap-2"><Package className="w-4 h-4" />Entregas</TabsTrigger>
-                <TabsTrigger value="assumptions" className="gap-2"><ShieldCheck className="w-4 h-4" />Premissas</TabsTrigger>
-                <TabsTrigger value="risks" className="gap-2"><AlertTriangle className="w-4 h-4" />Riscos</TabsTrigger>
-                <TabsTrigger value="lessons" className="gap-2"><BookOpen className="w-4 h-4" />Lições</TabsTrigger>
-                <TabsTrigger value="backlog" className="gap-2"><Inbox className="w-4 h-4" />Backlog</TabsTrigger>
-                <TabsTrigger value="workflow" className="gap-2"><Settings2 className="w-4 h-4" />Workflow</TabsTrigger>
-              </TabsList>
+              <DraggableTabBar
+                storageKey={`project-tabs-order-${id}`}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                tabs={[
+                  { value: "phases", label: "Fases", icon: <Layers className="w-4 h-4" /> },
+                  { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" /> },
+                  { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
+                  { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" /> },
+                  { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" /> },
+                  { value: "deliveries", label: "Entregas", icon: <Package className="w-4 h-4" /> },
+                  { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" /> },
+                  { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" /> },
+                  { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" /> },
+                  { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" /> },
+                  { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" /> },
+                ]}
+              />
 
               <TabsContent value="phases" className="mt-0">
                 <PhaseManager
