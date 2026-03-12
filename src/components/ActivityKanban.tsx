@@ -762,6 +762,7 @@ export const ActivityKanban = ({
           </div>
         ) : null}
       </DragOverlay>
-    </DndContext>
+      </DndContext>
+    </div>
   );
 };
