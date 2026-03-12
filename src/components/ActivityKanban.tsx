@@ -156,7 +156,7 @@ function KanbanCard({
           <div className="flex items-center gap-1.5 mb-1">
             {getPriorityIndicator(activity.priority)}
             <p
-              className={`text-sm font-medium truncate ${
+              className={`text-xs font-medium truncate ${
                 activity.status === "completed"
                   ? "line-through text-muted-foreground"
                   : "text-foreground"
