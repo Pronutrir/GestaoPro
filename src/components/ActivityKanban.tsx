@@ -9,6 +9,7 @@ import {
   Circle,
   GripVertical,
   AlertCircle,
+  Inbox,
 } from "lucide-react";
 import {
   DndContext,
