@@ -141,7 +141,7 @@ const Dashboard = () => {
             <Input placeholder="Buscar projetos..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" />
           </div>
           <div className="flex items-center gap-2">
-            <select className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" value={categoryFilter || ""} onChange={e => setCategoryFilter(e.target.value || null)}>
+            <select className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" value={categoryFilter || ""} onChange={e => { const v = e.target.value || null; setCategoryFilter(v); v ? localStorage.setItem("dashboard_category_filter", v) : localStorage.removeItem("dashboard_category_filter"); }}>
               <option value="">Todas Categorias</option>
               <option value="general">Geral</option>
               <option value="produto">Produto</option>
