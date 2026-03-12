@@ -230,6 +230,22 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   };
 
   const handleEdit = (m: Meeting) => {
+    // Parse daily/retro fields from minutes if applicable
+    let daily_yesterday = "", daily_today = "", daily_impediment = "";
+    let retro_good = "", retro_bad = "", retro_improve = "";
+    
+    if (m.meeting_type === "daily" && m.minutes) {
+      const parts = m.minutes.split(/\*\*[^*]+\*\*\n?/);
+      daily_yesterday = parts[1]?.trim() || "";
+      daily_today = parts[2]?.trim() || "";
+      daily_impediment = parts[3]?.trim() || "";
+    } else if (m.meeting_type === "retrospective" && m.minutes) {
+      const parts = m.minutes.split(/\*\*[^*]+\*\*\n?/);
+      retro_good = parts[1]?.trim() || "";
+      retro_bad = parts[2]?.trim() || "";
+      retro_improve = parts[3]?.trim() || "";
+    }
+    
     setForm({
       title: m.title,
       meeting_date: m.meeting_date ? m.meeting_date.slice(0, 16) : "",
@@ -241,6 +257,13 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       phase_id: m.phase_id || "",
       participants: m.participants || [],
       responsible: m.responsible || "",
+      meeting_type: m.meeting_type || "general",
+      daily_yesterday,
+      daily_today,
+      daily_impediment,
+      retro_good,
+      retro_bad,
+      retro_improve,
     });
     setEditingId(m.id);
     setShowForm(true);
