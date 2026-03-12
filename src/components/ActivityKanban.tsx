@@ -192,11 +192,12 @@ function KanbanCard({
               <Badge
                 variant="outline"
                 className={`text-[10px] px-1.5 py-0 ${
-                  new Date(activity.end_date) < new Date() && activity.status !== "completed"
-                    ? "border-destructive/50 text-destructive"
+                  isOverdue
+                    ? "border-destructive bg-destructive/10 text-destructive font-semibold"
                     : ""
                 }`}
               >
+                {isOverdue && <AlertCircle className="w-2.5 h-2.5 mr-0.5" />}
                 📅 {new Date(activity.end_date).toLocaleDateString("pt-BR")}
               </Badge>
             )}
