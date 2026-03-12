@@ -1047,6 +1047,35 @@ export type Database = {
         }
         Relationships: []
       }
+      workflow_stage_members: {
+        Row: {
+          created_at: string
+          id: string
+          stage_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          stage_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          stage_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_stage_members_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workflow_stages: {
         Row: {
           color: string
@@ -1055,6 +1084,7 @@ export type Database = {
           id: string
           is_blocked: boolean
           is_final: boolean
+          is_visible: boolean
           project_id: string
           title: string
         }
@@ -1065,6 +1095,7 @@ export type Database = {
           id?: string
           is_blocked?: boolean
           is_final?: boolean
+          is_visible?: boolean
           project_id: string
           title: string
         }
@@ -1075,6 +1106,7 @@ export type Database = {
           id?: string
           is_blocked?: boolean
           is_final?: boolean
+          is_visible?: boolean
           project_id?: string
           title?: string
         }
