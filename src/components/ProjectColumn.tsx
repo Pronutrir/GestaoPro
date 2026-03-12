@@ -45,6 +45,7 @@ export const ProjectColumn = ({
   onEdit,
   onDelete,
   onStatusChange,
+  onCardClick,
   isAdmin = false,
 }: ProjectColumnProps) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
