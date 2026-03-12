@@ -356,6 +356,7 @@ function SortableColumn({
 }
 
 
+function DroppableColumn({
   stage,
   children,
 }: {
