@@ -107,7 +107,35 @@ export const PhaseManager = ({
   };
 
   const getActivitiesForPhase = (phaseId: string | null) => {
-    return activities.filter((a) => a.phase_id === phaseId);
+    return activities.filter((a) => a.phase_id === phaseId && !a.parent_id);
+  };
+
+  const getSubActivities = (parentId: string) => {
+    return activities.filter((a) => a.parent_id === parentId)
+      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+  };
+
+  const handleQuickAddSubActivity = async (parentActivity: Activity) => {
+    const title = quickAddSubTitle[parentActivity.id]?.trim();
+    if (!title) return;
+    try {
+      const subs = getSubActivities(parentActivity.id);
+      const maxOrder = subs.reduce((max, a) => Math.max(max, a.display_order ?? 0), 0);
+      const { error } = await supabase.from("activities").insert({
+        project_id: projectId,
+        title,
+        phase_id: parentActivity.phase_id,
+        parent_id: parentActivity.id,
+        display_order: maxOrder + 1,
+      });
+      if (error) throw error;
+      setQuickAddSubTitle((prev) => ({ ...prev, [parentActivity.id]: "" }));
+      setExpandedActivities((prev) => new Set(prev).add(parentActivity.id));
+      onDataChanged();
+    } catch (error) {
+      console.error("Erro ao criar sub-atividade:", error);
+      toast({ title: "Erro ao criar sub-atividade", variant: "destructive" });
+    }
   };
 
   const calculatePhaseProgress = (phaseId: string) => {
