@@ -126,6 +126,7 @@ const ProjectDetails = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [editActivityDialogOpen, setEditActivityDialogOpen] = useState(false);
+  const [sprintGoal, setSprintGoal] = useState("");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -514,6 +515,8 @@ const ProjectDetails = () => {
                   onDeleteActivity={handleDeleteActivity}
                   onToggleActivity={handleToggleActivity}
                   isAdmin={isAdmin}
+                  sprintGoal={sprintGoal}
+                  onSprintGoalChange={(goal) => setSprintGoal(goal)}
                 />
               </TabsContent>
 
@@ -539,6 +542,24 @@ const ProjectDetails = () => {
                       priority: "medium",
                     });
                     fetchProjectData();
+                  }}
+                  onCreateBlocker={async (description) => {
+                    await supabase.from("risks").insert({
+                      project_id: id!,
+                      description,
+                      probability: "high",
+                      impact: "high",
+                      status: "identified",
+                      category: "impediment",
+                    });
+                  }}
+                  onCreateLesson={async (problem, suggestion) => {
+                    await supabase.from("lessons_learned").insert({
+                      project_id: id!,
+                      problem,
+                      suggestion: suggestion || null,
+                      category: "process",
+                    });
                   }}
                 />
               </TabsContent>

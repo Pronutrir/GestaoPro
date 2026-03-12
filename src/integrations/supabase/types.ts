@@ -29,8 +29,10 @@ export type Database = {
           phase_id: string | null
           priority: string
           project_id: string
+          sprint_id: string | null
           start_date: string | null
           status: string
+          story_points: number | null
           tags: string[] | null
           title: string
           updated_at: string
@@ -50,8 +52,10 @@ export type Database = {
           phase_id?: string | null
           priority?: string
           project_id: string
+          sprint_id?: string | null
           start_date?: string | null
           status?: string
+          story_points?: number | null
           tags?: string[] | null
           title: string
           updated_at?: string
@@ -71,8 +75,10 @@ export type Database = {
           phase_id?: string | null
           priority?: string
           project_id?: string
+          sprint_id?: string | null
           start_date?: string | null
           status?: string
+          story_points?: number | null
           tags?: string[] | null
           title?: string
           updated_at?: string
@@ -98,6 +104,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_sprint_id_fkey"
+            columns: ["sprint_id"]
+            isOneToOne: false
+            referencedRelation: "sprints"
             referencedColumns: ["id"]
           },
           {
@@ -512,11 +525,13 @@ export type Database = {
           id: string
           location: string | null
           meeting_date: string | null
+          meeting_type: string
           minutes: string | null
           participants: string[] | null
           phase_id: string | null
           project_id: string
           responsible: string | null
+          sprint_id: string | null
           start_time: string | null
           title: string
           updated_at: string
@@ -529,11 +544,13 @@ export type Database = {
           id?: string
           location?: string | null
           meeting_date?: string | null
+          meeting_type?: string
           minutes?: string | null
           participants?: string[] | null
           phase_id?: string | null
           project_id: string
           responsible?: string | null
+          sprint_id?: string | null
           start_time?: string | null
           title: string
           updated_at?: string
@@ -546,11 +563,13 @@ export type Database = {
           id?: string
           location?: string | null
           meeting_date?: string | null
+          meeting_type?: string
           minutes?: string | null
           participants?: string[] | null
           phase_id?: string | null
           project_id?: string
           responsible?: string | null
+          sprint_id?: string | null
           start_time?: string | null
           title?: string
           updated_at?: string
@@ -568,6 +587,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetings_sprint_id_fkey"
+            columns: ["sprint_id"]
+            isOneToOne: false
+            referencedRelation: "sprints"
             referencedColumns: ["id"]
           },
         ]
@@ -997,6 +1023,50 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      sprints: {
+        Row: {
+          created_at: string
+          end_date: string
+          goal: string | null
+          id: string
+          project_id: string
+          start_date: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          goal?: string | null
+          id?: string
+          project_id: string
+          start_date: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          goal?: string | null
+          id?: string
+          project_id?: string
+          start_date?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sprints_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       task_dependencies: {
         Row: {

@@ -68,6 +68,7 @@ interface Activity {
   tags?: string[];
   parent_id?: string | null;
   workflow_stage_id?: string | null;
+  story_points?: number;
 }
 
 interface ActivityKanbanProps {
@@ -79,6 +80,8 @@ interface ActivityKanbanProps {
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   isAdmin?: boolean;
+  sprintGoal?: string;
+  onSprintGoalChange?: (goal: string) => void;
 }
 
 function SortableKanbanCard({
@@ -224,6 +227,11 @@ function KanbanCard({
               >
                 {isOverdue && <AlertCircle className="w-2.5 h-2.5 mr-0.5" />}
                 📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR")}
+              </Badge>
+            )}
+            {(activity as any).story_points > 0 && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-bold">
+                🎯 {(activity as any).story_points} SP
               </Badge>
             )}
             {activity.hours > 0 && (
@@ -400,6 +408,8 @@ export const ActivityKanban = ({
   onDeleteActivity,
   onToggleActivity,
   isAdmin = false,
+  sprintGoal = "",
+  onSprintGoalChange,
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
@@ -649,9 +659,15 @@ export const ActivityKanban = ({
     }
   };
 
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalDraft, setGoalDraft] = useState(sprintGoal);
+
   const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
   const activeColumn = dragType === "column" && activeId ? visibleStages.find((s) => `col-${s.id}` === activeId) : null;
+
+  const totalSP = activities.reduce((sum, a) => sum + ((a as any).story_points || 0), 0);
+  const completedSP = activities.filter(a => a.status === "completed").reduce((sum, a) => sum + ((a as any).story_points || 0), 0);
 
   if (stages.length === 0) {
     return (
@@ -662,17 +678,45 @@ export const ActivityKanban = ({
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={rectIntersection}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext
-        items={visibleStages.map((s) => `col-${s.id}`)}
-        strategy={horizontalListSortingStrategy}
+    <div className="space-y-3">
+      {/* Sprint Goal Banner */}
+      <div className="flex items-center gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
+        <span className="text-sm font-bold text-primary shrink-0">🎯 Sprint Goal:</span>
+        {editingGoal ? (
+          <div className="flex-1 flex gap-2">
+            <input
+              className="flex-1 h-8 rounded-md border border-input bg-background px-3 text-sm"
+              value={goalDraft}
+              onChange={(e) => setGoalDraft(e.target.value)}
+              placeholder="Defina o objetivo da Sprint..."
+              autoFocus
+            />
+            <Button size="sm" className="h-8" onClick={() => { onSprintGoalChange?.(goalDraft); setEditingGoal(false); }}>Salvar</Button>
+            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setGoalDraft(sprintGoal); setEditingGoal(false); }}>Cancelar</Button>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-between">
+            <p className="text-sm text-foreground cursor-pointer hover:text-primary" onClick={() => setEditingGoal(true)}>
+              {sprintGoal || <span className="text-muted-foreground italic">Clique para definir o objetivo da Sprint...</span>}
+            </p>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+              <span className="font-medium">{completedSP}/{totalSP} SP</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={rectIntersection}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
       >
-        <div ref={containerRef} className="flex pb-4 w-full" style={{ minHeight: 400 }}>
+        <SortableContext
+          items={visibleStages.map((s) => `col-${s.id}`)}
+          strategy={horizontalListSortingStrategy}
+        >
+          <div ref={containerRef} className="flex pb-4 w-full" style={{ minHeight: 400 }}>
           {visibleStages.map((stage, idx) => {
             const stageActivities = activitiesByStage[stage.id] || [];
             const widthPct = columnWidths[stage.id] || (100 / visibleStages.length);
@@ -718,6 +762,7 @@ export const ActivityKanban = ({
           </div>
         ) : null}
       </DragOverlay>
-    </DndContext>
+      </DndContext>
+    </div>
   );
 };

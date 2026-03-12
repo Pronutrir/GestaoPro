@@ -21,6 +21,7 @@ import {
   Clock,
   Building2,
   Briefcase,
+  Lightbulb,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -41,6 +42,7 @@ interface Meeting {
   created_at: string;
   created_by: string | null;
   responsible: string | null;
+  meeting_type?: string;
 }
 
 interface MeetingDecision {
@@ -76,9 +78,27 @@ interface MeetingsManagerProps {
   projectId: string;
   phases: Phase[];
   onCreateActivity?: (title: string, assignedTo?: string) => Promise<void>;
+  onCreateBlocker?: (description: string) => Promise<void>;
+  onCreateLesson?: (problem: string, suggestion: string) => Promise<void>;
 }
 
-export const MeetingsManager = ({ projectId, phases, onCreateActivity }: MeetingsManagerProps) => {
+const MEETING_TYPES = [
+  { value: "general", label: "Geral" },
+  { value: "daily", label: "Daily Scrum" },
+  { value: "planning", label: "Sprint Planning" },
+  { value: "review", label: "Sprint Review" },
+  { value: "retrospective", label: "Sprint Retrospective" },
+];
+
+const MEETING_TYPE_COLORS: Record<string, string> = {
+  general: "bg-muted text-muted-foreground",
+  daily: "bg-primary/20 text-primary",
+  planning: "bg-blue-500/20 text-blue-700",
+  review: "bg-emerald-500/20 text-emerald-700",
+  retrospective: "bg-purple-500/20 text-purple-700",
+};
+
+export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateBlocker, onCreateLesson }: MeetingsManagerProps) => {
   const { toast } = useToast();
   const { isAdmin, user } = useAuth();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -102,6 +122,15 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
     phase_id: "",
     participants: [] as string[],
     responsible: "",
+    meeting_type: "general",
+    // Daily fields
+    daily_yesterday: "",
+    daily_today: "",
+    daily_impediment: "",
+    // Retro fields
+    retro_good: "",
+    retro_bad: "",
+    retro_improve: "",
   });
 
   const getProfile = (id: string) => profiles.find((p) => p.id === id);
@@ -144,7 +173,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
   };
 
   const resetForm = () => {
-    setForm({ title: "", meeting_date: "", start_time: "", end_time: "", location: "", agenda: "", minutes: "", phase_id: "", participants: [], responsible: "" });
+    setForm({ title: "", meeting_date: "", start_time: "", end_time: "", location: "", agenda: "", minutes: "", phase_id: "", participants: [], responsible: "", meeting_type: "general", daily_yesterday: "", daily_today: "", daily_impediment: "", retro_good: "", retro_bad: "", retro_improve: "" });
     setEditingId(null);
     setShowForm(false);
   };
@@ -155,6 +184,14 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       return;
     }
 
+    // Build minutes from template fields
+    let computedMinutes = form.minutes || "";
+    if (form.meeting_type === "daily") {
+      computedMinutes = `**O que fiz ontem:**\n${form.daily_yesterday}\n\n**O que farei hoje:**\n${form.daily_today}\n\n**Impedimentos:**\n${form.daily_impediment}`;
+    } else if (form.meeting_type === "retrospective") {
+      computedMinutes = `**O que foi bom:**\n${form.retro_good}\n\n**O que foi ruim:**\n${form.retro_bad}\n\n**O que melhorar:**\n${form.retro_improve}`;
+    }
+
     const payload: any = {
       project_id: projectId,
       title: form.title,
@@ -163,10 +200,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       end_time: form.end_time || null,
       location: form.location || null,
       agenda: form.agenda || null,
-      minutes: form.minutes || null,
+      minutes: computedMinutes || null,
       phase_id: form.phase_id || null,
       participants: form.participants,
       responsible: form.responsible || null,
+      meeting_type: form.meeting_type,
     };
 
     if (!editingId) {
@@ -181,12 +219,34 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       const { error } = await supabase.from("meetings").insert(payload);
       if (error) { toast({ title: "Erro ao criar", variant: "destructive" }); return; }
       toast({ title: "Reunião criada!" });
+
+      // Auto-create blocker from daily impediment
+      if (form.meeting_type === "daily" && form.daily_impediment.trim() && onCreateBlocker) {
+        await onCreateBlocker(form.daily_impediment.trim());
+        toast({ title: "Impedimento registrado como risco!" });
+      }
     }
     resetForm();
     fetchMeetings();
   };
 
   const handleEdit = (m: Meeting) => {
+    // Parse daily/retro fields from minutes if applicable
+    let daily_yesterday = "", daily_today = "", daily_impediment = "";
+    let retro_good = "", retro_bad = "", retro_improve = "";
+    
+    if (m.meeting_type === "daily" && m.minutes) {
+      const parts = m.minutes.split(/\*\*[^*]+\*\*\n?/);
+      daily_yesterday = parts[1]?.trim() || "";
+      daily_today = parts[2]?.trim() || "";
+      daily_impediment = parts[3]?.trim() || "";
+    } else if (m.meeting_type === "retrospective" && m.minutes) {
+      const parts = m.minutes.split(/\*\*[^*]+\*\*\n?/);
+      retro_good = parts[1]?.trim() || "";
+      retro_bad = parts[2]?.trim() || "";
+      retro_improve = parts[3]?.trim() || "";
+    }
+    
     setForm({
       title: m.title,
       meeting_date: m.meeting_date ? m.meeting_date.slice(0, 16) : "",
@@ -198,6 +258,13 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       phase_id: m.phase_id || "",
       participants: m.participants || [],
       responsible: m.responsible || "",
+      meeting_type: m.meeting_type || "general",
+      daily_yesterday,
+      daily_today,
+      daily_impediment,
+      retro_good,
+      retro_bad,
+      retro_improve,
     });
     setEditingId(m.id);
     setShowForm(true);
@@ -254,6 +321,15 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
       toast({ title: "Atividade criada no Kanban!" });
     }
   };
+  const handleSaveAsLesson = async (meeting: Meeting) => {
+    if (!onCreateLesson) return;
+    // Extract retro content from minutes
+    const parts = (meeting.minutes || "").split(/\*\*[^*]+\*\*\n?/);
+    const bad = parts[2]?.trim() || "Problema identificado na retrospectiva";
+    const improve = parts[3]?.trim() || "";
+    await onCreateLesson(bad, improve);
+    toast({ title: "Lição aprendida criada a partir da retrospectiva!" });
+  };
 
   const handleDeleteAction = async (id: string, meetingId: string) => {
     await supabase.from("meeting_actions").delete().eq("id", id);
@@ -280,6 +356,23 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
 
       {showForm && (
         <div className="space-y-3 p-4 bg-accent/30 rounded-lg border border-border">
+          {/* Meeting Type Selector */}
+          <div className="flex gap-2 flex-wrap">
+            {MEETING_TYPES.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
+                  form.meeting_type === t.value
+                    ? `${MEETING_TYPE_COLORS[t.value]} border-current ring-2 ring-current/20`
+                    : "border-border text-muted-foreground hover:border-foreground/30"
+                }`}
+                onClick={() => setForm({ ...form, meeting_type: t.value, title: form.title || t.label })}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
           <Input
             placeholder="Título da reunião *"
             value={form.title}
@@ -388,18 +481,52 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
               </div>
             )}
           </div>
-          <Textarea
-            placeholder="Pauta"
-            value={form.agenda}
-            onChange={(e) => setForm({ ...form, agenda: e.target.value })}
-            rows={2}
-          />
-          <Textarea
-            placeholder="Ata / Registro"
-            value={form.minutes}
-            onChange={(e) => setForm({ ...form, minutes: e.target.value })}
-            rows={3}
-          />
+          {/* Template-specific fields */}
+          {form.meeting_type === "daily" && (
+            <div className="space-y-2 p-3 bg-primary/5 rounded-lg border border-primary/20">
+              <p className="text-xs font-semibold text-primary">🏃 Daily Scrum</p>
+              <Textarea placeholder="O que fiz ontem?" value={form.daily_yesterday} onChange={(e) => setForm({ ...form, daily_yesterday: e.target.value })} rows={2} />
+              <Textarea placeholder="O que farei hoje?" value={form.daily_today} onChange={(e) => setForm({ ...form, daily_today: e.target.value })} rows={2} />
+              <Textarea placeholder="Há algum impedimento?" value={form.daily_impediment} onChange={(e) => setForm({ ...form, daily_impediment: e.target.value })} rows={2} className="border-destructive/30" />
+              {form.daily_impediment.trim() && (
+                <p className="text-[10px] text-destructive">⚠️ O impedimento será registrado automaticamente como risco ao salvar</p>
+              )}
+            </div>
+          )}
+
+          {form.meeting_type === "planning" && (
+            <div className="p-3 bg-blue-500/5 rounded-lg border border-blue-500/20">
+              <p className="text-xs font-semibold text-blue-700 mb-2">📋 Sprint Planning</p>
+              <p className="text-xs text-muted-foreground">Use a aba "Backlog" para selecionar e mover atividades para o Kanban durante esta reunião.</p>
+              <Textarea placeholder="Pauta / Objetivos da Sprint" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={3} />
+            </div>
+          )}
+
+          {form.meeting_type === "review" && (
+            <div className="p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
+              <p className="text-xs font-semibold text-emerald-700 mb-2">🎯 Sprint Review</p>
+              <p className="text-xs text-muted-foreground mb-2">Registre o incremento do produto. Anexe links ou documentos pela aba "Entregas".</p>
+              <Textarea placeholder="Ata da Review / Incremento entregue" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} rows={3} />
+            </div>
+          )}
+
+          {form.meeting_type === "retrospective" && (
+            <div className="space-y-2 p-3 bg-purple-500/5 rounded-lg border border-purple-500/20">
+              <p className="text-xs font-semibold text-purple-700">🔄 Sprint Retrospective</p>
+              <Textarea placeholder="O que foi bom?" value={form.retro_good} onChange={(e) => setForm({ ...form, retro_good: e.target.value })} rows={2} />
+              <Textarea placeholder="O que foi ruim?" value={form.retro_bad} onChange={(e) => setForm({ ...form, retro_bad: e.target.value })} rows={2} />
+              <Textarea placeholder="O que melhorar?" value={form.retro_improve} onChange={(e) => setForm({ ...form, retro_improve: e.target.value })} rows={2} />
+              <p className="text-[10px] text-purple-600">💡 Após salvar, você poderá converter em Lição Aprendida</p>
+            </div>
+          )}
+
+          {form.meeting_type === "general" && (
+            <>
+              <Textarea placeholder="Pauta" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={2} />
+              <Textarea placeholder="Ata / Registro" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} rows={3} />
+            </>
+          )}
+
           <Button onClick={handleSubmit}>{editingId ? "Atualizar" : "Criar Reunião"}</Button>
         </div>
       )}
@@ -424,7 +551,14 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                   <div className="flex items-start gap-2">
                     {isExpanded ? <ChevronDown className="w-4 h-4 mt-0.5 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 mt-0.5 text-muted-foreground" />}
                     <div>
-                      <p className="font-medium text-foreground">{meeting.title}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-foreground">{meeting.title}</p>
+                        {meeting.meeting_type && meeting.meeting_type !== "general" && (
+                          <Badge className={`text-[10px] ${MEETING_TYPE_COLORS[meeting.meeting_type || "general"]}`}>
+                            {MEETING_TYPES.find(t => t.value === meeting.meeting_type)?.label}
+                          </Badge>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
                         {meeting.meeting_date && (
                           <span className="flex items-center gap-1">
@@ -523,6 +657,19 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity }: Meeting
                         <h4 className="text-xs font-semibold text-muted-foreground mb-1">📝 Ata</h4>
                         <p className="text-sm text-foreground whitespace-pre-wrap">{meeting.minutes}</p>
                       </div>
+                    )}
+
+                    {/* Retrospective → Save as Lesson */}
+                    {meeting.meeting_type === "retrospective" && meeting.minutes && onCreateLesson && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-purple-700 border-purple-500/30 hover:bg-purple-500/10"
+                        onClick={() => handleSaveAsLesson(meeting)}
+                      >
+                        <Lightbulb className="w-3.5 h-3.5" />
+                        Salvar como Lição Aprendida
+                      </Button>
                     )}
 
                     {/* Decisions */}

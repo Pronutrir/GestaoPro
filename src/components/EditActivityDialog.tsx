@@ -64,6 +64,7 @@ export const EditActivityDialog = ({
     priority: "medium",
     tags: [] as string[],
     parent_id: "",
+    story_points: "0",
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -97,6 +98,7 @@ export const EditActivityDialog = ({
         priority: activity.priority || "medium",
         tags: activity.tags || [],
         parent_id: activity.parent_id || "",
+        story_points: (activity as any).story_points?.toString() || "0",
       });
       fetchSubActivities(activity.id);
     }
@@ -175,6 +177,7 @@ export const EditActivityDialog = ({
           priority: formData.priority,
           tags: formData.tags,
           parent_id: formData.parent_id || null,
+          story_points: parseInt(formData.story_points) || 0,
         })
         .eq("id", activity.id);
 
@@ -285,7 +288,7 @@ export const EditActivityDialog = ({
 
           <div className="p-4 bg-accent/30 rounded-lg border border-border space-y-4">
             <h3 className="text-sm font-bold text-foreground">Recursos da Atividade</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Clock className="w-4 h-4 text-primary" /> Horas Estimadas
@@ -297,6 +300,27 @@ export const EditActivityDialog = ({
                   <DollarSign className="w-4 h-4 text-success" /> Custo (R$)
                 </Label>
                 <Input type="number" step="0.01" min="0" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} className="font-semibold text-lg" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  🎯 Story Points
+                </Label>
+                <div className="flex gap-1 flex-wrap">
+                  {[0, 1, 2, 3, 5, 8, 13, 21].map((sp) => (
+                    <button
+                      key={sp}
+                      type="button"
+                      className={`w-9 h-9 rounded-md text-sm font-bold border transition-all ${
+                        parseInt(formData.story_points) === sp
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-border text-muted-foreground hover:border-primary/50"
+                      }`}
+                      onClick={() => setFormData({ ...formData, story_points: sp.toString() })}
+                    >
+                      {sp}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
