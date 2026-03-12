@@ -293,12 +293,24 @@ export const ActivityKanban = ({
       }
     });
 
+    // Build phase order lookup for sorting
+    const phaseOrderMap: Record<string, number> = {};
+    phases.forEach((p, i) => {
+      phaseOrderMap[p.id] = i;
+    });
+
+    // Sort by phase order first, then by display_order within phase (matching Phases tab)
     Object.keys(map).forEach((key) => {
-      map[key].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+      map[key].sort((a, b) => {
+        const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
+        const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
+        if (phaseA !== phaseB) return phaseA - phaseB;
+        return (a.display_order ?? 0) - (b.display_order ?? 0);
+      });
     });
 
     return map;
-  }, [activities, stages]);
+  }, [activities, stages, phases]);
 
   const activeActivity = activeId ? activities.find((a) => a.id === activeId) : null;
 
