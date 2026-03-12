@@ -230,14 +230,14 @@ function KanbanCard({
       </div>
 
       <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onToggle}>
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onToggle} title="Concluir">
           {activity.status === "completed" ? (
             <CheckCircle2 className="w-3.5 h-3.5 text-success" />
           ) : (
             <Circle className="w-3.5 h-3.5 text-muted-foreground" />
           )}
         </Button>
-        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEdit}>
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEdit} title="Editar">
           <Pencil className="w-3.5 h-3.5" />
         </Button>
         {isAdmin && (
@@ -246,6 +246,7 @@ function KanbanCard({
             variant="ghost"
             className="h-6 w-6 text-destructive hover:text-destructive"
             onClick={onDelete}
+            title="Excluir"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
