@@ -543,6 +543,24 @@ const ProjectDetails = () => {
                     });
                     fetchProjectData();
                   }}
+                  onCreateBlocker={async (description) => {
+                    await supabase.from("risks").insert({
+                      project_id: id!,
+                      description,
+                      probability: "high",
+                      impact: "high",
+                      status: "identified",
+                      category: "impediment",
+                    });
+                  }}
+                  onCreateLesson={async (problem, suggestion) => {
+                    await supabase.from("lessons_learned").insert({
+                      project_id: id!,
+                      problem,
+                      suggestion: suggestion || null,
+                      category: "process",
+                    });
+                  }}
                 />
               </TabsContent>
 
