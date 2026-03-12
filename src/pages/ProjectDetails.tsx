@@ -12,6 +12,7 @@ import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { ActivityComments } from "@/components/ActivityComments";
 import { EditActivityDialog } from "@/components/EditActivityDialog";
 import { PhaseManager } from "@/components/PhaseManager";
+import { ImportWBSDialog } from "@/components/ImportWBSDialog";
 import { TimelineView } from "@/components/TimelineView";
 
 import { LessonsLearned } from "@/components/LessonsLearned";
