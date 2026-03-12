@@ -144,10 +144,15 @@ function KanbanCard({
     }
   };
 
+  const isOverdue = activity.end_date && new Date(activity.end_date) < new Date() && activity.status !== "completed";
+
   return (
     <div
-      className="bg-card border border-border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+      className={`bg-card border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group ${
+        isOverdue ? "border-destructive border-l-[3px] border-l-destructive bg-destructive/5" : "border-border"
+      }`}
       onClick={onEdit}
+    >
     >
       <div className="flex items-start gap-2">
         <button
