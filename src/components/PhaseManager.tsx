@@ -12,6 +12,7 @@ import {
   Trash2,
   Layers,
   CheckCircle2,
+  ArrowRightLeft,
 } from "lucide-react";
 import {
   Collapsible,
@@ -135,6 +136,20 @@ export const PhaseManager = ({
     } catch (error) {
       console.error("Erro ao criar sub-atividade:", error);
       toast({ title: "Erro ao criar sub-atividade", variant: "destructive" });
+    }
+  };
+
+  const handleMoveSubActivity = async (activityId: string, newParentId: string | null, newPhaseId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from("activities")
+        .update({ parent_id: newParentId, phase_id: newPhaseId })
+        .eq("id", activityId);
+      if (error) throw error;
+      toast({ title: "Atividade movida!" });
+      onDataChanged();
+    } catch {
+      toast({ title: "Erro ao mover atividade", variant: "destructive" });
     }
   };
 
@@ -461,12 +476,14 @@ export const PhaseManager = ({
                                     <SubActivityTree
                                       parentId={activity.id}
                                       activities={activities}
+                                      phases={phases}
                                       getSubActivities={getSubActivities}
                                       expandedActivities={expandedActivities}
                                       toggleActivityExpand={toggleActivityExpand}
                                       onToggleActivity={onToggleActivity}
                                       onEditActivity={onEditActivity}
                                       onDeleteActivity={onDeleteActivity}
+                                      onMoveActivity={handleMoveSubActivity}
                                       quickAddSubTitle={quickAddSubTitle}
                                       setQuickAddSubTitle={setQuickAddSubTitle}
                                       handleQuickAddSubActivity={handleQuickAddSubActivity}
@@ -534,12 +551,14 @@ export const PhaseManager = ({
                       <SubActivityTree
                         parentId={activity.id}
                         activities={activities}
+                        phases={phases}
                         getSubActivities={getSubActivities}
                         expandedActivities={expandedActivities}
                         toggleActivityExpand={toggleActivityExpand}
                         onToggleActivity={onToggleActivity}
                         onEditActivity={onEditActivity}
                         onDeleteActivity={onDeleteActivity}
+                        onMoveActivity={handleMoveSubActivity}
                         quickAddSubTitle={quickAddSubTitle}
                         setQuickAddSubTitle={setQuickAddSubTitle}
                         handleQuickAddSubActivity={handleQuickAddSubActivity}
@@ -562,12 +581,14 @@ export const PhaseManager = ({
 interface SubActivityTreeProps {
   parentId: string;
   activities: Activity[];
+  phases: Phase[];
   getSubActivities: (parentId: string) => Activity[];
   expandedActivities: Set<string>;
   toggleActivityExpand: (id: string) => void;
   onToggleActivity: (id: string, status: string) => void;
   onEditActivity: (activity: Activity) => void;
   onDeleteActivity: (id: string) => void;
+  onMoveActivity: (activityId: string, newParentId: string | null, newPhaseId: string | null) => void;
   quickAddSubTitle: Record<string, string>;
   setQuickAddSubTitle: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   handleQuickAddSubActivity: (parent: Activity) => void;
@@ -576,18 +597,31 @@ interface SubActivityTreeProps {
 }
 
 const SubActivityTree = ({
-  parentId, activities, getSubActivities, expandedActivities, toggleActivityExpand,
-  onToggleActivity, onEditActivity, onDeleteActivity, quickAddSubTitle, setQuickAddSubTitle,
+  parentId, activities, phases, getSubActivities, expandedActivities, toggleActivityExpand,
+  onToggleActivity, onEditActivity, onDeleteActivity, onMoveActivity, quickAddSubTitle, setQuickAddSubTitle,
   handleQuickAddSubActivity, isAdmin, depth,
 }: SubActivityTreeProps) => {
   const subs = getSubActivities(parentId);
   const parentActivity = activities.find(a => a.id === parentId);
+  const [movingId, setMovingId] = useState<string | null>(null);
+
+  // Get all possible parent targets (activities without parent_id = top-level activities)
+  const topLevelActivities = activities.filter(a => !a.parent_id);
+  // Get all activities that could be parents (exclude the item being moved and its descendants)
+  const getDescendantIds = (id: string): string[] => {
+    const children = activities.filter(a => a.parent_id === id);
+    return [id, ...children.flatMap(c => getDescendantIds(c.id))];
+  };
 
   return (
     <div className="ml-6 space-y-1 border-l-2 border-primary/20 pl-3">
       {subs.map((sub) => {
         const subSubs = getSubActivities(sub.id);
         const isExpanded = expandedActivities.has(sub.id);
+        const isMoving = movingId === sub.id;
+        const excludeIds = getDescendantIds(sub.id);
+        const moveTargets = activities.filter(a => !excludeIds.includes(a.id));
+
         return (
           <div key={sub.id} className="space-y-1">
             <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-md border border-border/50 group">
@@ -601,6 +635,32 @@ const SubActivityTree = ({
               {subSubs.length > 0 && <Badge variant="secondary" className="text-[10px] px-1 py-0">{subSubs.length}</Badge>}
               {sub.assigned_to && <span className="text-[10px] text-muted-foreground">👤 {sub.assigned_to}</span>}
               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="relative">
+                  <Button size="icon" variant="ghost" className="h-6 w-6" title="Mover para..." onClick={() => setMovingId(isMoving ? null : sub.id)}>
+                    <ArrowRightLeft className="w-3 h-3" />
+                  </Button>
+                  {isMoving && (
+                    <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-50 min-w-[200px] max-h-[250px] overflow-y-auto">
+                      <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase border-b border-border">Mover para fase</div>
+                      <button className="w-full px-3 py-1.5 text-left text-xs hover:bg-accent" onClick={() => { onMoveActivity(sub.id, null, null); setMovingId(null); }}>
+                        Sem fase (raiz)
+                      </button>
+                      {phases.map(p => (
+                        <button key={p.id} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-accent ${sub.phase_id === p.id && !sub.parent_id ? "bg-accent" : ""}`}
+                          onClick={() => { onMoveActivity(sub.id, null, p.id); setMovingId(null); }}>
+                          📁 {p.title}
+                        </button>
+                      ))}
+                      <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase border-b border-t border-border">Mover para atividade</div>
+                      {moveTargets.map(a => (
+                        <button key={a.id} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-accent ${sub.parent_id === a.id ? "bg-accent" : ""}`}
+                          onClick={() => { onMoveActivity(sub.id, a.id, a.phase_id); setMovingId(null); }}>
+                          ↳ {a.title}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditActivity(sub)}><Pencil className="w-3 h-3" /></Button>
                 {isAdmin && <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => onDeleteActivity(sub.id)}><Trash2 className="w-3 h-3" /></Button>}
               </div>
@@ -609,12 +669,14 @@ const SubActivityTree = ({
               <SubActivityTree
                 parentId={sub.id}
                 activities={activities}
+                phases={phases}
                 getSubActivities={getSubActivities}
                 expandedActivities={expandedActivities}
                 toggleActivityExpand={toggleActivityExpand}
                 onToggleActivity={onToggleActivity}
                 onEditActivity={onEditActivity}
                 onDeleteActivity={onDeleteActivity}
+                onMoveActivity={onMoveActivity}
                 quickAddSubTitle={quickAddSubTitle}
                 setQuickAddSubTitle={setQuickAddSubTitle}
                 handleQuickAddSubActivity={handleQuickAddSubActivity}
