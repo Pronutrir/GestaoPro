@@ -440,7 +440,7 @@ export const ActivityKanban = ({
       // Generate blocked notification when moving to a blocked stage
       if (stage?.is_blocked && draggedActivity) {
         await supabase.from("notifications").insert({
-          project_id: draggedActivity.project_id,
+          project_id: projectId,
           activity_id: activityId,
           type: "blocked",
           title: "🚫 Atividade bloqueada: " + draggedActivity.title,
