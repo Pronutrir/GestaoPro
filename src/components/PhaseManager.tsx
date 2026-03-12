@@ -139,6 +139,20 @@ export const PhaseManager = ({
     }
   };
 
+  const handleMoveSubActivity = async (activityId: string, newParentId: string | null, newPhaseId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from("activities")
+        .update({ parent_id: newParentId, phase_id: newPhaseId })
+        .eq("id", activityId);
+      if (error) throw error;
+      toast({ title: "Atividade movida!" });
+      onDataChanged();
+    } catch {
+      toast({ title: "Erro ao mover atividade", variant: "destructive" });
+    }
+  };
+
   const calculatePhaseProgress = (phaseId: string) => {
     const phaseActivities = getActivitiesForPhase(phaseId);
     if (phaseActivities.length === 0) return 0;
