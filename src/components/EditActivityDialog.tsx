@@ -68,6 +68,20 @@ export const EditActivityDialog = ({
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
+  const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
+
+  useEffect(() => {
+    if (projectId) {
+      supabase.from("project_members").select("user_id").eq("project_id", projectId).then(({ data: memberData }) => {
+        if (memberData && memberData.length > 0) {
+          const userIds = memberData.map(m => m.user_id);
+          supabase.from("profiles").select("full_name, sector").in("id", userIds).then(({ data: profiles }) => {
+            if (profiles) setMembers(profiles.filter(p => p.full_name));
+          });
+        }
+      });
+    }
+  }, [projectId]);
 
   useEffect(() => {
     if (activity) {
