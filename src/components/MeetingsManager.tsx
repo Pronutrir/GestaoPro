@@ -658,6 +658,19 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                       </div>
                     )}
 
+                    {/* Retrospective → Save as Lesson */}
+                    {meeting.meeting_type === "retrospective" && meeting.minutes && onCreateLesson && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-purple-700 border-purple-500/30 hover:bg-purple-500/10"
+                        onClick={() => handleSaveAsLesson(meeting)}
+                      >
+                        <Lightbulb className="w-3.5 h-3.5" />
+                        Salvar como Lição Aprendida
+                      </Button>
+                    )}
+
                     {/* Decisions */}
                     <div>
                       <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
