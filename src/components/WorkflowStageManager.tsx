@@ -137,6 +137,9 @@ function SortableStageItem({
           {stage.is_final && (
             <Badge className="bg-success/20 text-success text-[10px]">Final</Badge>
           )}
+          {stage.is_blocked && (
+            <Badge className="bg-destructive/20 text-destructive text-[10px]">Bloqueio</Badge>
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -144,6 +147,14 @@ function SortableStageItem({
             onClick={() => onToggleFinal(stage.id, stage.is_final)}
           >
             {stage.is_final ? "Remover final" : "Marcar final"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => onToggleBlocked(stage.id, stage.is_blocked)}
+          >
+            {stage.is_blocked ? "Remover bloqueio" : "Marcar bloqueio"}
           </Button>
           <Button
             size="icon"
