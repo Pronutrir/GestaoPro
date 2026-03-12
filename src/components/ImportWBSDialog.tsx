@@ -98,14 +98,36 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       }
 
       // Create activities linked to their parent phase
+      const activityIdMap: Record<string, string> = {};
+
       for (let i = 0; i < activities.length; i++) {
         const activity = activities[i];
         const phaseId = activity.parentCode ? phaseIdMap[activity.parentCode] : null;
 
-        const { error } = await supabase.from("activities").insert({
+        const { data, error } = await supabase.from("activities").insert({
           project_id: projectId,
           title: `${activity.code} ${activity.title}`,
           phase_id: phaseId,
+          display_order: i,
+        }).select("id").single();
+
+        if (error) throw error;
+        activityIdMap[activity.code] = data.id;
+      }
+
+      // Create sub-activities linked to their parent activity
+      for (let i = 0; i < subactivities.length; i++) {
+        const sub = subactivities[i];
+        const parentId = sub.parentCode ? activityIdMap[sub.parentCode] : null;
+        // Find the phase of the parent activity
+        const parentActivity = activities.find(a => a.code === sub.parentCode);
+        const phaseId = parentActivity?.parentCode ? phaseIdMap[parentActivity.parentCode] : null;
+
+        const { error } = await supabase.from("activities").insert({
+          project_id: projectId,
+          title: `${sub.code} ${sub.title}`,
+          phase_id: phaseId,
+          parent_id: parentId,
           display_order: i,
         });
 
