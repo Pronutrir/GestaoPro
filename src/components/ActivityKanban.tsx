@@ -275,6 +275,7 @@ function SortableColumn({
   onEditActivity,
   onDeleteActivity,
   onToggleActivity,
+  onMoveToBacklog,
   isAdmin,
   onResizeStart,
 }: {
@@ -287,6 +288,7 @@ function SortableColumn({
   onEditActivity: (activity: Activity) => void;
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
+  onMoveToBacklog: (activityId: string) => void;
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
 }) {
