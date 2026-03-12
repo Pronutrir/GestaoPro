@@ -589,17 +589,18 @@ export const ActivityKanban = ({
     const completedAt = stage?.is_final ? new Date().toISOString() : null;
 
     // Fire DB update in background
-    supabase
-      .from("activities")
-      .update({
-        workflow_stage_id: targetStageId,
-        status: newStatus,
-        completed_at: completedAt,
-      })
-      .eq("id", activityId)
+    Promise.resolve(
+      supabase
+        .from("activities")
+        .update({
+          workflow_stage_id: targetStageId,
+          status: newStatus,
+          completed_at: completedAt,
+        })
+        .eq("id", activityId)
+    )
       .then(() => onDataChanged())
       .catch(() => {
-        // Revert optimistic move on error
         setOptimisticMoves((prev) => {
           const next = { ...prev };
           delete next[activityId];
