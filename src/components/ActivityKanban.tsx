@@ -87,6 +87,7 @@ function SortableKanbanCard({
   onEdit,
   onDelete,
   onToggle,
+  onMoveToBacklog,
   isAdmin,
   isBlocked,
 }: {
@@ -95,6 +96,7 @@ function SortableKanbanCard({
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
+  onMoveToBacklog: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
 }) {
@@ -115,6 +117,7 @@ function SortableKanbanCard({
         onEdit={onEdit}
         onDelete={onDelete}
         onToggle={onToggle}
+        onMoveToBacklog={onMoveToBacklog}
         dragListeners={listeners}
         isAdmin={isAdmin}
         isBlocked={isBlocked}
