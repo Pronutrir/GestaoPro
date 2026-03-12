@@ -246,6 +246,9 @@ function KanbanCard({
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEdit} title="Editar">
           <Pencil className="w-3.5 h-3.5" />
         </Button>
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onMoveToBacklog} title="Mover para Backlog">
+          <Inbox className="w-3.5 h-3.5" />
+        </Button>
         {isAdmin && (
           <Button
             size="icon"
