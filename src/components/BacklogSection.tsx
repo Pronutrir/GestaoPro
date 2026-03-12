@@ -131,11 +131,44 @@ export const BacklogSection = ({
     );
   }
 
+  const handleMoveAllToBoard = async () => {
+    const { data: nextStage } = await supabase
+      .from("workflow_stages")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("display_order", 1)
+      .single();
+
+    if (!nextStage) {
+      toast({ title: "Nenhuma etapa disponível para mover", variant: "destructive" });
+      return;
+    }
+
+    const ids = backlogActivities.map((a) => a.id);
+    await supabase
+      .from("activities")
+      .update({ workflow_stage_id: nextStage.id })
+      .in("id", ids);
+
+    onDataChanged();
+    toast({ title: `${ids.length} atividades movidas para o quadro` });
+  };
+
   return (
     <div className="space-y-2">
-      <p className="text-sm text-muted-foreground mb-3">
-        Atividades planejadas para o futuro ou temporariamente descartadas ({backlogActivities.length})
-      </p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm text-muted-foreground">
+          Atividades planejadas para o futuro ou temporariamente descartadas ({backlogActivities.length})
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          onClick={handleMoveAllToBoard}
+        >
+          Mover todas para o quadro
+        </Button>
+      </div>
       <div className="grid gap-2">
         {backlogActivities.map((activity) => {
           const phase = phases.find((p) => p.id === activity.phase_id);
