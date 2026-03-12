@@ -31,6 +31,7 @@ interface WorkflowStage {
   color: string;
   display_order: number;
   is_final: boolean;
+  is_blocked: boolean;
 }
 
 interface WorkflowStageManagerProps {
