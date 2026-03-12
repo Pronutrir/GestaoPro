@@ -20,6 +20,9 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { MeetingsManager } from "@/components/MeetingsManager";
+import { AssumptionsManager } from "@/components/AssumptionsManager";
+import { RisksManager } from "@/components/RisksManager";
+import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
 import {
   ArrowLeft,
   Plus,
