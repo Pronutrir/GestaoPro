@@ -153,7 +153,6 @@ function KanbanCard({
       }`}
       onClick={onEdit}
     >
-    >
       <div className="flex items-start gap-2">
         <button
           className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
