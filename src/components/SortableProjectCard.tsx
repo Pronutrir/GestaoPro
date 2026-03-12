@@ -59,7 +59,7 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, isAdmin = 
     <Card
       ref={setNodeRef}
       style={style}
-      className={`p-4 hover:shadow-md transition-shadow cursor-pointer ${isDragging ? "shadow-lg ring-2 ring-primary" : ""}`}
+      className={`p-4 cursor-pointer ${isDragging ? "shadow-lg ring-2 ring-primary" : ""}`}
       onClick={() => navigate(`/project/${project.id}`)}
     >
       <div className="space-y-3">
