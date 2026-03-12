@@ -239,6 +239,26 @@ export const PhaseManager = ({
     }
   };
 
+  const handleDeleteAllPhases = async () => {
+    if (!confirm(`Excluir TODAS as ${phases.length} fases? As atividades vinculadas ficarão sem fase.`)) return;
+    try {
+      const { error } = await supabase.from("phases").delete().eq("project_id", projectId);
+      if (error) throw error;
+      toast({ title: `${phases.length} fases excluídas!` });
+      onDataChanged();
+    } catch { toast({ title: "Erro ao excluir fases", variant: "destructive" }); }
+  };
+
+  const handleDeleteAllActivities = async () => {
+    if (!confirm(`Excluir TODAS as ${activities.length} atividades do projeto?`)) return;
+    try {
+      const { error } = await supabase.from("activities").delete().eq("project_id", projectId);
+      if (error) throw error;
+      toast({ title: `${activities.length} atividades excluídas!` });
+      onDataChanged();
+    } catch { toast({ title: "Erro ao excluir atividades", variant: "destructive" }); }
+  };
+
   const unassignedActivities = getActivitiesForPhase(null);
 
   return (
@@ -252,6 +272,16 @@ export const PhaseManager = ({
         {isAdmin && (
           <div className="flex gap-2">
             <ImportWBSDialog projectId={projectId} onDataChanged={onDataChanged} />
+            {phases.length > 0 && (
+              <Button size="sm" variant="outline" className="gap-2 text-destructive hover:bg-destructive/10" onClick={handleDeleteAllPhases}>
+                <Trash2 className="w-4 h-4" /> Excluir Fases
+              </Button>
+            )}
+            {activities.length > 0 && (
+              <Button size="sm" variant="outline" className="gap-2 text-destructive hover:bg-destructive/10" onClick={handleDeleteAllActivities}>
+                <Trash2 className="w-4 h-4" /> Excluir Atividades
+              </Button>
+            )}
             <Button size="sm" onClick={() => setShowAddPhase(!showAddPhase)} className="gap-2">
               <Plus className="w-4 h-4" />
               Nova Fase
