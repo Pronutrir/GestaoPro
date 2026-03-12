@@ -23,6 +23,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { SortableActivityCard } from "@/components/SortableActivityCard";
+import { ImportWBSDialog } from "@/components/ImportWBSDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
