@@ -24,33 +24,97 @@ const parseWBS = (text: string): ParsedItem[] => {
   const items: ParsedItem[] = [];
 
   for (const line of lines) {
-    const match = line.match(/^(\d+(?:\.\d+)*)\s+(.+)$/);
+    // Support optional dots at end (e.g. "1.1." or "1.1.1.")
+    const match = line.match(/^(\d+(?:\.\d+)*)\.?\s+(.+)$/);
     if (!match) continue;
 
     const code = match[1];
     const title = match[2].trim();
     const dotParts = code.split(".");
 
+    items.push({ code, title, level: "phase", parentCode: null }); // temporary
+  }
+
+  if (items.length === 0) return items;
+
+  // Auto-detect structure: find the minimum depth used (excluding single-number project titles)
+  const depths = items.map(i => i.code.split(".").length);
+  const minDepth = Math.min(...depths);
+  const maxDepth = Math.max(...depths);
+
+  // Determine mapping based on structure depth
+  // If min depth is 1 (e.g. "1 Project Title"), skip level 1 as project title
+  // Phases = first meaningful level, Activities = next, Sub-activities = deeper
+
+  const result: ParsedItem[] = [];
+
+  for (const item of items) {
+    const dotParts = item.code.split(".");
+    const depth = dotParts.length;
+
     let level: "phase" | "activity" | "subactivity";
     let parentCode: string | null = null;
 
-    if (dotParts.length === 1 || (dotParts.length === 2 && dotParts[1] === "0")) {
-      // 1 or 1.0 = Phase
-      level = "phase";
-    } else if (dotParts.length === 2) {
-      // 1.1 = Activity, parent is phase "1" or "1.0"
-      level = "activity";
-      parentCode = dotParts[0] + ".0";
+    if (minDepth === 1) {
+      // Structure: 1=project, 1.1=phase, 1.1.1=activity, 1.1.1.1+=subactivity
+      if (depth === 1) continue; // Skip project title line
+      if (depth === 2) {
+        level = "phase";
+      } else if (depth === 3) {
+        level = "activity";
+        parentCode = dotParts.slice(0, 2).join(".");
+      } else {
+        level = "subactivity";
+        parentCode = dotParts.slice(0, 3).join(".");
+      }
+    } else if (minDepth === 2) {
+      // Structure: 1.0/1.1=phase, 1.1/1.2=activity, 1.1.1+=subactivity
+      // Check if there's a X.0 pattern (old format)
+      const hasZeroPattern = items.some(i => {
+        const p = i.code.split(".");
+        return p.length === 2 && p[1] === "0";
+      });
+
+      if (hasZeroPattern) {
+        // Old format: X.0 = phase, X.Y = activity, X.Y.Z = subactivity
+        if (depth === 2 && dotParts[1] === "0") {
+          level = "phase";
+        } else if (depth === 2) {
+          level = "activity";
+          parentCode = dotParts[0] + ".0";
+        } else {
+          level = "subactivity";
+          parentCode = dotParts.slice(0, 2).join(".");
+        }
+      } else {
+        // X.Y = phase, X.Y.Z = activity, X.Y.Z.W+ = subactivity
+        if (depth === 2) {
+          level = "phase";
+        } else if (depth === 3) {
+          level = "activity";
+          parentCode = dotParts.slice(0, 2).join(".");
+        } else {
+          level = "subactivity";
+          parentCode = dotParts.slice(0, 3).join(".");
+        }
+      }
     } else {
-      // 1.1.1 = Sub-activity, parent is activity "1.1"
-      level = "subactivity";
-      parentCode = dotParts.slice(0, 2).join(".");
+      // Fallback: first level = phase, second = activity, rest = subactivity
+      if (depth === minDepth) {
+        level = "phase";
+      } else if (depth === minDepth + 1) {
+        level = "activity";
+        parentCode = dotParts.slice(0, minDepth).join(".");
+      } else {
+        level = "subactivity";
+        parentCode = dotParts.slice(0, minDepth + 1).join(".");
+      }
     }
 
-    items.push({ code, title, level, parentCode });
+    result.push({ code: item.code, title: item.title, level, parentCode });
   }
 
-  return items;
+  return result;
 };
 
 export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogProps) => {
