@@ -355,6 +355,23 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
 
       {showForm && (
         <div className="space-y-3 p-4 bg-accent/30 rounded-lg border border-border">
+          {/* Meeting Type Selector */}
+          <div className="flex gap-2 flex-wrap">
+            {MEETING_TYPES.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
+                  form.meeting_type === t.value
+                    ? `${MEETING_TYPE_COLORS[t.value]} border-current ring-2 ring-current/20`
+                    : "border-border text-muted-foreground hover:border-foreground/30"
+                }`}
+                onClick={() => setForm({ ...form, meeting_type: t.value, title: form.title || t.label })}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
           <Input
             placeholder="Título da reunião *"
             value={form.title}
