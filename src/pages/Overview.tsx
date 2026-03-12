@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/NotificationBell";
+import { Sparkline } from "@/components/Sparkline";
 import {
   LayoutDashboard, TrendingUp, DollarSign, CheckCircle2, Lightbulb,
   Beaker, Rocket, AlertTriangle, Archive, Clock, Flag, CalendarClock, ListTodo,
