@@ -551,12 +551,14 @@ export const PhaseManager = ({
                       <SubActivityTree
                         parentId={activity.id}
                         activities={activities}
+                        phases={phases}
                         getSubActivities={getSubActivities}
                         expandedActivities={expandedActivities}
                         toggleActivityExpand={toggleActivityExpand}
                         onToggleActivity={onToggleActivity}
                         onEditActivity={onEditActivity}
                         onDeleteActivity={onDeleteActivity}
+                        onMoveActivity={handleMoveSubActivity}
                         quickAddSubTitle={quickAddSubTitle}
                         setQuickAddSubTitle={setQuickAddSubTitle}
                         handleQuickAddSubActivity={handleQuickAddSubActivity}
