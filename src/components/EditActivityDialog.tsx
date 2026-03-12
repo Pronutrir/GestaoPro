@@ -316,12 +316,8 @@ export const EditActivityDialog = ({
             </div>
           )}
 
-          {/* Diário de Bordo */}
-          {activity && projectId && (
-            <div className="border-t border-border pt-4">
-              <ActivityLogbook activityId={activity.id} projectId={projectId} />
-            </div>
-          )}
+
+
 
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
