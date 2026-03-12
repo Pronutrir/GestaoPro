@@ -271,6 +271,10 @@ export const PhaseManager = ({
         </div>
         {isAdmin && (
           <div className="flex gap-2">
+            <Button size="sm" onClick={() => setShowAddPhase(!showAddPhase)} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Nova Fase
+            </Button>
             <ImportWBSDialog projectId={projectId} onDataChanged={onDataChanged} />
             {phases.length > 0 && (
               <Button size="sm" variant="outline" className="gap-2 text-destructive hover:bg-destructive/10" onClick={handleDeleteAllPhases}>
@@ -282,10 +286,6 @@ export const PhaseManager = ({
                 <Trash2 className="w-4 h-4" /> Excluir Atividades
               </Button>
             )}
-            <Button size="sm" onClick={() => setShowAddPhase(!showAddPhase)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Nova Fase
-            </Button>
           </div>
         )}
       </div>
