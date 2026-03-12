@@ -59,6 +59,7 @@ function SortableStageItem({
   onRename,
   onDelete,
   onToggleFinal,
+  onToggleBlocked,
   onColorChange,
 }: {
   stage: WorkflowStage;
@@ -70,6 +71,7 @@ function SortableStageItem({
   onRename: (id: string) => void;
   onDelete: (id: string) => void;
   onToggleFinal: (id: string, current: boolean) => void;
+  onToggleBlocked: (id: string, current: boolean) => void;
   onColorChange: (id: string, color: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
