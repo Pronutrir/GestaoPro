@@ -246,6 +246,11 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
   };
 
   const handleDelete = async (id: string) => {
+    const stage = stages.find((s) => s.id === id);
+    if (stage && stage.display_order === 0) {
+      toast({ title: "A etapa Backlog não pode ser excluída", description: "Ela é reservada para atividades ainda não iniciadas.", variant: "destructive" });
+      return;
+    }
     if (!confirm("Atividades nesta etapa perderão a associação. Continuar?")) return;
     const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
     if (error) {
