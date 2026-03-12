@@ -436,6 +436,18 @@ export const ActivityKanban = ({
           completed_at: completedAt,
         })
         .eq("id", activityId);
+
+      // Generate blocked notification when moving to a blocked stage
+      if (stage?.is_blocked && draggedActivity) {
+        await supabase.from("notifications").insert({
+          project_id: draggedActivity.project_id,
+          activity_id: activityId,
+          type: "blocked",
+          title: "🚫 Atividade bloqueada: " + draggedActivity.title,
+          message: `A atividade "${draggedActivity.title}" foi movida para a etapa "${stage.title}" e está bloqueada.`,
+        });
+      }
+
       onDataChanged();
     } catch {
       toast({ title: "Erro ao mover atividade", variant: "destructive" });
