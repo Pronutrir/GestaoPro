@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ProjectColumn } from "@/components/ProjectColumn";
+import { ProjectDrawer } from "@/components/ProjectDrawer";
 import { AddProjectDialog } from "@/components/AddProjectDialog";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { AppLayout } from "@/components/AppLayout";
