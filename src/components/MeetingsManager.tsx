@@ -41,6 +41,7 @@ interface Meeting {
   created_at: string;
   created_by: string | null;
   responsible: string | null;
+  meeting_type?: string;
 }
 
 interface MeetingDecision {
