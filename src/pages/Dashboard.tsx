@@ -37,7 +37,9 @@ const Dashboard = () => {
   const { toast } = useToast();
   const { filterProjects, isAdmin, loading: authLoading } = useProjectAccess();
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(() => {
+    return localStorage.getItem("dashboard_category_filter") || null;
+  });
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
