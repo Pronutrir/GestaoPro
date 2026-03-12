@@ -136,7 +136,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
       toast({
         title: "EAP importada!",
-        description: `${phases.length} fases e ${activities.length} atividades criadas.`,
+        description: `${phases.length} fases, ${activities.length} atividades e ${subactivities.length} sub-atividades criadas.`,
       });
 
       setText("");
