@@ -288,8 +288,8 @@ export const ActivityKanban = ({
   const { toast } = useToast();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
-  const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
 
   // Initialize equal column widths when stages change
