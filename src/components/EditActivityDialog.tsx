@@ -64,6 +64,7 @@ export const EditActivityDialog = ({
     priority: "medium",
     tags: [] as string[],
     parent_id: "",
+    story_points: "0",
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
