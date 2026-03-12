@@ -453,6 +453,9 @@ const ProjectDetails = () => {
                 
                 <TabsTrigger value="documents" className="gap-2"><FileText className="w-4 h-4" />Documentos</TabsTrigger>
                 <TabsTrigger value="meetings" className="gap-2"><Users className="w-4 h-4" />Reuniões</TabsTrigger>
+                <TabsTrigger value="deliveries" className="gap-2"><Package className="w-4 h-4" />Entregas</TabsTrigger>
+                <TabsTrigger value="assumptions" className="gap-2"><ShieldCheck className="w-4 h-4" />Premissas</TabsTrigger>
+                <TabsTrigger value="risks" className="gap-2"><AlertTriangle className="w-4 h-4" />Riscos</TabsTrigger>
                 <TabsTrigger value="lessons" className="gap-2"><BookOpen className="w-4 h-4" />Lições</TabsTrigger>
                 <TabsTrigger value="workflow" className="gap-2"><Settings2 className="w-4 h-4" />Workflow</TabsTrigger>
               </TabsList>
