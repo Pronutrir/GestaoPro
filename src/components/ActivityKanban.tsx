@@ -202,7 +202,7 @@ function KanbanCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onToggle}>
           {activity.status === "completed" ? (
             <CheckCircle2 className="w-3.5 h-3.5 text-success" />
