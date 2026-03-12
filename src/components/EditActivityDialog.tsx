@@ -84,8 +84,52 @@ export const EditActivityDialog = ({
         tags: activity.tags || [],
         parent_id: activity.parent_id || "",
       });
+      fetchSubActivities(activity.id);
     }
   }, [activity]);
+
+  const fetchSubActivities = async (parentId: string) => {
+    const { data } = await supabase
+      .from("activities")
+      .select("*")
+      .eq("parent_id", parentId)
+      .order("display_order");
+    if (data) setSubActivities(data as Activity[]);
+  };
+
+  const handleAddSubActivity = async () => {
+    if (!newSubTitle.trim() || !activity || !projectId) return;
+    const { error } = await supabase.from("activities").insert({
+      project_id: projectId,
+      title: newSubTitle.trim(),
+      phase_id: activity.phase_id,
+      parent_id: activity.id,
+      display_order: subActivities.length,
+    });
+    if (error) {
+      toast({ title: "Erro ao criar sub-atividade", variant: "destructive" });
+      return;
+    }
+    setNewSubTitle("");
+    fetchSubActivities(activity.id);
+    onActivityUpdated();
+  };
+
+  const handleDeleteSubActivity = async (subId: string) => {
+    await supabase.from("activities").delete().eq("id", subId);
+    if (activity) fetchSubActivities(activity.id);
+    onActivityUpdated();
+  };
+
+  const handleToggleSubActivity = async (sub: Activity) => {
+    const newStatus = sub.status === "completed" ? "pending" : "completed";
+    await supabase.from("activities").update({
+      status: newStatus,
+      completed_at: newStatus === "completed" ? new Date().toISOString() : null,
+    }).eq("id", sub.id);
+    if (activity) fetchSubActivities(activity.id);
+    onActivityUpdated();
+  };
 
   const handleAddTag = () => {
     if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
