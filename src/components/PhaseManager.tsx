@@ -250,10 +250,13 @@ export const PhaseManager = ({
           <h2 className="text-lg font-semibold text-foreground">Fases do Projeto</h2>
         </div>
         {isAdmin && (
-          <Button size="sm" onClick={() => setShowAddPhase(!showAddPhase)} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Nova Fase
-          </Button>
+          <div className="flex gap-2">
+            <ImportWBSDialog projectId={projectId} onDataChanged={onDataChanged} />
+            <Button size="sm" onClick={() => setShowAddPhase(!showAddPhase)} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Nova Fase
+            </Button>
+          </div>
         )}
       </div>
 
