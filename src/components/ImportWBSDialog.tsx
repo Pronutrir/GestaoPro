@@ -97,41 +97,37 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         phaseIdMap[phase.code] = data.id;
       }
 
-      // Create activities linked to their parent phase
+      // Create activities and sub-activities with sequential display_order per phase
       const activityIdMap: Record<string, string> = {};
+      const phaseOrderCounter: Record<string, number> = {};
 
-      for (let i = 0; i < activities.length; i++) {
-        const activity = activities[i];
+      for (const activity of activities) {
         const phaseId = activity.parentCode ? phaseIdMap[activity.parentCode] : null;
+        const phaseKey = phaseId || "__none__";
+        if (!(phaseKey in phaseOrderCounter)) phaseOrderCounter[phaseKey] = 0;
 
         const { data, error } = await supabase.from("activities").insert({
           project_id: projectId,
           title: `${activity.code} ${activity.title}`,
           phase_id: phaseId,
-          display_order: i,
+          display_order: phaseOrderCounter[phaseKey]++,
         }).select("id").single();
 
         if (error) throw error;
         activityIdMap[activity.code] = data.id;
-      }
 
-      // Create sub-activities linked to their parent activity
-      for (let i = 0; i < subactivities.length; i++) {
-        const sub = subactivities[i];
-        const parentId = sub.parentCode ? activityIdMap[sub.parentCode] : null;
-        // Find the phase of the parent activity
-        const parentActivity = activities.find(a => a.code === sub.parentCode);
-        const phaseId = parentActivity?.parentCode ? phaseIdMap[parentActivity.parentCode] : null;
-
-        const { error } = await supabase.from("activities").insert({
-          project_id: projectId,
-          title: `${sub.code} ${sub.title}`,
-          phase_id: phaseId,
-          parent_id: parentId,
-          display_order: i,
-        });
-
-        if (error) throw error;
+        // Insert sub-activities right after their parent
+        const childSubs = subactivities.filter(s => s.parentCode === activity.code);
+        for (const sub of childSubs) {
+          const { error: subError } = await supabase.from("activities").insert({
+            project_id: projectId,
+            title: `${sub.code} ${sub.title}`,
+            phase_id: phaseId,
+            parent_id: data.id,
+            display_order: phaseOrderCounter[phaseKey]++,
+          });
+          if (subError) throw subError;
+        }
       }
 
       toast({
