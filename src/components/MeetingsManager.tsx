@@ -121,6 +121,15 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     phase_id: "",
     participants: [] as string[],
     responsible: "",
+    meeting_type: "general",
+    // Daily fields
+    daily_yesterday: "",
+    daily_today: "",
+    daily_impediment: "",
+    // Retro fields
+    retro_good: "",
+    retro_bad: "",
+    retro_improve: "",
   });
 
   const getProfile = (id: string) => profiles.find((p) => p.id === id);
