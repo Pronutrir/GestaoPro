@@ -86,6 +86,15 @@ export const PhaseManager = ({
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [quickAddTitle, setQuickAddTitle] = useState<Record<string, string>>({});
+  const [quickAddSubTitle, setQuickAddSubTitle] = useState<Record<string, string>>({});
+  const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
+
+  const toggleActivityExpand = (activityId: string) => {
+    const newSet = new Set(expandedActivities);
+    if (newSet.has(activityId)) newSet.delete(activityId);
+    else newSet.add(activityId);
+    setExpandedActivities(newSet);
+  };
 
   const togglePhase = (phaseId: string) => {
     const newExpanded = new Set(expandedPhases);
