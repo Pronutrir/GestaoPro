@@ -149,7 +149,7 @@ function KanbanCard({
   return (
     <div
       className={`bg-card border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group ${
-        isOverdue ? "border-destructive border-l-[3px] border-l-destructive bg-destructive/5" : "border-border"
+        isOverdue ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue" : "border-border"
       }`}
       onClick={onEdit}
     >
@@ -305,13 +305,20 @@ export const ActivityKanban = ({
       phaseOrderMap[p.id] = i;
     });
 
-    // Sort by phase order first, then by display_order within phase (matching Phases tab)
+    // Sort by phase display_order first, then by activity display_order (1.0, 1.1, 1.1.1...)
     Object.keys(map).forEach((key) => {
       map[key].sort((a, b) => {
         const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
         const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
         if (phaseA !== phaseB) return phaseA - phaseB;
-        return (a.display_order ?? 0) - (b.display_order ?? 0);
+        // Within same phase, sort by display_order ascending (smaller first)
+        const orderA = a.display_order ?? 9999;
+        const orderB = b.display_order ?? 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        // Tie-break: parent activities before children
+        if (a.parent_id === null && b.parent_id !== null) return -1;
+        if (a.parent_id !== null && b.parent_id === null) return 1;
+        return 0;
       });
     });
 
@@ -386,13 +393,13 @@ export const ActivityKanban = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 pb-4" style={{ minHeight: 400 }}>
         {stages.filter((s) => s.display_order > 0).map((stage) => {
           const stageActivities = activitiesByStage[stage.id] || [];
           return (
             <div
               key={stage.id}
-              className="flex-shrink-0 w-[260px] bg-muted/30 rounded-xl border border-border/50 flex flex-col"
+              className="min-w-0 bg-muted/30 rounded-xl border border-border/50 flex flex-col"
             >
               {/* Column Header */}
               <div className="p-3 border-b border-border/50">
