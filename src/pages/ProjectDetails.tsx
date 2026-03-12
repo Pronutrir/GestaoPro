@@ -23,6 +23,7 @@ import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { MeetingsManager } from "@/components/MeetingsManager";
 import { AssumptionsManager } from "@/components/AssumptionsManager";
 import { RisksManager } from "@/components/RisksManager";
+import { BacklogSection } from "@/components/BacklogSection";
 import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
 import {
   ArrowLeft,
