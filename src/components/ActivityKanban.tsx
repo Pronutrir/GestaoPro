@@ -20,11 +20,14 @@ import {
   DragOverlay,
   DragStartEvent,
   useDroppable,
+  closestCenter,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   verticalListSortingStrategy,
+  horizontalListSortingStrategy,
   useSortable,
+  arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
@@ -251,6 +254,108 @@ function KanbanCard({
   );
 }
 
+function SortableColumn({
+  stage,
+  stageActivities,
+  activities,
+  phases,
+  widthPct,
+  isLast,
+  onEditActivity,
+  onDeleteActivity,
+  onToggleActivity,
+  isAdmin,
+  onResizeStart,
+}: {
+  stage: WorkflowStage;
+  stageActivities: Activity[];
+  activities: Activity[];
+  phases: Phase[];
+  widthPct: number;
+  isLast: boolean;
+  onEditActivity: (activity: Activity) => void;
+  onDeleteActivity: (activityId: string) => void;
+  onToggleActivity: (activityId: string, currentStatus: string) => void;
+  isAdmin?: boolean;
+  onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: `col-${stage.id}` });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    flex: `0 1 ${widthPct}%`,
+    marginRight: isLast ? 0 : 6,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      className={`relative min-w-0 rounded-xl border flex flex-col overflow-hidden ${
+        stage.is_blocked ? "bg-orange-500/5 border-orange-500/40" : "bg-muted/30 border-border/50"
+      }`}
+    >
+      {/* Column Header - drag handle for column reordering */}
+      <div className="p-3 border-b border-border/50 cursor-grab active:cursor-grabbing" {...listeners}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className="w-3 h-3 rounded-full shrink-0"
+              style={{ backgroundColor: stage.color }}
+            />
+            <h3 className="text-sm font-semibold text-foreground truncate">{stage.title}</h3>
+          </div>
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
+            {stageActivities.length}
+          </Badge>
+        </div>
+      </div>
+
+      {/* Droppable Column Body */}
+      <DroppableColumn stage={stage}>
+        <SortableContext
+          items={stageActivities.map((a) => a.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {stageActivities.length === 0 ? (
+            <div className="flex items-center justify-center h-20 border-2 border-dashed border-border/40 rounded-lg">
+              <p className="text-xs text-muted-foreground/50">Arraste aqui</p>
+            </div>
+          ) : (
+            stageActivities.map((activity) => (
+              <SortableKanbanCard
+                key={activity.id}
+                activity={activity}
+                phases={phases}
+                onEdit={() => onEditActivity(activity)}
+                onDelete={() => onDeleteActivity(activity.id)}
+                onToggle={() => onToggleActivity(activity.id, activity.status)}
+                isAdmin={isAdmin}
+                isBlocked={stage.is_blocked}
+              />
+            ))
+          )}
+        </SortableContext>
+      </DroppableColumn>
+
+      {/* Resize Handle */}
+      {!isLast && (
+        <div
+          className="absolute top-0 -right-[5px] w-[10px] h-full cursor-col-resize z-10 group flex items-center justify-center"
+          onMouseDown={(e) => onResizeStart(e, stage.id, widthPct)}
+        >
+          <div className="w-[3px] h-8 rounded-full bg-border/50 group-hover:bg-primary/60 transition-colors" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function DroppableColumn({
   stage,
   children,
@@ -285,6 +390,7 @@ export const ActivityKanban = ({
   const { toast } = useToast();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
@@ -389,27 +495,74 @@ export const ActivityKanban = ({
     return map;
   }, [activities, stages, phases]);
 
-  const activeActivity = activeId ? activities.find((a) => a.id === activeId) : null;
+  
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
+    const id = event.active.id as string;
+    if (id.startsWith("col-")) {
+      setActiveId(id);
+      setDragType("column");
+    } else {
+      setActiveId(id);
+      setDragType("card");
+    }
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     setActiveId(null);
+    setDragType(null);
     const { active, over } = event;
     if (!over) return;
 
+    // Handle column reordering
+    if (dragType === "column") {
+      const activeColId = (active.id as string).replace("col-", "");
+      const overColId = (over.id as string).replace("col-", "");
+      if (activeColId === overColId) return;
+
+      const visibleStages = stages.filter((s) => s.display_order > 0);
+      const oldIndex = visibleStages.findIndex((s) => s.id === activeColId);
+      const newIndex = visibleStages.findIndex((s) => s.id === overColId);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const reordered = arrayMove(visibleStages, oldIndex, newIndex);
+      // Update local state immediately
+      const backlogStages = stages.filter((s) => s.display_order === 0);
+      const updatedStages = [
+        ...backlogStages,
+        ...reordered.map((s, i) => ({ ...s, display_order: i + 1 })),
+      ];
+      setStages(updatedStages);
+
+      // Persist to database
+      try {
+        await Promise.all(
+          reordered.map((s, i) =>
+            supabase
+              .from("workflow_stages")
+              .update({ display_order: i + 1 })
+              .eq("id", s.id)
+          )
+        );
+        onDataChanged();
+      } catch {
+        toast({ title: "Erro ao reordenar colunas", variant: "destructive" });
+        fetchStages();
+      }
+      return;
+    }
+
+    // Handle card movement between stages
     const activityId = active.id as string;
     const overId = over.id as string;
 
     let targetStageId: string | null = null;
 
-    // Dropped on a droppable column
     if (overId.startsWith("stage-")) {
       targetStageId = overId.replace("stage-", "");
+    } else if (overId.startsWith("col-")) {
+      targetStageId = overId.replace("col-", "");
     } else {
-      // Dropped on another activity card — find which stage it belongs to
       const overActivity = activities.find((a) => a.id === overId);
       if (overActivity) {
         targetStageId = overActivity.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
@@ -418,7 +571,6 @@ export const ActivityKanban = ({
 
     if (!targetStageId) return;
 
-    // Check if it actually changed
     const draggedActivity = activities.find((a) => a.id === activityId);
     const currentStageId = draggedActivity?.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
     if (targetStageId === currentStageId) return;
@@ -437,7 +589,6 @@ export const ActivityKanban = ({
         })
         .eq("id", activityId);
 
-      // Generate blocked notification when moving to a blocked stage
       if (stage?.is_blocked && draggedActivity) {
         await supabase.from("notifications").insert({
           project_id: projectId,
@@ -454,6 +605,10 @@ export const ActivityKanban = ({
     }
   };
 
+  const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0), [stages]);
+  const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
+  const activeColumn = dragType === "column" && activeId ? visibleStages.find((s) => `col-${s.id}` === activeId) : null;
+
   if (stages.length === 0) {
     return (
       <Card className="p-8 text-center">
@@ -469,74 +624,33 @@ export const ActivityKanban = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div ref={containerRef} className="flex pb-4 w-full" style={{ minHeight: 400 }}>
-        {stages.filter((s) => s.display_order > 0).map((stage, idx, arr) => {
-          const stageActivities = activitiesByStage[stage.id] || [];
-          const widthPct = columnWidths[stage.id] || (100 / arr.length);
-          return (
-            <div
-              key={stage.id}
-              className={`relative min-w-0 rounded-xl border flex flex-col overflow-hidden ${
-                stage.is_blocked ? "bg-orange-500/5 border-orange-500/40" : "bg-muted/30 border-border/50"
-              }`}
-              style={{ flex: `0 1 ${widthPct}%`, marginRight: idx < arr.length - 1 ? 6 : 0 }}
-            >
-              {/* Column Header */}
-              <div className="p-3 border-b border-border/50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div
-                      className="w-3 h-3 rounded-full shrink-0"
-                      style={{ backgroundColor: stage.color }}
-                    />
-                    <h3 className="text-sm font-semibold text-foreground truncate">{stage.title}</h3>
-                  </div>
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
-                    {stageActivities.length}
-                  </Badge>
-                </div>
-              </div>
-
-              {/* Droppable Column Body */}
-              <DroppableColumn stage={stage}>
-                <SortableContext
-                  items={stageActivities.map((a) => a.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {stageActivities.length === 0 ? (
-                    <div className="flex items-center justify-center h-20 border-2 border-dashed border-border/40 rounded-lg">
-                      <p className="text-xs text-muted-foreground/50">Arraste aqui</p>
-                    </div>
-                  ) : (
-                    stageActivities.map((activity) => (
-                      <SortableKanbanCard
-                        key={activity.id}
-                        activity={activity}
-                        phases={phases}
-                        onEdit={() => onEditActivity(activity)}
-                        onDelete={() => onDeleteActivity(activity.id)}
-                        onToggle={() => onToggleActivity(activity.id, activity.status)}
-                        isAdmin={isAdmin}
-                        isBlocked={stage.is_blocked}
-                      />
-                    ))
-                  )}
-                </SortableContext>
-              </DroppableColumn>
-
-              {/* Resize Handle */}
-              {idx < arr.length - 1 && (
-                <div
-                  className="absolute top-0 -right-[5px] w-[10px] h-full cursor-col-resize z-10 group flex items-center justify-center"
-                  onMouseDown={(e) => handleResizeStart(e, stage.id, widthPct)}
-                >
-                  <div className="w-[3px] h-8 rounded-full bg-border/50 group-hover:bg-primary/60 transition-colors" />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <SortableContext
+        items={visibleStages.map((s) => `col-${s.id}`)}
+        strategy={horizontalListSortingStrategy}
+      >
+        <div ref={containerRef} className="flex pb-4 w-full" style={{ minHeight: 400 }}>
+          {visibleStages.map((stage, idx) => {
+            const stageActivities = activitiesByStage[stage.id] || [];
+            const widthPct = columnWidths[stage.id] || (100 / visibleStages.length);
+            return (
+              <SortableColumn
+                key={stage.id}
+                stage={stage}
+                stageActivities={stageActivities}
+                activities={activities}
+                phases={phases}
+                widthPct={widthPct}
+                isLast={idx === visibleStages.length - 1}
+                onEditActivity={onEditActivity}
+                onDeleteActivity={onDeleteActivity}
+                onToggleActivity={onToggleActivity}
+                isAdmin={isAdmin}
+                onResizeStart={handleResizeStart}
+              />
+            );
+          })}
+        </div>
+      </SortableContext>
 
       <DragOverlay>
         {activeActivity ? (
@@ -548,6 +662,13 @@ export const ActivityKanban = ({
               onDelete={() => {}}
               onToggle={() => {}}
             />
+          </div>
+        ) : activeColumn ? (
+          <div className="opacity-70 w-[200px] rounded-xl border bg-muted/50 p-3">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: activeColumn.color }} />
+              <span className="text-sm font-semibold text-foreground">{activeColumn.title}</span>
+            </div>
           </div>
         ) : null}
       </DragOverlay>
