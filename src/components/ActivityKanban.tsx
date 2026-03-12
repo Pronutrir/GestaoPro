@@ -673,6 +673,7 @@ export const ActivityKanban = ({
                 onEditActivity={onEditActivity}
                 onDeleteActivity={onDeleteActivity}
                 onToggleActivity={onToggleActivity}
+                onMoveToBacklog={handleMoveToBacklog}
                 isAdmin={isAdmin}
                 onResizeStart={handleResizeStart}
               />
