@@ -550,7 +550,14 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                   <div className="flex items-start gap-2">
                     {isExpanded ? <ChevronDown className="w-4 h-4 mt-0.5 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 mt-0.5 text-muted-foreground" />}
                     <div>
-                      <p className="font-medium text-foreground">{meeting.title}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-foreground">{meeting.title}</p>
+                        {meeting.meeting_type && meeting.meeting_type !== "general" && (
+                          <Badge className={`text-[10px] ${MEETING_TYPE_COLORS[meeting.meeting_type || "general"]}`}>
+                            {MEETING_TYPES.find(t => t.value === meeting.meeting_type)?.label}
+                          </Badge>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
                         {meeting.meeting_date && (
                           <span className="flex items-center gap-1">
