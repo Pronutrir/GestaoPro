@@ -126,6 +126,7 @@ function KanbanCard({
   onToggle,
   dragListeners,
   isAdmin,
+  isBlocked,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -134,6 +135,7 @@ function KanbanCard({
   onToggle: () => void;
   dragListeners?: any;
   isAdmin?: boolean;
+  isBlocked?: boolean;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -151,11 +153,15 @@ function KanbanCard({
   const parseDate = (d: string) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day); };
   const isOverdue = activity.end_date && parseDate(activity.end_date) < new Date() && activity.status !== "completed";
 
+  const cardBorderClass = isBlocked
+    ? "border-orange-500 border-l-[3px] border-l-orange-500 bg-orange-500/5"
+    : isOverdue
+      ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue"
+      : "border-border";
+
   return (
     <div
-      className={`bg-card border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group ${
-        isOverdue ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue" : "border-border"
-      }`}
+      className={`bg-card border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group ${cardBorderClass}`}
       onClick={onEdit}
     >
       <div className="flex items-start gap-2">
