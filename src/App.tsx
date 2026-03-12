@@ -15,6 +15,7 @@ import TeamView from "./pages/TeamView";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Timeline from "./pages/Timeline";
+import Roadmap from "./pages/Roadmap";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
