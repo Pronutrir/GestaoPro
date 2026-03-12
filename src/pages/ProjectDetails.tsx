@@ -127,6 +127,7 @@ const ProjectDetails = () => {
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [editActivityDialogOpen, setEditActivityDialogOpen] = useState(false);
   const [sprintGoal, setSprintGoal] = useState("");
+  const [activeSprintId, setActiveSprintId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),

@@ -680,30 +680,41 @@ export const ActivityKanban = ({
   return (
     <div className="space-y-3">
       {/* Sprint Goal Banner */}
-      <div className="flex items-center gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
-        <span className="text-sm font-bold text-primary shrink-0">🎯 Sprint Goal:</span>
-        {editingGoal ? (
-          <div className="flex-1 flex gap-2">
-            <input
-              className="flex-1 h-8 rounded-md border border-input bg-background px-3 text-sm"
-              value={goalDraft}
-              onChange={(e) => setGoalDraft(e.target.value)}
-              placeholder="Defina o objetivo da Sprint..."
-              autoFocus
-            />
-            <Button size="sm" className="h-8" onClick={() => { onSprintGoalChange?.(goalDraft); setEditingGoal(false); }}>Salvar</Button>
-            <Button size="sm" variant="ghost" className="h-8" onClick={() => { setGoalDraft(sprintGoal); setEditingGoal(false); }}>Cancelar</Button>
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-between">
-            <p className="text-sm text-foreground cursor-pointer hover:text-primary" onClick={() => setEditingGoal(true)}>
-              {sprintGoal || <span className="text-muted-foreground italic">Clique para definir o objetivo da Sprint...</span>}
-            </p>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
-              <span className="font-medium">{completedSP}/{totalSP} SP</span>
+      <div className="rounded-lg border border-primary/20 bg-primary/5 overflow-hidden">
+        <div className="flex items-center gap-3 p-3">
+          <span className="text-sm font-bold text-primary shrink-0">🎯 Sprint Goal:</span>
+          {editingGoal ? (
+            <div className="flex-1 flex gap-2">
+              <input
+                className="flex-1 h-8 rounded-md border border-input bg-background px-3 text-sm"
+                value={goalDraft}
+                onChange={(e) => setGoalDraft(e.target.value)}
+                placeholder="Defina o objetivo da Sprint..."
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter") { onSprintGoalChange?.(goalDraft); setEditingGoal(false); } }}
+              />
+              <Button size="sm" className="h-8" onClick={() => { onSprintGoalChange?.(goalDraft); setEditingGoal(false); }}>Salvar</Button>
+              <Button size="sm" variant="ghost" className="h-8" onClick={() => { setGoalDraft(sprintGoal); setEditingGoal(false); }}>Cancelar</Button>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="flex-1 flex items-center justify-between">
+              <p className="text-sm text-foreground cursor-pointer hover:text-primary" onClick={() => setEditingGoal(true)}>
+                {sprintGoal || <span className="text-muted-foreground italic">Clique para definir o objetivo da Sprint...</span>}
+              </p>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+                <span className="font-medium">{completedSP}/{totalSP} SP</span>
+                <span className="font-medium">{totalSP > 0 ? Math.round((completedSP / totalSP) * 100) : 0}%</span>
+              </div>
+            </div>
+          )}
+        </div>
+        {/* Progress Bar */}
+        <div className="h-1.5 w-full bg-primary/10">
+          <div
+            className="h-full bg-primary transition-all duration-500 ease-out"
+            style={{ width: `${totalSP > 0 ? (completedSP / totalSP) * 100 : 0}%` }}
+          />
+        </div>
       </div>
 
       <DndContext
