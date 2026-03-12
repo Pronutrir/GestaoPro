@@ -254,7 +254,108 @@ function KanbanCard({
   );
 }
 
-function DroppableColumn({
+function SortableColumn({
+  stage,
+  stageActivities,
+  activities,
+  phases,
+  widthPct,
+  isLast,
+  onEditActivity,
+  onDeleteActivity,
+  onToggleActivity,
+  isAdmin,
+  onResizeStart,
+}: {
+  stage: WorkflowStage;
+  stageActivities: Activity[];
+  activities: Activity[];
+  phases: Phase[];
+  widthPct: number;
+  isLast: boolean;
+  onEditActivity: (activity: Activity) => void;
+  onDeleteActivity: (activityId: string) => void;
+  onToggleActivity: (activityId: string, currentStatus: string) => void;
+  isAdmin?: boolean;
+  onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: `col-${stage.id}` });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    flex: `0 1 ${widthPct}%`,
+    marginRight: isLast ? 0 : 6,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      className={`relative min-w-0 rounded-xl border flex flex-col overflow-hidden ${
+        stage.is_blocked ? "bg-orange-500/5 border-orange-500/40" : "bg-muted/30 border-border/50"
+      }`}
+    >
+      {/* Column Header - drag handle for column reordering */}
+      <div className="p-3 border-b border-border/50 cursor-grab active:cursor-grabbing" {...listeners}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className="w-3 h-3 rounded-full shrink-0"
+              style={{ backgroundColor: stage.color }}
+            />
+            <h3 className="text-sm font-semibold text-foreground truncate">{stage.title}</h3>
+          </div>
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
+            {stageActivities.length}
+          </Badge>
+        </div>
+      </div>
+
+      {/* Droppable Column Body */}
+      <DroppableColumn stage={stage}>
+        <SortableContext
+          items={stageActivities.map((a) => a.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {stageActivities.length === 0 ? (
+            <div className="flex items-center justify-center h-20 border-2 border-dashed border-border/40 rounded-lg">
+              <p className="text-xs text-muted-foreground/50">Arraste aqui</p>
+            </div>
+          ) : (
+            stageActivities.map((activity) => (
+              <SortableKanbanCard
+                key={activity.id}
+                activity={activity}
+                phases={phases}
+                onEdit={() => onEditActivity(activity)}
+                onDelete={() => onDeleteActivity(activity.id)}
+                onToggle={() => onToggleActivity(activity.id, activity.status)}
+                isAdmin={isAdmin}
+                isBlocked={stage.is_blocked}
+              />
+            ))
+          )}
+        </SortableContext>
+      </DroppableColumn>
+
+      {/* Resize Handle */}
+      {!isLast && (
+        <div
+          className="absolute top-0 -right-[5px] w-[10px] h-full cursor-col-resize z-10 group flex items-center justify-center"
+          onMouseDown={(e) => onResizeStart(e, stage.id, widthPct)}
+        >
+          <div className="w-[3px] h-8 rounded-full bg-border/50 group-hover:bg-primary/60 transition-colors" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+
   stage,
   children,
 }: {
