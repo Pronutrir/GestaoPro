@@ -137,10 +137,42 @@ const ProjectDetails = () => {
   useEffect(() => {
     if (id) {
       fetchProjectData();
-      // Generate overdue/deadline notifications for this project
+      fetchActiveSprint();
       supabase.rpc("generate_overdue_notifications", { p_project_id: id }).then();
     }
   }, [id]);
+
+  const fetchActiveSprint = async () => {
+    const { data } = await supabase
+      .from("sprints")
+      .select("*")
+      .eq("project_id", id!)
+      .in("status", ["active", "planning"])
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (data && data.length > 0) {
+      setActiveSprintId(data[0].id);
+      setSprintGoal(data[0].goal || "");
+    }
+  };
+
+  const handleSprintGoalChange = async (goal: string) => {
+    setSprintGoal(goal);
+    if (activeSprintId) {
+      await supabase.from("sprints").update({ goal }).eq("id", activeSprintId);
+    } else {
+      // Create a new sprint automatically
+      const { data } = await supabase.from("sprints").insert({
+        project_id: id!,
+        title: "Sprint 1",
+        goal,
+        start_date: new Date().toISOString().split("T")[0],
+        end_date: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
+        status: "active",
+      }).select().single();
+      if (data) setActiveSprintId(data.id);
+    }
+  };
 
   const fetchProjectData = async () => {
     try {
