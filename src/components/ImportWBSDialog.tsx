@@ -62,6 +62,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
   const parsed = text ? parseWBS(text) : [];
   const phases = parsed.filter(i => i.level === "phase");
   const activities = parsed.filter(i => i.level === "activity");
+  const subactivities = parsed.filter(i => i.level === "subactivity");
 
   const handleImport = async () => {
     if (parsed.length === 0) return;
