@@ -83,6 +83,7 @@ function SortableKanbanCard({
   onDelete,
   onToggle,
   isAdmin,
+  isBlocked,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -90,6 +91,7 @@ function SortableKanbanCard({
   onDelete: () => void;
   onToggle: () => void;
   isAdmin?: boolean;
+  isBlocked?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -110,6 +112,7 @@ function SortableKanbanCard({
         onToggle={onToggle}
         dragListeners={listeners}
         isAdmin={isAdmin}
+        isBlocked={isBlocked}
       />
     </div>
   );
