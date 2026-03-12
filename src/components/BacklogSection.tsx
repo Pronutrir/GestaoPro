@@ -2,13 +2,37 @@ import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Circle, Pencil, Trash2, Inbox } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CheckCircle2, Circle, Trash2, Inbox, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface Phase {
   id: string;
   title: string;
+}
+
+interface WorkflowStage {
+  id: string;
+  title: string;
+  display_order: number;
+  color: string;
 }
 
 interface Activity {
@@ -42,6 +66,17 @@ interface BacklogSectionProps {
   isAdmin?: boolean;
 }
 
+const priorityLabels: Record<string, string> = {
+  high: "Alta",
+  medium: "Média",
+  low: "Baixa",
+};
+const priorityColors: Record<string, string> = {
+  high: "bg-destructive/10 text-destructive border-destructive/20",
+  medium: "bg-amber-500/10 text-amber-700 border-amber-500/20",
+  low: "bg-muted text-muted-foreground border-border",
+};
+
 export const BacklogSection = ({
   projectId,
   activities,
@@ -55,18 +90,25 @@ export const BacklogSection = ({
   const { toast } = useToast();
   const [backlogStageId, setBacklogStageId] = useState<string | null>(null);
   const [allStageIds, setAllStageIds] = useState<Set<string>>(new Set());
+  const [stages, setStages] = useState<WorkflowStage[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [targetStageId, setTargetStageId] = useState<string>("");
+  const [assignee, setAssignee] = useState<string>("");
+  const [isMoving, setIsMoving] = useState(false);
 
   useEffect(() => {
     const fetchStages = async () => {
       const { data } = await supabase
         .from("workflow_stages")
-        .select("id, display_order")
+        .select("id, display_order, title, color")
         .eq("project_id", projectId)
         .order("display_order");
       if (data) {
         const backlog = data.find((s) => s.display_order === 0);
         setBacklogStageId(backlog?.id ?? null);
         setAllStageIds(new Set(data.filter((s) => s.display_order > 0).map((s) => s.id)));
+        setStages(data.filter((s) => s.display_order > 0));
       }
     };
     fetchStages();
@@ -75,12 +117,10 @@ export const BacklogSection = ({
   const phaseOrderMap: Record<string, number> = {};
   phases.forEach((p, i) => { phaseOrderMap[p.id] = i; });
 
-  // Backlog = activities with backlog stage, no stage, or orphaned stage references
   const backlogActivities = activities
     .filter((a) => {
       if (!a.workflow_stage_id) return true;
       if (backlogStageId && a.workflow_stage_id === backlogStageId) return true;
-      // Orphaned: stage_id doesn't match any active (non-backlog) stage
       if (!allStageIds.has(a.workflow_stage_id)) return true;
       return false;
     })
@@ -96,27 +136,44 @@ export const BacklogSection = ({
       return 0;
     });
 
-  const handleMoveToBoard = async (activityId: string) => {
-    // Move to "A Fazer" (display_order = 1)
-    const { data: nextStage } = await supabase
-      .from("workflow_stages")
-      .select("id")
-      .eq("project_id", projectId)
-      .eq("display_order", 1)
-      .single();
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
-    if (!nextStage) {
-      toast({ title: "Nenhuma etapa disponível para mover", variant: "destructive" });
+  const toggleSelectAll = () => {
+    if (selectedIds.size === backlogActivities.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(backlogActivities.map((a) => a.id)));
+    }
+  };
+
+  const handleMoveSelected = async () => {
+    if (!targetStageId) {
+      toast({ title: "Selecione uma etapa de destino", variant: "destructive" });
       return;
     }
+    setIsMoving(true);
+    const ids = Array.from(selectedIds);
+    const updateData: Record<string, unknown> = { workflow_stage_id: targetStageId };
+    if (assignee.trim()) updateData.assigned_to = assignee.trim();
 
     await supabase
       .from("activities")
-      .update({ workflow_stage_id: nextStage.id })
-      .eq("id", activityId);
+      .update(updateData)
+      .in("id", ids);
 
+    setSelectedIds(new Set());
+    setMoveDialogOpen(false);
+    setTargetStageId("");
+    setAssignee("");
+    setIsMoving(false);
     onDataChanged();
-    toast({ title: "Atividade movida para o quadro" });
+    toast({ title: `${ids.length} atividade(s) movida(s) para o quadro` });
   };
 
   if (backlogActivities.length === 0) {
@@ -131,53 +188,55 @@ export const BacklogSection = ({
     );
   }
 
-  const handleMoveAllToBoard = async () => {
-    const { data: nextStage } = await supabase
-      .from("workflow_stages")
-      .select("id")
-      .eq("project_id", projectId)
-      .eq("display_order", 1)
-      .single();
-
-    if (!nextStage) {
-      toast({ title: "Nenhuma etapa disponível para mover", variant: "destructive" });
-      return;
-    }
-
-    const ids = backlogActivities.map((a) => a.id);
-    await supabase
-      .from("activities")
-      .update({ workflow_stage_id: nextStage.id })
-      .in("id", ids);
-
-    onDataChanged();
-    toast({ title: `${ids.length} atividades movidas para o quadro` });
-  };
+  const allSelected = selectedIds.size === backlogActivities.length;
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-sm text-muted-foreground">
-          Atividades planejadas para o futuro ou temporariamente descartadas ({backlogActivities.length})
-        </p>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 text-xs"
-          onClick={handleMoveAllToBoard}
-        >
-          Mover todas para o quadro
-        </Button>
+        <div className="flex items-center gap-3">
+          <Checkbox
+            checked={allSelected}
+            onCheckedChange={toggleSelectAll}
+            aria-label="Selecionar todas"
+          />
+          <p className="text-sm text-muted-foreground">
+            {selectedIds.size > 0
+              ? `${selectedIds.size} de ${backlogActivities.length} selecionada(s)`
+              : `${backlogActivities.length} atividade(s) no backlog`}
+          </p>
+        </div>
+        {selectedIds.size > 0 && (
+          <Button
+            size="sm"
+            className="h-7 text-xs gap-1.5"
+            onClick={() => setMoveDialogOpen(true)}
+          >
+            <ArrowRight className="w-3.5 h-3.5" />
+            Mover para Kanban ({selectedIds.size})
+          </Button>
+        )}
       </div>
+
       <div className="grid gap-2">
         {backlogActivities.map((activity) => {
           const phase = phases.find((p) => p.id === activity.phase_id);
+          const isSelected = selectedIds.has(activity.id);
+          const prio = activity.priority || "medium";
           return (
             <div
               key={activity.id}
-              className="flex items-center gap-3 bg-card border border-border rounded-lg px-4 py-3 hover:shadow-sm transition-shadow cursor-pointer group"
+              className={`flex items-center gap-3 bg-card border rounded-lg px-4 py-3 hover:shadow-sm transition-all cursor-pointer group ${
+                isSelected ? "border-primary/50 bg-primary/5" : "border-border"
+              }`}
               onClick={() => onEditActivity(activity)}
             >
+              <Checkbox
+                checked={isSelected}
+                onCheckedChange={() => toggleSelect(activity.id)}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Selecionar ${activity.title}`}
+              />
+
               <Button
                 size="icon"
                 variant="ghost"
@@ -204,6 +263,9 @@ export const BacklogSection = ({
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                <Badge variant="outline" className={`text-[10px] ${priorityColors[prio]}`}>
+                  {priorityLabels[prio] || prio}
+                </Badge>
                 {phase && (
                   <Badge variant="outline" className="text-[10px]">
                     {phase.title}
@@ -214,17 +276,6 @@ export const BacklogSection = ({
                     👤 {activity.assigned_to}
                   </Badge>
                 )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleMoveToBoard(activity.id);
-                  }}
-                >
-                  Mover para quadro
-                </Button>
                 {isAdmin && (
                   <Button
                     size="icon"
@@ -243,6 +294,64 @@ export const BacklogSection = ({
           );
         })}
       </div>
+
+      {/* Modal de configuração para mover */}
+      <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mover {selectedIds.size} atividade(s) para o Kanban</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Etapa de destino *</Label>
+              <Select value={targetStageId} onValueChange={setTargetStageId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a etapa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stages.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Responsável (opcional)</Label>
+              <Input
+                placeholder="Nome do responsável"
+                value={assignee}
+                onChange={(e) => setAssignee(e.target.value)}
+              />
+            </div>
+            <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-1">
+              <p className="text-xs text-muted-foreground mb-1">Atividades selecionadas:</p>
+              {backlogActivities
+                .filter((a) => selectedIds.has(a.id))
+                .map((a) => {
+                  const prio = a.priority || "medium";
+                  return (
+                    <div key={a.id} className="flex items-center gap-2 text-sm">
+                      <span className="truncate flex-1">{a.title}</span>
+                      <Badge variant="outline" className={`text-[10px] shrink-0 ${priorityColors[prio]}`}>
+                        {priorityLabels[prio] || prio}
+                      </Badge>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleMoveSelected} disabled={!targetStageId || isMoving}>
+              {isMoving ? "Movendo..." : "Confirmar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
