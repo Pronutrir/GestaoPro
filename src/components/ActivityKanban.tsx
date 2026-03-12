@@ -68,6 +68,7 @@ interface Activity {
   tags?: string[];
   parent_id?: string | null;
   workflow_stage_id?: string | null;
+  story_points?: number;
 }
 
 interface ActivityKanbanProps {
