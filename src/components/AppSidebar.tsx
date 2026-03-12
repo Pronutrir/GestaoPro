@@ -27,6 +27,7 @@ import {
 
 const allNavItems = [
   { path: "/", label: "Visão Geral", icon: Home, adminOnly: false },
+  { path: "/roadmap", label: "Roadmap", icon: Map, adminOnly: false },
   { path: "/projects", label: "Projetos", icon: FolderKanban, adminOnly: false },
   { path: "/timeline", label: "Cronograma", icon: GanttChart, adminOnly: false },
   { path: "/team", label: "Equipe", icon: Users, adminOnly: false },
