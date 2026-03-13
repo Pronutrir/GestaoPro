@@ -610,7 +610,81 @@ const ProjectDetails = () => {
                 <RisksManager projectId={id!} />
               </TabsContent>
 
-              <TabsContent value="backlog" className="mt-0">
+              <TabsContent value="backlog" className="mt-3 space-y-4">
+                {/* Action Buttons - migrated from Phases */}
+                {isAdmin && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant={showAddPhase ? "secondary" : "default"} onClick={() => { setShowAddPhase(!showAddPhase); setShowAddActivity(false); }} className="gap-2">
+                      <Layers className="w-4 h-4" /> Nova Fase
+                    </Button>
+                    <Button size="sm" variant={showAddActivity ? "secondary" : "outline"} onClick={() => { setShowAddActivity(!showAddActivity); setShowAddPhase(false); }} className="gap-2">
+                      <Plus className="w-4 h-4" /> Nova Atividade
+                    </Button>
+                    <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
+                    {phases.length > 0 && (
+                      <Button size="sm" variant="outline" className="gap-2 text-destructive hover:bg-destructive/10" onClick={async () => {
+                        if (!confirm(`Excluir TODAS as ${phases.length} fases?`)) return;
+                        await supabase.from("phases").delete().eq("project_id", id);
+                        toast({ title: `${phases.length} fases excluídas!` }); fetchProjectData();
+                      }}>
+                        <Trash2 className="w-4 h-4" /> Excluir Fases
+                      </Button>
+                    )}
+                    {activities.length > 0 && (
+                      <Button size="sm" variant="outline" className="gap-2 text-destructive hover:bg-destructive/10" onClick={async () => {
+                        if (!confirm(`Excluir TODAS as ${activities.length} atividades?`)) return;
+                        await supabase.from("activities").delete().eq("project_id", id);
+                        toast({ title: `${activities.length} atividades excluídas!` }); fetchProjectData();
+                      }}>
+                        <Trash2 className="w-4 h-4" /> Excluir Atividades
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {/* Add Phase Form */}
+                {showAddPhase && (
+                  <Card className="p-4 border-primary/20 bg-primary/5 space-y-3">
+                    <Input placeholder="Nome da fase *" value={newPhaseTitle} onChange={(e) => setNewPhaseTitle(e.target.value)} />
+                    <Input placeholder="Descrição (opcional)" value={newPhaseDescription} onChange={(e) => setNewPhaseDescription(e.target.value)} />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={handleAddPhase}>Criar Fase</Button>
+                      <Button size="sm" variant="outline" onClick={() => { setShowAddPhase(false); setNewPhaseTitle(""); setNewPhaseDescription(""); }}>Cancelar</Button>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Add Activity Form */}
+                {showAddActivity && (
+                  <Card className="p-4 border-primary/20 bg-primary/5 space-y-3">
+                    <Input placeholder="Nome da atividade *" value={newActivity} onChange={(e) => setNewActivity(e.target.value)} />
+                    <div className="grid grid-cols-3 gap-3">
+                      <Input placeholder="Responsável" value={newActivityAssigned} onChange={(e) => setNewActivityAssigned(e.target.value)} />
+                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newActivityPhaseId} onChange={(e) => setNewActivityPhaseId(e.target.value)}>
+                        <option value="">Sem fase</option>
+                        {phases.map((phase) => (<option key={phase.id} value={phase.id}>{phase.title}</option>))}
+                      </select>
+                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newActivityPriority} onChange={(e) => setNewActivityPriority(e.target.value)}>
+                        <option value="low">Baixa</option>
+                        <option value="medium">Média</option>
+                        <option value="high">Alta</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input type="number" placeholder="Horas estimadas" value={newActivityHours} onChange={(e) => setNewActivityHours(e.target.value)} step="0.5" min="0" />
+                      <Input type="number" placeholder="Custo (R$)" value={newActivityCost} onChange={(e) => setNewActivityCost(e.target.value)} step="0.01" min="0" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><Label className="text-xs text-muted-foreground">Início</Label><Input type="date" value={newActivityStartDate} onChange={(e) => setNewActivityStartDate(e.target.value)} /></div>
+                      <div><Label className="text-xs text-muted-foreground">Fim</Label><Input type="date" value={newActivityEndDate} onChange={(e) => setNewActivityEndDate(e.target.value)} /></div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleAddActivity}>Salvar</Button>
+                      <Button variant="outline" onClick={() => { setShowAddActivity(false); setNewActivity(""); setNewActivityAssigned(""); setNewActivityStartDate(""); setNewActivityEndDate(""); setNewActivityCost(""); setNewActivityHours(""); setNewActivityPhaseId(""); setNewActivityPriority("medium"); }}>Cancelar</Button>
+                    </div>
+                  </Card>
+                )}
+
                 <BacklogSection
                   projectId={id!}
                   activities={activities}
