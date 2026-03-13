@@ -11,6 +11,7 @@ import { Plus, Pencil, Trash2, Package, Calendar } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { DeliveryPackageDrawer } from "@/components/DeliveryPackageDrawer";
 
 interface DeliveryPackage {
   id: string;
@@ -27,6 +28,17 @@ interface DeliveryPackage {
 interface Activity {
   id: string;
   title: string;
+  status?: string;
+  workflow_stage_id?: string | null;
+  created_at?: string;
+  completed_at?: string | null;
+}
+
+interface WorkflowStage {
+  id: string;
+  title: string;
+  display_order: number;
+  color: string;
 }
 
 interface DeliveryPackagesManagerProps {
@@ -34,38 +46,35 @@ interface DeliveryPackagesManagerProps {
   activities: Activity[];
 }
 
-const STATUS_MAP: Record<string, { label: string; class: string }> = {
-  planned: { label: "Planejado", class: "bg-muted text-muted-foreground" },
-  in_progress: { label: "Em Andamento", class: "bg-primary/20 text-primary border-primary/30" },
-  delivered: { label: "Entregue", class: "bg-success/20 text-success border-success/30" },
-  delayed: { label: "Atrasado", class: "bg-destructive/20 text-destructive border-destructive/30" },
-};
-
 export const DeliveryPackagesManager = ({ projectId, activities }: DeliveryPackagesManagerProps) => {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const [packages, setPackages] = useState<DeliveryPackage[]>([]);
   const [packageActivities, setPackageActivities] = useState<Record<string, string[]>>({});
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [sector, setSector] = useState("");
   const [responsible, setResponsible] = useState("");
-  const [status, setStatus] = useState("planned");
+  const [status, setStatus] = useState("");
   const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
+  const [stages, setStages] = useState<WorkflowStage[]>([]);
+  const [drawerPkg, setDrawerPkg] = useState<DeliveryPackage | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const fetchData = async () => {
-    const [{ data: pkgs }, { data: links }, { data: sects }] = await Promise.all([
+    const [{ data: pkgs }, { data: links }, { data: sects }, { data: stgs }] = await Promise.all([
       supabase.from("delivery_packages").select("*").eq("project_id", projectId).order("start_date"),
       supabase.from("delivery_package_activities").select("package_id, activity_id"),
       supabase.from("sectors").select("id, name").order("name"),
+      supabase.from("workflow_stages").select("id, title, display_order, color").eq("project_id", projectId).order("display_order"),
     ]);
     if (pkgs) setPackages(pkgs);
     if (sects) setSectors(sects);
+    if (stgs) setStages(stgs);
     if (links) {
       const map: Record<string, string[]> = {};
       links.forEach(l => { if (!map[l.package_id]) map[l.package_id] = []; map[l.package_id].push(l.activity_id); });
@@ -77,8 +86,8 @@ export const DeliveryPackagesManager = ({ projectId, activities }: DeliveryPacka
 
   const resetForm = () => {
     setTitle(""); setDescription(""); setStartDate(""); setEndDate("");
-    setSector(""); setResponsible(""); setStatus("planned"); setSelectedActivities([]);
-    setEditingId(null); setShowForm(false);
+    setSector(""); setResponsible(""); setStatus(""); setSelectedActivities([]);
+    setShowForm(false);
   };
 
   const handleSave = async () => {
@@ -86,42 +95,39 @@ export const DeliveryPackagesManager = ({ projectId, activities }: DeliveryPacka
     const payload = {
       project_id: projectId, title, description: description || null,
       start_date: startDate || null, end_date: endDate || null,
-      sector: sector || null, responsible: responsible || null, status,
+      sector: sector || null, responsible: responsible || null, status: status || "planned",
     };
 
-    let pkgId = editingId;
-    if (editingId) {
-      const { error } = await supabase.from("delivery_packages").update(payload).eq("id", editingId);
-      if (error) { toast({ title: "Erro ao atualizar", variant: "destructive" }); return; }
-    } else {
-      const { data, error } = await supabase.from("delivery_packages").insert(payload).select("id").single();
-      if (error) { toast({ title: "Erro ao criar", variant: "destructive" }); return; }
-      pkgId = data.id;
-    }
+    const { data, error } = await supabase.from("delivery_packages").insert(payload).select().single();
+    if (error) { toast({ title: "Erro ao criar", variant: "destructive" }); return; }
+
+    const pkgId = data.id;
 
     // Sync activities
-    if (pkgId) {
-      await supabase.from("delivery_package_activities").delete().eq("package_id", pkgId);
-      if (selectedActivities.length > 0) {
-        await supabase.from("delivery_package_activities").insert(
-          selectedActivities.map(aId => ({ package_id: pkgId!, activity_id: aId }))
-        );
+    if (selectedActivities.length > 0) {
+      await supabase.from("delivery_package_activities").insert(
+        selectedActivities.map(aId => ({ package_id: pkgId, activity_id: aId }))
+      );
+      // Auto-assign workflow stage
+      if (status) {
+        const stageExists = stages.find(s => s.id === status);
+        if (stageExists) {
+          await supabase.from("activities").update({ workflow_stage_id: status }).in("id", selectedActivities);
+        }
       }
     }
 
-    toast({ title: editingId ? "Pacote atualizado!" : "Pacote criado!" });
-    resetForm(); fetchData();
-  };
+    toast({ title: "Pacote de Entregas criado!" });
+    resetForm();
+    await fetchData();
 
-  const handleEdit = (pkg: DeliveryPackage) => {
-    setEditingId(pkg.id); setTitle(pkg.title); setDescription(pkg.description || "");
-    setStartDate(pkg.start_date || ""); setEndDate(pkg.end_date || "");
-    setSector(pkg.sector || ""); setResponsible(pkg.responsible || ""); setStatus(pkg.status);
-    setSelectedActivities(packageActivities[pkg.id] || []); setShowForm(true);
+    // Auto-open drawer after creation
+    setDrawerPkg(data);
+    setDrawerOpen(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir este pacote?")) return;
+    if (!confirm("Excluir este pacote de entregas?")) return;
     await supabase.from("delivery_packages").delete().eq("id", id);
     toast({ title: "Pacote excluído!" }); fetchData();
   };
@@ -130,6 +136,14 @@ export const DeliveryPackagesManager = ({ projectId, activities }: DeliveryPacka
     setSelectedActivities(prev =>
       prev.includes(actId) ? prev.filter(a => a !== actId) : [...prev, actId]
     );
+  };
+
+  const getStageLabel = (statusValue: string) => {
+    const stage = stages.find(s => s.id === statusValue);
+    if (stage) return { label: stage.title, color: stage.color };
+    // Fallback for legacy status
+    const legacy: Record<string, string> = { planned: "Planejado", in_progress: "Em Andamento", delivered: "Entregue", delayed: "Atrasado" };
+    return { label: legacy[statusValue] || statusValue, color: undefined };
   };
 
   return (
@@ -162,9 +176,9 @@ export const DeliveryPackagesManager = ({ projectId, activities }: DeliveryPacka
             </Select>
             <Input placeholder="Responsável" value={responsible} onChange={e => setResponsible(e.target.value)} />
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
-                {Object.entries(STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+                {stages.map(s => <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -182,7 +196,7 @@ export const DeliveryPackagesManager = ({ projectId, activities }: DeliveryPacka
             </div>
           )}
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleSave}>{editingId ? "Atualizar" : "Criar"}</Button>
+            <Button size="sm" onClick={handleSave}>Criar</Button>
             <Button size="sm" variant="outline" onClick={resetForm}>Cancelar</Button>
           </div>
         </Card>
@@ -192,40 +206,63 @@ export const DeliveryPackagesManager = ({ projectId, activities }: DeliveryPacka
         <p className="text-sm text-muted-foreground text-center py-8">Nenhum pacote de entregas cadastrado.</p>
       ) : (
         <div className="space-y-2">
-          {packages.map(pkg => (
-            <Card key={pkg.id} className="p-4 space-y-2">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 space-y-1">
-                  <p className="text-sm font-medium text-foreground">{pkg.title}</p>
-                  {pkg.description && <p className="text-xs text-muted-foreground">{pkg.description}</p>}
-                  <div className="flex flex-wrap gap-2">
-                    <Badge className={STATUS_MAP[pkg.status]?.class}>{STATUS_MAP[pkg.status]?.label}</Badge>
-                    {pkg.sector && <Badge variant="outline">{pkg.sector}</Badge>}
-                    {pkg.responsible && <Badge variant="outline">👤 {pkg.responsible}</Badge>}
+          {packages.map(pkg => {
+            const stageInfo = getStageLabel(pkg.status);
+            return (
+              <Card
+                key={pkg.id}
+                className="p-4 space-y-2 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => { setDrawerPkg(pkg); setDrawerOpen(true); }}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 space-y-1">
+                    <p className="text-sm font-medium text-foreground">{pkg.title}</p>
+                    {pkg.description && <p className="text-xs text-muted-foreground">{pkg.description}</p>}
+                    <div className="flex flex-wrap gap-2">
+                      <Badge
+                        variant="outline"
+                        className="text-xs"
+                        style={stageInfo.color ? { borderColor: stageInfo.color, color: stageInfo.color } : undefined}
+                      >
+                        {stageInfo.label}
+                      </Badge>
+                      {pkg.sector && <Badge variant="outline">{pkg.sector}</Badge>}
+                      {pkg.responsible && <Badge variant="outline">👤 {pkg.responsible}</Badge>}
+                    </div>
+                    {(pkg.start_date || pkg.end_date) && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {pkg.start_date && new Date(pkg.start_date + 'T00:00:00').toLocaleDateString("pt-BR")}
+                        {pkg.start_date && pkg.end_date && " → "}
+                        {pkg.end_date && new Date(pkg.end_date + 'T00:00:00').toLocaleDateString("pt-BR")}
+                      </p>
+                    )}
+                    {packageActivities[pkg.id]?.length > 0 && (
+                      <p className="text-xs text-muted-foreground">{packageActivities[pkg.id].length} atividade(s) vinculada(s)</p>
+                    )}
                   </div>
-                  {(pkg.start_date || pkg.end_date) && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {pkg.start_date && new Date(pkg.start_date + 'T00:00:00').toLocaleDateString("pt-BR")}
-                      {pkg.start_date && pkg.end_date && " → "}
-                      {pkg.end_date && new Date(pkg.end_date + 'T00:00:00').toLocaleDateString("pt-BR")}
-                    </p>
-                  )}
-                  {packageActivities[pkg.id]?.length > 0 && (
-                    <p className="text-xs text-muted-foreground">{packageActivities[pkg.id].length} atividade(s) vinculada(s)</p>
+                  {isAdmin && (
+                    <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                      <Button size="icon" variant="ghost" onClick={() => { setDrawerPkg(pkg); setDrawerOpen(true); }}><Pencil className="w-4 h-4" /></Button>
+                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(pkg.id)}><Trash2 className="w-4 h-4" /></Button>
+                    </div>
                   )}
                 </div>
-                {isAdmin && (
-                  <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" onClick={() => handleEdit(pkg)}><Pencil className="w-4 h-4" /></Button>
-                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(pkg.id)}><Trash2 className="w-4 h-4" /></Button>
-                  </div>
-                )}
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
+
+      <DeliveryPackageDrawer
+        pkg={drawerPkg}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        projectId={projectId}
+        activities={activities}
+        onDataChanged={fetchData}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 };
