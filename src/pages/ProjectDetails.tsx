@@ -443,7 +443,7 @@ const ProjectDetails = () => {
                   { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
                   { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" /> },
                   { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" /> },
-                  { value: "deliveries", label: "Entregas", icon: <Package className="w-4 h-4" /> },
+                  { value: "deliveries", label: "Pacote de Entregas", icon: <Package className="w-4 h-4" /> },
                   { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" /> },
                   { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" /> },
                   { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" /> },
