@@ -443,7 +443,7 @@ const ProjectDetails = () => {
                   { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
                   { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" /> },
                   { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" /> },
-                  { value: "deliveries", label: "Entregas", icon: <Package className="w-4 h-4" /> },
+                  { value: "deliveries", label: "Pacote de Entregas", icon: <Package className="w-4 h-4" /> },
                   { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" /> },
                   { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" /> },
                   { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" /> },
@@ -452,8 +452,92 @@ const ProjectDetails = () => {
                 ]}
               />
 
-              <TabsContent value="phases" className="mt-3 space-y-4">
-                {/* Action Buttons - Admin only, inside Phases tab */}
+              <TabsContent value="phases" className="mt-3">
+                <PhaseManager
+                  projectId={id!} phases={phases} activities={activities}
+                  onDataChanged={fetchProjectData}
+                  onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+                  onDeleteActivity={handleDeleteActivity}
+                  onToggleActivity={handleToggleActivity}
+                  isAdmin={isAdmin}
+                />
+              </TabsContent>
+
+              <TabsContent value="kanban" className="mt-0">
+                <ActivityKanban
+                  projectId={id!}
+                  activities={activities}
+                  phases={phases}
+                  onDataChanged={fetchProjectData}
+                  onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+                  onDeleteActivity={handleDeleteActivity}
+                  onToggleActivity={handleToggleActivity}
+                  isAdmin={isAdmin}
+                />
+              </TabsContent>
+
+              <TabsContent value="timeline" className="mt-0">
+                <TimelineView phases={phases} activities={activities} projectDueDate={project.due_date} onActivityClick={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }} />
+              </TabsContent>
+
+
+              <TabsContent value="documents" className="mt-0">
+                <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
+              </TabsContent>
+
+              <TabsContent value="meetings" className="mt-0">
+                <MeetingsManager
+                  projectId={id!}
+                  phases={phases}
+                  onCreateActivity={async (title, assignedTo) => {
+                    await supabase.from("activities").insert({
+                      project_id: id!,
+                      title,
+                      assigned_to: assignedTo || null,
+                      status: "pending",
+                      priority: "medium",
+                    });
+                    fetchProjectData();
+                  }}
+                  onCreateBlocker={async (description) => {
+                    await supabase.from("risks").insert({
+                      project_id: id!,
+                      description,
+                      probability: "high",
+                      impact: "high",
+                      status: "identified",
+                      category: "impediment",
+                    });
+                  }}
+                  onCreateLesson={async (problem, suggestion) => {
+                    await supabase.from("lessons_learned").insert({
+                      project_id: id!,
+                      problem,
+                      suggestion: suggestion || null,
+                      category: "process",
+                    });
+                  }}
+                />
+              </TabsContent>
+
+              <TabsContent value="lessons" className="mt-0">
+                <LessonsLearned projectId={id!} phases={phases} />
+              </TabsContent>
+
+              <TabsContent value="deliveries" className="mt-0">
+                <DeliveryPackagesManager projectId={id!} activities={activities.map(a => ({ id: a.id, title: a.title, status: a.status, created_at: a.created_at, completed_at: a.completed_at }))} />
+              </TabsContent>
+
+              <TabsContent value="assumptions" className="mt-0">
+                <AssumptionsManager projectId={id!} />
+              </TabsContent>
+
+              <TabsContent value="risks" className="mt-0">
+                <RisksManager projectId={id!} />
+              </TabsContent>
+
+              <TabsContent value="backlog" className="mt-3 space-y-4">
+                {/* Action Buttons - migrated from Phases */}
                 {isAdmin && (
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant={showAddPhase ? "secondary" : "default"} onClick={() => { setShowAddPhase(!showAddPhase); setShowAddActivity(false); }} className="gap-2">
@@ -527,90 +611,6 @@ const ProjectDetails = () => {
                   </Card>
                 )}
 
-                <PhaseManager
-                  projectId={id!} phases={phases} activities={activities}
-                  onDataChanged={fetchProjectData}
-                  onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
-                  onDeleteActivity={handleDeleteActivity}
-                  onToggleActivity={handleToggleActivity}
-                  isAdmin={isAdmin}
-                />
-              </TabsContent>
-
-              <TabsContent value="kanban" className="mt-0">
-                <ActivityKanban
-                  projectId={id!}
-                  activities={activities}
-                  phases={phases}
-                  onDataChanged={fetchProjectData}
-                  onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
-                  onDeleteActivity={handleDeleteActivity}
-                  onToggleActivity={handleToggleActivity}
-                  isAdmin={isAdmin}
-                />
-              </TabsContent>
-
-              <TabsContent value="timeline" className="mt-0">
-                <TimelineView phases={phases} activities={activities} projectDueDate={project.due_date} onActivityClick={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }} />
-              </TabsContent>
-
-
-              <TabsContent value="documents" className="mt-0">
-                <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
-              </TabsContent>
-
-              <TabsContent value="meetings" className="mt-0">
-                <MeetingsManager
-                  projectId={id!}
-                  phases={phases}
-                  onCreateActivity={async (title, assignedTo) => {
-                    await supabase.from("activities").insert({
-                      project_id: id!,
-                      title,
-                      assigned_to: assignedTo || null,
-                      status: "pending",
-                      priority: "medium",
-                    });
-                    fetchProjectData();
-                  }}
-                  onCreateBlocker={async (description) => {
-                    await supabase.from("risks").insert({
-                      project_id: id!,
-                      description,
-                      probability: "high",
-                      impact: "high",
-                      status: "identified",
-                      category: "impediment",
-                    });
-                  }}
-                  onCreateLesson={async (problem, suggestion) => {
-                    await supabase.from("lessons_learned").insert({
-                      project_id: id!,
-                      problem,
-                      suggestion: suggestion || null,
-                      category: "process",
-                    });
-                  }}
-                />
-              </TabsContent>
-
-              <TabsContent value="lessons" className="mt-0">
-                <LessonsLearned projectId={id!} phases={phases} />
-              </TabsContent>
-
-              <TabsContent value="deliveries" className="mt-0">
-                <DeliveryPackagesManager projectId={id!} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
-              </TabsContent>
-
-              <TabsContent value="assumptions" className="mt-0">
-                <AssumptionsManager projectId={id!} />
-              </TabsContent>
-
-              <TabsContent value="risks" className="mt-0">
-                <RisksManager projectId={id!} />
-              </TabsContent>
-
-              <TabsContent value="backlog" className="mt-0">
                 <BacklogSection
                   projectId={id!}
                   activities={activities}
