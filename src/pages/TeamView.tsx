@@ -27,6 +27,7 @@ interface Project {
   title: string;
   budget_planned: number | null;
   budget_used: number | null;
+  owner: string | null;
 }
 
 interface TimeEntry {
