@@ -33,6 +33,7 @@ interface Profile {
   role_title: string | null;
   avatar_url: string | null;
   created_at: string;
+  is_active?: boolean;
 }
 
 interface UserRole {
