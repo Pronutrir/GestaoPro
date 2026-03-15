@@ -138,6 +138,16 @@ const TeamView = () => {
       projects: Set<string>;
     }>();
 
+    // Seed with all project members/owners first
+    allMemberNames.forEach(mp => {
+      if (!members.has(mp.full_name)) {
+        members.set(mp.full_name, { name: mp.full_name, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, projects: new Set(mp.project_ids) });
+      } else {
+        mp.project_ids.forEach(pid => members.get(mp.full_name)!.projects.add(pid));
+      }
+    });
+
+    // Add activity data
     activities.forEach(a => {
       const name = a.assigned_to?.trim();
       if (!name) return;
@@ -160,7 +170,7 @@ const TeamView = () => {
     });
 
     return Array.from(members.values()).sort((a, b) => b.totalTasks - a.totalTasks);
-  }, [activities, timeEntries]);
+  }, [activities, timeEntries, allMemberNames]);
 
 
   const unassigned = activities.filter(a => !a.assigned_to?.trim());
