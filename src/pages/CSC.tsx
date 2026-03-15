@@ -324,12 +324,10 @@ const CSC = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-1">
-                  <Plus className="w-4 h-4" /> Nova Solicitação
-                </Button>
-              </DialogTrigger>
+             <Button className="gap-1" onClick={openCreateDialog}>
+                <Plus className="w-4 h-4" /> Nova Solicitação
+              </Button>
+              <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogContent className="sm:max-w-[750px]">
                 <DialogHeader>
                   <DialogTitle>Nova Solicitação CSC</DialogTitle>
