@@ -633,7 +633,7 @@ const CSC = () => {
                     <div><span className="text-muted-foreground">Status:</span> <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${getStatusObj(selectedTicket.status).color}`}>{getStatusObj(selectedTicket.status).label}</span></div>
                     <div><span className="text-muted-foreground">SLA:</span> <SlaBadge ticket={selectedTicket} /></div>
                     {selectedTicket.assigned_to && <div><span className="text-muted-foreground">Responsável:</span> <strong>{selectedTicket.assigned_to}</strong></div>}
-                    {selectedTicket.raci_role && <div><span className="text-muted-foreground">RACI:</span> <strong>{RACI_ROLES.find(r => r.value === selectedTicket.raci_role)?.label}</strong></div>}
+                    
                     {selectedTicket.requesting_area && <div><span className="text-muted-foreground">Área:</span> <strong>{selectedTicket.requesting_area}</strong></div>}
                   </div>
 
