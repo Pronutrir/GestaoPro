@@ -113,8 +113,20 @@ Deno.serve(async (req) => {
 
     // Update role if provided
     if (role) {
-      await adminClient.from("user_roles").delete().eq("user_id", target_user_id);
-      await adminClient.from("user_roles").insert({ user_id: target_user_id, role });
+      const { error: delRoleError } = await adminClient.from("user_roles").delete().eq("user_id", target_user_id);
+      if (delRoleError) {
+        console.error("Error deleting old role:", delRoleError);
+        return new Response(JSON.stringify({ error: delRoleError.message }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { error: insRoleError } = await adminClient.from("user_roles").insert({ user_id: target_user_id, role });
+      if (insRoleError) {
+        console.error("Error inserting new role:", insRoleError);
+        return new Response(JSON.stringify({ error: insRoleError.message }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Update password if provided
