@@ -284,6 +284,111 @@ export type Database = {
           },
         ]
       }
+      csc_sla_configs: {
+        Row: {
+          created_at: string
+          department: string
+          description: string | null
+          id: string
+          service_type: string
+          sla_hours: number
+        }
+        Insert: {
+          created_at?: string
+          department: string
+          description?: string | null
+          id?: string
+          service_type: string
+          sla_hours?: number
+        }
+        Update: {
+          created_at?: string
+          department?: string
+          description?: string | null
+          id?: string
+          service_type?: string
+          sla_hours?: number
+        }
+        Relationships: []
+      }
+      csc_tickets: {
+        Row: {
+          activity_id: string | null
+          assigned_to: string | null
+          created_at: string
+          created_by: string | null
+          department: string
+          description: string | null
+          id: string
+          priority: string
+          project_id: string | null
+          raci_role: string | null
+          requested_date: string | null
+          requesting_area: string | null
+          resolved_at: string | null
+          service_type: string
+          sla_deadline: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          activity_id?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          department?: string
+          description?: string | null
+          id?: string
+          priority?: string
+          project_id?: string | null
+          raci_role?: string | null
+          requested_date?: string | null
+          requesting_area?: string | null
+          resolved_at?: string | null
+          service_type?: string
+          sla_deadline?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          activity_id?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          department?: string
+          description?: string | null
+          id?: string
+          priority?: string
+          project_id?: string | null
+          raci_role?: string | null
+          requested_date?: string | null
+          requesting_area?: string | null
+          resolved_at?: string | null
+          service_type?: string
+          sla_deadline?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "csc_tickets_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "csc_tickets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_package_activities: {
         Row: {
           activity_id: string
