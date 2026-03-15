@@ -167,12 +167,13 @@ const TeamView = () => {
     <AppLayout title="Visão por Equipe">
       <main className="px-4 py-6 space-y-6">
         {/* Summary - clickable cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {[
             { key: "members" as SummaryFilter, label: "Membros", value: teamMembers.length, color: "text-foreground" },
             { key: "assigned" as SummaryFilter, label: "Tarefas Atribuídas", value: activities.filter(a => a.assigned_to?.trim()).length, color: "text-foreground" },
             { key: "unassigned" as SummaryFilter, label: "Sem Responsável", value: unassigned.length, color: "text-warning" },
             { key: "hours" as SummaryFilter, label: "Horas Registradas", value: `${(timeEntries.reduce((s, t) => s + (t.duration_minutes || 0), 0) / 60).toFixed(0)}h`, color: "text-info" },
+            { key: "investments" as SummaryFilter, label: "Investimentos", value: `R$ ${totalInvestments.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, color: "text-emerald-600" },
           ].map(card => (
             <Card
               key={card.key}
