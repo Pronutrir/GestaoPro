@@ -228,7 +228,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
           <>
             <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); setEditingInvestment(null); } setDialogOpen(open); }}>
               <DialogTrigger asChild>
-                <Button size="sm" className="gap-1.5"><Plus className="w-4 h-4" /> Registrar Investimento</Button>
+                <Button size="sm" className="gap-1.5"><Plus className="w-4 h-4" /> Registrar Custo</Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
