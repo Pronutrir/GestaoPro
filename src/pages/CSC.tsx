@@ -57,13 +57,6 @@ interface Profile {
 }
 
 // ── Constants ──────────────────────────────────────
-const DEPARTMENTS = [
-  { value: "ti", label: "T.I" },
-  { value: "rh", label: "RH" },
-  { value: "financeiro", label: "Financeiro" },
-  { value: "juridico", label: "Jurídico" },
-  { value: "compras", label: "Compras" },
-];
 
 const STATUSES = [
   { value: "novo", label: "Novo", color: "bg-blue-100 text-blue-800" },
