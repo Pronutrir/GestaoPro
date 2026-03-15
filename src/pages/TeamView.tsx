@@ -46,7 +46,7 @@ type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | null;
 
 const TeamView = () => {
   const navigate = useNavigate();
-  const { filterProjects, isAdmin, loading: authLoading } = useProjectAccess();
+  const { filterProjects, canManage: isAdmin, loading: authLoading } = useProjectAccess();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);

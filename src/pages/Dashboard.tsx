@@ -37,7 +37,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
-  const { filterProjects, isAdmin, loading: authLoading } = useProjectAccess();
+  const { filterProjects, canManage: isAdmin, loading: authLoading } = useProjectAccess();
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(() => {
     return localStorage.getItem("dashboard_category_filter") || null;
