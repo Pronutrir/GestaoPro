@@ -247,7 +247,7 @@ export const EditActivityDialog = ({
                 <option value="">Sem responsável</option>
                 {members.map((m) => (
                   <option key={m.full_name} value={m.full_name!}>
-                    {m.full_name}{m.sector ? ` (${m.sector})` : ""}
+                    {m.full_name}
                   </option>
                 ))}
               </select>

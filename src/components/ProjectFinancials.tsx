@@ -272,7 +272,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                           <SelectItem value="_none">Sem responsável</SelectItem>
                           {members.map((m) => (
                             <SelectItem key={m.full_name!} value={m.full_name!}>
-                              {m.full_name}{m.sector ? ` (${m.sector})` : ""}
+                              {m.full_name}
                             </SelectItem>
                           ))}
                         </SelectContent>

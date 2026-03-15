@@ -437,7 +437,7 @@ const ProjectDetails = () => {
                     <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newActivityAssigned} onChange={(e) => setNewActivityAssigned(e.target.value)}>
                       <option value="">Sem responsável</option>
                       {members.map((m) => (
-                        <option key={m.full_name} value={m.full_name!}>{m.full_name}{m.sector ? ` (${m.sector})` : ""}</option>
+                        <option key={m.full_name} value={m.full_name!}>{m.full_name}</option>
                       ))}
                     </select>
                     <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newActivityPhaseId} onChange={(e) => setNewActivityPhaseId(e.target.value)}>
