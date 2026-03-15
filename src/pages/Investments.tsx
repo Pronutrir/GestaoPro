@@ -351,7 +351,7 @@ const Investments = () => {
                       .map(p => {
                         const pct = p.planned > 0 ? ((p.used + p.investmentTotal) / p.planned) * 100 : 0;
                         return (
-                          <tr key={p.id} className="border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-colors" onClick={() => setSelectedProject(p.id)}>
+                          <tr key={p.id} className="border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-colors" onClick={() => navigate(`/project/${p.id}`)}>
                             <td className="p-3">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-foreground">{p.title}</span>
