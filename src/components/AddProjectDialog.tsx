@@ -29,7 +29,7 @@ interface AddProjectDialogProps {
 }
 
 export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
-  const [profiles, setProfiles] = useState<{ full_name: string }[]>([]);
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
 
   useEffect(() => {
     const fetchProfiles = async () => {
