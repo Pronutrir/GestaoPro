@@ -3,6 +3,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { CommandSearch } from "@/components/CommandSearch";
+import { StickyNotes } from "@/components/StickyNotes";
 
 export const AppLayout = ({ children, title }: { children: ReactNode; title?: string }) => {
   return (
