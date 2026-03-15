@@ -48,6 +48,7 @@ const DraggableNote = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(note.content);
+  const [minimized, setMinimized] = useState(false);
   const dragRef = useRef<DragState | null>(null);
   const noteRef = useRef<HTMLDivElement>(null);
   const colors = NOTE_COLORS.find((c) => c.name === note.color) || NOTE_COLORS[0];
