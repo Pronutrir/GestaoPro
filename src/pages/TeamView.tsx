@@ -40,6 +40,9 @@ interface ActivityInvestment {
   activity_id: string;
   amount: number;
   description: string | null;
+  project_id: string | null;
+  responsible: string | null;
+  category: string | null;
 }
 
 type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | "investments" | null;
