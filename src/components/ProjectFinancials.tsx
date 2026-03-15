@@ -70,12 +70,18 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
 
   const fetchData = async () => {
     setIsLoading(true);
-    const [{ data: invData }, { data: actData }] = await Promise.all([
+    const [{ data: invData }, { data: actData }, { data: memberData }] = await Promise.all([
       supabase.from("activity_investments").select("*").eq("project_id", projectId).order("recorded_at", { ascending: false }),
       supabase.from("activities").select("id, title").eq("project_id", projectId).order("title"),
+      supabase.from("project_members").select("user_id").eq("project_id", projectId),
     ]);
     if (invData) setInvestments(invData);
     if (actData) setActivities(actData);
+    if (memberData && memberData.length > 0) {
+      const userIds = memberData.map(m => m.user_id);
+      const { data: profiles } = await supabase.from("profiles").select("full_name, sector").in("id", userIds);
+      if (profiles) setMembers(profiles.filter(p => p.full_name) as { full_name: string; sector: string | null }[]);
+    }
     setIsLoading(false);
   };
 
