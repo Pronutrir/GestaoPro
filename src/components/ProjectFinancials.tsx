@@ -239,8 +239,8 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="grid gap-2">
-                      <Label>Valor (R$) *</Label>
-                      <Input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+                      <Label>Valor *</Label>
+                      <CurrencyInput step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
                     </div>
                     <div className="grid gap-2">
                       <Label>Categoria</Label>
