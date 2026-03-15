@@ -391,8 +391,8 @@ export const UserManagement = () => {
                     <p className="font-semibold text-foreground">{selectedUser.full_name || "Sem nome"}</p>
                     <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
                   </div>
-                  <Badge variant={getUserRole(selectedUser.id) === "admin" ? "default" : "secondary"}>
-                    {getUserRole(selectedUser.id) === "admin" ? "Administrador" : "Usuário"}
+                  <Badge variant={getUserRole(selectedUser.id) === "admin" ? "default" : getUserRole(selectedUser.id) === "gestor" ? "outline" : "secondary"}>
+                    {getUserRole(selectedUser.id) === "admin" ? "Administrador" : getUserRole(selectedUser.id) === "gestor" ? "Gestor" : "Usuário"}
                   </Badge>
                 </div>
 
