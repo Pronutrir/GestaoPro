@@ -60,7 +60,7 @@ export const EditProjectDialog = ({
   useEffect(() => {
     const fetchProfiles = async () => {
       const [{ data: profileData }, { data: adminRoles }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name").not("full_name", "is", null).order("full_name"),
+        supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
       ]);
       const adminIds = new Set((adminRoles || []).map(r => r.user_id));
