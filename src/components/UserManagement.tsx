@@ -420,6 +420,7 @@ export const UserManagement = () => {
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="admin">Administrador</SelectItem>
+                        <SelectItem value="gestor">Gestor</SelectItem>
                         <SelectItem value="user">Usuário</SelectItem>
                       </SelectContent>
                     </Select>
