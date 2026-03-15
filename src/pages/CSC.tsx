@@ -339,8 +339,8 @@ const CSC = () => {
                       <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v, service_type: "" })}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {DEPARTMENTS.map((d) => (
-                            <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                          {sectors.map((d) => (
+                            <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
