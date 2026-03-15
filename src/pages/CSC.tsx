@@ -179,10 +179,28 @@ const CSC = () => {
   // ── Create ─────────────────────────────────────
   const handleCreate = async () => {
     if (!form.title || !form.department) {
-      toast({ title: "Preencha os campos obrigatórios (Título e Departamento)", variant: "destructive" });
+      toast({ title: "Preencha os campos obrigatórios (Título e Setor Demandado)", variant: "destructive" });
       return;
     }
     setIsLoading(true);
+
+    // Upload attachment if present
+    let attachmentUrl: string | null = null;
+    if (attachmentFile) {
+      const fileExt = attachmentFile.name.split('.').pop();
+      const filePath = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from("csc-attachments")
+        .upload(filePath, attachmentFile);
+      if (uploadError) {
+        toast({ title: "Erro ao enviar anexo", description: uploadError.message, variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+      const { data: urlData } = supabase.storage.from("csc-attachments").getPublicUrl(filePath);
+      attachmentUrl = urlData.publicUrl;
+    }
+
     const sla = slaConfigs.find((c) => c.service_type === form.service_type && c.department === form.department);
     const slaDeadline = sla ? new Date(Date.now() + sla.sla_hours * 3600000).toISOString() : null;
 
@@ -192,9 +210,9 @@ const CSC = () => {
       service_type: form.service_type,
       priority: form.priority,
       requesting_area: form.requesting_area || null,
-      requested_date: form.requested_date || null,
       department: form.department,
       assigned_to: form.assigned_to || null,
+      attachment_url: attachmentUrl,
       sla_deadline: slaDeadline,
       created_by: user?.id || null,
     } as any);
@@ -203,7 +221,8 @@ const CSC = () => {
       toast({ title: "Erro ao criar solicitação", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Solicitação criada com sucesso!" });
-      setForm({ title: "", description: "", service_type: "", priority: "medium", requesting_area: "", requested_date: "", department: "", assigned_to: "" });
+      setForm({ title: "", description: "", service_type: "", priority: "medium", requesting_area: "", department: "", assigned_to: "" });
+      setAttachmentFile(null);
       setCreateOpen(false);
       fetchData();
     }
