@@ -285,21 +285,6 @@ export const StickyNotes = () => {
 
       {/* Floating action button */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-2">
-        {/* Toggle visibility of free notes */}
-        {freeNotes.length > 0 && (
-          <button
-            onClick={() => setShowFree(!showFree)}
-            className={cn(
-              "h-9 w-9 rounded-full shadow-md flex items-center justify-center transition-all duration-200 hover:scale-110 border",
-              showFree
-                ? "bg-accent text-accent-foreground border-accent"
-                : "bg-card text-muted-foreground border-border"
-            )}
-            title={showFree ? "Ocultar notas" : "Mostrar notas"}
-          >
-            <PanelBottomClose className="h-4 w-4" />
-          </button>
-        )}
 
         {/* Main button */}
         <div className="relative">
