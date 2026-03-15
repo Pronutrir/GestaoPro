@@ -48,7 +48,7 @@ interface DeliveryPackagesManagerProps {
 
 export const DeliveryPackagesManager = ({ projectId, activities }: DeliveryPackagesManagerProps) => {
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { canManage: isAdmin } = useAuth();
   const [packages, setPackages] = useState<DeliveryPackage[]>([]);
   const [packageActivities, setPackageActivities] = useState<Record<string, string[]>>({});
   const [showForm, setShowForm] = useState(false);

@@ -52,7 +52,7 @@ const categoryLabels: Record<string, string> = {
 
 export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProjectUpdated }: ProjectFinancialsProps) => {
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { canManage: isAdmin } = useAuth();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [activities, setActivities] = useState<{ id: string; title: string }[]>([]);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);

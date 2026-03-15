@@ -6,6 +6,8 @@ interface AuthContextType {
   session: Session | null;
   user: User | null;
   isAdmin: boolean;
+  isGestor: boolean;
+  canManage: boolean; // admin OR gestor — has all permissions except settings
   profile: any | null;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -15,6 +17,8 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
   isAdmin: false,
+  isGestor: false,
+  canManage: false,
   profile: null,
   loading: true,
   signOut: async () => {},
@@ -26,28 +30,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isGestor, setIsGestor] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUserData = async (userId: string) => {
     try {
-      const [{ data: profileData }, { data: roleData }] = await Promise.all([
+      const [{ data: profileData }, { data: rolesData }] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", userId).single(),
-        supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle(),
+        supabase.from("user_roles").select("role").eq("user_id", userId),
       ]);
       setProfile(profileData);
-      setIsAdmin(!!roleData);
+      const roles = (rolesData || []).map((r: any) => r.role);
+      setIsAdmin(roles.includes("admin"));
+      setIsGestor(roles.includes("gestor"));
     } catch (error) {
       console.error("Error fetching user data:", error);
       setProfile(null);
       setIsAdmin(false);
+      setIsGestor(false);
     }
   };
 
   useEffect(() => {
     let mounted = true;
 
-    // Safety timeout to prevent infinite loading
     const safetyTimer = setTimeout(() => {
       if (mounted && loading) {
         console.warn("Auth loading safety timeout reached");
@@ -62,10 +69,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!session?.user) {
         setProfile(null);
         setIsAdmin(false);
+        setIsGestor(false);
         setLoading(false);
         return;
       }
-      // Don't await inside onAuthStateChange - use setTimeout to avoid deadlocks
       setTimeout(() => {
         if (!mounted) return;
         fetchUserData(session.user.id).finally(() => {
@@ -101,11 +108,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     setProfile(null);
     setIsAdmin(false);
+    setIsGestor(false);
     await supabase.auth.signOut();
   }, []);
 
+  const canManage = isAdmin || isGestor;
+
   return (
-    <AuthContext.Provider value={{ session, user, isAdmin, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, isAdmin, isGestor, canManage, profile, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -62,7 +62,7 @@ const COLORS = {
 
 const Overview = () => {
   const navigate = useNavigate();
-  const { filterProjects, isAdmin, loading: authLoading } = useProjectAccess();
+  const { filterProjects, canManage: isAdmin, loading: authLoading } = useProjectAccess();
   const [projects, setProjects] = useState<Project[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);

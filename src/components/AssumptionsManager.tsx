@@ -34,7 +34,7 @@ const CAT_LABELS: Record<string, string> = { general: "Geral", technical: "Técn
 
 export const AssumptionsManager = ({ projectId }: AssumptionsManagerProps) => {
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { canManage: isAdmin } = useAuth();
   const [items, setItems] = useState<Assumption[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
