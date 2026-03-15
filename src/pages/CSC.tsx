@@ -131,7 +131,7 @@ const CSC = () => {
     priority: "medium",
     requesting_area: "",
     requested_date: "",
-    department: "ti",
+    department: "",
     assigned_to: "",
     raci_role: "",
   });
