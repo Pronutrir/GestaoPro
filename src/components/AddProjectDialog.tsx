@@ -28,6 +28,15 @@ interface AddProjectDialogProps {
 }
 
 export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
+  const [profiles, setProfiles] = useState<{ full_name: string }[]>([]);
+
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      const { data } = await supabase.from("profiles").select("full_name").not("full_name", "is", null).order("full_name");
+      if (data) setProfiles(data.filter(p => p.full_name));
+    };
+    fetchProfiles();
+  }, []);
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
