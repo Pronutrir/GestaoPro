@@ -334,7 +334,7 @@ const CSC = () => {
                     Preencha os detalhes da nova solicitação abaixo.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-1">
+                <div className="grid gap-4 py-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label>Título *</Label>
