@@ -324,14 +324,19 @@ const CSC = () => {
                   <Plus className="w-4 h-4" /> Nova Solicitação
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-lg">
-                <DialogHeader><DialogTitle>Nova Solicitação CSC</DialogTitle></DialogHeader>
-                <div className="grid gap-4 py-2 max-h-[60vh] overflow-y-auto pr-1">
-                  <div className="grid gap-2">
-                    <Label>Título *</Label>
-                    <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Resumo da solicitação" />
-                  </div>
+              <DialogContent className="sm:max-w-[750px]">
+                <DialogHeader>
+                  <DialogTitle>Nova Solicitação CSC</DialogTitle>
+                  <DialogDescription>
+                    Preencha os detalhes da nova solicitação abaixo.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-1">
                   <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>Título *</Label>
+                      <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Resumo da solicitação" />
+                    </div>
                     <div className="grid gap-2">
                       <Label>Departamento *</Label>
                       <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v, service_type: "" })}>
@@ -343,6 +348,8 @@ const CSC = () => {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label>Tipo de Serviço *</Label>
                       <Select value={form.service_type} onValueChange={(v) => setForm({ ...form, service_type: v })}>
@@ -354,12 +361,6 @@ const CSC = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Descrição</Label>
-                    <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Detalhes da solicitação..." rows={3} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label>Prioridade</Label>
                       <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
@@ -371,16 +372,22 @@ const CSC = () => {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Descrição</Label>
+                    <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Detalhes da solicitação..." rows={3} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label>Área Solicitante</Label>
                       <Input value={form.requesting_area} onChange={(e) => setForm({ ...form, requesting_area: e.target.value })} placeholder="Setor de origem" />
                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label>Data Desejada</Label>
                       <Input type="date" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} />
                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label>Responsável</Label>
                       <Select value={form.assigned_to || "_none"} onValueChange={(v) => setForm({ ...form, assigned_to: v === "_none" ? "" : v })}>
@@ -393,18 +400,18 @@ const CSC = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Papel RACI</Label>
-                    <Select value={form.raci_role || "_none"} onValueChange={(v) => setForm({ ...form, raci_role: v === "_none" ? "" : v })}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none">Nenhum</SelectItem>
-                        {RACI_ROLES.map((r) => (
-                          <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="grid gap-2">
+                      <Label>Papel RACI</Label>
+                      <Select value={form.raci_role || "_none"} onValueChange={(v) => setForm({ ...form, raci_role: v === "_none" ? "" : v })}>
+                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none">Nenhum</SelectItem>
+                          {RACI_ROLES.map((r) => (
+                            <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>
