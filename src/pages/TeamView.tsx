@@ -372,12 +372,6 @@ const TeamView = () => {
                         <span className="text-muted-foreground">{member.highPriority} alta</span>
                       </div>
                     )}
-                    {member.investmentTotal > 0 && (
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-emerald-600" />
-                        <span className="text-muted-foreground">R$ {member.investmentTotal.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
-                      </div>
-                    )}
                   </div>
                 </Card>
               );
