@@ -145,14 +145,16 @@ const CSC = () => {
 
   // ── Fetch ──────────────────────────────────────
   const fetchData = async () => {
-    const [{ data: t }, { data: s }, { data: p }] = await Promise.all([
+    const [{ data: t }, { data: s }, { data: p }, { data: sec }] = await Promise.all([
       supabase.from("csc_tickets").select("*").order("created_at", { ascending: false }),
       supabase.from("csc_sla_configs").select("*"),
       supabase.from("profiles").select("id, full_name, email, sector").order("full_name"),
+      supabase.from("sectors").select("id, name").order("name"),
     ]);
     if (t) setTickets(t as CscTicket[]);
     if (s) setSlaConfigs(s as SlaConfig[]);
     if (p) setProfiles(p);
+    if (sec) setSectors(sec);
   };
 
   useEffect(() => {
