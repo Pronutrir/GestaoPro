@@ -124,6 +124,7 @@ const CSC = () => {
   const [tickets, setTickets] = useState<CscTicket[]>([]);
   const [slaConfigs, setSlaConfigs] = useState<SlaConfig[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<CscTicket | null>(null);
   const [activeTab, setActiveTab] = useState("kanban");
@@ -144,14 +145,16 @@ const CSC = () => {
 
   // ── Fetch ──────────────────────────────────────
   const fetchData = async () => {
-    const [{ data: t }, { data: s }, { data: p }] = await Promise.all([
+    const [{ data: t }, { data: s }, { data: p }, { data: sec }] = await Promise.all([
       supabase.from("csc_tickets").select("*").order("created_at", { ascending: false }),
       supabase.from("csc_sla_configs").select("*"),
       supabase.from("profiles").select("id, full_name, email, sector").order("full_name"),
+      supabase.from("sectors").select("id, name").order("name"),
     ]);
     if (t) setTickets(t as CscTicket[]);
     if (s) setSlaConfigs(s as SlaConfig[]);
     if (p) setProfiles(p);
+    if (sec) setSectors(sec);
   };
 
   useEffect(() => {
@@ -380,7 +383,15 @@ const CSC = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label>Área Solicitante</Label>
-                      <Input value={form.requesting_area} onChange={(e) => setForm({ ...form, requesting_area: e.target.value })} placeholder="Setor de origem" />
+                      <Select value={form.requesting_area || "_none"} onValueChange={(v) => setForm({ ...form, requesting_area: v === "_none" ? "" : v })}>
+                        <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none">Nenhum</SelectItem>
+                          {sectors.map((s) => (
+                            <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="grid gap-2">
                       <Label>Data Desejada</Label>
