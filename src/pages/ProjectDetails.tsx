@@ -255,17 +255,6 @@ const ProjectDetails = () => {
   const completedActivities = activities.filter((a) => a.status === "completed").length;
   const activityProgress = activities.length > 0 ? (completedActivities / activities.length) * 100 : 0;
 
-  const formatDueDate = (dateStr: string) => {
-    const dueDateStr = dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00';
-    const dueDate = new Date(dueDateStr);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    dueDate.setHours(0, 0, 0, 0);
-    const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    const isOverdue = diffDays < 0;
-    const isUrgent = diffDays >= 0 && diffDays <= 30;
-    return { dueDate, diffDays, isOverdue, isUrgent };
-  };
 
   return (
     <AppLayout title={project.title}>
