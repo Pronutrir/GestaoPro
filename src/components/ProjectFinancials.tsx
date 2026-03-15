@@ -263,9 +263,31 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                     <Label>Descrição</Label>
                     <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descreva o investimento" />
                   </div>
-                  <div className="grid gap-2">
-                    <Label>Responsável</Label>
-                    <Input value={form.responsible} onChange={(e) => setForm({ ...form, responsible: e.target.value })} placeholder="Quem autorizou / realizou" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <Label>Responsável</Label>
+                      <Select value={form.responsible || "_none"} onValueChange={(v) => setForm({ ...form, responsible: v === "_none" ? "" : v })}>
+                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none">Sem responsável</SelectItem>
+                          {members.map((m) => (
+                            <SelectItem key={m.full_name!} value={m.full_name!}>
+                              {m.full_name}{m.sector ? ` (${m.sector})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Setor</Label>
+                      <Input
+                        value={(() => {
+                          const match = members.find(m => m.full_name === form.responsible);
+                          return match?.sector || "";
+                        })()}
+                        readOnly disabled placeholder="Selecione um responsável" className="bg-muted"
+                      />
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>
