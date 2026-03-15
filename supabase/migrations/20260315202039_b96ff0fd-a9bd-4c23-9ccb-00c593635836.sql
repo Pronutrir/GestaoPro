@@ -1,0 +1,2 @@
+ALTER TABLE public.meetings DROP CONSTRAINT meetings_created_by_fkey;
+ALTER TABLE public.meetings ADD CONSTRAINT meetings_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
