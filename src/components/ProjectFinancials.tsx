@@ -278,12 +278,12 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                 <DialogHeader><DialogTitle>Editar Orçamento do Projeto</DialogTitle></DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label>Orçamento Planejado (R$)</Label>
-                    <Input type="number" step="0.01" min="0" value={newBudgetPlanned} onChange={(e) => setNewBudgetPlanned(e.target.value)} />
+                    <Label>Orçamento Planejado</Label>
+                    <CurrencyInput step="0.01" min="0" value={newBudgetPlanned} onChange={(e) => setNewBudgetPlanned(e.target.value)} />
                   </div>
                   <div className="grid gap-2">
-                    <Label>Custo Utilizado (R$)</Label>
-                    <Input type="number" step="0.01" min="0" value={newBudgetUsed} onChange={(e) => setNewBudgetUsed(e.target.value)} />
+                    <Label>Custo Utilizado</Label>
+                    <CurrencyInput step="0.01" min="0" value={newBudgetUsed} onChange={(e) => setNewBudgetUsed(e.target.value)} />
                   </div>
                 </div>
                 <DialogFooter>
