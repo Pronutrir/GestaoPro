@@ -381,7 +381,7 @@ const CSC = () => {
                       </Select>
                     </div>
                     <div className="grid gap-2">
-                      <Label>Data Desejada</Label>
+                      <Label>Data de Solução Desejada</Label>
                       <Input type="date" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} />
                     </div>
                   </div>
