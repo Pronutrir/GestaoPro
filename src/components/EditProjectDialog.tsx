@@ -59,8 +59,12 @@ export const EditProjectDialog = ({
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      const { data } = await supabase.from("profiles").select("full_name").not("full_name", "is", null).order("full_name");
-      if (data) setProfiles(data.filter(p => p.full_name));
+      const [{ data: profileData }, { data: adminRoles }] = await Promise.all([
+        supabase.from("profiles").select("id, full_name").not("full_name", "is", null).order("full_name"),
+        supabase.from("user_roles").select("user_id").eq("role", "admin"),
+      ]);
+      const adminIds = new Set((adminRoles || []).map(r => r.user_id));
+      if (profileData) setProfiles(profileData.filter(p => p.full_name && !adminIds.has(p.id)));
     };
     if (open) fetchProfiles();
   }, [open]);

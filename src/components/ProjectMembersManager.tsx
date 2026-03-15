@@ -44,10 +44,12 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
   });
 
   const fetchData = async () => {
-    const [{ data: membersData }, { data: profilesData }] = await Promise.all([
+    const [{ data: membersData }, { data: profilesData }, { data: adminRoles }] = await Promise.all([
       supabase.from("project_members").select("*").eq("project_id", projectId),
       supabase.from("profiles").select("id, email, full_name, sector"),
+      supabase.from("user_roles").select("user_id").eq("role", "admin"),
     ]);
+    const adminIds = new Set((adminRoles || []).map(r => r.user_id));
 
     if (profilesData) setProfiles(profilesData);
 
