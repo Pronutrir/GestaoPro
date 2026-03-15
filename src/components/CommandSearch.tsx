@@ -140,10 +140,10 @@ export function CommandSearch() {
                   value={project.title}
                   onSelect={() => handleSelect(project.url)}
                 >
-                  <FolderKanban className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <FolderKanban className="mr-2 h-4 w-4 opacity-60" />
                   <div className="flex flex-col">
                     <span>{project.title}</span>
-                    <span className="text-xs text-muted-foreground">{project.description}</span>
+                    <span className="text-xs opacity-70">{project.description}</span>
                   </div>
                 </CommandItem>
               ))}
