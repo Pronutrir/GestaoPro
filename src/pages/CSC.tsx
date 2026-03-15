@@ -105,7 +105,7 @@ const formatTimeRemaining = (deadline: string | null): string => {
   return `${hours}h ${Math.floor((diff % 3600000) / 60000)}m`;
 };
 
-const getDeptLabel = (d: string) => DEPARTMENTS.find((x) => x.value === d)?.label || d;
+const getDeptLabel = (d: string) => d;
 const getStatusObj = (s: string) => STATUSES.find((x) => x.value === s) || STATUSES[0];
 const getPriorityLabel = (p: string) => PRIORITIES.find((x) => x.value === p)?.label || p;
 
