@@ -36,6 +36,11 @@ interface TimeEntry {
   project_id: string;
 }
 
+interface ProjectMemberProfile {
+  full_name: string;
+  project_ids: Set<string>;
+}
+
 type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | null;
 
 const TeamView = () => {
@@ -44,7 +49,7 @@ const TeamView = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
-  
+  const [allMemberNames, setAllMemberNames] = useState<ProjectMemberProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>(null);
