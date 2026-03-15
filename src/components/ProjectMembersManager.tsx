@@ -51,7 +51,7 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
     ]);
     const adminIds = new Set((adminRoles || []).map(r => r.user_id));
 
-    if (profilesData) setProfiles(profilesData);
+    if (profilesData) setProfiles(profilesData.filter(p => !adminIds.has(p.id)));
 
     if (membersData && profilesData) {
       const enriched = membersData.map((m: any) => ({
