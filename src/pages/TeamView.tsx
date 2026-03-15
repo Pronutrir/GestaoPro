@@ -137,7 +137,7 @@ const TeamView = () => {
     <AppLayout title="Visão por Equipe">
       <main className="px-4 py-6 space-y-6">
         {/* Summary - clickable cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { key: "members" as SummaryFilter, label: "Membros", value: teamMembers.length, color: "text-foreground" },
             { key: "assigned" as SummaryFilter, label: "Tarefas Atribuídas", value: activities.filter(a => a.assigned_to?.trim()).length, color: "text-foreground" },
