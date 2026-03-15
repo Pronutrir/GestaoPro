@@ -175,7 +175,16 @@ const TeamView = () => {
                     <SelectValue placeholder="Projeto" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos os Projetos ({unassigned.length})</SelectItem>
+                    {(() => {
+                      const allCount = summaryFilter === "unassigned"
+                        ? unassigned.length
+                        : summaryFilter === "assigned"
+                        ? activities.filter(a => a.assigned_to?.trim()).length
+                        : summaryFilter === "hours"
+                        ? timeEntries.length
+                        : 0;
+                      return <SelectItem value="all">Todos os Projetos ({allCount})</SelectItem>;
+                    })()}
                     {projects.map(p => {
                       const count = summaryFilter === "unassigned"
                         ? unassigned.filter(a => a.project_id === p.id).length
@@ -186,7 +195,7 @@ const TeamView = () => {
                         : 0;
                       return (
                         <SelectItem key={p.id} value={p.id}>
-                          {p.title} {count > 0 ? `(${count})` : ""}
+                          {p.title} ({count})
                         </SelectItem>
                       );
                     })}
