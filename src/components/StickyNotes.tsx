@@ -39,16 +39,17 @@ const DraggableNote = ({
   onUpdateColor,
   onUpdatePosition,
   onDelete,
+  onMinimize,
 }: {
   note: Note;
   onUpdate: (id: string, content: string) => void;
   onUpdateColor: (id: string, color: string) => void;
   onUpdatePosition: (id: string, x: number, y: number) => void;
   onDelete: (id: string) => void;
+  onMinimize: (id: string) => void;
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(note.content);
-  const [minimized, setMinimized] = useState(false);
   const dragRef = useRef<DragState | null>(null);
   const noteRef = useRef<HTMLDivElement>(null);
   const colors = NOTE_COLORS.find((c) => c.name === note.color) || NOTE_COLORS[0];
