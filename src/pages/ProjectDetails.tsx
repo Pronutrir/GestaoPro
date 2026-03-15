@@ -469,6 +469,15 @@ const ProjectDetails = () => {
               />
             </TabsContent>
 
+            <TabsContent value="financials" className="mt-0">
+              <ProjectFinancials
+                projectId={id!}
+                budgetPlanned={project.budget_planned}
+                budgetUsed={project.budget_used}
+                onProjectUpdated={fetchProjectData}
+              />
+            </TabsContent>
+
             <TabsContent value="workflow" className="mt-0">
               <WorkflowStageManager projectId={id!} />
             </TabsContent>
