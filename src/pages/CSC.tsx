@@ -239,10 +239,11 @@ const CSC = () => {
           return sum + (end - start);
         }, 0) / resolved.length / 3600000
       : 0;
-    const byDept = DEPARTMENTS.map((d) => ({
-      ...d,
-      total: tickets.filter((t) => t.department === d.value).length,
-      active: tickets.filter((t) => t.department === d.value && !["concluido", "cancelado"].includes(t.status)).length,
+    const byDept = sectors.map((d) => ({
+      value: d.name,
+      label: d.name,
+      total: tickets.filter((t) => t.department === d.name).length,
+      active: tickets.filter((t) => t.department === d.name && !["concluido", "cancelado"].includes(t.status)).length,
     }));
     const overdue = active.filter((t) => getSlaStatus(t) === "red").length;
     const atRisk = active.filter((t) => getSlaStatus(t) === "yellow").length;
