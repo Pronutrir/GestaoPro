@@ -186,8 +186,6 @@ const TeamView = () => {
                         ? activities.filter(a => a.assigned_to?.trim()).length
                         : summaryFilter === "hours"
                         ? timeEntries.length
-                        : summaryFilter === "investments"
-                        ? teamMembers.filter(m => m.investmentTotal > 0).length
                         : 0;
                       return <SelectItem value="all">Todos os Projetos ({allCount})</SelectItem>;
                     })()}
