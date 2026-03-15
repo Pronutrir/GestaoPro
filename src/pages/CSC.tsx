@@ -168,8 +168,8 @@ const CSC = () => {
 
   // ── Create ─────────────────────────────────────
   const handleCreate = async () => {
-    if (!form.title || !form.service_type) {
-      toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
+    if (!form.title || !form.department) {
+      toast({ title: "Preencha os campos obrigatórios (Título e Departamento)", variant: "destructive" });
       return;
     }
     setIsLoading(true);
