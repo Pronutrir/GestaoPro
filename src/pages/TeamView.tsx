@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Users, Clock, CheckCircle2, AlertTriangle, Briefcase } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ArrowLeft, Users, Clock, CheckCircle2, AlertTriangle, Briefcase, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 
@@ -39,10 +40,22 @@ const TeamView = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedMember, setSelectedMember] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading) fetchData();
   }, [authLoading, isAdmin]);
+
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel('team-activities')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, () => {
+        fetchData();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const fetchData = async () => {
     const [actRes, projRes, timeRes] = await Promise.all([
@@ -50,10 +63,8 @@ const TeamView = () => {
       supabase.from("projects").select("id, title"),
       supabase.from("time_entries").select("activity_id, duration_minutes, user_name, project_id"),
     ]);
-
     const filteredProjects = await filterProjects(projRes.data || []);
     setProjects(filteredProjects);
-
     const projectIds = new Set(filteredProjects.map((p) => p.id));
     if (actRes.data) setActivities(actRes.data.filter((a) => projectIds.has(a.project_id)));
     if (timeRes.data) setTimeEntries(timeRes.data.filter((t) => projectIds.has(t.project_id)));
@@ -65,13 +76,9 @@ const TeamView = () => {
 
   const teamMembers = useMemo(() => {
     const members = new Map<string, {
-      name: string;
-      totalTasks: number;
-      completedTasks: number;
-      overdueTasks: number;
-      highPriority: number;
-      hoursEstimated: number;
-      hoursTracked: number;
+      name: string; totalTasks: number; completedTasks: number;
+      overdueTasks: number; highPriority: number;
+      hoursEstimated: number; hoursTracked: number;
       projects: Set<string>;
     }>();
 
@@ -100,6 +107,20 @@ const TeamView = () => {
   }, [activities, timeEntries]);
 
   const unassigned = activities.filter(a => !a.assigned_to?.trim());
+
+  // Member detail data
+  const selectedMemberData = useMemo(() => {
+    if (!selectedMember) return null;
+    const member = teamMembers.find(m => m.name === selectedMember);
+    if (!member) return null;
+
+    const memberActivities = activities.filter(a => a.assigned_to?.trim() === selectedMember);
+    const memberProjects = projects.filter(p => member.projects.has(p.id));
+    const overdue = memberActivities.filter(a => a.status !== "completed" && a.end_date && new Date(a.end_date) < today);
+    const inProgress = memberActivities.filter(a => a.status !== "completed" && !(a.end_date && new Date(a.end_date) < today));
+
+    return { member, memberActivities, memberProjects, overdue, inProgress };
+  }, [selectedMember, teamMembers, activities, projects]);
 
   return (
     <AppLayout title="Visão por Equipe">
@@ -131,7 +152,11 @@ const TeamView = () => {
             {teamMembers.map(member => {
               const completionRate = member.totalTasks > 0 ? (member.completedTasks / member.totalTasks) * 100 : 0;
               return (
-                <Card key={member.name} className="p-5 space-y-4">
+                <Card
+                  key={member.name}
+                  className="p-5 space-y-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setSelectedMember(member.name)}
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                       <span className="text-sm font-bold text-primary">{member.name.substring(0, 2).toUpperCase()}</span>
@@ -174,6 +199,90 @@ const TeamView = () => {
             })}
           </div>
         )}
+
+        {/* Member Detail Drawer */}
+        <Sheet open={!!selectedMember} onOpenChange={(open) => { if (!open) setSelectedMember(null); }}>
+          <SheetContent className="sm:max-w-lg overflow-y-auto">
+            {selectedMemberData && (
+              <>
+                <SheetHeader>
+                  <SheetTitle className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-bold text-primary">{selectedMemberData.member.name.substring(0, 2).toUpperCase()}</span>
+                    </div>
+                    {selectedMemberData.member.name}
+                  </SheetTitle>
+                </SheetHeader>
+
+                <div className="mt-6 space-y-6">
+                  {/* KPIs */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Card className="p-3 text-center">
+                      <p className="text-xs text-muted-foreground">Concluídas</p>
+                      <p className="text-2xl font-bold text-success">{selectedMemberData.member.completedTasks}</p>
+                    </Card>
+                    <Card className="p-3 text-center">
+                      <p className="text-xs text-muted-foreground">Atrasadas</p>
+                      <p className="text-2xl font-bold text-destructive">{selectedMemberData.member.overdueTasks}</p>
+                    </Card>
+                    <Card className="p-3 text-center">
+                      <p className="text-xs text-muted-foreground">Horas Est.</p>
+                      <p className="text-2xl font-bold text-foreground">{selectedMemberData.member.hoursEstimated}h</p>
+                    </Card>
+                    <Card className="p-3 text-center">
+                      <p className="text-xs text-muted-foreground">Horas Reg.</p>
+                      <p className="text-2xl font-bold text-info">{selectedMemberData.member.hoursTracked.toFixed(1)}h</p>
+                    </Card>
+                  </div>
+
+                  {/* Projects */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2">Projetos ({selectedMemberData.memberProjects.length})</h3>
+                    <div className="space-y-1.5">
+                      {selectedMemberData.memberProjects.map(p => (
+                        <div key={p.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded-md cursor-pointer hover:bg-muted/50"
+                          onClick={() => { setSelectedMember(null); navigate(`/project/${p.id}`); }}>
+                          <Briefcase className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{p.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Overdue Tasks */}
+                  {selectedMemberData.overdue.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-destructive mb-2">⚠️ Atrasadas ({selectedMemberData.overdue.length})</h3>
+                      <div className="space-y-1.5">
+                        {selectedMemberData.overdue.map(a => (
+                          <div key={a.id} className="flex items-center justify-between p-2 bg-destructive/5 rounded-md border border-destructive/10">
+                            <span className="text-sm truncate flex-1">{a.title}</span>
+                            {a.end_date && <span className="text-xs text-destructive ml-2">{new Date(a.end_date).toLocaleDateString("pt-BR")}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* In Progress Tasks */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2">Em andamento ({selectedMemberData.inProgress.length})</h3>
+                    <div className="space-y-1.5">
+                      {selectedMemberData.inProgress.map(a => (
+                        <div key={a.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                          <span className="text-sm truncate flex-1">{a.title}</span>
+                          <Badge variant="outline" className="text-[10px] ml-2">
+                            {a.priority === "high" ? "Alta" : a.priority === "medium" ? "Média" : "Baixa"}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </SheetContent>
+        </Sheet>
       </main>
     </AppLayout>
   );

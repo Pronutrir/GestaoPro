@@ -1,18 +1,13 @@
-import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useSortable } from "@dnd-kit/sortable";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Calendar, MoreVertical, Pencil, Trash2, GripVertical } from "lucide-react";
+import { GripVertical, MoreVertical, Pencil, Trash2, Calendar } from "lucide-react";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useHealthScore } from "@/hooks/useHealthScore";
-import { HealthBadge } from "@/components/HealthBadge";
 
 interface Project {
   id: string;
@@ -26,27 +21,20 @@ interface Project {
 interface SortableProjectCardProps {
   project: Project;
   onEdit: (project: Project) => void;
-  onDeleteClick: (projectId: string) => void;
+  onDeleteClick: (id: string) => void;
   onCardClick?: (project: Project) => void;
   isAdmin?: boolean;
 }
 
 const priorityColors: Record<string, string> = {
-  low: "bg-muted text-muted-foreground",
-  medium: "bg-warning text-warning-foreground",
-  high: "bg-destructive text-destructive-foreground",
+  high: "bg-destructive/20 text-destructive border-destructive/30",
+  medium: "bg-warning/20 text-warning border-warning/30",
+  low: "bg-muted text-muted-foreground border-border",
 };
 
 export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClick, isAdmin = false }: SortableProjectCardProps) => {
-  const { health } = useHealthScore(project.id);
   const {
-    attributes,
-    listeners,
-    setNodeRef,
-    setActivatorNodeRef,
-    transform,
-    transition,
-    isDragging,
+    attributes, listeners, setNodeRef, transform, transition, isDragging, setActivatorNodeRef,
   } = useSortable({ id: project.id });
 
   const style = {
@@ -54,6 +42,11 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
     transition,
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 50 : undefined,
+  };
+
+  const formatDueDate = (dateStr: string) => {
+    const str = dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00';
+    return new Date(str).toLocaleDateString("pt-BR");
   };
 
   return (
@@ -76,12 +69,7 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
               <GripVertical className="w-4 h-4 text-muted-foreground" />
             </button>
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <h4 className="font-semibold text-foreground">
-                  {project.title}
-                </h4>
-                {health && <HealthBadge health={health} />}
-              </div>
+              <h4 className="font-semibold text-foreground mb-1">{project.title}</h4>
               <p className="text-sm text-muted-foreground line-clamp-2">
                 {project.description || <span className="italic text-muted-foreground/60">Clique para adicionar uma descrição</span>}
               </p>
@@ -90,34 +78,16 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
           {isAdmin && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 -mr-2"
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2" onClick={(e) => e.stopPropagation()}>
                   <MoreVertical className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit(project);
-                  }}
-                >
-                  <Pencil className="w-4 h-4 mr-2" />
-                  Editar
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(project); }}>
+                  <Pencil className="w-4 h-4 mr-2" /> Editar
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteClick(project.id);
-                  }}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Excluir
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDeleteClick(project.id); }} className="text-destructive focus:text-destructive">
+                  <Trash2 className="w-4 h-4 mr-2" /> Excluir
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -134,7 +104,7 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
             {project.due_date && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Calendar className="w-3 h-3" />
-                {new Date(project.due_date).toLocaleDateString("pt-BR")}
+                {formatDueDate(project.due_date)}
               </div>
             )}
           </div>
@@ -142,9 +112,7 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
           <div className="flex -space-x-2">
             {project.assignees.map((assignee, index) => (
               <Avatar key={index} className="w-6 h-6 border-2 border-background">
-                <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                  {assignee}
-                </AvatarFallback>
+                <AvatarFallback className="text-xs bg-primary text-primary-foreground">{assignee}</AvatarFallback>
               </Avatar>
             ))}
           </div>
