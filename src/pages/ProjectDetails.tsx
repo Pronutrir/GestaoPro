@@ -275,6 +275,11 @@ const ProjectDetails = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-6 text-sm">
                 <h2 className="text-sm font-semibold text-foreground">Informações do Projeto</h2>
+                {isAdmin && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingProject(project); setEditDialogOpen(true); }}>
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
+                )}
                 {project.owner && (
                   <div className="flex items-center gap-1.5">
                     <span className="text-muted-foreground">Responsável:</span>
