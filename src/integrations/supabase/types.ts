@@ -164,25 +164,42 @@ export type Database = {
         Row: {
           activity_id: string
           amount: number
+          category: string | null
           description: string | null
           id: string
+          project_id: string | null
           recorded_at: string
+          responsible: string | null
         }
         Insert: {
           activity_id: string
           amount: number
+          category?: string | null
           description?: string | null
           id?: string
+          project_id?: string | null
           recorded_at?: string
+          responsible?: string | null
         }
         Update: {
           activity_id?: string
           amount?: number
+          category?: string | null
           description?: string | null
           id?: string
+          project_id?: string | null
           recorded_at?: string
+          responsible?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "activity_investments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       activity_log_entries: {
         Row: {
@@ -346,38 +363,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "delivery_packages_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      investment_history: {
-        Row: {
-          amount: number
-          description: string | null
-          id: string
-          project_id: string
-          recorded_at: string
-        }
-        Insert: {
-          amount: number
-          description?: string | null
-          id?: string
-          project_id: string
-          recorded_at?: string
-        }
-        Update: {
-          amount?: number
-          description?: string | null
-          id?: string
-          project_id?: string
-          recorded_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "investment_history_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
