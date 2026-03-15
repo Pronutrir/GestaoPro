@@ -325,8 +325,8 @@ export const UserManagement = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <Badge variant={role === "admin" ? "default" : "secondary"} className="text-[10px]">
-                        {role === "admin" ? "Admin" : "Usuário"}
+                      <Badge variant={role === "admin" ? "default" : role === "gestor" ? "outline" : "secondary"} className="text-[10px]">
+                        {role === "admin" ? "Admin" : role === "gestor" ? "Gestor" : "Usuário"}
                       </Badge>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
