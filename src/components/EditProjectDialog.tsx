@@ -54,6 +54,15 @@ export const EditProjectDialog = ({
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [profiles, setProfiles] = useState<{ full_name: string }[]>([]);
+
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      const { data } = await supabase.from("profiles").select("full_name").not("full_name", "is", null).order("full_name");
+      if (data) setProfiles(data.filter(p => p.full_name));
+    };
+    if (open) fetchProfiles();
+  }, [open]);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
