@@ -39,16 +39,17 @@ const DraggableNote = ({
   onUpdateColor,
   onUpdatePosition,
   onDelete,
+  onMinimize,
 }: {
   note: Note;
   onUpdate: (id: string, content: string) => void;
   onUpdateColor: (id: string, color: string) => void;
   onUpdatePosition: (id: string, x: number, y: number) => void;
   onDelete: (id: string) => void;
+  onMinimize: (id: string) => void;
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(note.content);
-  const [minimized, setMinimized] = useState(false);
   const dragRef = useRef<DragState | null>(null);
   const noteRef = useRef<HTMLDivElement>(null);
   const colors = NOTE_COLORS.find((c) => c.name === note.color) || NOTE_COLORS[0];
@@ -94,29 +95,6 @@ const DraggableNote = ({
     setIsEditing(false);
   };
 
-  if (minimized) {
-    return (
-      <div
-        ref={noteRef}
-        className="fixed z-[60]"
-        style={{ left: note.position_x, top: note.position_y }}
-      >
-        <button
-          onClick={() => setMinimized(false)}
-          onMouseDown={handleMouseDown}
-          className={cn(
-            "h-9 w-9 rounded-full shadow-lg border flex items-center justify-center transition-all duration-200 hover:scale-110 cursor-grab active:cursor-grabbing",
-            colors.bg,
-            colors.border
-          )}
-          title="Expandir nota"
-        >
-          <StickyNote className="h-4 w-4 text-foreground/70" />
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div
       ref={noteRef}
@@ -141,7 +119,7 @@ const DraggableNote = ({
             size="icon"
             variant="ghost"
             className="h-5 w-5"
-            onClick={() => setMinimized(true)}
+            onClick={() => onMinimize(note.id)}
             title="Minimizar"
           >
             <Minimize2 className="h-2.5 w-2.5" />
@@ -229,6 +207,7 @@ export const StickyNotes = () => {
   const [panelOpen, setPanelOpen] = useState(false);
   const [freeNotes, setFreeNotes] = useState<Note[]>([]);
   const [showFree, setShowFree] = useState(false);
+  const [minimizedIds, setMinimizedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) fetchNotes();
@@ -282,12 +261,27 @@ export const StickyNotes = () => {
     fetchNotes();
   };
 
+  const minimizeNote = (id: string) => {
+    setMinimizedIds((prev) => new Set(prev).add(id));
+  };
+
+  const restoreNote = (id: string) => {
+    setMinimizedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
   if (!user) return null;
+
+  const visibleNotes = freeNotes.filter((n) => !minimizedIds.has(n.id));
+  const minimizedNotes = freeNotes.filter((n) => minimizedIds.has(n.id));
 
   return (
     <>
       {/* Floating draggable notes */}
-      {showFree && freeNotes.map((note) => (
+      {showFree && visibleNotes.map((note) => (
         <DraggableNote
           key={note.id}
           note={note}
@@ -295,12 +289,12 @@ export const StickyNotes = () => {
           onUpdateColor={updateColor}
           onUpdatePosition={updatePosition}
           onDelete={deleteNote}
+          onMinimize={minimizeNote}
         />
       ))}
 
       {/* Floating action button */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-2">
-
         {/* Main button */}
         <div className="relative">
           <button
@@ -321,7 +315,7 @@ export const StickyNotes = () => {
 
           {/* Mini menu */}
           {panelOpen && (
-            <div className="absolute bottom-14 right-0 bg-card border rounded-lg shadow-xl p-2 flex flex-col gap-1 min-w-[140px] animate-in slide-in-from-bottom-2 fade-in duration-150">
+            <div className="absolute bottom-14 right-0 bg-card border rounded-lg shadow-xl p-2 flex flex-col gap-1 min-w-[160px] animate-in slide-in-from-bottom-2 fade-in duration-150">
               <button
                 onClick={() => { addNote(); setPanelOpen(false); }}
                 className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors text-foreground"
@@ -336,6 +330,28 @@ export const StickyNotes = () => {
                   <PanelBottomClose className="h-4 w-4" />
                   {showFree ? "Ocultar notas" : "Mostrar notas"}
                 </button>
+              )}
+              {minimizedNotes.length > 0 && (
+                <>
+                  <div className="border-t border-border my-1" />
+                  <span className="px-3 py-1 text-[11px] text-muted-foreground font-medium">Minimizadas</span>
+                  {minimizedNotes.map((note) => {
+                    const colors = NOTE_COLORS.find((c) => c.name === note.color) || NOTE_COLORS[0];
+                    return (
+                      <button
+                        key={note.id}
+                        onClick={() => { restoreNote(note.id); setShowFree(true); setPanelOpen(false); }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors text-foreground"
+                      >
+                        <span className={cn("h-3 w-3 rounded-full border shrink-0", colors.bg, colors.border)} />
+                        <span className="truncate text-xs">
+                          {note.content?.slice(0, 20) || "Nota vazia"}
+                          {note.content && note.content.length > 20 ? "…" : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </>
               )}
             </div>
           )}
