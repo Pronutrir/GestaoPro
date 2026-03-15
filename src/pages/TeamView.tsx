@@ -232,6 +232,8 @@ const TeamView = () => {
                         ? activities.filter(a => a.assigned_to?.trim() && a.project_id === p.id).length
                         : summaryFilter === "hours"
                         ? timeEntries.filter(t => t.project_id === p.id).length
+                        : summaryFilter === "investments"
+                        ? teamMembers.filter(m => m.investmentTotal > 0 && m.projects.has(p.id)).length
                         : 0;
                       return (
                         <SelectItem key={p.id} value={p.id}>
