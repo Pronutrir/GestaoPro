@@ -184,7 +184,6 @@ const CSC = () => {
       requested_date: form.requested_date || null,
       department: form.department,
       assigned_to: form.assigned_to || null,
-      raci_role: form.raci_role || null,
       sla_deadline: slaDeadline,
       created_by: user?.id || null,
     } as any);
