@@ -124,6 +124,7 @@ const CSC = () => {
   const [tickets, setTickets] = useState<CscTicket[]>([]);
   const [slaConfigs, setSlaConfigs] = useState<SlaConfig[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<CscTicket | null>(null);
   const [activeTab, setActiveTab] = useState("kanban");
