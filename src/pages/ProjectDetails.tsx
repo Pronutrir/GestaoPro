@@ -23,12 +23,13 @@ import { AssumptionsManager } from "@/components/AssumptionsManager";
 import { RisksManager } from "@/components/RisksManager";
 import { BacklogSection } from "@/components/BacklogSection";
 import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
+import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, ListTodo, GanttChart, BookOpen, FileText, Flag,
   ChevronRight, Settings2, Kanban, Users, ShieldCheck, AlertTriangle,
-  Package, Inbox,
+  Package, Inbox, DollarSign,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
@@ -324,6 +325,7 @@ const ProjectDetails = () => {
                 { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" /> },
                 { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" /> },
                 { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" /> },
+                { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
                 { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" /> },
                 { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" /> },
               ]}
@@ -464,6 +466,15 @@ const ProjectDetails = () => {
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
                 isAdmin={isAdmin}
+              />
+            </TabsContent>
+
+            <TabsContent value="financials" className="mt-0">
+              <ProjectFinancials
+                projectId={id!}
+                budgetPlanned={project.budget_planned}
+                budgetUsed={project.budget_used}
+                onProjectUpdated={fetchProjectData}
               />
             </TabsContent>
 
