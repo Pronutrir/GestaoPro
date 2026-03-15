@@ -298,19 +298,13 @@ const CSC = () => {
   };
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
-        {/* Header */}
+    <AppLayout title="Centro de Serviços Compartilhados">
+      <div className="px-4 py-4 space-y-6">
+        {/* Toolbar */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <Briefcase className="w-6 h-6 text-primary" />
-              Centro de Serviços Compartilhados
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Portal de solicitações, gestão de SLA e workflows departamentais
-            </p>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Portal de solicitações, gestão de SLA e workflows departamentais
+          </p>
           <div className="flex items-center gap-2">
             <Select value={filterDept} onValueChange={setFilterDept}>
               <SelectTrigger className="w-[160px]">
