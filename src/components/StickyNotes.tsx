@@ -118,18 +118,31 @@ const DraggableNote = ({
             size="icon"
             variant="ghost"
             className="h-5 w-5"
-            onClick={() => { setIsEditing(true); setEditContent(note.content); }}
+            onClick={() => setMinimized(!minimized)}
+            title={minimized ? "Expandir" : "Minimizar"}
           >
-            <Pencil className="h-2.5 w-2.5" />
+            {minimized ? <Maximize2 className="h-2.5 w-2.5" /> : <Minimize2 className="h-2.5 w-2.5" />}
           </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-5 w-5 text-destructive hover:text-destructive"
-            onClick={() => onDelete(note.id)}
-          >
-            <Trash2 className="h-2.5 w-2.5" />
-          </Button>
+          {!minimized && (
+            <>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5"
+                onClick={() => { setIsEditing(true); setEditContent(note.content); }}
+              >
+                <Pencil className="h-2.5 w-2.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5 text-destructive hover:text-destructive"
+                onClick={() => onDelete(note.id)}
+              >
+                <Trash2 className="h-2.5 w-2.5" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
