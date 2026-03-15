@@ -59,13 +59,13 @@ interface Profile {
 // ── Constants ──────────────────────────────────────
 
 const STATUSES = [
-  { value: "novo", label: "Novo", color: "bg-blue-100 text-blue-800" },
-  { value: "triagem", label: "Triagem", color: "bg-purple-100 text-purple-800" },
-  { value: "em_analise", label: "Em Análise", color: "bg-yellow-100 text-yellow-800" },
-  { value: "aprovacao", label: "Aprovação", color: "bg-orange-100 text-orange-800" },
-  { value: "em_execucao", label: "Em Execução", color: "bg-cyan-100 text-cyan-800" },
-  { value: "concluido", label: "Concluído", color: "bg-green-100 text-green-800" },
-  { value: "cancelado", label: "Cancelado", color: "bg-red-100 text-red-800" },
+  { value: "novo", label: "Novo", color: "bg-blue-100 text-blue-800", dot: "hsl(220, 90%, 56%)" },
+  { value: "triagem", label: "Triagem", color: "bg-purple-100 text-purple-800", dot: "hsl(270, 70%, 55%)" },
+  { value: "em_analise", label: "Em Análise", color: "bg-yellow-100 text-yellow-800", dot: "hsl(38, 92%, 50%)" },
+  { value: "aprovacao", label: "Aprovação", color: "bg-orange-100 text-orange-800", dot: "hsl(25, 95%, 53%)" },
+  { value: "em_execucao", label: "Em Execução", color: "bg-cyan-100 text-cyan-800", dot: "hsl(199, 89%, 48%)" },
+  { value: "concluido", label: "Concluído", color: "bg-green-100 text-green-800", dot: "hsl(142, 76%, 36%)" },
+  { value: "cancelado", label: "Cancelado", color: "bg-red-100 text-red-800", dot: "hsl(0, 84%, 60%)" },
 ];
 
 const PRIORITIES = [
