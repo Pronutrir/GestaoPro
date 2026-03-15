@@ -361,23 +361,6 @@ const CSC = () => {
                       <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Resumo da solicitação" />
                     </div>
                     <div className="grid gap-2">
-                      <Label>Departamento *</Label>
-                      <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v, service_type: "" })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {sectors.map((d) => (
-                            <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                     <div className="grid gap-2">
-                      <Label>Tipo de Serviço *</Label>
-                      <Input value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })} placeholder="Digite o tipo de serviço" />
-                    </div>
-                    <div className="grid gap-2">
                       <Label>Prioridade</Label>
                       <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
@@ -389,23 +372,56 @@ const CSC = () => {
                       </Select>
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>Setor Demandado *</Label>
+                      <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v, service_type: "" })}>
+                        <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
+                        <SelectContent>
+                          {sectors.map((d) => (
+                            <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Tipo de Serviço *</Label>
+                      <Input value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })} placeholder="Digite o tipo de serviço" />
+                    </div>
+                  </div>
                   <div className="grid gap-2">
                     <Label>Descrição</Label>
                     <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Detalhes da solicitação..." rows={3} />
                   </div>
-                   <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label>Responsável</Label>
                       <Input value={form.assigned_to} readOnly className="bg-muted" />
                     </div>
                     <div className="grid gap-2">
-                      <Label>Área Solicitante</Label>
+                      <Label>Setor Solicitante</Label>
                       <Input value={form.requesting_area} readOnly className="bg-muted" />
                     </div>
-                   </div>
+                  </div>
                   <div className="grid gap-2">
-                    <Label>Data de Solução Desejada</Label>
-                    <Input type="date" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} />
+                    <Label>Anexo</Label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 px-3 py-2 border border-input rounded-md cursor-pointer hover:bg-accent transition-colors text-sm text-muted-foreground">
+                        <Paperclip className="w-4 h-4" />
+                        {attachmentFile ? attachmentFile.name : "Selecionar arquivo (imagem, PDF, etc.)"}
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                          onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+                        />
+                      </label>
+                      {attachmentFile && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAttachmentFile(null)}>
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>
