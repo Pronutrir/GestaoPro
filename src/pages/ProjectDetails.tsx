@@ -277,7 +277,7 @@ const ProjectDetails = () => {
                   </div>
                 )}
                 {project.due_date && (() => {
-                  const { dueDate, diffDays, isOverdue, isUrgent } = formatDueDate(project.due_date);
+                  const { dueDate, diffDays, isOverdue, isUrgent } = getProjectDeadlineInfo(project.due_date);
                   return (
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-primary" />

@@ -132,7 +132,7 @@ export function ProjectDrawer({ project, open, onOpenChange }: ProjectDrawerProp
             <div className="flex items-center gap-2 text-sm">
               <Calendar className="w-4 h-4 text-muted-foreground" />
               <span className="text-muted-foreground">Prazo:</span>
-              <span>{new Date(project.due_date).toLocaleDateString("pt-BR")}</span>
+              <span>{formatProjectDueDate(project.due_date)}</span>
             </div>
           )}
 
