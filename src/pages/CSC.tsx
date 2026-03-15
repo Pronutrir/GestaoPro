@@ -16,7 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Clock, CheckCircle2, AlertTriangle, Timer, TrendingUp,
-  BarChart3, Users, Briefcase, Filter, ArrowRight,
+  BarChart3, Users, Briefcase, Filter, ArrowRight, Paperclip, X,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────
@@ -113,6 +113,7 @@ const CSC = () => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
 
   const openCreateDialog = () => {
     const cp = profiles.find(p => p.id === user?.id);
@@ -122,10 +123,10 @@ const CSC = () => {
       service_type: "",
       priority: "medium",
       requesting_area: cp?.sector || "",
-      requested_date: "",
       department: "",
       assigned_to: cp?.full_name || "",
     });
+    setAttachmentFile(null);
     setCreateOpen(true);
   };
   const [selectedTicket, setSelectedTicket] = useState<CscTicket | null>(null);
@@ -139,7 +140,6 @@ const CSC = () => {
     service_type: "",
     priority: "medium",
     requesting_area: "",
-    requested_date: "",
     department: "",
     assigned_to: "",
   });
@@ -179,10 +179,28 @@ const CSC = () => {
   // ── Create ─────────────────────────────────────
   const handleCreate = async () => {
     if (!form.title || !form.department) {
-      toast({ title: "Preencha os campos obrigatórios (Título e Departamento)", variant: "destructive" });
+      toast({ title: "Preencha os campos obrigatórios (Título e Setor Demandado)", variant: "destructive" });
       return;
     }
     setIsLoading(true);
+
+    // Upload attachment if present
+    let attachmentUrl: string | null = null;
+    if (attachmentFile) {
+      const fileExt = attachmentFile.name.split('.').pop();
+      const filePath = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from("csc-attachments")
+        .upload(filePath, attachmentFile);
+      if (uploadError) {
+        toast({ title: "Erro ao enviar anexo", description: uploadError.message, variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+      const { data: urlData } = supabase.storage.from("csc-attachments").getPublicUrl(filePath);
+      attachmentUrl = urlData.publicUrl;
+    }
+
     const sla = slaConfigs.find((c) => c.service_type === form.service_type && c.department === form.department);
     const slaDeadline = sla ? new Date(Date.now() + sla.sla_hours * 3600000).toISOString() : null;
 
@@ -192,9 +210,9 @@ const CSC = () => {
       service_type: form.service_type,
       priority: form.priority,
       requesting_area: form.requesting_area || null,
-      requested_date: form.requested_date || null,
       department: form.department,
       assigned_to: form.assigned_to || null,
+      attachment_url: attachmentUrl,
       sla_deadline: slaDeadline,
       created_by: user?.id || null,
     } as any);
@@ -203,7 +221,8 @@ const CSC = () => {
       toast({ title: "Erro ao criar solicitação", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Solicitação criada com sucesso!" });
-      setForm({ title: "", description: "", service_type: "", priority: "medium", requesting_area: "", requested_date: "", department: "", assigned_to: "" });
+      setForm({ title: "", description: "", service_type: "", priority: "medium", requesting_area: "", department: "", assigned_to: "" });
+      setAttachmentFile(null);
       setCreateOpen(false);
       fetchData();
     }
@@ -342,23 +361,6 @@ const CSC = () => {
                       <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Resumo da solicitação" />
                     </div>
                     <div className="grid gap-2">
-                      <Label>Departamento *</Label>
-                      <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v, service_type: "" })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {sectors.map((d) => (
-                            <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                     <div className="grid gap-2">
-                      <Label>Tipo de Serviço *</Label>
-                      <Input value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })} placeholder="Digite o tipo de serviço" />
-                    </div>
-                    <div className="grid gap-2">
                       <Label>Prioridade</Label>
                       <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
@@ -370,23 +372,56 @@ const CSC = () => {
                       </Select>
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>Setor Demandado *</Label>
+                      <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v, service_type: "" })}>
+                        <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
+                        <SelectContent>
+                          {sectors.map((d) => (
+                            <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Tipo de Serviço *</Label>
+                      <Input value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })} placeholder="Digite o tipo de serviço" />
+                    </div>
+                  </div>
                   <div className="grid gap-2">
                     <Label>Descrição</Label>
                     <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Detalhes da solicitação..." rows={3} />
                   </div>
-                   <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label>Responsável</Label>
                       <Input value={form.assigned_to} readOnly className="bg-muted" />
                     </div>
                     <div className="grid gap-2">
-                      <Label>Área Solicitante</Label>
+                      <Label>Setor Solicitante</Label>
                       <Input value={form.requesting_area} readOnly className="bg-muted" />
                     </div>
-                   </div>
+                  </div>
                   <div className="grid gap-2">
-                    <Label>Data de Solução Desejada</Label>
-                    <Input type="date" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} />
+                    <Label>Anexo</Label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 px-3 py-2 border border-input rounded-md cursor-pointer hover:bg-accent transition-colors text-sm text-muted-foreground">
+                        <Paperclip className="w-4 h-4" />
+                        {attachmentFile ? attachmentFile.name : "Selecionar arquivo (imagem, PDF, etc.)"}
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                          onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+                        />
+                      </label>
+                      {attachmentFile && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAttachmentFile(null)}>
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>

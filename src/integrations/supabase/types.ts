@@ -315,6 +315,7 @@ export type Database = {
         Row: {
           activity_id: string | null
           assigned_to: string | null
+          attachment_url: string | null
           created_at: string
           created_by: string | null
           department: string
@@ -335,6 +336,7 @@ export type Database = {
         Insert: {
           activity_id?: string | null
           assigned_to?: string | null
+          attachment_url?: string | null
           created_at?: string
           created_by?: string | null
           department?: string
@@ -355,6 +357,7 @@ export type Database = {
         Update: {
           activity_id?: string | null
           assigned_to?: string | null
+          attachment_url?: string | null
           created_at?: string
           created_by?: string | null
           department?: string
