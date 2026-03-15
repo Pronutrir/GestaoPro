@@ -54,6 +54,15 @@ export const EditProjectDialog = ({
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [profiles, setProfiles] = useState<{ full_name: string }[]>([]);
+
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      const { data } = await supabase.from("profiles").select("full_name").not("full_name", "is", null).order("full_name");
+      if (data) setProfiles(data.filter(p => p.full_name));
+    };
+    if (open) fetchProfiles();
+  }, [open]);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -241,14 +250,20 @@ export const EditProjectDialog = ({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-owner">Responsável pelo Projeto</Label>
-              <Input
-                id="edit-owner"
-                placeholder="Nome do responsável"
-                value={formData.owner}
-                onChange={(e) =>
-                  setFormData({ ...formData, owner: e.target.value })
-                }
-              />
+              <Select
+                value={formData.owner || "_none"}
+                onValueChange={(v) => setFormData({ ...formData, owner: v === "_none" ? "" : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Sem responsável</SelectItem>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.full_name!} value={p.full_name!}>{p.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-program">Programa</Label>

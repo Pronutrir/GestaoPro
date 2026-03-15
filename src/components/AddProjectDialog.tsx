@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +28,15 @@ interface AddProjectDialogProps {
 }
 
 export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
+  const [profiles, setProfiles] = useState<{ full_name: string }[]>([]);
+
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      const { data } = await supabase.from("profiles").select("full_name").not("full_name", "is", null).order("full_name");
+      if (data) setProfiles(data.filter(p => p.full_name));
+    };
+    fetchProfiles();
+  }, []);
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -213,14 +222,20 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="owner">Responsável pelo Projeto</Label>
-              <Input
-                id="owner"
-                placeholder="Nome do responsável"
-                value={formData.owner}
-                onChange={(e) =>
-                  setFormData({ ...formData, owner: e.target.value })
-                }
-              />
+              <Select
+                value={formData.owner || "_none"}
+                onValueChange={(v) => setFormData({ ...formData, owner: v === "_none" ? "" : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Sem responsável</SelectItem>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.full_name!} value={p.full_name!}>{p.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="program">Programa</Label>
