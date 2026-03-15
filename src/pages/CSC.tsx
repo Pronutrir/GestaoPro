@@ -406,9 +406,9 @@ const CSC = () => {
                   <div className="grid gap-2">
                     <Label>Anexo</Label>
                     <div className="flex items-center gap-2">
-                      <label className="flex items-center gap-2 px-3 py-2 border border-input rounded-md cursor-pointer hover:bg-accent transition-colors text-sm text-muted-foreground">
-                        <Paperclip className="w-4 h-4" />
-                        {attachmentFile ? attachmentFile.name : "Selecionar arquivo (imagem, PDF, etc.)"}
+                      <label className="flex-1 flex items-center gap-2 h-10 px-3 border border-input rounded-md cursor-pointer hover:bg-accent transition-colors text-sm text-muted-foreground truncate">
+                        <Paperclip className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{attachmentFile ? attachmentFile.name : "Selecionar arquivo (imagem, PDF, etc.)"}</span>
                         <input
                           type="file"
                           className="hidden"
@@ -417,7 +417,7 @@ const CSC = () => {
                         />
                       </label>
                       {attachmentFile && (
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAttachmentFile(null)}>
+                        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => setAttachmentFile(null)}>
                           <X className="w-4 h-4" />
                         </Button>
                       )}
