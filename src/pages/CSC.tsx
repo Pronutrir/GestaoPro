@@ -113,6 +113,7 @@ const CSC = () => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
 
   const openCreateDialog = () => {
     const cp = profiles.find(p => p.id === user?.id);
@@ -122,10 +123,10 @@ const CSC = () => {
       service_type: "",
       priority: "medium",
       requesting_area: cp?.sector || "",
-      requested_date: "",
       department: "",
       assigned_to: cp?.full_name || "",
     });
+    setAttachmentFile(null);
     setCreateOpen(true);
   };
   const [selectedTicket, setSelectedTicket] = useState<CscTicket | null>(null);
@@ -139,7 +140,6 @@ const CSC = () => {
     service_type: "",
     priority: "medium",
     requesting_area: "",
-    requested_date: "",
     department: "",
     assigned_to: "",
   });
