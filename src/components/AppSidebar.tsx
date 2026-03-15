@@ -10,6 +10,7 @@ import {
   GanttChart,
   Map,
   DollarSign,
+  Layers,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -33,6 +34,7 @@ const allNavItems = [
   { path: "/timeline", label: "Cronograma", icon: GanttChart, minRole: "user" as const },
   { path: "/team", label: "Equipe", icon: Users, minRole: "user" as const },
   { path: "/investments", label: "Gestão Financeira", icon: DollarSign, minRole: "user" as const },
+  { path: "/csc", label: "CSC", icon: Layers, minRole: "user" as const },
   { path: "/reports", label: "Relatórios", icon: BarChart3, minRole: "gestor" as const },
   { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, minRole: "gestor" as const },
   { path: "/settings", label: "Configurações", icon: Settings, minRole: "admin" as const },
