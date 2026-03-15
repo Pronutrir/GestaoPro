@@ -25,6 +25,8 @@ interface Activity {
 interface Project {
   id: string;
   title: string;
+  budget_planned: number | null;
+  budget_used: number | null;
 }
 
 interface TimeEntry {
@@ -34,7 +36,13 @@ interface TimeEntry {
   project_id: string;
 }
 
-type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | null;
+interface ActivityInvestment {
+  activity_id: string;
+  amount: number;
+  description: string | null;
+}
+
+type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | "investments" | null;
 
 const TeamView = () => {
   const navigate = useNavigate();
