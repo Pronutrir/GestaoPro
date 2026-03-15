@@ -164,7 +164,6 @@ const TeamView = () => {
                 {summaryFilter === "assigned" && `📋 Tarefas Atribuídas`}
                 {summaryFilter === "unassigned" && `⚠️ Tarefas Sem Responsável`}
                 {summaryFilter === "hours" && `⏱️ Horas Registradas por Membro`}
-                {summaryFilter === "investments" && `💰 Investimentos por Membro`}
               </h3>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setSummaryFilter(null); setFilterProject("all"); setFilterMember("all"); setFilterStatus("all"); }}>
                 <X className="w-4 h-4" />
