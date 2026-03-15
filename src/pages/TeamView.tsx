@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ArrowLeft, Users, Clock, CheckCircle2, AlertTriangle, Briefcase, X } from "lucide-react";
+import { ArrowLeft, Users, Clock, CheckCircle2, AlertTriangle, Briefcase, X, Filter } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 
@@ -44,6 +45,9 @@ const TeamView = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>(null);
+  const [filterProject, setFilterProject] = useState<string>("all");
+  const [filterMember, setFilterMember] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
 
   useEffect(() => {
     if (!authLoading) fetchData();
@@ -153,66 +157,145 @@ const TeamView = () => {
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-foreground">
                 {summaryFilter === "members" && `👥 Membros da Equipe (${teamMembers.length})`}
-                {summaryFilter === "assigned" && `📋 Tarefas Atribuídas (${activities.filter(a => a.assigned_to?.trim()).length})`}
-                {summaryFilter === "unassigned" && `⚠️ Tarefas Sem Responsável (${unassigned.length})`}
+                {summaryFilter === "assigned" && `📋 Tarefas Atribuídas`}
+                {summaryFilter === "unassigned" && `⚠️ Tarefas Sem Responsável`}
                 {summaryFilter === "hours" && `⏱️ Horas Registradas por Membro`}
               </h3>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSummaryFilter(null)}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setSummaryFilter(null); setFilterProject("all"); setFilterMember("all"); setFilterStatus("all"); }}>
                 <X className="w-4 h-4" />
               </Button>
             </div>
-            <div className="space-y-1.5 max-h-64 overflow-y-auto">
-              {summaryFilter === "members" && teamMembers.map(m => (
-                <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md cursor-pointer hover:bg-muted/50"
-                  onClick={() => { setSummaryFilter(null); setSelectedMember(m.name); }}>
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 bg-primary/10 rounded-full flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-primary">{m.name.substring(0, 2).toUpperCase()}</span>
+
+            {/* Filters row */}
+            {summaryFilter !== "members" && (
+              <div className="flex flex-wrap gap-2 items-center">
+                <Filter className="w-4 h-4 text-muted-foreground" />
+                <Select value={filterProject} onValueChange={setFilterProject}>
+                  <SelectTrigger className="h-8 w-[180px] text-xs">
+                    <SelectValue placeholder="Projeto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os Projetos</SelectItem>
+                    {projects.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {summaryFilter === "assigned" && (
+                  <>
+                    <Select value={filterMember} onValueChange={setFilterMember}>
+                      <SelectTrigger className="h-8 w-[160px] text-xs">
+                        <SelectValue placeholder="Membro" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os Membros</SelectItem>
+                        {teamMembers.map(m => (
+                          <SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger className="h-8 w-[140px] text-xs">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos Status</SelectItem>
+                        <SelectItem value="completed">Concluída</SelectItem>
+                        <SelectItem value="in_progress">Em andamento</SelectItem>
+                        <SelectItem value="pending">Pendente</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </>
+                )}
+              </div>
+            )}
+
+            {(() => {
+              const byProject = (a: Activity) => filterProject === "all" || a.project_id === filterProject;
+              const byMember = (a: Activity) => filterMember === "all" || a.assigned_to?.trim() === filterMember;
+              const byStatus = (a: Activity) => filterStatus === "all" || a.status === filterStatus;
+
+              const filteredAssigned = activities.filter(a => a.assigned_to?.trim()).filter(byProject).filter(byMember).filter(byStatus);
+              const filteredUnassigned = unassigned.filter(byProject);
+              const filteredHoursMembers = teamMembers.filter(m => m.hoursTracked > 0).filter(m => {
+                if (filterProject === "all") return true;
+                return m.projects.has(filterProject);
+              }).sort((a, b) => b.hoursTracked - a.hoursTracked);
+
+              return (
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {summaryFilter === "members" && teamMembers.map(m => (
+                    <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md cursor-pointer hover:bg-muted/50"
+                      onClick={() => { setSummaryFilter(null); setSelectedMember(m.name); }}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 bg-primary/10 rounded-full flex items-center justify-center">
+                          <span className="text-[10px] font-bold text-primary">{m.name.substring(0, 2).toUpperCase()}</span>
+                        </div>
+                        <span className="text-sm font-medium">{m.name}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{m.totalTasks} tarefa(s) · {m.projects.size} projeto(s)</span>
                     </div>
-                    <span className="text-sm font-medium">{m.name}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{m.totalTasks} tarefa(s) · {m.projects.size} projeto(s)</span>
+                  ))}
+
+                  {summaryFilter === "assigned" && (
+                    <>
+                      <p className="text-xs text-muted-foreground">{filteredAssigned.length} resultado(s)</p>
+                      {filteredAssigned.map(a => {
+                        const proj = projects.find(p => p.id === a.project_id);
+                        return (
+                          <div key={a.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium truncate block">{a.title}</span>
+                              <span className="text-[10px] text-muted-foreground">👤 {a.assigned_to} · {proj?.title || ""}</span>
+                            </div>
+                            <Badge variant="outline" className="text-[10px] ml-2 shrink-0">
+                              {a.status === "completed" ? "Concluída" : a.status === "in_progress" ? "Em andamento" : "Pendente"}
+                            </Badge>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+
+                  {summaryFilter === "unassigned" && (
+                    <>
+                      <p className="text-xs text-muted-foreground">{filteredUnassigned.length} resultado(s)</p>
+                      {filteredUnassigned.map(a => {
+                        const proj = projects.find(p => p.id === a.project_id);
+                        return (
+                          <div key={a.id} className="flex items-center justify-between p-2 bg-warning/5 rounded-md border border-warning/10">
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium truncate block">{a.title}</span>
+                              <span className="text-[10px] text-muted-foreground">{proj?.title || ""}</span>
+                            </div>
+                            {a.end_date && <span className="text-xs text-muted-foreground ml-2">{new Date(a.end_date).toLocaleDateString("pt-BR")}</span>}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+
+                  {summaryFilter === "hours" && (
+                    <>
+                      <p className="text-xs text-muted-foreground">{filteredHoursMembers.length} membro(s)</p>
+                      {filteredHoursMembers.map(m => (
+                        <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                          <span className="text-sm font-medium">{m.name}</span>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span>Estimado: {m.hoursEstimated.toFixed(0)}h</span>
+                            <span className="font-semibold text-info">Registrado: {m.hoursTracked.toFixed(1)}h</span>
+                          </div>
+                        </div>
+                      ))}
+                      {filteredHoursMembers.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">Nenhuma hora registrada ainda.</p>
+                      )}
+                    </>
+                  )}
                 </div>
-              ))}
-              {summaryFilter === "assigned" && activities.filter(a => a.assigned_to?.trim()).map(a => {
-                const proj = projects.find(p => p.id === a.project_id);
-                return (
-                  <div key={a.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium truncate block">{a.title}</span>
-                      <span className="text-[10px] text-muted-foreground">👤 {a.assigned_to} · {proj?.title || ""}</span>
-                    </div>
-                    <Badge variant="outline" className="text-[10px] ml-2 shrink-0">
-                      {a.status === "completed" ? "Concluída" : a.status === "in_progress" ? "Em andamento" : "Pendente"}
-                    </Badge>
-                  </div>
-                );
-              })}
-              {summaryFilter === "unassigned" && unassigned.map(a => {
-                const proj = projects.find(p => p.id === a.project_id);
-                return (
-                  <div key={a.id} className="flex items-center justify-between p-2 bg-warning/5 rounded-md border border-warning/10">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium truncate block">{a.title}</span>
-                      <span className="text-[10px] text-muted-foreground">{proj?.title || ""}</span>
-                    </div>
-                    {a.end_date && <span className="text-xs text-muted-foreground ml-2">{new Date(a.end_date).toLocaleDateString("pt-BR")}</span>}
-                  </div>
-                );
-              })}
-              {summaryFilter === "hours" && teamMembers.filter(m => m.hoursTracked > 0).sort((a, b) => b.hoursTracked - a.hoursTracked).map(m => (
-                <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
-                  <span className="text-sm font-medium">{m.name}</span>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span>Estimado: {m.hoursEstimated.toFixed(0)}h</span>
-                    <span className="font-semibold text-info">Registrado: {m.hoursTracked.toFixed(1)}h</span>
-                  </div>
-                </div>
-              ))}
-              {summaryFilter === "hours" && teamMembers.filter(m => m.hoursTracked > 0).length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">Nenhuma hora registrada ainda.</p>
-              )}
-            </div>
+              );
+            })()}
           </Card>
         )}
 
