@@ -417,9 +417,17 @@ export const UserManagement = () => {
                     <p className="font-semibold text-foreground">{selectedUser.full_name || "Sem nome"}</p>
                     <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
                   </div>
-                  <Badge variant={getUserRole(selectedUser.id) === "admin" ? "default" : getUserRole(selectedUser.id) === "gestor" ? "outline" : "secondary"}>
+                  <Badge
+                    variant={getUserRole(selectedUser.id) === "admin" ? "default" : "secondary"}
+                    className={getUserRole(selectedUser.id) === "gestor" ? "bg-amber-100 text-amber-800 border-amber-200" : ""}
+                  >
                     {getUserRole(selectedUser.id) === "admin" ? "Administrador" : getUserRole(selectedUser.id) === "gestor" ? "Gestor" : "Usuário"}
                   </Badge>
+                  {selectedUser.is_active === false && (
+                    <Badge variant="destructive" className="text-xs gap-1">
+                      <Ban className="w-3 h-3" /> Inativo
+                    </Badge>
+                  )}
                 </div>
 
                 {/* Form Fields */}
