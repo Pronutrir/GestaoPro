@@ -33,6 +33,8 @@ interface TimeEntry {
   project_id: string;
 }
 
+type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | null;
+
 const TeamView = () => {
   const navigate = useNavigate();
   const { filterProjects, isAdmin, loading: authLoading } = useProjectAccess();
@@ -41,6 +43,7 @@ const TeamView = () => {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>(null);
 
   useEffect(() => {
     if (!authLoading) fetchData();
