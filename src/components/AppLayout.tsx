@@ -25,6 +25,7 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
             </div>
           </header>
           <main className="flex-1">{children}</main>
+          <StickyNotes />
         </div>
       </div>
     </SidebarProvider>
