@@ -79,6 +79,7 @@ Deno.serve(async (req) => {
         ban_duration: "876600h",
       });
       if (error) return jsonResponse({ error: error.message }, 400);
+      await adminClient.from("profiles").update({ is_active: false }).eq("id", target_user_id);
       return jsonResponse({ success: true, action: "banned" });
     }
 
@@ -87,6 +88,7 @@ Deno.serve(async (req) => {
         ban_duration: "none",
       });
       if (error) return jsonResponse({ error: error.message }, 400);
+      await adminClient.from("profiles").update({ is_active: true }).eq("id", target_user_id);
       return jsonResponse({ success: true, action: "unbanned" });
     }
 

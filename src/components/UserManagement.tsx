@@ -33,6 +33,7 @@ interface Profile {
   role_title: string | null;
   avatar_url: string | null;
   created_at: string;
+  is_active?: boolean;
 }
 
 interface UserRole {
@@ -304,19 +305,35 @@ export const UserManagement = () => {
                 return (
                   <div
                     key={p.id}
-                    className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-accent/10 transition-all cursor-pointer group"
+                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer group ${
+                      p.is_active === false
+                        ? "border-destructive/30 bg-destructive/5 opacity-60"
+                        : "border-border hover:border-primary/30 hover:bg-accent/10"
+                    }`}
                     onClick={() => openUserDetail(p)}
                   >
                     <Avatar className="h-11 w-11 shrink-0">
-                      <AvatarImage src={p.avatar_url || undefined} alt={p.full_name || ""} />
-                      <AvatarFallback className={role === "admin" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}>
+                      <AvatarImage src={p.avatar_url || undefined} alt={p.full_name || ""} className={p.is_active === false ? "grayscale" : ""} />
+                      <AvatarFallback className={
+                        p.is_active === false ? "bg-muted text-muted-foreground" :
+                        role === "admin" ? "bg-primary/15 text-primary" :
+                        role === "gestor" ? "bg-amber-100 text-amber-700" :
+                        "bg-muted text-muted-foreground"
+                      }>
                         {getInitials(p.full_name)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-foreground text-sm truncate">{p.full_name || "Sem nome"}</span>
+                        <span className={`font-medium text-sm truncate ${p.is_active === false ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                          {p.full_name || "Sem nome"}
+                        </span>
                         {isSelf && <Badge variant="outline" className="text-[9px] h-4">Você</Badge>}
+                        {p.is_active === false && (
+                          <Badge variant="destructive" className="text-[9px] h-4 gap-0.5">
+                            <Ban className="w-2.5 h-2.5" /> Inativo
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{p.email}</p>
                       <div className="flex items-center gap-1.5 mt-1">
@@ -325,7 +342,10 @@ export const UserManagement = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <Badge variant={role === "admin" ? "default" : role === "gestor" ? "outline" : "secondary"} className="text-[10px]">
+                      <Badge
+                        variant={role === "admin" ? "default" : "secondary"}
+                        className={`text-[10px] ${role === "gestor" ? "bg-amber-100 text-amber-800 border-amber-200" : ""}`}
+                      >
                         {role === "admin" ? "Admin" : role === "gestor" ? "Gestor" : "Usuário"}
                       </Badge>
                       <DropdownMenu>
@@ -341,9 +361,15 @@ export const UserManagement = () => {
                           {!isSelf && (
                             <>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => setBanConfirm({ profile: p, action: "ban" })}>
-                                <Ban className="w-3.5 h-3.5 mr-2" /> Inativar
-                              </DropdownMenuItem>
+                              {p.is_active === false ? (
+                                <DropdownMenuItem onClick={() => setBanConfirm({ profile: p, action: "unban" })}>
+                                  <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Reativar
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem onClick={() => setBanConfirm({ profile: p, action: "ban" })}>
+                                  <Ban className="w-3.5 h-3.5 mr-2" /> Inativar
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem className="text-destructive" onClick={() => setDeleteConfirm(p)}>
                                 <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
                               </DropdownMenuItem>
@@ -391,9 +417,17 @@ export const UserManagement = () => {
                     <p className="font-semibold text-foreground">{selectedUser.full_name || "Sem nome"}</p>
                     <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
                   </div>
-                  <Badge variant={getUserRole(selectedUser.id) === "admin" ? "default" : getUserRole(selectedUser.id) === "gestor" ? "outline" : "secondary"}>
+                  <Badge
+                    variant={getUserRole(selectedUser.id) === "admin" ? "default" : "secondary"}
+                    className={getUserRole(selectedUser.id) === "gestor" ? "bg-amber-100 text-amber-800 border-amber-200" : ""}
+                  >
                     {getUserRole(selectedUser.id) === "admin" ? "Administrador" : getUserRole(selectedUser.id) === "gestor" ? "Gestor" : "Usuário"}
                   </Badge>
+                  {selectedUser.is_active === false && (
+                    <Badge variant="destructive" className="text-xs gap-1">
+                      <Ban className="w-3 h-3" /> Inativo
+                    </Badge>
+                  )}
                 </div>
 
                 {/* Form Fields */}
