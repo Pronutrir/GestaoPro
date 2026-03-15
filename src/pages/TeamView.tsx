@@ -68,21 +68,16 @@ const TeamView = () => {
   }, []);
 
   const fetchData = async () => {
-    const [actRes, projRes, timeRes, invRes] = await Promise.all([
+    const [actRes, projRes, timeRes] = await Promise.all([
       supabase.from("activities").select("id, title, status, assigned_to, project_id, hours, end_date, priority"),
       supabase.from("projects").select("id, title, budget_planned, budget_used"),
       supabase.from("time_entries").select("activity_id, duration_minutes, user_name, project_id"),
-      supabase.from("activity_investments").select("activity_id, amount, description, project_id, responsible, category"),
     ]);
     const filteredProjects = await filterProjects(projRes.data || []);
     setProjects(filteredProjects);
     const projectIds = new Set(filteredProjects.map((p) => p.id));
     if (actRes.data) setActivities(actRes.data.filter((a) => projectIds.has(a.project_id)));
     if (timeRes.data) setTimeEntries(timeRes.data.filter((t) => projectIds.has(t.project_id)));
-    if (invRes.data) {
-      const activityIds = new Set((actRes.data || []).filter(a => projectIds.has(a.project_id)).map(a => a.id));
-      setActivityInvestments(invRes.data.filter(i => activityIds.has(i.activity_id)));
-    }
     setIsLoading(false);
   };
 
