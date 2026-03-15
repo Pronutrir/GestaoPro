@@ -113,6 +113,21 @@ const CSC = () => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+
+  const openCreateDialog = () => {
+    const cp = profiles.find(p => p.id === user?.id);
+    setForm({
+      title: "",
+      description: "",
+      service_type: "",
+      priority: "medium",
+      requesting_area: cp?.sector || "",
+      requested_date: "",
+      department: "",
+      assigned_to: cp?.full_name || "",
+    });
+    setCreateOpen(true);
+  };
   const [selectedTicket, setSelectedTicket] = useState<CscTicket | null>(null);
   const [activeTab, setActiveTab] = useState("kanban");
   const [filterDept, setFilterDept] = useState("all");
