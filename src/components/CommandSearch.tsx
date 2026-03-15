@@ -104,11 +104,7 @@ export function CommandSearch() {
         onClick={() => setOpen(true)}
         className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground bg-muted/50 border border-border rounded-md hover:bg-muted transition-colors"
       >
-        <Search className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Buscar...</span>
-        <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-          ⌘K
-        </kbd>
+        <span>Buscar...</span>
       </button>
       <CommandDialog open={open} onOpenChange={setOpen}>
         <CommandInput placeholder="Buscar projetos, páginas..." />
