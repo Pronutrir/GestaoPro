@@ -258,7 +258,7 @@ const CSC = () => {
       overdue,
       atRisk,
     };
-  }, [filteredTickets, tickets]);
+  }, [filteredTickets, tickets, sectors]);
 
   // ── Kanban columns ─────────────────────────────
   const kanbanStatuses = STATUSES.filter((s) => s.value !== "cancelado");
