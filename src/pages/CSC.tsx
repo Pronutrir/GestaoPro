@@ -194,7 +194,7 @@ const CSC = () => {
       toast({ title: "Erro ao criar solicitação", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Solicitação criada com sucesso!" });
-      setForm({ title: "", description: "", service_type: "", priority: "medium", requesting_area: "", requested_date: "", department: "", assigned_to: "", raci_role: "" });
+      setForm({ title: "", description: "", service_type: "", priority: "medium", requesting_area: "", requested_date: "", department: "", assigned_to: "" });
       setCreateOpen(false);
       fetchData();
     }
