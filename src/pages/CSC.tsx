@@ -16,7 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Clock, CheckCircle2, AlertTriangle, Timer, TrendingUp,
-  BarChart3, Users, Briefcase, Filter, ArrowRight,
+  BarChart3, Users, Briefcase, Filter, ArrowRight, Paperclip, X,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────
