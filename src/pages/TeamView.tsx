@@ -89,19 +89,14 @@ const TeamView = () => {
       name: string; totalTasks: number; completedTasks: number;
       overdueTasks: number; highPriority: number;
       hoursEstimated: number; hoursTracked: number;
-      investmentTotal: number;
       projects: Set<string>;
     }>();
-
-    // Map activity_id -> assigned_to for investment attribution
-    const activityOwner = new Map<string, string>();
 
     activities.forEach(a => {
       const name = a.assigned_to?.trim();
       if (!name) return;
-      activityOwner.set(a.id, name);
       if (!members.has(name)) {
-        members.set(name, { name, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, investmentTotal: 0, projects: new Set() });
+        members.set(name, { name, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, projects: new Set() });
       }
       const m = members.get(name)!;
       m.totalTasks++;
@@ -118,15 +113,8 @@ const TeamView = () => {
       members.get(name)!.hoursTracked += (te.duration_minutes || 0) / 60;
     });
 
-    activityInvestments.forEach(inv => {
-      const owner = activityOwner.get(inv.activity_id);
-      if (owner && members.has(owner)) {
-        members.get(owner)!.investmentTotal += inv.amount || 0;
-      }
-    });
-
     return Array.from(members.values()).sort((a, b) => b.totalTasks - a.totalTasks);
-  }, [activities, timeEntries, activityInvestments]);
+  }, [activities, timeEntries]);
 
   const totalInvestments = useMemo(() => {
     return activityInvestments.reduce((s, i) => s + (i.amount || 0), 0);
