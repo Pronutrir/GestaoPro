@@ -383,7 +383,15 @@ const CSC = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label>Área Solicitante</Label>
-                      <Input value={form.requesting_area} onChange={(e) => setForm({ ...form, requesting_area: e.target.value })} placeholder="Setor de origem" />
+                      <Select value={form.requesting_area || "_none"} onValueChange={(v) => setForm({ ...form, requesting_area: v === "_none" ? "" : v })}>
+                        <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none">Nenhum</SelectItem>
+                          {sectors.map((s) => (
+                            <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="grid gap-2">
                       <Label>Data Desejada</Label>
