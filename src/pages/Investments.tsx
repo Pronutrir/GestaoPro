@@ -179,7 +179,7 @@ const Investments = () => {
     <AppLayout title="Investimentos">
       <main className="px-4 py-6 space-y-6">
         <div>
-          <h2 className="text-3xl font-bold text-foreground mb-1">Gestão de Investimentos</h2>
+          <h2 className="text-3xl font-bold text-foreground mb-1">Gestão Financeira</h2>
           <p className="text-muted-foreground">Orçamento dos projetos e investimentos por atividade</p>
         </div>
 
