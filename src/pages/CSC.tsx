@@ -385,31 +385,17 @@ const CSC = () => {
                       <Input type="date" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label>Responsável</Label>
-                      <Select value={form.assigned_to || "_none"} onValueChange={(v) => setForm({ ...form, assigned_to: v === "_none" ? "" : v })}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Nenhum</SelectItem>
-                          {profiles.filter(p => p.full_name).map((p) => (
-                            <SelectItem key={p.id} value={p.full_name!}>{p.full_name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label>Papel RACI</Label>
-                      <Select value={form.raci_role || "_none"} onValueChange={(v) => setForm({ ...form, raci_role: v === "_none" ? "" : v })}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Nenhum</SelectItem>
-                          {RACI_ROLES.map((r) => (
-                            <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                   <div className="grid gap-2">
+                    <Label>Responsável</Label>
+                    <Select value={form.assigned_to || "_none"} onValueChange={(v) => setForm({ ...form, assigned_to: v === "_none" ? "" : v })}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">Nenhum</SelectItem>
+                        {profiles.filter(p => p.full_name).map((p) => (
+                          <SelectItem key={p.id} value={p.full_name!}>{p.full_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <DialogFooter>
