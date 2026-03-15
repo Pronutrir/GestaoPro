@@ -73,16 +73,57 @@ const TeamView = () => {
   }, []);
 
   const fetchData = async () => {
-    const [actRes, projRes, timeRes] = await Promise.all([
+    const [actRes, projRes, timeRes, membersRes] = await Promise.all([
       supabase.from("activities").select("id, title, status, assigned_to, project_id, hours, end_date, priority"),
-      supabase.from("projects").select("id, title, budget_planned, budget_used"),
+      supabase.from("projects").select("id, title, budget_planned, budget_used, owner"),
       supabase.from("time_entries").select("activity_id, duration_minutes, user_name, project_id"),
+      supabase.from("project_members").select("project_id, user_id"),
     ]);
     const filteredProjects = await filterProjects(projRes.data || []);
     setProjects(filteredProjects);
     const projectIds = new Set(filteredProjects.map((p) => p.id));
     if (actRes.data) setActivities(actRes.data.filter((a) => projectIds.has(a.project_id)));
     if (timeRes.data) setTimeEntries(timeRes.data.filter((t) => projectIds.has(t.project_id)));
+
+    // Build all member names from project_members profiles + project owners
+    const filteredMembers = (membersRes.data || []).filter(m => projectIds.has(m.project_id));
+    const userIds = [...new Set(filteredMembers.map(m => m.user_id))];
+    
+    const memberProfiles: ProjectMemberProfile[] = [];
+    
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", userIds);
+      if (profiles) {
+        const profileMap = new Map(profiles.map(p => [p.id, p.full_name]));
+        const nameToProjects = new Map<string, Set<string>>();
+        
+        filteredMembers.forEach(m => {
+          const name = profileMap.get(m.user_id)?.trim();
+          if (!name) return;
+          if (!nameToProjects.has(name)) nameToProjects.set(name, new Set());
+          nameToProjects.get(name)!.add(m.project_id);
+        });
+        
+        nameToProjects.forEach((pIds, name) => {
+          memberProfiles.push({ full_name: name, project_ids: pIds });
+        });
+      }
+    }
+
+    // Also include project owners
+    filteredProjects.forEach(p => {
+      const owner = (p as any).owner?.trim();
+      if (owner) {
+        const existing = memberProfiles.find(mp => mp.full_name === owner);
+        if (existing) {
+          existing.project_ids.add(p.id);
+        } else {
+          memberProfiles.push({ full_name: owner, project_ids: new Set([p.id]) });
+        }
+      }
+    });
+
+    setAllMemberNames(memberProfiles);
     setIsLoading(false);
   };
 
