@@ -452,11 +452,6 @@ const CSC = () => {
                                 </Avatar>
                               )}
                             </div>
-                            {ticket.raci_role && (
-                              <Badge variant="outline" className="text-[8px] h-3.5 mt-1">
-                                {RACI_ROLES.find(r => r.value === ticket.raci_role)?.label || ticket.raci_role}
-                              </Badge>
-                            )}
                           </div>
                         ))}
                         {columnTickets.length === 0 && (
