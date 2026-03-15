@@ -383,6 +383,10 @@ const CSC = () => {
                       <Label>Área Solicitante</Label>
                       <Input value={form.requesting_area} readOnly className="bg-muted" />
                     </div>
+                   </div>
+                  <div className="grid gap-2">
+                    <Label>Data de Solução Desejada</Label>
+                    <Input type="date" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} />
                   </div>
                 </div>
                 <DialogFooter>
