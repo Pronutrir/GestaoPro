@@ -116,13 +116,6 @@ const TeamView = () => {
     return Array.from(members.values()).sort((a, b) => b.totalTasks - a.totalTasks);
   }, [activities, timeEntries]);
 
-  const totalInvestments = useMemo(() => {
-    return activityInvestments.reduce((s, i) => s + (i.amount || 0), 0);
-  }, [activityInvestments]);
-
-  const totalBudgetPlanned = useMemo(() => {
-    return projects.reduce((s, p) => s + (p.budget_planned || 0), 0);
-  }, [projects]);
 
   const unassigned = activities.filter(a => !a.assigned_to?.trim());
 
