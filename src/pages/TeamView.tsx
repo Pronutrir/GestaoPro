@@ -45,6 +45,9 @@ const TeamView = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>(null);
+  const [filterProject, setFilterProject] = useState<string>("all");
+  const [filterMember, setFilterMember] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
 
   useEffect(() => {
     if (!authLoading) fetchData();
