@@ -147,6 +147,8 @@ const TeamView = () => {
 
   const totalBudgetPlanned = useMemo(() => {
     return projects.reduce((s, p) => s + (p.budget_planned || 0), 0);
+  }, [projects]);
+
   const unassigned = activities.filter(a => !a.assigned_to?.trim());
 
   // Member detail data
