@@ -32,7 +32,7 @@ const allNavItems = [
   { path: "/projects", label: "Projetos", icon: FolderKanban, adminOnly: false },
   { path: "/timeline", label: "Cronograma", icon: GanttChart, adminOnly: false },
   { path: "/team", label: "Equipe", icon: Users, adminOnly: false },
-  { path: "/investments", label: "Investimentos", icon: DollarSign, adminOnly: false },
+  { path: "/investments", label: "Gestão Financeira", icon: DollarSign, adminOnly: false },
   { path: "/reports", label: "Relatórios", icon: BarChart3, adminOnly: true },
   { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, adminOnly: true },
   { path: "/settings", label: "Configurações", icon: Settings, adminOnly: true },
