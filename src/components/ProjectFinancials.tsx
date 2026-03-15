@@ -55,6 +55,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
   const { isAdmin } = useAuth();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [activities, setActivities] = useState<{ id: string; title: string }[]>([]);
+  const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
