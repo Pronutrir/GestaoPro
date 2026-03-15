@@ -53,7 +53,7 @@ export const EditProjectDialog = ({
   onProjectUpdated,
 }: EditProjectDialogProps) => {
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { canManage: isAdmin } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
 

@@ -27,15 +27,15 @@ import {
 } from "@/components/ui/sidebar";
 
 const allNavItems = [
-  { path: "/", label: "Visão Geral", icon: Home, adminOnly: false },
-  { path: "/roadmap", label: "Roadmap", icon: Map, adminOnly: false },
-  { path: "/projects", label: "Projetos", icon: FolderKanban, adminOnly: false },
-  { path: "/timeline", label: "Cronograma", icon: GanttChart, adminOnly: false },
-  { path: "/team", label: "Equipe", icon: Users, adminOnly: false },
-  { path: "/investments", label: "Gestão Financeira", icon: DollarSign, adminOnly: false },
-  { path: "/reports", label: "Relatórios", icon: BarChart3, adminOnly: true },
-  { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, adminOnly: true },
-  { path: "/settings", label: "Configurações", icon: Settings, adminOnly: true },
+  { path: "/", label: "Visão Geral", icon: Home, minRole: "user" as const },
+  { path: "/roadmap", label: "Roadmap", icon: Map, minRole: "user" as const },
+  { path: "/projects", label: "Projetos", icon: FolderKanban, minRole: "user" as const },
+  { path: "/timeline", label: "Cronograma", icon: GanttChart, minRole: "user" as const },
+  { path: "/team", label: "Equipe", icon: Users, minRole: "user" as const },
+  { path: "/investments", label: "Gestão Financeira", icon: DollarSign, minRole: "user" as const },
+  { path: "/reports", label: "Relatórios", icon: BarChart3, minRole: "gestor" as const },
+  { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, minRole: "gestor" as const },
+  { path: "/settings", label: "Configurações", icon: Settings, minRole: "admin" as const },
 ];
 
 export function AppSidebar() {
@@ -43,8 +43,13 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut, profile, isAdmin } = useAuth();
-  const navItems = allNavItems.filter(item => !item.adminOnly || isAdmin);
+  const { signOut, profile, isAdmin, canManage } = useAuth();
+  const navItems = allNavItems.filter(item => {
+    if (item.minRole === "user") return true;
+    if (item.minRole === "gestor") return canManage;
+    if (item.minRole === "admin") return isAdmin;
+    return false;
+  });
 
   const handleSignOut = async () => {
     await signOut();

@@ -41,7 +41,7 @@ interface DocumentManagerProps {
 
 export const DocumentManager = ({ projectId, phases, activities }: DocumentManagerProps) => {
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { canManage: isAdmin } = useAuth();
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({

@@ -44,7 +44,7 @@ const LEVEL_LABELS: Record<string, string> = { low: "Baixo", medium: "Médio", h
 
 export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { canManage: isAdmin } = useAuth();
   const [items, setItems] = useState<Risk[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
