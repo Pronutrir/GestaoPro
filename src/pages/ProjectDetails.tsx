@@ -282,7 +282,7 @@ const ProjectDetails = () => {
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-primary" />
                       <span className="font-semibold text-foreground">Entrega em:</span>
-                      <span className="font-semibold text-foreground">{dueDate.toLocaleDateString("pt-BR")}</span>
+                      <span className="font-semibold text-foreground">{formatProjectDueDate(project.due_date)}</span>
                       <span className={`font-bold text-xs px-2 py-0.5 rounded-full animate-pulse ${isOverdue ? "bg-destructive/90 text-destructive-foreground" : isUrgent ? "bg-warning/90 text-warning-foreground" : "bg-success/90 text-success-foreground"}`}>
                         {isOverdue ? `${Math.abs(diffDays)}d atrasado` : diffDays === 0 ? "Hoje!" : `${diffDays} D Restantes`}
                       </span>
