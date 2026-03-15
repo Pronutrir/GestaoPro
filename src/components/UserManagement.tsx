@@ -1,23 +1,38 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Plus, Shield, User, Pencil } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Users, Plus, Shield, User, Pencil, Trash2, Ban, CheckCircle2,
+  Camera, Mail, Building2, Briefcase, Key, Search, MoreVertical,
+} from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface Profile {
   id: string;
-  email: string;
-  full_name: string;
+  email: string | null;
+  full_name: string | null;
   sector: string | null;
   role_title: string | null;
   avatar_url: string | null;
+  created_at: string;
 }
 
 interface UserRole {
@@ -32,28 +47,23 @@ interface Sector {
 
 export const UserManagement = () => {
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user: currentUser } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);
-  const [open, setOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<Profile | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<Profile | null>(null);
+  const [banConfirm, setBanConfirm] = useState<{ profile: Profile; action: "ban" | "unban" } | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
   const [form, setForm] = useState({
-    email: "",
-    password: "",
-    full_name: "",
-    sector: "",
-    role_title: "",
-    role: "user",
+    email: "", password: "", full_name: "", sector: "", role_title: "", role: "user",
   });
   const [editForm, setEditForm] = useState({
-    full_name: "",
-    sector: "",
-    role_title: "",
-    role: "user",
-    new_password: "",
+    full_name: "", sector: "", role_title: "", role: "user", new_password: "",
   });
 
   const fetchData = async () => {
@@ -74,6 +84,11 @@ export const UserManagement = () => {
     return r?.role || "user";
   };
 
+  const getInitials = (name: string | null) => {
+    if (!name) return "?";
+    return name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
+  };
+
   const handleCreate = async () => {
     if (!form.email || !form.password || !form.full_name) {
       toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
@@ -81,14 +96,12 @@ export const UserManagement = () => {
     }
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("admin-create-user", {
-        body: form,
-      });
+      const { data, error } = await supabase.functions.invoke("admin-create-user", { body: form });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast({ title: "Usuário criado!", description: `${form.full_name} foi adicionado.` });
       setForm({ email: "", password: "", full_name: "", sector: "", role_title: "", role: "user" });
-      setOpen(false);
+      setCreateOpen(false);
       fetchData();
     } catch (error: any) {
       toast({ title: "Erro ao criar usuário", description: error.message, variant: "destructive" });
@@ -96,8 +109,84 @@ export const UserManagement = () => {
     setIsLoading(false);
   };
 
-  const handleStartEdit = (profile: Profile) => {
-    setEditingUser(profile);
+  const handleUpdate = async () => {
+    if (!selectedUser) return;
+    setIsLoading(true);
+    try {
+      const body: any = {
+        target_user_id: selectedUser.id,
+        full_name: editForm.full_name,
+        sector: editForm.sector,
+        role_title: editForm.role_title,
+        role: editForm.role,
+      };
+      if (editForm.new_password.trim()) body.new_password = editForm.new_password;
+      const { data, error } = await supabase.functions.invoke("admin-update-user", { body });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Usuário atualizado!" });
+      setSelectedUser(null);
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
+    }
+    setIsLoading(false);
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedUser || !e.target.files?.[0]) return;
+    const file = e.target.files[0];
+    const ext = file.name.split(".").pop();
+    const path = `${selectedUser.id}/avatar.${ext}`;
+
+    setIsLoading(true);
+    try {
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+      const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+      const { error } = await supabase.functions.invoke("admin-update-user", {
+        body: { target_user_id: selectedUser.id, avatar_url: avatarUrl },
+      });
+      if (error) throw error;
+
+      toast({ title: "Foto atualizada!" });
+      fetchData();
+      setSelectedUser(prev => prev ? { ...prev, avatar_url: avatarUrl } : null);
+    } catch (error: any) {
+      toast({ title: "Erro no upload", description: error.message, variant: "destructive" });
+    }
+    setIsLoading(false);
+  };
+
+  const handleAction = async (userId: string, action: "ban" | "unban" | "delete") => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-update-user", {
+        body: { target_user_id: userId, action },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const messages = {
+        ban: "Usuário inativado!",
+        unban: "Usuário reativado!",
+        delete: "Usuário excluído!",
+      };
+      toast({ title: messages[action] });
+      setDeleteConfirm(null);
+      setBanConfirm(null);
+      setSelectedUser(null);
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    }
+    setIsLoading(false);
+  };
+
+  const openUserDetail = (profile: Profile) => {
+    setSelectedUser(profile);
     setEditForm({
       full_name: profile.full_name || "",
       sector: profile.sector || "",
@@ -105,35 +194,18 @@ export const UserManagement = () => {
       role: getUserRole(profile.id),
       new_password: "",
     });
-    setEditOpen(true);
   };
 
-  const handleUpdate = async () => {
-    if (!editingUser) return;
-    setIsLoading(true);
-    try {
-      const body: any = {
-        target_user_id: editingUser.id,
-        full_name: editForm.full_name,
-        sector: editForm.sector,
-        role_title: editForm.role_title,
-        role: editForm.role,
-      };
-      if (editForm.new_password.trim()) {
-        body.new_password = editForm.new_password;
-      }
-      const { data, error } = await supabase.functions.invoke("admin-update-user", { body });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast({ title: "Usuário atualizado!" });
-      setEditOpen(false);
-      setEditingUser(null);
-      fetchData();
-    } catch (error: any) {
-      toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
-    }
-    setIsLoading(false);
-  };
+  const filteredProfiles = profiles.filter(p => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      p.full_name?.toLowerCase().includes(term) ||
+      p.email?.toLowerCase().includes(term) ||
+      p.sector?.toLowerCase().includes(term) ||
+      p.role_title?.toLowerCase().includes(term)
+    );
+  });
 
   if (!isAdmin) return null;
 
@@ -150,153 +222,304 @@ export const UserManagement = () => {
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Usuários
-            </CardTitle>
-            <CardDescription>Gerencie os usuários que têm acesso ao sistema.</CardDescription>
-          </div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-1">
-                <Plus className="w-4 h-4" /> Novo Usuário
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Criar Novo Usuário</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label>Nome Completo *</Label>
-                  <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="João Silva" />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Email *</Label>
-                  <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="joao@empresa.com" />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Senha *</Label>
-                  <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 6 caracteres" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5" /> Usuários
+              </CardTitle>
+              <CardDescription>{profiles.length} usuário(s) cadastrado(s)</CardDescription>
+            </div>
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-1"><Plus className="w-4 h-4" /> Novo Usuário</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Criar Novo Usuário</DialogTitle></DialogHeader>
+                <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label>Setor</Label>
-                    <SectorSelect value={form.sector} onValueChange={(v) => setForm({ ...form, sector: v })} />
+                    <Label>Nome Completo *</Label>
+                    <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="João Silva" />
                   </div>
                   <div className="grid gap-2">
-                    <Label>Cargo</Label>
-                    <Input value={form.role_title} onChange={(e) => setForm({ ...form, role_title: e.target.value })} placeholder="Gerente" />
+                    <Label>Email *</Label>
+                    <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="joao@empresa.com" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Senha *</Label>
+                    <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 6 caracteres" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>Setor</Label>
+                      <SectorSelect value={form.sector} onValueChange={(v) => setForm({ ...form, sector: v })} />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Cargo</Label>
+                      <Input value={form.role_title} onChange={(e) => setForm({ ...form, role_title: e.target.value })} placeholder="Gerente" />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Perfil de Acesso</Label>
+                    <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Administrador</SelectItem>
+                        <SelectItem value="user">Usuário</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label>Perfil de Acesso</Label>
-                  <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Administrador</SelectItem>
-                      <SelectItem value="user">Usuário</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-                <Button onClick={handleCreate} disabled={isLoading}>
-                  {isLoading ? "Criando..." : "Criar Usuário"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {profiles.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">Nenhum usuário cadastrado.</p>
-        ) : (
-          <div className="space-y-3">
-            {profiles.map((p) => (
-              <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent/20 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    {getUserRole(p.id) === "admin" ? (
-                      <Shield className="w-5 h-5 text-primary" />
-                    ) : (
-                      <User className="w-5 h-5 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground">{p.full_name || "Sem nome"}</p>
-                    <p className="text-sm text-muted-foreground">{p.email}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {p.role_title && <span className="text-sm text-muted-foreground">{p.role_title}</span>}
-                  {p.sector && <Badge variant="outline">{p.sector}</Badge>}
-                  <Badge variant={getUserRole(p.id) === "admin" ? "default" : "secondary"}>
-                    {getUserRole(p.id) === "admin" ? "Admin" : "Usuário"}
-                  </Badge>
-                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleStartEdit(p)}>
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleCreate} disabled={isLoading}>{isLoading ? "Criando..." : "Criar Usuário"}</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
-        )}
-      </CardContent>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome, email, setor ou cargo..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9"
+            />
+          </div>
 
-      {/* Edit User Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar Usuário</DialogTitle>
-          </DialogHeader>
-          {editingUser && (
-            <div className="grid gap-4 py-4">
-              <p className="text-sm text-muted-foreground">{editingUser.email}</p>
-              <div className="grid gap-2">
-                <Label>Nome Completo</Label>
-                <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Setor</Label>
-                  <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Cargo</Label>
-                  <Input value={editForm.role_title} onChange={(e) => setEditForm({ ...editForm, role_title: e.target.value })} />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Perfil de Acesso</Label>
-                <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Administrador</SelectItem>
-                    <SelectItem value="user">Usuário</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Nova Senha (deixe vazio para não alterar)</Label>
-                <Input type="password" value={editForm.new_password} onChange={(e) => setEditForm({ ...editForm, new_password: e.target.value })} placeholder="Nova senha..." />
-              </div>
+          {/* User Grid */}
+          {filteredProfiles.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Nenhum usuário encontrado.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {filteredProfiles.map((p) => {
+                const role = getUserRole(p.id);
+                const isSelf = p.id === currentUser?.id;
+                return (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-accent/10 transition-all cursor-pointer group"
+                    onClick={() => openUserDetail(p)}
+                  >
+                    <Avatar className="h-11 w-11 shrink-0">
+                      <AvatarImage src={p.avatar_url || undefined} alt={p.full_name || ""} />
+                      <AvatarFallback className={role === "admin" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}>
+                        {getInitials(p.full_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-foreground text-sm truncate">{p.full_name || "Sem nome"}</span>
+                        {isSelf && <Badge variant="outline" className="text-[9px] h-4">Você</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{p.email}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {p.role_title && <span className="text-[10px] text-muted-foreground">{p.role_title}</span>}
+                        {p.sector && <Badge variant="outline" className="text-[9px] h-4">{p.sector}</Badge>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge variant={role === "admin" ? "default" : "secondary"} className="text-[10px]">
+                        {role === "admin" ? "Admin" : "Usuário"}
+                      </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuItem onClick={() => openUserDetail(p)}>
+                            <Pencil className="w-3.5 h-3.5 mr-2" /> Editar
+                          </DropdownMenuItem>
+                          {!isSelf && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => setBanConfirm({ profile: p, action: "ban" })}>
+                                <Ban className="w-3.5 h-3.5 mr-2" /> Inativar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive" onClick={() => setDeleteConfirm(p)}>
+                                <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
-            <Button onClick={handleUpdate} disabled={isLoading}>
-              {isLoading ? "Salvando..." : "Salvar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Card>
+        </CardContent>
+      </Card>
+
+      {/* User Detail Sheet */}
+      <Sheet open={!!selectedUser} onOpenChange={(open) => { if (!open) setSelectedUser(null); }}>
+        <SheetContent className="sm:max-w-md overflow-y-auto">
+          {selectedUser && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="text-lg">Editar Usuário</SheetTitle>
+              </SheetHeader>
+
+              <div className="mt-6 space-y-6">
+                {/* Avatar Section */}
+                <div className="flex flex-col items-center gap-3">
+                  <div className="relative group">
+                    <Avatar className="h-20 w-20">
+                      <AvatarImage src={selectedUser.avatar_url || undefined} alt={selectedUser.full_name || ""} />
+                      <AvatarFallback className="text-xl bg-primary/15 text-primary">
+                        {getInitials(selectedUser.full_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <button
+                      className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => avatarInputRef.current?.click()}
+                    >
+                      <Camera className="w-5 h-5 text-white" />
+                    </button>
+                    <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                  </div>
+                  <div className="text-center">
+                    <p className="font-semibold text-foreground">{selectedUser.full_name || "Sem nome"}</p>
+                    <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
+                  </div>
+                  <Badge variant={getUserRole(selectedUser.id) === "admin" ? "default" : "secondary"}>
+                    {getUserRole(selectedUser.id) === "admin" ? "Administrador" : "Usuário"}
+                  </Badge>
+                </div>
+
+                {/* Form Fields */}
+                <div className="space-y-4">
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Nome Completo</Label>
+                    <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <Label className="flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5" /> Setor</Label>
+                      <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Cargo</Label>
+                      <Input value={editForm.role_title} onChange={(e) => setEditForm({ ...editForm, role_title: e.target.value })} />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5" /> Perfil de Acesso</Label>
+                    <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Administrador</SelectItem>
+                        <SelectItem value="user">Usuário</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-1.5"><Key className="w-3.5 h-3.5" /> Redefinir Senha</Label>
+                    <Input
+                      type="password"
+                      value={editForm.new_password}
+                      onChange={(e) => setEditForm({ ...editForm, new_password: e.target.value })}
+                      placeholder="Deixe vazio para não alterar"
+                    />
+                  </div>
+                </div>
+
+                {/* Info */}
+                <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t border-border">
+                  <p>Cadastrado em: {new Date(selectedUser.created_at).toLocaleDateString("pt-BR")}</p>
+                  <p>ID: {selectedUser.id.substring(0, 8)}…</p>
+                </div>
+
+                {/* Actions */}
+                <div className="space-y-2 pt-2">
+                  <Button className="w-full" onClick={handleUpdate} disabled={isLoading}>
+                    {isLoading ? "Salvando..." : "Salvar Alterações"}
+                  </Button>
+
+                  {selectedUser.id !== currentUser?.id && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-1"
+                        onClick={() => setBanConfirm({ profile: selectedUser, action: "ban" })}
+                      >
+                        <Ban className="w-3.5 h-3.5" /> Inativar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-1"
+                        onClick={() => setBanConfirm({ profile: selectedUser, action: "unban" })}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Reativar
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        onClick={() => setDeleteConfirm(selectedUser)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Usuário</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <strong>{deleteConfirm?.full_name}</strong>? Esta ação é irreversível e removerá todos os dados do usuário.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteConfirm && handleAction(deleteConfirm.id, "delete")}
+            >
+              Excluir Permanentemente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Ban/Unban Confirmation */}
+      <AlertDialog open={!!banConfirm} onOpenChange={() => setBanConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{banConfirm?.action === "ban" ? "Inativar" : "Reativar"} Usuário</AlertDialogTitle>
+            <AlertDialogDescription>
+              {banConfirm?.action === "ban"
+                ? `O usuário ${banConfirm?.profile.full_name} não poderá mais fazer login no sistema.`
+                : `O usuário ${banConfirm?.profile.full_name} poderá fazer login novamente.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => banConfirm && handleAction(banConfirm.profile.id, banConfirm.action)}>
+              {banConfirm?.action === "ban" ? "Inativar" : "Reativar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };

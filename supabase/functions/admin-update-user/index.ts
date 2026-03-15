@@ -40,11 +40,55 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { target_user_id, full_name, sector, role_title, role, new_password } = await req.json();
+    const { target_user_id, full_name, sector, role_title, role, new_password, avatar_url, action } = await req.json();
 
     if (!target_user_id) {
       return new Response(JSON.stringify({ error: "target_user_id é obrigatório" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Handle special actions
+    if (action === "ban") {
+      const { error } = await adminClient.auth.admin.updateUserById(target_user_id, {
+        ban_duration: "876600h", // ~100 years
+      });
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ success: true, action: "banned" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "unban") {
+      const { error } = await adminClient.auth.admin.updateUserById(target_user_id, {
+        ban_duration: "none",
+      });
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ success: true, action: "unbanned" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "delete") {
+      // Delete profile, roles, then auth user
+      await adminClient.from("user_roles").delete().eq("user_id", target_user_id);
+      await adminClient.from("profiles").delete().eq("id", target_user_id);
+      const { error } = await adminClient.auth.admin.deleteUser(target_user_id);
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ success: true, action: "deleted" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -53,6 +97,7 @@ Deno.serve(async (req) => {
     if (full_name !== undefined) profileUpdate.full_name = full_name;
     if (sector !== undefined) profileUpdate.sector = sector;
     if (role_title !== undefined) profileUpdate.role_title = role_title;
+    if (avatar_url !== undefined) profileUpdate.avatar_url = avatar_url;
 
     if (Object.keys(profileUpdate).length > 0) {
       const { error: profileError } = await adminClient
