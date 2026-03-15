@@ -113,7 +113,7 @@ const TeamView = () => {
 
     // Also include project owners
     filteredProjects.forEach(p => {
-      const owner = (p as any).owner?.trim();
+      const owner = p.owner?.trim();
       if (owner) {
         const existing = memberProfiles.find(mp => mp.full_name === owner);
         if (existing) {
