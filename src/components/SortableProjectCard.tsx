@@ -8,7 +8,7 @@ import { GripVertical, MoreVertical, Pencil, Trash2, Calendar } from "lucide-rea
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
+import { formatProjectDueDate } from "@/lib/projectDeadline";
 interface Project {
   id: string;
   title: string;
@@ -44,10 +44,6 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
     zIndex: isDragging ? 50 : undefined,
   };
 
-  const formatDueDate = (dateStr: string) => {
-    const str = dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00';
-    return new Date(str).toLocaleDateString("pt-BR");
-  };
 
   return (
     <Card
@@ -104,7 +100,7 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
             {project.due_date && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Calendar className="w-3 h-3" />
-                {formatDueDate(project.due_date)}
+                {formatProjectDueDate(project.due_date)}
               </div>
             )}
           </div>
