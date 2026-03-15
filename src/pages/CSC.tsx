@@ -57,13 +57,6 @@ interface Profile {
 }
 
 // ── Constants ──────────────────────────────────────
-const DEPARTMENTS = [
-  { value: "ti", label: "T.I" },
-  { value: "rh", label: "RH" },
-  { value: "financeiro", label: "Financeiro" },
-  { value: "juridico", label: "Jurídico" },
-  { value: "compras", label: "Compras" },
-];
 
 const STATUSES = [
   { value: "novo", label: "Novo", color: "bg-blue-100 text-blue-800" },
@@ -112,7 +105,7 @@ const formatTimeRemaining = (deadline: string | null): string => {
   return `${hours}h ${Math.floor((diff % 3600000) / 60000)}m`;
 };
 
-const getDeptLabel = (d: string) => DEPARTMENTS.find((x) => x.value === d)?.label || d;
+const getDeptLabel = (d: string) => d;
 const getStatusObj = (s: string) => STATUSES.find((x) => x.value === s) || STATUSES[0];
 const getPriorityLabel = (p: string) => PRIORITIES.find((x) => x.value === p)?.label || p;
 
@@ -138,7 +131,7 @@ const CSC = () => {
     priority: "medium",
     requesting_area: "",
     requested_date: "",
-    department: "ti",
+    department: "",
     assigned_to: "",
     raci_role: "",
   });
@@ -175,8 +168,8 @@ const CSC = () => {
 
   // ── Create ─────────────────────────────────────
   const handleCreate = async () => {
-    if (!form.title || !form.service_type) {
-      toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
+    if (!form.title || !form.department) {
+      toast({ title: "Preencha os campos obrigatórios (Título e Departamento)", variant: "destructive" });
       return;
     }
     setIsLoading(true);
@@ -201,7 +194,7 @@ const CSC = () => {
       toast({ title: "Erro ao criar solicitação", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Solicitação criada com sucesso!" });
-      setForm({ title: "", description: "", service_type: "", priority: "medium", requesting_area: "", requested_date: "", department: "ti", assigned_to: "", raci_role: "" });
+      setForm({ title: "", description: "", service_type: "", priority: "medium", requesting_area: "", requested_date: "", department: "", assigned_to: "", raci_role: "" });
       setCreateOpen(false);
       fetchData();
     }
@@ -246,10 +239,11 @@ const CSC = () => {
           return sum + (end - start);
         }, 0) / resolved.length / 3600000
       : 0;
-    const byDept = DEPARTMENTS.map((d) => ({
-      ...d,
-      total: tickets.filter((t) => t.department === d.value).length,
-      active: tickets.filter((t) => t.department === d.value && !["concluido", "cancelado"].includes(t.status)).length,
+    const byDept = sectors.map((d) => ({
+      value: d.name,
+      label: d.name,
+      total: tickets.filter((t) => t.department === d.name).length,
+      active: tickets.filter((t) => t.department === d.name && !["concluido", "cancelado"].includes(t.status)).length,
     }));
     const overdue = active.filter((t) => getSlaStatus(t) === "red").length;
     const atRisk = active.filter((t) => getSlaStatus(t) === "yellow").length;
@@ -264,7 +258,7 @@ const CSC = () => {
       overdue,
       atRisk,
     };
-  }, [filteredTickets, tickets]);
+  }, [filteredTickets, tickets, sectors]);
 
   // ── Kanban columns ─────────────────────────────
   const kanbanStatuses = STATUSES.filter((s) => s.value !== "cancelado");
@@ -316,8 +310,8 @@ const CSC = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                {DEPARTMENTS.map((d) => (
-                  <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                {sectors.map((d) => (
+                  <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -345,8 +339,8 @@ const CSC = () => {
                       <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v, service_type: "" })}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {DEPARTMENTS.map((d) => (
-                            <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                          {sectors.map((d) => (
+                            <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
