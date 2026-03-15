@@ -305,7 +305,7 @@ function SortableColumn({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
-    flex: `0 1 ${widthPct}%`,
+    flex: `1 1 ${widthPct}%`,
     marginRight: isLast ? 0 : 6,
   };
 
