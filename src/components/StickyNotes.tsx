@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { StickyNote, Plus, X, Trash2, Pencil, Check, GripVertical, PanelBottomClose } from "lucide-react";
+import { StickyNote, Plus, X, Trash2, Pencil, Check, GripVertical, PanelBottomClose, Minimize2, Maximize2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
