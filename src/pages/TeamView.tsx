@@ -355,6 +355,48 @@ const TeamView = () => {
                       )}
                     </>
                   )}
+
+                  {summaryFilter === "investments" && (() => {
+                    const filteredInvMembers = teamMembers.filter(m => m.investmentTotal > 0).filter(m => {
+                      if (filterProject === "all") return true;
+                      return m.projects.has(filterProject);
+                    }).sort((a, b) => b.investmentTotal - a.investmentTotal);
+
+                    const totalFiltered = filteredInvMembers.reduce((s, m) => s + m.investmentTotal, 0);
+                    const budgetFiltered = filterProject === "all"
+                      ? totalBudgetPlanned
+                      : projects.find(p => p.id === filterProject)?.budget_planned || 0;
+
+                    return (
+                      <>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                          <span>{filteredInvMembers.length} membro(s)</span>
+                          {budgetFiltered > 0 && (
+                            <span>Orçamento planejado: R$ {budgetFiltered.toLocaleString("pt-BR")}</span>
+                          )}
+                        </div>
+                        {filteredInvMembers.map(m => (
+                          <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                            <span className="text-sm font-medium">{m.name}</span>
+                            <span className="text-sm font-semibold text-emerald-600">
+                              R$ {m.investmentTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        ))}
+                        {filteredInvMembers.length > 0 && (
+                          <div className="flex items-center justify-between p-2 bg-primary/5 rounded-md border border-primary/10 mt-1">
+                            <span className="text-sm font-semibold">Total</span>
+                            <span className="text-sm font-bold text-emerald-600">
+                              R$ {totalFiltered.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        )}
+                        {filteredInvMembers.length === 0 && (
+                          <p className="text-sm text-muted-foreground text-center py-4">Nenhum investimento registrado.</p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               );
             })()}
