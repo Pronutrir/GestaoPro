@@ -325,6 +325,7 @@ const ProjectDetails = () => {
                 { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" /> },
                 { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" /> },
                 { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" /> },
+                { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
                 { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" /> },
                 { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" /> },
               ]}
