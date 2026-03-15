@@ -113,6 +113,21 @@ const CSC = () => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+
+  const openCreateDialog = () => {
+    const cp = profiles.find(p => p.id === user?.id);
+    setForm({
+      title: "",
+      description: "",
+      service_type: "",
+      priority: "medium",
+      requesting_area: cp?.sector || "",
+      requested_date: "",
+      department: "",
+      assigned_to: cp?.full_name || "",
+    });
+    setCreateOpen(true);
+  };
   const [selectedTicket, setSelectedTicket] = useState<CscTicket | null>(null);
   const [activeTab, setActiveTab] = useState("kanban");
   const [filterDept, setFilterDept] = useState("all");
@@ -142,6 +157,8 @@ const CSC = () => {
     if (p) setProfiles(p);
     if (sec) setSectors(sec);
   };
+
+  const currentProfile = useMemo(() => profiles.find(p => p.id === user?.id), [profiles, user]);
 
   useEffect(() => {
     fetchData();
@@ -307,12 +324,10 @@ const CSC = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-1">
-                  <Plus className="w-4 h-4" /> Nova Solicitação
-                </Button>
-              </DialogTrigger>
+             <Button className="gap-1" onClick={openCreateDialog}>
+                <Plus className="w-4 h-4" /> Nova Solicitação
+              </Button>
+              <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogContent className="sm:max-w-[750px]">
                 <DialogHeader>
                   <DialogTitle>Nova Solicitação CSC</DialogTitle>
@@ -359,35 +374,19 @@ const CSC = () => {
                     <Label>Descrição</Label>
                     <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Detalhes da solicitação..." rows={3} />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                   <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>Responsável</Label>
+                      <Input value={form.assigned_to} readOnly className="bg-muted" />
+                    </div>
                     <div className="grid gap-2">
                       <Label>Área Solicitante</Label>
-                      <Select value={form.requesting_area || "_none"} onValueChange={(v) => setForm({ ...form, requesting_area: v === "_none" ? "" : v })}>
-                        <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Nenhum</SelectItem>
-                          {sectors.map((s) => (
-                            <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Input value={form.requesting_area} readOnly className="bg-muted" />
                     </div>
-                    <div className="grid gap-2">
-                      <Label>Data de Solução Desejada</Label>
-                      <Input type="date" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} />
-                    </div>
-                  </div>
-                   <div className="grid gap-2">
-                    <Label>Responsável</Label>
-                    <Select value={form.assigned_to || "_none"} onValueChange={(v) => setForm({ ...form, assigned_to: v === "_none" ? "" : v })}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none">Nenhum</SelectItem>
-                        {profiles.filter(p => p.full_name).map((p) => (
-                          <SelectItem key={p.id} value={p.full_name!}>{p.full_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                   </div>
+                  <div className="grid gap-2">
+                    <Label>Data de Solução Desejada</Label>
+                    <Input type="date" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} />
                   </div>
                 </div>
                 <DialogFooter>
