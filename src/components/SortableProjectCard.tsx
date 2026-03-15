@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { GripVertical, MoreVertical, Pencil, Trash2, Calendar } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { formatProjectDueDate } from "@/lib/projectDeadline";
 
 interface Project {
   id: string;

@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { useHealthScore } from "@/hooks/useHealthScore";
 import { HealthBadge } from "@/components/HealthBadge";
 import { Progress } from "@/components/ui/progress";
+import { formatProjectDueDate } from "@/lib/projectDeadline";
 
 interface Project {
   id: string;
