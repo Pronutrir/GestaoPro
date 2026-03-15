@@ -95,29 +95,6 @@ const DraggableNote = ({
     setIsEditing(false);
   };
 
-  if (minimized) {
-    return (
-      <div
-        ref={noteRef}
-        className="fixed z-[60]"
-        style={{ left: note.position_x, top: note.position_y }}
-      >
-        <button
-          onClick={() => setMinimized(false)}
-          onMouseDown={handleMouseDown}
-          className={cn(
-            "h-9 w-9 rounded-full shadow-lg border flex items-center justify-center transition-all duration-200 hover:scale-110 cursor-grab active:cursor-grabbing",
-            colors.bg,
-            colors.border
-          )}
-          title="Expandir nota"
-        >
-          <StickyNote className="h-4 w-4 text-foreground/70" />
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div
       ref={noteRef}
@@ -142,7 +119,7 @@ const DraggableNote = ({
             size="icon"
             variant="ghost"
             className="h-5 w-5"
-            onClick={() => setMinimized(true)}
+            onClick={() => onMinimize(note.id)}
             title="Minimizar"
           >
             <Minimize2 className="h-2.5 w-2.5" />
