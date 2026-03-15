@@ -44,10 +44,6 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
     zIndex: isDragging ? 50 : undefined,
   };
 
-  const formatDueDate = (dateStr: string) => {
-    const str = dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00';
-    return new Date(str).toLocaleDateString("pt-BR");
-  };
 
   return (
     <Card
