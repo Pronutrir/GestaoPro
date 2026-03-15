@@ -133,7 +133,6 @@ const CSC = () => {
     requested_date: "",
     department: "",
     assigned_to: "",
-    raci_role: "",
   });
 
   // ── Fetch ──────────────────────────────────────
