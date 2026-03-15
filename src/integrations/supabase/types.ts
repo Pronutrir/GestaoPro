@@ -29,6 +29,7 @@ export type Database = {
           phase_id: string | null
           priority: string
           project_id: string
+          raci_role: string | null
           sprint_id: string | null
           start_date: string | null
           status: string
@@ -52,6 +53,7 @@ export type Database = {
           phase_id?: string | null
           priority?: string
           project_id: string
+          raci_role?: string | null
           sprint_id?: string | null
           start_date?: string | null
           status?: string
@@ -75,6 +77,7 @@ export type Database = {
           phase_id?: string | null
           priority?: string
           project_id?: string
+          raci_role?: string | null
           sprint_id?: string | null
           start_date?: string | null
           status?: string

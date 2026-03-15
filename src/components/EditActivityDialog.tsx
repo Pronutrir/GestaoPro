@@ -42,29 +42,47 @@ interface EditActivityDialogProps {
   projectId?: string;
 }
 
+const RACI_OPTIONS = [
+  { value: "", label: "Nenhum" },
+  { value: "R", label: "R - Responsável" },
+  { value: "A", label: "A - Autoridade" },
+  { value: "C", label: "C - Consultado" },
+  { value: "I", label: "I - Informado" },
+];
+
+/** Parse hours as decimal from "Xh Ym" or plain number */
+function parseHoursInput(val: string): number {
+  const hm = val.match(/(\d+)\s*h\s*(\d+)\s*m/i);
+  if (hm) return parseInt(hm[1]) + parseInt(hm[2]) / 60;
+  const hOnly = val.match(/^(\d+(?:\.\d+)?)\s*h?$/i);
+  if (hOnly) return parseFloat(hOnly[1]);
+  const mOnly = val.match(/^(\d+)\s*m$/i);
+  if (mOnly) return parseInt(mOnly[1]) / 60;
+  return parseFloat(val) || 0;
+}
+
+/** Format decimal hours to "Xh Ym" */
+function formatHoursDisplay(hours: number): string {
+  if (!hours) return "";
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  if (m > 0) return `${m}m`;
+  return "0h";
+}
+
 export const EditActivityDialog = ({
-  activity,
-  open,
-  onOpenChange,
-  onActivityUpdated,
-  phases = [],
-  allActivities = [],
-  projectId,
+  activity, open, onOpenChange, onActivityUpdated,
+  phases = [], allActivities = [], projectId,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    assigned_to: "",
-    start_date: "",
-    end_date: "",
-    cost: "",
-    hours: "",
-    phase_id: "",
-    priority: "medium",
-    tags: [] as string[],
-    parent_id: "",
-    story_points: "0",
+    title: "", description: "", assigned_to: "",
+    start_date: "", end_date: "", cost: "", hours: "",
+    phase_id: "", priority: "medium",
+    tags: [] as string[], parent_id: "",
+    story_points: "0", raci_role: "",
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -93,39 +111,31 @@ export const EditActivityDialog = ({
         start_date: activity.start_date || "",
         end_date: activity.end_date || "",
         cost: activity.cost?.toString() || "0",
-        hours: activity.hours?.toString() || "0",
+        hours: formatHoursDisplay(activity.hours || 0),
         phase_id: activity.phase_id || "",
         priority: activity.priority || "medium",
         tags: activity.tags || [],
         parent_id: activity.parent_id || "",
         story_points: (activity as any).story_points?.toString() || "0",
+        raci_role: (activity as any).raci_role || "",
       });
       fetchSubActivities(activity.id);
     }
   }, [activity]);
 
   const fetchSubActivities = async (parentId: string) => {
-    const { data } = await supabase
-      .from("activities")
-      .select("*")
-      .eq("parent_id", parentId)
-      .order("display_order");
+    const { data } = await supabase.from("activities").select("*")
+      .eq("parent_id", parentId).order("display_order");
     if (data) setSubActivities(data as Activity[]);
   };
 
   const handleAddSubActivity = async () => {
     if (!newSubTitle.trim() || !activity || !projectId) return;
-    const { error } = await supabase.from("activities").insert({
-      project_id: projectId,
-      title: newSubTitle.trim(),
-      phase_id: activity.phase_id,
-      parent_id: activity.id,
+    await supabase.from("activities").insert({
+      project_id: projectId, title: newSubTitle.trim(),
+      phase_id: activity.phase_id, parent_id: activity.id,
       display_order: subActivities.length,
     });
-    if (error) {
-      toast({ title: "Erro ao criar sub-atividade", variant: "destructive" });
-      return;
-    }
     setNewSubTitle("");
     fetchSubActivities(activity.id);
     onActivityUpdated();
@@ -140,8 +150,7 @@ export const EditActivityDialog = ({
   const handleToggleSubActivity = async (sub: Activity) => {
     const newStatus = sub.status === "completed" ? "pending" : "completed";
     await supabase.from("activities").update({
-      status: newStatus,
-      completed_at: newStatus === "completed" ? new Date().toISOString() : null,
+      status: newStatus, completed_at: newStatus === "completed" ? new Date().toISOString() : null,
     }).eq("id", sub.id);
     if (activity) fetchSubActivities(activity.id);
     onActivityUpdated();
@@ -161,29 +170,24 @@ export const EditActivityDialog = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activity) return;
-
     try {
-      const { error } = await supabase
-        .from("activities")
-        .update({
-          title: formData.title,
-          description: formData.description || null,
-          assigned_to: formData.assigned_to || null,
-          start_date: formData.start_date || null,
-          end_date: formData.end_date || null,
-          cost: parseFloat(formData.cost) || 0,
-          hours: parseFloat(formData.hours) || 0,
-          phase_id: formData.phase_id || null,
-          priority: formData.priority,
-          tags: formData.tags,
-          parent_id: formData.parent_id || null,
-          story_points: parseInt(formData.story_points) || 0,
-        })
-        .eq("id", activity.id);
-
+      const { error } = await supabase.from("activities").update({
+        title: formData.title,
+        description: formData.description || null,
+        assigned_to: formData.assigned_to || null,
+        start_date: formData.start_date || null,
+        end_date: formData.end_date || null,
+        cost: parseFloat(formData.cost) || 0,
+        hours: parseHoursInput(formData.hours),
+        phase_id: formData.phase_id || null,
+        priority: formData.priority,
+        tags: formData.tags,
+        parent_id: formData.parent_id || null,
+        story_points: parseInt(formData.story_points) || 0,
+        raci_role: formData.raci_role || null,
+      } as any).eq("id", activity.id);
       if (error) throw error;
-
-      toast({ title: "Atividade atualizada!", description: "As alterações foram salvas." });
+      toast({ title: "Atividade atualizada!" });
       onActivityUpdated();
       onOpenChange(false);
     } catch (error) {
@@ -191,8 +195,6 @@ export const EditActivityDialog = ({
       toast({ title: "Erro ao atualizar atividade", variant: "destructive" });
     }
   };
-
-  const parentCandidates = allActivities.filter((a) => a.id !== activity?.id);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -222,39 +224,47 @@ export const EditActivityDialog = ({
                 { value: "medium", label: "Média", color: "bg-warning/20 text-warning" },
                 { value: "high", label: "Alta", color: "bg-destructive/20 text-destructive" },
               ].map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-all ${
-                    formData.priority === p.value
-                      ? `${p.color} border-current ring-2 ring-current/20`
-                      : "border-border text-muted-foreground hover:border-foreground/30"
-                  }`}
+                <button key={p.value} type="button"
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-all ${formData.priority === p.value ? `${p.color} border-current ring-2 ring-current/20` : "border-border text-muted-foreground hover:border-foreground/30"}`}
                   onClick={() => setFormData({ ...formData, priority: p.value })}
-                >
-                  {p.label}
-                </button>
+                >{p.label}</button>
               ))}
             </div>
           </div>
 
-
-          <div className="space-y-2">
-            <Label htmlFor="assigned_to" className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <User className="w-4 h-4" /> Responsável
-            </Label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={formData.assigned_to}
-              onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-            >
-              <option value="">Sem responsável</option>
-              {members.map((m) => (
-                <option key={m.full_name} value={m.full_name!}>
-                  {m.full_name}{m.sector ? ` (${m.sector})` : ""}
-                </option>
-              ))}
-            </select>
+          {/* Responsável + RACI */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <User className="w-4 h-4" /> Responsável
+              </Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={formData.assigned_to}
+                onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+              >
+                <option value="">Sem responsável</option>
+                {members.map((m) => (
+                  <option key={m.full_name} value={m.full_name!}>
+                    {m.full_name}{m.sector ? ` (${m.sector})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                🏷️ Papel RACI
+              </Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={formData.raci_role}
+                onChange={(e) => setFormData({ ...formData, raci_role: e.target.value })}
+              >
+                {RACI_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -293,7 +303,13 @@ export const EditActivityDialog = ({
                 <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Clock className="w-4 h-4 text-primary" /> Horas Estimadas
                 </Label>
-                <Input type="number" step="0.5" min="0" value={formData.hours} onChange={(e) => setFormData({ ...formData, hours: e.target.value })} className="font-semibold text-lg" />
+                <Input
+                  placeholder="Ex: 2h 30m"
+                  value={formData.hours}
+                  onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
+                  className="font-semibold text-lg"
+                />
+                <p className="text-[10px] text-muted-foreground">Formato: 2h 30m, 1.5h ou 90m</p>
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -307,25 +323,17 @@ export const EditActivityDialog = ({
                 </Label>
                 <div className="flex gap-1 flex-wrap">
                   {[0, 1, 2, 3, 5, 8, 13, 21].map((sp) => (
-                    <button
-                      key={sp}
-                      type="button"
-                      className={`w-9 h-9 rounded-md text-sm font-bold border transition-all ${
-                        parseInt(formData.story_points) === sp
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "border-border text-muted-foreground hover:border-primary/50"
-                      }`}
+                    <button key={sp} type="button"
+                      className={`w-9 h-9 rounded-md text-sm font-bold border transition-all ${parseInt(formData.story_points) === sp ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
                       onClick={() => setFormData({ ...formData, story_points: sp.toString() })}
-                    >
-                      {sp}
-                    </button>
+                    >{sp}</button>
                   ))}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Sub-atividades (Pacotes de Trabalho) */}
+          {/* Sub-atividades */}
           {activity && projectId && (
             <div className="border-t border-border pt-4 space-y-3">
               <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
@@ -351,22 +359,14 @@ export const EditActivityDialog = ({
                 </div>
               )}
               <div className="flex gap-2">
-                <Input
-                  placeholder="Adicionar sub-atividade..."
-                  value={newSubTitle}
-                  onChange={(e) => setNewSubTitle(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddSubActivity(); } }}
-                  className="h-8 text-sm"
-                />
+                <Input placeholder="Adicionar sub-atividade..." value={newSubTitle} onChange={(e) => setNewSubTitle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddSubActivity(); } }} className="h-8 text-sm" />
                 <Button type="button" size="sm" variant="outline" className="h-8 px-2" onClick={handleAddSubActivity}>
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
             </div>
           )}
-
-
-
 
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
