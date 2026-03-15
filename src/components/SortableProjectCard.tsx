@@ -100,7 +100,7 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
             {project.due_date && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Calendar className="w-3 h-3" />
-                {formatDueDate(project.due_date)}
+                {formatProjectDueDate(project.due_date)}
               </div>
             )}
           </div>
