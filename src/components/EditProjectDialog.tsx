@@ -266,7 +266,7 @@ export const EditProjectDialog = ({
                     <SelectItem value="_none">Sem responsável</SelectItem>
                     {profiles.map((p) => (
                       <SelectItem key={p.full_name!} value={p.full_name!}>
-                        {p.full_name}{p.sector ? ` (${p.sector})` : ""}
+                        {p.full_name}
                       </SelectItem>
                     ))}
                   </SelectContent>
