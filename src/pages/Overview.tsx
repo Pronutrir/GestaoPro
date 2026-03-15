@@ -290,6 +290,37 @@ const Overview = () => {
               </Card>
             </div>
 
+            {/* KPI Row 3 - Financial */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <Card className="p-5 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/investments")}>
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="w-4 h-4 text-primary" />
+                  <span className="text-sm text-muted-foreground">Orçamento Planejado</span>
+                </div>
+                <p className="text-3xl font-bold text-foreground">
+                  R$ {totalBudgetPlanned.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              </Card>
+              <Card className={`p-5 cursor-pointer hover:shadow-md transition-shadow ${budgetProgress > 90 ? "border-destructive/50" : ""}`} onClick={() => navigate("/investments")}>
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className={`w-4 h-4 ${budgetProgress > 100 ? "text-destructive" : "text-success"}`} />
+                  <span className="text-sm text-muted-foreground">Orçamento Utilizado</span>
+                </div>
+                <p className={`text-3xl font-bold ${budgetProgress > 100 ? "text-destructive" : "text-foreground"}`}>
+                  R$ {totalBudgetUsed.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">{budgetProgress.toFixed(0)}% do planejado</p>
+              </Card>
+              <Card className="p-5 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/investments")}>
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm text-muted-foreground">Horas Registradas</span>
+                </div>
+                <p className="text-3xl font-bold text-foreground">{totalHoursTracked.toFixed(0)}h</p>
+                <p className="text-xs text-muted-foreground mt-1">de {totalHoursEstimated.toFixed(0)}h estimadas</p>
+              </Card>
+            </div>
+
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Burn-down Chart */}

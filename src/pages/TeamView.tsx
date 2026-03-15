@@ -143,10 +143,8 @@ const TeamView = () => {
   }, [activities, timeEntries, activityInvestments]);
 
   const totalInvestments = useMemo(() => {
-    const fromActivities = activityInvestments.reduce((s, i) => s + (i.amount || 0), 0);
-    const fromBudget = projects.reduce((s, p) => s + (p.budget_used || 0), 0);
-    return fromActivities + fromBudget;
-  }, [activityInvestments, projects]);
+    return activityInvestments.reduce((s, i) => s + (i.amount || 0), 0);
+  }, [activityInvestments]);
 
   const totalBudgetPlanned = useMemo(() => {
     return projects.reduce((s, p) => s + (p.budget_planned || 0), 0);
