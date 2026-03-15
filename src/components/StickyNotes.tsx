@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { StickyNote, Plus, X, Trash2, Pencil, Check, GripVertical, PanelBottomClose } from "lucide-react";
+import { StickyNote, Plus, X, Trash2, Pencil, Check, GripVertical, PanelBottomClose, Minimize2, Maximize2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +48,7 @@ const DraggableNote = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(note.content);
+  const [minimized, setMinimized] = useState(false);
   const dragRef = useRef<DragState | null>(null);
   const noteRef = useRef<HTMLDivElement>(null);
   const colors = NOTE_COLORS.find((c) => c.name === note.color) || NOTE_COLORS[0];
@@ -117,75 +118,92 @@ const DraggableNote = ({
             size="icon"
             variant="ghost"
             className="h-5 w-5"
-            onClick={() => { setIsEditing(true); setEditContent(note.content); }}
+            onClick={() => setMinimized(!minimized)}
+            title={minimized ? "Expandir" : "Minimizar"}
           >
-            <Pencil className="h-2.5 w-2.5" />
+            {minimized ? <Maximize2 className="h-2.5 w-2.5" /> : <Minimize2 className="h-2.5 w-2.5" />}
           </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-5 w-5 text-destructive hover:text-destructive"
-            onClick={() => onDelete(note.id)}
-          >
-            <Trash2 className="h-2.5 w-2.5" />
-          </Button>
+          {!minimized && (
+            <>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5"
+                onClick={() => { setIsEditing(true); setEditContent(note.content); }}
+              >
+                <Pencil className="h-2.5 w-2.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5 text-destructive hover:text-destructive"
+                onClick={() => onDelete(note.id)}
+              >
+                <Trash2 className="h-2.5 w-2.5" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Content */}
-      <div className="p-2.5">
-        {isEditing ? (
-          <div className="space-y-2">
-            <Textarea
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              className="min-h-[60px] text-xs bg-background/60 border-0 resize-none p-1.5"
-              autoFocus
-              placeholder="Escreva sua nota..."
-              onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey) handleSave(); }}
-            />
-            <div className="flex items-center justify-between">
-              <div className="flex gap-1">
-                {NOTE_COLORS.map((c) => (
-                  <button
-                    key={c.name}
-                    onClick={() => onUpdateColor(note.id, c.name)}
-                    className={cn(
-                      "h-3.5 w-3.5 rounded-full border transition-transform",
-                      c.bg, c.border,
-                      note.color === c.name && "scale-125 ring-2 ring-primary"
-                    )}
-                  />
-                ))}
+      {!minimized && (
+        <>
+          {/* Content */}
+          <div className="p-2.5">
+            {isEditing ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="min-h-[60px] text-xs bg-background/60 border-0 resize-none p-1.5"
+                  autoFocus
+                  placeholder="Escreva sua nota..."
+                  onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey) handleSave(); }}
+                />
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-1">
+                    {NOTE_COLORS.map((c) => (
+                      <button
+                        key={c.name}
+                        onClick={() => onUpdateColor(note.id, c.name)}
+                        className={cn(
+                          "h-3.5 w-3.5 rounded-full border transition-transform",
+                          c.bg, c.border,
+                          note.color === c.name && "scale-125 ring-2 ring-primary"
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setIsEditing(false)}>
+                      <X className="h-2.5 w-2.5" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={handleSave}>
+                      <Check className="h-2.5 w-2.5" />
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <div className="flex gap-1">
-                <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setIsEditing(false)}>
-                  <X className="h-2.5 w-2.5" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-5 w-5" onClick={handleSave}>
-                  <Check className="h-2.5 w-2.5" />
-                </Button>
-              </div>
-            </div>
+            ) : (
+              <p
+                className="text-xs whitespace-pre-wrap min-h-[30px] text-foreground cursor-default"
+                onDoubleClick={() => { setIsEditing(true); setEditContent(note.content); }}
+              >
+                {note.content || <span className="text-muted-foreground italic text-[11px]">Duplo clique para editar...</span>}
+              </p>
+            )}
           </div>
-        ) : (
-          <p
-            className="text-xs whitespace-pre-wrap min-h-[30px] text-foreground cursor-default"
-            onDoubleClick={() => { setIsEditing(true); setEditContent(note.content); }}
-          >
-            {note.content || <span className="text-muted-foreground italic text-[11px]">Duplo clique para editar...</span>}
-          </p>
-        )}
-      </div>
 
-      {/* Timestamp */}
-      <div className="px-2.5 pb-1.5">
-        <span className="text-[9px] text-muted-foreground">
-          {new Date(note.updated_at).toLocaleDateString("pt-BR", {
-            day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-          })}
-        </span>
-      </div>
+          {/* Timestamp */}
+          <div className="px-2.5 pb-1.5">
+            <span className="text-[9px] text-muted-foreground">
+              {new Date(note.updated_at).toLocaleDateString("pt-BR", {
+                day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+              })}
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 };
