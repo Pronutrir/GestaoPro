@@ -75,12 +75,6 @@ const PRIORITIES = [
   { value: "critical", label: "Crítica" },
 ];
 
-const RACI_ROLES = [
-  { value: "responsible", label: "Responsável (R)" },
-  { value: "accountable", label: "Autoridade (A)" },
-  { value: "consulted", label: "Consultado (C)" },
-  { value: "informed", label: "Informado (I)" },
-];
 
 // ── Helpers ────────────────────────────────────────
 const getSlaStatus = (ticket: CscTicket): "green" | "yellow" | "red" => {
@@ -133,7 +127,6 @@ const CSC = () => {
     requested_date: "",
     department: "",
     assigned_to: "",
-    raci_role: "",
   });
 
   // ── Fetch ──────────────────────────────────────
@@ -185,7 +178,6 @@ const CSC = () => {
       requested_date: form.requested_date || null,
       department: form.department,
       assigned_to: form.assigned_to || null,
-      raci_role: form.raci_role || null,
       sla_deadline: slaDeadline,
       created_by: user?.id || null,
     } as any);
@@ -194,7 +186,7 @@ const CSC = () => {
       toast({ title: "Erro ao criar solicitação", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Solicitação criada com sucesso!" });
-      setForm({ title: "", description: "", service_type: "", priority: "medium", requesting_area: "", requested_date: "", department: "", assigned_to: "", raci_role: "" });
+      setForm({ title: "", description: "", service_type: "", priority: "medium", requesting_area: "", requested_date: "", department: "", assigned_to: "" });
       setCreateOpen(false);
       fetchData();
     }
@@ -347,16 +339,9 @@ const CSC = () => {
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
+                     <div className="grid gap-2">
                       <Label>Tipo de Serviço *</Label>
-                      <Select value={form.service_type} onValueChange={(v) => setForm({ ...form, service_type: v })}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          {serviceTypes.map((s) => (
-                            <SelectItem key={s.service_type} value={s.service_type}>{s.description}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Input value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })} placeholder="Digite o tipo de serviço" />
                     </div>
                     <div className="grid gap-2">
                       <Label>Prioridade</Label>
@@ -388,35 +373,21 @@ const CSC = () => {
                       </Select>
                     </div>
                     <div className="grid gap-2">
-                      <Label>Data Desejada</Label>
+                      <Label>Data de Solução Desejada</Label>
                       <Input type="date" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label>Responsável</Label>
-                      <Select value={form.assigned_to || "_none"} onValueChange={(v) => setForm({ ...form, assigned_to: v === "_none" ? "" : v })}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Nenhum</SelectItem>
-                          {profiles.filter(p => p.full_name).map((p) => (
-                            <SelectItem key={p.id} value={p.full_name!}>{p.full_name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label>Papel RACI</Label>
-                      <Select value={form.raci_role || "_none"} onValueChange={(v) => setForm({ ...form, raci_role: v === "_none" ? "" : v })}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Nenhum</SelectItem>
-                          {RACI_ROLES.map((r) => (
-                            <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                   <div className="grid gap-2">
+                    <Label>Responsável</Label>
+                    <Select value={form.assigned_to || "_none"} onValueChange={(v) => setForm({ ...form, assigned_to: v === "_none" ? "" : v })}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">Nenhum</SelectItem>
+                        {profiles.filter(p => p.full_name).map((p) => (
+                          <SelectItem key={p.id} value={p.full_name!}>{p.full_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <DialogFooter>
@@ -475,11 +446,6 @@ const CSC = () => {
                                 </Avatar>
                               )}
                             </div>
-                            {ticket.raci_role && (
-                              <Badge variant="outline" className="text-[8px] h-3.5 mt-1">
-                                {RACI_ROLES.find(r => r.value === ticket.raci_role)?.label || ticket.raci_role}
-                              </Badge>
-                            )}
                           </div>
                         ))}
                         {columnTickets.length === 0 && (
@@ -661,7 +627,7 @@ const CSC = () => {
                     <div><span className="text-muted-foreground">Status:</span> <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${getStatusObj(selectedTicket.status).color}`}>{getStatusObj(selectedTicket.status).label}</span></div>
                     <div><span className="text-muted-foreground">SLA:</span> <SlaBadge ticket={selectedTicket} /></div>
                     {selectedTicket.assigned_to && <div><span className="text-muted-foreground">Responsável:</span> <strong>{selectedTicket.assigned_to}</strong></div>}
-                    {selectedTicket.raci_role && <div><span className="text-muted-foreground">RACI:</span> <strong>{RACI_ROLES.find(r => r.value === selectedTicket.raci_role)?.label}</strong></div>}
+                    
                     {selectedTicket.requesting_area && <div><span className="text-muted-foreground">Área:</span> <strong>{selectedTicket.requesting_area}</strong></div>}
                   </div>
 
@@ -702,24 +668,6 @@ const CSC = () => {
                           <SelectItem value="_none">Nenhum</SelectItem>
                           {profiles.filter(p => p.full_name).map((p) => (
                             <SelectItem key={p.id} value={p.full_name!}>{p.full_name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-1">
-                      <Label className="text-xs">Papel RACI</Label>
-                      <Select
-                        value={selectedTicket.raci_role || "_none"}
-                        onValueChange={(v) => {
-                          const val = v === "_none" ? null : v;
-                          updateTicket(selectedTicket.id, { raci_role: val });
-                        }}
-                      >
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Nenhum</SelectItem>
-                          {RACI_ROLES.map((r) => (
-                            <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
