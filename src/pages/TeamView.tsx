@@ -40,6 +40,9 @@ interface ActivityInvestment {
   activity_id: string;
   amount: number;
   description: string | null;
+  project_id: string | null;
+  responsible: string | null;
+  category: string | null;
 }
 
 type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | "investments" | null;
@@ -78,7 +81,7 @@ const TeamView = () => {
       supabase.from("activities").select("id, title, status, assigned_to, project_id, hours, end_date, priority"),
       supabase.from("projects").select("id, title, budget_planned, budget_used"),
       supabase.from("time_entries").select("activity_id, duration_minutes, user_name, project_id"),
-      supabase.from("activity_investments").select("activity_id, amount, description"),
+      supabase.from("activity_investments").select("activity_id, amount, description, project_id, responsible, category"),
     ]);
     const filteredProjects = await filterProjects(projRes.data || []);
     setProjects(filteredProjects);
