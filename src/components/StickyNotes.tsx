@@ -331,26 +331,36 @@ export const StickyNotes = () => {
                   {showFree ? "Ocultar notas" : "Mostrar notas"}
                 </button>
               )}
-              {minimizedNotes.length > 0 && (
+              {freeNotes.length > 0 && (
                 <>
                   <div className="border-t border-border my-1" />
-                  <span className="px-3 py-1 text-[11px] text-muted-foreground font-medium">Minimizadas</span>
-                  {minimizedNotes.map((note) => {
-                    const colors = NOTE_COLORS.find((c) => c.name === note.color) || NOTE_COLORS[0];
-                    return (
-                      <button
-                        key={note.id}
-                        onClick={() => { restoreNote(note.id); setShowFree(true); setPanelOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors text-foreground"
-                      >
-                        <span className={cn("h-3 w-3 rounded-full border shrink-0", colors.bg, colors.border)} />
-                        <span className="truncate text-xs">
-                          {note.content?.slice(0, 20) || "Nota vazia"}
-                          {note.content && note.content.length > 20 ? "…" : ""}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  <span className="px-3 py-1 text-[11px] text-muted-foreground font-medium">Todas as notas ({freeNotes.length})</span>
+                  <div className="max-h-[240px] overflow-y-auto">
+                    {freeNotes.map((note) => {
+                      const colors = NOTE_COLORS.find((c) => c.name === note.color) || NOTE_COLORS[0];
+                      const isMinimized = minimizedIds.has(note.id);
+                      return (
+                        <button
+                          key={note.id}
+                          onClick={() => {
+                            if (isMinimized) restoreNote(note.id);
+                            setShowFree(true);
+                            setPanelOpen(false);
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors text-foreground w-full"
+                        >
+                          <span className={cn("h-3 w-3 rounded-full border shrink-0", colors.bg, colors.border)} />
+                          <span className="truncate text-xs flex-1 text-left">
+                            {note.content?.slice(0, 25) || "Nota vazia"}
+                            {note.content && note.content.length > 25 ? "…" : ""}
+                          </span>
+                          {isMinimized && (
+                            <Maximize2 className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </>
               )}
             </div>
