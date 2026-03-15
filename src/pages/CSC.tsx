@@ -75,12 +75,6 @@ const PRIORITIES = [
   { value: "critical", label: "Crítica" },
 ];
 
-const RACI_ROLES = [
-  { value: "responsible", label: "Responsável (R)" },
-  { value: "accountable", label: "Autoridade (A)" },
-  { value: "consulted", label: "Consultado (C)" },
-  { value: "informed", label: "Informado (I)" },
-];
 
 // ── Helpers ────────────────────────────────────────
 const getSlaStatus = (ticket: CscTicket): "green" | "yellow" | "red" => {
