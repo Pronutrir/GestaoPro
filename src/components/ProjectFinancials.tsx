@@ -55,6 +55,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
   const { isAdmin } = useAuth();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [activities, setActivities] = useState<{ id: string; title: string }[]>([]);
+  const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
@@ -69,12 +70,18 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
 
   const fetchData = async () => {
     setIsLoading(true);
-    const [{ data: invData }, { data: actData }] = await Promise.all([
+    const [{ data: invData }, { data: actData }, { data: memberData }] = await Promise.all([
       supabase.from("activity_investments").select("*").eq("project_id", projectId).order("recorded_at", { ascending: false }),
       supabase.from("activities").select("id, title").eq("project_id", projectId).order("title"),
+      supabase.from("project_members").select("user_id").eq("project_id", projectId),
     ]);
     if (invData) setInvestments(invData);
     if (actData) setActivities(actData);
+    if (memberData && memberData.length > 0) {
+      const userIds = memberData.map(m => m.user_id);
+      const { data: profiles } = await supabase.from("profiles").select("full_name, sector").in("id", userIds);
+      if (profiles) setMembers(profiles.filter(p => p.full_name) as { full_name: string; sector: string | null }[]);
+    }
     setIsLoading(false);
   };
 
@@ -256,9 +263,31 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                     <Label>Descrição</Label>
                     <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descreva o investimento" />
                   </div>
-                  <div className="grid gap-2">
-                    <Label>Responsável</Label>
-                    <Input value={form.responsible} onChange={(e) => setForm({ ...form, responsible: e.target.value })} placeholder="Quem autorizou / realizou" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <Label>Responsável</Label>
+                      <Select value={form.responsible || "_none"} onValueChange={(v) => setForm({ ...form, responsible: v === "_none" ? "" : v })}>
+                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none">Sem responsável</SelectItem>
+                          {members.map((m) => (
+                            <SelectItem key={m.full_name!} value={m.full_name!}>
+                              {m.full_name}{m.sector ? ` (${m.sector})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Setor</Label>
+                      <Input
+                        value={(() => {
+                          const match = members.find(m => m.full_name === form.responsible);
+                          return match?.sector || "";
+                        })()}
+                        readOnly disabled placeholder="Selecione um responsável" className="bg-muted"
+                      />
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>

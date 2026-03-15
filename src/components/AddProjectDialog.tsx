@@ -29,12 +29,12 @@ interface AddProjectDialogProps {
 }
 
 export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
-  const [profiles, setProfiles] = useState<{ full_name: string }[]>([]);
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
 
   useEffect(() => {
     const fetchProfiles = async () => {
       const [{ data: profileData }, { data: adminRoles }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name").not("full_name", "is", null).order("full_name"),
+        supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
       ]);
       const adminIds = new Set((adminRoles || []).map(r => r.user_id));
@@ -224,22 +224,39 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
                 </Select>
               </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="owner">Responsável pelo Projeto</Label>
-              <Select
-                value={formData.owner || "_none"}
-                onValueChange={(v) => setFormData({ ...formData, owner: v === "_none" ? "" : v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o responsável" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">Sem responsável</SelectItem>
-                  {profiles.map((p) => (
-                    <SelectItem key={p.full_name!} value={p.full_name!}>{p.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Responsável pelo Projeto</Label>
+                <Select
+                  value={formData.owner || "_none"}
+                  onValueChange={(v) => setFormData({ ...formData, owner: v === "_none" ? "" : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o responsável" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Sem responsável</SelectItem>
+                    {profiles.map((p) => (
+                      <SelectItem key={p.full_name!} value={p.full_name!}>
+                        {p.full_name}{p.sector ? ` (${p.sector})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Setor</Label>
+                <Input
+                  value={(() => {
+                    const match = profiles.find(p => p.full_name === formData.owner);
+                    return match?.sector || "";
+                  })()}
+                  readOnly
+                  disabled
+                  placeholder="Selecione um responsável"
+                  className="bg-muted"
+                />
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="program">Programa</Label>
