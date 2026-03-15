@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle } from "lucide-react";
+import { CurrencyInput } from "@/components/ui/currency-input";
 
 interface Activity {
   id: string;
@@ -313,9 +314,9 @@ export const EditActivityDialog = ({
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-success" /> Custo (R$)
+                  <DollarSign className="w-4 h-4 text-success" /> Custo
                 </Label>
-                <Input type="number" step="0.01" min="0" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} className="font-semibold text-lg" />
+                <CurrencyInput step="0.01" min="0" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} className="font-semibold text-lg" />
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-semibold text-foreground flex items-center gap-2">

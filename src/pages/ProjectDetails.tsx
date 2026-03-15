@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
@@ -446,7 +447,7 @@ const ProjectDetails = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <Input type="number" placeholder="Horas estimadas" value={newActivityHours} onChange={(e) => setNewActivityHours(e.target.value)} step="0.5" min="0" />
-                    <Input type="number" placeholder="Custo (R$)" value={newActivityCost} onChange={(e) => setNewActivityCost(e.target.value)} step="0.01" min="0" />
+                    <CurrencyInput placeholder="0,00" value={newActivityCost} onChange={(e) => setNewActivityCost(e.target.value)} step="0.01" min="0" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div><Label className="text-xs text-muted-foreground">Início</Label><Input type="date" value={newActivityStartDate} onChange={(e) => setNewActivityStartDate(e.target.value)} /></div>

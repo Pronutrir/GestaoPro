@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -238,8 +239,8 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="grid gap-2">
-                      <Label>Valor (R$) *</Label>
-                      <Input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+                      <Label>Valor *</Label>
+                      <CurrencyInput step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
                     </div>
                     <div className="grid gap-2">
                       <Label>Categoria</Label>
@@ -277,12 +278,12 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                 <DialogHeader><DialogTitle>Editar Orçamento do Projeto</DialogTitle></DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label>Orçamento Planejado (R$)</Label>
-                    <Input type="number" step="0.01" min="0" value={newBudgetPlanned} onChange={(e) => setNewBudgetPlanned(e.target.value)} />
+                    <Label>Orçamento Planejado</Label>
+                    <CurrencyInput step="0.01" min="0" value={newBudgetPlanned} onChange={(e) => setNewBudgetPlanned(e.target.value)} />
                   </div>
                   <div className="grid gap-2">
-                    <Label>Custo Utilizado (R$)</Label>
-                    <Input type="number" step="0.01" min="0" value={newBudgetUsed} onChange={(e) => setNewBudgetUsed(e.target.value)} />
+                    <Label>Custo Utilizado</Label>
+                    <CurrencyInput step="0.01" min="0" value={newBudgetUsed} onChange={(e) => setNewBudgetUsed(e.target.value)} />
                   </div>
                 </div>
                 <DialogFooter>

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -183,9 +184,8 @@ export const EditProjectDialog = ({
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="edit-budget_planned">Orçamento Planejado (R$)</Label>
-                <Input
+                <CurrencyInput
                   id="edit-budget_planned"
-                  type="number"
                   step="0.01"
                   min="0"
                   placeholder="0,00"
