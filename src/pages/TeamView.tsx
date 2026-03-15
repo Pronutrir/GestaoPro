@@ -33,6 +33,8 @@ interface TimeEntry {
   project_id: string;
 }
 
+type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | null;
+
 const TeamView = () => {
   const navigate = useNavigate();
   const { filterProjects, isAdmin, loading: authLoading } = useProjectAccess();
@@ -41,6 +43,7 @@ const TeamView = () => {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>(null);
 
   useEffect(() => {
     if (!authLoading) fetchData();
@@ -125,25 +128,93 @@ const TeamView = () => {
   return (
     <AppLayout title="Visão por Equipe">
       <main className="px-4 py-6 space-y-6">
-        {/* Summary */}
+        {/* Summary - clickable cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-5">
-            <p className="text-sm text-muted-foreground">Membros</p>
-            <p className="text-3xl font-bold text-foreground">{teamMembers.length}</p>
-          </Card>
-          <Card className="p-5">
-            <p className="text-sm text-muted-foreground">Tarefas Atribuídas</p>
-            <p className="text-3xl font-bold text-foreground">{activities.filter(a => a.assigned_to?.trim()).length}</p>
-          </Card>
-          <Card className="p-5">
-            <p className="text-sm text-muted-foreground">Sem Responsável</p>
-            <p className="text-3xl font-bold text-warning">{unassigned.length}</p>
-          </Card>
-          <Card className="p-5">
-            <p className="text-sm text-muted-foreground">Horas Registradas</p>
-            <p className="text-3xl font-bold text-info">{(timeEntries.reduce((s, t) => s + (t.duration_minutes || 0), 0) / 60).toFixed(0)}h</p>
-          </Card>
+          {[
+            { key: "members" as SummaryFilter, label: "Membros", value: teamMembers.length, color: "text-foreground" },
+            { key: "assigned" as SummaryFilter, label: "Tarefas Atribuídas", value: activities.filter(a => a.assigned_to?.trim()).length, color: "text-foreground" },
+            { key: "unassigned" as SummaryFilter, label: "Sem Responsável", value: unassigned.length, color: "text-warning" },
+            { key: "hours" as SummaryFilter, label: "Horas Registradas", value: `${(timeEntries.reduce((s, t) => s + (t.duration_minutes || 0), 0) / 60).toFixed(0)}h`, color: "text-info" },
+          ].map(card => (
+            <Card
+              key={card.key}
+              className={`p-5 cursor-pointer hover:shadow-md transition-shadow ${summaryFilter === card.key ? "ring-2 ring-primary" : ""}`}
+              onClick={() => setSummaryFilter(summaryFilter === card.key ? null : card.key)}
+            >
+              <p className="text-sm text-muted-foreground">{card.label}</p>
+              <p className={`text-3xl font-bold ${card.color}`}>{card.value}</p>
+            </Card>
+          ))}
         </div>
+
+        {/* Summary detail panel */}
+        {summaryFilter && (
+          <Card className="p-5 space-y-3 border-primary/30">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-foreground">
+                {summaryFilter === "members" && `👥 Membros da Equipe (${teamMembers.length})`}
+                {summaryFilter === "assigned" && `📋 Tarefas Atribuídas (${activities.filter(a => a.assigned_to?.trim()).length})`}
+                {summaryFilter === "unassigned" && `⚠️ Tarefas Sem Responsável (${unassigned.length})`}
+                {summaryFilter === "hours" && `⏱️ Horas Registradas por Membro`}
+              </h3>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSummaryFilter(null)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {summaryFilter === "members" && teamMembers.map(m => (
+                <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md cursor-pointer hover:bg-muted/50"
+                  onClick={() => { setSummaryFilter(null); setSelectedMember(m.name); }}>
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 bg-primary/10 rounded-full flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-primary">{m.name.substring(0, 2).toUpperCase()}</span>
+                    </div>
+                    <span className="text-sm font-medium">{m.name}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{m.totalTasks} tarefa(s) · {m.projects.size} projeto(s)</span>
+                </div>
+              ))}
+              {summaryFilter === "assigned" && activities.filter(a => a.assigned_to?.trim()).map(a => {
+                const proj = projects.find(p => p.id === a.project_id);
+                return (
+                  <div key={a.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium truncate block">{a.title}</span>
+                      <span className="text-[10px] text-muted-foreground">👤 {a.assigned_to} · {proj?.title || ""}</span>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] ml-2 shrink-0">
+                      {a.status === "completed" ? "Concluída" : a.status === "in_progress" ? "Em andamento" : "Pendente"}
+                    </Badge>
+                  </div>
+                );
+              })}
+              {summaryFilter === "unassigned" && unassigned.map(a => {
+                const proj = projects.find(p => p.id === a.project_id);
+                return (
+                  <div key={a.id} className="flex items-center justify-between p-2 bg-warning/5 rounded-md border border-warning/10">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium truncate block">{a.title}</span>
+                      <span className="text-[10px] text-muted-foreground">{proj?.title || ""}</span>
+                    </div>
+                    {a.end_date && <span className="text-xs text-muted-foreground ml-2">{new Date(a.end_date).toLocaleDateString("pt-BR")}</span>}
+                  </div>
+                );
+              })}
+              {summaryFilter === "hours" && teamMembers.filter(m => m.hoursTracked > 0).sort((a, b) => b.hoursTracked - a.hoursTracked).map(m => (
+                <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                  <span className="text-sm font-medium">{m.name}</span>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span>Estimado: {m.hoursEstimated.toFixed(0)}h</span>
+                    <span className="font-semibold text-info">Registrado: {m.hoursTracked.toFixed(1)}h</span>
+                  </div>
+                </div>
+              ))}
+              {summaryFilter === "hours" && teamMembers.filter(m => m.hoursTracked > 0).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhuma hora registrada ainda.</p>
+              )}
+            </div>
+          </Card>
+        )}
 
         {isLoading ? (
           <p className="text-muted-foreground text-center py-12">Carregando...</p>
