@@ -678,24 +678,6 @@ const CSC = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="grid gap-1">
-                      <Label className="text-xs">Papel RACI</Label>
-                      <Select
-                        value={selectedTicket.raci_role || "_none"}
-                        onValueChange={(v) => {
-                          const val = v === "_none" ? null : v;
-                          updateTicket(selectedTicket.id, { raci_role: val });
-                        }}
-                      >
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Nenhum</SelectItem>
-                          {RACI_ROLES.map((r) => (
-                            <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
                   </div>
                 </div>
               </>
