@@ -347,16 +347,9 @@ const CSC = () => {
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
+                     <div className="grid gap-2">
                       <Label>Tipo de Serviço *</Label>
-                      <Select value={form.service_type} onValueChange={(v) => setForm({ ...form, service_type: v })}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          {serviceTypes.map((s) => (
-                            <SelectItem key={s.service_type} value={s.service_type}>{s.description}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Input value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })} placeholder="Digite o tipo de serviço" />
                     </div>
                     <div className="grid gap-2">
                       <Label>Prioridade</Label>
