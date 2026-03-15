@@ -412,12 +412,6 @@ const TeamView = () => {
                       <p className="text-xs text-muted-foreground">Horas Reg.</p>
                       <p className="text-2xl font-bold text-info">{selectedMemberData.member.hoursTracked.toFixed(1)}h</p>
                     </Card>
-                    {selectedMemberData.member.investmentTotal > 0 && (
-                      <Card className="p-3 text-center col-span-2">
-                        <p className="text-xs text-muted-foreground">Investimentos</p>
-                        <p className="text-2xl font-bold text-emerald-600">R$ {selectedMemberData.member.investmentTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                      </Card>
-                    )}
                   </div>
 
                   {/* Projects */}
