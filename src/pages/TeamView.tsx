@@ -27,6 +27,7 @@ interface Project {
   title: string;
   budget_planned: number | null;
   budget_used: number | null;
+  owner: string | null;
 }
 
 interface TimeEntry {
@@ -34,6 +35,11 @@ interface TimeEntry {
   duration_minutes: number | null;
   user_name: string | null;
   project_id: string;
+}
+
+interface ProjectMemberProfile {
+  full_name: string;
+  project_ids: Set<string>;
 }
 
 type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | null;
@@ -44,7 +50,7 @@ const TeamView = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
-  
+  const [allMemberNames, setAllMemberNames] = useState<ProjectMemberProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>(null);
@@ -68,16 +74,57 @@ const TeamView = () => {
   }, []);
 
   const fetchData = async () => {
-    const [actRes, projRes, timeRes] = await Promise.all([
+    const [actRes, projRes, timeRes, membersRes] = await Promise.all([
       supabase.from("activities").select("id, title, status, assigned_to, project_id, hours, end_date, priority"),
-      supabase.from("projects").select("id, title, budget_planned, budget_used"),
+      supabase.from("projects").select("id, title, budget_planned, budget_used, owner"),
       supabase.from("time_entries").select("activity_id, duration_minutes, user_name, project_id"),
+      supabase.from("project_members").select("project_id, user_id"),
     ]);
     const filteredProjects = await filterProjects(projRes.data || []);
     setProjects(filteredProjects);
     const projectIds = new Set(filteredProjects.map((p) => p.id));
     if (actRes.data) setActivities(actRes.data.filter((a) => projectIds.has(a.project_id)));
     if (timeRes.data) setTimeEntries(timeRes.data.filter((t) => projectIds.has(t.project_id)));
+
+    // Build all member names from project_members profiles + project owners
+    const filteredMembers = (membersRes.data || []).filter(m => projectIds.has(m.project_id));
+    const userIds = [...new Set(filteredMembers.map(m => m.user_id))];
+    
+    const memberProfiles: ProjectMemberProfile[] = [];
+    
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", userIds);
+      if (profiles) {
+        const profileMap = new Map(profiles.map(p => [p.id, p.full_name]));
+        const nameToProjects = new Map<string, Set<string>>();
+        
+        filteredMembers.forEach(m => {
+          const name = profileMap.get(m.user_id)?.trim();
+          if (!name) return;
+          if (!nameToProjects.has(name)) nameToProjects.set(name, new Set());
+          nameToProjects.get(name)!.add(m.project_id);
+        });
+        
+        nameToProjects.forEach((pIds, name) => {
+          memberProfiles.push({ full_name: name, project_ids: pIds });
+        });
+      }
+    }
+
+    // Also include project owners
+    filteredProjects.forEach(p => {
+      const owner = p.owner?.trim();
+      if (owner) {
+        const existing = memberProfiles.find(mp => mp.full_name === owner);
+        if (existing) {
+          existing.project_ids.add(p.id);
+        } else {
+          memberProfiles.push({ full_name: owner, project_ids: new Set([p.id]) });
+        }
+      }
+    });
+
+    setAllMemberNames(memberProfiles);
     setIsLoading(false);
   };
 
@@ -92,6 +139,16 @@ const TeamView = () => {
       projects: Set<string>;
     }>();
 
+    // Seed with all project members/owners first
+    allMemberNames.forEach(mp => {
+      if (!members.has(mp.full_name)) {
+        members.set(mp.full_name, { name: mp.full_name, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, projects: new Set(mp.project_ids) });
+      } else {
+        mp.project_ids.forEach(pid => members.get(mp.full_name)!.projects.add(pid));
+      }
+    });
+
+    // Add activity data
     activities.forEach(a => {
       const name = a.assigned_to?.trim();
       if (!name) return;
@@ -114,7 +171,7 @@ const TeamView = () => {
     });
 
     return Array.from(members.values()).sort((a, b) => b.totalTasks - a.totalTasks);
-  }, [activities, timeEntries]);
+  }, [activities, timeEntries, allMemberNames]);
 
 
   const unassigned = activities.filter(a => !a.assigned_to?.trim());
