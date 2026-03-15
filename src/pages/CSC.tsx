@@ -143,6 +143,8 @@ const CSC = () => {
     if (sec) setSectors(sec);
   };
 
+  const currentProfile = useMemo(() => profiles.find(p => p.id === user?.id), [profiles, user]);
+
   useEffect(() => {
     fetchData();
   }, []);
