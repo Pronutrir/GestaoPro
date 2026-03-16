@@ -231,11 +231,11 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: 
         </Card>
       )}
 
-      {packages.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-8">Nenhum pacote de entregas cadastrado.</p>
+      {filteredPackages.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">{filterPhaseId !== "all" ? "Nenhum pacote encontrado para esta fase." : "Nenhum pacote de entregas cadastrado."}</p>
       ) : (
         <div className="space-y-2">
-          {packages.map(pkg => {
+          {filteredPackages.map(pkg => {
             const stageInfo = getStageLabel(pkg.status);
             return (
               <Card
