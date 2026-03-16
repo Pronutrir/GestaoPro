@@ -50,6 +50,7 @@ interface WorkflowStage {
 interface DeliveryPackagesManagerProps {
   projectId: string;
   activities: Activity[];
+  phases?: Phase[];
 }
 
 export const DeliveryPackagesManager = ({ projectId, activities }: DeliveryPackagesManagerProps) => {
