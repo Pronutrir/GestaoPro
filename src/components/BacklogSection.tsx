@@ -96,6 +96,7 @@ export const BacklogSection = ({
   const [targetStageId, setTargetStageId] = useState<string>("");
   const [assignee, setAssignee] = useState<string>("");
   const [isMoving, setIsMoving] = useState(false);
+  const [filterPhaseId, setFilterPhaseId] = useState<string>("all");
 
   useEffect(() => {
     const fetchStages = async () => {
