@@ -29,7 +29,13 @@ interface CscTicket {
   assigned_to: string | null;
   created_at: string;
   resolved_at: string | null;
-  [key: string]: any;
+  requested_date: string | null;
+  raci_role: string | null;
+  project_id: string | null;
+  activity_id: string | null;
+  created_by: string | null;
+  updated_at: string;
+  attachment_url?: string | null;
 }
 
 interface StatusObj {
