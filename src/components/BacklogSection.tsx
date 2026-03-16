@@ -207,16 +207,29 @@ export const BacklogSection = ({
               : `${backlogActivities.length} atividade(s) no backlog`}
           </p>
         </div>
-        {selectedIds.size > 0 && (
-          <Button
-            size="sm"
-            className="h-7 text-xs gap-1.5"
-            onClick={() => setMoveDialogOpen(true)}
-          >
-            <ArrowRight className="w-3.5 h-3.5" />
-            Mover para Kanban ({selectedIds.size})
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <Select value={filterPhaseId} onValueChange={setFilterPhaseId}>
+            <SelectTrigger className="h-7 text-xs w-[180px]">
+              <SelectValue placeholder="Filtrar por fase" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as fases</SelectItem>
+              {phases.map(p => (
+                <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedIds.size > 0 && (
+            <Button
+              size="sm"
+              className="h-7 text-xs gap-1.5"
+              onClick={() => setMoveDialogOpen(true)}
+            >
+              <ArrowRight className="w-3.5 h-3.5" />
+              Mover para Kanban ({selectedIds.size})
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-2">
