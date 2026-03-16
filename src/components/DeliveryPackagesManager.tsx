@@ -153,18 +153,39 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: 
     const legacy: Record<string, string> = { planned: "Planejado", in_progress: "Em Andamento", delivered: "Entregue", delayed: "Atrasado" };
     return { label: legacy[statusValue] || statusValue, color: undefined };
   };
+  // Filter packages by phase: show packages that have at least one activity in the selected phase
+  const activityPhaseMap = new Map(activities.map(a => [a.id, a.phase_id]));
+  const filteredPackages = filterPhaseId === "all" ? packages : packages.filter(pkg => {
+    const pkgActIds = packageActivities[pkg.id] || [];
+    return pkgActIds.some(aId => activityPhaseMap.get(aId) === filterPhaseId);
+  });
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold flex items-center gap-2">
-          <Package className="w-5 h-5 text-primary" /> Pacotes de Entregas ({packages.length})
+          <Package className="w-5 h-5 text-primary" /> Pacotes de Entregas ({filteredPackages.length})
         </h3>
-        {isAdmin && (
-          <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }} className="gap-2">
-            <Plus className="w-4 h-4" /> Novo Pacote
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {phases.length > 0 && (
+            <Select value={filterPhaseId} onValueChange={setFilterPhaseId}>
+              <SelectTrigger className="h-8 text-xs w-[180px]">
+                <SelectValue placeholder="Filtrar por fase" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as fases</SelectItem>
+                {phases.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {isAdmin && (
+            <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }} className="gap-2">
+              <Plus className="w-4 h-4" /> Novo Pacote
+            </Button>
+          )}
+        </div>
       </div>
 
       {showForm && (
