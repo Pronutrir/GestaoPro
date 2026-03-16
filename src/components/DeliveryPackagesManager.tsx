@@ -53,7 +53,7 @@ interface DeliveryPackagesManagerProps {
   phases?: Phase[];
 }
 
-export const DeliveryPackagesManager = ({ projectId, activities }: DeliveryPackagesManagerProps) => {
+export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: DeliveryPackagesManagerProps) => {
   const { toast } = useToast();
   const { canManage: isAdmin } = useAuth();
   const [packages, setPackages] = useState<DeliveryPackage[]>([]);
@@ -71,6 +71,7 @@ export const DeliveryPackagesManager = ({ projectId, activities }: DeliveryPacka
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [drawerPkg, setDrawerPkg] = useState<DeliveryPackage | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [filterPhaseId, setFilterPhaseId] = useState<string>("all");
 
   const fetchData = async () => {
     const [{ data: pkgs }, { data: links }, { data: sects }, { data: stgs }] = await Promise.all([
