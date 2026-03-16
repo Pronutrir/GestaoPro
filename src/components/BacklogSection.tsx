@@ -125,6 +125,7 @@ export const BacklogSection = ({
       if (!allStageIds.has(a.workflow_stage_id)) return true;
       return false;
     })
+    .filter((a) => filterPhaseId === "all" || a.phase_id === filterPhaseId)
     .sort((a, b) => {
       const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
       const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
