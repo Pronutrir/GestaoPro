@@ -32,6 +32,12 @@ interface Activity {
   workflow_stage_id?: string | null;
   created_at?: string;
   completed_at?: string | null;
+  phase_id?: string | null;
+}
+
+interface Phase {
+  id: string;
+  title: string;
 }
 
 interface WorkflowStage {
