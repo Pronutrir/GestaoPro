@@ -30,7 +30,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   Plus, Clock, CheckCircle2, AlertTriangle, Timer, TrendingUp,
   BarChart3, Users, Briefcase, Filter, ArrowRight, Paperclip, X, GripVertical,
-} from "lucide-react";
+import { CscKanbanBoard } from "@/components/CscKanbanBoard";
 
 // ── Types ──────────────────────────────────────────
 interface CscTicket {
