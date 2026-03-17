@@ -11,6 +11,7 @@ interface ParsedItem {
   code: string;
   title: string;
   level: "phase" | "activity" | "subactivity";
+  levelLabel: string;
   parentCode: string | null;
 }
 

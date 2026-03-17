@@ -72,6 +72,7 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: 
   const [drawerPkg, setDrawerPkg] = useState<DeliveryPackage | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [filterPhaseId, setFilterPhaseId] = useState<string>("all");
+  const [formFilterPhaseId, setFormFilterPhaseId] = useState<string>("all");
 
   const fetchData = async () => {
     const [{ data: pkgs }, { data: links }, { data: sects }, { data: stgs }] = await Promise.all([
