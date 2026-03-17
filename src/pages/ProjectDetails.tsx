@@ -16,6 +16,7 @@ import { ImportWBSDialog } from "@/components/ImportWBSDialog";
 import { TimelineView } from "@/components/TimelineView";
 import { LessonsLearned } from "@/components/LessonsLearned";
 import { DocumentManager } from "@/components/DocumentManager";
+import { ProjectCharter } from "@/components/ProjectCharter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
@@ -30,7 +31,7 @@ import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, ListTodo, GanttChart, BookOpen, FileText, Flag,
   ChevronRight, Settings2, Kanban, Users, ShieldCheck, AlertTriangle,
-  Package, Inbox, DollarSign,
+  Package, Inbox, DollarSign, ClipboardList,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
@@ -318,6 +319,7 @@ const ProjectDetails = () => {
                 { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
                 { value: "deliveries", label: "Pacote de Entregas", icon: <Package className="w-4 h-4" /> },
                 { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" /> },
+                { value: "tap", label: "TAP", icon: <ClipboardList className="w-4 h-4" /> },
                 { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" /> },
                 { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" /> },
                 { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" /> },
@@ -344,6 +346,10 @@ const ProjectDetails = () => {
 
             <TabsContent value="documents" className="mt-0">
               <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
+            </TabsContent>
+
+            <TabsContent value="tap" className="mt-0">
+              <ProjectCharter projectId={id!} project={project} phases={phases} members={members} />
             </TabsContent>
 
             <TabsContent value="meetings" className="mt-0">
