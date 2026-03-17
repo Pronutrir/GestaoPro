@@ -20,6 +20,17 @@ interface ImportWBSDialogProps {
   onDataChanged: () => void;
 }
 
+const getLevelLabel = (depth: number, phaseDepth: number): string => {
+  const relativeDepth = depth - phaseDepth;
+  switch (relativeDepth) {
+    case 0: return "Fase/Entregável";
+    case 1: return "Subentrega";
+    case 2: return "Pacote de Trabalho";
+    case 3: return "Atividade";
+    default: return relativeDepth < 0 ? "Projeto" : "Atividade";
+  }
+};
+
 const parseWBS = (text: string): ParsedItem[] => {
   const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
   const rawItems: { code: string; title: string }[] = [];
@@ -35,16 +46,11 @@ const parseWBS = (text: string): ParsedItem[] => {
   const depths = rawItems.map(i => i.code.split(".").length);
   const minDepth = Math.min(...depths);
 
-  // Detect X.0 pattern (old format)
   const hasZeroPattern = rawItems.some(i => {
     const p = i.code.split(".");
     return p.length === 2 && p[1] === "0";
   });
 
-  // Determine which depth level = phase
-  // If minDepth=1 → level 1 is project title (skip), level 2 = phase
-  // If minDepth=2 and hasZeroPattern → X.0 = phase
-  // If minDepth=2 no zero → level 2 = phase
   const phaseDepth = hasZeroPattern ? 2 : (minDepth === 1 ? 2 : minDepth);
   const activityDepth = phaseDepth + 1;
 
@@ -54,26 +60,23 @@ const parseWBS = (text: string): ParsedItem[] => {
     const dotParts = item.code.split(".");
     const depth = dotParts.length;
 
-    // Skip project title (depth < phaseDepth)
     if (depth < phaseDepth) continue;
-    // Skip X.0 in zero-pattern (it's the phase)
+
     if (hasZeroPattern && depth === 2 && dotParts[1] === "0") {
-      result.push({ code: item.code, title: item.title, level: "phase", parentCode: null });
+      result.push({ code: item.code, title: item.title, level: "phase", levelLabel: getLevelLabel(depth, phaseDepth), parentCode: null });
       continue;
     }
 
     if (depth === phaseDepth && !hasZeroPattern) {
-      result.push({ code: item.code, title: item.title, level: "phase", parentCode: null });
+      result.push({ code: item.code, title: item.title, level: "phase", levelLabel: getLevelLabel(depth, phaseDepth), parentCode: null });
     } else if (depth === activityDepth || (hasZeroPattern && depth === 2)) {
       const parentCode = hasZeroPattern
         ? dotParts[0] + ".0"
         : dotParts.slice(0, phaseDepth).join(".");
-      const level = (hasZeroPattern && depth === 2) ? "activity" : "activity";
-      result.push({ code: item.code, title: item.title, level, parentCode });
+      result.push({ code: item.code, title: item.title, level: "activity", levelLabel: getLevelLabel(depth, phaseDepth), parentCode });
     } else {
-      // Levels deeper than activity → subactivity, parent is one level up
       const parentCode = dotParts.slice(0, depth - 1).join(".");
-      result.push({ code: item.code, title: item.title, level: "subactivity", parentCode });
+      result.push({ code: item.code, title: item.title, level: "subactivity", levelLabel: getLevelLabel(depth, phaseDepth), parentCode });
     }
   }
 
