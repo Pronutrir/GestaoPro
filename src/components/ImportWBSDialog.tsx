@@ -194,11 +194,11 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         <div className="space-y-4">
           <div>
             <p className="text-sm text-muted-foreground mb-2">
-              Cole a estrutura WBS abaixo. Nível <strong>X.0</strong> = fase, <strong>X.Y</strong> = atividade, 
-              <strong>X.Y.Z</strong> = sub-atividade.
+              Cole a estrutura EAP abaixo. Hierarquia: <strong>X.0</strong> = Fase/Entregável, <strong>X.Y</strong> = Subentrega, 
+              <strong>X.Y.Z</strong> = Pacote de Trabalho, <strong>X.Y.Z.W</strong> = Atividade.
             </p>
             <Textarea
-              placeholder={`Exemplo:\n1.0 Gestão do Projeto\n1.1 Iniciação do Projeto\n1.1.1 Elaboração do Termo de Abertura\n1.1.2 Definição dos objetivos`}
+              placeholder={`Exemplo:\n1.0 Gestão do Projeto\n1.1 Iniciação do Projeto\n1.1.1 Elaboração do Termo de Abertura\n1.1.1.1 Definir escopo preliminar\n1.1.1.1.1 Reunião com stakeholders`}
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={10}
