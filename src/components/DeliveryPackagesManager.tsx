@@ -213,9 +213,24 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: 
           </div>
           {activities.length > 0 && (
             <div>
-              <Label className="text-xs text-muted-foreground mb-2 block">Atividades vinculadas</Label>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-xs text-muted-foreground">Atividades vinculadas</Label>
+                {phases.length > 0 && (
+                  <Select value={formFilterPhaseId} onValueChange={setFormFilterPhaseId}>
+                    <SelectTrigger className="h-7 text-xs w-[160px]">
+                      <SelectValue placeholder="Filtrar por fase" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as fases</SelectItem>
+                      {phases.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
               <div className="max-h-32 overflow-y-auto border border-border rounded p-2 space-y-1">
-                {activities.map(a => (
+                {(formFilterPhaseId === "all" ? activities : activities.filter(a => a.phase_id === formFilterPhaseId)).map(a => (
                   <label key={a.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1">
                     <Checkbox checked={selectedActivities.includes(a.id)} onCheckedChange={() => toggleActivity(a.id)} />
                     {a.title}
