@@ -208,18 +208,18 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
           {parsed.length > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="gap-1">
                   <Layers className="w-3 h-3" />
-                  {phases.length} fases
+                  {phases.length} Fases/Entregáveis
                 </Badge>
                 <Badge variant="outline" className="gap-1">
                   <ListTodo className="w-3 h-3" />
-                  {activities.length} atividades
+                  {activities.length} Subentregas
                 </Badge>
                 <Badge variant="outline" className="gap-1">
                   <ListTodo className="w-3 h-3" />
-                  {subactivities.length} sub-atividades
+                  {subactivities.length} Pacotes/Atividades
                 </Badge>
               </div>
 
