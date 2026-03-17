@@ -16,6 +16,7 @@ import { ImportWBSDialog } from "@/components/ImportWBSDialog";
 import { TimelineView } from "@/components/TimelineView";
 import { LessonsLearned } from "@/components/LessonsLearned";
 import { DocumentManager } from "@/components/DocumentManager";
+import { ProjectCharter } from "@/components/ProjectCharter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
