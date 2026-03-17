@@ -225,24 +225,23 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
               <div className="border border-border rounded-lg p-3 max-h-[200px] overflow-y-auto bg-muted/30">
                 <p className="text-xs font-semibold text-muted-foreground mb-2">Pré-visualização:</p>
-                {parsed.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex items-center gap-2 py-1 ${
-                      item.level === "activity" ? "pl-6" : item.level === "subactivity" ? "pl-12" : ""
-                    }`}
-                  >
-                    {item.level === "phase" ? (
-                      <Layers className="w-3 h-3 text-primary shrink-0" />
-                    ) : (
-                      <ListTodo className="w-3 h-3 text-muted-foreground shrink-0" />
-                    )}
-                    <span className="text-xs font-mono text-muted-foreground">{item.code}</span>
-                    <span className={`text-sm ${item.level === "phase" ? "font-medium text-foreground" : "text-muted-foreground"}`}>
-                      {item.title}
-                    </span>
-                  </div>
-                ))}
+                {parsed.map((item, idx) => {
+                  const indent = item.level === "phase" ? "" : item.level === "activity" ? "pl-5" : "pl-10";
+                  return (
+                    <div key={idx} className={`flex items-center gap-2 py-1 ${indent}`}>
+                      {item.level === "phase" ? (
+                        <Layers className="w-3 h-3 text-primary shrink-0" />
+                      ) : (
+                        <ListTodo className="w-3 h-3 text-muted-foreground shrink-0" />
+                      )}
+                      <span className="text-xs font-mono text-muted-foreground">{item.code}</span>
+                      <span className={`text-sm ${item.level === "phase" ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+                        {item.title}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/60 ml-auto shrink-0">{item.levelLabel}</span>
+                    </div>
+                  );
+                })}
               </div>
 
               {activities.some(a => !a.parentCode || !phases.find(p => p.code === a.parentCode)) && (
