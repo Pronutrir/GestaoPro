@@ -11,6 +11,7 @@ interface ParsedItem {
   code: string;
   title: string;
   level: "phase" | "activity" | "subactivity";
+  levelLabel: string;
   parentCode: string | null;
 }
 
@@ -18,6 +19,17 @@ interface ImportWBSDialogProps {
   projectId: string;
   onDataChanged: () => void;
 }
+
+const getLevelLabel = (depth: number, phaseDepth: number): string => {
+  const relativeDepth = depth - phaseDepth;
+  switch (relativeDepth) {
+    case 0: return "Fase/Entregável";
+    case 1: return "Subentrega";
+    case 2: return "Pacote de Trabalho";
+    case 3: return "Atividade";
+    default: return relativeDepth < 0 ? "Projeto" : "Atividade";
+  }
+};
 
 const parseWBS = (text: string): ParsedItem[] => {
   const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
@@ -34,16 +46,11 @@ const parseWBS = (text: string): ParsedItem[] => {
   const depths = rawItems.map(i => i.code.split(".").length);
   const minDepth = Math.min(...depths);
 
-  // Detect X.0 pattern (old format)
   const hasZeroPattern = rawItems.some(i => {
     const p = i.code.split(".");
     return p.length === 2 && p[1] === "0";
   });
 
-  // Determine which depth level = phase
-  // If minDepth=1 → level 1 is project title (skip), level 2 = phase
-  // If minDepth=2 and hasZeroPattern → X.0 = phase
-  // If minDepth=2 no zero → level 2 = phase
   const phaseDepth = hasZeroPattern ? 2 : (minDepth === 1 ? 2 : minDepth);
   const activityDepth = phaseDepth + 1;
 
@@ -53,26 +60,23 @@ const parseWBS = (text: string): ParsedItem[] => {
     const dotParts = item.code.split(".");
     const depth = dotParts.length;
 
-    // Skip project title (depth < phaseDepth)
     if (depth < phaseDepth) continue;
-    // Skip X.0 in zero-pattern (it's the phase)
+
     if (hasZeroPattern && depth === 2 && dotParts[1] === "0") {
-      result.push({ code: item.code, title: item.title, level: "phase", parentCode: null });
+      result.push({ code: item.code, title: item.title, level: "phase", levelLabel: getLevelLabel(depth, phaseDepth), parentCode: null });
       continue;
     }
 
     if (depth === phaseDepth && !hasZeroPattern) {
-      result.push({ code: item.code, title: item.title, level: "phase", parentCode: null });
+      result.push({ code: item.code, title: item.title, level: "phase", levelLabel: getLevelLabel(depth, phaseDepth), parentCode: null });
     } else if (depth === activityDepth || (hasZeroPattern && depth === 2)) {
       const parentCode = hasZeroPattern
         ? dotParts[0] + ".0"
         : dotParts.slice(0, phaseDepth).join(".");
-      const level = (hasZeroPattern && depth === 2) ? "activity" : "activity";
-      result.push({ code: item.code, title: item.title, level, parentCode });
+      result.push({ code: item.code, title: item.title, level: "activity", levelLabel: getLevelLabel(depth, phaseDepth), parentCode });
     } else {
-      // Levels deeper than activity → subactivity, parent is one level up
       const parentCode = dotParts.slice(0, depth - 1).join(".");
-      result.push({ code: item.code, title: item.title, level: "subactivity", parentCode });
+      result.push({ code: item.code, title: item.title, level: "subactivity", levelLabel: getLevelLabel(depth, phaseDepth), parentCode });
     }
   }
 
@@ -160,7 +164,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
       toast({
         title: "EAP importada!",
-        description: `${phases.length} fases, ${activities.length} atividades e ${subactivities.length} sub-atividades criadas.`,
+        description: `${phases.length} fase(s)/entregável(is), ${activities.length} subentrega(s) e ${subactivities.length} pacote(s)/atividade(s) criados.`,
       });
 
       setText("");
@@ -190,11 +194,11 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         <div className="space-y-4">
           <div>
             <p className="text-sm text-muted-foreground mb-2">
-              Cole a estrutura WBS abaixo. Nível <strong>X.0</strong> = fase, <strong>X.Y</strong> = atividade, 
-              <strong>X.Y.Z</strong> = sub-atividade.
+              Cole a estrutura EAP abaixo. Hierarquia: <strong>X.0</strong> = Fase/Entregável, <strong>X.Y</strong> = Subentrega, 
+              <strong>X.Y.Z</strong> = Pacote de Trabalho, <strong>X.Y.Z.W</strong> = Atividade.
             </p>
             <Textarea
-              placeholder={`Exemplo:\n1.0 Gestão do Projeto\n1.1 Iniciação do Projeto\n1.1.1 Elaboração do Termo de Abertura\n1.1.2 Definição dos objetivos`}
+              placeholder={`Exemplo:\n1.0 Gestão do Projeto\n1.1 Iniciação do Projeto\n1.1.1 Elaboração do Termo de Abertura\n1.1.1.1 Definir escopo preliminar\n1.1.1.1.1 Reunião com stakeholders`}
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={10}
@@ -204,41 +208,40 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
           {parsed.length > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="gap-1">
                   <Layers className="w-3 h-3" />
-                  {phases.length} fases
+                  {phases.length} Fases/Entregáveis
                 </Badge>
                 <Badge variant="outline" className="gap-1">
                   <ListTodo className="w-3 h-3" />
-                  {activities.length} atividades
+                  {activities.length} Subentregas
                 </Badge>
                 <Badge variant="outline" className="gap-1">
                   <ListTodo className="w-3 h-3" />
-                  {subactivities.length} sub-atividades
+                  {subactivities.length} Pacotes/Atividades
                 </Badge>
               </div>
 
               <div className="border border-border rounded-lg p-3 max-h-[200px] overflow-y-auto bg-muted/30">
                 <p className="text-xs font-semibold text-muted-foreground mb-2">Pré-visualização:</p>
-                {parsed.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex items-center gap-2 py-1 ${
-                      item.level === "activity" ? "pl-6" : item.level === "subactivity" ? "pl-12" : ""
-                    }`}
-                  >
-                    {item.level === "phase" ? (
-                      <Layers className="w-3 h-3 text-primary shrink-0" />
-                    ) : (
-                      <ListTodo className="w-3 h-3 text-muted-foreground shrink-0" />
-                    )}
-                    <span className="text-xs font-mono text-muted-foreground">{item.code}</span>
-                    <span className={`text-sm ${item.level === "phase" ? "font-medium text-foreground" : "text-muted-foreground"}`}>
-                      {item.title}
-                    </span>
-                  </div>
-                ))}
+                {parsed.map((item, idx) => {
+                  const indent = item.level === "phase" ? "" : item.level === "activity" ? "pl-5" : "pl-10";
+                  return (
+                    <div key={idx} className={`flex items-center gap-2 py-1 ${indent}`}>
+                      {item.level === "phase" ? (
+                        <Layers className="w-3 h-3 text-primary shrink-0" />
+                      ) : (
+                        <ListTodo className="w-3 h-3 text-muted-foreground shrink-0" />
+                      )}
+                      <span className="text-xs font-mono text-muted-foreground">{item.code}</span>
+                      <span className={`text-sm ${item.level === "phase" ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+                        {item.title}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/60 ml-auto shrink-0">{item.levelLabel}</span>
+                    </div>
+                  );
+                })}
               </div>
 
               {activities.some(a => !a.parentCode || !phases.find(p => p.code === a.parentCode)) && (
