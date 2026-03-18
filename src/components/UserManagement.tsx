@@ -128,6 +128,7 @@ export const UserManagement = () => {
       const { data, error } = await supabase.functions.invoke("admin-update-user", { body });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      await handleSaveTabPermissions(selectedUser.id, userAllowedTabs);
       toast({ title: "Usuário atualizado!" });
       setSelectedUser(null);
       fetchData();
