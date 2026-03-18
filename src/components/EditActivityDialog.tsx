@@ -188,6 +188,7 @@ export const EditActivityDialog = ({
         parent_id: formData.parent_id || null,
         story_points: parseInt(formData.story_points) || 0,
         raci_role: formData.raci_role || null,
+        participants: formData.participants,
       } as any).eq("id", activity.id);
       if (error) throw error;
       toast({ title: "Atividade atualizada!" });
