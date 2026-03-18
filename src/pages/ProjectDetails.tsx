@@ -130,8 +130,9 @@ const ProjectDetails = () => {
   }, [id]);
 
   useEffect(() => {
-    if (!currentUser?.id || isAdmin) {
-      // Admin/Gestor sees all tabs
+    if (!currentUser?.id) return;
+    // Admin/Gestor always sees all tabs
+    if (isAdmin) {
       setAllowedTabs(null);
       return;
     }
@@ -142,15 +143,16 @@ const ProjectDetails = () => {
       .maybeSingle()
       .then(({ data, error }) => {
         if (error) {
-          console.error("Tab permissions error:", error);
+          console.error("Tab permissions fetch error:", error);
           return;
         }
-        if (data?.allowed_tabs) {
+        if (data?.allowed_tabs && Array.isArray(data.allowed_tabs)) {
           setAllowedTabs(data.allowed_tabs);
           if (!data.allowed_tabs.includes(activeTab) && data.allowed_tabs.length > 0) {
             setActiveTab(data.allowed_tabs[0]);
           }
         }
+        // If no record, allowedTabs stays null = all visible (default)
       });
   }, [currentUser?.id, isAdmin]);
 
