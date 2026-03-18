@@ -302,6 +302,7 @@ export const EditActivityDialog = ({
             </select>
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
             {phases.length > 0 && (
               <div className="space-y-2">
                 <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
