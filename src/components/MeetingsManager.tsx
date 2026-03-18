@@ -195,7 +195,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     const payload: any = {
       project_id: projectId,
       title: form.title,
-      meeting_date: form.meeting_date || null,
+      meeting_date: form.meeting_date ? `${form.meeting_date.slice(0, 10)}T12:00:00` : null,
       start_time: form.start_time || null,
       end_time: form.end_time || null,
       location: form.location || null,
