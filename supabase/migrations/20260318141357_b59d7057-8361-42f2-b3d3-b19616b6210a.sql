@@ -1,0 +1,1 @@
+ALTER TABLE public.activities ADD COLUMN participants text[] DEFAULT '{}'::text[];

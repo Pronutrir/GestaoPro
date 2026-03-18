@@ -84,6 +84,7 @@ export const EditActivityDialog = ({
     phase_id: "", priority: "medium",
     tags: [] as string[], parent_id: "",
     story_points: "0", raci_role: "",
+    participants: [] as string[],
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -119,6 +120,7 @@ export const EditActivityDialog = ({
         parent_id: activity.parent_id || "",
         story_points: (activity as any).story_points?.toString() || "0",
         raci_role: (activity as any).raci_role || "",
+        participants: (activity as any).participants || [],
       });
       fetchSubActivities(activity.id);
     }
@@ -186,6 +188,7 @@ export const EditActivityDialog = ({
         parent_id: formData.parent_id || null,
         story_points: parseInt(formData.story_points) || 0,
         raci_role: formData.raci_role || null,
+        participants: formData.participants,
       } as any).eq("id", activity.id);
       if (error) throw error;
       toast({ title: "Atividade atualizada!" });
@@ -266,6 +269,37 @@ export const EditActivityDialog = ({
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Participantes */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              👥 Participantes
+            </Label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {formData.participants.map((p) => (
+                <Badge key={p} variant="secondary" className="gap-1 text-xs">
+                  {p}
+                  <button type="button" onClick={() => setFormData({ ...formData, participants: formData.participants.filter(x => x !== p) })}>
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value=""
+              onChange={(e) => {
+                if (e.target.value && !formData.participants.includes(e.target.value)) {
+                  setFormData({ ...formData, participants: [...formData.participants, e.target.value] });
+                }
+              }}
+            >
+              <option value="">Adicionar participante...</option>
+              {members.filter(m => m.full_name && !formData.participants.includes(m.full_name!)).map((m) => (
+                <option key={m.full_name} value={m.full_name!}>{m.full_name}</option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
