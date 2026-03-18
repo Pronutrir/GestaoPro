@@ -563,7 +563,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                         {meeting.meeting_date && (
                           <span className="flex items-center gap-1">
                             <CalendarDays className="w-3 h-3" />
-                            {new Date(meeting.meeting_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                            {(() => { const d = meeting.meeting_date!.slice(0, 10).split("-").map(Number); return new Date(d[0], d[1] - 1, d[2]).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }); })()}
                           </span>
                         )}
                         {(meeting.start_time || meeting.end_time) && (
