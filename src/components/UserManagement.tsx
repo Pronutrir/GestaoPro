@@ -508,6 +508,31 @@ export const UserManagement = () => {
                   </div>
                 </div>
 
+                {/* Tab Permissions */}
+                <div className="space-y-3 pt-2 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-1.5"><LayoutGrid className="w-3.5 h-3.5" /> Abas Visíveis no Projeto</Label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground">Todas</span>
+                      <Switch
+                        checked={userAllowedTabs.length === ALL_TAB_VALUES.length}
+                        onCheckedChange={toggleAllTabs}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ALL_PROJECT_TABS.map(tab => (
+                      <div key={tab.value} className="flex items-center justify-between p-2 rounded-lg border border-border">
+                        <span className="text-xs font-medium text-foreground">{tab.label}</span>
+                        <Switch
+                          checked={userAllowedTabs.includes(tab.value)}
+                          onCheckedChange={() => toggleTab(tab.value)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Info */}
                 <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t border-border">
                   <p>Cadastrado em: {new Date(selectedUser.created_at).toLocaleDateString("pt-BR")}</p>
