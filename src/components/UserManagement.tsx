@@ -68,6 +68,7 @@ export const UserManagement = () => {
   const [editForm, setEditForm] = useState({
     full_name: "", sector: "", role_title: "", role: "user", new_password: "",
   });
+  const [userAllowedTabs, setUserAllowedTabs] = useState<string[]>([...ALL_TAB_VALUES]);
 
   const fetchData = async () => {
     const [{ data: profilesData }, { data: rolesData }, { data: sectorsData }] = await Promise.all([
