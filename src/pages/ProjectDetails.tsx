@@ -345,7 +345,7 @@ const ProjectDetails = () => {
                 { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
                 { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" /> },
                 { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" /> },
-              ]}
+              ].filter(tab => !allowedTabs || allowedTabs.includes(tab.value))}
             />
 
             <TabsContent value="kanban" className="mt-0">
