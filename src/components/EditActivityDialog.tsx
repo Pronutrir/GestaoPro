@@ -120,6 +120,7 @@ export const EditActivityDialog = ({
         parent_id: activity.parent_id || "",
         story_points: (activity as any).story_points?.toString() || "0",
         raci_role: (activity as any).raci_role || "",
+        participants: (activity as any).participants || [],
       });
       fetchSubActivities(activity.id);
     }
