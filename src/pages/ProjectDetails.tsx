@@ -248,7 +248,22 @@ const ProjectDetails = () => {
   const handleToggleActivity = async (activityId: string, currentStatus: string) => {
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
-    await supabase.from("activities").update({ status: newStatus, completed_at: completedAt }).eq("id", activityId);
+    const updatePayload: any = { status: newStatus, completed_at: completedAt };
+
+    if (newStatus === "completed" && id) {
+      const { data: finalStage } = await supabase
+        .from("workflow_stages")
+        .select("id")
+        .eq("project_id", id)
+        .eq("is_final", true)
+        .limit(1)
+        .maybeSingle();
+      if (finalStage) {
+        updatePayload.workflow_stage_id = finalStage.id;
+      }
+    }
+
+    await supabase.from("activities").update(updatePayload).eq("id", activityId);
     fetchProjectData();
   };
 
