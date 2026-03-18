@@ -130,22 +130,31 @@ const ProjectDetails = () => {
   }, [id]);
 
   useEffect(() => {
-    if (currentUser?.id) {
-      supabase
-        .from("user_tab_permissions")
-        .select("allowed_tabs")
-        .eq("user_id", currentUser.id)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data?.allowed_tabs) {
-            setAllowedTabs(data.allowed_tabs);
-            if (!data.allowed_tabs.includes(activeTab) && data.allowed_tabs.length > 0) {
-              setActiveTab(data.allowed_tabs[0]);
-            }
-          }
-        });
+    if (!currentUser?.id) return;
+    // Admin/Gestor always sees all tabs
+    if (isAdmin) {
+      setAllowedTabs(null);
+      return;
     }
-  }, [currentUser?.id]);
+    supabase
+      .from("user_tab_permissions")
+      .select("allowed_tabs")
+      .eq("user_id", currentUser.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Tab permissions fetch error:", error);
+          return;
+        }
+        if (data?.allowed_tabs && Array.isArray(data.allowed_tabs)) {
+          setAllowedTabs(data.allowed_tabs);
+          if (!data.allowed_tabs.includes(activeTab) && data.allowed_tabs.length > 0) {
+            setActiveTab(data.allowed_tabs[0]);
+          }
+        }
+        // If no record, allowedTabs stays null = all visible (default)
+      });
+  }, [currentUser?.id, isAdmin]);
 
   const fetchMembers = async () => {
     const { data: memberData } = await supabase
