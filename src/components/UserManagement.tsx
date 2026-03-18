@@ -9,8 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   Users, Plus, Shield, User, Pencil, Trash2, Ban, CheckCircle2,
-  Camera, Mail, Building2, Briefcase, Key, Search, MoreVertical,
+  Camera, Mail, Building2, Briefcase, Key, Search, MoreVertical, LayoutGrid,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { ALL_PROJECT_TABS, ALL_TAB_VALUES } from "@/lib/projectTabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -66,6 +68,7 @@ export const UserManagement = () => {
   const [editForm, setEditForm] = useState({
     full_name: "", sector: "", role_title: "", role: "user", new_password: "",
   });
+  const [userAllowedTabs, setUserAllowedTabs] = useState<string[]>([...ALL_TAB_VALUES]);
 
   const fetchData = async () => {
     const [{ data: profilesData }, { data: rolesData }, { data: sectorsData }] = await Promise.all([
@@ -125,6 +128,7 @@ export const UserManagement = () => {
       const { data, error } = await supabase.functions.invoke("admin-update-user", { body });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      await handleSaveTabPermissions(selectedUser.id, userAllowedTabs);
       toast({ title: "Usuário atualizado!" });
       setSelectedUser(null);
       fetchData();
@@ -186,7 +190,7 @@ export const UserManagement = () => {
     setIsLoading(false);
   };
 
-  const openUserDetail = (profile: Profile) => {
+  const openUserDetail = async (profile: Profile) => {
     setSelectedUser(profile);
     setEditForm({
       full_name: profile.full_name || "",
@@ -195,6 +199,39 @@ export const UserManagement = () => {
       role: getUserRole(profile.id),
       new_password: "",
     });
+    // Fetch tab permissions
+    const { data } = await supabase
+      .from("user_tab_permissions")
+      .select("allowed_tabs")
+      .eq("user_id", profile.id)
+      .maybeSingle();
+    setUserAllowedTabs(data?.allowed_tabs || [...ALL_TAB_VALUES]);
+  };
+
+  const handleSaveTabPermissions = async (userId: string, tabs: string[]) => {
+    const { data: existing } = await supabase
+      .from("user_tab_permissions")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (existing) {
+      await supabase.from("user_tab_permissions").update({ allowed_tabs: tabs, updated_at: new Date().toISOString() }).eq("user_id", userId);
+    } else {
+      await supabase.from("user_tab_permissions").insert({ user_id: userId, allowed_tabs: tabs } as any);
+    }
+  };
+
+  const toggleTab = (tabValue: string) => {
+    setUserAllowedTabs(prev => {
+      if (prev.includes(tabValue)) {
+        return prev.filter(t => t !== tabValue);
+      }
+      return [...prev, tabValue];
+    });
+  };
+
+  const toggleAllTabs = (enabled: boolean) => {
+    setUserAllowedTabs(enabled ? [...ALL_TAB_VALUES] : []);
   };
 
   const filteredProfiles = profiles.filter(p => {
@@ -468,6 +505,31 @@ export const UserManagement = () => {
                       onChange={(e) => setEditForm({ ...editForm, new_password: e.target.value })}
                       placeholder="Deixe vazio para não alterar"
                     />
+                  </div>
+                </div>
+
+                {/* Tab Permissions */}
+                <div className="space-y-3 pt-2 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-1.5"><LayoutGrid className="w-3.5 h-3.5" /> Abas Visíveis no Projeto</Label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground">Todas</span>
+                      <Switch
+                        checked={userAllowedTabs.length === ALL_TAB_VALUES.length}
+                        onCheckedChange={toggleAllTabs}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ALL_PROJECT_TABS.map(tab => (
+                      <div key={tab.value} className="flex items-center justify-between p-2 rounded-lg border border-border">
+                        <span className="text-xs font-medium text-foreground">{tab.label}</span>
+                        <Switch
+                          checked={userAllowedTabs.includes(tab.value)}
+                          onCheckedChange={() => toggleTab(tab.value)}
+                        />
+                      </div>
+                    ))}
                   </div>
                 </div>
 

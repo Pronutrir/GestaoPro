@@ -88,12 +88,13 @@ const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { canManage: isAdmin } = useAuth();
+  const { canManage: isAdmin, user: currentUser } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("kanban");
+  const [allowedTabs, setAllowedTabs] = useState<string[] | null>(null);
   const [newActivity, setNewActivity] = useState("");
   const [newActivityAssigned, setNewActivityAssigned] = useState("");
   const [newActivityStartDate, setNewActivityStartDate] = useState("");
@@ -127,6 +128,24 @@ const ProjectDetails = () => {
       supabase.rpc("generate_overdue_notifications", { p_project_id: id }).then();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      supabase
+        .from("user_tab_permissions")
+        .select("allowed_tabs")
+        .eq("user_id", currentUser.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.allowed_tabs) {
+            setAllowedTabs(data.allowed_tabs);
+            if (!data.allowed_tabs.includes(activeTab) && data.allowed_tabs.length > 0) {
+              setActiveTab(data.allowed_tabs[0]);
+            }
+          }
+        });
+    }
+  }, [currentUser?.id]);
 
   const fetchMembers = async () => {
     const { data: memberData } = await supabase
@@ -326,7 +345,7 @@ const ProjectDetails = () => {
                 { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
                 { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" /> },
                 { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" /> },
-              ]}
+              ].filter(tab => !allowedTabs || allowedTabs.includes(tab.value))}
             />
 
             <TabsContent value="kanban" className="mt-0">
