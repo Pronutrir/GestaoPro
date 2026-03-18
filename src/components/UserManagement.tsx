@@ -189,7 +189,7 @@ export const UserManagement = () => {
     setIsLoading(false);
   };
 
-  const openUserDetail = (profile: Profile) => {
+  const openUserDetail = async (profile: Profile) => {
     setSelectedUser(profile);
     setEditForm({
       full_name: profile.full_name || "",
@@ -198,6 +198,39 @@ export const UserManagement = () => {
       role: getUserRole(profile.id),
       new_password: "",
     });
+    // Fetch tab permissions
+    const { data } = await supabase
+      .from("user_tab_permissions")
+      .select("allowed_tabs")
+      .eq("user_id", profile.id)
+      .maybeSingle();
+    setUserAllowedTabs(data?.allowed_tabs || [...ALL_TAB_VALUES]);
+  };
+
+  const handleSaveTabPermissions = async (userId: string, tabs: string[]) => {
+    const { data: existing } = await supabase
+      .from("user_tab_permissions")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (existing) {
+      await supabase.from("user_tab_permissions").update({ allowed_tabs: tabs, updated_at: new Date().toISOString() }).eq("user_id", userId);
+    } else {
+      await supabase.from("user_tab_permissions").insert({ user_id: userId, allowed_tabs: tabs } as any);
+    }
+  };
+
+  const toggleTab = (tabValue: string) => {
+    setUserAllowedTabs(prev => {
+      if (prev.includes(tabValue)) {
+        return prev.filter(t => t !== tabValue);
+      }
+      return [...prev, tabValue];
+    });
+  };
+
+  const toggleAllTabs = (enabled: boolean) => {
+    setUserAllowedTabs(enabled ? [...ALL_TAB_VALUES] : []);
   };
 
   const filteredProfiles = profiles.filter(p => {
