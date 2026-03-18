@@ -84,6 +84,7 @@ export const EditActivityDialog = ({
     phase_id: "", priority: "medium",
     tags: [] as string[], parent_id: "",
     story_points: "0", raci_role: "",
+    participants: [] as string[],
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
