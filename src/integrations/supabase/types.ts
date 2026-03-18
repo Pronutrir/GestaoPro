@@ -26,6 +26,7 @@ export type Database = {
           hours: number | null
           id: string
           parent_id: string | null
+          participants: string[] | null
           phase_id: string | null
           priority: string
           project_id: string
@@ -50,6 +51,7 @@ export type Database = {
           hours?: number | null
           id?: string
           parent_id?: string | null
+          participants?: string[] | null
           phase_id?: string | null
           priority?: string
           project_id: string
@@ -74,6 +76,7 @@ export type Database = {
           hours?: number | null
           id?: string
           parent_id?: string | null
+          participants?: string[] | null
           phase_id?: string | null
           priority?: string
           project_id?: string
