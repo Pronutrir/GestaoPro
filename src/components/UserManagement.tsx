@@ -9,8 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   Users, Plus, Shield, User, Pencil, Trash2, Ban, CheckCircle2,
-  Camera, Mail, Building2, Briefcase, Key, Search, MoreVertical,
+  Camera, Mail, Building2, Briefcase, Key, Search, MoreVertical, LayoutGrid,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { ALL_PROJECT_TABS, ALL_TAB_VALUES } from "@/lib/projectTabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
