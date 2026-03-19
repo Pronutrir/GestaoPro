@@ -92,6 +92,7 @@ function SortableKanbanCard({
   onMoveToBacklog,
   isAdmin,
   isBlocked,
+  storyCount,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -101,6 +102,7 @@ function SortableKanbanCard({
   onMoveToBacklog: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
+  storyCount?: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
