@@ -740,6 +740,7 @@ export const ActivityKanban = ({
                 onMoveToBacklog={handleMoveToBacklog}
                 isAdmin={isAdmin}
                 onResizeStart={handleResizeStart}
+                storyCounts={storyCounts}
               />
             );
           })}
