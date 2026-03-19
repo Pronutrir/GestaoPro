@@ -477,6 +477,26 @@ export const ActivityKanban = ({
     fetchStages();
   }, [projectId]);
 
+  // Fetch user story counts per activity
+  useEffect(() => {
+    const fetchStoryCounts = async () => {
+      const activityIds = activities.map(a => a.id);
+      if (activityIds.length === 0) { setStoryCounts({}); return; }
+      const { data } = await supabase
+        .from("user_stories")
+        .select("activity_id")
+        .in("activity_id", activityIds);
+      if (data) {
+        const counts: Record<string, number> = {};
+        data.forEach((row: any) => {
+          counts[row.activity_id] = (counts[row.activity_id] || 0) + 1;
+        });
+        setStoryCounts(counts);
+      }
+    };
+    fetchStoryCounts();
+  }, [activities]);
+
   const fetchStages = async () => {
     const { data } = await supabase
       .from("workflow_stages")
