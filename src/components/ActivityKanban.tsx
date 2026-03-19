@@ -92,6 +92,7 @@ function SortableKanbanCard({
   onMoveToBacklog,
   isAdmin,
   isBlocked,
+  storyCount,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -101,6 +102,7 @@ function SortableKanbanCard({
   onMoveToBacklog: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
+  storyCount?: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -123,6 +125,7 @@ function SortableKanbanCard({
         dragListeners={listeners}
         isAdmin={isAdmin}
         isBlocked={isBlocked}
+        storyCount={storyCount}
       />
     </div>
   );
@@ -138,6 +141,7 @@ function KanbanCard({
   dragListeners,
   isAdmin,
   isBlocked,
+  storyCount,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -148,6 +152,7 @@ function KanbanCard({
   dragListeners?: any;
   isAdmin?: boolean;
   isBlocked?: boolean;
+  storyCount?: number;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -238,6 +243,11 @@ function KanbanCard({
                 🎯 {(activity as any).story_points} SP
               </Badge>
             )}
+            {storyCount && storyCount > 0 && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30">
+                📖 {storyCount}
+              </Badge>
+            )}
             {activity.hours > 0 && (
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                 {activity.hours}h
@@ -290,6 +300,7 @@ function SortableColumn({
   onMoveToBacklog,
   isAdmin,
   onResizeStart,
+  storyCounts,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -303,6 +314,7 @@ function SortableColumn({
   onMoveToBacklog: (activityId: string) => void;
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
+  storyCounts: Record<string, number>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
@@ -362,6 +374,7 @@ function SortableColumn({
                 onMoveToBacklog={() => onMoveToBacklog(activity.id)}
                 isAdmin={isAdmin}
                 isBlocked={stage.is_blocked}
+                storyCount={storyCounts[activity.id] || 0}
               />
             ))
           )}
@@ -420,6 +433,7 @@ export const ActivityKanban = ({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
+  const [storyCounts, setStoryCounts] = useState<Record<string, number>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
 
@@ -475,6 +489,26 @@ export const ActivityKanban = ({
   useEffect(() => {
     fetchStages();
   }, [projectId]);
+
+  // Fetch user story counts per activity
+  useEffect(() => {
+    const fetchStoryCounts = async () => {
+      const activityIds = activities.map(a => a.id);
+      if (activityIds.length === 0) { setStoryCounts({}); return; }
+      const { data } = await supabase
+        .from("user_stories")
+        .select("activity_id")
+        .in("activity_id", activityIds);
+      if (data) {
+        const counts: Record<string, number> = {};
+        data.forEach((row: any) => {
+          counts[row.activity_id] = (counts[row.activity_id] || 0) + 1;
+        });
+        setStoryCounts(counts);
+      }
+    };
+    fetchStoryCounts();
+  }, [activities]);
 
   const fetchStages = async () => {
     const { data } = await supabase
@@ -706,6 +740,7 @@ export const ActivityKanban = ({
                 onMoveToBacklog={handleMoveToBacklog}
                 isAdmin={isAdmin}
                 onResizeStart={handleResizeStart}
+                storyCounts={storyCounts}
               />
             );
           })}
