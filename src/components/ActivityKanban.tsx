@@ -214,6 +214,11 @@ function KanbanCard({
                 👤 {activity.assigned_to}
               </Badge>
             )}
+            {activity.participants && activity.participants.length > 0 && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/30">
+                👥 +{activity.participants.length}
+              </Badge>
+            )}
             {activity.end_date && (
               <Badge
                 variant="outline"
