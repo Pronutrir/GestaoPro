@@ -457,6 +457,135 @@ export const EditActivityDialog = ({
             </div>
           )}
 
+          {/* Histórias de Usuário */}
+          {activity && projectId && (
+            <div className="border-t border-border pt-4 space-y-3">
+              <button
+                type="button"
+                className="flex items-center gap-2 w-full text-left"
+                onClick={() => setShowStories(!showStories)}
+              >
+                {showStories ? <ChevronDown className="w-4 h-4 text-primary" /> : <ChevronRight className="w-4 h-4 text-primary" />}
+                <BookOpen className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-bold text-foreground">
+                  Histórias de Usuário ({userStories.length})
+                </h3>
+              </button>
+
+              {showStories && (
+                <div className="space-y-3 pl-6">
+                  {userStories.map((story) => (
+                    <div key={story.id} className={`p-3 rounded-lg border space-y-2 ${story.status === "done" ? "bg-success/5 border-success/30" : "bg-muted/30 border-border/50"}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs leading-relaxed ${story.status === "done" ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                            <span className="font-semibold">Como</span> {story.persona},{" "}
+                            <span className="font-semibold">eu quero</span> {story.action},{" "}
+                            <span className="font-semibold">para que</span> {story.benefit}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${story.priority === "high" ? "border-destructive text-destructive" : story.priority === "medium" ? "border-warning text-warning" : ""}`}>
+                            {story.priority === "high" ? "Alta" : story.priority === "medium" ? "Média" : "Baixa"}
+                          </Badge>
+                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleToggleStoryStatus(story)}>
+                            {story.status === "done" ? <CheckCircle2 className="w-3.5 h-3.5 text-success" /> : <Circle className="w-3.5 h-3.5 text-muted-foreground" />}
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDeleteStory(story.id)}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      {story.acceptance_criteria && story.acceptance_criteria.length > 0 && (
+                        <div className="space-y-1 pt-1 border-t border-border/30">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase">Critérios de Aceite</p>
+                          {story.acceptance_criteria.map((criterion, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <CheckCircle2 className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+                              <span className="text-[11px] text-muted-foreground">{criterion}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {!showAddStory ? (
+                    <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowAddStory(true)}>
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar História
+                    </Button>
+                  ) : (
+                    <div className="p-3 bg-accent/20 rounded-lg border border-border space-y-3">
+                      <p className="text-xs font-semibold text-foreground">Nova História de Usuário</p>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-muted-foreground w-16 shrink-0">Como</span>
+                          <Input placeholder="persona (ex: gestor de projetos)" value={newStory.persona}
+                            onChange={(e) => setNewStory({ ...newStory, persona: e.target.value })} className="h-8 text-sm" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-muted-foreground w-16 shrink-0">Eu quero</span>
+                          <Input placeholder="ação desejada" value={newStory.action}
+                            onChange={(e) => setNewStory({ ...newStory, action: e.target.value })} className="h-8 text-sm" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-muted-foreground w-16 shrink-0">Para que</span>
+                          <Input placeholder="benefício esperado" value={newStory.benefit}
+                            onChange={(e) => setNewStory({ ...newStory, benefit: e.target.value })} className="h-8 text-sm" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-muted-foreground">Prioridade:</span>
+                        {["low", "medium", "high"].map((p) => (
+                          <button key={p} type="button"
+                            className={`px-2 py-1 rounded text-[10px] font-medium border ${newStory.priority === p ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}
+                            onClick={() => setNewStory({ ...newStory, priority: p })}
+                          >{p === "high" ? "Alta" : p === "medium" ? "Média" : "Baixa"}</button>
+                        ))}
+                      </div>
+                      {/* Acceptance Criteria */}
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase">Critérios de Aceite</p>
+                        {storyCriteria.map((c, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <CheckCircle2 className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+                            <span className="text-[11px] text-foreground flex-1">{c}</span>
+                            <Button type="button" size="icon" variant="ghost" className="h-5 w-5"
+                              onClick={() => setStoryCriteria(storyCriteria.filter((_, i) => i !== idx))}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                        <div className="flex gap-2">
+                          <Input placeholder="Adicionar critério..." value={newCriterion}
+                            onChange={(e) => setNewCriterion(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && newCriterion.trim()) {
+                                e.preventDefault();
+                                setStoryCriteria([...storyCriteria, newCriterion.trim()]);
+                                setNewCriterion("");
+                              }
+                            }} className="h-7 text-xs" />
+                          <Button type="button" size="sm" variant="ghost" className="h-7 px-2"
+                            onClick={() => { if (newCriterion.trim()) { setStoryCriteria([...storyCriteria, newCriterion.trim()]); setNewCriterion(""); } }}>
+                            <Plus className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <Button type="button" size="sm" className="h-7 text-xs" onClick={handleAddStory}>Salvar História</Button>
+                        <Button type="button" size="sm" variant="ghost" className="h-7 text-xs"
+                          onClick={() => { setShowAddStory(false); setNewStory({ persona: "", action: "", benefit: "", priority: "medium" }); setStoryCriteria([]); }}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button type="submit">Salvar Alterações</Button>
