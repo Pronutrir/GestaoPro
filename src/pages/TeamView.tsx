@@ -16,6 +16,7 @@ interface Activity {
   title: string;
   status: string;
   assigned_to: string | null;
+  participants: string[] | null;
   project_id: string;
   hours: number;
   end_date: string | null;
