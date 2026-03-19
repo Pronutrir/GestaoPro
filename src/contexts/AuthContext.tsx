@@ -58,9 +58,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const safetyTimer = setTimeout(() => {
       if (mounted && loading) {
         console.warn("Auth loading safety timeout reached");
-        setLoading(false);
+        // Re-attempt getSession before giving up
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!mounted) return;
+          setSession(session);
+          setUser(session?.user ?? null);
+          if (session?.user) {
+            fetchUserData(session.user.id).finally(() => {
+              if (mounted) setLoading(false);
+            });
+          } else {
+            setLoading(false);
+          }
+        }).catch(() => {
+          if (mounted) setLoading(false);
+        });
       }
-    }, 5000);
+    }, 8000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;

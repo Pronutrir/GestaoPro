@@ -149,20 +149,28 @@ const TeamView = () => {
       }
     });
 
-    // Add activity data
+    // Add activity data (responsible + participants)
     activities.forEach(a => {
-      const name = a.assigned_to?.trim();
-      if (!name) return;
-      if (!members.has(name)) {
-        members.set(name, { name, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, projects: new Set() });
+      const addActivityToMember = (name: string | undefined | null, isParticipant = false) => {
+        const trimmed = name?.trim();
+        if (!trimmed) return;
+        if (!members.has(trimmed)) {
+          members.set(trimmed, { name: trimmed, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, projects: new Set() });
+        }
+        const m = members.get(trimmed)!;
+        m.totalTasks++;
+        if (a.status === "completed") m.completedTasks++;
+        if (a.status !== "completed" && a.end_date && new Date(a.end_date) < today) m.overdueTasks++;
+        if (a.priority === "high" && a.status !== "completed") m.highPriority++;
+        if (!isParticipant) m.hoursEstimated += a.hours || 0;
+        m.projects.add(a.project_id);
+      };
+
+      addActivityToMember(a.assigned_to);
+      // Also add participants
+      if (a.participants && a.participants.length > 0) {
+        a.participants.forEach(p => addActivityToMember(p, true));
       }
-      const m = members.get(name)!;
-      m.totalTasks++;
-      if (a.status === "completed") m.completedTasks++;
-      if (a.status !== "completed" && a.end_date && new Date(a.end_date) < today) m.overdueTasks++;
-      if (a.priority === "high" && a.status !== "completed") m.highPriority++;
-      m.hoursEstimated += a.hours || 0;
-      m.projects.add(a.project_id);
     });
 
     timeEntries.forEach(te => {
