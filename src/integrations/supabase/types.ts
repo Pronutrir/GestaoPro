@@ -1314,6 +1314,63 @@ export type Database = {
         }
         Relationships: []
       }
+      user_stories: {
+        Row: {
+          acceptance_criteria: string[]
+          action: string
+          activity_id: string
+          benefit: string
+          created_at: string
+          id: string
+          persona: string
+          priority: string
+          project_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          acceptance_criteria?: string[]
+          action?: string
+          activity_id: string
+          benefit?: string
+          created_at?: string
+          id?: string
+          persona?: string
+          priority?: string
+          project_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          acceptance_criteria?: string[]
+          action?: string
+          activity_id?: string
+          benefit?: string
+          created_at?: string
+          id?: string
+          persona?: string
+          priority?: string
+          project_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_stories_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_stories_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_tab_permissions: {
         Row: {
           allowed_tabs: string[]
