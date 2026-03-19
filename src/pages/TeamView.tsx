@@ -16,6 +16,7 @@ interface Activity {
   title: string;
   status: string;
   assigned_to: string | null;
+  participants: string[] | null;
   project_id: string;
   hours: number;
   end_date: string | null;
@@ -75,7 +76,7 @@ const TeamView = () => {
 
   const fetchData = async () => {
     const [actRes, projRes, timeRes, membersRes] = await Promise.all([
-      supabase.from("activities").select("id, title, status, assigned_to, project_id, hours, end_date, priority"),
+      supabase.from("activities").select("id, title, status, assigned_to, participants, project_id, hours, end_date, priority"),
       supabase.from("projects").select("id, title, budget_planned, budget_used, owner"),
       supabase.from("time_entries").select("activity_id, duration_minutes, user_name, project_id"),
       supabase.from("project_members").select("project_id, user_id"),
@@ -148,20 +149,28 @@ const TeamView = () => {
       }
     });
 
-    // Add activity data
+    // Add activity data (responsible + participants)
     activities.forEach(a => {
-      const name = a.assigned_to?.trim();
-      if (!name) return;
-      if (!members.has(name)) {
-        members.set(name, { name, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, projects: new Set() });
+      const addActivityToMember = (name: string | undefined | null, isParticipant = false) => {
+        const trimmed = name?.trim();
+        if (!trimmed) return;
+        if (!members.has(trimmed)) {
+          members.set(trimmed, { name: trimmed, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, projects: new Set() });
+        }
+        const m = members.get(trimmed)!;
+        m.totalTasks++;
+        if (a.status === "completed") m.completedTasks++;
+        if (a.status !== "completed" && a.end_date && new Date(a.end_date) < today) m.overdueTasks++;
+        if (a.priority === "high" && a.status !== "completed") m.highPriority++;
+        if (!isParticipant) m.hoursEstimated += a.hours || 0;
+        m.projects.add(a.project_id);
+      };
+
+      addActivityToMember(a.assigned_to);
+      // Also add participants
+      if (a.participants && a.participants.length > 0) {
+        a.participants.forEach(p => addActivityToMember(p, true));
       }
-      const m = members.get(name)!;
-      m.totalTasks++;
-      if (a.status === "completed") m.completedTasks++;
-      if (a.status !== "completed" && a.end_date && new Date(a.end_date) < today) m.overdueTasks++;
-      if (a.priority === "high" && a.status !== "completed") m.highPriority++;
-      m.hoursEstimated += a.hours || 0;
-      m.projects.add(a.project_id);
     });
 
     timeEntries.forEach(te => {

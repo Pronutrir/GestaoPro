@@ -69,6 +69,7 @@ interface Activity {
   parent_id?: string | null;
   workflow_stage_id?: string | null;
   story_points?: number;
+  participants?: string[];
 }
 
 interface ActivityKanbanProps {
@@ -212,6 +213,11 @@ function KanbanCard({
             {activity.assigned_to && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                 👤 {activity.assigned_to}
+              </Badge>
+            )}
+            {activity.participants && activity.participants.length > 0 && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/30">
+                👥 +{activity.participants.length}
               </Badge>
             )}
             {activity.end_date && (
