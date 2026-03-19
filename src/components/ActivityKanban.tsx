@@ -243,6 +243,11 @@ function KanbanCard({
                 🎯 {(activity as any).story_points} SP
               </Badge>
             )}
+            {storyCount && storyCount > 0 && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30">
+                📖 {storyCount}
+              </Badge>
+            )}
             {activity.hours > 0 && (
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                 {activity.hours}h
