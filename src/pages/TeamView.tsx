@@ -76,7 +76,7 @@ const TeamView = () => {
 
   const fetchData = async () => {
     const [actRes, projRes, timeRes, membersRes] = await Promise.all([
-      supabase.from("activities").select("id, title, status, assigned_to, project_id, hours, end_date, priority"),
+      supabase.from("activities").select("id, title, status, assigned_to, participants, project_id, hours, end_date, priority"),
       supabase.from("projects").select("id, title, budget_planned, budget_used, owner"),
       supabase.from("time_entries").select("activity_id, duration_minutes, user_name, project_id"),
       supabase.from("project_members").select("project_id, user_id"),
