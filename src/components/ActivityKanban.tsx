@@ -290,7 +290,6 @@ function SortableColumn({
   onMoveToBacklog,
   isAdmin,
   onResizeStart,
-  storyCounts,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
