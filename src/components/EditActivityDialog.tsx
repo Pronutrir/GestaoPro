@@ -263,7 +263,7 @@ export const EditActivityDialog = ({
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
-            <Input id="title" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} required className="font-medium" />
+            <Input id="title" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} required className="font-medium break-words" />
           </div>
 
           <div className="space-y-2">
