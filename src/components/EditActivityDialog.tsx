@@ -92,23 +92,7 @@ export const EditActivityDialog = ({
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   
-  // User Stories state
-  interface UserStory {
-    id: string;
-    persona: string;
-    action: string;
-    benefit: string;
-    acceptance_criteria: string[];
-    priority: string;
-    status: string;
-  }
-  const [userStories, setUserStories] = useState<UserStory[]>([]);
-  const [showStories, setShowStories] = useState(false);
-  const [showAddStory, setShowAddStory] = useState(false);
-  const [newStory, setNewStory] = useState({ persona: "", action: "", benefit: "", priority: "medium" });
-  const [newCriterion, setNewCriterion] = useState("");
-  const [editingStoryId, setEditingStoryId] = useState<string | null>(null);
-  const [storyCriteria, setStoryCriteria] = useState<string[]>([]);
+  
 
   useEffect(() => {
     if (projectId) {
