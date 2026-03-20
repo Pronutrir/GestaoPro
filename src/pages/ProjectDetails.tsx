@@ -26,6 +26,7 @@ import { RisksManager } from "@/components/RisksManager";
 import { BacklogSection } from "@/components/BacklogSection";
 import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
+import { UserStoriesBoard } from "@/components/UserStoriesBoard";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
@@ -362,6 +363,7 @@ const ProjectDetails = () => {
                 { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
                 { value: "deliveries", label: "Pacote de Entregas", icon: <Package className="w-4 h-4" /> },
                 { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" /> },
+                { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" /> },
                 { value: "tap", label: "TAP", icon: <ClipboardList className="w-4 h-4" /> },
                 { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" /> },
                 { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" /> },
@@ -389,6 +391,10 @@ const ProjectDetails = () => {
 
             <TabsContent value="documents" className="mt-0">
               <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
+            </TabsContent>
+
+            <TabsContent value="stories" className="mt-0">
+              <UserStoriesBoard projectId={id!} />
             </TabsContent>
 
             <TabsContent value="tap" className="mt-0">

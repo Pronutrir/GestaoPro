@@ -1318,10 +1318,12 @@ export type Database = {
         Row: {
           acceptance_criteria: string[]
           action: string
-          activity_id: string
+          activity_id: string | null
           benefit: string
           created_at: string
           id: string
+          image_url: string | null
+          narrative: string | null
           persona: string
           priority: string
           project_id: string
@@ -1331,10 +1333,12 @@ export type Database = {
         Insert: {
           acceptance_criteria?: string[]
           action?: string
-          activity_id: string
+          activity_id?: string | null
           benefit?: string
           created_at?: string
           id?: string
+          image_url?: string | null
+          narrative?: string | null
           persona?: string
           priority?: string
           project_id: string
@@ -1344,10 +1348,12 @@ export type Database = {
         Update: {
           acceptance_criteria?: string[]
           action?: string
-          activity_id?: string
+          activity_id?: string | null
           benefit?: string
           created_at?: string
           id?: string
+          image_url?: string | null
+          narrative?: string | null
           persona?: string
           priority?: string
           project_id?: string

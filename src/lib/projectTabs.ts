@@ -4,6 +4,7 @@ export const ALL_PROJECT_TABS = [
   { value: "timeline", label: "Cronograma" },
   { value: "deliveries", label: "Pacote de Entregas" },
   { value: "documents", label: "Documentos" },
+  { value: "stories", label: "Histórias" },
   { value: "tap", label: "TAP" },
   { value: "meetings", label: "Reuniões" },
   { value: "assumptions", label: "Premissas" },
