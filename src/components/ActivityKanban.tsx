@@ -303,7 +303,6 @@ function SortableColumn({
   onMoveToBacklog: (activityId: string) => void;
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
-  storyCounts: Record<string, number>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
