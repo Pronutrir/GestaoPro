@@ -126,7 +126,7 @@ export const EditActivityDialog = ({
         participants: (activity as any).participants || [],
       });
       fetchSubActivities(activity.id);
-      fetchUserStories(activity.id);
+      
     }
   }, [activity]);
 
