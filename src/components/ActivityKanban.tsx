@@ -101,7 +101,6 @@ function SortableKanbanCard({
   onMoveToBacklog: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
-  storyCount?: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
