@@ -130,39 +130,7 @@ export const EditActivityDialog = ({
     }
   }, [activity]);
 
-  const fetchUserStories = async (activityId: string) => {
-    const { data } = await supabase.from("user_stories").select("*")
-      .eq("activity_id", activityId).order("created_at");
-    if (data) setUserStories(data as UserStory[]);
-  };
-
-  const handleAddStory = async () => {
-    if (!newStory.persona.trim() || !newStory.action.trim() || !activity || !projectId) return;
-    await supabase.from("user_stories").insert({
-      activity_id: activity.id,
-      project_id: projectId,
-      persona: newStory.persona,
-      action: newStory.action,
-      benefit: newStory.benefit,
-      priority: newStory.priority,
-      acceptance_criteria: storyCriteria,
-    } as any);
-    setNewStory({ persona: "", action: "", benefit: "", priority: "medium" });
-    setStoryCriteria([]);
-    setShowAddStory(false);
-    fetchUserStories(activity.id);
-  };
-
-  const handleDeleteStory = async (storyId: string) => {
-    await supabase.from("user_stories").delete().eq("id", storyId);
-    if (activity) fetchUserStories(activity.id);
-  };
-
-  const handleToggleStoryStatus = async (story: UserStory) => {
-    const newStatus = story.status === "done" ? "draft" : "done";
-    await supabase.from("user_stories").update({ status: newStatus } as any).eq("id", story.id);
-    if (activity) fetchUserStories(activity.id);
-  };
+  
 
   const fetchSubActivities = async (parentId: string) => {
     const { data } = await supabase.from("activities").select("*")
