@@ -263,12 +263,12 @@ export const EditActivityDialog = ({
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
-            <Input id="title" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} required className="font-medium" />
+            <Input id="title" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} required className="font-medium break-words" />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="description" className="text-sm font-semibold text-foreground">Descrição</Label>
-            <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} placeholder="Descreva a atividade..." />
+            <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} autoResize placeholder="Descreva a atividade..." className="break-words whitespace-pre-wrap" />
           </div>
 
           {/* Priority */}
@@ -478,7 +478,7 @@ export const EditActivityDialog = ({
                     <div key={story.id} className={`p-3 rounded-lg border space-y-2 ${story.status === "done" ? "bg-success/5 border-success/30" : "bg-muted/30 border-border/50"}`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <p className={`text-xs leading-relaxed ${story.status === "done" ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                          <p className={`text-xs leading-relaxed break-words whitespace-pre-wrap ${story.status === "done" ? "text-muted-foreground line-through" : "text-foreground"}`}>
                             <span className="font-semibold">Como</span> {story.persona},{" "}
                             <span className="font-semibold">eu quero</span> {story.action},{" "}
                             <span className="font-semibold">para que</span> {story.benefit}
