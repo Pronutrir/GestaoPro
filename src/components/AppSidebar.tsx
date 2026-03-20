@@ -29,14 +29,14 @@ import {
 
 const allNavItems = [
   { path: "/", label: "Visão Geral", icon: Home, minRole: "user" as const },
-  { path: "/roadmap", label: "Roadmap", icon: Map, minRole: "user" as const },
+  { path: "/roadmap", label: "Roadmap", icon: Map, minRole: "gestor" as const },
   { path: "/projects", label: "Projetos", icon: FolderKanban, minRole: "user" as const },
   { path: "/timeline", label: "Cronograma", icon: GanttChart, minRole: "user" as const },
   { path: "/team", label: "Equipe", icon: Users, minRole: "user" as const },
-  { path: "/investments", label: "Gestão Financeira", icon: DollarSign, minRole: "user" as const },
-  { path: "/csc", label: "CSC", icon: Layers, minRole: "user" as const },
+  { path: "/investments", label: "Gestão Financeira", icon: DollarSign, minRole: "gestor" as const },
+  { path: "/csc", label: "CSC", icon: Layers, minRole: "gestor" as const },
   { path: "/reports", label: "Relatórios", icon: BarChart3, minRole: "gestor" as const },
-  { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, minRole: "gestor" as const },
+  { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, minRole: "user" as const },
   { path: "/settings", label: "Configurações", icon: Settings, minRole: "admin" as const },
 ];
 

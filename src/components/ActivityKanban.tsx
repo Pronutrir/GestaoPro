@@ -189,11 +189,11 @@ function KanbanCard({
         >
           <GripVertical className="w-3.5 h-3.5" />
         </button>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 overflow-hidden">
           <div className="flex items-center gap-1.5 mb-1">
             {getPriorityIndicator(activity.priority)}
             <p
-              className={`text-xs font-medium break-words whitespace-normal leading-snug ${
+              className={`text-xs font-medium leading-snug line-clamp-2 ${
                 activity.status === "completed"
                   ? "line-through text-muted-foreground"
                   : "text-foreground"
@@ -204,7 +204,7 @@ function KanbanCard({
           </div>
 
           {activity.description && (
-            <p className="text-[11px] text-muted-foreground line-clamp-2 mb-1.5 leading-relaxed">
+            <p className="text-[11px] text-muted-foreground line-clamp-1 mb-1.5 leading-relaxed truncate">
               {activity.description}
             </p>
           )}
