@@ -420,7 +420,7 @@ export const ActivityKanban = ({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
-  const [storyCounts, setStoryCounts] = useState<Record<string, number>>({});
+  
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
 
