@@ -92,7 +92,6 @@ function SortableKanbanCard({
   onMoveToBacklog,
   isAdmin,
   isBlocked,
-  storyCount,
 }: {
   activity: Activity;
   phases: Phase[];
