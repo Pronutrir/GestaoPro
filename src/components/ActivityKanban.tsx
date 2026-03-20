@@ -123,7 +123,6 @@ function SortableKanbanCard({
         dragListeners={listeners}
         isAdmin={isAdmin}
         isBlocked={isBlocked}
-        storyCount={storyCount}
       />
     </div>
   );
