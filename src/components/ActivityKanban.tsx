@@ -148,7 +148,6 @@ function KanbanCard({
   dragListeners?: any;
   isAdmin?: boolean;
   isBlocked?: boolean;
-  storyCount?: number;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
