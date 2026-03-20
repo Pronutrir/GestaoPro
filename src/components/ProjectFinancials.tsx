@@ -160,10 +160,16 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
   };
 
   const handleUpdateBudget = async () => {
-    await supabase.from("projects").update({
-      budget_planned: parseFloat(newBudgetPlanned) || 0,
-      budget_used: parseFloat(newBudgetUsed) || 0,
+    const planned = newBudgetPlanned ? parseFloat(newBudgetPlanned) : 0;
+    const used = newBudgetUsed ? parseFloat(newBudgetUsed) : 0;
+    const { error } = await supabase.from("projects").update({
+      budget_planned: isNaN(planned) ? 0 : planned,
+      budget_used: isNaN(used) ? 0 : used,
     }).eq("id", projectId);
+    if (error) {
+      toast({ title: "Erro ao atualizar orçamento", description: error.message, variant: "destructive" });
+      return;
+    }
     toast({ title: "Orçamento atualizado!" });
     setBudgetDialogOpen(false);
     onProjectUpdated();
