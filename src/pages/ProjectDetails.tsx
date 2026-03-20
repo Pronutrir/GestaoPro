@@ -393,6 +393,10 @@ const ProjectDetails = () => {
               <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
             </TabsContent>
 
+            <TabsContent value="stories" className="mt-0">
+              <UserStoriesBoard projectId={id!} />
+            </TabsContent>
+
             <TabsContent value="tap" className="mt-0">
               <ProjectCharter projectId={id!} project={project} phases={phases} members={members} />
             </TabsContent>
