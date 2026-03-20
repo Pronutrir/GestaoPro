@@ -268,7 +268,7 @@ export const EditActivityDialog = ({
 
           <div className="space-y-2">
             <Label htmlFor="description" className="text-sm font-semibold text-foreground">Descrição</Label>
-            <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} placeholder="Descreva a atividade..." />
+            <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} autoResize placeholder="Descreva a atividade..." className="break-words whitespace-pre-wrap" />
           </div>
 
           {/* Priority */}
