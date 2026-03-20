@@ -138,7 +138,6 @@ function KanbanCard({
   dragListeners,
   isAdmin,
   isBlocked,
-  storyCount,
 }: {
   activity: Activity;
   phases: Phase[];
