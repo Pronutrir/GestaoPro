@@ -196,20 +196,38 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
             <div className="space-y-3 p-4 bg-accent/20 rounded-lg border border-border">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Formato Ágil</p>
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2">
                   <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Como</span>
-                  <Input placeholder="persona (ex: gestor de projetos)" value={form.persona}
-                    onChange={(e) => setForm({ ...form, persona: e.target.value })} />
+                  <Textarea
+                    placeholder="persona (ex: gestor de projetos)"
+                    value={form.persona}
+                    onChange={(e) => setForm({ ...form, persona: e.target.value })}
+                    rows={1}
+                    autoResize
+                    className="min-h-[44px] break-words whitespace-pre-wrap"
+                  />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2">
                   <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Eu quero</span>
-                  <Input placeholder="ação desejada" value={form.action}
-                    onChange={(e) => setForm({ ...form, action: e.target.value })} />
+                  <Textarea
+                    placeholder="ação desejada"
+                    value={form.action}
+                    onChange={(e) => setForm({ ...form, action: e.target.value })}
+                    rows={1}
+                    autoResize
+                    className="min-h-[44px] break-words whitespace-pre-wrap"
+                  />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2">
                   <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Para que</span>
-                  <Input placeholder="benefício esperado" value={form.benefit}
-                    onChange={(e) => setForm({ ...form, benefit: e.target.value })} />
+                  <Textarea
+                    placeholder="benefício esperado"
+                    value={form.benefit}
+                    onChange={(e) => setForm({ ...form, benefit: e.target.value })}
+                    rows={1}
+                    autoResize
+                    className="min-h-[44px] break-words whitespace-pre-wrap"
+                  />
                 </div>
               </div>
             </div>
@@ -346,7 +364,7 @@ const StoryCard = ({ story, columns, onEdit, onDelete, onMove }: StoryCardProps)
       )}
 
       {story.narrative && (
-        <p className="text-[11px] text-muted-foreground line-clamp-2 break-words">{story.narrative}</p>
+        <p className="text-[11px] text-muted-foreground line-clamp-2 break-words whitespace-pre-wrap">{story.narrative}</p>
       )}
 
       <div className="flex items-center justify-between gap-1">

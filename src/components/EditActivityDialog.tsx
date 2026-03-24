@@ -215,7 +215,15 @@ export const EditActivityDialog = ({
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
-            <Input id="title" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} required className="font-medium break-words" />
+            <Textarea
+              id="title"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              required
+              rows={1}
+              autoResize
+              className="min-h-[44px] font-medium break-words whitespace-pre-wrap"
+            />
           </div>
 
           <div className="space-y-2">
