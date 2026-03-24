@@ -219,7 +219,7 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                      className="h-8 w-8"
                       onClick={() => startEdit(doc)}
                     >
                       <Pencil className="w-4 h-4" />
@@ -227,7 +227,7 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100 text-destructive"
+                      className="h-8 w-8 text-destructive"
                       onClick={() => handleDelete(doc.id)}
                     >
                       <Trash2 className="w-4 h-4" />
