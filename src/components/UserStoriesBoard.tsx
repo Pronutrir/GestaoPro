@@ -163,12 +163,12 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
         {KANBAN_COLUMNS.map(col => {
           const colStories = getStoriesByStatus(col.key);
           return (
-            <div key={col.key} className="space-y-2">
+            <div key={col.key} className="space-y-2 min-w-0">
               <div className={`flex items-center justify-between px-3 py-2 rounded-lg ${col.color}`}>
                 <span className={`text-sm font-semibold ${col.textColor}`}>{col.label}</span>
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0">{colStories.length}</Badge>
               </div>
-              <div className="space-y-2 min-h-[120px]">
+              <div className="space-y-2 min-h-[120px] min-w-0">
                 {colStories.map(story => (
                   <StoryCard
                     key={story.id}
@@ -196,7 +196,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
             <div className="space-y-3 p-4 bg-accent/20 rounded-lg border border-border">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Formato Ágil</p>
               <div className="space-y-2">
-                <div className="flex items-start gap-2">
+                <div className="flex items-start gap-2 min-w-0">
                   <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Como</span>
                   <Textarea
                     placeholder="persona (ex: gestor de projetos)"
@@ -204,10 +204,10 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                     onChange={(e) => setForm({ ...form, persona: e.target.value })}
                     rows={1}
                     autoResize
-                    className="min-h-[44px] break-words whitespace-pre-wrap"
+                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
                   />
                 </div>
-                <div className="flex items-start gap-2">
+                <div className="flex items-start gap-2 min-w-0">
                   <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Eu quero</span>
                   <Textarea
                     placeholder="ação desejada"
@@ -215,10 +215,10 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                     onChange={(e) => setForm({ ...form, action: e.target.value })}
                     rows={1}
                     autoResize
-                    className="min-h-[44px] break-words whitespace-pre-wrap"
+                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
                   />
                 </div>
-                <div className="flex items-start gap-2">
+                <div className="flex items-start gap-2 min-w-0">
                   <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Para que</span>
                   <Textarea
                     placeholder="benefício esperado"
@@ -226,7 +226,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                     onChange={(e) => setForm({ ...form, benefit: e.target.value })}
                     rows={1}
                     autoResize
-                    className="min-h-[44px] break-words whitespace-pre-wrap"
+                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
                   />
                 </div>
               </div>
@@ -241,7 +241,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                 onChange={(e) => setForm({ ...form, narrative: e.target.value })}
                 rows={4}
                 autoResize
-                className="break-words whitespace-pre-wrap"
+                className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
               />
             </div>
 
@@ -344,8 +344,8 @@ const StoryCard = ({ story, columns, onEdit, onDelete, onMove }: StoryCardProps)
       className="p-3 space-y-2 cursor-pointer hover:shadow-md transition-shadow group border-border/60"
       onClick={onEdit}
     >
-      <div className="flex items-start justify-between gap-1">
-        <p className="text-xs leading-relaxed text-foreground break-words whitespace-pre-wrap flex-1 min-w-0">
+      <div className="flex items-start justify-between gap-1 min-w-0">
+        <p className="text-xs leading-relaxed text-foreground break-words whitespace-pre-wrap [overflow-wrap:anywhere] flex-1 min-w-0">
           <span className="font-semibold text-primary">Como</span> {story.persona},{" "}
           <span className="font-semibold text-primary">eu quero</span> {story.action}
           {story.benefit && (
@@ -364,7 +364,7 @@ const StoryCard = ({ story, columns, onEdit, onDelete, onMove }: StoryCardProps)
       )}
 
       {story.narrative && (
-        <p className="text-[11px] text-muted-foreground line-clamp-2 break-words whitespace-pre-wrap">{story.narrative}</p>
+        <p className="text-[11px] text-muted-foreground line-clamp-2 break-words whitespace-pre-wrap [overflow-wrap:anywhere] min-w-0">{story.narrative}</p>
       )}
 
       <div className="flex items-center justify-between gap-1">

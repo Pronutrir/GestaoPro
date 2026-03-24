@@ -213,7 +213,7 @@ export const EditActivityDialog = ({
           <DialogTitle className="text-xl font-bold">Editar Atividade</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
             <Textarea
               id="title"
@@ -222,13 +222,13 @@ export const EditActivityDialog = ({
               required
               rows={1}
               autoResize
-              className="min-h-[44px] font-medium break-words whitespace-pre-wrap"
+              className="min-h-[44px] w-full min-w-0 font-medium break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             <Label htmlFor="description" className="text-sm font-semibold text-foreground">Descrição</Label>
-            <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} autoResize placeholder="Descreva a atividade..." className="break-words whitespace-pre-wrap" />
+            <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} autoResize placeholder="Descreva a atividade..." className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
           </div>
 
           {/* Priority */}

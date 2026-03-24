@@ -7,7 +7,7 @@ export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextArea
 }
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, autoResize = false, onChange, ...props }, ref) => {
+  ({ className, autoResize = false, onChange, style, wrap, ...props }, ref) => {
     const innerRef = React.useRef<HTMLTextAreaElement | null>(null);
 
     const adjustHeight = React.useCallback(() => {
@@ -25,10 +25,17 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <textarea
         className={cn(
-          "flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+          "block min-h-[80px] min-w-0 w-full rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
           autoResize && "resize-none overflow-hidden",
           className,
         )}
+        wrap={wrap ?? "soft"}
+        style={{
+          ...style,
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+          wordBreak: "break-word",
+        }}
         ref={(el) => {
           innerRef.current = el;
           if (typeof ref === "function") ref(el);
