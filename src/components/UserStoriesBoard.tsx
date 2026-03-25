@@ -105,6 +105,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
       persona: story.persona, action: story.action, benefit: story.benefit,
       narrative: story.narrative || "", priority: story.priority,
       image_url: story.image_url,
+      phase_id: story.phase_id || null, activity_id: story.activity_id || null,
     });
     setCriteria(story.acceptance_criteria || []);
     setDialogOpen(true);
