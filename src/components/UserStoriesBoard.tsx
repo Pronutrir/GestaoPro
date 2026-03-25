@@ -308,7 +308,37 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
               </div>
             </div>
 
-            {/* Narrative */}
+            {/* Vínculo EAP */}
+            <div className="space-y-3 p-4 bg-muted/30 rounded-lg border border-border">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Link2 className="w-3.5 h-3.5" /> Vínculo com EAP
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Fase</Label>
+                  <Select value={form.phase_id || "none"} onValueChange={(v) => setForm({ ...form, phase_id: v === "none" ? null : v, activity_id: null })}>
+                    <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {phases.map(p => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Atividade</Label>
+                  <Select value={form.activity_id || "none"} onValueChange={(v) => setForm({ ...form, activity_id: v === "none" ? null : v })}>
+                    <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {activities.filter(a => !form.phase_id || a.phase_id === form.phase_id).map(a => (
+                        <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Narrativa / Contexto</Label>
               <Textarea
