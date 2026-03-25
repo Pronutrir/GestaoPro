@@ -101,12 +101,15 @@ export const BacklogSection = ({
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .eq("is_active", true)
-        .order("full_name");
-      if (data) setProfiles(data);
+      // Fetch active profiles excluding admin users
+      const [{ data: profilesData }, { data: adminRoles }] = await Promise.all([
+        supabase.from("profiles").select("id, full_name").eq("is_active", true).order("full_name"),
+        supabase.from("user_roles").select("user_id").eq("role", "admin"),
+      ]);
+      if (profilesData) {
+        const adminIds = new Set((adminRoles || []).map((r: any) => r.user_id));
+        setProfiles(profilesData.filter((p) => !adminIds.has(p.id)));
+      }
     };
     fetchProfiles();
   }, []);
