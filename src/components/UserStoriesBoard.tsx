@@ -193,24 +193,22 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
     if (!over) return;
     const overId = String(over.id);
     const storyId = String(active.id);
+    const draggedStory = stories.find(s => s.id === storyId);
+    if (!draggedStory) return;
 
     // Check if dropped over a column
     const targetColumn = KANBAN_COLUMNS.find(c => c.key === overId);
     if (targetColumn) {
-      const story = stories.find(s => s.id === storyId);
-      if (story && story.status !== targetColumn.key) {
-        handleMoveStory(story, targetColumn.key);
+      if (draggedStory.status !== targetColumn.key) {
+        handleMoveStory(draggedStory, targetColumn.key);
       }
       return;
     }
 
     // Dropped over another story card — find its column
     const targetStory = stories.find(s => s.id === overId);
-    if (targetStory) {
-      const story = stories.find(s => s.id === storyId);
-      if (story && story.status !== targetStory.status) {
-        handleMoveStory(story, targetStory.status);
-      }
+    if (targetStory && draggedStory.status !== targetStory.status) {
+      handleMoveStory(draggedStory, targetStory.status);
     }
   };
 
