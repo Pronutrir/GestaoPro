@@ -3,6 +3,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Pencil,
   Trash2,
   CheckCircle2,
@@ -10,6 +17,7 @@ import {
   GripVertical,
   AlertCircle,
   Inbox,
+  ArrowUpDown,
 } from "lucide-react";
 import {
   DndContext,
