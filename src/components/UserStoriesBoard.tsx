@@ -457,12 +457,14 @@ const DroppableColumn = ({ columnKey, color, textColor, label, count, children }
 interface StoryCardProps {
   story: UserStory;
   columns: typeof KANBAN_COLUMNS;
+  phases: Phase[];
+  activities: Activity[];
   onEdit: () => void;
   onDelete: () => void;
   onMove: (status: string) => void;
 }
 
-const DraggableStoryCard = ({ story, columns, onEdit, onDelete, onMove }: StoryCardProps) => {
+const DraggableStoryCard = ({ story, columns, phases, activities, onEdit, onDelete, onMove }: StoryCardProps) => {
   const [showMenu, setShowMenu] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: story.id });
   const style = {
