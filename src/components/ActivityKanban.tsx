@@ -65,6 +65,7 @@ interface Activity {
   status: string;
   completed_at: string | null;
   created_at: string;
+  updated_at?: string;
   assigned_to: string | null;
   start_date: string | null;
   end_date: string | null;
