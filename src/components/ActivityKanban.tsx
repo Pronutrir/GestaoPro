@@ -714,6 +714,24 @@ export const ActivityKanban = ({
 
   return (
     <div className="space-y-3">
+      {/* Sort Filter Bar */}
+      <div className="flex items-center gap-2">
+        <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
+        <Select value={sortMode} onValueChange={setSortMode}>
+          <SelectTrigger className="h-8 text-xs w-[220px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="wbs_asc">EAP ↑ (crescente)</SelectItem>
+            <SelectItem value="wbs_desc">EAP ↓ (decrescente)</SelectItem>
+            <SelectItem value="updated_desc">Movimentação (recente)</SelectItem>
+            <SelectItem value="updated_asc">Movimentação (antiga)</SelectItem>
+            <SelectItem value="priority">Prioridade (alta primeiro)</SelectItem>
+            <SelectItem value="due_date">Prazo (próximo primeiro)</SelectItem>
+            <SelectItem value="assigned">Responsável (A-Z)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       <DndContext
         sensors={sensors}
         collisionDetection={rectIntersection}
