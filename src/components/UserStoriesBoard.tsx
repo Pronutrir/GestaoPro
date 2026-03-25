@@ -144,6 +144,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
       image_url: form.image_url,
       acceptance_criteria: criteria,
       priority: form.priority,
+      phase_id: form.phase_id,
+      activity_id: form.activity_id,
     };
 
     if (editingStory) {
