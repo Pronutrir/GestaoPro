@@ -239,6 +239,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                       key={story.id}
                       story={story}
                       columns={KANBAN_COLUMNS}
+                      phases={phases}
+                      activities={activities}
                       onEdit={() => openEditDialog(story)}
                       onDelete={() => handleDelete(story.id)}
                       onMove={(status) => handleMoveStory(story, status)}
