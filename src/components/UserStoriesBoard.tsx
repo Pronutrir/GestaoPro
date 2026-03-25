@@ -506,7 +506,19 @@ const DraggableStoryCard = ({ story, columns, phases, activities, onEdit, onDele
         <p className="text-[11px] text-muted-foreground line-clamp-2 break-words whitespace-pre-wrap [overflow-wrap:anywhere] min-w-0">{story.narrative}</p>
       )}
 
-      <div className="flex items-center justify-between gap-1">
+      {(story.phase_id || story.activity_id) && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {story.phase_id && (() => {
+            const phase = phases.find(p => p.id === story.phase_id);
+            return phase ? <Badge variant="secondary" className="text-[10px] px-1.5 py-0">📁 {phase.title}</Badge> : null;
+          })()}
+          {story.activity_id && (() => {
+            const act = activities.find(a => a.id === story.activity_id);
+            return act ? <Badge variant="secondary" className="text-[10px] px-1.5 py-0">📋 {act.title}</Badge> : null;
+          })()}
+        </div>
+      )}
+
         <div className="flex items-center gap-1">
           <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${story.priority === "high" ? "border-destructive text-destructive" : story.priority === "medium" ? "border-warning text-warning" : "border-border"}`}>
             {story.priority === "high" ? "Alta" : story.priority === "medium" ? "Média" : "Baixa"}
