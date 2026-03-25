@@ -576,7 +576,7 @@ export const ActivityKanban = ({
     });
 
     return map;
-  }, [activities, stages, phases, optimisticMoves]);
+  }, [activities, stages, phases, optimisticMoves, sortMode]);
 
   
 
