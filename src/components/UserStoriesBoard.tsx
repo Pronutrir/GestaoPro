@@ -519,6 +519,7 @@ const DraggableStoryCard = ({ story, columns, phases, activities, onEdit, onDele
         </div>
       )}
 
+      <div className="flex items-center justify-between gap-1">
         <div className="flex items-center gap-1">
           <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${story.priority === "high" ? "border-destructive text-destructive" : story.priority === "medium" ? "border-warning text-warning" : "border-border"}`}>
             {story.priority === "high" ? "Alta" : story.priority === "medium" ? "Média" : "Baixa"}
