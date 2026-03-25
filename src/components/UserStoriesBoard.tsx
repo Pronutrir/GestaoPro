@@ -9,6 +9,12 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
+  DndContext, closestCenter, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay,
+  PointerSensor, useSensor, useSensors,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Plus, Trash2, CheckCircle2, Circle, X, Image as ImageIcon,
   BookOpen, ChevronDown, GripVertical, Upload,
 } from "lucide-react";
