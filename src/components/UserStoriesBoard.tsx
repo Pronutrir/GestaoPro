@@ -41,8 +41,9 @@ interface Activity { id: string; title: string; phase_id: string | null; }
 
 const KANBAN_COLUMNS = [
   { key: "draft", label: "Rascunho", color: "bg-muted", textColor: "text-muted-foreground" },
-  { key: "analysis", label: "Análise", color: "bg-info/15", textColor: "text-info" },
+  { key: "analysis", label: "Em Análise", color: "bg-info/15", textColor: "text-info" },
   { key: "validated", label: "Validada", color: "bg-warning/15", textColor: "text-warning" },
+  { key: "implementing", label: "Implementando", color: "bg-primary/15", textColor: "text-primary" },
   { key: "done", label: "Concluída", color: "bg-success/15", textColor: "text-success" },
 ];
 
