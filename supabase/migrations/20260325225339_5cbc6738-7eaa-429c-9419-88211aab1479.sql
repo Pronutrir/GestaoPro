@@ -1,0 +1,1 @@
+ALTER TABLE public.user_stories ADD COLUMN IF NOT EXISTS phase_id uuid REFERENCES public.phases(id) ON DELETE SET NULL;

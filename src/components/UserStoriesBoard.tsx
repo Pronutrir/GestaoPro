@@ -16,13 +16,15 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import {
   Plus, Trash2, CheckCircle2, Circle, X, Image as ImageIcon,
-  BookOpen, ChevronDown, GripVertical, Upload,
+  BookOpen, ChevronDown, GripVertical, Upload, Link2,
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface UserStory {
   id: string;
   project_id: string;
   activity_id: string | null;
+  phase_id: string | null;
   persona: string;
   action: string;
   benefit: string;
@@ -33,6 +35,9 @@ interface UserStory {
   status: string;
   created_at: string;
 }
+
+interface Phase { id: string; title: string; display_order: number | null; }
+interface Activity { id: string; title: string; phase_id: string | null; }
 
 const KANBAN_COLUMNS = [
   { key: "draft", label: "Rascunho", color: "bg-muted", textColor: "text-muted-foreground" },
@@ -53,16 +58,30 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [phases, setPhases] = useState<Phase[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+
   const [form, setForm] = useState({
     persona: "", action: "", benefit: "", narrative: "",
     priority: "medium", image_url: null as string | null,
+    phase_id: null as string | null, activity_id: null as string | null,
   });
   const [criteria, setCriteria] = useState<string[]>([]);
   const [newCriterion, setNewCriterion] = useState("");
 
   useEffect(() => {
     fetchStories();
+    fetchPhasesAndActivities();
   }, [projectId]);
+
+  const fetchPhasesAndActivities = async () => {
+    const [{ data: ph }, { data: act }] = await Promise.all([
+      supabase.from("phases").select("id, title, display_order").eq("project_id", projectId).order("display_order"),
+      supabase.from("activities").select("id, title, phase_id").eq("project_id", projectId).order("title"),
+    ]);
+    if (ph) setPhases(ph);
+    if (act) setActivities(act);
+  };
 
   const fetchStories = async () => {
     const { data } = await supabase
@@ -75,7 +94,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
   const openCreateDialog = (status = "draft") => {
     setEditingStory(null);
-    setForm({ persona: "", action: "", benefit: "", narrative: "", priority: "medium", image_url: null });
+    setForm({ persona: "", action: "", benefit: "", narrative: "", priority: "medium", image_url: null, phase_id: null, activity_id: null });
     setCriteria([]);
     setDialogOpen(true);
   };
@@ -86,6 +105,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
       persona: story.persona, action: story.action, benefit: story.benefit,
       narrative: story.narrative || "", priority: story.priority,
       image_url: story.image_url,
+      phase_id: story.phase_id || null, activity_id: story.activity_id || null,
     });
     setCriteria(story.acceptance_criteria || []);
     setDialogOpen(true);
@@ -124,6 +144,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
       image_url: form.image_url,
       acceptance_criteria: criteria,
       priority: form.priority,
+      phase_id: form.phase_id,
+      activity_id: form.activity_id,
     };
 
     if (editingStory) {
@@ -217,6 +239,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                       key={story.id}
                       story={story}
                       columns={KANBAN_COLUMNS}
+                      phases={phases}
+                      activities={activities}
                       onEdit={() => openEditDialog(story)}
                       onDelete={() => handleDelete(story.id)}
                       onMove={(status) => handleMoveStory(story, status)}
@@ -286,7 +310,37 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
               </div>
             </div>
 
-            {/* Narrative */}
+            {/* Vínculo EAP */}
+            <div className="space-y-3 p-4 bg-muted/30 rounded-lg border border-border">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Link2 className="w-3.5 h-3.5" /> Vínculo com EAP
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Fase</Label>
+                  <Select value={form.phase_id || "none"} onValueChange={(v) => setForm({ ...form, phase_id: v === "none" ? null : v, activity_id: null })}>
+                    <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {phases.map(p => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Atividade</Label>
+                  <Select value={form.activity_id || "none"} onValueChange={(v) => setForm({ ...form, activity_id: v === "none" ? null : v })}>
+                    <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {activities.filter(a => !form.phase_id || a.phase_id === form.phase_id).map(a => (
+                        <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Narrativa / Contexto</Label>
               <Textarea
@@ -403,12 +457,14 @@ const DroppableColumn = ({ columnKey, color, textColor, label, count, children }
 interface StoryCardProps {
   story: UserStory;
   columns: typeof KANBAN_COLUMNS;
+  phases: Phase[];
+  activities: Activity[];
   onEdit: () => void;
   onDelete: () => void;
   onMove: (status: string) => void;
 }
 
-const DraggableStoryCard = ({ story, columns, onEdit, onDelete, onMove }: StoryCardProps) => {
+const DraggableStoryCard = ({ story, columns, phases, activities, onEdit, onDelete, onMove }: StoryCardProps) => {
   const [showMenu, setShowMenu] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: story.id });
   const style = {
@@ -448,6 +504,19 @@ const DraggableStoryCard = ({ story, columns, onEdit, onDelete, onMove }: StoryC
 
       {story.narrative && (
         <p className="text-[11px] text-muted-foreground line-clamp-2 break-words whitespace-pre-wrap [overflow-wrap:anywhere] min-w-0">{story.narrative}</p>
+      )}
+
+      {(story.phase_id || story.activity_id) && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {story.phase_id && (() => {
+            const phase = phases.find(p => p.id === story.phase_id);
+            return phase ? <Badge variant="secondary" className="text-[10px] px-1.5 py-0">📁 {phase.title}</Badge> : null;
+          })()}
+          {story.activity_id && (() => {
+            const act = activities.find(a => a.id === story.activity_id);
+            return act ? <Badge variant="secondary" className="text-[10px] px-1.5 py-0">📋 {act.title}</Badge> : null;
+          })()}
+        </div>
       )}
 
       <div className="flex items-center justify-between gap-1">

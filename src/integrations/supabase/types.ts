@@ -1325,6 +1325,7 @@ export type Database = {
           image_url: string | null
           narrative: string | null
           persona: string
+          phase_id: string | null
           priority: string
           project_id: string
           status: string
@@ -1340,6 +1341,7 @@ export type Database = {
           image_url?: string | null
           narrative?: string | null
           persona?: string
+          phase_id?: string | null
           priority?: string
           project_id: string
           status?: string
@@ -1355,6 +1357,7 @@ export type Database = {
           image_url?: string | null
           narrative?: string | null
           persona?: string
+          phase_id?: string | null
           priority?: string
           project_id?: string
           status?: string
@@ -1366,6 +1369,13 @@ export type Database = {
             columns: ["activity_id"]
             isOneToOne: false
             referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_stories_phase_id_fkey"
+            columns: ["phase_id"]
+            isOneToOne: false
+            referencedRelation: "phases"
             referencedColumns: ["id"]
           },
           {
