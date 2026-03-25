@@ -24,6 +24,7 @@ interface UserStory {
   id: string;
   project_id: string;
   activity_id: string | null;
+  phase_id: string | null;
   persona: string;
   action: string;
   benefit: string;
@@ -34,6 +35,9 @@ interface UserStory {
   status: string;
   created_at: string;
 }
+
+interface Phase { id: string; title: string; display_order: number | null; }
+interface Activity { id: string; title: string; phase_id: string | null; }
 
 const KANBAN_COLUMNS = [
   { key: "draft", label: "Rascunho", color: "bg-muted", textColor: "text-muted-foreground" },
