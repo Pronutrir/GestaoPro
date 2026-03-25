@@ -58,9 +58,13 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [phases, setPhases] = useState<Phase[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+
   const [form, setForm] = useState({
     persona: "", action: "", benefit: "", narrative: "",
     priority: "medium", image_url: null as string | null,
+    phase_id: null as string | null, activity_id: null as string | null,
   });
   const [criteria, setCriteria] = useState<string[]>([]);
   const [newCriterion, setNewCriterion] = useState("");
