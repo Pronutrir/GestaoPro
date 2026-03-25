@@ -175,7 +175,7 @@ export const BacklogSection = ({
     setIsMoving(true);
     const ids = Array.from(selectedIds);
     const updateData: Record<string, unknown> = { workflow_stage_id: targetStageId };
-    if (assignee.trim()) updateData.assigned_to = assignee.trim();
+    if (assignee && assignee !== "__none__") updateData.assigned_to = assignee;
 
     await supabase
       .from("activities")

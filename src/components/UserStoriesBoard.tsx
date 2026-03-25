@@ -423,6 +423,9 @@ const DraggableStoryCard = ({ story, columns, onEdit, onDelete, onMove }: StoryC
       onClick={onEdit}
     >
       <div className="flex items-start justify-between gap-1 min-w-0">
+        <div {...attributes} {...listeners} className="shrink-0 cursor-grab active:cursor-grabbing pt-0.5 touch-none">
+          <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
+        </div>
         <p className="text-xs leading-relaxed text-foreground break-words whitespace-pre-wrap [overflow-wrap:anywhere] flex-1 min-w-0">
           <span className="font-semibold text-primary">Como</span> {story.persona},{" "}
           <span className="font-semibold text-primary">eu quero</span> {story.action}
