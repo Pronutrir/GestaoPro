@@ -97,6 +97,19 @@ export const BacklogSection = ({
   const [assignee, setAssignee] = useState<string>("");
   const [isMoving, setIsMoving] = useState(false);
   const [filterPhaseId, setFilterPhaseId] = useState<string>("all");
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string | null }[]>([]);
+
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("is_active", true)
+        .order("full_name");
+      if (data) setProfiles(data);
+    };
+    fetchProfiles();
+  }, []);
 
   useEffect(() => {
     const fetchStages = async () => {
@@ -162,7 +175,7 @@ export const BacklogSection = ({
     setIsMoving(true);
     const ids = Array.from(selectedIds);
     const updateData: Record<string, unknown> = { workflow_stage_id: targetStageId };
-    if (assignee.trim()) updateData.assigned_to = assignee.trim();
+    if (assignee && assignee !== "__none__") updateData.assigned_to = assignee;
 
     await supabase
       .from("activities")
@@ -334,11 +347,19 @@ export const BacklogSection = ({
             </div>
             <div className="space-y-2">
               <Label>Responsável (opcional)</Label>
-              <Input
-                placeholder="Nome do responsável"
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
-              />
+              <Select value={assignee} onValueChange={setAssignee}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Nenhum</SelectItem>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.id} value={p.full_name || p.id}>
+                      {p.full_name || "Sem nome"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-1">
               <p className="text-xs text-muted-foreground mb-1">Atividades selecionadas:</p>

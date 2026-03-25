@@ -9,6 +9,12 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
+  DndContext, closestCenter, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay,
+  PointerSensor, useSensor, useSensors,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Plus, Trash2, CheckCircle2, Circle, X, Image as ImageIcon,
   BookOpen, ChevronDown, GripVertical, Upload,
 } from "lucide-react";
@@ -145,6 +151,44 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
   const getStoriesByStatus = (status: string) => stories.filter(s => s.status === status);
 
+  const [activeStory, setActiveStory] = useState<UserStory | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const story = stories.find(s => s.id === event.active.id);
+    setActiveStory(story || null);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveStory(null);
+    const { active, over } = event;
+    if (!over) return;
+    const overId = String(over.id);
+    const storyId = String(active.id);
+
+    // Check if dropped over a column
+    const targetColumn = KANBAN_COLUMNS.find(c => c.key === overId);
+    if (targetColumn) {
+      const story = stories.find(s => s.id === storyId);
+      if (story && story.status !== targetColumn.key) {
+        handleMoveStory(story, targetColumn.key);
+      }
+      return;
+    }
+
+    // Dropped over another story card — find its column
+    const targetStory = stories.find(s => s.id === overId);
+    if (targetStory) {
+      const story = stories.find(s => s.id === storyId);
+      if (story && story.status !== targetStory.status) {
+        handleMoveStory(story, targetStory.status);
+      }
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -158,32 +202,40 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
         </Button>
       </div>
 
-      {/* Kanban Board */}
-      <div className="grid grid-cols-4 gap-3">
-        {KANBAN_COLUMNS.map(col => {
-          const colStories = getStoriesByStatus(col.key);
-          return (
-            <div key={col.key} className="space-y-2 min-w-0">
-              <div className={`flex items-center justify-between px-3 py-2 rounded-lg ${col.color}`}>
-                <span className={`text-sm font-semibold ${col.textColor}`}>{col.label}</span>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0">{colStories.length}</Badge>
-              </div>
-              <div className="space-y-2 min-h-[120px] min-w-0">
-                {colStories.map(story => (
-                  <StoryCard
-                    key={story.id}
-                    story={story}
-                    columns={KANBAN_COLUMNS}
-                    onEdit={() => openEditDialog(story)}
-                    onDelete={() => handleDelete(story.id)}
-                    onMove={(status) => handleMoveStory(story, status)}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* Kanban Board with DnD */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className="grid grid-cols-4 gap-3">
+          {KANBAN_COLUMNS.map(col => {
+            const colStories = getStoriesByStatus(col.key);
+            return (
+              <DroppableColumn key={col.key} columnKey={col.key} color={col.color} textColor={col.textColor} label={col.label} count={colStories.length}>
+                <SortableContext items={colStories.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                  {colStories.map(story => (
+                    <DraggableStoryCard
+                      key={story.id}
+                      story={story}
+                      columns={KANBAN_COLUMNS}
+                      onEdit={() => openEditDialog(story)}
+                      onDelete={() => handleDelete(story.id)}
+                      onMove={(status) => handleMoveStory(story, status)}
+                    />
+                  ))}
+                </SortableContext>
+              </DroppableColumn>
+            );
+          })}
+        </div>
+        <DragOverlay>
+          {activeStory ? (
+            <Card className="p-3 shadow-lg opacity-90 rotate-2 border-primary">
+              <p className="text-xs text-foreground">
+                <span className="font-semibold text-primary">Como</span> {activeStory.persona},{" "}
+                <span className="font-semibold text-primary">eu quero</span> {activeStory.action}
+              </p>
+            </Card>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -327,7 +379,25 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   );
 };
 
-/* ── Story Card ── */
+/* ── Droppable Column ── */
+const DroppableColumn = ({ columnKey, color, textColor, label, count, children }: {
+  columnKey: string; color: string; textColor: string; label: string; count: number; children: React.ReactNode;
+}) => {
+  const { setNodeRef, isOver } = useSortable({ id: columnKey, data: { type: "column" } });
+  return (
+    <div ref={setNodeRef} className={`space-y-2 min-w-0 transition-colors rounded-lg ${isOver ? "bg-primary/5" : ""}`}>
+      <div className={`flex items-center justify-between px-3 py-2 rounded-lg ${color}`}>
+        <span className={`text-sm font-semibold ${textColor}`}>{label}</span>
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{count}</Badge>
+      </div>
+      <div className="space-y-2 min-h-[120px] min-w-0 p-1">
+        {children}
+      </div>
+    </div>
+  );
+};
+
+/* ── Draggable Story Card ── */
 interface StoryCardProps {
   story: UserStory;
   columns: typeof KANBAN_COLUMNS;
@@ -336,15 +406,26 @@ interface StoryCardProps {
   onMove: (status: string) => void;
 }
 
-const StoryCard = ({ story, columns, onEdit, onDelete, onMove }: StoryCardProps) => {
+const DraggableStoryCard = ({ story, columns, onEdit, onDelete, onMove }: StoryCardProps) => {
   const [showMenu, setShowMenu] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: story.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
 
   return (
     <Card
+      ref={setNodeRef}
+      style={style}
       className="p-3 space-y-2 cursor-pointer hover:shadow-md transition-shadow group border-border/60"
       onClick={onEdit}
     >
       <div className="flex items-start justify-between gap-1 min-w-0">
+        <div {...attributes} {...listeners} className="shrink-0 cursor-grab active:cursor-grabbing pt-0.5 touch-none">
+          <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
+        </div>
         <p className="text-xs leading-relaxed text-foreground break-words whitespace-pre-wrap [overflow-wrap:anywhere] flex-1 min-w-0">
           <span className="font-semibold text-primary">Como</span> {story.persona},{" "}
           <span className="font-semibold text-primary">eu quero</span> {story.action}
