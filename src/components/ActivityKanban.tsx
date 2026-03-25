@@ -313,6 +313,7 @@ function SortableColumn({
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
 }) {
+  const [colSort, setColSort] = useState<string>("wbs_asc");
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
 
@@ -324,6 +325,46 @@ function SortableColumn({
     marginRight: isLast ? 0 : 6,
   };
 
+  const phaseOrderMap: Record<string, number> = {};
+  phases.forEach((p, i) => { phaseOrderMap[p.id] = i; });
+  const priorityWeight: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+  const sortedActivities = useMemo(() => {
+    const sorted = [...stageActivities];
+    sorted.sort((a, b) => {
+      switch (colSort) {
+        case "wbs_asc": {
+          const pA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
+          const pB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
+          if (pA !== pB) return pA - pB;
+          return (a.display_order ?? 9999) - (b.display_order ?? 9999);
+        }
+        case "wbs_desc": {
+          const pA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? -1) : -1;
+          const pB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? -1) : -1;
+          if (pA !== pB) return pB - pA;
+          return (b.display_order ?? -1) - (a.display_order ?? -1);
+        }
+        case "updated_desc":
+          return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
+        case "updated_asc":
+          return new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime();
+        case "priority":
+          return (priorityWeight[a.priority || "medium"] ?? 1) - (priorityWeight[b.priority || "medium"] ?? 1);
+        case "due_date": {
+          const da = a.end_date ? new Date(a.end_date).getTime() : Infinity;
+          const db = b.end_date ? new Date(b.end_date).getTime() : Infinity;
+          return da - db;
+        }
+        case "assigned":
+          return (a.assigned_to || "zzz").localeCompare(b.assigned_to || "zzz");
+        default:
+          return 0;
+      }
+    });
+    return sorted;
+  }, [stageActivities, colSort, phases]);
+
   return (
     <div
       ref={setNodeRef}
@@ -334,8 +375,8 @@ function SortableColumn({
       }`}
     >
       {/* Column Header - drag handle for column reordering */}
-      <div className="p-3 border-b border-border/50 cursor-grab active:cursor-grabbing" {...listeners}>
-        <div className="flex items-center justify-between">
+      <div className="p-2 border-b border-border/50">
+        <div className="flex items-center justify-between cursor-grab active:cursor-grabbing" {...listeners}>
           <div className="flex items-center gap-2 min-w-0">
             <div
               className="w-3 h-3 rounded-full shrink-0"
@@ -347,20 +388,41 @@ function SortableColumn({
             {stageActivities.length}
           </Badge>
         </div>
+        {stageActivities.length > 1 && (
+          <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+            <Select value={colSort} onValueChange={setColSort}>
+              <SelectTrigger className="h-6 text-[10px] w-full border-border/40 bg-background/50">
+                <div className="flex items-center gap-1">
+                  <ArrowUpDown className="w-3 h-3 shrink-0" />
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="wbs_asc">EAP ↑</SelectItem>
+                <SelectItem value="wbs_desc">EAP ↓</SelectItem>
+                <SelectItem value="updated_desc">Recente</SelectItem>
+                <SelectItem value="updated_asc">Antiga</SelectItem>
+                <SelectItem value="priority">Prioridade</SelectItem>
+                <SelectItem value="due_date">Prazo</SelectItem>
+                <SelectItem value="assigned">Responsável</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* Droppable Column Body */}
       <DroppableColumn stage={stage}>
         <SortableContext
-          items={stageActivities.map((a) => a.id)}
+          items={sortedActivities.map((a) => a.id)}
           strategy={verticalListSortingStrategy}
         >
-          {stageActivities.length === 0 ? (
+          {sortedActivities.length === 0 ? (
             <div className="flex items-center justify-center h-20 border-2 border-dashed border-border/40 rounded-lg">
               <p className="text-xs text-muted-foreground/50">Arraste aqui</p>
             </div>
           ) : (
-            stageActivities.map((activity) => (
+            sortedActivities.map((activity) => (
               <SortableKanbanCard
                 key={activity.id}
                 activity={activity}
