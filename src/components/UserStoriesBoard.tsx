@@ -379,7 +379,25 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   );
 };
 
-/* ── Story Card ── */
+/* ── Droppable Column ── */
+const DroppableColumn = ({ columnKey, color, textColor, label, count, children }: {
+  columnKey: string; color: string; textColor: string; label: string; count: number; children: React.ReactNode;
+}) => {
+  const { setNodeRef, isOver } = useSortable({ id: columnKey, data: { type: "column" } });
+  return (
+    <div ref={setNodeRef} className={`space-y-2 min-w-0 transition-colors rounded-lg ${isOver ? "bg-primary/5" : ""}`}>
+      <div className={`flex items-center justify-between px-3 py-2 rounded-lg ${color}`}>
+        <span className={`text-sm font-semibold ${textColor}`}>{label}</span>
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{count}</Badge>
+      </div>
+      <div className="space-y-2 min-h-[120px] min-w-0 p-1">
+        {children}
+      </div>
+    </div>
+  );
+};
+
+/* ── Draggable Story Card ── */
 interface StoryCardProps {
   story: UserStory;
   columns: typeof KANBAN_COLUMNS;
@@ -388,11 +406,19 @@ interface StoryCardProps {
   onMove: (status: string) => void;
 }
 
-const StoryCard = ({ story, columns, onEdit, onDelete, onMove }: StoryCardProps) => {
+const DraggableStoryCard = ({ story, columns, onEdit, onDelete, onMove }: StoryCardProps) => {
   const [showMenu, setShowMenu] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: story.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
 
   return (
     <Card
+      ref={setNodeRef}
+      style={style}
       className="p-3 space-y-2 cursor-pointer hover:shadow-md transition-shadow group border-border/60"
       onClick={onEdit}
     >
