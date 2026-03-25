@@ -145,8 +145,10 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleMoveStory = async (story: UserStory, newStatus: string) => {
-    await supabase.from("user_stories").update({ status: newStatus }).eq("id", story.id);
-    fetchStories();
+    // Optimistic update
+    setStories(prev => prev.map(s => s.id === story.id ? { ...s, status: newStatus } : s));
+    const { error } = await supabase.from("user_stories").update({ status: newStatus }).eq("id", story.id);
+    if (error) fetchStories(); // rollback on error
   };
 
   const getStoriesByStatus = (status: string) => stories.filter(s => s.status === status);
