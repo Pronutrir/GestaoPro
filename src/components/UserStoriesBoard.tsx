@@ -227,7 +227,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
       {/* Kanban Board with DnD */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-5 gap-3">
           {KANBAN_COLUMNS.map(col => {
             const colStories = getStoriesByStatus(col.key);
             return (
