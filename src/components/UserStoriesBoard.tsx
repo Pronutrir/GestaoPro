@@ -41,8 +41,9 @@ interface Activity { id: string; title: string; phase_id: string | null; }
 
 const KANBAN_COLUMNS = [
   { key: "draft", label: "Rascunho", color: "bg-muted", textColor: "text-muted-foreground" },
-  { key: "analysis", label: "Análise", color: "bg-info/15", textColor: "text-info" },
+  { key: "analysis", label: "Em Análise", color: "bg-info/15", textColor: "text-info" },
   { key: "validated", label: "Validada", color: "bg-warning/15", textColor: "text-warning" },
+  { key: "implementing", label: "Implementando", color: "bg-primary/15", textColor: "text-primary" },
   { key: "done", label: "Concluída", color: "bg-success/15", textColor: "text-success" },
 ];
 
@@ -192,24 +193,22 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
     if (!over) return;
     const overId = String(over.id);
     const storyId = String(active.id);
+    const draggedStory = stories.find(s => s.id === storyId);
+    if (!draggedStory) return;
 
     // Check if dropped over a column
     const targetColumn = KANBAN_COLUMNS.find(c => c.key === overId);
     if (targetColumn) {
-      const story = stories.find(s => s.id === storyId);
-      if (story && story.status !== targetColumn.key) {
-        handleMoveStory(story, targetColumn.key);
+      if (draggedStory.status !== targetColumn.key) {
+        handleMoveStory(draggedStory, targetColumn.key);
       }
       return;
     }
 
     // Dropped over another story card — find its column
     const targetStory = stories.find(s => s.id === overId);
-    if (targetStory) {
-      const story = stories.find(s => s.id === storyId);
-      if (story && story.status !== targetStory.status) {
-        handleMoveStory(story, targetStory.status);
-      }
+    if (targetStory && draggedStory.status !== targetStory.status) {
+      handleMoveStory(draggedStory, targetStory.status);
     }
   };
 
@@ -228,7 +227,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
       {/* Kanban Board with DnD */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-5 gap-3">
           {KANBAN_COLUMNS.map(col => {
             const colStories = getStoriesByStatus(col.key);
             return (
