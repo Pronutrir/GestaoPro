@@ -537,18 +537,42 @@ export const ActivityKanban = ({
       phaseOrderMap[p.id] = i;
     });
 
+    const priorityWeight: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+    const sortFn = (a: Activity, b: Activity): number => {
+      switch (sortMode) {
+        case "wbs_asc": {
+          const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
+          const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
+          if (phaseA !== phaseB) return phaseA - phaseB;
+          return (a.display_order ?? 9999) - (b.display_order ?? 9999);
+        }
+        case "wbs_desc": {
+          const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? -1) : -1;
+          const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? -1) : -1;
+          if (phaseA !== phaseB) return phaseB - phaseA;
+          return (b.display_order ?? -1) - (a.display_order ?? -1);
+        }
+        case "updated_desc":
+          return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
+        case "updated_asc":
+          return new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime();
+        case "priority":
+          return (priorityWeight[a.priority || "medium"] ?? 1) - (priorityWeight[b.priority || "medium"] ?? 1);
+        case "due_date": {
+          const da = a.end_date ? new Date(a.end_date).getTime() : Infinity;
+          const db = b.end_date ? new Date(b.end_date).getTime() : Infinity;
+          return da - db;
+        }
+        case "assigned":
+          return (a.assigned_to || "zzz").localeCompare(b.assigned_to || "zzz");
+        default:
+          return 0;
+      }
+    };
+
     Object.keys(map).forEach((key) => {
-      map[key].sort((a, b) => {
-        const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
-        const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
-        if (phaseA !== phaseB) return phaseA - phaseB;
-        const orderA = a.display_order ?? 9999;
-        const orderB = b.display_order ?? 9999;
-        if (orderA !== orderB) return orderA - orderB;
-        if (a.parent_id === null && b.parent_id !== null) return -1;
-        if (a.parent_id !== null && b.parent_id === null) return 1;
-        return 0;
-      });
+      map[key].sort(sortFn);
     });
 
     return map;
