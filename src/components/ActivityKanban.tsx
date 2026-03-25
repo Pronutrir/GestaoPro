@@ -3,6 +3,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Pencil,
   Trash2,
   CheckCircle2,
@@ -10,6 +17,7 @@ import {
   GripVertical,
   AlertCircle,
   Inbox,
+  ArrowUpDown,
 } from "lucide-react";
 import {
   DndContext,
@@ -57,6 +65,7 @@ interface Activity {
   status: string;
   completed_at: string | null;
   created_at: string;
+  updated_at?: string;
   assigned_to: string | null;
   start_date: string | null;
   end_date: string | null;
@@ -418,6 +427,7 @@ export const ActivityKanban = ({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [sortMode, setSortMode] = useState<string>("wbs_asc");
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
   
@@ -527,22 +537,46 @@ export const ActivityKanban = ({
       phaseOrderMap[p.id] = i;
     });
 
+    const priorityWeight: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+    const sortFn = (a: Activity, b: Activity): number => {
+      switch (sortMode) {
+        case "wbs_asc": {
+          const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
+          const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
+          if (phaseA !== phaseB) return phaseA - phaseB;
+          return (a.display_order ?? 9999) - (b.display_order ?? 9999);
+        }
+        case "wbs_desc": {
+          const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? -1) : -1;
+          const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? -1) : -1;
+          if (phaseA !== phaseB) return phaseB - phaseA;
+          return (b.display_order ?? -1) - (a.display_order ?? -1);
+        }
+        case "updated_desc":
+          return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
+        case "updated_asc":
+          return new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime();
+        case "priority":
+          return (priorityWeight[a.priority || "medium"] ?? 1) - (priorityWeight[b.priority || "medium"] ?? 1);
+        case "due_date": {
+          const da = a.end_date ? new Date(a.end_date).getTime() : Infinity;
+          const db = b.end_date ? new Date(b.end_date).getTime() : Infinity;
+          return da - db;
+        }
+        case "assigned":
+          return (a.assigned_to || "zzz").localeCompare(b.assigned_to || "zzz");
+        default:
+          return 0;
+      }
+    };
+
     Object.keys(map).forEach((key) => {
-      map[key].sort((a, b) => {
-        const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
-        const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
-        if (phaseA !== phaseB) return phaseA - phaseB;
-        const orderA = a.display_order ?? 9999;
-        const orderB = b.display_order ?? 9999;
-        if (orderA !== orderB) return orderA - orderB;
-        if (a.parent_id === null && b.parent_id !== null) return -1;
-        if (a.parent_id !== null && b.parent_id === null) return 1;
-        return 0;
-      });
+      map[key].sort(sortFn);
     });
 
     return map;
-  }, [activities, stages, phases, optimisticMoves]);
+  }, [activities, stages, phases, optimisticMoves, sortMode]);
 
   
 
@@ -680,6 +714,24 @@ export const ActivityKanban = ({
 
   return (
     <div className="space-y-3">
+      {/* Sort Filter Bar */}
+      <div className="flex items-center gap-2">
+        <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
+        <Select value={sortMode} onValueChange={setSortMode}>
+          <SelectTrigger className="h-8 text-xs w-[220px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="wbs_asc">EAP ↑ (crescente)</SelectItem>
+            <SelectItem value="wbs_desc">EAP ↓ (decrescente)</SelectItem>
+            <SelectItem value="updated_desc">Movimentação (recente)</SelectItem>
+            <SelectItem value="updated_asc">Movimentação (antiga)</SelectItem>
+            <SelectItem value="priority">Prioridade (alta primeiro)</SelectItem>
+            <SelectItem value="due_date">Prazo (próximo primeiro)</SelectItem>
+            <SelectItem value="assigned">Responsável (A-Z)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       <DndContext
         sensors={sensors}
         collisionDetection={rectIntersection}
