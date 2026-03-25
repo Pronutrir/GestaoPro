@@ -97,6 +97,19 @@ export const BacklogSection = ({
   const [assignee, setAssignee] = useState<string>("");
   const [isMoving, setIsMoving] = useState(false);
   const [filterPhaseId, setFilterPhaseId] = useState<string>("all");
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string | null }[]>([]);
+
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("is_active", true)
+        .order("full_name");
+      if (data) setProfiles(data);
+    };
+    fetchProfiles();
+  }, []);
 
   useEffect(() => {
     const fetchStages = async () => {
