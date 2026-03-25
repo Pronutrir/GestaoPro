@@ -71,7 +71,17 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
   useEffect(() => {
     fetchStories();
+    fetchPhasesAndActivities();
   }, [projectId]);
+
+  const fetchPhasesAndActivities = async () => {
+    const [{ data: ph }, { data: act }] = await Promise.all([
+      supabase.from("phases").select("id, title, display_order").eq("project_id", projectId).order("display_order"),
+      supabase.from("activities").select("id, title, phase_id").eq("project_id", projectId).order("title"),
+    ]);
+    if (ph) setPhases(ph);
+    if (act) setActivities(act);
+  };
 
   const fetchStories = async () => {
     const { data } = await supabase
