@@ -1328,6 +1328,7 @@ export type Database = {
           phase_id: string | null
           priority: string
           project_id: string
+          stage_id: string | null
           status: string
           updated_at: string
         }
@@ -1344,6 +1345,7 @@ export type Database = {
           phase_id?: string | null
           priority?: string
           project_id: string
+          stage_id?: string | null
           status?: string
           updated_at?: string
         }
@@ -1360,6 +1362,7 @@ export type Database = {
           phase_id?: string | null
           priority?: string
           project_id?: string
+          stage_id?: string | null
           status?: string
           updated_at?: string
         }
@@ -1380,6 +1383,51 @@ export type Database = {
           },
           {
             foreignKeyName: "user_stories_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_stories_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "user_story_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_story_stages: {
+        Row: {
+          color: string
+          created_at: string
+          display_order: number
+          id: string
+          is_final: boolean
+          project_id: string
+          title: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_final?: boolean
+          project_id: string
+          title: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_final?: boolean
+          project_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_story_stages_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
