@@ -9,22 +9,25 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
-  DndContext, closestCenter, DragEndEvent, DragOverEvent, DragStartEvent, DragOverlay,
-  PointerSensor, useSensor, useSensors,
+  DndContext, DragEndEvent, DragStartEvent, DragOverlay,
+  PointerSensor, useSensor, useSensors, useDroppable, rectIntersection,
 } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  Plus, Trash2, CheckCircle2, Circle, X, Image as ImageIcon,
-  BookOpen, ChevronDown, GripVertical, Upload, Link2,
+  Plus, Trash2, CheckCircle2, X, Image as ImageIcon,
+  BookOpen, ChevronDown, GripVertical, Upload, Link2, Settings2,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { UserStoryStageManager, type UserStoryStage } from "@/components/UserStoryStageManager";
 
 interface UserStory {
   id: string;
   project_id: string;
   activity_id: string | null;
   phase_id: string | null;
+  stage_id: string | null;
   persona: string;
   action: string;
   benefit: string;
@@ -39,29 +42,19 @@ interface UserStory {
 interface Phase { id: string; title: string; display_order: number | null; }
 interface Activity { id: string; title: string; phase_id: string | null; }
 
-const KANBAN_COLUMNS = [
-  { key: "draft", label: "Rascunho", color: "bg-muted", textColor: "text-muted-foreground" },
-  { key: "analysis", label: "Em Análise", color: "bg-info/15", textColor: "text-info" },
-  { key: "validated", label: "Validada", color: "bg-warning/15", textColor: "text-warning" },
-  { key: "implementing", label: "Implementando", color: "bg-primary/15", textColor: "text-primary" },
-  { key: "done", label: "Concluída", color: "bg-success/15", textColor: "text-success" },
-];
-
-interface Props {
-  projectId: string;
-}
+interface Props { projectId: string; }
 
 export const UserStoriesBoard = ({ projectId }: Props) => {
   const { toast } = useToast();
   const [stories, setStories] = useState<UserStory[]>([]);
+  const [stages, setStages] = useState<UserStoryStage[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingStory, setEditingStory] = useState<UserStory | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [showStageManager, setShowStageManager] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [phases, setPhases] = useState<Phase[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
-
   const [form, setForm] = useState({
     persona: "", action: "", benefit: "", narrative: "",
     priority: "medium", image_url: null as string | null,
@@ -69,11 +62,21 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   });
   const [criteria, setCriteria] = useState<string[]>([]);
   const [newCriterion, setNewCriterion] = useState("");
+  const [activeStory, setActiveStory] = useState<UserStory | null>(null);
 
-  useEffect(() => {
-    fetchStories();
-    fetchPhasesAndActivities();
-  }, [projectId]);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  useEffect(() => { fetchStages(); fetchStories(); fetchPhasesAndActivities(); }, [projectId]);
+
+  const fetchStages = async () => {
+    const { data } = await supabase.from("user_story_stages").select("*").eq("project_id", projectId).order("display_order");
+    if (data) setStages(data as UserStoryStage[]);
+  };
+
+  const fetchStories = async () => {
+    const { data } = await supabase.from("user_stories").select("*").eq("project_id", projectId).order("created_at", { ascending: true });
+    if (data) setStories(data as UserStory[]);
+  };
 
   const fetchPhasesAndActivities = async () => {
     const [{ data: ph }, { data: act }] = await Promise.all([
@@ -84,16 +87,9 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
     if (act) setActivities(act);
   };
 
-  const fetchStories = async () => {
-    const { data } = await supabase
-      .from("user_stories")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: true });
-    if (data) setStories(data as UserStory[]);
-  };
+  const getStoriesByStage = (stageId: string) => stories.filter(s => s.stage_id === stageId);
 
-  const openCreateDialog = (status = "draft") => {
+  const openCreateDialog = () => {
     setEditingStory(null);
     setForm({ persona: "", action: "", benefit: "", narrative: "", priority: "medium", image_url: null, phase_id: null, activity_id: null });
     setCriteria([]);
@@ -104,8 +100,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
     setEditingStory(story);
     setForm({
       persona: story.persona, action: story.action, benefit: story.benefit,
-      narrative: story.narrative || "", priority: story.priority,
-      image_url: story.image_url,
+      narrative: story.narrative || "", priority: story.priority, image_url: story.image_url,
       phase_id: story.phase_id || null, activity_id: story.activity_id || null,
     });
     setCriteria(story.acceptance_criteria || []);
@@ -126,9 +121,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
       toast({ title: "Imagem carregada!" });
     } catch (err: any) {
       toast({ title: "Erro ao carregar imagem", description: err.message, variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
+    } finally { setUploading(false); }
   };
 
   const handleSave = async () => {
@@ -136,24 +129,19 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
       toast({ title: "Preencha pelo menos persona e ação", variant: "destructive" });
       return;
     }
+    const firstStage = stages[0];
     const payload = {
-      project_id: projectId,
-      persona: form.persona,
-      action: form.action,
-      benefit: form.benefit,
-      narrative: form.narrative,
-      image_url: form.image_url,
-      acceptance_criteria: criteria,
-      priority: form.priority,
-      phase_id: form.phase_id,
-      activity_id: form.activity_id,
+      project_id: projectId, persona: form.persona, action: form.action,
+      benefit: form.benefit, narrative: form.narrative, image_url: form.image_url,
+      acceptance_criteria: criteria, priority: form.priority,
+      phase_id: form.phase_id, activity_id: form.activity_id,
     };
 
     if (editingStory) {
       await supabase.from("user_stories").update(payload).eq("id", editingStory.id);
       toast({ title: "História atualizada!" });
     } else {
-      await supabase.from("user_stories").insert({ ...payload, status: "draft" });
+      await supabase.from("user_stories").insert({ ...payload, status: "draft", stage_id: firstStage?.id || null });
       toast({ title: "História criada!" });
     }
     setDialogOpen(false);
@@ -167,50 +155,42 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
     fetchStories();
   };
 
-  const handleMoveStory = async (story: UserStory, newStatus: string) => {
-    // Optimistic update
-    setStories(prev => prev.map(s => s.id === story.id ? { ...s, status: newStatus } : s));
-    const { error } = await supabase.from("user_stories").update({ status: newStatus }).eq("id", story.id);
-    if (error) fetchStories(); // rollback on error
+  const handleMoveStory = async (storyId: string, newStageId: string) => {
+    setStories(prev => prev.map(s => s.id === storyId ? { ...s, stage_id: newStageId } : s));
+    const { error } = await supabase.from("user_stories").update({ stage_id: newStageId }).eq("id", storyId);
+    if (error) fetchStories();
   };
 
-  const getStoriesByStatus = (status: string) => stories.filter(s => s.status === status);
-
-  const [activeStory, setActiveStory] = useState<UserStory | null>(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
-
   const handleDragStart = (event: DragStartEvent) => {
-    const story = stories.find(s => s.id === event.active.id);
-    setActiveStory(story || null);
+    setActiveStory(stories.find(s => s.id === event.active.id) || null);
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     setActiveStory(null);
     const { active, over } = event;
     if (!over) return;
-    const overId = String(over.id);
     const storyId = String(active.id);
+    const overId = String(over.id);
     const draggedStory = stories.find(s => s.id === storyId);
     if (!draggedStory) return;
 
-    // Check if dropped over a column
-    const targetColumn = KANBAN_COLUMNS.find(c => c.key === overId);
-    if (targetColumn) {
-      if (draggedStory.status !== targetColumn.key) {
-        handleMoveStory(draggedStory, targetColumn.key);
+    // Check if dropped over a column droppable
+    const targetStage = stages.find(s => s.id === overId);
+    if (targetStage) {
+      if (draggedStory.stage_id !== targetStage.id) {
+        handleMoveStory(storyId, targetStage.id);
       }
       return;
     }
 
-    // Dropped over another story card — find its column
+    // Dropped over another story card — find its stage
     const targetStory = stories.find(s => s.id === overId);
-    if (targetStory && draggedStory.status !== targetStory.status) {
-      handleMoveStory(draggedStory, targetStory.status);
+    if (targetStory && targetStory.stage_id && draggedStory.stage_id !== targetStory.stage_id) {
+      handleMoveStory(storyId, targetStory.stage_id);
     }
   };
+
+  const gridCols = stages.length <= 3 ? "grid-cols-3" : stages.length === 4 ? "grid-cols-4" : stages.length === 5 ? "grid-cols-5" : stages.length === 6 ? "grid-cols-6" : "grid-cols-7";
 
   return (
     <div className="space-y-4">
@@ -220,32 +200,35 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
           <h2 className="text-lg font-bold text-foreground">Histórias de Usuário</h2>
           <Badge variant="secondary" className="text-xs">{stories.length}</Badge>
         </div>
-        <Button size="sm" onClick={() => openCreateDialog()} className="gap-1.5">
-          <Plus className="w-4 h-4" /> Nova História
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setShowStageManager(!showStageManager)} className="gap-1.5">
+            <Settings2 className="w-4 h-4" /> Etapas
+          </Button>
+          <Button size="sm" onClick={openCreateDialog} className="gap-1.5">
+            <Plus className="w-4 h-4" /> Nova História
+          </Button>
+        </div>
       </div>
 
-      {/* Kanban Board with DnD */}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-5 gap-3">
-          {KANBAN_COLUMNS.map(col => {
-            const colStories = getStoriesByStatus(col.key);
+      {/* Stage Manager (collapsible) */}
+      <Collapsible open={showStageManager} onOpenChange={setShowStageManager}>
+        <CollapsibleContent>
+          <UserStoryStageManager projectId={projectId} stages={stages} onStagesChange={fetchStages} />
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Kanban Board */}
+      <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className={`grid ${gridCols} gap-3`}>
+          {stages.map(stage => {
+            const stageStories = getStoriesByStage(stage.id);
             return (
-              <DroppableColumn key={col.key} columnKey={col.key} color={col.color} textColor={col.textColor} label={col.label} count={colStories.length}>
-                <SortableContext items={colStories.map(s => s.id)} strategy={verticalListSortingStrategy}>
-                  {colStories.map(story => (
-                    <DraggableStoryCard
-                      key={story.id}
-                      story={story}
-                      columns={KANBAN_COLUMNS}
-                      phases={phases}
-                      activities={activities}
-                      onEdit={() => openEditDialog(story)}
-                      onDelete={() => handleDelete(story.id)}
-                      onMove={(status) => handleMoveStory(story, status)}
-                    />
-                  ))}
-                </SortableContext>
+              <DroppableColumn key={stage.id} stageId={stage.id} color={stage.color} label={stage.title} count={stageStories.length}>
+                {stageStories.map(story => (
+                  <DraggableStoryCard key={story.id} story={story} stages={stages} phases={phases} activities={activities}
+                    onEdit={() => openEditDialog(story)} onDelete={() => handleDelete(story.id)}
+                    onMove={(stageId) => handleMoveStory(story.id, stageId)} />
+                ))}
               </DroppableColumn>
             );
           })}
@@ -269,47 +252,30 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
             <DialogTitle>{editingStory ? "Editar História" : "Nova História de Usuário"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {/* User Story Format */}
             <div className="space-y-3 p-4 bg-accent/20 rounded-lg border border-border">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Formato Ágil</p>
               <div className="space-y-2">
                 <div className="flex items-start gap-2 min-w-0">
                   <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Como</span>
-                  <Textarea
-                    placeholder="persona (ex: gestor de projetos)"
-                    value={form.persona}
-                    onChange={(e) => setForm({ ...form, persona: e.target.value })}
-                    rows={1}
-                    autoResize
-                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
-                  />
+                  <Textarea placeholder="persona (ex: gestor de projetos)" value={form.persona}
+                    onChange={e => setForm({ ...form, persona: e.target.value })} rows={1} autoResize
+                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
                 </div>
                 <div className="flex items-start gap-2 min-w-0">
                   <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Eu quero</span>
-                  <Textarea
-                    placeholder="ação desejada"
-                    value={form.action}
-                    onChange={(e) => setForm({ ...form, action: e.target.value })}
-                    rows={1}
-                    autoResize
-                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
-                  />
+                  <Textarea placeholder="ação desejada" value={form.action}
+                    onChange={e => setForm({ ...form, action: e.target.value })} rows={1} autoResize
+                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
                 </div>
                 <div className="flex items-start gap-2 min-w-0">
                   <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Para que</span>
-                  <Textarea
-                    placeholder="benefício esperado"
-                    value={form.benefit}
-                    onChange={(e) => setForm({ ...form, benefit: e.target.value })}
-                    rows={1}
-                    autoResize
-                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
-                  />
+                  <Textarea placeholder="benefício esperado" value={form.benefit}
+                    onChange={e => setForm({ ...form, benefit: e.target.value })} rows={1} autoResize
+                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
                 </div>
               </div>
             </div>
 
-            {/* Vínculo EAP */}
             <div className="space-y-3 p-4 bg-muted/30 rounded-lg border border-border">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                 <Link2 className="w-3.5 h-3.5" /> Vínculo com EAP
@@ -317,7 +283,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Fase</Label>
-                  <Select value={form.phase_id || "none"} onValueChange={(v) => setForm({ ...form, phase_id: v === "none" ? null : v, activity_id: null })}>
+                  <Select value={form.phase_id || "none"} onValueChange={v => setForm({ ...form, phase_id: v === "none" ? null : v, activity_id: null })}>
                     <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>
@@ -327,7 +293,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Atividade</Label>
-                  <Select value={form.activity_id || "none"} onValueChange={(v) => setForm({ ...form, activity_id: v === "none" ? null : v })}>
+                  <Select value={form.activity_id || "none"} onValueChange={v => setForm({ ...form, activity_id: v === "none" ? null : v })}>
                     <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>
@@ -342,59 +308,40 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Narrativa / Contexto</Label>
-              <Textarea
-                placeholder="Conte a história com mais detalhes... O que aconteceu? Qual o contexto?"
-                value={form.narrative}
-                onChange={(e) => setForm({ ...form, narrative: e.target.value })}
-                rows={4}
-                autoResize
-                className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
-              />
+              <Textarea placeholder="Conte a história com mais detalhes..." value={form.narrative}
+                onChange={e => setForm({ ...form, narrative: e.target.value })} rows={4} autoResize
+                className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
             </div>
 
-            {/* Image Upload */}
             <div className="space-y-2">
-              <Label className="text-sm font-semibold flex items-center gap-2">
-                <ImageIcon className="w-4 h-4" /> Imagem / Evidência
-              </Label>
+              <Label className="text-sm font-semibold flex items-center gap-2"><ImageIcon className="w-4 h-4" /> Imagem / Evidência</Label>
               {form.image_url ? (
                 <div className="relative group">
                   <img src={form.image_url} alt="Story" className="w-full max-h-48 object-cover rounded-lg border border-border" />
                   <Button size="icon" variant="destructive" className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => setForm({ ...form, image_url: null })}>
-                    <X className="w-4 h-4" />
-                  </Button>
+                    onClick={() => setForm({ ...form, image_url: null })}><X className="w-4 h-4" /></Button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 hover:bg-accent/30 transition-colors"
-                  disabled={uploading}
-                >
+                <button type="button" onClick={() => fileInputRef.current?.click()}
+                  className="w-full border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 hover:bg-accent/30 transition-colors" disabled={uploading}>
                   <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    {uploading ? "Carregando..." : "Clique para anexar uma imagem"}
-                  </p>
+                  <p className="text-sm text-muted-foreground">{uploading ? "Carregando..." : "Clique para anexar uma imagem"}</p>
                 </button>
               )}
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
             </div>
 
-            {/* Priority */}
             <div className="flex items-center gap-3">
               <Label className="text-sm font-semibold">Prioridade:</Label>
               {(["low", "medium", "high"] as const).map(p => (
                 <button key={p} type="button"
                   className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${form.priority === p ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
-                  onClick={() => setForm({ ...form, priority: p })}
-                >
+                  onClick={() => setForm({ ...form, priority: p })}>
                   {p === "high" ? "Alta" : p === "medium" ? "Média" : "Baixa"}
                 </button>
               ))}
             </div>
 
-            {/* Acceptance Criteria */}
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Critérios de Aceite</Label>
               {criteria.map((c, idx) => (
@@ -402,21 +349,14 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                   <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
                   <span className="text-sm text-foreground flex-1 break-words">{c}</span>
                   <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0"
-                    onClick={() => setCriteria(criteria.filter((_, i) => i !== idx))}>
-                    <X className="w-3 h-3" />
-                  </Button>
+                    onClick={() => setCriteria(criteria.filter((_, i) => i !== idx))}><X className="w-3 h-3" /></Button>
                 </div>
               ))}
               <div className="flex gap-2">
                 <Input placeholder="Adicionar critério..." value={newCriterion}
-                  onChange={(e) => setNewCriterion(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newCriterion.trim()) {
-                      e.preventDefault();
-                      setCriteria([...criteria, newCriterion.trim()]);
-                      setNewCriterion("");
-                    }
-                  }} className="text-sm" />
+                  onChange={e => setNewCriterion(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && newCriterion.trim()) { e.preventDefault(); setCriteria([...criteria, newCriterion.trim()]); setNewCriterion(""); } }}
+                  className="text-sm" />
                 <Button type="button" size="sm" variant="outline"
                   onClick={() => { if (newCriterion.trim()) { setCriteria([...criteria, newCriterion.trim()]); setNewCriterion(""); } }}>
                   <Plus className="w-4 h-4" />
@@ -434,15 +374,15 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   );
 };
 
-/* ── Droppable Column ── */
-const DroppableColumn = ({ columnKey, color, textColor, label, count, children }: {
-  columnKey: string; color: string; textColor: string; label: string; count: number; children: React.ReactNode;
+/* ── Droppable Column using useDroppable (NOT useSortable) ── */
+const DroppableColumn = ({ stageId, color, label, count, children }: {
+  stageId: string; color: string; label: string; count: number; children: React.ReactNode;
 }) => {
-  const { setNodeRef, isOver } = useSortable({ id: columnKey, data: { type: "column" } });
+  const { setNodeRef, isOver } = useDroppable({ id: stageId });
   return (
-    <div ref={setNodeRef} className={`space-y-2 min-w-0 transition-colors rounded-lg ${isOver ? "bg-primary/5" : ""}`}>
-      <div className={`flex items-center justify-between px-3 py-2 rounded-lg ${color}`}>
-        <span className={`text-sm font-semibold ${textColor}`}>{label}</span>
+    <div ref={setNodeRef} className={`space-y-2 min-w-0 transition-colors rounded-lg ${isOver ? "ring-2 ring-primary/40 bg-primary/5" : ""}`}>
+      <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ backgroundColor: color.replace(")", ", 0.15)").replace("hsl", "hsla") }}>
+        <span className="text-sm font-semibold" style={{ color }}>{label}</span>
         <Badge variant="outline" className="text-[10px] px-1.5 py-0">{count}</Badge>
       </div>
       <div className="space-y-2 min-h-[120px] min-w-0 p-1">
@@ -453,32 +393,17 @@ const DroppableColumn = ({ columnKey, color, textColor, label, count, children }
 };
 
 /* ── Draggable Story Card ── */
-interface StoryCardProps {
-  story: UserStory;
-  columns: typeof KANBAN_COLUMNS;
-  phases: Phase[];
-  activities: Activity[];
-  onEdit: () => void;
-  onDelete: () => void;
-  onMove: (status: string) => void;
-}
-
-const DraggableStoryCard = ({ story, columns, phases, activities, onEdit, onDelete, onMove }: StoryCardProps) => {
+const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelete, onMove }: {
+  story: UserStory; stages: UserStoryStage[]; phases: Phase[]; activities: Activity[];
+  onEdit: () => void; onDelete: () => void; onMove: (stageId: string) => void;
+}) => {
   const [showMenu, setShowMenu] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: story.id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
 
   return (
-    <Card
-      ref={setNodeRef}
-      style={style}
-      className="p-3 space-y-2 cursor-pointer hover:shadow-md transition-shadow group border-border/60"
-      onClick={onEdit}
-    >
+    <Card ref={setNodeRef} style={style}
+      className="p-3 space-y-2 cursor-pointer hover:shadow-md transition-shadow group border-border/60" onClick={onEdit}>
       <div className="flex items-start justify-between gap-1 min-w-0">
         <div {...attributes} {...listeners} className="shrink-0 cursor-grab active:cursor-grabbing pt-0.5 touch-none">
           <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
@@ -486,65 +411,37 @@ const DraggableStoryCard = ({ story, columns, phases, activities, onEdit, onDele
         <p className="text-xs leading-relaxed text-foreground break-words whitespace-pre-wrap [overflow-wrap:anywhere] flex-1 min-w-0">
           <span className="font-semibold text-primary">Como</span> {story.persona},{" "}
           <span className="font-semibold text-primary">eu quero</span> {story.action}
-          {story.benefit && (
-            <>, <span className="font-semibold text-primary">para que</span> {story.benefit}</>
-          )}
+          {story.benefit && (<>, <span className="font-semibold text-primary">para que</span> {story.benefit}</>)}
         </p>
         <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
-            <Trash2 className="w-3 h-3" />
-          </Button>
+          <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive"
+            onClick={e => { e.stopPropagation(); onDelete(); }}><Trash2 className="w-3 h-3" /></Button>
         </div>
       </div>
 
-      {story.image_url && (
-        <img src={story.image_url} alt="" className="w-full h-20 object-cover rounded-md border border-border/50" />
-      )}
-
-      {story.narrative && (
-        <p className="text-[11px] text-muted-foreground line-clamp-2 break-words whitespace-pre-wrap [overflow-wrap:anywhere] min-w-0">{story.narrative}</p>
-      )}
+      {story.image_url && <img src={story.image_url} alt="" className="w-full h-20 object-cover rounded-md border border-border/50" />}
+      {story.narrative && <p className="text-[11px] text-muted-foreground line-clamp-2 break-words whitespace-pre-wrap [overflow-wrap:anywhere] min-w-0">{story.narrative}</p>}
 
       {(story.phase_id || story.activity_id) && (
         <div className="flex items-center gap-1 flex-wrap">
-          {story.phase_id && (() => {
-            const phase = phases.find(p => p.id === story.phase_id);
-            return phase ? <Badge variant="secondary" className="text-[10px] px-1.5 py-0">📁 {phase.title}</Badge> : null;
-          })()}
-          {story.activity_id && (() => {
-            const act = activities.find(a => a.id === story.activity_id);
-            return act ? <Badge variant="secondary" className="text-[10px] px-1.5 py-0">📋 {act.title}</Badge> : null;
-          })()}
+          {story.phase_id && (() => { const phase = phases.find(p => p.id === story.phase_id); return phase ? <Badge variant="secondary" className="text-[10px] px-1.5 py-0">📁 {phase.title}</Badge> : null; })()}
+          {story.activity_id && (() => { const act = activities.find(a => a.id === story.activity_id); return act ? <Badge variant="secondary" className="text-[10px] px-1.5 py-0">📋 {act.title}</Badge> : null; })()}
         </div>
       )}
 
       <div className="flex items-center justify-between gap-1">
-        <div className="flex items-center gap-1">
-          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${story.priority === "high" ? "border-destructive text-destructive" : story.priority === "medium" ? "border-warning text-warning" : "border-border"}`}>
-            {story.priority === "high" ? "Alta" : story.priority === "medium" ? "Média" : "Baixa"}
-          </Badge>
-          {story.acceptance_criteria?.length > 0 && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-              ✓ {story.acceptance_criteria.length}
-            </Badge>
-          )}
-        </div>
-
-        {/* Move dropdown */}
+        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${story.priority === "high" ? "border-destructive text-destructive" : story.priority === "medium" ? "border-warning text-warning" : "border-border"}`}>
+          {story.priority === "high" ? "Alta" : story.priority === "medium" ? "Média" : "Baixa"}
+        </Badge>
         <div className="relative">
           <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100"
-            onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}>
-            <ChevronDown className="w-3 h-3" />
-          </Button>
+            onClick={e => { e.stopPropagation(); setShowMenu(!showMenu); }}><ChevronDown className="w-3 h-3" /></Button>
           {showMenu && (
             <div className="absolute right-0 bottom-7 z-50 bg-popover border border-border rounded-lg shadow-lg p-1 min-w-[120px]"
-              onClick={(e) => e.stopPropagation()}>
-              {columns.filter(c => c.key !== story.status).map(col => (
-                <button key={col.key}
-                  className="w-full text-left text-xs px-3 py-1.5 rounded hover:bg-accent transition-colors"
-                  onClick={() => { onMove(col.key); setShowMenu(false); }}>
-                  {col.label}
-                </button>
+              onClick={e => e.stopPropagation()}>
+              {stages.filter(s => s.id !== story.stage_id).map(s => (
+                <button key={s.id} className="w-full text-left text-xs px-3 py-1.5 rounded hover:bg-accent transition-colors"
+                  onClick={() => { onMove(s.id); setShowMenu(false); }}>{s.title}</button>
               ))}
             </div>
           )}
