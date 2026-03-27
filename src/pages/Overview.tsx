@@ -71,6 +71,7 @@ const Overview = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [kpiDialog, setKpiDialog] = useState<{ title: string; items: Activity[] } | null>(null);
 
   useEffect(() => {
     if (!authLoading) fetchAllData();
