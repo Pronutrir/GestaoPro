@@ -586,6 +586,43 @@ const Overview = () => {
           </>
         )}
       </main>
+
+      <Dialog open={!!kpiDialog} onOpenChange={() => setKpiDialog(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>{kpiDialog?.title}</DialogTitle>
+            <DialogDescription>{kpiDialog?.items.length || 0} atividade(s) encontrada(s)</DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-2">
+              {kpiDialog?.items.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-8">Nenhuma atividade encontrada.</p>
+              )}
+              {kpiDialog?.items.map(a => {
+                const proj = projects.find(p => p.id === a.project_id);
+                return (
+                  <div key={a.id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{a.title}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {proj && <Badge variant="outline" className="text-xs">{proj.title.substring(0, 25)}</Badge>}
+                        {a.assigned_to && <span className="text-xs text-muted-foreground">👤 {a.assigned_to}</span>}
+                        {a.end_date && <span className="text-xs text-muted-foreground">📅 {new Date(a.end_date).toLocaleDateString("pt-BR")}</span>}
+                        <Badge variant={a.priority === "high" ? "destructive" : a.priority === "medium" ? "secondary" : "outline"} className="text-xs">
+                          {a.priority === "high" ? "Alta" : a.priority === "medium" ? "Média" : "Baixa"}
+                        </Badge>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => { setKpiDialog(null); navigate(`/project/${a.project_id}`); }}>
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };
