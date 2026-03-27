@@ -243,8 +243,8 @@ const Overview = () => {
             </div>
 
             {/* KPI Row 2 - Key Metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="p-5">
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="p-5 cursor-pointer hover:shadow-md transition-all" onClick={() => setKpiDialog({ title: "Tarefas Concluídas", items: activities.filter(a => a.status === "completed") })}>
                 <div className="flex items-center gap-2 mb-2">
                   <ListTodo className="w-4 h-4 text-primary" />
                   <span className="text-sm text-muted-foreground">Conclusão de Tarefas</span>
@@ -260,7 +260,7 @@ const Overview = () => {
                 </div>
               </Card>
 
-              <Card className={`p-5 ${overdueActivities.length > 0 ? "border-destructive/50" : ""}`}>
+              <Card className={`p-5 cursor-pointer hover:shadow-md transition-all ${overdueActivities.length > 0 ? "border-destructive/50" : ""}`} onClick={() => setKpiDialog({ title: "Atividades Atrasadas", items: overdueActivities })}>
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle className={`w-4 h-4 ${overdueActivities.length > 0 ? "text-destructive" : "text-muted-foreground"}`} />
                   <span className="text-sm text-muted-foreground">Atrasadas</span>
@@ -276,7 +276,7 @@ const Overview = () => {
                 </div>
               </Card>
 
-              <Card className={`p-5 ${upcomingDeadlines.length > 0 ? "border-warning/50" : ""}`}>
+              <Card className={`p-5 cursor-pointer hover:shadow-md transition-all ${upcomingDeadlines.length > 0 ? "border-warning/50" : ""}`} onClick={() => setKpiDialog({ title: "Prazos Próximos (7 dias)", items: upcomingDeadlines })}>
                 <div className="flex items-center gap-2 mb-2">
                   <CalendarClock className={`w-4 h-4 ${upcomingDeadlines.length > 0 ? "text-warning" : "text-muted-foreground"}`} />
                   <span className="text-sm text-muted-foreground">Prazos Próximos</span>
@@ -285,7 +285,7 @@ const Overview = () => {
                 <p className="text-xs text-muted-foreground mt-1">nos próximos 7 dias</p>
               </Card>
 
-              <Card className="p-5">
+              <Card className="p-5 cursor-pointer hover:shadow-md transition-all" onClick={() => setKpiDialog({ title: "Alta Prioridade (Pendentes)", items: highPriorityPending })}>
                 <div className="flex items-center gap-2 mb-2">
                   <Flag className="w-4 h-4 text-destructive" />
                   <span className="text-sm text-muted-foreground">Alta Prioridade</span>
