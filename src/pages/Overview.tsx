@@ -247,14 +247,14 @@ const Overview = () => {
               <Card className="p-5 cursor-pointer hover:shadow-md transition-all" onClick={() => setKpiDialog({ title: "Tarefas Concluídas", items: activities.filter(a => a.status === "completed") })}>
                 <div className="flex items-center gap-2 mb-2">
                   <ListTodo className="w-4 h-4 text-primary" />
-                  <span className="text-sm text-muted-foreground">Conclusão de Tarefas</span>
+                  <span className="text-sm text-muted-foreground truncate">Conclusão de Tarefas</span>
                 </div>
-                <div className="flex items-end justify-between gap-3">
-                  <div>
-                    <p className="text-3xl font-bold text-foreground">{taskCompletionRate.toFixed(0)}%</p>
-                    <p className="text-xs text-muted-foreground mt-1">{completedActivities}/{totalActivities} concluídas</p>
+                <div className="flex items-end justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-2xl font-bold text-foreground">{taskCompletionRate.toFixed(0)}%</p>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">{completedActivities}/{totalActivities} concluídas</p>
                   </div>
-                  <div className="w-20">
+                  <div className="w-16 shrink-0">
                     <Sparkline data={sparklineCompletion} color="hsl(var(--success))" />
                   </div>
                 </div>
@@ -263,14 +263,14 @@ const Overview = () => {
               <Card className={`p-5 cursor-pointer hover:shadow-md transition-all ${overdueActivities.length > 0 ? "border-destructive/50" : ""}`} onClick={() => setKpiDialog({ title: "Atividades Atrasadas", items: overdueActivities })}>
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle className={`w-4 h-4 ${overdueActivities.length > 0 ? "text-destructive" : "text-muted-foreground"}`} />
-                  <span className="text-sm text-muted-foreground">Atrasadas</span>
+                  <span className="text-sm text-muted-foreground truncate">Atrasadas</span>
                 </div>
-                <div className="flex items-end justify-between gap-3">
-                  <div>
-                    <p className={`text-3xl font-bold ${overdueActivities.length > 0 ? "text-destructive" : "text-foreground"}`}>{overdueActivities.length}</p>
-                    <p className="text-xs text-muted-foreground mt-1">tarefas vencidas</p>
+                <div className="flex items-end justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className={`text-2xl font-bold ${overdueActivities.length > 0 ? "text-destructive" : "text-foreground"}`}>{overdueActivities.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">tarefas vencidas</p>
                   </div>
-                  <div className="w-20">
+                  <div className="w-16 shrink-0">
                     <Sparkline data={sparklineOverdue} color="hsl(var(--destructive))" />
                   </div>
                 </div>
@@ -279,19 +279,27 @@ const Overview = () => {
               <Card className={`p-5 cursor-pointer hover:shadow-md transition-all ${upcomingDeadlines.length > 0 ? "border-warning/50" : ""}`} onClick={() => setKpiDialog({ title: "Prazos Próximos (7 dias)", items: upcomingDeadlines })}>
                 <div className="flex items-center gap-2 mb-2">
                   <CalendarClock className={`w-4 h-4 ${upcomingDeadlines.length > 0 ? "text-warning" : "text-muted-foreground"}`} />
-                  <span className="text-sm text-muted-foreground">Prazos Próximos</span>
+                  <span className="text-sm text-muted-foreground truncate">Prazos Próximos</span>
                 </div>
-                <p className={`text-3xl font-bold ${upcomingDeadlines.length > 0 ? "text-warning" : "text-foreground"}`}>{upcomingDeadlines.length}</p>
-                <p className="text-xs text-muted-foreground mt-1">nos próximos 7 dias</p>
+                <div className="flex items-end justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className={`text-2xl font-bold ${upcomingDeadlines.length > 0 ? "text-warning" : "text-foreground"}`}>{upcomingDeadlines.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">nos próximos 7 dias</p>
+                  </div>
+                </div>
               </Card>
 
               <Card className="p-5 cursor-pointer hover:shadow-md transition-all" onClick={() => setKpiDialog({ title: "Alta Prioridade (Pendentes)", items: highPriorityPending })}>
                 <div className="flex items-center gap-2 mb-2">
                   <Flag className="w-4 h-4 text-destructive" />
-                  <span className="text-sm text-muted-foreground">Alta Prioridade</span>
+                  <span className="text-sm text-muted-foreground truncate">Alta Prioridade</span>
                 </div>
-                <p className="text-3xl font-bold text-foreground">{highPriorityPending.length}</p>
-                <p className="text-xs text-muted-foreground mt-1">pendentes</p>
+                <div className="flex items-end justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-2xl font-bold text-foreground">{highPriorityPending.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">pendentes</p>
+                  </div>
+                </div>
               </Card>
             </div>
 
