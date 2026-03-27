@@ -9,9 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Sparkline } from "@/components/Sparkline";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
   LayoutDashboard, TrendingUp, DollarSign, CheckCircle2, Lightbulb,
   Beaker, Rocket, AlertTriangle, Archive, Clock, Flag, CalendarClock, ListTodo,
-  Users, BarChart3,
+  Users, BarChart3, ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -67,6 +71,7 @@ const Overview = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [kpiDialog, setKpiDialog] = useState<{ title: string; items: Activity[] } | null>(null);
 
   useEffect(() => {
     if (!authLoading) fetchAllData();
@@ -238,8 +243,8 @@ const Overview = () => {
             </div>
 
             {/* KPI Row 2 - Key Metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="p-5">
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="p-5 cursor-pointer hover:shadow-md transition-all" onClick={() => setKpiDialog({ title: "Tarefas Concluídas", items: activities.filter(a => a.status === "completed") })}>
                 <div className="flex items-center gap-2 mb-2">
                   <ListTodo className="w-4 h-4 text-primary" />
                   <span className="text-sm text-muted-foreground">Conclusão de Tarefas</span>
@@ -255,7 +260,7 @@ const Overview = () => {
                 </div>
               </Card>
 
-              <Card className={`p-5 ${overdueActivities.length > 0 ? "border-destructive/50" : ""}`}>
+              <Card className={`p-5 cursor-pointer hover:shadow-md transition-all ${overdueActivities.length > 0 ? "border-destructive/50" : ""}`} onClick={() => setKpiDialog({ title: "Atividades Atrasadas", items: overdueActivities })}>
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle className={`w-4 h-4 ${overdueActivities.length > 0 ? "text-destructive" : "text-muted-foreground"}`} />
                   <span className="text-sm text-muted-foreground">Atrasadas</span>
@@ -271,7 +276,7 @@ const Overview = () => {
                 </div>
               </Card>
 
-              <Card className={`p-5 ${upcomingDeadlines.length > 0 ? "border-warning/50" : ""}`}>
+              <Card className={`p-5 cursor-pointer hover:shadow-md transition-all ${upcomingDeadlines.length > 0 ? "border-warning/50" : ""}`} onClick={() => setKpiDialog({ title: "Prazos Próximos (7 dias)", items: upcomingDeadlines })}>
                 <div className="flex items-center gap-2 mb-2">
                   <CalendarClock className={`w-4 h-4 ${upcomingDeadlines.length > 0 ? "text-warning" : "text-muted-foreground"}`} />
                   <span className="text-sm text-muted-foreground">Prazos Próximos</span>
@@ -280,7 +285,7 @@ const Overview = () => {
                 <p className="text-xs text-muted-foreground mt-1">nos próximos 7 dias</p>
               </Card>
 
-              <Card className="p-5">
+              <Card className="p-5 cursor-pointer hover:shadow-md transition-all" onClick={() => setKpiDialog({ title: "Alta Prioridade (Pendentes)", items: highPriorityPending })}>
                 <div className="flex items-center gap-2 mb-2">
                   <Flag className="w-4 h-4 text-destructive" />
                   <span className="text-sm text-muted-foreground">Alta Prioridade</span>
@@ -581,6 +586,43 @@ const Overview = () => {
           </>
         )}
       </main>
+
+      <Dialog open={!!kpiDialog} onOpenChange={() => setKpiDialog(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>{kpiDialog?.title}</DialogTitle>
+            <DialogDescription>{kpiDialog?.items.length || 0} atividade(s) encontrada(s)</DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-2">
+              {kpiDialog?.items.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-8">Nenhuma atividade encontrada.</p>
+              )}
+              {kpiDialog?.items.map(a => {
+                const proj = projects.find(p => p.id === a.project_id);
+                return (
+                  <div key={a.id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{a.title}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {proj && <Badge variant="outline" className="text-xs">{proj.title.substring(0, 25)}</Badge>}
+                        {a.assigned_to && <span className="text-xs text-muted-foreground">👤 {a.assigned_to}</span>}
+                        {a.end_date && <span className="text-xs text-muted-foreground">📅 {new Date(a.end_date).toLocaleDateString("pt-BR")}</span>}
+                        <Badge variant={a.priority === "high" ? "destructive" : a.priority === "medium" ? "secondary" : "outline"} className="text-xs">
+                          {a.priority === "high" ? "Alta" : a.priority === "medium" ? "Média" : "Baixa"}
+                        </Badge>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => { setKpiDialog(null); navigate(`/project/${a.project_id}`); }}>
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };
