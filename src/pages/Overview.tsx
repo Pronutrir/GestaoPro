@@ -9,9 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Sparkline } from "@/components/Sparkline";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
   LayoutDashboard, TrendingUp, DollarSign, CheckCircle2, Lightbulb,
   Beaker, Rocket, AlertTriangle, Archive, Clock, Flag, CalendarClock, ListTodo,
-  Users, BarChart3,
+  Users, BarChart3, ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
