@@ -311,6 +311,7 @@ function SortableColumn({
   onToggleActivity,
   onMoveToBacklog,
   onCreateActivity,
+  storyLinkedActivities,
   isAdmin,
   onResizeStart,
 }: {
