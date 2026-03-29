@@ -9,6 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Pencil,
   Trash2,
@@ -18,6 +20,7 @@ import {
   AlertCircle,
   Inbox,
   ArrowUpDown,
+  Plus,
 } from "lucide-react";
 import {
   DndContext,
@@ -297,6 +300,7 @@ function SortableColumn({
   onDeleteActivity,
   onToggleActivity,
   onMoveToBacklog,
+  onCreateActivity,
   isAdmin,
   onResizeStart,
 }: {
@@ -310,10 +314,16 @@ function SortableColumn({
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onMoveToBacklog: (activityId: string) => void;
+  onCreateActivity: (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => Promise<void>;
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
 }) {
   const [colSort, setColSort] = useState<string>("wbs_asc");
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickTitle, setQuickTitle] = useState("");
+  const [quickPhase, setQuickPhase] = useState("");
+  const [quickOrder, setQuickOrder] = useState("");
+  const [quickLoading, setQuickLoading] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
 
@@ -384,9 +394,19 @@ function SortableColumn({
             />
             <h3 className="text-sm font-semibold text-foreground truncate">{stage.title}</h3>
           </div>
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
-            {stageActivities.length}
-          </Badge>
+          <div className="flex items-center gap-1 shrink-0">
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center">
+              {stageActivities.length}
+            </Badge>
+            <button
+              type="button"
+              className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+              onClick={(e) => { e.stopPropagation(); setShowQuickAdd(!showQuickAdd); }}
+              title="Criar atividade nesta coluna"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
         {stageActivities.length > 1 && (
           <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
@@ -410,6 +430,64 @@ function SortableColumn({
           </div>
         )}
       </div>
+
+      {/* Quick Add Form */}
+      {showQuickAdd && (
+        <div className="px-2 pb-2 space-y-2 border-b border-border/50" onClick={(e) => e.stopPropagation()}>
+          <Input
+            placeholder="Título da atividade..."
+            className="h-8 text-xs"
+            value={quickTitle}
+            onChange={(e) => setQuickTitle(e.target.value)}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && quickTitle.trim()) {
+                setQuickLoading(true);
+                onCreateActivity(stage.id, quickTitle.trim(), quickPhase || null, quickOrder ? parseInt(quickOrder) : null)
+                  .then(() => { setQuickTitle(""); setQuickPhase(""); setQuickOrder(""); setShowQuickAdd(false); })
+                  .finally(() => setQuickLoading(false));
+              }
+              if (e.key === "Escape") setShowQuickAdd(false);
+            }}
+          />
+          {phases.length > 0 && (
+            <select
+              className="flex h-7 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+              value={quickPhase}
+              onChange={(e) => setQuickPhase(e.target.value)}
+            >
+              <option value="">Sem fase (EAP)</option>
+              {phases.map((p) => (
+                <option key={p.id} value={p.id}>{p.title}</option>
+              ))}
+            </select>
+          )}
+          <Input
+            placeholder="Nº EAP (opcional, ex: 1.2.3)"
+            className="h-7 text-xs"
+            value={quickOrder}
+            onChange={(e) => setQuickOrder(e.target.value)}
+          />
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              className="h-7 text-xs flex-1"
+              disabled={!quickTitle.trim() || quickLoading}
+              onClick={() => {
+                setQuickLoading(true);
+                onCreateActivity(stage.id, quickTitle.trim(), quickPhase || null, quickOrder ? parseInt(quickOrder) : null)
+                  .then(() => { setQuickTitle(""); setQuickPhase(""); setQuickOrder(""); setShowQuickAdd(false); })
+                  .finally(() => setQuickLoading(false));
+              }}
+            >
+              {quickLoading ? "Criando..." : "Criar"}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowQuickAdd(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Droppable Column Body */}
       <DroppableColumn stage={stage}>
@@ -734,6 +812,23 @@ export const ActivityKanban = ({
     }
   };
 
+  const handleCreateActivity = async (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => {
+    const { error } = await supabase.from("activities").insert({
+      project_id: projectId,
+      title,
+      phase_id: phaseId,
+      workflow_stage_id: stageId,
+      display_order: displayOrder,
+      status: "pending",
+    });
+    if (error) {
+      toast({ title: "Erro ao criar atividade", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Atividade criada com sucesso" });
+      onDataChanged();
+    }
+  };
+
 
   const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
@@ -777,6 +872,7 @@ export const ActivityKanban = ({
                 onDeleteActivity={onDeleteActivity}
                 onToggleActivity={onToggleActivity}
                 onMoveToBacklog={handleMoveToBacklog}
+                onCreateActivity={handleCreateActivity}
                 isAdmin={isAdmin}
                 onResizeStart={handleResizeStart}
               />
