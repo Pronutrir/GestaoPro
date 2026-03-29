@@ -9,6 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Pencil,
   Trash2,
@@ -18,6 +20,7 @@ import {
   AlertCircle,
   Inbox,
   ArrowUpDown,
+  Plus,
 } from "lucide-react";
 import {
   DndContext,
