@@ -364,15 +364,15 @@ export const BacklogSection = ({
                 </SelectContent>
               </Select>
             </div>
-            <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-1">
+            <div className="border rounded-lg p-3 max-h-40 overflow-y-auto overflow-x-hidden space-y-1">
               <p className="text-xs text-muted-foreground mb-1">Atividades selecionadas:</p>
               {backlogActivities
                 .filter((a) => selectedIds.has(a.id))
                 .map((a) => {
                   const prio = a.priority || "medium";
                   return (
-                    <div key={a.id} className="flex items-center gap-2 text-sm">
-                      <span className="truncate flex-1">{a.title}</span>
+                    <div key={a.id} className="flex items-center gap-2 text-sm min-w-0">
+                      <span className="truncate flex-1 min-w-0">{a.title}</span>
                       <Badge variant="outline" className={`text-[10px] shrink-0 ${priorityColors[prio]}`}>
                         {priorityLabels[prio] || prio}
                       </Badge>
