@@ -812,6 +812,23 @@ export const ActivityKanban = ({
     }
   };
 
+  const handleCreateActivity = async (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => {
+    const { error } = await supabase.from("activities").insert({
+      project_id: projectId,
+      title,
+      phase_id: phaseId,
+      workflow_stage_id: stageId,
+      display_order: displayOrder,
+      status: "pending",
+    });
+    if (error) {
+      toast({ title: "Erro ao criar atividade", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Atividade criada com sucesso" });
+      onDataChanged();
+    }
+  };
+
 
   const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
