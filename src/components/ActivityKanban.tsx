@@ -911,6 +911,7 @@ export const ActivityKanban = ({
               onDelete={() => {}}
               onToggle={() => {}}
               onMoveToBacklog={() => {}}
+              hasStory={storyLinkedActivities.has(activeActivity.id)}
             />
           </div>
         ) : activeColumn ? (
