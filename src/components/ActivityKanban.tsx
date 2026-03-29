@@ -431,6 +431,64 @@ function SortableColumn({
         )}
       </div>
 
+      {/* Quick Add Form */}
+      {showQuickAdd && (
+        <div className="px-2 pb-2 space-y-2 border-b border-border/50" onClick={(e) => e.stopPropagation()}>
+          <Input
+            placeholder="Título da atividade..."
+            className="h-8 text-xs"
+            value={quickTitle}
+            onChange={(e) => setQuickTitle(e.target.value)}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && quickTitle.trim()) {
+                setQuickLoading(true);
+                onCreateActivity(stage.id, quickTitle.trim(), quickPhase || null, quickOrder ? parseInt(quickOrder) : null)
+                  .then(() => { setQuickTitle(""); setQuickPhase(""); setQuickOrder(""); setShowQuickAdd(false); })
+                  .finally(() => setQuickLoading(false));
+              }
+              if (e.key === "Escape") setShowQuickAdd(false);
+            }}
+          />
+          {phases.length > 0 && (
+            <select
+              className="flex h-7 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+              value={quickPhase}
+              onChange={(e) => setQuickPhase(e.target.value)}
+            >
+              <option value="">Sem fase (EAP)</option>
+              {phases.map((p) => (
+                <option key={p.id} value={p.id}>{p.title}</option>
+              ))}
+            </select>
+          )}
+          <Input
+            placeholder="Nº EAP (opcional, ex: 1.2.3)"
+            className="h-7 text-xs"
+            value={quickOrder}
+            onChange={(e) => setQuickOrder(e.target.value)}
+          />
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              className="h-7 text-xs flex-1"
+              disabled={!quickTitle.trim() || quickLoading}
+              onClick={() => {
+                setQuickLoading(true);
+                onCreateActivity(stage.id, quickTitle.trim(), quickPhase || null, quickOrder ? parseInt(quickOrder) : null)
+                  .then(() => { setQuickTitle(""); setQuickPhase(""); setQuickOrder(""); setShowQuickAdd(false); })
+                  .finally(() => setQuickLoading(false));
+              }}
+            >
+              {quickLoading ? "Criando..." : "Criar"}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowQuickAdd(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Droppable Column Body */}
       <DroppableColumn stage={stage}>
         <SortableContext
