@@ -326,6 +326,7 @@ function SortableColumn({
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onMoveToBacklog: (activityId: string) => void;
   onCreateActivity: (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => Promise<void>;
+  storyLinkedActivities: Set<string>;
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
 }) {
