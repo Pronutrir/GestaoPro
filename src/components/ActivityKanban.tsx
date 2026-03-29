@@ -626,7 +626,12 @@ export const ActivityKanban = ({
 
   useEffect(() => {
     fetchStages();
-  }, [projectId]);
+    // Fetch activities that have linked user stories
+    supabase.from("user_stories").select("activity_id").eq("project_id", projectId).not("activity_id", "is", null)
+      .then(({ data }) => {
+        if (data) setStoryLinkedActivities(new Set(data.map((s: any) => s.activity_id)));
+      });
+  }, [projectId, activities]);
 
   
 
