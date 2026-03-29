@@ -314,8 +314,8 @@ export const EditActivityDialog = ({
               }}
             >
               <option value="">Adicionar participante...</option>
-              {members.filter(m => m.full_name && !formData.participants.includes(m.full_name!)).map((m) => (
-                <option key={m.full_name} value={m.full_name!}>{m.full_name}</option>
+              {allProfiles.filter(m => m.full_name && !formData.participants.includes(m.full_name!)).map((m) => (
+                <option key={m.full_name} value={m.full_name!}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
               ))}
             </select>
           </div>
