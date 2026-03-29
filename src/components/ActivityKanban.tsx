@@ -153,6 +153,7 @@ function KanbanCard({
   dragListeners,
   isAdmin,
   isBlocked,
+  hasStory,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -163,6 +164,7 @@ function KanbanCard({
   dragListeners?: any;
   isAdmin?: boolean;
   isBlocked?: boolean;
+  hasStory?: boolean;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
