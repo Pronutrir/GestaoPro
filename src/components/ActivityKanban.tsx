@@ -523,6 +523,7 @@ function SortableColumn({
                 onMoveToBacklog={() => onMoveToBacklog(activity.id)}
                 isAdmin={isAdmin}
                 isBlocked={stage.is_blocked}
+                hasStory={storyLinkedActivities.has(activity.id)}
               />
             ))
           )}
