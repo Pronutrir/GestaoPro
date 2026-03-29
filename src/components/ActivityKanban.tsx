@@ -394,9 +394,19 @@ function SortableColumn({
             />
             <h3 className="text-sm font-semibold text-foreground truncate">{stage.title}</h3>
           </div>
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
-            {stageActivities.length}
-          </Badge>
+          <div className="flex items-center gap-1 shrink-0">
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center">
+              {stageActivities.length}
+            </Badge>
+            <button
+              type="button"
+              className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+              onClick={(e) => { e.stopPropagation(); setShowQuickAdd(!showQuickAdd); }}
+              title="Criar atividade nesta coluna"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
         {stageActivities.length > 1 && (
           <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
