@@ -319,6 +319,11 @@ function SortableColumn({
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
 }) {
   const [colSort, setColSort] = useState<string>("wbs_asc");
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickTitle, setQuickTitle] = useState("");
+  const [quickPhase, setQuickPhase] = useState("");
+  const [quickOrder, setQuickOrder] = useState("");
+  const [quickLoading, setQuickLoading] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
 
