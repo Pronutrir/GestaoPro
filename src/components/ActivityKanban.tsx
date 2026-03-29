@@ -104,6 +104,7 @@ function SortableKanbanCard({
   onMoveToBacklog,
   isAdmin,
   isBlocked,
+  hasStory,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -113,6 +114,7 @@ function SortableKanbanCard({
   onMoveToBacklog: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
+  hasStory?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -135,6 +137,7 @@ function SortableKanbanCard({
         dragListeners={listeners}
         isAdmin={isAdmin}
         isBlocked={isBlocked}
+        hasStory={hasStory}
       />
     </div>
   );
@@ -150,6 +153,7 @@ function KanbanCard({
   dragListeners,
   isAdmin,
   isBlocked,
+  hasStory,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -160,6 +164,7 @@ function KanbanCard({
   dragListeners?: any;
   isAdmin?: boolean;
   isBlocked?: boolean;
+  hasStory?: boolean;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -250,6 +255,11 @@ function KanbanCard({
                 🎯 {(activity as any).story_points} SP
               </Badge>
             )}
+            {hasStory && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30">
+                📖 História
+              </Badge>
+            )}
             {activity.hours > 0 && (
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                 {activity.hours}h
@@ -301,6 +311,7 @@ function SortableColumn({
   onToggleActivity,
   onMoveToBacklog,
   onCreateActivity,
+  storyLinkedActivities,
   isAdmin,
   onResizeStart,
 }: {
@@ -315,6 +326,7 @@ function SortableColumn({
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onMoveToBacklog: (activityId: string) => void;
   onCreateActivity: (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => Promise<void>;
+  storyLinkedActivities: Set<string>;
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
 }) {
@@ -511,6 +523,7 @@ function SortableColumn({
                 onMoveToBacklog={() => onMoveToBacklog(activity.id)}
                 isAdmin={isAdmin}
                 isBlocked={stage.is_blocked}
+                hasStory={storyLinkedActivities.has(activity.id)}
               />
             ))
           )}
@@ -567,6 +580,7 @@ export const ActivityKanban = ({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [storyLinkedActivities, setStoryLinkedActivities] = useState<Set<string>>(new Set());
   
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
@@ -625,7 +639,12 @@ export const ActivityKanban = ({
 
   useEffect(() => {
     fetchStages();
-  }, [projectId]);
+    // Fetch activities that have linked user stories
+    supabase.from("user_stories").select("activity_id").eq("project_id", projectId).not("activity_id", "is", null)
+      .then(({ data }) => {
+        if (data) setStoryLinkedActivities(new Set(data.map((s: any) => s.activity_id)));
+      });
+  }, [projectId, activities]);
 
   
 
@@ -873,6 +892,7 @@ export const ActivityKanban = ({
                 onToggleActivity={onToggleActivity}
                 onMoveToBacklog={handleMoveToBacklog}
                 onCreateActivity={handleCreateActivity}
+                storyLinkedActivities={storyLinkedActivities}
                 isAdmin={isAdmin}
                 onResizeStart={handleResizeStart}
               />
@@ -891,6 +911,7 @@ export const ActivityKanban = ({
               onDelete={() => {}}
               onToggle={() => {}}
               onMoveToBacklog={() => {}}
+              hasStory={storyLinkedActivities.has(activeActivity.id)}
             />
           </div>
         ) : activeColumn ? (
