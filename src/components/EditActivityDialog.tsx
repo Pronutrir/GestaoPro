@@ -91,10 +91,14 @@ export const EditActivityDialog = ({
   const [newSubTitle, setNewSubTitle] = useState("");
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
-  
-  
+  const [allProfiles, setAllProfiles] = useState<{ full_name: string; sector: string | null }[]>([]);
 
   useEffect(() => {
+    // Fetch all active profiles for participants dropdown
+    supabase.from("profiles").select("full_name, sector").eq("is_active", true).then(({ data }) => {
+      if (data) setAllProfiles(data.filter(p => p.full_name));
+    });
+
     if (projectId) {
       supabase.from("project_members").select("user_id").eq("project_id", projectId).then(({ data: memberData }) => {
         if (memberData && memberData.length > 0) {
@@ -310,8 +314,8 @@ export const EditActivityDialog = ({
               }}
             >
               <option value="">Adicionar participante...</option>
-              {members.filter(m => m.full_name && !formData.participants.includes(m.full_name!)).map((m) => (
-                <option key={m.full_name} value={m.full_name!}>{m.full_name}</option>
+              {allProfiles.filter(m => m.full_name && !formData.participants.includes(m.full_name!)).map((m) => (
+                <option key={m.full_name} value={m.full_name!}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
               ))}
             </select>
           </div>
