@@ -262,7 +262,11 @@ function KanbanCard({
               </Badge>
             )}
             {hasStory && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30">
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30 cursor-pointer hover:bg-primary/20 transition-colors"
+                onClick={(e) => { e.stopPropagation(); onStoryClick?.(); }}
+              >
                 📖 História
               </Badge>
             )}
