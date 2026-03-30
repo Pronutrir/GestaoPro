@@ -594,6 +594,8 @@ export const ActivityKanban = ({
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Set<string>>(new Set());
+  const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
+  const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
