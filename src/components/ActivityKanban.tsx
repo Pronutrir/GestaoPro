@@ -324,6 +324,7 @@ function SortableColumn({
   storyLinkedActivities,
   isAdmin,
   onResizeStart,
+  onStoryClick,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
