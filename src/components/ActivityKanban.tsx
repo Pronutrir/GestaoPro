@@ -106,6 +106,7 @@ function SortableKanbanCard({
   isAdmin,
   isBlocked,
   hasStory,
+  onStoryClick,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -116,6 +117,7 @@ function SortableKanbanCard({
   isAdmin?: boolean;
   isBlocked?: boolean;
   hasStory?: boolean;
+  onStoryClick?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -139,6 +141,7 @@ function SortableKanbanCard({
         isAdmin={isAdmin}
         isBlocked={isBlocked}
         hasStory={hasStory}
+        onStoryClick={onStoryClick}
       />
     </div>
   );
