@@ -535,6 +535,7 @@ function SortableColumn({
                 isAdmin={isAdmin}
                 isBlocked={stage.is_blocked}
                 hasStory={storyLinkedActivities.has(activity.id)}
+                onStoryClick={() => onStoryClick(activity.id)}
               />
             ))
           )}
