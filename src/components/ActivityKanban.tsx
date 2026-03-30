@@ -940,6 +940,12 @@ export const ActivityKanban = ({
         ) : null}
       </DragOverlay>
       </DndContext>
+      <UserStoryDrawer
+        activityId={storyDrawerActivityId}
+        projectId={projectId}
+        open={storyDrawerOpen}
+        onOpenChange={setStoryDrawerOpen}
+      />
     </div>
   );
 };
