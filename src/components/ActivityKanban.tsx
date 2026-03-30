@@ -44,6 +44,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { UserStoryDrawer } from "@/components/UserStoryDrawer";
 
 interface WorkflowStage {
   id: string;
@@ -105,6 +106,7 @@ function SortableKanbanCard({
   isAdmin,
   isBlocked,
   hasStory,
+  onStoryClick,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -115,6 +117,7 @@ function SortableKanbanCard({
   isAdmin?: boolean;
   isBlocked?: boolean;
   hasStory?: boolean;
+  onStoryClick?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -138,6 +141,7 @@ function SortableKanbanCard({
         isAdmin={isAdmin}
         isBlocked={isBlocked}
         hasStory={hasStory}
+        onStoryClick={onStoryClick}
       />
     </div>
   );
@@ -154,6 +158,7 @@ function KanbanCard({
   isAdmin,
   isBlocked,
   hasStory,
+  onStoryClick,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -165,6 +170,7 @@ function KanbanCard({
   isAdmin?: boolean;
   isBlocked?: boolean;
   hasStory?: boolean;
+  onStoryClick?: () => void;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -256,7 +262,11 @@ function KanbanCard({
               </Badge>
             )}
             {hasStory && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30">
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30 cursor-pointer hover:bg-primary/20 transition-colors"
+                onClick={(e) => { e.stopPropagation(); onStoryClick?.(); }}
+              >
                 📖 História
               </Badge>
             )}
@@ -314,6 +324,7 @@ function SortableColumn({
   storyLinkedActivities,
   isAdmin,
   onResizeStart,
+  onStoryClick,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -329,6 +340,7 @@ function SortableColumn({
   storyLinkedActivities: Set<string>;
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
+  onStoryClick: (activityId: string) => void;
 }) {
   const [colSort, setColSort] = useState<string>("wbs_asc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -524,6 +536,7 @@ function SortableColumn({
                 isAdmin={isAdmin}
                 isBlocked={stage.is_blocked}
                 hasStory={storyLinkedActivities.has(activity.id)}
+                onStoryClick={() => onStoryClick(activity.id)}
               />
             ))
           )}
@@ -581,6 +594,8 @@ export const ActivityKanban = ({
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Set<string>>(new Set());
+  const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
+  const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
@@ -895,6 +910,7 @@ export const ActivityKanban = ({
                 storyLinkedActivities={storyLinkedActivities}
                 isAdmin={isAdmin}
                 onResizeStart={handleResizeStart}
+                onStoryClick={(activityId) => { setStoryDrawerActivityId(activityId); setStoryDrawerOpen(true); }}
               />
             );
           })}
@@ -924,6 +940,12 @@ export const ActivityKanban = ({
         ) : null}
       </DragOverlay>
       </DndContext>
+      <UserStoryDrawer
+        activityId={storyDrawerActivityId}
+        projectId={projectId}
+        open={storyDrawerOpen}
+        onOpenChange={setStoryDrawerOpen}
+      />
     </div>
   );
 };
