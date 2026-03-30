@@ -44,6 +44,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { UserStoryDrawer } from "@/components/UserStoryDrawer";
 
 interface WorkflowStage {
   id: string;
