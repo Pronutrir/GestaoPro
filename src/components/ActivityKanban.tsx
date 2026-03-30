@@ -339,6 +339,7 @@ function SortableColumn({
   storyLinkedActivities: Set<string>;
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
+  onStoryClick: (activityId: string) => void;
 }) {
   const [colSort, setColSort] = useState<string>("wbs_asc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
