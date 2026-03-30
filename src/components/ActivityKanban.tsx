@@ -910,6 +910,7 @@ export const ActivityKanban = ({
                 storyLinkedActivities={storyLinkedActivities}
                 isAdmin={isAdmin}
                 onResizeStart={handleResizeStart}
+                onStoryClick={(activityId) => { setStoryDrawerActivityId(activityId); setStoryDrawerOpen(true); }}
               />
             );
           })}
