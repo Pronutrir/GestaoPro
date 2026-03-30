@@ -94,6 +94,7 @@ export const EditActivityDialog = ({
   const [allProfiles, setAllProfiles] = useState<{ full_name: string; sector: string | null }[]>([]);
 
   useEffect(() => {
+    if (!open) return;
     // Fetch all active profiles for participants dropdown
     supabase.from("profiles").select("full_name, sector").eq("is_active", true).then(({ data }) => {
       if (data) setAllProfiles(data.filter(p => p.full_name));
@@ -109,7 +110,7 @@ export const EditActivityDialog = ({
         }
       });
     }
-  }, [projectId]);
+  }, [projectId, open]);
 
   useEffect(() => {
     if (activity) {
