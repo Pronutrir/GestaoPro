@@ -237,8 +237,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
           {activeStory ? (
             <Card className="p-3 shadow-lg opacity-90 rotate-2 border-primary">
               <p className="text-xs text-foreground">
-                <span className="font-semibold text-primary">Como</span> {activeStory.persona},{" "}
-                <span className="font-semibold text-primary">eu quero</span> {activeStory.action}
+              {activeStory.narrative || "Sem narrativa"}
               </p>
             </Card>
           ) : null}
