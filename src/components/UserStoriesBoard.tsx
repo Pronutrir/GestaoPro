@@ -308,38 +308,6 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
             </div>
 
-            <div className="flex items-center gap-3">
-              <Label className="text-sm font-semibold">Prioridade:</Label>
-              {(["low", "medium", "high"] as const).map(p => (
-                <button key={p} type="button"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${form.priority === p ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
-                  onClick={() => setForm({ ...form, priority: p })}>
-                  {p === "high" ? "Alta" : p === "medium" ? "Média" : "Baixa"}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">Critérios de Aceite</Label>
-              {criteria.map((c, idx) => (
-                <div key={idx} className="flex items-center gap-2 p-2 bg-muted/30 rounded-md">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
-                  <span className="text-sm text-foreground flex-1 break-words">{c}</span>
-                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0"
-                    onClick={() => setCriteria(criteria.filter((_, i) => i !== idx))}><X className="w-3 h-3" /></Button>
-                </div>
-              ))}
-              <div className="flex gap-2">
-                <Input placeholder="Adicionar critério..." value={newCriterion}
-                  onChange={e => setNewCriterion(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && newCriterion.trim()) { e.preventDefault(); setCriteria([...criteria, newCriterion.trim()]); setNewCriterion(""); } }}
-                  className="text-sm" />
-                <Button type="button" size="sm" variant="outline"
-                  onClick={() => { if (newCriterion.trim()) { setCriteria([...criteria, newCriterion.trim()]); setNewCriterion(""); } }}>
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
