@@ -89,8 +89,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
   const openCreateDialog = () => {
     setEditingStory(null);
-    setForm({ persona: "", action: "", benefit: "", narrative: "", priority: "medium", image_url: null, phase_id: null, activity_id: null });
-    setCriteria([]);
+    setForm({ narrative: "", image_url: null, phase_id: null, activity_id: null });
     setDialogOpen(true);
   };
 
