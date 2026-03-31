@@ -354,9 +354,7 @@ const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelet
           <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
         </div>
         <p className="text-xs leading-relaxed text-foreground break-words whitespace-pre-wrap [overflow-wrap:anywhere] flex-1 min-w-0">
-          <span className="font-semibold text-primary">Como</span> {story.persona},{" "}
-          <span className="font-semibold text-primary">eu quero</span> {story.action}
-          {story.benefit && (<>, <span className="font-semibold text-primary">para que</span> {story.benefit}</>)}
+          {story.narrative || <span className="italic text-muted-foreground">Sem narrativa</span>}
         </p>
         <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive"
