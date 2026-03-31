@@ -558,6 +558,7 @@ function SortableColumn({
                 isBlocked={stage.is_blocked}
                 hasStory={storyLinkedActivities.has(activity.id)}
                 onStoryClick={() => onStoryClick(activity.id)}
+                onCreateStory={() => onCreateStory(activity)}
               />
             ))
           )}
