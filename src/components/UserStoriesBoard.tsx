@@ -15,7 +15,7 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  Plus, Trash2, CheckCircle2, X, Image as ImageIcon,
+  Plus, Trash2, X, Image as ImageIcon,
   BookOpen, ChevronDown, GripVertical, Upload, Link2, Settings2,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -56,12 +56,10 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   const [phases, setPhases] = useState<Phase[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [form, setForm] = useState({
-    persona: "", action: "", benefit: "", narrative: "",
-    priority: "medium", image_url: null as string | null,
+    narrative: "",
+    image_url: null as string | null,
     phase_id: null as string | null, activity_id: null as string | null,
   });
-  const [criteria, setCriteria] = useState<string[]>([]);
-  const [newCriterion, setNewCriterion] = useState("");
   const [activeStory, setActiveStory] = useState<UserStory | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -91,19 +89,16 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
   const openCreateDialog = () => {
     setEditingStory(null);
-    setForm({ persona: "", action: "", benefit: "", narrative: "", priority: "medium", image_url: null, phase_id: null, activity_id: null });
-    setCriteria([]);
+    setForm({ narrative: "", image_url: null, phase_id: null, activity_id: null });
     setDialogOpen(true);
   };
 
   const openEditDialog = (story: UserStory) => {
     setEditingStory(story);
     setForm({
-      persona: story.persona, action: story.action, benefit: story.benefit,
-      narrative: story.narrative || "", priority: story.priority, image_url: story.image_url,
+      narrative: story.narrative || "", image_url: story.image_url,
       phase_id: story.phase_id || null, activity_id: story.activity_id || null,
     });
-    setCriteria(story.acceptance_criteria || []);
     setDialogOpen(true);
   };
 
@@ -125,15 +120,15 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleSave = async () => {
-    if (!form.persona.trim() || !form.action.trim()) {
-      toast({ title: "Preencha pelo menos persona e ação", variant: "destructive" });
+    if (!form.narrative.trim()) {
+      toast({ title: "Preencha a narrativa", variant: "destructive" });
       return;
     }
     const firstStage = stages[0];
     const payload = {
-      project_id: projectId, persona: form.persona, action: form.action,
-      benefit: form.benefit, narrative: form.narrative, image_url: form.image_url,
-      acceptance_criteria: criteria, priority: form.priority,
+      project_id: projectId, persona: "", action: "",
+      benefit: "", narrative: form.narrative, image_url: form.image_url,
+      acceptance_criteria: [], priority: "medium",
       phase_id: form.phase_id, activity_id: form.activity_id,
     };
 
@@ -237,8 +232,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
           {activeStory ? (
             <Card className="p-3 shadow-lg opacity-90 rotate-2 border-primary">
               <p className="text-xs text-foreground">
-                <span className="font-semibold text-primary">Como</span> {activeStory.persona},{" "}
-                <span className="font-semibold text-primary">eu quero</span> {activeStory.action}
+              {activeStory.narrative || "Sem narrativa"}
               </p>
             </Card>
           ) : null}
@@ -252,29 +246,6 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
             <DialogTitle>{editingStory ? "Editar História" : "Nova História de Usuário"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-3 p-4 bg-accent/20 rounded-lg border border-border">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Formato Ágil</p>
-              <div className="space-y-2">
-                <div className="flex items-start gap-2 min-w-0">
-                  <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Como</span>
-                  <Textarea placeholder="persona (ex: gestor de projetos)" value={form.persona}
-                    onChange={e => setForm({ ...form, persona: e.target.value })} rows={1} autoResize
-                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
-                </div>
-                <div className="flex items-start gap-2 min-w-0">
-                  <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Eu quero</span>
-                  <Textarea placeholder="ação desejada" value={form.action}
-                    onChange={e => setForm({ ...form, action: e.target.value })} rows={1} autoResize
-                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
-                </div>
-                <div className="flex items-start gap-2 min-w-0">
-                  <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Para que</span>
-                  <Textarea placeholder="benefício esperado" value={form.benefit}
-                    onChange={e => setForm({ ...form, benefit: e.target.value })} rows={1} autoResize
-                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
-                </div>
-              </div>
-            </div>
 
             <div className="space-y-3 p-4 bg-muted/30 rounded-lg border border-border">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -331,38 +302,6 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
             </div>
 
-            <div className="flex items-center gap-3">
-              <Label className="text-sm font-semibold">Prioridade:</Label>
-              {(["low", "medium", "high"] as const).map(p => (
-                <button key={p} type="button"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${form.priority === p ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
-                  onClick={() => setForm({ ...form, priority: p })}>
-                  {p === "high" ? "Alta" : p === "medium" ? "Média" : "Baixa"}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">Critérios de Aceite</Label>
-              {criteria.map((c, idx) => (
-                <div key={idx} className="flex items-center gap-2 p-2 bg-muted/30 rounded-md">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
-                  <span className="text-sm text-foreground flex-1 break-words">{c}</span>
-                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0"
-                    onClick={() => setCriteria(criteria.filter((_, i) => i !== idx))}><X className="w-3 h-3" /></Button>
-                </div>
-              ))}
-              <div className="flex gap-2">
-                <Input placeholder="Adicionar critério..." value={newCriterion}
-                  onChange={e => setNewCriterion(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && newCriterion.trim()) { e.preventDefault(); setCriteria([...criteria, newCriterion.trim()]); setNewCriterion(""); } }}
-                  className="text-sm" />
-                <Button type="button" size="sm" variant="outline"
-                  onClick={() => { if (newCriterion.trim()) { setCriteria([...criteria, newCriterion.trim()]); setNewCriterion(""); } }}>
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
@@ -409,9 +348,7 @@ const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelet
           <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
         </div>
         <p className="text-xs leading-relaxed text-foreground break-words whitespace-pre-wrap [overflow-wrap:anywhere] flex-1 min-w-0">
-          <span className="font-semibold text-primary">Como</span> {story.persona},{" "}
-          <span className="font-semibold text-primary">eu quero</span> {story.action}
-          {story.benefit && (<>, <span className="font-semibold text-primary">para que</span> {story.benefit}</>)}
+          {story.narrative || <span className="italic text-muted-foreground">Sem narrativa</span>}
         </p>
         <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive"
@@ -430,9 +367,7 @@ const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelet
       )}
 
       <div className="flex items-center justify-between gap-1">
-        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${story.priority === "high" ? "border-destructive text-destructive" : story.priority === "medium" ? "border-warning text-warning" : "border-border"}`}>
-          {story.priority === "high" ? "Alta" : story.priority === "medium" ? "Média" : "Baixa"}
-        </Badge>
+        <div className="flex-1" />
         <div className="relative">
           <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100"
             onClick={e => { e.stopPropagation(); setShowMenu(!showMenu); }}><ChevronDown className="w-3 h-3" /></Button>
