@@ -15,7 +15,7 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  Plus, Trash2, CheckCircle2, X, Image as ImageIcon,
+  Plus, Trash2, X, Image as ImageIcon,
   BookOpen, ChevronDown, GripVertical, Upload, Link2, Settings2,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
