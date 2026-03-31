@@ -751,7 +751,30 @@ export const ActivityKanban = ({
     return map;
   }, [activities, stages, phases, optimisticMoves]);
 
-  
+  const handleCreateStory = async () => {
+    if (!createStoryActivity || !createStoryNarrative.trim()) return;
+    setCreateStoryLoading(true);
+    const { error } = await supabase.from("user_stories").insert({
+      project_id: projectId,
+      activity_id: createStoryActivity.id,
+      phase_id: createStoryActivity.phase_id,
+      narrative: createStoryNarrative.trim(),
+      persona: "",
+      action: "",
+      benefit: "",
+      acceptance_criteria: [],
+      priority: "medium",
+      status: "draft",
+    });
+    setCreateStoryLoading(false);
+    if (error) {
+      toast({ title: "Erro ao criar história", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "História criada com sucesso" });
+      setStoryLinkedActivities((prev) => new Set([...prev, createStoryActivity.id]));
+      setCreateStoryActivity(null);
+    }
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string;
