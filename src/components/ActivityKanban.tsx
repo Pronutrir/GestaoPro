@@ -11,6 +11,14 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Pencil,
   Trash2,
@@ -21,6 +29,7 @@ import {
   Inbox,
   ArrowUpDown,
   Plus,
+  BookOpen,
 } from "lucide-react";
 import {
   DndContext,
@@ -107,6 +116,7 @@ function SortableKanbanCard({
   isBlocked,
   hasStory,
   onStoryClick,
+  onCreateStory,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -118,6 +128,7 @@ function SortableKanbanCard({
   isBlocked?: boolean;
   hasStory?: boolean;
   onStoryClick?: () => void;
+  onCreateStory?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -142,6 +153,7 @@ function SortableKanbanCard({
         isBlocked={isBlocked}
         hasStory={hasStory}
         onStoryClick={onStoryClick}
+        onCreateStory={onCreateStory}
       />
     </div>
   );
@@ -159,6 +171,7 @@ function KanbanCard({
   isBlocked,
   hasStory,
   onStoryClick,
+  onCreateStory,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -171,6 +184,7 @@ function KanbanCard({
   isBlocked?: boolean;
   hasStory?: boolean;
   onStoryClick?: () => void;
+  onCreateStory?: () => void;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -293,6 +307,11 @@ function KanbanCard({
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onMoveToBacklog} title="Mover para Backlog">
           <Inbox className="w-3.5 h-3.5" />
         </Button>
+        {!hasStory && onCreateStory && (
+          <Button size="icon" variant="ghost" className="h-6 w-6 text-primary hover:text-primary" onClick={onCreateStory} title="Criar História">
+            <BookOpen className="w-3.5 h-3.5" />
+          </Button>
+        )}
         {isAdmin && (
           <Button
             size="icon"
@@ -325,6 +344,7 @@ function SortableColumn({
   isAdmin,
   onResizeStart,
   onStoryClick,
+  onCreateStory,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -341,6 +361,7 @@ function SortableColumn({
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
   onStoryClick: (activityId: string) => void;
+  onCreateStory: (activity: Activity) => void;
 }) {
   const [colSort, setColSort] = useState<string>("wbs_asc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -537,6 +558,7 @@ function SortableColumn({
                 isBlocked={stage.is_blocked}
                 hasStory={storyLinkedActivities.has(activity.id)}
                 onStoryClick={() => onStoryClick(activity.id)}
+                onCreateStory={() => onCreateStory(activity)}
               />
             ))
           )}
@@ -596,6 +618,9 @@ export const ActivityKanban = ({
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Set<string>>(new Set());
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
+  const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
+  const [createStoryNarrative, setCreateStoryNarrative] = useState("");
+  const [createStoryLoading, setCreateStoryLoading] = useState(false);
   
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
@@ -726,7 +751,30 @@ export const ActivityKanban = ({
     return map;
   }, [activities, stages, phases, optimisticMoves]);
 
-  
+  const handleCreateStory = async () => {
+    if (!createStoryActivity || !createStoryNarrative.trim()) return;
+    setCreateStoryLoading(true);
+    const { error } = await supabase.from("user_stories").insert({
+      project_id: projectId,
+      activity_id: createStoryActivity.id,
+      phase_id: createStoryActivity.phase_id,
+      narrative: createStoryNarrative.trim(),
+      persona: "",
+      action: "",
+      benefit: "",
+      acceptance_criteria: [],
+      priority: "medium",
+      status: "draft",
+    });
+    setCreateStoryLoading(false);
+    if (error) {
+      toast({ title: "Erro ao criar história", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "História criada com sucesso" });
+      setStoryLinkedActivities((prev) => new Set([...prev, createStoryActivity.id]));
+      setCreateStoryActivity(null);
+    }
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string;
@@ -911,6 +959,7 @@ export const ActivityKanban = ({
                 isAdmin={isAdmin}
                 onResizeStart={handleResizeStart}
                 onStoryClick={(activityId) => { setStoryDrawerActivityId(activityId); setStoryDrawerOpen(true); }}
+                onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryNarrative(""); }}
               />
             );
           })}
@@ -946,6 +995,46 @@ export const ActivityKanban = ({
         open={storyDrawerOpen}
         onOpenChange={setStoryDrawerOpen}
       />
+
+      {/* Dialog para criar história rápida */}
+      <Dialog open={!!createStoryActivity} onOpenChange={(open) => { if (!open) setCreateStoryActivity(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-primary" />
+              Criar História
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs text-muted-foreground">Atividade vinculada</Label>
+              <p className="text-sm font-medium">{createStoryActivity?.title}</p>
+            </div>
+            {createStoryActivity?.phase_id && (
+              <div>
+                <Label className="text-xs text-muted-foreground">Fase (EAP)</Label>
+                <p className="text-sm">{phases.find(p => p.id === createStoryActivity?.phase_id)?.title || "—"}</p>
+              </div>
+            )}
+            <div>
+              <Label className="text-xs">Narrativa / Contexto *</Label>
+              <Textarea
+                placeholder="Descreva o contexto e a narrativa desta história..."
+                value={createStoryNarrative}
+                onChange={(e) => setCreateStoryNarrative(e.target.value)}
+                className="min-h-[100px] mt-1"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateStoryActivity(null)}>Cancelar</Button>
+            <Button onClick={handleCreateStory} disabled={!createStoryNarrative.trim() || createStoryLoading}>
+              {createStoryLoading ? "Criando..." : "Criar História"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
