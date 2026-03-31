@@ -171,6 +171,7 @@ function KanbanCard({
   isBlocked,
   hasStory,
   onStoryClick,
+  onCreateStory,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -183,6 +184,7 @@ function KanbanCard({
   isBlocked?: boolean;
   hasStory?: boolean;
   onStoryClick?: () => void;
+  onCreateStory?: () => void;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
