@@ -372,9 +372,7 @@ const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelet
       )}
 
       <div className="flex items-center justify-between gap-1">
-        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${story.priority === "high" ? "border-destructive text-destructive" : story.priority === "medium" ? "border-warning text-warning" : "border-border"}`}>
-          {story.priority === "high" ? "Alta" : story.priority === "medium" ? "Média" : "Baixa"}
-        </Badge>
+        <div className="flex-1" />
         <div className="relative">
           <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100"
             onClick={e => { e.stopPropagation(); setShowMenu(!showMenu); }}><ChevronDown className="w-3 h-3" /></Button>
