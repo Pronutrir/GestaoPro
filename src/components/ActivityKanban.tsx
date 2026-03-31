@@ -972,6 +972,46 @@ export const ActivityKanban = ({
         open={storyDrawerOpen}
         onOpenChange={setStoryDrawerOpen}
       />
+
+      {/* Dialog para criar história rápida */}
+      <Dialog open={!!createStoryActivity} onOpenChange={(open) => { if (!open) setCreateStoryActivity(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-primary" />
+              Criar História
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs text-muted-foreground">Atividade vinculada</Label>
+              <p className="text-sm font-medium">{createStoryActivity?.title}</p>
+            </div>
+            {createStoryActivity?.phase_id && (
+              <div>
+                <Label className="text-xs text-muted-foreground">Fase (EAP)</Label>
+                <p className="text-sm">{phases.find(p => p.id === createStoryActivity?.phase_id)?.title || "—"}</p>
+              </div>
+            )}
+            <div>
+              <Label className="text-xs">Narrativa / Contexto *</Label>
+              <Textarea
+                placeholder="Descreva o contexto e a narrativa desta história..."
+                value={createStoryNarrative}
+                onChange={(e) => setCreateStoryNarrative(e.target.value)}
+                className="min-h-[100px] mt-1"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateStoryActivity(null)}>Cancelar</Button>
+            <Button onClick={handleCreateStory} disabled={!createStoryNarrative.trim() || createStoryLoading}>
+              {createStoryLoading ? "Criando..." : "Criar História"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
