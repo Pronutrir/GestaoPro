@@ -126,9 +126,9 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
     }
     const firstStage = stages[0];
     const payload = {
-      project_id: projectId, persona: form.persona, action: form.action,
-      benefit: form.benefit, narrative: form.narrative, image_url: form.image_url,
-      acceptance_criteria: criteria, priority: form.priority,
+      project_id: projectId, persona: "", action: "",
+      benefit: "", narrative: form.narrative, image_url: form.image_url,
+      acceptance_criteria: [], priority: "medium",
       phase_id: form.phase_id, activity_id: form.activity_id,
     };
 
