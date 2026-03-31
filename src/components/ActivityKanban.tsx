@@ -936,6 +936,7 @@ export const ActivityKanban = ({
                 isAdmin={isAdmin}
                 onResizeStart={handleResizeStart}
                 onStoryClick={(activityId) => { setStoryDrawerActivityId(activityId); setStoryDrawerOpen(true); }}
+                onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryNarrative(""); }}
               />
             );
           })}
