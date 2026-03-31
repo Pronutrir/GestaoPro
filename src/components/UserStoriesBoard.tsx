@@ -125,8 +125,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleSave = async () => {
-    if (!form.persona.trim() || !form.action.trim()) {
-      toast({ title: "Preencha pelo menos persona e ação", variant: "destructive" });
+    if (!form.narrative.trim()) {
+      toast({ title: "Preencha a narrativa", variant: "destructive" });
       return;
     }
     const firstStage = stages[0];
