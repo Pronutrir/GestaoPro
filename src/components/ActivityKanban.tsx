@@ -307,6 +307,11 @@ function KanbanCard({
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onMoveToBacklog} title="Mover para Backlog">
           <Inbox className="w-3.5 h-3.5" />
         </Button>
+        {!hasStory && onCreateStory && (
+          <Button size="icon" variant="ghost" className="h-6 w-6 text-primary hover:text-primary" onClick={onCreateStory} title="Criar História">
+            <BookOpen className="w-3.5 h-3.5" />
+          </Button>
+        )}
         {isAdmin && (
           <Button
             size="icon"
