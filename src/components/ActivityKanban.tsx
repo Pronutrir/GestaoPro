@@ -344,6 +344,7 @@ function SortableColumn({
   isAdmin,
   onResizeStart,
   onStoryClick,
+  onCreateStory,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -360,6 +361,7 @@ function SortableColumn({
   isAdmin?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
   onStoryClick: (activityId: string) => void;
+  onCreateStory: (activity: Activity) => void;
 }) {
   const [colSort, setColSort] = useState<string>("wbs_asc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
