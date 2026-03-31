@@ -116,6 +116,7 @@ function SortableKanbanCard({
   isBlocked,
   hasStory,
   onStoryClick,
+  onCreateStory,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -127,6 +128,7 @@ function SortableKanbanCard({
   isBlocked?: boolean;
   hasStory?: boolean;
   onStoryClick?: () => void;
+  onCreateStory?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -151,6 +153,7 @@ function SortableKanbanCard({
         isBlocked={isBlocked}
         hasStory={hasStory}
         onStoryClick={onStoryClick}
+        onCreateStory={onCreateStory}
       />
     </div>
   );
