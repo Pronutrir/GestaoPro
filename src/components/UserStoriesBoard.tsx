@@ -56,12 +56,10 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   const [phases, setPhases] = useState<Phase[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [form, setForm] = useState({
-    persona: "", action: "", benefit: "", narrative: "",
-    priority: "medium", image_url: null as string | null,
+    narrative: "",
+    image_url: null as string | null,
     phase_id: null as string | null, activity_id: null as string | null,
   });
-  const [criteria, setCriteria] = useState<string[]>([]);
-  const [newCriterion, setNewCriterion] = useState("");
   const [activeStory, setActiveStory] = useState<UserStory | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
