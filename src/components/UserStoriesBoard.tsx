@@ -252,29 +252,6 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
             <DialogTitle>{editingStory ? "Editar História" : "Nova História de Usuário"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-3 p-4 bg-accent/20 rounded-lg border border-border">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Formato Ágil</p>
-              <div className="space-y-2">
-                <div className="flex items-start gap-2 min-w-0">
-                  <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Como</span>
-                  <Textarea placeholder="persona (ex: gestor de projetos)" value={form.persona}
-                    onChange={e => setForm({ ...form, persona: e.target.value })} rows={1} autoResize
-                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
-                </div>
-                <div className="flex items-start gap-2 min-w-0">
-                  <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Eu quero</span>
-                  <Textarea placeholder="ação desejada" value={form.action}
-                    onChange={e => setForm({ ...form, action: e.target.value })} rows={1} autoResize
-                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
-                </div>
-                <div className="flex items-start gap-2 min-w-0">
-                  <span className="text-sm font-semibold text-muted-foreground w-20 shrink-0">Para que</span>
-                  <Textarea placeholder="benefício esperado" value={form.benefit}
-                    onChange={e => setForm({ ...form, benefit: e.target.value })} rows={1} autoResize
-                    className="min-h-[44px] flex-1 min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
-                </div>
-              </div>
-            </div>
 
             <div className="space-y-3 p-4 bg-muted/30 rounded-lg border border-border">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
