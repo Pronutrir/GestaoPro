@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Circle, BookOpen, Link2 } from "lucide-react";
+import { BookOpen, Link2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface UserStory {
