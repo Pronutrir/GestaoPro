@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Circle, BookOpen, Link2 } from "lucide-react";
+import { BookOpen, Link2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface UserStory {
@@ -88,41 +87,13 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange }: P
           </div>
         ) : (
           <div className="space-y-5 mt-4">
-            {/* User Story Format */}
-            <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-2">
-              <p className="text-sm">
-                <span className="font-semibold text-foreground">Como</span>{" "}
-                <span className="text-primary font-medium">{story.persona || "—"}</span>
-              </p>
-              <p className="text-sm">
-                <span className="font-semibold text-foreground">Eu quero</span>{" "}
-                <span className="text-foreground">{story.action || "—"}</span>
-              </p>
-              <p className="text-sm">
-                <span className="font-semibold text-foreground">Para que</span>{" "}
-                <span className="text-foreground">{story.benefit || "—"}</span>
-              </p>
-            </div>
-
-            {/* Priority & Stage */}
-            <div className="flex flex-wrap gap-2">
-              <Badge className={priorityLabel[story.priority]?.class || ""}>
-                {priorityLabel[story.priority]?.label || story.priority}
-              </Badge>
-              {stageName && (
-                <Badge variant="outline" className="text-xs">
-                  📌 {stageName}
-                </Badge>
-              )}
-            </div>
-
             {/* Narrative */}
-            {story.narrative && (
-              <div className="space-y-1">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Narrativa</p>
-                <p className="text-sm text-foreground whitespace-pre-wrap">{story.narrative}</p>
-              </div>
-            )}
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Narrativa / Contexto</p>
+              <p className="text-sm text-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                {story.narrative || <span className="italic text-muted-foreground">Sem narrativa</span>}
+              </p>
+            </div>
 
             {/* Linked items */}
             <div className="space-y-2">
@@ -151,23 +122,6 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange }: P
                   alt="User Story"
                   className="rounded-lg border border-border max-h-48 w-full object-cover"
                 />
-              </div>
-            )}
-
-            {/* Acceptance Criteria */}
-            {story.acceptance_criteria && story.acceptance_criteria.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Critérios de Aceite ({story.acceptance_criteria.length})
-                </p>
-                <div className="space-y-1.5">
-                  {story.acceptance_criteria.map((c, i) => (
-                    <div key={i} className="flex items-start gap-2 p-2 bg-muted/30 rounded-md border border-border/50">
-                      <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-success shrink-0" />
-                      <p className="text-xs text-foreground">{c}</p>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
           </div>
