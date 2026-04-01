@@ -689,11 +689,12 @@ export const ActivityKanban = ({
   
 
   const fetchStages = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("workflow_stages")
       .select("*")
       .eq("project_id", projectId)
       .order("display_order");
+    console.log("[Kanban] fetchStages:", { data, error, projectId });
     if (data) setStages(data);
   };
 
