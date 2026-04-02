@@ -124,7 +124,23 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      toast({ title: "Membro cadastrado!", description: `Senha temporária: Temp@1234` });
+      const createdUserId = data?.user?.id;
+
+      if (createdUserId) {
+        const { error: memberError } = await supabase.from("project_members").insert({
+          project_id: projectId,
+          user_id: createdUserId,
+          sector: newMemberSector || null,
+          can_create: true,
+          can_edit: true,
+          can_delete: false,
+          can_move: true,
+        });
+
+        if (memberError) throw memberError;
+      }
+
+      toast({ title: "Membro cadastrado e vinculado ao projeto!", description: `Senha temporária: Temp@1234` });
       setNewMemberName("");
       setNewMemberEmail("");
       setNewMemberSector("");
