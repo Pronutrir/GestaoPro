@@ -39,9 +39,6 @@ const Dashboard = () => {
   const { toast } = useToast();
   const { filterProjects, canManage: isAdmin, loading: authLoading } = useProjectAccess();
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(() => {
-    return localStorage.getItem("dashboard_category_filter") || null;
-  });
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -114,8 +111,7 @@ const Dashboard = () => {
 
   const filteredProjects = projects.filter(p => {
     const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || p.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = !categoryFilter || (p.category || "general") === categoryFilter;
-    return matchesSearch && matchesCategory;
+    return matchesSearch;
   });
 
   const sortByOrder = (arr: Project[]) => [...arr].sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
@@ -145,16 +141,6 @@ const Dashboard = () => {
             <Input placeholder="Buscar projetos..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" />
           </div>
           <div className="flex items-center gap-2">
-            <select className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" value={categoryFilter || ""} onChange={e => { const v = e.target.value || null; setCategoryFilter(v); v ? localStorage.setItem("dashboard_category_filter", v) : localStorage.removeItem("dashboard_category_filter"); }}>
-              <option value="">Todas Categorias</option>
-              <option value="general">Geral</option>
-              <option value="produto">Produto</option>
-              <option value="infraestrutura">Infraestrutura</option>
-              <option value="marketing">Marketing</option>
-              <option value="operacoes">Operações</option>
-              <option value="tecnologia">Tecnologia</option>
-              <option value="rh">RH</option>
-            </select>
             <AddProjectDialog onProjectAdded={fetchProjects} />
           </div>
         </div>

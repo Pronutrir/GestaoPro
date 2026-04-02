@@ -97,7 +97,8 @@ const ProjectDetails = () => {
   const [phases, setPhases] = useState<Phase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [permissionsLoading, setPermissionsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("kanban");
+  const [showDashboard, setShowDashboard] = useState(false);
   const [allowedTabs, setAllowedTabs] = useState<string[] | null>(null);
   const [newActivity, setNewActivity] = useState("");
   const [newActivityAssigned, setNewActivityAssigned] = useState("");
@@ -400,7 +401,16 @@ const ProjectDetails = () => {
           {/* Project Info Card */}
           <Card className="px-5 py-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6 text-sm">
+              <div className="flex items-center gap-4 text-sm">
+                <Button
+                  variant={showDashboard ? "default" : "outline"}
+                  size="sm"
+                  className="gap-1.5 h-8"
+                  onClick={() => setShowDashboard(!showDashboard)}
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                  Dashboard
+                </Button>
                 <h2 className="text-sm font-semibold text-foreground">Informações do Projeto</h2>
                 {isAdmin && (
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingProject(project); setEditDialogOpen(true); }}>
@@ -443,6 +453,15 @@ const ProjectDetails = () => {
             </div>
           </Card>
 
+          {showDashboard && (
+            <ProjectDashboard
+              activities={activities}
+              phases={phases}
+              project={project}
+              onNavigateToActivity={(activity) => { setEditingActivity(activity as any); setEditActivityDialogOpen(true); }}
+            />
+          )}
+
           {/* Tabs — Phases tab REMOVED */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <DraggableTabBar
@@ -450,7 +469,6 @@ const ProjectDetails = () => {
               activeTab={activeTab}
               onTabChange={setActiveTab}
               tabs={[
-                { value: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
                 { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" /> },
                 { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" /> },
                 { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
@@ -466,15 +484,6 @@ const ProjectDetails = () => {
                 { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" /> },
               ].filter(tab => !allowedTabs || allowedTabs.includes(tab.value))}
             />
-
-            <TabsContent value="dashboard" className="mt-0">
-              <ProjectDashboard
-                activities={activities}
-                phases={phases}
-                project={project}
-                onNavigateToActivity={(activity) => { setEditingActivity(activity as any); setEditActivityDialogOpen(true); }}
-              />
-            </TabsContent>
 
             <TabsContent value="kanban" className="mt-0">
               <ActivityKanban

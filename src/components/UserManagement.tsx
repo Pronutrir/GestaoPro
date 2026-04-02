@@ -225,7 +225,7 @@ export const UserManagement = () => {
   };
 
   const toggleTab = (tabValue: string) => {
-    if (tabValue === "dashboard") return;
+    if (tabValue === "kanban") return;
 
     setUserAllowedTabs(prev => {
       if (prev.includes(tabValue)) {
@@ -236,7 +236,7 @@ export const UserManagement = () => {
   };
 
   const toggleAllTabs = (enabled: boolean) => {
-    setUserAllowedTabs(enabled ? normalizeProjectTabs(ALL_TAB_VALUES) : ["dashboard"]);
+    setUserAllowedTabs(enabled ? normalizeProjectTabs([...ALL_TAB_VALUES]) : ["kanban"]);
   };
 
   const filteredProfiles = profiles.filter(p => {
@@ -536,7 +536,7 @@ export const UserManagement = () => {
                         <span className="text-xs font-medium text-foreground">{tab.label}</span>
                         <Switch
                           checked={userAllowedTabs.includes(tab.value)}
-                          disabled={tab.value === "dashboard"}
+                          disabled={tab.value === "kanban"}
                           onCheckedChange={() => toggleTab(tab.value)}
                         />
                       </div>

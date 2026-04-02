@@ -1,5 +1,4 @@
 export const ALL_PROJECT_TABS = [
-  { value: "dashboard", label: "Dashboard" },
   { value: "kanban", label: "Kanban" },
   { value: "backlog", label: "Backlog" },
   { value: "timeline", label: "Cronograma" },
@@ -24,5 +23,5 @@ export const normalizeProjectTabs = (tabs?: string[] | null) => {
 
   const baseTabs = validTabs.length > 0 ? validTabs : [...ALL_TAB_VALUES];
 
-  return Array.from(new Set(["dashboard", ...baseTabs]));
+  return Array.from(new Set(["kanban", ...baseTabs]));
 };
