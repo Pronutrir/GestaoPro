@@ -36,6 +36,9 @@ import {
   Package, Inbox, DollarSign, ClipboardList, LayoutDashboard,
 } from "lucide-react";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
