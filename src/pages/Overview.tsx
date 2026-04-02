@@ -262,7 +262,7 @@ const Overview = () => {
                 <p className="text-xs text-muted-foreground mt-1">tarefas vencidas</p>
               </Card>
 
-              <Card className={`p-5 cursor-pointer hover:shadow-md transition-all h-full ${upcomingDeadlines.length > 0 ? "border-warning/50" : ""}`} onClick={() => setKpiDialog({ title: "Prazos Próximos (7 dias)", items: upcomingDeadlines })}>
+              <Card className={`p-5 cursor-pointer hover:shadow-md transition-all h-full ${upcomingDeadlines.length > 0 ? "border-warning/50" : ""}`} onClick={() => setKpiDialog({ title: "Prazos Próximos (5 dias)", items: upcomingDeadlines })}>
                 <div className="flex items-center gap-2 mb-3">
                   <CalendarClock className={`w-4 h-4 shrink-0 ${upcomingDeadlines.length > 0 ? "text-warning" : "text-muted-foreground"}`} />
                   <span className="text-sm text-muted-foreground">Prazos Próximos</span>
