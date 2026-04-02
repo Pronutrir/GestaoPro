@@ -44,6 +44,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { getProjectDeadlineInfo, formatProjectDueDate } from "@/lib/projectDeadline";
+import { ALL_TAB_VALUES } from "@/lib/projectTabs";
 
 interface Project {
   id: string;
@@ -85,6 +86,13 @@ interface Activity {
   tags?: string[];
   parent_id?: string | null;
 }
+
+const normalizeAllowedTabs = (tabs: string[] | null | undefined) => {
+  const safeTabs = (tabs || []).filter((tab): tab is string => ALL_TAB_VALUES.includes(tab as any));
+  const normalized = safeTabs.length > 0 ? safeTabs : [...ALL_TAB_VALUES];
+
+  return Array.from(new Set(["dashboard", ...normalized]));
+};
 
 const ProjectDetails = () => {
   const { id } = useParams();
@@ -175,13 +183,13 @@ const ProjectDetails = () => {
 
       if (tabError) {
         console.error("Tab permissions fetch error:", tabError);
-      } else if (tabPerms?.allowed_tabs && Array.isArray(tabPerms.allowed_tabs)) {
-        setAllowedTabs(tabPerms.allowed_tabs);
-        if (!tabPerms.allowed_tabs.includes(activeTab) && tabPerms.allowed_tabs.length > 0) {
-          setActiveTab(tabPerms.allowed_tabs[0]);
-        }
       } else {
-        setAllowedTabs(null);
+        const normalizedTabs = normalizeAllowedTabs(tabPerms?.allowed_tabs);
+        setAllowedTabs(normalizedTabs);
+
+        if (!normalizedTabs.includes(activeTab) && normalizedTabs.length > 0) {
+          setActiveTab(normalizedTabs[0]);
+        }
       }
 
       setPermissionsLoading(false);
