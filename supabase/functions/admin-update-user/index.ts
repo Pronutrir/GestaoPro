@@ -157,6 +157,16 @@ Deno.serve(async (req) => {
       if (pwError) return jsonResponse({ error: pwError.message }, 400);
     }
 
+    if (new_email) {
+      const { error: emailError } = await adminClient.auth.admin.updateUserById(target_user_id, {
+        email: new_email,
+        email_confirm: true,
+      });
+      if (emailError) return jsonResponse({ error: emailError.message }, 400);
+
+      await adminClient.from("profiles").update({ email: new_email }).eq("id", target_user_id);
+    }
+
     if (full_name !== undefined) {
       const { error: metadataError } = await adminClient.auth.admin.updateUserById(target_user_id, {
         user_metadata: { full_name },
