@@ -303,8 +303,8 @@ const ProjectDetails = () => {
         .from("phases").select("*").eq("project_id", id).order("display_order", { ascending: true });
       setPhases(phasesData || []);
 
-      const { data: activitiesData } = await supabase
-        .from("activities").select("*").eq("project_id", id).eq("is_trashed" as any, false)
+      const { data: activitiesData } = await (supabase
+        .from("activities").select("*").eq("project_id", id) as any).eq("is_trashed", false)
         .order("display_order", { ascending: true }).order("created_at", { ascending: true });
       setActivities(activitiesData || []);
     } catch (error) {
