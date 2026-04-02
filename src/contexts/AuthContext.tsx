@@ -34,7 +34,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserData = async (userId: string) => {
+  const fetchUserData = useCallback(async (userId: string) => {
     try {
       const [{ data: profileData }, { data: rolesData }] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", userId).single(),
@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsAdmin(false);
       setIsGestor(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -115,7 +115,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [fetchUserData, loading]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const refreshUserData = () => {
+      fetchUserData(user.id).catch((error) => {
+        console.error("Error refreshing user data:", error);
+      });
+    };
+
+    const handleFocus = () => refreshUserData();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshUserData();
+      }
+    };
+
+    const channel = supabase
+      .channel(`auth-user-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "profiles", filter: `id=eq.${user.id}` },
+        refreshUserData
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "user_roles", filter: `user_id=eq.${user.id}` },
+        refreshUserData
+      )
+      .subscribe();
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      supabase.removeChannel(channel);
+    };
+  }, [fetchUserData, user?.id]);
 
   const signOut = useCallback(async () => {
     setSession(null);

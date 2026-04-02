@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -7,19 +8,71 @@ import { useAuth } from "@/contexts/AuthContext";
  */
 export const useProjectAccess = () => {
   const { user, isAdmin, isGestor, canManage, loading } = useAuth();
+  const [memberProjectIds, setMemberProjectIds] = useState<Set<string>>(new Set());
+  const [membershipsLoading, setMembershipsLoading] = useState(true);
 
-  const filterProjects = async <T extends { id: string }>(projects: T[]): Promise<T[]> => {
-    if (canManage || !user) return projects;
+  const loadMemberships = useCallback(async () => {
+    if (loading) return;
+
+    if (canManage || !user?.id) {
+      setMemberProjectIds(new Set());
+      setMembershipsLoading(false);
+      return;
+    }
+
+    setMembershipsLoading(true);
 
     const { data: memberships } = await supabase
       .from("project_members")
       .select("project_id")
       .eq("user_id", user.id);
 
-    if (!memberships) return [];
-    const allowedIds = new Set(memberships.map((m: any) => m.project_id));
-    return projects.filter((p) => allowedIds.has(p.id));
+    setMemberProjectIds(new Set((memberships || []).map((m: any) => m.project_id)));
+    setMembershipsLoading(false);
+  }, [canManage, loading, user?.id]);
+
+  useEffect(() => {
+    loadMemberships();
+  }, [loadMemberships]);
+
+  useEffect(() => {
+    if (loading || canManage || !user?.id) return;
+
+    const refresh = () => {
+      loadMemberships();
+    };
+
+    const handleFocus = () => refresh();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+
+    const channel = supabase
+      .channel(`project-memberships-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_members", filter: `user_id=eq.${user.id}` },
+        refresh
+      )
+      .subscribe();
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      supabase.removeChannel(channel);
+    };
+  }, [canManage, loadMemberships, loading, user?.id]);
+
+  const filterProjects = async <T extends { id: string }>(projects: T[]): Promise<T[]> => {
+    if (canManage || !user) return projects;
+
+    return projects.filter((p) => memberProjectIds.has(p.id));
   };
 
-  return { filterProjects, isAdmin, isGestor, canManage, user, loading };
+  return { filterProjects, isAdmin, isGestor, canManage, user, loading: loading || membershipsLoading };
 };
