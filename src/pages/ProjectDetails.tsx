@@ -368,7 +368,7 @@ const ProjectDetails = () => {
 
   const handleDeleteActivity = async (activityId: string) => {
     if (!confirm("Tem certeza que deseja mover esta atividade para a lixeira?")) return;
-    await supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("id", activityId);
+    await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any) as any).eq("id", activityId);
     toast({ title: "Atividade movida para a lixeira!" });
     fetchProjectData();
   };
