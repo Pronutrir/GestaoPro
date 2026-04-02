@@ -95,7 +95,7 @@ const ProjectDetails = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("kanban");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [allowedTabs, setAllowedTabs] = useState<string[] | null>(null);
   const [newActivity, setNewActivity] = useState("");
   const [newActivityAssigned, setNewActivityAssigned] = useState("");
