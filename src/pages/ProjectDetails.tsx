@@ -463,7 +463,7 @@ const ProjectDetails = () => {
             </TabsContent>
 
             <TabsContent value="backlog" className="mt-3 space-y-4">
-              {isAdmin && (
+              {canCreate && (
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant={showAddPhase ? "secondary" : "default"} onClick={() => { setShowAddPhase(!showAddPhase); setShowAddActivity(false); }} className="gap-2">
                     <Layers className="w-4 h-4" /> Nova Fase
