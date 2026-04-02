@@ -213,6 +213,42 @@ const ProjectDetails = () => {
     };
   }, [authLoading, id, loadAccess]);
 
+  useEffect(() => {
+    if (authLoading || !id || !currentUser?.id || isAdmin) return;
+
+    const accessChannel = supabase
+      .channel(`project-access-${id}-${currentUser.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "project_members",
+          filter: `project_id=eq.${id}`,
+        },
+        () => {
+          loadAccess();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_tab_permissions",
+          filter: `user_id=eq.${currentUser.id}`,
+        },
+        () => {
+          loadAccess();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(accessChannel);
+    };
+  }, [authLoading, id, currentUser?.id, isAdmin, loadAccess]);
+
   const fetchMembers = async () => {
     const { data: memberData } = await supabase
       .from("project_members").select("user_id").eq("project_id", id!);
