@@ -557,24 +557,33 @@ const ProjectDetails = () => {
                     <Plus className="w-4 h-4" /> Nova Atividade
                   </Button>
                   <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
-                  {phases.length > 0 && (
-                    <Button size="sm" variant="outline" className="gap-2 text-destructive hover:bg-destructive/10" onClick={async () => {
-                      if (!confirm(`Excluir TODAS as ${phases.length} fases?`)) return;
-                      await supabase.from("phases").delete().eq("project_id", id);
-                      toast({ title: `${phases.length} fases excluídas!` }); fetchProjectData();
-                    }}>
-                      <Trash2 className="w-4 h-4" /> Excluir Fases
-                    </Button>
-                  )}
-                  {activities.length > 0 && (
-                    <Button size="sm" variant="outline" className="gap-2 text-destructive hover:bg-destructive/10" onClick={async () => {
-                      if (!confirm(`Excluir TODAS as ${activities.length} atividades?`)) return;
-                      await supabase.from("activities").delete().eq("project_id", id);
-                      toast({ title: `${activities.length} atividades excluídas!` }); fetchProjectData();
-                    }}>
-                      <Trash2 className="w-4 h-4" /> Excluir Atividades
-                    </Button>
-                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline" className="gap-2">
+                        <Settings2 className="w-4 h-4" /> Opções
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {phases.length > 0 && (
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
+                          if (!confirm(`Excluir TODAS as ${phases.length} fases? Esta ação é irreversível.`)) return;
+                          await supabase.from("phases").delete().eq("project_id", id);
+                          toast({ title: `${phases.length} fases excluídas!` }); fetchProjectData();
+                        }}>
+                          <Trash2 className="w-4 h-4 mr-2" /> Excluir todas as fases
+                        </DropdownMenuItem>
+                      )}
+                      {activities.length > 0 && (
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
+                          if (!confirm(`Excluir TODAS as ${activities.length} atividades? Elas serão movidas para a lixeira.`)) return;
+                          await supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id).eq("is_trashed" as any, false);
+                          toast({ title: `${activities.length} atividades movidas para a lixeira!` }); fetchProjectData();
+                        }}>
+                          <Trash2 className="w-4 h-4 mr-2" /> Excluir todas as atividades
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               )}
 
