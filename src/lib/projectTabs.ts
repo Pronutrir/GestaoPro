@@ -1,4 +1,5 @@
 export const ALL_PROJECT_TABS = [
+  { value: "dashboard", label: "Dashboard" },
   { value: "kanban", label: "Kanban" },
   { value: "backlog", label: "Backlog" },
   { value: "timeline", label: "Cronograma" },
