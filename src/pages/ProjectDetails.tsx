@@ -579,7 +579,7 @@ const ProjectDetails = () => {
                       {activities.length > 0 && (
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
                           if (!confirm(`Excluir TODAS as ${activities.length} atividades? Elas serão movidas para a lixeira.`)) return;
-                          await supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id).eq("is_trashed" as any, false);
+                          await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id) as any).eq("is_trashed", false);
                           toast({ title: `${activities.length} atividades movidas para a lixeira!` }); fetchProjectData();
                         }}>
                           <Trash2 className="w-4 h-4 mr-2" /> Excluir todas as atividades
