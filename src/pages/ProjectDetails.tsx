@@ -425,6 +425,7 @@ const ProjectDetails = () => {
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 isAdmin={canDelete}
+                canCreate={canCreate}
               />
             </TabsContent>
 
