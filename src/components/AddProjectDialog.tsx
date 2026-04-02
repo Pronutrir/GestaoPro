@@ -78,7 +78,7 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
         assignees: assigneesArray,
         budget_planned: parseFloat(formData.budget_planned) || 0,
         budget_used: 0,
-        owner: formData.owner,
+        owner: formData.owner || null,
         blockers: formData.blockers,
         category: formData.category || "general",
         program: formData.program || null,
@@ -226,16 +226,16 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>Responsável pelo Projeto</Label>
+                <Label>Líder do Projeto</Label>
                 <Select
                   value={formData.owner || "_none"}
                   onValueChange={(v) => setFormData({ ...formData, owner: v === "_none" ? "" : v })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione o responsável" />
+                    <SelectValue placeholder="Selecione o líder" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="_none">Sem responsável</SelectItem>
+                    <SelectItem value="_none">Sem líder</SelectItem>
                     {profiles.map((p) => (
                       <SelectItem key={p.full_name!} value={p.full_name!}>
                         {p.full_name}
@@ -253,7 +253,7 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
                   })()}
                   readOnly
                   disabled
-                  placeholder="Selecione um responsável"
+                  placeholder="Selecione um líder"
                   className="bg-muted"
                 />
               </div>

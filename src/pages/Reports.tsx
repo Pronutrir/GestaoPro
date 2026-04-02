@@ -199,7 +199,7 @@ const Reports = () => {
                         <th className="p-2 font-medium text-muted-foreground">Projeto</th>
                         <th className="p-2 font-medium text-muted-foreground">Status</th>
                         <th className="p-2 font-medium text-muted-foreground">Categoria</th>
-                        <th className="p-2 font-medium text-muted-foreground">Responsável</th>
+                        <th className="p-2 font-medium text-muted-foreground">Líder</th>
                         <th className="p-2 font-medium text-muted-foreground text-center">Tarefas</th>
                         <th className="p-2 font-medium text-muted-foreground text-center">%</th>
                         <th className="p-2 font-medium text-muted-foreground text-center">Atrasadas</th>

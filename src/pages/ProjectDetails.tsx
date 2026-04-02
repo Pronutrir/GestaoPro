@@ -350,7 +350,7 @@ const ProjectDetails = () => {
                 )}
                 {project.owner && (
                   <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">Responsável:</span>
+                    <span className="text-muted-foreground">Líder:</span>
                     <span className="font-medium text-foreground">{project.owner}</span>
                   </div>
                 )}
