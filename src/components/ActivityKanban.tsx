@@ -366,7 +366,7 @@ function SortableColumn({
   onStoryClick: (activityId: string) => void;
   onCreateStory: (activity: Activity) => void;
 }) {
-  const [colSort, setColSort] = useState<string>("wbs_asc");
+  const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickTitle, setQuickTitle] = useState("");
   const [quickPhase, setQuickPhase] = useState("");
