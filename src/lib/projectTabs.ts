@@ -16,3 +16,13 @@ export const ALL_PROJECT_TABS = [
 ] as const;
 
 export const ALL_TAB_VALUES = ALL_PROJECT_TABS.map(t => t.value);
+
+export const normalizeProjectTabs = (tabs?: string[] | null) => {
+  const validTabs = (tabs || []).filter((tab): tab is typeof ALL_TAB_VALUES[number] =>
+    ALL_TAB_VALUES.includes(tab as typeof ALL_TAB_VALUES[number])
+  );
+
+  const baseTabs = validTabs.length > 0 ? validTabs : [...ALL_TAB_VALUES];
+
+  return Array.from(new Set(["dashboard", ...baseTabs]));
+};

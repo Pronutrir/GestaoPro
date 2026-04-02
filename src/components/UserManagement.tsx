@@ -12,7 +12,7 @@ import {
   Camera, Mail, Building2, Briefcase, Key, Search, MoreVertical, LayoutGrid,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { ALL_PROJECT_TABS, ALL_TAB_VALUES } from "@/lib/projectTabs";
+import { ALL_PROJECT_TABS, ALL_TAB_VALUES, normalizeProjectTabs } from "@/lib/projectTabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -68,7 +68,7 @@ export const UserManagement = () => {
   const [editForm, setEditForm] = useState({
     full_name: "", email: "", sector: "", role_title: "", role: "user", new_password: "",
   });
-  const [userAllowedTabs, setUserAllowedTabs] = useState<string[]>([...ALL_TAB_VALUES]);
+  const [userAllowedTabs, setUserAllowedTabs] = useState<string[]>(normalizeProjectTabs(ALL_TAB_VALUES));
 
   const fetchData = async () => {
     const [{ data: profilesData }, { data: rolesData }, { data: sectorsData }] = await Promise.all([
@@ -207,33 +207,36 @@ export const UserManagement = () => {
       .select("allowed_tabs")
       .eq("user_id", profile.id)
       .maybeSingle();
-    setUserAllowedTabs(data?.allowed_tabs || [...ALL_TAB_VALUES]);
+    setUserAllowedTabs(normalizeProjectTabs(data?.allowed_tabs));
   };
 
   const handleSaveTabPermissions = async (userId: string, tabs: string[]) => {
+    const normalizedTabs = normalizeProjectTabs(tabs);
     const { data: existing } = await supabase
       .from("user_tab_permissions")
       .select("id")
       .eq("user_id", userId)
       .maybeSingle();
     if (existing) {
-      await supabase.from("user_tab_permissions").update({ allowed_tabs: tabs, updated_at: new Date().toISOString() }).eq("user_id", userId);
+      await supabase.from("user_tab_permissions").update({ allowed_tabs: normalizedTabs, updated_at: new Date().toISOString() }).eq("user_id", userId);
     } else {
-      await supabase.from("user_tab_permissions").insert({ user_id: userId, allowed_tabs: tabs } as any);
+      await supabase.from("user_tab_permissions").insert({ user_id: userId, allowed_tabs: normalizedTabs } as any);
     }
   };
 
   const toggleTab = (tabValue: string) => {
+    if (tabValue === "dashboard") return;
+
     setUserAllowedTabs(prev => {
       if (prev.includes(tabValue)) {
-        return prev.filter(t => t !== tabValue);
+        return normalizeProjectTabs(prev.filter(t => t !== tabValue));
       }
-      return [...prev, tabValue];
+      return normalizeProjectTabs([...prev, tabValue]);
     });
   };
 
   const toggleAllTabs = (enabled: boolean) => {
-    setUserAllowedTabs(enabled ? [...ALL_TAB_VALUES] : []);
+    setUserAllowedTabs(enabled ? normalizeProjectTabs(ALL_TAB_VALUES) : ["dashboard"]);
   };
 
   const filteredProfiles = profiles.filter(p => {
@@ -533,6 +536,7 @@ export const UserManagement = () => {
                         <span className="text-xs font-medium text-foreground">{tab.label}</span>
                         <Switch
                           checked={userAllowedTabs.includes(tab.value)}
+                          disabled={tab.value === "dashboard"}
                           onCheckedChange={() => toggleTab(tab.value)}
                         />
                       </div>

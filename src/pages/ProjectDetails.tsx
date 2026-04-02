@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -44,7 +44,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { getProjectDeadlineInfo, formatProjectDueDate } from "@/lib/projectDeadline";
-import { ALL_TAB_VALUES } from "@/lib/projectTabs";
+import { normalizeProjectTabs } from "@/lib/projectTabs";
 
 interface Project {
   id: string;
@@ -86,13 +86,6 @@ interface Activity {
   tags?: string[];
   parent_id?: string | null;
 }
-
-const normalizeAllowedTabs = (tabs: string[] | null | undefined) => {
-  const safeTabs = (tabs || []).filter((tab): tab is string => ALL_TAB_VALUES.includes(tab as any));
-  const normalized = safeTabs.length > 0 ? safeTabs : [...ALL_TAB_VALUES];
-
-  return Array.from(new Set(["dashboard", ...normalized]));
-};
 
 const ProjectDetails = () => {
   const { id } = useParams();
@@ -146,25 +139,26 @@ const ProjectDetails = () => {
     }
   }, [id, authLoading]);
 
-  useEffect(() => {
-    if (authLoading) return;
+  const loadAccess = useCallback(async () => {
     if (!id) return;
 
     if (isAdmin) {
       setUserPerms({ can_create: true, can_edit: true, can_delete: true, can_move: true });
-      setPermissionsLoading(false);
       setAllowedTabs(null);
+      setPermissionsLoading(false);
       return;
     }
 
     if (!currentUser?.id) {
       setUserPerms(null);
+      setAllowedTabs(normalizeProjectTabs());
       setPermissionsLoading(false);
       return;
     }
 
-    const loadAccess = async () => {
-      setPermissionsLoading(true);
+    setPermissionsLoading(true);
+
+    try {
       const [{ data: perms }, { data: tabPerms, error: tabError }] = await Promise.all([
         supabase
           .from("project_members")
@@ -183,20 +177,41 @@ const ProjectDetails = () => {
 
       if (tabError) {
         console.error("Tab permissions fetch error:", tabError);
-      } else {
-        const normalizedTabs = normalizeAllowedTabs(tabPerms?.allowed_tabs);
-        setAllowedTabs(normalizedTabs);
-
-        if (!normalizedTabs.includes(activeTab) && normalizedTabs.length > 0) {
-          setActiveTab(normalizedTabs[0]);
-        }
       }
 
+      const normalizedTabs = normalizeProjectTabs(tabPerms?.allowed_tabs);
+      setAllowedTabs(normalizedTabs);
+      setActiveTab((currentTab) => (normalizedTabs.includes(currentTab) ? currentTab : normalizedTabs[0]));
+    } finally {
       setPermissionsLoading(false);
+    }
+  }, [id, currentUser?.id, isAdmin]);
+
+  useEffect(() => {
+    if (authLoading || !id) return;
+    loadAccess();
+  }, [authLoading, id, loadAccess]);
+
+  useEffect(() => {
+    if (authLoading || !id) return;
+
+    const handleFocus = () => loadAccess();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadAccess();
+      }
     };
 
-    loadAccess();
-  }, [id, currentUser?.id, isAdmin, authLoading]);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const intervalId = window.setInterval(handleFocus, 10000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(intervalId);
+    };
+  }, [authLoading, id, loadAccess]);
 
   const fetchMembers = async () => {
     const { data: memberData } = await supabase
