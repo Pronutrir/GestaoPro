@@ -103,6 +103,7 @@ interface ActivityKanbanProps {
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   isAdmin?: boolean;
+  canCreate?: boolean;
 }
 
 function SortableKanbanCard({
