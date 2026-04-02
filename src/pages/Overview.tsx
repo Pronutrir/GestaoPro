@@ -126,7 +126,7 @@ const Overview = () => {
     if (a.status === "completed" || !a.end_date) return false;
     const end = new Date(a.end_date);
     const diff = (end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-    return diff >= 0 && diff <= 5;
+    return diff >= 0 && diff <= 7;
   });
 
   const highPriorityPending = activities.filter(a => a.priority === "high" && a.status !== "completed");
