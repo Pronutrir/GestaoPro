@@ -268,7 +268,7 @@ const Overview = () => {
                   <span className="text-sm text-muted-foreground">Prazos Próximos</span>
                 </div>
                 <p className={`text-2xl font-bold ${upcomingDeadlines.length > 0 ? "text-warning" : "text-foreground"}`}>{upcomingDeadlines.length}</p>
-                <p className="text-xs text-muted-foreground mt-1">nos próximos 7 dias</p>
+                <p className="text-xs text-muted-foreground mt-1">nos próximos 5 dias</p>
               </Card>
 
               <Card className="p-5 cursor-pointer hover:shadow-md transition-all h-full" onClick={() => setKpiDialog({ title: "Alta Prioridade (Pendentes)", items: highPriorityPending })}>
