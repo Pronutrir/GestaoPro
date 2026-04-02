@@ -473,7 +473,7 @@ function SortableColumn({
                 <SelectItem value="priority">Prioridade</SelectItem>
                 <SelectItem value="due_date">Prazo</SelectItem>
                 <SelectItem value="assigned">Responsável</SelectItem>
-                <SelectItem value="wbs_asc">EAP ↑</SelectItem>
+                
               </SelectContent>
             </Select>
           </div>
