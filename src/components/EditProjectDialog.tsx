@@ -254,16 +254,16 @@ export const EditProjectDialog = ({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>Responsável pelo Projeto</Label>
+                <Label>Líder do Projeto</Label>
                 <Select
                   value={formData.owner || "_none"}
                   onValueChange={(v) => setFormData({ ...formData, owner: v === "_none" ? "" : v })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione o responsável" />
+                    <SelectValue placeholder="Selecione o líder" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="_none">Sem responsável</SelectItem>
+                    <SelectItem value="_none">Sem líder</SelectItem>
                     {profiles.map((p) => (
                       <SelectItem key={p.full_name!} value={p.full_name!}>
                         {p.full_name}
