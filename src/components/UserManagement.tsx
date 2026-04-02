@@ -194,6 +194,7 @@ export const UserManagement = () => {
     setSelectedUser(profile);
     setEditForm({
       full_name: profile.full_name || "",
+      email: profile.email || "",
       sector: profile.sector || "",
       role_title: profile.role_title || "",
       role: getUserRole(profile.id),
