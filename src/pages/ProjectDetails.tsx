@@ -90,11 +90,12 @@ const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { canManage: isAdmin, user: currentUser } = useAuth();
+  const { canManage: isAdmin, user: currentUser, loading: authLoading } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [allowedTabs, setAllowedTabs] = useState<string[] | null>(null);
   const [newActivity, setNewActivity] = useState("");
@@ -118,68 +119,76 @@ const ProjectDetails = () => {
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
 
-  // Effective permissions: admin/gestor always has full access, regular users check project_members
-  const canCreate = isAdmin || (userPerms?.can_create ?? false);
-  const canEdit = isAdmin || (userPerms?.can_edit ?? false);
-  const canDelete = isAdmin || (userPerms?.can_delete ?? false);
-  const canMove = isAdmin || (userPerms?.can_move ?? false);
+  const canCreate = !permissionsLoading && (isAdmin || (userPerms?.can_create ?? false));
+  const canEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
+  const canDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
+  const canMove = !permissionsLoading && (isAdmin || (userPerms?.can_move ?? false));
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   useEffect(() => {
+    if (authLoading) return;
     if (id) {
       fetchProjectData();
       fetchActiveSprint();
       fetchMembers();
       supabase.rpc("generate_overdue_notifications", { p_project_id: id }).then();
     }
-  }, [id]);
+  }, [id, authLoading]);
 
   useEffect(() => {
-    if (id && currentUser?.id) {
-      fetchUserPermissions();
-    }
-  }, [id, currentUser?.id, isAdmin]);
+    if (authLoading) return;
+    if (!id) return;
 
-  const fetchUserPermissions = async () => {
-    if (!currentUser?.id || isAdmin) return;
-    const { data } = await supabase
-      .from("project_members")
-      .select("can_create, can_edit, can_delete, can_move")
-      .eq("project_id", id!)
-      .eq("user_id", currentUser.id)
-      .maybeSingle();
-    if (data) setUserPerms(data);
-  };
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    // Admin/Gestor always sees all tabs
     if (isAdmin) {
+      setUserPerms({ can_create: true, can_edit: true, can_delete: true, can_move: true });
+      setPermissionsLoading(false);
       setAllowedTabs(null);
       return;
     }
-    supabase
-      .from("user_tab_permissions")
-      .select("allowed_tabs")
-      .eq("user_id", currentUser.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Tab permissions fetch error:", error);
-          return;
+
+    if (!currentUser?.id) {
+      setUserPerms(null);
+      setPermissionsLoading(false);
+      return;
+    }
+
+    const loadAccess = async () => {
+      setPermissionsLoading(true);
+      const [{ data: perms }, { data: tabPerms, error: tabError }] = await Promise.all([
+        supabase
+          .from("project_members")
+          .select("can_create, can_edit, can_delete, can_move")
+          .eq("project_id", id)
+          .eq("user_id", currentUser.id)
+          .maybeSingle(),
+        supabase
+          .from("user_tab_permissions")
+          .select("allowed_tabs")
+          .eq("user_id", currentUser.id)
+          .maybeSingle(),
+      ]);
+
+      setUserPerms(perms ?? { can_create: false, can_edit: false, can_delete: false, can_move: false });
+
+      if (tabError) {
+        console.error("Tab permissions fetch error:", tabError);
+      } else if (tabPerms?.allowed_tabs && Array.isArray(tabPerms.allowed_tabs)) {
+        setAllowedTabs(tabPerms.allowed_tabs);
+        if (!tabPerms.allowed_tabs.includes(activeTab) && tabPerms.allowed_tabs.length > 0) {
+          setActiveTab(tabPerms.allowed_tabs[0]);
         }
-        if (data?.allowed_tabs && Array.isArray(data.allowed_tabs)) {
-          setAllowedTabs(data.allowed_tabs);
-          if (!data.allowed_tabs.includes(activeTab) && data.allowed_tabs.length > 0) {
-            setActiveTab(data.allowed_tabs[0]);
-          }
-        }
-        // If no record, allowedTabs stays null = all visible (default)
-      });
-  }, [currentUser?.id, isAdmin]);
+      } else {
+        setAllowedTabs(null);
+      }
+
+      setPermissionsLoading(false);
+    };
+
+    loadAccess();
+  }, [id, currentUser?.id, isAdmin, authLoading]);
 
   const fetchMembers = async () => {
     const { data: memberData } = await supabase
@@ -314,7 +323,7 @@ const ProjectDetails = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || authLoading || permissionsLoading) {
     return (<div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Carregando projeto...</p></div>);
   }
   if (!project) {
@@ -416,6 +425,7 @@ const ProjectDetails = () => {
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 isAdmin={canDelete}
+                canCreate={canCreate}
               />
             </TabsContent>
 

@@ -103,6 +103,7 @@ interface ActivityKanbanProps {
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   isAdmin?: boolean;
+  canCreate?: boolean;
 }
 
 function SortableKanbanCard({
@@ -342,6 +343,7 @@ function SortableColumn({
   onCreateActivity,
   storyLinkedActivities,
   isAdmin,
+  canCreate,
   onResizeStart,
   onStoryClick,
   onCreateStory,
@@ -359,6 +361,7 @@ function SortableColumn({
   onCreateActivity: (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => Promise<void>;
   storyLinkedActivities: Set<string>;
   isAdmin?: boolean;
+  canCreate?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
   onStoryClick: (activityId: string) => void;
   onCreateStory: (activity: Activity) => void;
@@ -443,14 +446,16 @@ function SortableColumn({
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center">
               {stageActivities.length}
             </Badge>
-            <button
-              type="button"
-              className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-              onClick={(e) => { e.stopPropagation(); setShowQuickAdd(!showQuickAdd); }}
-              title="Criar atividade nesta coluna"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
+            {canCreate && (
+              <button
+                type="button"
+                className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                onClick={(e) => { e.stopPropagation(); setShowQuickAdd(!showQuickAdd); }}
+                title="Criar atividade nesta coluna"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
         {stageActivities.length > 1 && (
@@ -477,7 +482,7 @@ function SortableColumn({
       </div>
 
       {/* Quick Add Form */}
-      {showQuickAdd && (
+      {showQuickAdd && canCreate && (
         <div className="px-2 pb-2 space-y-2 border-b border-border/50" onClick={(e) => e.stopPropagation()}>
           <Input
             placeholder="Título da atividade..."
@@ -609,6 +614,7 @@ export const ActivityKanban = ({
   onDeleteActivity,
   onToggleActivity,
   isAdmin = false,
+  canCreate = false,
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
@@ -958,6 +964,7 @@ export const ActivityKanban = ({
                 onCreateActivity={handleCreateActivity}
                 storyLinkedActivities={storyLinkedActivities}
                 isAdmin={isAdmin}
+                canCreate={canCreate}
                 onResizeStart={handleResizeStart}
                 onStoryClick={(activityId) => { setStoryDrawerActivityId(activityId); setStoryDrawerOpen(true); }}
                 onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryNarrative(""); }}

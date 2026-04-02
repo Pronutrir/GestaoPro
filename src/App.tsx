@@ -33,15 +33,15 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/setup" element={<Setup />} />
             <Route path="/" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
-            <Route path="/roadmap" element={<ProtectedRoute><Roadmap /></ProtectedRoute>} />
+            <Route path="/roadmap" element={<ProtectedRoute gestorOnly><Roadmap /></ProtectedRoute>} />
             <Route path="/projects" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/project/:id" element={<ProtectedRoute><ProjectDetails /></ProtectedRoute>} />
             <Route path="/blocked-projects" element={<ProtectedRoute><BlockedProjects /></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><TeamView /></ProtectedRoute>} />
             <Route path="/timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
-            <Route path="/investments" element={<ProtectedRoute><Investments /></ProtectedRoute>} />
-            <Route path="/csc" element={<ProtectedRoute><CSC /></ProtectedRoute>} />
-            <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+            <Route path="/investments" element={<ProtectedRoute gestorOnly><Investments /></ProtectedRoute>} />
+            <Route path="/csc" element={<ProtectedRoute gestorOnly><CSC /></ProtectedRoute>} />
+            <Route path="/reports" element={<ProtectedRoute gestorOnly><Reports /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute adminOnly><Settings /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
