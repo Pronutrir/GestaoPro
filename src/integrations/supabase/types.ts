@@ -25,6 +25,7 @@ export type Database = {
           end_date: string | null
           hours: number | null
           id: string
+          is_trashed: boolean
           parent_id: string | null
           participants: string[] | null
           phase_id: string | null
@@ -37,6 +38,7 @@ export type Database = {
           story_points: number | null
           tags: string[] | null
           title: string
+          trashed_at: string | null
           updated_at: string
           workflow_stage_id: string | null
         }
@@ -50,6 +52,7 @@ export type Database = {
           end_date?: string | null
           hours?: number | null
           id?: string
+          is_trashed?: boolean
           parent_id?: string | null
           participants?: string[] | null
           phase_id?: string | null
@@ -62,6 +65,7 @@ export type Database = {
           story_points?: number | null
           tags?: string[] | null
           title: string
+          trashed_at?: string | null
           updated_at?: string
           workflow_stage_id?: string | null
         }
@@ -75,6 +79,7 @@ export type Database = {
           end_date?: string | null
           hours?: number | null
           id?: string
+          is_trashed?: boolean
           parent_id?: string | null
           participants?: string[] | null
           phase_id?: string | null
@@ -87,6 +92,7 @@ export type Database = {
           story_points?: number | null
           tags?: string[] | null
           title?: string
+          trashed_at?: string | null
           updated_at?: string
           workflow_stage_id?: string | null
         }
