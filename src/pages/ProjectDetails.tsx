@@ -323,7 +323,7 @@ const ProjectDetails = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || authLoading || permissionsLoading) {
     return (<div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Carregando projeto...</p></div>);
   }
   if (!project) {
