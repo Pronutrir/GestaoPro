@@ -116,7 +116,13 @@ const ProjectDetails = () => {
   const [sprintGoal, setSprintGoal] = useState("");
   const [activeSprintId, setActiveSprintId] = useState<string | null>(null);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
+  const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
 
+  // Effective permissions: admin/gestor always has full access, regular users check project_members
+  const canCreate = isAdmin || (userPerms?.can_create ?? false);
+  const canEdit = isAdmin || (userPerms?.can_edit ?? false);
+  const canDelete = isAdmin || (userPerms?.can_delete ?? false);
+  const canMove = isAdmin || (userPerms?.can_move ?? false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
