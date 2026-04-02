@@ -133,9 +133,21 @@ const ProjectDetails = () => {
       fetchProjectData();
       fetchActiveSprint();
       fetchMembers();
+      fetchUserPermissions();
       supabase.rpc("generate_overdue_notifications", { p_project_id: id }).then();
     }
   }, [id]);
+
+  const fetchUserPermissions = async () => {
+    if (!currentUser?.id || isAdmin) return;
+    const { data } = await supabase
+      .from("project_members")
+      .select("can_create, can_edit, can_delete, can_move")
+      .eq("project_id", id!)
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+    if (data) setUserPerms(data);
+  };
 
   useEffect(() => {
     if (!currentUser?.id) return;
