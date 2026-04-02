@@ -116,7 +116,13 @@ const ProjectDetails = () => {
   const [sprintGoal, setSprintGoal] = useState("");
   const [activeSprintId, setActiveSprintId] = useState<string | null>(null);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
+  const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
 
+  // Effective permissions: admin/gestor always has full access, regular users check project_members
+  const canCreate = isAdmin || (userPerms?.can_create ?? false);
+  const canEdit = isAdmin || (userPerms?.can_edit ?? false);
+  const canDelete = isAdmin || (userPerms?.can_delete ?? false);
+  const canMove = isAdmin || (userPerms?.can_move ?? false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -127,9 +133,21 @@ const ProjectDetails = () => {
       fetchProjectData();
       fetchActiveSprint();
       fetchMembers();
+      fetchUserPermissions();
       supabase.rpc("generate_overdue_notifications", { p_project_id: id }).then();
     }
   }, [id]);
+
+  const fetchUserPermissions = async () => {
+    if (!currentUser?.id || isAdmin) return;
+    const { data } = await supabase
+      .from("project_members")
+      .select("can_create, can_edit, can_delete, can_move")
+      .eq("project_id", id!)
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+    if (data) setUserPerms(data);
+  };
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -392,7 +410,7 @@ const ProjectDetails = () => {
                 onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
-                isAdmin={isAdmin}
+                isAdmin={canDelete}
               />
             </TabsContent>
 
@@ -445,7 +463,7 @@ const ProjectDetails = () => {
             </TabsContent>
 
             <TabsContent value="backlog" className="mt-3 space-y-4">
-              {isAdmin && (
+              {canCreate && (
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant={showAddPhase ? "secondary" : "default"} onClick={() => { setShowAddPhase(!showAddPhase); setShowAddActivity(false); }} className="gap-2">
                     <Layers className="w-4 h-4" /> Nova Fase
@@ -527,7 +545,7 @@ const ProjectDetails = () => {
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
-                isAdmin={isAdmin}
+                isAdmin={canDelete}
               />
             </TabsContent>
 
