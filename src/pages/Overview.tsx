@@ -473,7 +473,7 @@ const Overview = () => {
                   Prazos Próximos ({upcomingDeadlines.length})
                 </h3>
                 {upcomingDeadlines.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">Nenhum prazo nos próximos 5 dias</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">Nenhum prazo nos próximos 7 dias</p>
                 ) : (
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
                     {upcomingDeadlines.slice(0, 15).map(a => {

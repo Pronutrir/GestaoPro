@@ -77,7 +77,7 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
     const nearDeadline = activities.filter(a => {
       if (a.status === "completed" || !a.end_date) return false;
       const d = new Date(a.end_date);
-      return d >= today && d <= fiveDaysLater;
+      return d >= today && d <= sevenDaysLater;
     });
     const highPriority = activities.filter(a => a.priority === "high" && a.status !== "completed");
     const totalHours = activities.reduce((sum, a) => sum + (a.hours || 0), 0);
