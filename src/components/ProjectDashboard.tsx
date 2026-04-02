@@ -14,7 +14,7 @@ interface Activity {
   id: string;
   title: string;
   status: string;
-  priority: string;
+  priority?: string;
   start_date: string | null;
   end_date: string | null;
   hours: number | null;
