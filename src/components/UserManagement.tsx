@@ -124,6 +124,7 @@ export const UserManagement = () => {
         role_title: editForm.role_title,
         role: editForm.role,
       };
+      if (editForm.email.trim() && editForm.email !== selectedUser.email) body.new_email = editForm.email;
       if (editForm.new_password.trim()) body.new_password = editForm.new_password;
       const { data, error } = await supabase.functions.invoke("admin-update-user", { body });
       if (error) throw error;
