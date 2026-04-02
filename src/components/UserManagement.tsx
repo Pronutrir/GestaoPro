@@ -476,6 +476,11 @@ export const UserManagement = () => {
                     <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
                   </div>
 
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email</Label>
+                    <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="email@empresa.com" />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div className="grid gap-2">
                       <Label className="flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5" /> Setor</Label>
