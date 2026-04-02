@@ -343,6 +343,7 @@ function SortableColumn({
   onCreateActivity,
   storyLinkedActivities,
   isAdmin,
+  canCreate,
   onResizeStart,
   onStoryClick,
   onCreateStory,
@@ -360,6 +361,7 @@ function SortableColumn({
   onCreateActivity: (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => Promise<void>;
   storyLinkedActivities: Set<string>;
   isAdmin?: boolean;
+  canCreate?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
   onStoryClick: (activityId: string) => void;
   onCreateStory: (activity: Activity) => void;
