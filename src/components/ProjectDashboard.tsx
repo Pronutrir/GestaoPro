@@ -63,8 +63,8 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const fiveDaysLater = new Date(today);
-  fiveDaysLater.setDate(fiveDaysLater.getDate() + 5);
+  const sevenDaysLater = new Date(today);
+  sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
 
   const stats = useMemo(() => {
     const total = activities.length;
