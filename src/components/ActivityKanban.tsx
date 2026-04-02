@@ -366,7 +366,7 @@ function SortableColumn({
   onStoryClick: (activityId: string) => void;
   onCreateStory: (activity: Activity) => void;
 }) {
-  const [colSort, setColSort] = useState<string>("wbs_asc");
+  const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickTitle, setQuickTitle] = useState("");
   const [quickPhase, setQuickPhase] = useState("");
@@ -468,13 +468,12 @@ function SortableColumn({
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="wbs_asc">EAP ↑</SelectItem>
-                <SelectItem value="wbs_desc">EAP ↓</SelectItem>
                 <SelectItem value="updated_desc">Recente</SelectItem>
                 <SelectItem value="updated_asc">Antiga</SelectItem>
                 <SelectItem value="priority">Prioridade</SelectItem>
                 <SelectItem value="due_date">Prazo</SelectItem>
                 <SelectItem value="assigned">Responsável</SelectItem>
+                <SelectItem value="wbs_asc">EAP ↑</SelectItem>
               </SelectContent>
             </Select>
           </div>
