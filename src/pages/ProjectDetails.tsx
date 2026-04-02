@@ -359,6 +359,7 @@ const ProjectDetails = () => {
               activeTab={activeTab}
               onTabChange={setActiveTab}
               tabs={[
+                { value: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
                 { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" /> },
                 { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" /> },
                 { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
