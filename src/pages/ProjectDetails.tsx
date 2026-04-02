@@ -376,6 +376,15 @@ const ProjectDetails = () => {
               ].filter(tab => !allowedTabs || allowedTabs.includes(tab.value))}
             />
 
+            <TabsContent value="dashboard" className="mt-0">
+              <ProjectDashboard
+                activities={activities}
+                phases={phases}
+                project={project}
+                onNavigateToActivity={(activity) => { setEditingActivity(activity as any); setEditActivityDialogOpen(true); }}
+              />
+            </TabsContent>
+
             <TabsContent value="kanban" className="mt-0">
               <ActivityKanban
                 projectId={id!} activities={activities} phases={phases}
