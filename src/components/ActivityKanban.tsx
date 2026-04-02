@@ -482,7 +482,7 @@ function SortableColumn({
       </div>
 
       {/* Quick Add Form */}
-      {showQuickAdd && (
+      {showQuickAdd && canCreate && (
         <div className="px-2 pb-2 space-y-2 border-b border-border/50" onClick={(e) => e.stopPropagation()}>
           <Input
             placeholder="Título da atividade..."
