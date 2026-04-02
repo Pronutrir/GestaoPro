@@ -90,11 +90,12 @@ const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { canManage: isAdmin, user: currentUser } = useAuth();
+  const { canManage: isAdmin, user: currentUser, loading: authLoading } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [allowedTabs, setAllowedTabs] = useState<string[] | null>(null);
   const [newActivity, setNewActivity] = useState("");
@@ -118,11 +119,10 @@ const ProjectDetails = () => {
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
 
-  // Effective permissions: admin/gestor always has full access, regular users check project_members
-  const canCreate = isAdmin || (userPerms?.can_create ?? false);
-  const canEdit = isAdmin || (userPerms?.can_edit ?? false);
-  const canDelete = isAdmin || (userPerms?.can_delete ?? false);
-  const canMove = isAdmin || (userPerms?.can_move ?? false);
+  const canCreate = !permissionsLoading && (isAdmin || (userPerms?.can_create ?? false));
+  const canEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
+  const canDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
+  const canMove = !permissionsLoading && (isAdmin || (userPerms?.can_move ?? false));
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
