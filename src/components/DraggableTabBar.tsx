@@ -103,12 +103,23 @@ export const DraggableTabBar = ({
     if (saved) {
       try {
         const order: string[] = JSON.parse(saved);
-        const sorted = [...tabs].sort((a, b) => {
-          const iA = order.indexOf(a.value);
-          const iB = order.indexOf(b.value);
-          return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
+        // Keep new tabs (not in saved order) at their original position
+        const knownValues = new Set(order);
+        const newTabs = tabs.filter(t => !knownValues.has(t.value));
+        const savedTabs = [...tabs].filter(t => knownValues.has(t.value))
+          .sort((a, b) => {
+            const iA = order.indexOf(a.value);
+            const iB = order.indexOf(b.value);
+            return iA - iB;
+          });
+        // Insert new tabs at their original index positions
+        const result = [...savedTabs];
+        newTabs.forEach(newTab => {
+          const originalIndex = tabs.indexOf(newTab);
+          const insertAt = Math.min(originalIndex, result.length);
+          result.splice(insertAt, 0, newTab);
         });
-        setOrderedTabs(sorted);
+        setOrderedTabs(result);
       } catch {
         setOrderedTabs(tabs);
       }
