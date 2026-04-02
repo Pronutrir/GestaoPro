@@ -545,7 +545,7 @@ const ProjectDetails = () => {
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
-                isAdmin={isAdmin}
+                isAdmin={canDelete}
               />
             </TabsContent>
 
