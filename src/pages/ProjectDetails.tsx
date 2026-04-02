@@ -349,16 +349,30 @@ const ProjectDetails = () => {
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
     const updatePayload: any = { status: newStatus, completed_at: completedAt };
 
-    if (newStatus === "completed" && id) {
-      const { data: finalStage } = await supabase
-        .from("workflow_stages")
-        .select("id")
-        .eq("project_id", id)
-        .eq("is_final", true)
-        .limit(1)
-        .maybeSingle();
-      if (finalStage) {
-        updatePayload.workflow_stage_id = finalStage.id;
+    if (id) {
+      if (newStatus === "completed") {
+        const { data: finalStage } = await supabase
+          .from("workflow_stages")
+          .select("id")
+          .eq("project_id", id)
+          .eq("is_final", true)
+          .limit(1)
+          .maybeSingle();
+        if (finalStage) {
+          updatePayload.workflow_stage_id = finalStage.id;
+        }
+      } else {
+        // When un-completing, move back to backlog stage
+        const { data: backlogStage } = await supabase
+          .from("workflow_stages")
+          .select("id")
+          .eq("project_id", id)
+          .eq("display_order", 0)
+          .limit(1)
+          .maybeSingle();
+        if (backlogStage) {
+          updatePayload.workflow_stage_id = backlogStage.id;
+        }
       }
     }
 
