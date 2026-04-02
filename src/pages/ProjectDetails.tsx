@@ -133,10 +133,15 @@ const ProjectDetails = () => {
       fetchProjectData();
       fetchActiveSprint();
       fetchMembers();
-      fetchUserPermissions();
       supabase.rpc("generate_overdue_notifications", { p_project_id: id }).then();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (id && currentUser?.id) {
+      fetchUserPermissions();
+    }
+  }, [id, currentUser?.id, isAdmin]);
 
   const fetchUserPermissions = async () => {
     if (!currentUser?.id || isAdmin) return;
