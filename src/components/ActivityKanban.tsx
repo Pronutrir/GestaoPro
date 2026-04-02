@@ -761,6 +761,16 @@ export const ActivityKanban = ({
   const handleCreateStory = async () => {
     if (!createStoryActivity || !createStoryNarrative.trim()) return;
     setCreateStoryLoading(true);
+
+    // Fetch the first stage ("Rascunho") so the story appears in the Stories board
+    const { data: stagesData } = await supabase
+      .from("user_story_stages")
+      .select("id")
+      .eq("project_id", projectId)
+      .order("display_order", { ascending: true })
+      .limit(1);
+    const firstStageId = stagesData?.[0]?.id || null;
+
     const { error } = await supabase.from("user_stories").insert({
       project_id: projectId,
       activity_id: createStoryActivity.id,
@@ -772,12 +782,13 @@ export const ActivityKanban = ({
       acceptance_criteria: [],
       priority: "medium",
       status: "draft",
+      stage_id: firstStageId,
     });
     setCreateStoryLoading(false);
     if (error) {
       toast({ title: "Erro ao criar história", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "História criada com sucesso" });
+      toast({ title: "História criada! Ela aparecerá na aba Histórias em Rascunho." });
       setStoryLinkedActivities((prev) => new Set([...prev, createStoryActivity.id]));
       setCreateStoryActivity(null);
     }
