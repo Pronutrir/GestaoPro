@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CheckCircle2, Circle, Trash2, Inbox, ArrowRight } from "lucide-react";
+import { CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -22,6 +22,16 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Phase {
   id: string;
@@ -98,10 +108,12 @@ export const BacklogSection = ({
   const [isMoving, setIsMoving] = useState(false);
   const [filterPhaseId, setFilterPhaseId] = useState<string>("all");
   const [profiles, setProfiles] = useState<{ id: string; full_name: string | null }[]>([]);
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashedActivities, setTrashedActivities] = useState<any[]>([]);
+  const [permanentDeleteId, setPermanentDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      // Fetch active profiles excluding admin users
       const [{ data: profilesData }, { data: adminRoles }] = await Promise.all([
         supabase.from("profiles").select("id, full_name").eq("is_active", true).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
@@ -130,6 +142,47 @@ export const BacklogSection = ({
     };
     fetchStages();
   }, [projectId]);
+
+  const fetchTrashedActivities = async () => {
+    const { data } = await (supabase
+      .from("activities").select("*").eq("project_id", projectId) as any).eq("is_trashed", true)
+      .order("trashed_at", { ascending: false });
+    setTrashedActivities(data || []);
+  };
+
+  useEffect(() => {
+    if (showTrash) fetchTrashedActivities();
+  }, [showTrash, projectId]);
+
+  const handleRestore = async (activityId: string) => {
+    await (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any) as any).eq("id", activityId);
+    toast({ title: "Atividade restaurada!" });
+    fetchTrashedActivities();
+    onDataChanged();
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!permanentDeleteId) return;
+    await supabase.from("activities").delete().eq("id", permanentDeleteId);
+    toast({ title: "Atividade excluída permanentemente!" });
+    setPermanentDeleteId(null);
+    fetchTrashedActivities();
+  };
+
+  const handleRestoreAll = async () => {
+    if (!confirm(`Restaurar todas as ${trashedActivities.length} atividades da lixeira?`)) return;
+    await (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any).eq("project_id", projectId) as any).eq("is_trashed", true);
+    toast({ title: "Todas as atividades restauradas!" });
+    fetchTrashedActivities();
+    onDataChanged();
+  };
+
+  const handleEmptyTrash = async () => {
+    if (!confirm(`Excluir PERMANENTEMENTE todas as ${trashedActivities.length} atividades? Esta ação é irreversível.`)) return;
+    await (supabase.from("activities").delete().eq("project_id", projectId) as any).eq("is_trashed", true);
+    toast({ title: "Lixeira esvaziada!" });
+    fetchTrashedActivities();
+  };
 
   const phaseOrderMap: Record<string, number> = {};
   phases.forEach((p, i) => { phaseOrderMap[p.id] = i; });
@@ -194,139 +247,236 @@ export const BacklogSection = ({
     toast({ title: `${ids.length} atividade(s) movida(s) para o quadro` });
   };
 
-  if (backlogActivities.length === 0) {
-    return (
-      <Card className="p-8 text-center">
-        <Inbox className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-        <p className="text-muted-foreground text-sm">Nenhuma atividade no backlog</p>
-        <p className="text-muted-foreground/60 text-xs mt-1">
-          Atividades descartadas ou planejadas para o futuro aparecerão aqui
-        </p>
-      </Card>
-    );
-  }
-
-  const allSelected = selectedIds.size === backlogActivities.length;
+  const allSelected = backlogActivities.length > 0 && selectedIds.size === backlogActivities.length;
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <Checkbox
-            checked={allSelected}
-            onCheckedChange={toggleSelectAll}
-            aria-label="Selecionar todas"
-          />
-          <p className="text-sm text-muted-foreground">
-            {selectedIds.size > 0
-              ? `${selectedIds.size} de ${backlogActivities.length} selecionada(s)`
-              : `${backlogActivities.length} atividade(s) no backlog`}
+    <div className="space-y-4">
+      {/* Backlog content */}
+      {backlogActivities.length === 0 && !showTrash ? (
+        <Card className="p-8 text-center">
+          <Inbox className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+          <p className="text-muted-foreground text-sm">Nenhuma atividade no backlog</p>
+          <p className="text-muted-foreground/60 text-xs mt-1">
+            Atividades descartadas ou planejadas para o futuro aparecerão aqui
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={filterPhaseId} onValueChange={setFilterPhaseId}>
-            <SelectTrigger className="h-7 text-xs w-[180px]">
-              <SelectValue placeholder="Filtrar por fase" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as fases</SelectItem>
-              {phases.map(p => (
-                <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {selectedIds.size > 0 && (
-            <Button
-              size="sm"
-              className="h-7 text-xs gap-1.5"
-              onClick={() => setMoveDialogOpen(true)}
-            >
-              <ArrowRight className="w-3.5 h-3.5" />
-              Mover para Kanban ({selectedIds.size})
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <div className="grid gap-2">
-        {backlogActivities.map((activity) => {
-          const phase = phases.find((p) => p.id === activity.phase_id);
-          const isSelected = selectedIds.has(activity.id);
-          const prio = activity.priority || "medium";
-          return (
-            <div
-              key={activity.id}
-              className={`flex items-center gap-3 bg-card border rounded-lg px-4 py-3 hover:shadow-sm transition-all cursor-pointer group ${
-                isSelected ? "border-primary/50 bg-primary/5" : "border-border"
-              }`}
-              onClick={() => onEditActivity(activity)}
-            >
+        </Card>
+      ) : backlogActivities.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
               <Checkbox
-                checked={isSelected}
-                onCheckedChange={() => toggleSelect(activity.id)}
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Selecionar ${activity.title}`}
+                checked={allSelected}
+                onCheckedChange={toggleSelectAll}
+                aria-label="Selecionar todas"
               />
+              <p className="text-sm text-muted-foreground">
+                {selectedIds.size > 0
+                  ? `${selectedIds.size} de ${backlogActivities.length} selecionada(s)`
+                  : `${backlogActivities.length} atividade(s) no backlog`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={filterPhaseId} onValueChange={setFilterPhaseId}>
+                <SelectTrigger className="h-7 text-xs w-[180px]">
+                  <SelectValue placeholder="Filtrar por fase" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as fases</SelectItem>
+                  {phases.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedIds.size > 0 && (
+                <Button
+                  size="sm"
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => setMoveDialogOpen(true)}
+                >
+                  <ArrowRight className="w-3.5 h-3.5" />
+                  Mover para Kanban ({selectedIds.size})
+                </Button>
+              )}
+            </div>
+          </div>
 
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6 shrink-0"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleActivity(activity.id, activity.status);
-                }}
-              >
-                {activity.status === "completed" ? (
-                  <CheckCircle2 className="w-4 h-4 text-success" />
-                ) : (
-                  <Circle className="w-4 h-4 text-muted-foreground" />
-                )}
-              </Button>
+          <div className="grid gap-2">
+            {backlogActivities.map((activity) => {
+              const phase = phases.find((p) => p.id === activity.phase_id);
+              const isSelected = selectedIds.has(activity.id);
+              const prio = activity.priority || "medium";
+              return (
+                <div
+                  key={activity.id}
+                  className={`flex items-center gap-3 bg-card border rounded-lg px-4 py-3 hover:shadow-sm transition-all cursor-pointer group ${
+                    isSelected ? "border-primary/50 bg-primary/5" : "border-border"
+                  }`}
+                  onClick={() => onEditActivity(activity)}
+                >
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => toggleSelect(activity.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Selecionar ${activity.title}`}
+                  />
 
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                  {activity.title}
-                </p>
-                {activity.description && (
-                  <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{activity.description}</p>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="outline" className={`text-[10px] ${priorityColors[prio]}`}>
-                  {priorityLabels[prio] || prio}
-                </Badge>
-                {phase && (
-                  <Badge variant="outline" className="text-[10px]">
-                    {phase.title}
-                  </Badge>
-                )}
-                {activity.assigned_to && (
-                  <Badge variant="secondary" className="text-[10px]">
-                    👤 {activity.assigned_to}
-                  </Badge>
-                )}
-                {isAdmin && (
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="h-6 w-6 shrink-0"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDeleteActivity(activity.id);
+                      onToggleActivity(activity.id, activity.status);
                     }}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    {activity.status === "completed" ? (
+                      <CheckCircle2 className="w-4 h-4 text-success" />
+                    ) : (
+                      <Circle className="w-4 h-4 text-muted-foreground" />
+                    )}
                   </Button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                      {activity.title}
+                    </p>
+                    {activity.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{activity.description}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="outline" className={`text-[10px] ${priorityColors[prio]}`}>
+                      {priorityLabels[prio] || prio}
+                    </Badge>
+                    {phase && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {phase.title}
+                      </Badge>
+                    )}
+                    {activity.assigned_to && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        👤 {activity.assigned_to}
+                      </Badge>
+                    )}
+                    {isAdmin && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteActivity(activity.id);
+                        }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Trash Section */}
+      <div className="border-t pt-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-2 text-muted-foreground hover:text-foreground"
+          onClick={() => { setShowTrash(!showTrash); if (!showTrash) fetchTrashedActivities(); }}
+        >
+          <Trash2 className="w-4 h-4" />
+          Lixeira
+          {showTrash ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </Button>
+
+        {showTrash && (
+          <div className="mt-3 space-y-2">
+            {trashedActivities.length === 0 ? (
+              <Card className="p-6 text-center">
+                <Trash2 className="w-8 h-8 mx-auto text-muted-foreground/30 mb-2" />
+                <p className="text-muted-foreground text-sm">Lixeira vazia</p>
+              </Card>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-muted-foreground">
+                    {trashedActivities.length} atividade(s) na lixeira
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleRestoreAll}>
+                      <RotateCcw className="w-3.5 h-3.5" /> Restaurar todas
+                    </Button>
+                    {isAdmin && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-destructive hover:bg-destructive/10" onClick={handleEmptyTrash}>
+                        <Trash2 className="w-3.5 h-3.5" /> Esvaziar lixeira
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  {trashedActivities.map((activity: any) => {
+                    const phase = phases.find((p) => p.id === activity.phase_id);
+                    const trashedDate = activity.trashed_at
+                      ? new Date(activity.trashed_at).toLocaleDateString("pt-BR")
+                      : "";
+                    return (
+                      <div
+                        key={activity.id}
+                        className="flex items-center gap-3 bg-muted/50 border border-dashed rounded-lg px-4 py-3 group"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-muted-foreground line-through">
+                            {activity.title}
+                          </p>
+                          {activity.description && (
+                            <p className="text-xs text-muted-foreground/60 line-clamp-1 mt-0.5">{activity.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {phase && (
+                            <Badge variant="outline" className="text-[10px] opacity-60">
+                              {phase.title}
+                            </Badge>
+                          )}
+                          {trashedDate && (
+                            <span className="text-[10px] text-muted-foreground/60">
+                              Excluída em {trashedDate}
+                            </span>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-xs gap-1 px-2"
+                            onClick={() => handleRestore(activity.id)}
+                          >
+                            <RotateCcw className="w-3 h-3" /> Restaurar
+                          </Button>
+                          {isAdmin && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => setPermanentDeleteId(activity.id)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Modal de configuração para mover */}
+      {/* Move Dialog */}
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent className="sm:max-w-2xl w-[95vw]">
           <DialogHeader>
@@ -391,6 +541,24 @@ export const BacklogSection = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Permanent Delete Confirmation */}
+      <AlertDialog open={!!permanentDeleteId} onOpenChange={(open) => !open && setPermanentDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir permanentemente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação é irreversível. A atividade será excluída permanentemente e não poderá ser recuperada.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handlePermanentDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir permanentemente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
