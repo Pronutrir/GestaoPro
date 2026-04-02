@@ -48,6 +48,7 @@ export const useProjectAccess = () => {
         refresh();
       }
     };
+    const intervalId = window.setInterval(refresh, 10000);
 
     const channel = supabase
       .channel(`project-memberships-${user.id}`)
@@ -64,6 +65,7 @@ export const useProjectAccess = () => {
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
   }, [canManage, loadMemberships, loading, user?.id]);

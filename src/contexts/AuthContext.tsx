@@ -132,6 +132,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         refreshUserData();
       }
     };
+    const intervalId = window.setInterval(refreshUserData, 10000);
 
     const channel = supabase
       .channel(`auth-user-${user.id}`)
@@ -153,6 +154,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
   }, [fetchUserData, user?.id]);
