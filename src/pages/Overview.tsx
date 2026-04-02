@@ -126,7 +126,7 @@ const Overview = () => {
     if (a.status === "completed" || !a.end_date) return false;
     const end = new Date(a.end_date);
     const diff = (end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-    return diff >= 0 && diff <= 7;
+    return diff >= 0 && diff <= 5;
   });
 
   const highPriorityPending = activities.filter(a => a.priority === "high" && a.status !== "completed");
@@ -262,13 +262,13 @@ const Overview = () => {
                 <p className="text-xs text-muted-foreground mt-1">tarefas vencidas</p>
               </Card>
 
-              <Card className={`p-5 cursor-pointer hover:shadow-md transition-all h-full ${upcomingDeadlines.length > 0 ? "border-warning/50" : ""}`} onClick={() => setKpiDialog({ title: "Prazos Próximos (7 dias)", items: upcomingDeadlines })}>
+              <Card className={`p-5 cursor-pointer hover:shadow-md transition-all h-full ${upcomingDeadlines.length > 0 ? "border-warning/50" : ""}`} onClick={() => setKpiDialog({ title: "Prazos Próximos (5 dias)", items: upcomingDeadlines })}>
                 <div className="flex items-center gap-2 mb-3">
                   <CalendarClock className={`w-4 h-4 shrink-0 ${upcomingDeadlines.length > 0 ? "text-warning" : "text-muted-foreground"}`} />
                   <span className="text-sm text-muted-foreground">Prazos Próximos</span>
                 </div>
                 <p className={`text-2xl font-bold ${upcomingDeadlines.length > 0 ? "text-warning" : "text-foreground"}`}>{upcomingDeadlines.length}</p>
-                <p className="text-xs text-muted-foreground mt-1">nos próximos 7 dias</p>
+                <p className="text-xs text-muted-foreground mt-1">nos próximos 5 dias</p>
               </Card>
 
               <Card className="p-5 cursor-pointer hover:shadow-md transition-all h-full" onClick={() => setKpiDialog({ title: "Alta Prioridade (Pendentes)", items: highPriorityPending })}>
@@ -473,7 +473,7 @@ const Overview = () => {
                   Prazos Próximos ({upcomingDeadlines.length})
                 </h3>
                 {upcomingDeadlines.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">Nenhum prazo nos próximos 7 dias</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">Nenhum prazo nos próximos 5 dias</p>
                 ) : (
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
                     {upcomingDeadlines.slice(0, 15).map(a => {

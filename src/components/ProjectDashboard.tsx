@@ -63,8 +63,8 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const threeDaysLater = new Date(today);
-  threeDaysLater.setDate(threeDaysLater.getDate() + 3);
+  const fiveDaysLater = new Date(today);
+  fiveDaysLater.setDate(fiveDaysLater.getDate() + 5);
 
   const stats = useMemo(() => {
     const total = activities.length;
@@ -77,7 +77,7 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
     const nearDeadline = activities.filter(a => {
       if (a.status === "completed" || !a.end_date) return false;
       const d = new Date(a.end_date);
-      return d >= today && d <= threeDaysLater;
+      return d >= today && d <= fiveDaysLater;
     });
     const highPriority = activities.filter(a => a.priority === "high" && a.status !== "completed");
     const totalHours = activities.reduce((sum, a) => sum + (a.hours || 0), 0);
