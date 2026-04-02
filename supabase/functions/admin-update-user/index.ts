@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Sem permissão de administrador" }, 403);
     }
 
-    const { target_user_id, full_name, sector, role_title, role, new_password, avatar_url, action } = await req.json();
+    const { target_user_id, full_name, sector, role_title, role, new_password, new_email, avatar_url, action } = await req.json();
 
     if (!target_user_id) {
       return jsonResponse({ error: "target_user_id é obrigatório" }, 400);
