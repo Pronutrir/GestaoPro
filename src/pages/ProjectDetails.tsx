@@ -27,6 +27,7 @@ import { BacklogSection } from "@/components/BacklogSection";
 import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
+import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
