@@ -281,7 +281,7 @@ export const EditProjectDialog = ({
                   })()}
                   readOnly
                   disabled
-                  placeholder="Selecione um responsável"
+                  placeholder="Selecione um líder"
                   className="bg-muted"
                 />
               </div>
