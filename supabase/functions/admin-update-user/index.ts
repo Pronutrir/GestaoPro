@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Sem permissão de administrador" }, 403);
     }
 
-    const { target_user_id, full_name, sector, role_title, role, new_password, avatar_url, action } = await req.json();
+    const { target_user_id, full_name, sector, role_title, role, new_password, new_email, avatar_url, action } = await req.json();
 
     if (!target_user_id) {
       return jsonResponse({ error: "target_user_id é obrigatório" }, 400);
@@ -155,6 +155,16 @@ Deno.serve(async (req) => {
         password: new_password,
       });
       if (pwError) return jsonResponse({ error: pwError.message }, 400);
+    }
+
+    if (new_email) {
+      const { error: emailError } = await adminClient.auth.admin.updateUserById(target_user_id, {
+        email: new_email,
+        email_confirm: true,
+      });
+      if (emailError) return jsonResponse({ error: emailError.message }, 400);
+
+      await adminClient.from("profiles").update({ email: new_email }).eq("id", target_user_id);
     }
 
     if (full_name !== undefined) {

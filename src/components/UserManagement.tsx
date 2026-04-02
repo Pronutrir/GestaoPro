@@ -66,7 +66,7 @@ export const UserManagement = () => {
     email: "", password: "", full_name: "", sector: "", role_title: "", role: "user",
   });
   const [editForm, setEditForm] = useState({
-    full_name: "", sector: "", role_title: "", role: "user", new_password: "",
+    full_name: "", email: "", sector: "", role_title: "", role: "user", new_password: "",
   });
   const [userAllowedTabs, setUserAllowedTabs] = useState<string[]>([...ALL_TAB_VALUES]);
 
@@ -124,6 +124,7 @@ export const UserManagement = () => {
         role_title: editForm.role_title,
         role: editForm.role,
       };
+      if (editForm.email.trim() && editForm.email !== selectedUser.email) body.new_email = editForm.email;
       if (editForm.new_password.trim()) body.new_password = editForm.new_password;
       const { data, error } = await supabase.functions.invoke("admin-update-user", { body });
       if (error) throw error;
@@ -194,6 +195,7 @@ export const UserManagement = () => {
     setSelectedUser(profile);
     setEditForm({
       full_name: profile.full_name || "",
+      email: profile.email || "",
       sector: profile.sector || "",
       role_title: profile.role_title || "",
       role: getUserRole(profile.id),
@@ -472,6 +474,11 @@ export const UserManagement = () => {
                   <div className="grid gap-2">
                     <Label className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Nome Completo</Label>
                     <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email</Label>
+                    <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="email@empresa.com" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
