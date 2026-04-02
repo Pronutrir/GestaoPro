@@ -324,7 +324,7 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
 
       {/* Detail Dialog */}
       <Dialog open={!!dialogData} onOpenChange={() => setDialogData(null)}>
-        <DialogContent className="max-w-lg max-h-[70vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-xl max-h-[60vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{dialogData?.title}</DialogTitle>
           </DialogHeader>
