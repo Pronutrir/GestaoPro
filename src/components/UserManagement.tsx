@@ -66,7 +66,7 @@ export const UserManagement = () => {
     email: "", password: "", full_name: "", sector: "", role_title: "", role: "user",
   });
   const [editForm, setEditForm] = useState({
-    full_name: "", sector: "", role_title: "", role: "user", new_password: "",
+    full_name: "", email: "", sector: "", role_title: "", role: "user", new_password: "",
   });
   const [userAllowedTabs, setUserAllowedTabs] = useState<string[]>([...ALL_TAB_VALUES]);
 
