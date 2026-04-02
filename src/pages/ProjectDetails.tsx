@@ -27,12 +27,13 @@ import { BacklogSection } from "@/components/BacklogSection";
 import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
+import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, ListTodo, GanttChart, BookOpen, FileText, Flag,
   ChevronRight, Settings2, Kanban, Users, ShieldCheck, AlertTriangle,
-  Package, Inbox, DollarSign, ClipboardList,
+  Package, Inbox, DollarSign, ClipboardList, LayoutDashboard,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
@@ -94,7 +95,7 @@ const ProjectDetails = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("kanban");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [allowedTabs, setAllowedTabs] = useState<string[] | null>(null);
   const [newActivity, setNewActivity] = useState("");
   const [newActivityAssigned, setNewActivityAssigned] = useState("");
@@ -358,6 +359,7 @@ const ProjectDetails = () => {
               activeTab={activeTab}
               onTabChange={setActiveTab}
               tabs={[
+                { value: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
                 { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" /> },
                 { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" /> },
                 { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
@@ -373,6 +375,15 @@ const ProjectDetails = () => {
                 { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" /> },
               ].filter(tab => !allowedTabs || allowedTabs.includes(tab.value))}
             />
+
+            <TabsContent value="dashboard" className="mt-0">
+              <ProjectDashboard
+                activities={activities}
+                phases={phases}
+                project={project}
+                onNavigateToActivity={(activity) => { setEditingActivity(activity as any); setEditActivityDialogOpen(true); }}
+              />
+            </TabsContent>
 
             <TabsContent value="kanban" className="mt-0">
               <ActivityKanban
