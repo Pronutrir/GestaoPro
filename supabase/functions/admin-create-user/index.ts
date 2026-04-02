@@ -33,11 +33,12 @@ Deno.serve(async (req) => {
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
-      .eq("role", "admin")
-      .single();
+      .in("role", ["admin", "gestor"])
+      .limit(1)
+      .maybeSingle();
 
     if (!roleData) {
-      return new Response(JSON.stringify({ error: "Sem permissão de administrador" }), {
+      return new Response(JSON.stringify({ error: "Sem permissão de administrador ou gestor" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
