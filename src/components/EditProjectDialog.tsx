@@ -122,7 +122,7 @@ export const EditProjectDialog = ({
           due_date: formData.due_date || null,
           assignees: assigneesArray,
           budget_planned: parseFloat(formData.budget_planned) || 0,
-          owner: formData.owner,
+          owner: formData.owner || null,
           blockers: formData.blockers,
           category: formData.category || "general",
           program: formData.program || null,
