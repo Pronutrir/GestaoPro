@@ -140,7 +140,7 @@ const ProjectDetails = () => {
     }
   }, [id, authLoading]);
 
-  const loadAccess = useCallback(async () => {
+  const loadAccess = useCallback(async (silent = false) => {
     if (!id) return;
 
     if (isAdmin) {
@@ -157,7 +157,9 @@ const ProjectDetails = () => {
       return;
     }
 
-    setPermissionsLoading(true);
+    if (!silent) {
+      setPermissionsLoading(true);
+    }
 
     try {
       const [{ data: perms }, { data: tabPerms, error: tabError }] = await Promise.all([
@@ -190,27 +192,27 @@ const ProjectDetails = () => {
 
   useEffect(() => {
     if (authLoading || !id) return;
-    loadAccess();
+    void loadAccess();
   }, [authLoading, id, loadAccess]);
 
   useEffect(() => {
     if (authLoading || !id) return;
 
-    const handleFocus = () => loadAccess();
+    const handleFocus = () => {
+      void loadAccess(true);
+    };
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        loadAccess();
+        void loadAccess(true);
       }
     };
 
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    const intervalId = window.setInterval(handleFocus, 10000);
 
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearInterval(intervalId);
     };
   }, [authLoading, id, loadAccess]);
 
@@ -228,7 +230,7 @@ const ProjectDetails = () => {
           filter: `project_id=eq.${id}`,
         },
         () => {
-          loadAccess();
+          void loadAccess(true);
         }
       )
       .on(
@@ -240,7 +242,7 @@ const ProjectDetails = () => {
           filter: `user_id=eq.${currentUser.id}`,
         },
         () => {
-          loadAccess();
+          void loadAccess(true);
         }
       )
       .subscribe();
