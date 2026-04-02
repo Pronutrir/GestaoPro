@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   CommandDialog,
   CommandEmpty,
@@ -18,7 +19,6 @@ import {
   Settings,
   GanttChart,
   AlertTriangle,
-  Search,
 } from "lucide-react";
 
 interface SearchResult {
@@ -27,17 +27,18 @@ interface SearchResult {
   type: "project" | "page";
   url: string;
   description?: string;
+  minRole?: "user" | "gestor" | "admin";
 }
 
 const pages: SearchResult[] = [
-  { id: "overview", title: "Visão Geral", type: "page", url: "/", description: "Dashboard principal" },
-  { id: "roadmap", title: "Roadmap Estratégico", type: "page", url: "/roadmap", description: "Priorização de ideias" },
-  { id: "projects", title: "Pipeline de Projetos", type: "page", url: "/projects", description: "Gestão de projetos" },
-  { id: "timeline", title: "Cronograma", type: "page", url: "/timeline", description: "Visão temporal" },
-  { id: "team", title: "Equipe", type: "page", url: "/team", description: "Membros da equipe" },
-  { id: "reports", title: "Relatórios", type: "page", url: "/reports", description: "Análises e métricas" },
-  { id: "blocked", title: "Bloqueios", type: "page", url: "/blocked-projects", description: "Projetos bloqueados" },
-  { id: "settings", title: "Configurações", type: "page", url: "/settings", description: "Preferências" },
+  { id: "overview", title: "Visão Geral", type: "page", url: "/", description: "Dashboard principal", minRole: "user" },
+  { id: "roadmap", title: "Roadmap Estratégico", type: "page", url: "/roadmap", description: "Priorização de ideias", minRole: "gestor" },
+  { id: "projects", title: "Pipeline de Projetos", type: "page", url: "/projects", description: "Gestão de projetos", minRole: "user" },
+  { id: "timeline", title: "Cronograma", type: "page", url: "/timeline", description: "Visão temporal", minRole: "user" },
+  { id: "team", title: "Equipe", type: "page", url: "/team", description: "Membros da equipe", minRole: "user" },
+  { id: "reports", title: "Relatórios", type: "page", url: "/reports", description: "Análises e métricas", minRole: "gestor" },
+  { id: "blocked", title: "Bloqueios", type: "page", url: "/blocked-projects", description: "Projetos bloqueados", minRole: "user" },
+  { id: "settings", title: "Configurações", type: "page", url: "/settings", description: "Preferências", minRole: "admin" },
 ];
 
 const pageIcons: Record<string, React.ElementType> = {
@@ -55,6 +56,13 @@ export function CommandSearch() {
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<SearchResult[]>([]);
   const navigate = useNavigate();
+  const { isAdmin, canManage } = useAuth();
+
+  const visiblePages = pages.filter((page) => {
+    if (page.minRole === "admin") return isAdmin;
+    if (page.minRole === "gestor") return canManage;
+    return true;
+  });
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -111,7 +119,7 @@ export function CommandSearch() {
         <CommandList>
           <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
           <CommandGroup heading="Páginas">
-            {pages.map((page) => {
+            {visiblePages.map((page) => {
               const Icon = pageIcons[page.id] || Home;
               return (
                 <CommandItem

@@ -964,6 +964,7 @@ export const ActivityKanban = ({
                 onCreateActivity={handleCreateActivity}
                 storyLinkedActivities={storyLinkedActivities}
                 isAdmin={isAdmin}
+                canCreate={canCreate}
                 onResizeStart={handleResizeStart}
                 onStoryClick={(activityId) => { setStoryDrawerActivityId(activityId); setStoryDrawerOpen(true); }}
                 onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryNarrative(""); }}
