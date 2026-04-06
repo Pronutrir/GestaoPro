@@ -37,6 +37,7 @@ interface UserStory {
   priority: string;
   status: string;
   created_at: string;
+  updated_at: string;
 }
 
 interface Phase { id: string; title: string; display_order: number | null; }
