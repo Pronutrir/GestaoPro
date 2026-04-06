@@ -235,8 +235,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
         <DragOverlay>
           {activeStory ? (
             <Card className="p-3 shadow-lg opacity-90 rotate-2 border-primary">
-              <p className="text-xs text-foreground">
-              {activeStory.narrative || "Sem narrativa"}
+              <p className="text-xs font-semibold text-foreground">
+              {activeStory.title || "Sem título"}
               </p>
             </Card>
           ) : null}
