@@ -16,6 +16,8 @@ interface UserStory {
   phase_id: string | null;
   activity_id: string | null;
   stage_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface Props {
@@ -124,6 +126,20 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange }: P
                 />
               </div>
             )}
+
+            {/* Timestamps */}
+            <div className="space-y-1 pt-2 border-t border-border">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Criada em:</span>
+                <span className="font-medium">{new Date(story.created_at).toLocaleDateString("pt-BR")} {new Date(story.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+              </div>
+              {story.updated_at !== story.created_at && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Atualizada em:</span>
+                  <span className="font-medium">{new Date(story.updated_at).toLocaleDateString("pt-BR")} {new Date(story.updated_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </SheetContent>

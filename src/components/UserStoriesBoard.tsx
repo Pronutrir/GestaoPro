@@ -37,6 +37,7 @@ interface UserStory {
   priority: string;
   status: string;
   created_at: string;
+  updated_at: string;
 }
 
 interface Phase { id: string; title: string; display_order: number | null; }
@@ -303,6 +304,14 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
             </div>
 
           </div>
+          {editingStory && (
+            <div className="flex items-center gap-4 text-[11px] text-muted-foreground border-t border-border pt-3">
+              <span>Criada em: {new Date(editingStory.created_at).toLocaleDateString("pt-BR")} {new Date(editingStory.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+              {editingStory.created_at !== (editingStory as any).updated_at && (
+                <span>Atualizada em: {new Date((editingStory as any).updated_at).toLocaleDateString("pt-BR")} {new Date((editingStory as any).updated_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+              )}
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave}>{editingStory ? "Salvar" : "Criar História"}</Button>
@@ -358,6 +367,10 @@ const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelet
 
       {story.image_url && <img src={story.image_url} alt="" className="w-full h-20 object-cover rounded-md border border-border/50" />}
       {story.narrative && <p className="text-[11px] text-muted-foreground line-clamp-2 break-words whitespace-pre-wrap [overflow-wrap:anywhere] min-w-0">{story.narrative}</p>}
+
+      <p className="text-[10px] text-muted-foreground/70">
+        {new Date(story.created_at).toLocaleDateString("pt-BR")} {new Date(story.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+      </p>
 
       {(story.phase_id || story.activity_id) && (
         <div className="flex items-center gap-1 flex-wrap">
