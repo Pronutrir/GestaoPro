@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface UserStory {
   id: string;
+  title: string;
   persona: string;
   action: string;
   benefit: string;
@@ -112,13 +113,18 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange }: P
                   </p>
                 )}
 
+                {/* Title */}
+                <p className="text-sm font-semibold text-foreground">{story.title || "Sem título"}</p>
+
                 {/* Narrative */}
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Narrativa</p>
-                  <p className="text-sm text-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                    {story.narrative || <span className="italic text-muted-foreground">Sem narrativa</span>}
-                  </p>
-                </div>
+                {story.narrative && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Narrativa</p>
+                    <p className="text-sm text-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                      {story.narrative}
+                    </p>
+                  </div>
+                )}
 
                 {/* Image */}
                 {story.image_url && (

@@ -365,21 +365,23 @@ const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelet
         <div {...attributes} {...listeners} className="shrink-0 cursor-grab active:cursor-grabbing pt-0.5 touch-none">
           <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
         </div>
-        <p className="text-xs leading-relaxed text-foreground break-words whitespace-pre-wrap [overflow-wrap:anywhere] flex-1 min-w-0">
-          {story.narrative || <span className="italic text-muted-foreground">Sem narrativa</span>}
-        </p>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-foreground line-clamp-2 break-words [overflow-wrap:anywhere]">
+            {story.title || <span className="italic text-muted-foreground">Sem título</span>}
+          </p>
+        </div>
         <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive"
             onClick={e => { e.stopPropagation(); onDelete(); }}><Trash2 className="w-3 h-3" /></Button>
         </div>
       </div>
 
-      {story.image_url && <img src={story.image_url} alt="" className="w-full h-20 object-cover rounded-md border border-border/50" />}
       {story.narrative && <p className="text-[11px] text-muted-foreground line-clamp-2 break-words whitespace-pre-wrap [overflow-wrap:anywhere] min-w-0">{story.narrative}</p>}
+      {story.image_url && <img src={story.image_url} alt="" className="w-full h-20 object-cover rounded-md border border-border/50" />}
 
-      <p className="text-[10px] text-muted-foreground/70">
-        {new Date(story.created_at).toLocaleDateString("pt-BR")} {new Date(story.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-      </p>
+      <div className="flex items-center gap-1.5 text-[10px] font-medium text-primary/80 bg-primary/5 rounded px-1.5 py-0.5 w-fit">
+        <span>📅 {new Date(story.created_at).toLocaleDateString("pt-BR")} • {new Date(story.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+      </div>
 
       {(story.phase_id || story.activity_id) && (
         <div className="flex items-center gap-1 flex-wrap">
