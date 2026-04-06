@@ -630,6 +630,7 @@ export const ActivityKanban = ({
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
+  const [createStoryTitle, setCreateStoryTitle] = useState("");
   const [createStoryNarrative, setCreateStoryNarrative] = useState("");
   const [createStoryLoading, setCreateStoryLoading] = useState(false);
   
@@ -770,7 +771,7 @@ export const ActivityKanban = ({
   }, [activities, stages, phases, optimisticMoves]);
 
   const handleCreateStory = async () => {
-    if (!createStoryActivity || !createStoryNarrative.trim()) return;
+    if (!createStoryActivity || !createStoryTitle.trim()) return;
     setCreateStoryLoading(true);
 
     // Fetch the first stage ("Rascunho") so the story appears in the Stories board
@@ -786,6 +787,7 @@ export const ActivityKanban = ({
       project_id: projectId,
       activity_id: createStoryActivity.id,
       phase_id: createStoryActivity.phase_id,
+      title: createStoryTitle.trim(),
       narrative: createStoryNarrative.trim(),
       persona: "",
       action: "",
@@ -993,7 +995,7 @@ export const ActivityKanban = ({
                 canCreate={canCreate}
                 onResizeStart={handleResizeStart}
                 onStoryClick={(activityId) => { setStoryDrawerActivityId(activityId); setStoryDrawerOpen(true); }}
-                onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryNarrative(""); }}
+                onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
               />
             );
           })}
@@ -1051,19 +1053,28 @@ export const ActivityKanban = ({
               </div>
             )}
             <div>
-              <Label className="text-xs">Narrativa / Contexto *</Label>
+              <Label className="text-xs">Título *</Label>
+              <Input
+                placeholder="Título da história..."
+                value={createStoryTitle}
+                onChange={(e) => setCreateStoryTitle(e.target.value)}
+                className="mt-1"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Narrativa / Contexto</Label>
               <Textarea
                 placeholder="Descreva o contexto e a narrativa desta história..."
                 value={createStoryNarrative}
                 onChange={(e) => setCreateStoryNarrative(e.target.value)}
                 className="min-h-[100px] mt-1"
-                autoFocus
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateStoryActivity(null)}>Cancelar</Button>
-            <Button onClick={handleCreateStory} disabled={!createStoryNarrative.trim() || createStoryLoading}>
+            <Button onClick={handleCreateStory} disabled={!createStoryTitle.trim() || createStoryLoading}>
               {createStoryLoading ? "Criando..." : "Criar História"}
             </Button>
           </DialogFooter>
