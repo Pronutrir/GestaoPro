@@ -128,6 +128,7 @@ function SortableKanbanCard({
   isAdmin?: boolean;
   isBlocked?: boolean;
   hasStory?: boolean;
+  storyCount?: number;
   onStoryClick?: () => void;
   onCreateStory?: () => void;
 }) {
@@ -184,6 +185,7 @@ function KanbanCard({
   isAdmin?: boolean;
   isBlocked?: boolean;
   hasStory?: boolean;
+  storyCount?: number;
   onStoryClick?: () => void;
   onCreateStory?: () => void;
 }) {
@@ -282,7 +284,7 @@ function KanbanCard({
                 className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30 cursor-pointer hover:bg-primary/20 transition-colors"
                 onClick={(e) => { e.stopPropagation(); onStoryClick?.(); }}
               >
-                📖 História
+                📖 {storyCount && storyCount > 1 ? `${storyCount} Histórias` : "História"}
               </Badge>
             )}
             {activity.hours > 0 && (
@@ -308,7 +310,7 @@ function KanbanCard({
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onMoveToBacklog} title="Mover para Backlog">
           <Inbox className="w-3.5 h-3.5" />
         </Button>
-        {!hasStory && onCreateStory && (
+        {onCreateStory && (
           <Button size="icon" variant="ghost" className="h-6 w-6 text-primary hover:text-primary" onClick={onCreateStory} title="Criar História">
             <BookOpen className="w-3.5 h-3.5" />
           </Button>
@@ -620,7 +622,7 @@ export const ActivityKanban = ({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
-  const [storyLinkedActivities, setStoryLinkedActivities] = useState<Set<string>>(new Set());
+  const [storyLinkedActivities, setStoryLinkedActivities] = useState<Map<string, number>>(new Map());
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
@@ -687,7 +689,13 @@ export const ActivityKanban = ({
     // Fetch activities that have linked user stories
     supabase.from("user_stories").select("activity_id").eq("project_id", projectId).not("activity_id", "is", null)
       .then(({ data }) => {
-        if (data) setStoryLinkedActivities(new Set(data.map((s: any) => s.activity_id)));
+        if (data) {
+          const countMap = new Map<string, number>();
+          data.forEach((s: any) => {
+            countMap.set(s.activity_id, (countMap.get(s.activity_id) || 0) + 1);
+          });
+          setStoryLinkedActivities(countMap);
+        }
       });
   }, [projectId, activities]);
 
@@ -788,7 +796,11 @@ export const ActivityKanban = ({
       toast({ title: "Erro ao criar história", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "História criada! Ela aparecerá na aba Histórias em Rascunho." });
-      setStoryLinkedActivities((prev) => new Set([...prev, createStoryActivity.id]));
+      setStoryLinkedActivities((prev) => {
+        const next = new Map(prev);
+        next.set(createStoryActivity.id, (next.get(createStoryActivity.id) || 0) + 1);
+        return next;
+      });
       setCreateStoryActivity(null);
     }
   };
