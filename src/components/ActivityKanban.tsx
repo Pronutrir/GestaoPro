@@ -174,6 +174,7 @@ function KanbanCard({
   isAdmin,
   isBlocked,
   hasStory,
+  storyCount,
   onStoryClick,
   onCreateStory,
 }: {
