@@ -28,6 +28,7 @@ interface UserStory {
   activity_id: string | null;
   phase_id: string | null;
   stage_id: string | null;
+  title: string;
   persona: string;
   action: string;
   benefit: string;
@@ -57,6 +58,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   const [phases, setPhases] = useState<Phase[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [form, setForm] = useState({
+    title: "",
     narrative: "",
     image_url: null as string | null,
     phase_id: null as string | null, activity_id: null as string | null,
@@ -90,13 +92,14 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
   const openCreateDialog = () => {
     setEditingStory(null);
-    setForm({ narrative: "", image_url: null, phase_id: null, activity_id: null });
+    setForm({ title: "", narrative: "", image_url: null, phase_id: null, activity_id: null });
     setDialogOpen(true);
   };
 
   const openEditDialog = (story: UserStory) => {
     setEditingStory(story);
     setForm({
+      title: story.title || "",
       narrative: story.narrative || "", image_url: story.image_url,
       phase_id: story.phase_id || null, activity_id: story.activity_id || null,
     });
@@ -121,14 +124,14 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleSave = async () => {
-    if (!form.narrative.trim()) {
-      toast({ title: "Preencha a narrativa", variant: "destructive" });
+    if (!form.title.trim()) {
+      toast({ title: "Preencha o título", variant: "destructive" });
       return;
     }
     const firstStage = stages[0];
     const payload = {
       project_id: projectId, persona: "", action: "",
-      benefit: "", narrative: form.narrative, image_url: form.image_url,
+      benefit: "", title: form.title, narrative: form.narrative, image_url: form.image_url,
       acceptance_criteria: [], priority: "medium",
       phase_id: form.phase_id, activity_id: form.activity_id,
     };
@@ -276,6 +279,12 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                   </Select>
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Título *</Label>
+              <Input placeholder="Título da história..." value={form.title}
+                onChange={e => setForm({ ...form, title: e.target.value })} autoFocus />
             </div>
 
             <div className="space-y-2">
