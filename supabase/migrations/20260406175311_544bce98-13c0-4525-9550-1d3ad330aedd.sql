@@ -1,0 +1,1 @@
+ALTER TABLE public.user_stories ADD COLUMN title text NOT NULL DEFAULT '';

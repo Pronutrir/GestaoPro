@@ -28,6 +28,7 @@ interface UserStory {
   activity_id: string | null;
   phase_id: string | null;
   stage_id: string | null;
+  title: string;
   persona: string;
   action: string;
   benefit: string;
@@ -57,6 +58,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   const [phases, setPhases] = useState<Phase[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [form, setForm] = useState({
+    title: "",
     narrative: "",
     image_url: null as string | null,
     phase_id: null as string | null, activity_id: null as string | null,
@@ -90,13 +92,14 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
   const openCreateDialog = () => {
     setEditingStory(null);
-    setForm({ narrative: "", image_url: null, phase_id: null, activity_id: null });
+    setForm({ title: "", narrative: "", image_url: null, phase_id: null, activity_id: null });
     setDialogOpen(true);
   };
 
   const openEditDialog = (story: UserStory) => {
     setEditingStory(story);
     setForm({
+      title: story.title || "",
       narrative: story.narrative || "", image_url: story.image_url,
       phase_id: story.phase_id || null, activity_id: story.activity_id || null,
     });
@@ -121,14 +124,14 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleSave = async () => {
-    if (!form.narrative.trim()) {
-      toast({ title: "Preencha a narrativa", variant: "destructive" });
+    if (!form.title.trim()) {
+      toast({ title: "Preencha o título", variant: "destructive" });
       return;
     }
     const firstStage = stages[0];
     const payload = {
       project_id: projectId, persona: "", action: "",
-      benefit: "", narrative: form.narrative, image_url: form.image_url,
+      benefit: "", title: form.title, narrative: form.narrative, image_url: form.image_url,
       acceptance_criteria: [], priority: "medium",
       phase_id: form.phase_id, activity_id: form.activity_id,
     };
@@ -232,8 +235,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
         <DragOverlay>
           {activeStory ? (
             <Card className="p-3 shadow-lg opacity-90 rotate-2 border-primary">
-              <p className="text-xs text-foreground">
-              {activeStory.narrative || "Sem narrativa"}
+              <p className="text-xs font-semibold text-foreground">
+              {activeStory.title || "Sem título"}
               </p>
             </Card>
           ) : null}
@@ -276,6 +279,12 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                   </Select>
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Título *</Label>
+              <Input placeholder="Título da história..." value={form.title}
+                onChange={e => setForm({ ...form, title: e.target.value })} autoFocus />
             </div>
 
             <div className="space-y-2">
@@ -356,21 +365,23 @@ const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelet
         <div {...attributes} {...listeners} className="shrink-0 cursor-grab active:cursor-grabbing pt-0.5 touch-none">
           <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
         </div>
-        <p className="text-xs leading-relaxed text-foreground break-words whitespace-pre-wrap [overflow-wrap:anywhere] flex-1 min-w-0">
-          {story.narrative || <span className="italic text-muted-foreground">Sem narrativa</span>}
-        </p>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-foreground line-clamp-2 break-words [overflow-wrap:anywhere]">
+            {story.title || <span className="italic text-muted-foreground">Sem título</span>}
+          </p>
+        </div>
         <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive"
             onClick={e => { e.stopPropagation(); onDelete(); }}><Trash2 className="w-3 h-3" /></Button>
         </div>
       </div>
 
-      {story.image_url && <img src={story.image_url} alt="" className="w-full h-20 object-cover rounded-md border border-border/50" />}
       {story.narrative && <p className="text-[11px] text-muted-foreground line-clamp-2 break-words whitespace-pre-wrap [overflow-wrap:anywhere] min-w-0">{story.narrative}</p>}
+      {story.image_url && <img src={story.image_url} alt="" className="w-full h-20 object-cover rounded-md border border-border/50" />}
 
-      <p className="text-[10px] text-muted-foreground/70">
-        {new Date(story.created_at).toLocaleDateString("pt-BR")} {new Date(story.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-      </p>
+      <div className="flex items-center gap-1.5 text-[10px] font-medium text-primary/80 bg-primary/5 rounded px-1.5 py-0.5 w-fit">
+        <span>📅 {new Date(story.created_at).toLocaleDateString("pt-BR")} • {new Date(story.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+      </div>
 
       {(story.phase_id || story.activity_id) && (
         <div className="flex items-center gap-1 flex-wrap">
