@@ -1030,6 +1030,18 @@ export const ActivityKanban = ({
         projectId={projectId}
         open={storyDrawerOpen}
         onOpenChange={setStoryDrawerOpen}
+        onStoriesChanged={() => {
+          supabase.from("user_stories").select("activity_id").eq("project_id", projectId).not("activity_id", "is", null)
+            .then(({ data }) => {
+              if (data) {
+                const countMap = new Map<string, number>();
+                data.forEach((s: any) => {
+                  countMap.set(s.activity_id, (countMap.get(s.activity_id) || 0) + 1);
+                });
+                setStoryLinkedActivities(countMap);
+              }
+            });
+        }}
       />
 
       {/* Dialog para criar história rápida */}
