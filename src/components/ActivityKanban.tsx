@@ -116,6 +116,7 @@ function SortableKanbanCard({
   isAdmin,
   isBlocked,
   hasStory,
+  storyCount,
   onStoryClick,
   onCreateStory,
 }: {
@@ -154,6 +155,7 @@ function SortableKanbanCard({
         isAdmin={isAdmin}
         isBlocked={isBlocked}
         hasStory={hasStory}
+        storyCount={storyCount}
         onStoryClick={onStoryClick}
         onCreateStory={onCreateStory}
       />
@@ -361,7 +363,7 @@ function SortableColumn({
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onMoveToBacklog: (activityId: string) => void;
   onCreateActivity: (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => Promise<void>;
-  storyLinkedActivities: Set<string>;
+  storyLinkedActivities: Map<string, number>;
   isAdmin?: boolean;
   canCreate?: boolean;
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
@@ -563,6 +565,7 @@ function SortableColumn({
                 isAdmin={isAdmin}
                 isBlocked={stage.is_blocked}
                 hasStory={storyLinkedActivities.has(activity.id)}
+                storyCount={storyLinkedActivities.get(activity.id) || 0}
                 onStoryClick={() => onStoryClick(activity.id)}
                 onCreateStory={() => onCreateStory(activity)}
               />
