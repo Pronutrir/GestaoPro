@@ -106,6 +106,7 @@ interface ActivityKanbanProps {
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   isAdmin?: boolean;
   canCreate?: boolean;
+  isQualityProject?: boolean;
 }
 
 function SortableKanbanCard({
@@ -121,6 +122,7 @@ function SortableKanbanCard({
   storyCount,
   onStoryClick,
   onCreateStory,
+  isQualityProject,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -134,6 +136,7 @@ function SortableKanbanCard({
   storyCount?: number;
   onStoryClick?: () => void;
   onCreateStory?: () => void;
+  isQualityProject?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
