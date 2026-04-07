@@ -61,6 +61,7 @@ interface Project {
   budget_used: number;
   owner: string | null;
   blockers: string | null;
+  category?: string | null;
 }
 
 interface Phase {
