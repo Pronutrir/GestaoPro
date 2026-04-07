@@ -61,6 +61,7 @@ interface Project {
   budget_used: number;
   owner: string | null;
   blockers: string | null;
+  category?: string | null;
 }
 
 interface Phase {
@@ -128,6 +129,7 @@ const ProjectDetails = () => {
   const canEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
   const canDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
   const canMove = !permissionsLoading && (isAdmin || (userPerms?.can_move ?? false));
+  const isQualityProject = project?.category === "qualidade";
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -513,6 +515,7 @@ const ProjectDetails = () => {
                 onToggleActivity={handleToggleActivity}
                 isAdmin={canDelete}
                 canCreate={canCreate}
+                isQualityProject={isQualityProject}
               />
             </TabsContent>
 
@@ -679,7 +682,7 @@ const ProjectDetails = () => {
         <EditActivityDialog
           activity={editingActivity} open={editActivityDialogOpen} onOpenChange={setEditActivityDialogOpen}
           onActivityUpdated={fetchProjectData} phases={phases} allActivities={activities}
-          projectId={id!}
+          projectId={id!} isQualityProject={isQualityProject}
         />
       </main>
     </AppLayout>

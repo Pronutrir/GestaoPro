@@ -106,6 +106,7 @@ interface ActivityKanbanProps {
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   isAdmin?: boolean;
   canCreate?: boolean;
+  isQualityProject?: boolean;
 }
 
 function SortableKanbanCard({
@@ -121,6 +122,7 @@ function SortableKanbanCard({
   storyCount,
   onStoryClick,
   onCreateStory,
+  isQualityProject,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -134,6 +136,7 @@ function SortableKanbanCard({
   storyCount?: number;
   onStoryClick?: () => void;
   onCreateStory?: () => void;
+  isQualityProject?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -160,6 +163,7 @@ function SortableKanbanCard({
         storyCount={storyCount}
         onStoryClick={onStoryClick}
         onCreateStory={onCreateStory}
+        isQualityProject={isQualityProject}
       />
     </div>
   );
@@ -179,6 +183,7 @@ function KanbanCard({
   storyCount,
   onStoryClick,
   onCreateStory,
+  isQualityProject,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -193,6 +198,7 @@ function KanbanCard({
   storyCount?: number;
   onStoryClick?: () => void;
   onCreateStory?: () => void;
+  isQualityProject?: boolean;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -255,7 +261,7 @@ function KanbanCard({
                 🚫 Bloqueada
               </Badge>
             )}
-            {activity.deadline_flag && activity.deadline_flag !== "" && (
+            {isQualityProject && activity.deadline_flag && activity.deadline_flag !== "" && (
               <Badge className={`text-[10px] px-1.5 py-0 ${
                 activity.deadline_flag === "green" ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/30" :
                 activity.deadline_flag === "orange" ? "bg-orange-500/20 text-orange-600 border-orange-500/30" :
@@ -289,7 +295,7 @@ function KanbanCard({
                 📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR")}
               </Badge>
             )}
-            {activity.last_update_date && (
+            {isQualityProject && activity.last_update_date && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/5 text-primary/80">
                 🔄 {parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}
               </Badge>
@@ -370,6 +376,7 @@ function SortableColumn({
   onResizeStart,
   onStoryClick,
   onCreateStory,
+  isQualityProject,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -388,6 +395,7 @@ function SortableColumn({
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
   onStoryClick: (activityId: string) => void;
   onCreateStory: (activity: Activity) => void;
+  isQualityProject?: boolean;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -587,6 +595,7 @@ function SortableColumn({
                 storyCount={storyLinkedActivities.get(activity.id) || 0}
                 onStoryClick={() => onStoryClick(activity.id)}
                 onCreateStory={() => onCreateStory(activity)}
+                isQualityProject={isQualityProject}
               />
             ))
           )}
@@ -638,6 +647,7 @@ export const ActivityKanban = ({
   onToggleActivity,
   isAdmin = false,
   canCreate = false,
+  isQualityProject = false,
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
@@ -1014,6 +1024,7 @@ export const ActivityKanban = ({
                 onResizeStart={handleResizeStart}
                 onStoryClick={(activityId) => { setStoryDrawerActivityId(activityId); setStoryDrawerOpen(true); }}
                 onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
+                isQualityProject={isQualityProject}
               />
             );
           })}
