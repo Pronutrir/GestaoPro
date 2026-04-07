@@ -42,6 +42,7 @@ interface EditActivityDialogProps {
   phases?: Phase[];
   allActivities?: Activity[];
   projectId?: string;
+  isQualityProject?: boolean;
 }
 
 const RACI_OPTIONS = [
@@ -76,7 +77,7 @@ function formatHoursDisplay(hours: number): string {
 
 export const EditActivityDialog = ({
   activity, open, onOpenChange, onActivityUpdated,
-  phases = [], allActivities = [], projectId,
+  phases = [], allActivities = [], projectId, isQualityProject = false,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
