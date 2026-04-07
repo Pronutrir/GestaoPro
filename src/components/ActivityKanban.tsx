@@ -260,7 +260,7 @@ function KanbanCard({
                 🚫 Bloqueada
               </Badge>
             )}
-            {activity.deadline_flag && activity.deadline_flag !== "" && (
+            {isQualityProject && activity.deadline_flag && activity.deadline_flag !== "" && (
               <Badge className={`text-[10px] px-1.5 py-0 ${
                 activity.deadline_flag === "green" ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/30" :
                 activity.deadline_flag === "orange" ? "bg-orange-500/20 text-orange-600 border-orange-500/30" :
@@ -294,7 +294,7 @@ function KanbanCard({
                 📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR")}
               </Badge>
             )}
-            {activity.last_update_date && (
+            {isQualityProject && activity.last_update_date && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/5 text-primary/80">
                 🔄 {parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}
               </Badge>
