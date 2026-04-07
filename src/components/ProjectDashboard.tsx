@@ -245,6 +245,22 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
         ))}
       </div>
 
+      {/* Flag Cards - Quality Only */}
+      {flagCards.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {flagCards.map((fc) => (
+            <Card
+              key={fc.label}
+              className={`p-4 space-y-2 border ${fc.border} ${fc.items.length > 0 ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`}
+              onClick={() => fc.items.length > 0 && setDialogData({ title: fc.label, items: fc.items })}
+            >
+              <span className="text-xs font-medium text-muted-foreground">{fc.label}</span>
+              <p className={`text-2xl font-bold ${fc.color}`}>{fc.value}</p>
+            </Card>
+          ))}
+        </div>
+      )}
+
       {/* Charts Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Status Donut */}
