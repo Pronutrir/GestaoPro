@@ -11,6 +11,7 @@ import {
   Map,
   DollarSign,
   Layers,
+  ShieldCheck,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -30,6 +31,7 @@ import {
 const allNavItems = [
   { path: "/", label: "Visão Geral", icon: Home, minRole: "user" as const },
   { path: "/projects", label: "Projetos", icon: FolderKanban, minRole: "user" as const },
+  { path: "/qualidade", label: "Gestão da Qualidade", icon: ShieldCheck, minRole: "qualidade" as const },
   { path: "/team", label: "Equipe", icon: Users, minRole: "user" as const },
   { path: "/timeline", label: "Cronograma", icon: GanttChart, minRole: "user" as const },
   { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, minRole: "user" as const },
@@ -46,8 +48,18 @@ export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut, profile, isAdmin, canManage } = useAuth();
+  const userSector = profile?.sector?.toLowerCase() || "";
+  const isQualidade = userSector === "qualidade";
+
   const navItems = allNavItems.filter(item => {
-    if (item.minRole === "user") return true;
+    if (item.minRole === "qualidade") {
+      return isQualidade || canManage;
+    }
+    if (item.minRole === "user") {
+      // Usuários do setor qualidade não veem "Projetos"
+      if (item.path === "/projects" && isQualidade && !canManage) return false;
+      return true;
+    }
     if (item.minRole === "gestor") return canManage;
     if (item.minRole === "admin") return isAdmin;
     return false;

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { 
+import {
   Search,
   Lightbulb,
   Beaker,
@@ -8,7 +8,6 @@ import {
   CheckCircle,
   Archive,
   AlertTriangle,
-  Filter,
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ProjectColumn } from "@/components/ProjectColumn";
@@ -33,7 +32,7 @@ interface Project {
   category?: string; program?: string | null;
 }
 
-const Dashboard = () => {
+const QualityManagement = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
@@ -59,7 +58,7 @@ const Dashboard = () => {
   const fetchProjects = async () => {
     try {
       const { data, error } = await supabase.from("projects").select("*")
-        .neq("category", "qualidade")
+        .eq("category", "qualidade")
         .order("display_order", { ascending: true }).order("created_at", { ascending: false });
       if (error) throw error;
       const filtered = await filterProjects(data || []);
@@ -120,7 +119,7 @@ const Dashboard = () => {
   const pocProjects = sortByOrder(filteredProjects.filter(p => p.status === "poc"));
   const mvpProjects = sortByOrder(filteredProjects.filter(p => p.status === "mvp"));
   const blockedProjects = sortByOrder(filteredProjects.filter(p => p.status === "blocked"));
-  const drawerProjects = sortByOrder(filteredProjects.filter(p => p.status === "drawer"));
+  const drawerProjectsList = sortByOrder(filteredProjects.filter(p => p.status === "drawer"));
   const emExecucaoProjects = sortByOrder(filteredProjects.filter(p => p.status === "em-execucao"));
 
   const statusCards = [
@@ -128,12 +127,12 @@ const Dashboard = () => {
     { key: "poc", label: "POC", icon: Beaker, color: "info", projects: pocProjects },
     { key: "mvp", label: "MVP", icon: Rocket, color: "accent", projects: mvpProjects },
     { key: "blocked", label: "Bloqueio", icon: AlertTriangle, color: "destructive", projects: blockedProjects },
-    { key: "drawer", label: "Gaveta", icon: Archive, color: "secondary", projects: drawerProjects },
+    { key: "drawer", label: "Gaveta", icon: Archive, color: "secondary", projects: drawerProjectsList },
     { key: "em-execucao", label: "Em Execução", icon: CheckCircle, color: "success", projects: emExecucaoProjects },
   ];
 
   return (
-    <AppLayout title="Pipeline de Projetos">
+    <AppLayout title="Gestão da Qualidade">
       <div className="px-4 py-4">
         {/* Toolbar */}
         <div className="flex items-center justify-between mb-6">
@@ -142,7 +141,7 @@ const Dashboard = () => {
             <Input placeholder="Buscar projetos..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" />
           </div>
           <div className="flex items-center gap-2">
-            <AddProjectDialog onProjectAdded={fetchProjects} />
+            <AddProjectDialog onProjectAdded={fetchProjects} defaultCategory="qualidade" />
           </div>
         </div>
 
@@ -198,4 +197,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default QualityManagement;
