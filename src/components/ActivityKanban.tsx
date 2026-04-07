@@ -182,6 +182,7 @@ function KanbanCard({
   storyCount,
   onStoryClick,
   onCreateStory,
+  isQualityProject,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -196,6 +197,7 @@ function KanbanCard({
   storyCount?: number;
   onStoryClick?: () => void;
   onCreateStory?: () => void;
+  isQualityProject?: boolean;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
