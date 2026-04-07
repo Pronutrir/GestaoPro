@@ -20,6 +20,8 @@ interface Activity {
   hours: number | null;
   phase_id: string | null;
   completed_at: string | null;
+  deadline_flag?: string | null;
+  last_update_date?: string | null;
 }
 
 interface Phase {
@@ -31,6 +33,7 @@ interface Phase {
 interface Project {
   budget_planned: number | null;
   budget_used: number | null;
+  category?: string | null;
 }
 
 interface Props {
@@ -81,8 +84,11 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
     });
     const highPriority = activities.filter(a => a.priority === "high" && a.status !== "completed");
     const totalHours = activities.reduce((sum, a) => sum + (a.hours || 0), 0);
+    const flagGreen = activities.filter(a => a.deadline_flag === "green");
+    const flagOrange = activities.filter(a => a.deadline_flag === "orange");
+    const flagRed = activities.filter(a => a.deadline_flag === "red");
 
-    return { total, completed, completionRate, overdue, nearDeadline, highPriority, totalHours };
+    return { total, completed, completionRate, overdue, nearDeadline, highPriority, totalHours, flagGreen, flagOrange, flagRed };
   }, [activities]);
 
   const statusChartData = useMemo(() => {
@@ -136,6 +142,8 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
   const budgetUsed = project.budget_used || 0;
   const budgetPct = budgetPlanned > 0 ? (budgetUsed / budgetPlanned) * 100 : 0;
 
+  const isQuality = project.category === "qualidade";
+
   const kpiCards = [
     {
       label: "Total de Atividades",
@@ -188,6 +196,33 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
     },
   ];
 
+  const flagCards = isQuality ? [
+    {
+      label: "🟢 Em dia",
+      value: stats.flagGreen.length,
+      color: "text-emerald-600",
+      bg: "bg-emerald-500/10",
+      border: "border-emerald-500/30",
+      items: stats.flagGreen,
+    },
+    {
+      label: "🟠 Atenção",
+      value: stats.flagOrange.length,
+      color: "text-orange-600",
+      bg: "bg-orange-500/10",
+      border: "border-orange-500/30",
+      items: stats.flagOrange,
+    },
+    {
+      label: "🔴 Vencido",
+      value: stats.flagRed.length,
+      color: "text-destructive",
+      bg: "bg-destructive/10",
+      border: "border-destructive/30",
+      items: stats.flagRed,
+    },
+  ] : [];
+
   return (
     <div className="space-y-6 pt-4">
       {/* KPI Cards */}
@@ -209,6 +244,22 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
           </Card>
         ))}
       </div>
+
+      {/* Flag Cards - Quality Only */}
+      {flagCards.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {flagCards.map((fc) => (
+            <Card
+              key={fc.label}
+              className={`p-4 space-y-2 border ${fc.border} ${fc.items.length > 0 ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`}
+              onClick={() => fc.items.length > 0 && setDialogData({ title: fc.label, items: fc.items })}
+            >
+              <span className="text-xs font-medium text-muted-foreground">{fc.label}</span>
+              <p className={`text-2xl font-bold ${fc.color}`}>{fc.value}</p>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

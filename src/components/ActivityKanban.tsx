@@ -92,6 +92,8 @@ interface Activity {
   workflow_stage_id?: string | null;
   story_points?: number;
   participants?: string[];
+  deadline_flag?: string | null;
+  last_update_date?: string | null;
 }
 
 interface ActivityKanbanProps {
@@ -253,6 +255,17 @@ function KanbanCard({
                 🚫 Bloqueada
               </Badge>
             )}
+            {activity.deadline_flag && activity.deadline_flag !== "" && (
+              <Badge className={`text-[10px] px-1.5 py-0 ${
+                activity.deadline_flag === "green" ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/30" :
+                activity.deadline_flag === "orange" ? "bg-orange-500/20 text-orange-600 border-orange-500/30" :
+                activity.deadline_flag === "red" ? "bg-destructive/20 text-destructive border-destructive/30" : ""
+              }`}>
+                {activity.deadline_flag === "green" ? "🟢 Em dia" :
+                 activity.deadline_flag === "orange" ? "🟠 Atenção" :
+                 activity.deadline_flag === "red" ? "🔴 Vencido" : ""}
+              </Badge>
+            )}
             {activity.assigned_to && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                 👤 {activity.assigned_to}
@@ -274,6 +287,11 @@ function KanbanCard({
               >
                 {isOverdue && <AlertCircle className="w-2.5 h-2.5 mr-0.5" />}
                 📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR")}
+              </Badge>
+            )}
+            {activity.last_update_date && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/5 text-primary/80">
+                🔄 {parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}
               </Badge>
             )}
             {(activity as any).story_points > 0 && (

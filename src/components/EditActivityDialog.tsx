@@ -86,6 +86,8 @@ export const EditActivityDialog = ({
     tags: [] as string[], parent_id: "",
     story_points: "0", raci_role: "",
     participants: [] as string[],
+    deadline_flag: "" as string,
+    last_update_date: "",
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -129,6 +131,8 @@ export const EditActivityDialog = ({
         story_points: (activity as any).story_points?.toString() || "0",
         raci_role: (activity as any).raci_role || "",
         participants: (activity as any).participants || [],
+        deadline_flag: (activity as any).deadline_flag || "",
+        last_update_date: (activity as any).last_update_date || "",
       });
       fetchSubActivities(activity.id);
       
@@ -200,6 +204,8 @@ export const EditActivityDialog = ({
         story_points: parseInt(formData.story_points) || 0,
         raci_role: formData.raci_role || null,
         participants: formData.participants,
+        deadline_flag: formData.deadline_flag || null,
+        last_update_date: formData.last_update_date || null,
       } as any).eq("id", activity.id);
       if (error) throw error;
       toast({ title: "Atividade atualizada!" });
@@ -335,7 +341,7 @@ export const EditActivityDialog = ({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Calendar className="w-4 h-4" /> Data de Início
@@ -347,6 +353,32 @@ export const EditActivityDialog = ({
                 <Calendar className="w-4 h-4" /> Data de Fim
               </Label>
               <Input type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Data de Atualização
+              </Label>
+              <Input type="date" value={formData.last_update_date} onChange={(e) => setFormData({ ...formData, last_update_date: e.target.value })} />
+            </div>
+          </div>
+
+          {/* Flag de Prazo */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Flag className="w-4 h-4" /> Flag de Prazo
+            </Label>
+            <div className="flex gap-2">
+              {[
+                { value: "", label: "Nenhuma", color: "border-border text-muted-foreground" },
+                { value: "green", label: "🟢 Em dia", color: "bg-emerald-500/20 text-emerald-600 border-emerald-500" },
+                { value: "orange", label: "🟠 Atenção", color: "bg-orange-500/20 text-orange-600 border-orange-500" },
+                { value: "red", label: "🔴 Vencido", color: "bg-destructive/20 text-destructive border-destructive" },
+              ].map((f) => (
+                <button key={f.value} type="button"
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-all ${formData.deadline_flag === f.value ? `${f.color} ring-2 ring-current/20` : "border-border text-muted-foreground hover:border-foreground/30"}`}
+                  onClick={() => setFormData({ ...formData, deadline_flag: f.value })}
+                >{f.label}</button>
+              ))}
             </div>
           </div>
 

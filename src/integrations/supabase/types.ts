@@ -20,12 +20,14 @@ export type Database = {
           completed_at: string | null
           cost: number | null
           created_at: string
+          deadline_flag: string | null
           description: string | null
           display_order: number | null
           end_date: string | null
           hours: number | null
           id: string
           is_trashed: boolean
+          last_update_date: string | null
           parent_id: string | null
           participants: string[] | null
           phase_id: string | null
@@ -47,12 +49,14 @@ export type Database = {
           completed_at?: string | null
           cost?: number | null
           created_at?: string
+          deadline_flag?: string | null
           description?: string | null
           display_order?: number | null
           end_date?: string | null
           hours?: number | null
           id?: string
           is_trashed?: boolean
+          last_update_date?: string | null
           parent_id?: string | null
           participants?: string[] | null
           phase_id?: string | null
@@ -74,12 +78,14 @@ export type Database = {
           completed_at?: string | null
           cost?: number | null
           created_at?: string
+          deadline_flag?: string | null
           description?: string | null
           display_order?: number | null
           end_date?: string | null
           hours?: number | null
           id?: string
           is_trashed?: boolean
+          last_update_date?: string | null
           parent_id?: string | null
           participants?: string[] | null
           phase_id?: string | null
