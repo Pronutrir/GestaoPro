@@ -20,6 +20,8 @@ interface Activity {
   hours: number | null;
   phase_id: string | null;
   completed_at: string | null;
+  deadline_flag?: string | null;
+  last_update_date?: string | null;
 }
 
 interface Phase {
@@ -31,6 +33,7 @@ interface Phase {
 interface Project {
   budget_planned: number | null;
   budget_used: number | null;
+  category?: string | null;
 }
 
 interface Props {
@@ -81,8 +84,11 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
     });
     const highPriority = activities.filter(a => a.priority === "high" && a.status !== "completed");
     const totalHours = activities.reduce((sum, a) => sum + (a.hours || 0), 0);
+    const flagGreen = activities.filter(a => a.deadline_flag === "green");
+    const flagOrange = activities.filter(a => a.deadline_flag === "orange");
+    const flagRed = activities.filter(a => a.deadline_flag === "red");
 
-    return { total, completed, completionRate, overdue, nearDeadline, highPriority, totalHours };
+    return { total, completed, completionRate, overdue, nearDeadline, highPriority, totalHours, flagGreen, flagOrange, flagRed };
   }, [activities]);
 
   const statusChartData = useMemo(() => {
@@ -136,6 +142,8 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
   const budgetUsed = project.budget_used || 0;
   const budgetPct = budgetPlanned > 0 ? (budgetUsed / budgetPlanned) * 100 : 0;
 
+  const isQuality = project.category === "qualidade";
+
   const kpiCards = [
     {
       label: "Total de Atividades",
@@ -187,6 +195,33 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
       items: [],
     },
   ];
+
+  const flagCards = isQuality ? [
+    {
+      label: "🟢 Em dia",
+      value: stats.flagGreen.length,
+      color: "text-emerald-600",
+      bg: "bg-emerald-500/10",
+      border: "border-emerald-500/30",
+      items: stats.flagGreen,
+    },
+    {
+      label: "🟠 Atenção",
+      value: stats.flagOrange.length,
+      color: "text-orange-600",
+      bg: "bg-orange-500/10",
+      border: "border-orange-500/30",
+      items: stats.flagOrange,
+    },
+    {
+      label: "🔴 Vencido",
+      value: stats.flagRed.length,
+      color: "text-destructive",
+      bg: "bg-destructive/10",
+      border: "border-destructive/30",
+      items: stats.flagRed,
+    },
+  ] : [];
 
   return (
     <div className="space-y-6 pt-4">
