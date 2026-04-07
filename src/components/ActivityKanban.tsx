@@ -163,6 +163,7 @@ function SortableKanbanCard({
         storyCount={storyCount}
         onStoryClick={onStoryClick}
         onCreateStory={onCreateStory}
+        isQualityProject={isQualityProject}
       />
     </div>
   );
