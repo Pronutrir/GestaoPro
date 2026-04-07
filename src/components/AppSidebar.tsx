@@ -16,6 +16,8 @@ import {
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 import {
   Sidebar,
@@ -29,39 +31,83 @@ import {
 } from "@/components/ui/sidebar";
 
 const allNavItems = [
-  { path: "/", label: "Visão Geral", icon: Home, minRole: "user" as const },
-  { path: "/projects", label: "Projetos", icon: FolderKanban, minRole: "user" as const },
-  { path: "/qualidade", label: "Gestão da Qualidade", icon: ShieldCheck, minRole: "qualidade" as const },
-  { path: "/team", label: "Equipe", icon: Users, minRole: "user" as const },
-  { path: "/timeline", label: "Cronograma", icon: GanttChart, minRole: "user" as const },
-  { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, minRole: "user" as const },
-  { path: "/investments", label: "Gestão Financeira", icon: DollarSign, minRole: "gestor" as const },
-  { path: "/roadmap", label: "Roadmap", icon: Map, minRole: "gestor" as const },
-  { path: "/reports", label: "Relatórios", icon: BarChart3, minRole: "gestor" as const },
-  { path: "/csc", label: "CSC", icon: Layers, minRole: "gestor" as const },
-  { path: "/settings", label: "Configurações", icon: Settings, minRole: "admin" as const },
+  { path: "/", label: "Visão Geral", icon: Home, minRole: "user" as const, moduleKey: "overview" },
+  { path: "/projects", label: "Projetos", icon: FolderKanban, minRole: "user" as const, moduleKey: "projects" },
+  { path: "/qualidade", label: "Gestão da Qualidade", icon: ShieldCheck, minRole: "qualidade" as const, moduleKey: "qualidade" },
+  { path: "/team", label: "Equipe", icon: Users, minRole: "user" as const, moduleKey: "team" },
+  { path: "/timeline", label: "Cronograma", icon: GanttChart, minRole: "user" as const, moduleKey: "timeline" },
+  { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, minRole: "user" as const, moduleKey: "blocked" },
+  { path: "/investments", label: "Gestão Financeira", icon: DollarSign, minRole: "gestor" as const, moduleKey: "investments" },
+  { path: "/roadmap", label: "Roadmap", icon: Map, minRole: "gestor" as const, moduleKey: "roadmap" },
+  { path: "/reports", label: "Relatórios", icon: BarChart3, minRole: "gestor" as const, moduleKey: "reports" },
+  { path: "/csc", label: "CSC", icon: Layers, minRole: "gestor" as const, moduleKey: "csc" },
+  { path: "/settings", label: "Configurações", icon: Settings, minRole: "admin" as const, moduleKey: "settings" },
 ];
+
+const DEFAULT_MODULES = ["overview", "projects", "team", "timeline", "blocked"];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut, profile, isAdmin, canManage } = useAuth();
+  const { signOut, profile, isAdmin, canManage, user } = useAuth();
   const userSector = profile?.sector?.toLowerCase() || "";
   const isQualidade = userSector === "qualidade";
+  const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    if (!user?.id || canManage) return;
+    const fetchModules = async () => {
+      const { data } = await supabase
+        .from("user_module_permissions")
+        .select("allowed_modules")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setAllowedModules(data?.allowed_modules || DEFAULT_MODULES);
+    };
+    fetchModules();
+
+    const channel = supabase
+      .channel(`module-perms-${user.id}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "user_module_permissions",
+        filter: `user_id=eq.${user.id}`,
+      }, () => fetchModules())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, canManage]);
 
   const navItems = allNavItems.filter(item => {
-    if (item.minRole === "qualidade") {
-      return isQualidade || canManage;
+    // Settings is always admin-only
+    if (item.minRole === "admin") return isAdmin;
+
+    // Admin/Gestor always see everything their role allows
+    if (canManage) {
+      if (item.minRole === "qualidade") return true;
+      if (item.minRole === "gestor") return true;
+      if (item.minRole === "user") return true;
+      return false;
     }
-    if (item.minRole === "user") {
-      // Usuários do setor qualidade não veem "Projetos"
-      if (item.path === "/projects" && isQualidade && !canManage) return false;
+
+    // For regular users, check module permissions
+    if (item.minRole === "qualidade") {
+      if (!isQualidade) return false;
+      if (allowedModules && !allowedModules.includes(item.moduleKey)) return false;
       return true;
     }
-    if (item.minRole === "gestor") return canManage;
-    if (item.minRole === "admin") return isAdmin;
+
+    if (item.minRole === "user") {
+      // Usuários do setor qualidade não veem "Projetos"
+      if (item.path === "/projects" && isQualidade) return false;
+      // Check module permissions
+      if (allowedModules && !allowedModules.includes(item.moduleKey)) return false;
+      return true;
+    }
+
     return false;
   });
 

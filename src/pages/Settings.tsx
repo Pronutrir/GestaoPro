@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserManagement } from "@/components/UserManagement";
+import { ModulePermissions } from "@/components/ModulePermissions";
 
 interface Sector {
   id: string;
@@ -75,6 +76,9 @@ const Settings = () => {
       <div className="px-4 py-6 space-y-6 max-w-4xl mx-auto">
         {/* User Management (admin only) */}
         <UserManagement />
+
+        {/* Module Permissions (admin only) */}
+        <ModulePermissions />
 
         {/* Sectors */}
         <Card>
