@@ -59,6 +59,7 @@ const Dashboard = () => {
   const fetchProjects = async () => {
     try {
       const { data, error } = await supabase.from("projects").select("*")
+        .neq("category", "qualidade")
         .order("display_order", { ascending: true }).order("created_at", { ascending: false });
       if (error) throw error;
       const filtered = await filterProjects(data || []);

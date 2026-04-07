@@ -26,9 +26,10 @@ import { useToast } from "@/hooks/use-toast";
 
 interface AddProjectDialogProps {
   onProjectAdded: () => void;
+  defaultCategory?: string;
 }
 
-export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
+export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProjectDialogProps) => {
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
 
   useEffect(() => {
@@ -55,7 +56,7 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
     budget_planned: "",
     owner: "",
     blockers: "",
-    category: "",
+    category: defaultCategory || "",
     program: "",
   });
 
@@ -101,7 +102,7 @@ export const AddProjectDialog = ({ onProjectAdded }: AddProjectDialogProps) => {
         budget_planned: "",
         owner: "",
         blockers: "",
-        category: "general",
+        category: defaultCategory || "general",
         program: "",
       });
       setOpen(false);
