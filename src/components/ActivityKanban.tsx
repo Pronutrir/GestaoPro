@@ -376,6 +376,7 @@ function SortableColumn({
   onResizeStart,
   onStoryClick,
   onCreateStory,
+  isQualityProject,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -394,6 +395,7 @@ function SortableColumn({
   onResizeStart: (e: React.MouseEvent, stageId: string, widthPct: number) => void;
   onStoryClick: (activityId: string) => void;
   onCreateStory: (activity: Activity) => void;
+  isQualityProject?: boolean;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -593,6 +595,7 @@ function SortableColumn({
                 storyCount={storyLinkedActivities.get(activity.id) || 0}
                 onStoryClick={() => onStoryClick(activity.id)}
                 onCreateStory={() => onCreateStory(activity)}
+                isQualityProject={isQualityProject}
               />
             ))
           )}
