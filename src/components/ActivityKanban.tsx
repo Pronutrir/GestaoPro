@@ -1023,6 +1023,7 @@ export const ActivityKanban = ({
                 onResizeStart={handleResizeStart}
                 onStoryClick={(activityId) => { setStoryDrawerActivityId(activityId); setStoryDrawerOpen(true); }}
                 onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
+                isQualityProject={isQualityProject}
               />
             );
           })}
