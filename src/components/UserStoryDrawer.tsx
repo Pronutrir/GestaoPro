@@ -175,48 +175,32 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
             )}
 
             {stories.map((story, idx) => (
-              <div key={story.id} className="space-y-3 p-3 rounded-lg border border-border bg-muted/20">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    {stories.length > 1 && (
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                        História {idx + 1}
-                      </p>
-                    )}
-                  </div>
-                  {editingId !== story.id && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit(story)}>
-                        <Pencil className="w-3 h-3" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDelete(story.id)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
+              <div key={story.id} className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
                 {editingId === story.id ? (
                   <div className="space-y-3">
                     <div className="space-y-1">
-                      <Label className="text-xs">Título *</Label>
-                      <Input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} autoFocus />
+                      <Label className="text-xs">Título</Label>
+                      <Input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className="h-8 text-sm" />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Narrativa</Label>
                       <Textarea value={editForm.narrative} onChange={e => setEditForm({ ...editForm, narrative: e.target.value })} rows={3} />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1"><ImageIcon className="w-3 h-3" /> Imagem</Label>
+                      <Label className="text-xs">Imagem</Label>
                       {editForm.image_url ? (
-                        <div className="relative group">
-                          <img src={editForm.image_url} alt="" className="w-full max-h-32 object-cover rounded-md border border-border" />
-                          <Button size="icon" variant="destructive" className="absolute top-1 right-1 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => setEditForm({ ...editForm, image_url: null })}><X className="w-3 h-3" /></Button>
+                        <div className="relative">
+                          <img src={editForm.image_url} alt="Preview" className="rounded-lg border border-border max-h-32 w-full object-cover" />
+                          <Button size="icon" variant="destructive" className="absolute top-1 right-1 h-5 w-5" onClick={() => setEditForm({ ...editForm, image_url: "" })}>
+                            <X className="w-3 h-3" />
+                          </Button>
                         </div>
                       ) : (
-                        <button type="button" onClick={() => fileInputRef.current?.click()}
-                          className="w-full border border-dashed border-border rounded-md p-3 text-center hover:border-primary/50 hover:bg-accent/30 transition-colors text-xs text-muted-foreground" disabled={uploading}>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full border border-dashed border-border rounded-lg p-3 text-xs text-muted-foreground hover:bg-muted/40 transition-colors"
+                        >
                           <Upload className="w-4 h-4 mx-auto mb-1" />
                           {uploading ? "Carregando..." : "Anexar imagem"}
                         </button>
@@ -234,10 +218,20 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
                   </div>
                 ) : (
                   <>
-                    <p className="text-sm font-semibold text-foreground">{story.title || "Sem título"}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-foreground flex-1 min-w-0">{story.title || "Sem título"}</p>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit(story)}>
+                          <Pencil className="w-3 h-3" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDelete(story.id)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
 
                     {story.narrative && (
-                      <div className="space-y-1">
+                      <div>
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Narrativa</p>
                         <p className="text-sm text-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                           {story.narrative}
@@ -246,7 +240,7 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
                     )}
 
                     {story.image_url && (
-                      <div className="space-y-1">
+                      <div>
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Imagem</p>
                         <img src={story.image_url} alt="User Story" className="rounded-lg border border-border max-h-48 w-full object-cover" />
                       </div>
