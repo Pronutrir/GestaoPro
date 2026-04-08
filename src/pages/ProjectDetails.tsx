@@ -529,6 +529,8 @@ const ProjectDetails = () => {
                 />
               </TabsContent>
             )}
+
+            <TabsContent value="timeline" className="mt-0">
               <TimelineView phases={phases} activities={activities} projectDueDate={project.due_date} onActivityClick={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }} />
             </TabsContent>
 
