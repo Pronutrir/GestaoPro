@@ -1,9 +1,12 @@
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   CheckCircle2, AlertTriangle, Clock, Flag, ListTodo, Timer,
+  Calendar, User, Pencil, Filter, AlertCircle,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
@@ -15,6 +18,7 @@ interface Activity {
   title: string;
   status: string;
   priority?: string;
+  assigned_to?: string | null;
   start_date: string | null;
   end_date: string | null;
   hours: number | null;
@@ -61,13 +65,27 @@ const PRIORITY_LABELS: Record<string, string> = {
   high: "Alta",
 };
 
+const FLAG_DISPLAY: Record<string, { label: string; class: string }> = {
+  green: { label: "Em dia", class: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" },
+  orange: { label: "Atenção", class: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
+  red: { label: "Vencido", class: "bg-destructive/10 text-destructive border-destructive/30" },
+};
+
 export const ProjectDashboard = ({ activities, phases, project, onNavigateToActivity }: Props) => {
   const [dialogData, setDialogData] = useState<{ title: string; items: Activity[] } | null>(null);
+  const [pendencyFilter, setPendencyFilter] = useState<"all" | "end_date" | "update_date">("all");
+
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const sevenDaysLater = new Date(today);
   sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+
+  const isQuality = project.category === "qualidade";
 
   const stats = useMemo(() => {
     const total = activities.length;
@@ -90,6 +108,38 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
 
     return { total, completed, completionRate, overdue, nearDeadline, highPriority, totalHours, flagGreen, flagOrange, flagRed };
   }, [activities]);
+
+  // Pendencies for quality projects
+  const pendingActivities = useMemo(() => {
+    if (!isQuality) return [];
+    return activities.filter((a) => {
+      if (a.status === "completed") return false;
+      const endMatch = a.end_date && a.end_date <= todayStr;
+      const updateMatch = a.last_update_date && a.last_update_date <= todayStr;
+      if (pendencyFilter === "end_date") return endMatch;
+      if (pendencyFilter === "update_date") return updateMatch;
+      return endMatch || updateMatch;
+    });
+  }, [activities, todayStr, pendencyFilter, isQuality]);
+
+  const pendencyStats = useMemo(() => {
+    if (!isQuality) return { overdue: 0, dueToday: 0, updatePending: 0, highPriority: 0 };
+    return {
+      overdue: pendingActivities.filter(a => a.end_date && a.end_date < todayStr).length,
+      dueToday: pendingActivities.filter(a => a.end_date === todayStr).length,
+      updatePending: pendingActivities.filter(a => a.last_update_date && a.last_update_date <= todayStr).length,
+      highPriority: pendingActivities.filter(a => a.priority === "high").length,
+    };
+  }, [pendingActivities, todayStr, isQuality]);
+
+  const getDaysInfo = (dateStr: string) => {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    date.setHours(0, 0, 0, 0);
+    return Math.ceil((date.getTime() - t.getTime()) / (1000 * 60 * 60 * 24));
+  };
 
   const statusChartData = useMemo(() => {
     const counts: Record<string, number> = { pending: 0, in_progress: 0, completed: 0 };
@@ -141,8 +191,6 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
   const budgetPlanned = project.budget_planned || 0;
   const budgetUsed = project.budget_used || 0;
   const budgetPct = budgetPlanned > 0 ? (budgetUsed / budgetPlanned) * 100 : 0;
-
-  const isQuality = project.category === "qualidade";
 
   const kpiCards = [
     {
@@ -258,6 +306,143 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
               <p className={`text-2xl font-bold ${fc.color}`}>{fc.value}</p>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Pendencies Section - Quality Only */}
+      {isQuality && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-primary" />
+              Pendências ({pendingActivities.length})
+            </h3>
+            <Select value={pendencyFilter} onValueChange={(v) => setPendencyFilter(v as any)}>
+              <SelectTrigger className="w-[180px] h-8 text-xs">
+                <Filter className="w-3 h-3 mr-1" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="end_date">Data Fim</SelectItem>
+                <SelectItem value="update_date">Data Atualização</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Pendency KPI row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-primary/10">
+                  <AlertCircle className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-foreground">{pendingActivities.length}</p>
+                  <p className="text-[10px] text-muted-foreground">Total Pendências</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-destructive/10">
+                  <AlertTriangle className="w-4 h-4 text-destructive" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-destructive">{pendencyStats.overdue}</p>
+                  <p className="text-[10px] text-muted-foreground">Vencidas</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-orange-500/10">
+                  <Calendar className="w-4 h-4 text-orange-500" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-orange-500">{pendencyStats.dueToday}</p>
+                  <p className="text-[10px] text-muted-foreground">Vencem Hoje</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-warning/10">
+                  <Flag className="w-4 h-4 text-warning" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-warning">{pendencyStats.highPriority}</p>
+                  <p className="text-[10px] text-muted-foreground">Alta Prioridade</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Pendency Activity List */}
+          {pendingActivities.length > 0 ? (
+            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+              {pendingActivities.map((activity) => {
+                const flag = activity.deadline_flag ? FLAG_DISPLAY[activity.deadline_flag] : null;
+                const priority = PRIORITY_LABELS[activity.priority || "medium"];
+                const endDiff = activity.end_date ? getDaysInfo(activity.end_date) : null;
+                const updateDiff = activity.last_update_date ? getDaysInfo(activity.last_update_date) : null;
+
+                return (
+                  <Card
+                    key={activity.id}
+                    className="p-3 hover:shadow-md transition-shadow cursor-pointer border-border"
+                    onClick={() => onNavigateToActivity?.(activity)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          {flag && (
+                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${flag.class}`}>
+                              {flag.label}
+                            </Badge>
+                          )}
+                          <p className="text-sm font-semibold text-foreground truncate">{activity.title}</p>
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {activity.assigned_to && (
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <User className="w-3 h-3" /> {activity.assigned_to}
+                            </span>
+                          )}
+                          {priority && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                              {priority}
+                            </Badge>
+                          )}
+                          {activity.end_date && endDiff !== null && (
+                            <span className={`flex items-center gap-1 text-[10px] font-medium ${endDiff < 0 ? "text-destructive" : endDiff === 0 ? "text-orange-600" : "text-muted-foreground"}`}>
+                              <Calendar className="w-3 h-3" />
+                              {endDiff < 0 ? `${Math.abs(endDiff)}d atrasado` : endDiff === 0 ? "Vence hoje" : `${endDiff}d restantes`}
+                            </span>
+                          )}
+                          {activity.last_update_date && updateDiff !== null && (
+                            <span className={`flex items-center gap-1 text-[10px] font-medium ${updateDiff < 0 ? "text-destructive" : updateDiff === 0 ? "text-orange-600" : "text-muted-foreground"}`}>
+                              <Clock className="w-3 h-3" />
+                              {updateDiff < 0 ? `Atualização ${Math.abs(updateDiff)}d atrás` : updateDiff === 0 ? "Atualização hoje" : `Atualização em ${updateDiff}d`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); onNavigateToActivity?.(activity); }}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500/40 mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">Nenhuma pendência encontrada</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">Todas as atividades estão em dia! 🎉</p>
+            </div>
+          )}
         </div>
       )}
 

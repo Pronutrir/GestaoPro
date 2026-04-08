@@ -28,13 +28,12 @@ import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
-import { DailyPendencies } from "@/components/DailyPendencies";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, ListTodo, GanttChart, BookOpen, FileText, Flag,
   ChevronRight, Settings2, Kanban, Users, ShieldCheck, AlertTriangle,
-  Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, ClipboardCheck,
+  Package, Inbox, DollarSign, ClipboardList, LayoutDashboard,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -104,7 +103,6 @@ const ProjectDetails = () => {
   const [permissionsLoading, setPermissionsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("kanban");
   const [showDashboard, setShowDashboard] = useState(false);
-  const [showPendencies, setShowPendencies] = useState(false);
   const [allowedTabs, setAllowedTabs] = useState<string[] | null>(null);
   const [newActivity, setNewActivity] = useState("");
   const [newActivityAssigned, setNewActivityAssigned] = useState("");
@@ -429,22 +427,11 @@ const ProjectDetails = () => {
                   variant={showDashboard ? "default" : "outline"}
                   size="sm"
                   className="gap-1.5 h-8"
-                  onClick={() => { setShowDashboard(!showDashboard); if (!showDashboard) setShowPendencies(false); }}
+                  onClick={() => setShowDashboard(!showDashboard)}
                 >
                   <LayoutDashboard className="w-3.5 h-3.5" />
                   Dashboard
                 </Button>
-                {isQualityProject && (
-                  <Button
-                    variant={showPendencies ? "default" : "outline"}
-                    size="sm"
-                    className="gap-1.5 h-8"
-                    onClick={() => { setShowPendencies(!showPendencies); if (!showPendencies) setShowDashboard(false); }}
-                  >
-                    <ClipboardCheck className="w-3.5 h-3.5" />
-                    Pendências
-                  </Button>
-                )}
                 <h2 className="text-sm font-semibold text-foreground">Informações do Projeto</h2>
                 {isAdmin && (
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingProject(project); setEditDialogOpen(true); }}>
@@ -496,12 +483,8 @@ const ProjectDetails = () => {
             />
           )}
 
-          {showPendencies && isQualityProject && (
-            <DailyPendencies
-              activities={activities}
-              onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
-            />
-          )}
+
+
 
           {/* Tabs — Phases tab REMOVED */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
