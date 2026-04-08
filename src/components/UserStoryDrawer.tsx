@@ -44,6 +44,7 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ title: "", narrative: "", image_url: null as string | null });
   const [uploading, setUploading] = useState(false);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchStories = async () => {
@@ -155,6 +156,26 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
           </div>
         ) : (
           <div className="space-y-4 mt-4">
+            {/* Sort filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Ordenar:</span>
+              <div className="flex gap-1">
+                {[
+                  { value: "desc", label: "Recente" },
+                  { value: "asc", label: "Antiga" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`px-2 py-0.5 rounded text-xs font-medium border transition-all ${sortOrder === opt.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-foreground/30"}`}
+                    onClick={() => setSortOrder(opt.value as "asc" | "desc")}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {(phaseName || activityName) && (
               <div className="space-y-2 pb-3 border-b border-border">
                 {phaseName && (
@@ -174,7 +195,11 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
               </div>
             )}
 
-            {stories.map((story, idx) => (
+            {[...stories].sort((a, b) => {
+              const dateA = new Date(a.created_at).getTime();
+              const dateB = new Date(b.created_at).getTime();
+              return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+            }).map((story, idx) => (
               <div key={story.id} className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
                 {editingId === story.id ? (
                   <div className="space-y-3">
