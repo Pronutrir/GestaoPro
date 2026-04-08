@@ -484,12 +484,8 @@ const ProjectDetails = () => {
             />
           )}
 
-          {showPendencies && isQualityProject && (
-            <DailyPendencies
-              activities={activities}
-              onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
-            />
-          )}
+
+
 
           {/* Tabs — Phases tab REMOVED */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
