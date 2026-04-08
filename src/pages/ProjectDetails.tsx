@@ -511,7 +511,6 @@ const ProjectDetails = () => {
               onTabChange={setActiveTab}
               tabs={[
                 { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" /> },
-                ...(isQualityProject ? [{ value: "daily", label: "Pendências do Dia", icon: <Calendar className="w-4 h-4" /> }] : []),
                 { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" /> },
                 { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
                 { value: "deliveries", label: "Pacote de Entregas", icon: <Package className="w-4 h-4" /> },
