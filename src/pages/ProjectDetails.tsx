@@ -428,22 +428,11 @@ const ProjectDetails = () => {
                   variant={showDashboard ? "default" : "outline"}
                   size="sm"
                   className="gap-1.5 h-8"
-                  onClick={() => { setShowDashboard(!showDashboard); if (!showDashboard) setShowPendencies(false); }}
+                  onClick={() => setShowDashboard(!showDashboard)}
                 >
                   <LayoutDashboard className="w-3.5 h-3.5" />
                   Dashboard
                 </Button>
-                {isQualityProject && (
-                  <Button
-                    variant={showPendencies ? "default" : "outline"}
-                    size="sm"
-                    className="gap-1.5 h-8"
-                    onClick={() => { setShowPendencies(!showPendencies); if (!showPendencies) setShowDashboard(false); }}
-                  >
-                    <ClipboardCheck className="w-3.5 h-3.5" />
-                    Pendências
-                  </Button>
-                )}
                 <h2 className="text-sm font-semibold text-foreground">Informações do Projeto</h2>
                 {isAdmin && (
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingProject(project); setEditDialogOpen(true); }}>
