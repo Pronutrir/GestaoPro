@@ -34,7 +34,7 @@ import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, ListTodo, GanttChart, BookOpen, FileText, Flag,
   ChevronRight, Settings2, Kanban, Users, ShieldCheck, AlertTriangle,
-  Package, Inbox, DollarSign, ClipboardList, LayoutDashboard,
+  Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, ClipboardCheck,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -104,6 +104,7 @@ const ProjectDetails = () => {
   const [permissionsLoading, setPermissionsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("kanban");
   const [showDashboard, setShowDashboard] = useState(false);
+  const [showPendencies, setShowPendencies] = useState(false);
   const [allowedTabs, setAllowedTabs] = useState<string[] | null>(null);
   const [newActivity, setNewActivity] = useState("");
   const [newActivityAssigned, setNewActivityAssigned] = useState("");
@@ -428,11 +429,22 @@ const ProjectDetails = () => {
                   variant={showDashboard ? "default" : "outline"}
                   size="sm"
                   className="gap-1.5 h-8"
-                  onClick={() => setShowDashboard(!showDashboard)}
+                  onClick={() => { setShowDashboard(!showDashboard); if (!showDashboard) setShowPendencies(false); }}
                 >
                   <LayoutDashboard className="w-3.5 h-3.5" />
                   Dashboard
                 </Button>
+                {isQualityProject && (
+                  <Button
+                    variant={showPendencies ? "default" : "outline"}
+                    size="sm"
+                    className="gap-1.5 h-8"
+                    onClick={() => { setShowPendencies(!showPendencies); if (!showPendencies) setShowDashboard(false); }}
+                  >
+                    <ClipboardCheck className="w-3.5 h-3.5" />
+                    Pendências
+                  </Button>
+                )}
                 <h2 className="text-sm font-semibold text-foreground">Informações do Projeto</h2>
                 {isAdmin && (
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingProject(project); setEditDialogOpen(true); }}>
@@ -484,6 +496,13 @@ const ProjectDetails = () => {
             />
           )}
 
+          {showPendencies && isQualityProject && (
+            <DailyPendencies
+              activities={activities}
+              onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+            />
+          )}
+
           {/* Tabs — Phases tab REMOVED */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <DraggableTabBar
@@ -492,7 +511,6 @@ const ProjectDetails = () => {
               onTabChange={setActiveTab}
               tabs={[
                 { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" /> },
-                ...(isQualityProject ? [{ value: "daily", label: "Pendências do Dia", icon: <Calendar className="w-4 h-4" /> }] : []),
                 { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" /> },
                 { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
                 { value: "deliveries", label: "Pacote de Entregas", icon: <Package className="w-4 h-4" /> },
@@ -521,14 +539,7 @@ const ProjectDetails = () => {
               />
             </TabsContent>
 
-            {isQualityProject && (
-              <TabsContent value="daily" className="mt-0">
-                <DailyPendencies
-                  activities={activities}
-                  onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
-                />
-              </TabsContent>
-            )}
+
 
             <TabsContent value="timeline" className="mt-0">
               <TimelineView phases={phases} activities={activities} projectDueDate={project.due_date} onActivityClick={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }} />
