@@ -262,7 +262,7 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
       )}
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className={`grid gap-4 ${isQuality ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"}`}>
         {/* Status Donut */}
         <Card className="p-4 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Distribuição por Status</h3>
@@ -300,53 +300,57 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
           )}
         </Card>
 
-        {/* Phase Bars */}
-        <Card className="p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Atividades por Fase</h3>
-          {phaseChartData.length > 0 ? (
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={phaseChartData} layout="vertical" margin={{ left: 0, right: 16 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 10 }} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
-                  <Tooltip />
-                  <Bar dataKey="total" fill="hsl(220, 90%, 56%)" radius={[0, 4, 4, 0]} name="Total" />
-                  <Bar dataKey="concluídas" fill="hsl(142, 76%, 36%)" radius={[0, 4, 4, 0]} name="Concluídas" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-8">Sem fases com atividades</p>
-          )}
-        </Card>
+        {/* Phase Bars - Only for non-quality */}
+        {!isQuality && (
+          <Card className="p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">Atividades por Fase</h3>
+            {phaseChartData.length > 0 ? (
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={phaseChartData} layout="vertical" margin={{ left: 0, right: 16 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 10 }} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
+                    <Tooltip />
+                    <Bar dataKey="total" fill="hsl(220, 90%, 56%)" radius={[0, 4, 4, 0]} name="Total" />
+                    <Bar dataKey="concluídas" fill="hsl(142, 76%, 36%)" radius={[0, 4, 4, 0]} name="Concluídas" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-8">Sem fases com atividades</p>
+            )}
+          </Card>
+        )}
 
-        {/* Weekly Evolution */}
-        <Card className="p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Evolução Semanal</h3>
-          {weeklyData.length > 0 ? (
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={weeklyData} margin={{ left: 0, right: 16, bottom: 0, top: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="semana" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <Tooltip />
-                  <Area
-                    type="monotone"
-                    dataKey="concluídas"
-                    stroke="hsl(142, 76%, 36%)"
-                    fill="hsl(142, 76%, 36%)"
-                    fillOpacity={0.15}
-                    name="Concluídas"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-8">Sem conclusões registradas</p>
-          )}
-        </Card>
+        {/* Weekly Evolution - Only for non-quality */}
+        {!isQuality && (
+          <Card className="p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">Evolução Semanal</h3>
+            {weeklyData.length > 0 ? (
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={weeklyData} margin={{ left: 0, right: 16, bottom: 0, top: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="semana" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <Tooltip />
+                    <Area
+                      type="monotone"
+                      dataKey="concluídas"
+                      stroke="hsl(142, 76%, 36%)"
+                      fill="hsl(142, 76%, 36%)"
+                      fillOpacity={0.15}
+                      name="Concluídas"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-8">Sem conclusões registradas</p>
+            )}
+          </Card>
+        )}
       </div>
 
       {/* Budget Bar (conditionally shown) */}

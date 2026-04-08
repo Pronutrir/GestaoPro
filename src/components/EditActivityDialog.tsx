@@ -462,6 +462,30 @@ export const EditActivityDialog = ({
 
 
           <DialogFooter className="gap-2">
+            {activity && activity.status !== "completed" && (
+              <Button
+                type="button"
+                variant="outline"
+                className="mr-auto gap-2 text-success border-success/30 hover:bg-success/10"
+                onClick={async () => {
+                  if (!activity) return;
+                  try {
+                    const { error } = await supabase.from("activities").update({
+                      status: "completed",
+                      completed_at: new Date().toISOString(),
+                    }).eq("id", activity.id);
+                    if (error) throw error;
+                    toast({ title: "Atividade concluída!" });
+                    onActivityUpdated();
+                    onOpenChange(false);
+                  } catch {
+                    toast({ title: "Erro ao concluir", variant: "destructive" });
+                  }
+                }}
+              >
+                <CheckCircle2 className="w-4 h-4" /> Concluir Atividade
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button type="submit">Salvar Alterações</Button>
           </DialogFooter>
