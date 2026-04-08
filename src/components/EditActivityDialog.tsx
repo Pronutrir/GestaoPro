@@ -468,12 +468,26 @@ export const EditActivityDialog = ({
                 variant="outline"
                 className="mr-auto gap-2 text-success border-success/30 hover:bg-success/10"
                 onClick={async () => {
-                  if (!activity) return;
+                  if (!activity || !projectId) return;
                   try {
-                    const { error } = await supabase.from("activities").update({
+                    // Find the final workflow stage
+                    const { data: finalStage } = await supabase
+                      .from("workflow_stages")
+                      .select("id")
+                      .eq("project_id", projectId)
+                      .eq("is_final", true)
+                      .limit(1)
+                      .maybeSingle();
+
+                    const updateData: any = {
                       status: "completed",
                       completed_at: new Date().toISOString(),
-                    }).eq("id", activity.id);
+                    };
+                    if (finalStage) {
+                      updateData.workflow_stage_id = finalStage.id;
+                    }
+
+                    const { error } = await supabase.from("activities").update(updateData).eq("id", activity.id);
                     if (error) throw error;
                     toast({ title: "Atividade concluída!" });
                     onActivityUpdated();
