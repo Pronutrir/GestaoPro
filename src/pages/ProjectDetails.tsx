@@ -28,13 +28,12 @@ import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
-import { DailyPendencies } from "@/components/DailyPendencies";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, ListTodo, GanttChart, BookOpen, FileText, Flag,
   ChevronRight, Settings2, Kanban, Users, ShieldCheck, AlertTriangle,
-  Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, ClipboardCheck,
+  Package, Inbox, DollarSign, ClipboardList, LayoutDashboard,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
