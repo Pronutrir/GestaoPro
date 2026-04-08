@@ -7,16 +7,19 @@ import { Calendar, Clock, Pencil, User, Flag } from "lucide-react";
 interface Activity {
   id: string;
   title: string;
+  description: string | null;
   status: string;
   priority?: string;
   assigned_to: string | null;
   start_date: string | null;
   end_date: string | null;
   completed_at: string | null;
+  created_at: string;
+  cost: number;
+  hours: number | null;
   deadline_flag?: string | null;
   last_update_date?: string | null;
   phase_id: string | null;
-  hours: number | null;
 }
 
 interface Props {
