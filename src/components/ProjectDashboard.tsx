@@ -122,6 +122,16 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
     });
   }, [activities, todayStr, pendencyFilter, isQuality]);
 
+  const dailyTasksCount = useMemo(() => {
+    if (!isQuality) return 0;
+    return activities.filter((a) => {
+      if (a.status === "completed") return false;
+      const endMatch = a.end_date && a.end_date <= todayStr;
+      const updateMatch = a.last_update_date && a.last_update_date <= todayStr;
+      return endMatch || updateMatch;
+    }).length;
+  }, [activities, todayStr, isQuality]);
+
   const pendencyStats = useMemo(() => {
     if (!isQuality) return { overdue: 0, dueToday: 0, updatePending: 0, highPriority: 0 };
     return {
