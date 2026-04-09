@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -222,139 +223,163 @@ function KanbanCard({
       ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue"
       : "border-border";
 
+  const tooltipLines = [
+    activity.title,
+    activity.description ? `📝 ${activity.description}` : null,
+    activity.assigned_to ? `👤 Responsável: ${activity.assigned_to}` : null,
+    activity.priority ? `⚡ Prioridade: ${activity.priority === "high" ? "Alta" : activity.priority === "medium" ? "Média" : "Baixa"}` : null,
+    activity.start_date ? `📅 Início: ${parseDate(activity.start_date).toLocaleDateString("pt-BR")}` : null,
+    activity.end_date ? `📅 Fim: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}` : null,
+    isQualityProject && activity.last_update_date ? `🔄 Atualização: ${parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}` : null,
+    isQualityProject && activity.deadline_flag ? `🚦 Flag: ${activity.deadline_flag === "green" ? "Em dia" : activity.deadline_flag === "orange" ? "Atenção" : activity.deadline_flag === "red" ? "Vencido" : ""}` : null,
+    activity.hours > 0 ? `⏱ Horas: ${activity.hours}h` : null,
+    activity.status === "completed" ? "✅ Concluída" : null,
+  ].filter(Boolean);
+
   return (
-    <div
-      className={`bg-card border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group ${cardBorderClass}`}
-      onClick={onEdit}
-    >
-      <div className="flex items-start gap-2">
-        <button
-          className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
-          onClick={(e) => e.stopPropagation()}
-          {...dragListeners}
-        >
-          <GripVertical className="w-3.5 h-3.5" />
-        </button>
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <div className="flex items-center gap-1.5 mb-1">
-            {getPriorityIndicator(activity.priority)}
-            <p
-              className={`text-xs font-medium leading-snug line-clamp-2 ${
-                activity.status === "completed"
-                  ? "line-through text-muted-foreground"
-                  : "text-foreground"
-              }`}
-            >
-              {activity.title}
-            </p>
-          </div>
-
-          {activity.description && (
-            <p className="text-[11px] text-muted-foreground line-clamp-1 mb-1.5 leading-relaxed truncate">
-              {activity.description}
-            </p>
-          )}
-
-          <div className="flex flex-wrap gap-1">
-            {isBlocked && (
-              <Badge className="bg-orange-500/20 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0">
-                🚫 Bloqueada
-              </Badge>
-            )}
-            {isQualityProject && activity.deadline_flag && activity.deadline_flag !== "" && (
-              <Badge className={`text-[10px] px-1.5 py-0 ${
-                activity.deadline_flag === "green" ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/30" :
-                activity.deadline_flag === "orange" ? "bg-orange-500/20 text-orange-600 border-orange-500/30" :
-                activity.deadline_flag === "red" ? "bg-destructive/20 text-destructive border-destructive/30" : ""
-              }`}>
-                {activity.deadline_flag === "green" ? "🟢 Em dia" :
-                 activity.deadline_flag === "orange" ? "🟠 Atenção" :
-                 activity.deadline_flag === "red" ? "🔴 Vencido" : ""}
-              </Badge>
-            )}
-            {activity.assigned_to && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                👤 {activity.assigned_to}
-              </Badge>
-            )}
-            {activity.participants && activity.participants.length > 0 && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/30">
-                👥 +{activity.participants.length}
-              </Badge>
-            )}
-            {activity.end_date && (
-              <Badge
-                variant="outline"
-                className={`text-[10px] px-1.5 py-0 ${
-                  isOverdue
-                    ? "border-destructive bg-destructive/10 text-destructive font-semibold"
-                    : ""
-                }`}
-              >
-                {isOverdue && <AlertCircle className="w-2.5 h-2.5 mr-0.5" />}
-                📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR")}
-              </Badge>
-            )}
-            {isQualityProject && activity.last_update_date && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/5 text-primary/80">
-                🔄 {parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}
-              </Badge>
-            )}
-            {(activity as any).story_points > 0 && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-bold">
-                🎯 {(activity as any).story_points} SP
-              </Badge>
-            )}
-            {hasStory && (
-              <Badge
-                variant="outline"
-                className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30 cursor-pointer hover:bg-primary/20 transition-colors"
-                onClick={(e) => { e.stopPropagation(); onStoryClick?.(); }}
-              >
-                📖 {storyCount && storyCount > 1 ? `${storyCount} Histórias` : "História"}
-              </Badge>
-            )}
-            {activity.hours > 0 && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                {activity.hours}h
-              </Badge>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onToggle} title="Concluir">
-          {activity.status === "completed" ? (
-            <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-          ) : (
-            <Circle className="w-3.5 h-3.5 text-muted-foreground" />
-          )}
-        </Button>
-        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEdit} title="Editar">
-          <Pencil className="w-3.5 h-3.5" />
-        </Button>
-        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onMoveToBacklog} title="Mover para Backlog">
-          <Inbox className="w-3.5 h-3.5" />
-        </Button>
-        {onCreateStory && (
-          <Button size="icon" variant="ghost" className="h-6 w-6 text-primary hover:text-primary" onClick={onCreateStory} title="Criar História">
-            <BookOpen className="w-3.5 h-3.5" />
-          </Button>
-        )}
-        {isAdmin && (
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 text-destructive hover:text-destructive"
-            onClick={onDelete}
-            title="Excluir"
+    <TooltipProvider delayDuration={400}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className={`bg-card border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group ${cardBorderClass}`}
+            onClick={onEdit}
           >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-        )}
-      </div>
-    </div>
+            <div className="flex items-start gap-2">
+              <button
+                className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
+                onClick={(e) => e.stopPropagation()}
+                {...dragListeners}
+              >
+                <GripVertical className="w-3.5 h-3.5" />
+              </button>
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <div className="flex items-center gap-1.5 mb-1">
+                  {getPriorityIndicator(activity.priority)}
+                  <p
+                    className={`text-xs font-medium leading-snug line-clamp-2 ${
+                      activity.status === "completed"
+                        ? "line-through text-muted-foreground"
+                        : "text-foreground"
+                    }`}
+                  >
+                    {activity.title}
+                  </p>
+                </div>
+
+                {activity.description && (
+                  <p className="text-[11px] text-muted-foreground line-clamp-1 mb-1.5 leading-relaxed truncate">
+                    {activity.description}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap gap-1">
+                  {isBlocked && (
+                    <Badge className="bg-orange-500/20 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0">
+                      🚫 Bloqueada
+                    </Badge>
+                  )}
+                  {isQualityProject && activity.deadline_flag && activity.deadline_flag !== "" && (
+                    <Badge className={`text-[10px] px-1.5 py-0 ${
+                      activity.deadline_flag === "green" ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/30" :
+                      activity.deadline_flag === "orange" ? "bg-orange-500/20 text-orange-600 border-orange-500/30" :
+                      activity.deadline_flag === "red" ? "bg-destructive/20 text-destructive border-destructive/30" : ""
+                    }`}>
+                      {activity.deadline_flag === "green" ? "🟢 Em dia" :
+                       activity.deadline_flag === "orange" ? "🟠 Atenção" :
+                       activity.deadline_flag === "red" ? "🔴 Vencido" : ""}
+                    </Badge>
+                  )}
+                  {activity.assigned_to && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      👤 {activity.assigned_to}
+                    </Badge>
+                  )}
+                  {activity.participants && activity.participants.length > 0 && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/30">
+                      👥 +{activity.participants.length}
+                    </Badge>
+                  )}
+                  {activity.end_date && (
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] px-1.5 py-0 ${
+                        isOverdue
+                          ? "border-destructive bg-destructive/10 text-destructive font-semibold"
+                          : ""
+                      }`}
+                    >
+                      {isOverdue && <AlertCircle className="w-2.5 h-2.5 mr-0.5" />}
+                      📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR")}
+                    </Badge>
+                  )}
+                  {isQualityProject && activity.last_update_date && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/5 text-primary/80">
+                      🔄 {parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}
+                    </Badge>
+                  )}
+                  {(activity as any).story_points > 0 && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-bold">
+                      🎯 {(activity as any).story_points} SP
+                    </Badge>
+                  )}
+                  {hasStory && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30 cursor-pointer hover:bg-primary/20 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); onStoryClick?.(); }}
+                    >
+                      📖 {storyCount && storyCount > 1 ? `${storyCount} Histórias` : "História"}
+                    </Badge>
+                  )}
+                  {activity.hours > 0 && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      {activity.hours}h
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onToggle} title="Concluir">
+                {activity.status === "completed" ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                ) : (
+                  <Circle className="w-3.5 h-3.5 text-muted-foreground" />
+                )}
+              </Button>
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEdit} title="Editar">
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onMoveToBacklog} title="Mover para Backlog">
+                <Inbox className="w-3.5 h-3.5" />
+              </Button>
+              {onCreateStory && (
+                <Button size="icon" variant="ghost" className="h-6 w-6 text-primary hover:text-primary" onClick={onCreateStory} title="Criar História">
+                  <BookOpen className="w-3.5 h-3.5" />
+                </Button>
+              )}
+              {isAdmin && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 text-destructive hover:text-destructive"
+                  onClick={onDelete}
+                  title="Excluir"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="max-w-[280px] space-y-1 text-xs">
+          {tooltipLines.map((line, i) => (
+            <p key={i} className={i === 0 ? "font-semibold" : "text-muted-foreground"}>{line}</p>
+          ))}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -1014,7 +1039,7 @@ export const ActivityKanban = ({
         >
           <div ref={containerRef} className="flex pb-4 w-full" style={{ minHeight: 400 }}>
           {/* Tarefas do Dia - Quality Only */}
-          {isQualityProject && dailyTasks.length > 0 && (
+          {isQualityProject && (
             <div
               className="relative min-w-0 rounded-xl border flex flex-col overflow-hidden bg-orange-500/5 border-orange-500/40"
               style={{ flex: `1 1 ${100 / (visibleStages.length + 1)}%`, marginRight: 6 }}
@@ -1031,23 +1056,29 @@ export const ActivityKanban = ({
                 </div>
               </div>
               <div className="flex-1 p-2 space-y-2 min-h-[120px] overflow-y-auto">
-                {dailyTasks.map((activity) => (
-                  <KanbanCard
-                    key={`daily-${activity.id}`}
-                    activity={activity}
-                    phases={phases}
-                    onEdit={() => onEditActivity(activity)}
-                    onDelete={() => onDeleteActivity(activity.id)}
-                    onToggle={() => onToggleActivity(activity.id, activity.status)}
-                    onMoveToBacklog={() => handleMoveToBacklog(activity.id)}
-                    isAdmin={isAdmin}
-                    hasStory={storyLinkedActivities.has(activity.id)}
-                    storyCount={storyLinkedActivities.get(activity.id) || 0}
-                    onStoryClick={() => { setStoryDrawerActivityId(activity.id); setStoryDrawerOpen(true); }}
-                    onCreateStory={() => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
-                    isQualityProject={isQualityProject}
-                  />
-                ))}
+                {dailyTasks.length === 0 ? (
+                  <div className="flex items-center justify-center h-20 border-2 border-dashed border-orange-500/20 rounded-lg">
+                    <p className="text-xs text-muted-foreground/50">Nenhuma tarefa pendente hoje ✅</p>
+                  </div>
+                ) : (
+                  dailyTasks.map((activity) => (
+                    <KanbanCard
+                      key={`daily-${activity.id}`}
+                      activity={activity}
+                      phases={phases}
+                      onEdit={() => onEditActivity(activity)}
+                      onDelete={() => onDeleteActivity(activity.id)}
+                      onToggle={() => onToggleActivity(activity.id, activity.status)}
+                      onMoveToBacklog={() => handleMoveToBacklog(activity.id)}
+                      isAdmin={isAdmin}
+                      hasStory={storyLinkedActivities.has(activity.id)}
+                      storyCount={storyLinkedActivities.get(activity.id) || 0}
+                      onStoryClick={() => { setStoryDrawerActivityId(activity.id); setStoryDrawerOpen(true); }}
+                      onCreateStory={() => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
+                      isQualityProject={isQualityProject}
+                    />
+                  ))
+                )}
               </div>
             </div>
           )}

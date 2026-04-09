@@ -122,6 +122,16 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
     });
   }, [activities, todayStr, pendencyFilter, isQuality]);
 
+  const dailyTasksCount = useMemo(() => {
+    if (!isQuality) return 0;
+    return activities.filter((a) => {
+      if (a.status === "completed") return false;
+      const endMatch = a.end_date && a.end_date <= todayStr;
+      const updateMatch = a.last_update_date && a.last_update_date <= todayStr;
+      return endMatch || updateMatch;
+    }).length;
+  }, [activities, todayStr, isQuality]);
+
   const pendencyStats = useMemo(() => {
     if (!isQuality) return { overdue: 0, dueToday: 0, updatePending: 0, highPriority: 0 };
     return {
@@ -331,7 +341,7 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
           </div>
 
           {/* Pendency KPI row - clickable cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Card
               className="p-3 cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => pendingActivities.length > 0 && setDialogData({ title: "Total Pendências", items: pendingActivities })}
@@ -343,6 +353,28 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
                 <div>
                   <p className="text-xl font-bold text-foreground">{pendingActivities.length}</p>
                   <p className="text-[10px] text-muted-foreground">Total Pendências</p>
+                </div>
+              </div>
+            </Card>
+            <Card
+              className="p-3 cursor-pointer hover:shadow-md transition-shadow border-orange-500/30"
+              onClick={() => {
+                const items = activities.filter(a => {
+                  if (a.status === "completed") return false;
+                  const endMatch = a.end_date && a.end_date <= todayStr;
+                  const updateMatch = a.last_update_date && a.last_update_date <= todayStr;
+                  return endMatch || updateMatch;
+                });
+                items.length > 0 && setDialogData({ title: "Tarefas do Dia", items });
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-orange-500/10">
+                  <Clock className="w-4 h-4 text-orange-500" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-orange-500">{dailyTasksCount}</p>
+                  <p className="text-[10px] text-muted-foreground">Tarefas do Dia</p>
                 </div>
               </div>
             </Card>
