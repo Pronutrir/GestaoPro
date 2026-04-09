@@ -106,7 +106,7 @@ export const EditActivityDialog = ({
     });
 
     if (projectId) {
-      // Fetch workflow stages for move-to-column
+      // Always refetch workflow stages when dialog opens (catches newly created columns)
       supabase.from("workflow_stages").select("id, title, color, display_order, is_final")
         .eq("project_id", projectId).order("display_order").then(({ data }) => {
           if (data) setWorkflowStages(data);
@@ -121,7 +121,7 @@ export const EditActivityDialog = ({
         }
       });
     }
-  }, [projectId, open]);
+  }, [projectId, open, activity?.id]);
 
   useEffect(() => {
     if (activity) {
