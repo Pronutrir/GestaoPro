@@ -1039,7 +1039,7 @@ export const ActivityKanban = ({
         >
           <div ref={containerRef} className="flex pb-4 w-full" style={{ minHeight: 400 }}>
           {/* Tarefas do Dia - Quality Only */}
-          {isQualityProject && dailyTasks.length > 0 && (
+          {isQualityProject && (
             <div
               className="relative min-w-0 rounded-xl border flex flex-col overflow-hidden bg-orange-500/5 border-orange-500/40"
               style={{ flex: `1 1 ${100 / (visibleStages.length + 1)}%`, marginRight: 6 }}
@@ -1056,23 +1056,29 @@ export const ActivityKanban = ({
                 </div>
               </div>
               <div className="flex-1 p-2 space-y-2 min-h-[120px] overflow-y-auto">
-                {dailyTasks.map((activity) => (
-                  <KanbanCard
-                    key={`daily-${activity.id}`}
-                    activity={activity}
-                    phases={phases}
-                    onEdit={() => onEditActivity(activity)}
-                    onDelete={() => onDeleteActivity(activity.id)}
-                    onToggle={() => onToggleActivity(activity.id, activity.status)}
-                    onMoveToBacklog={() => handleMoveToBacklog(activity.id)}
-                    isAdmin={isAdmin}
-                    hasStory={storyLinkedActivities.has(activity.id)}
-                    storyCount={storyLinkedActivities.get(activity.id) || 0}
-                    onStoryClick={() => { setStoryDrawerActivityId(activity.id); setStoryDrawerOpen(true); }}
-                    onCreateStory={() => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
-                    isQualityProject={isQualityProject}
-                  />
-                ))}
+                {dailyTasks.length === 0 ? (
+                  <div className="flex items-center justify-center h-20 border-2 border-dashed border-orange-500/20 rounded-lg">
+                    <p className="text-xs text-muted-foreground/50">Nenhuma tarefa pendente hoje ✅</p>
+                  </div>
+                ) : (
+                  dailyTasks.map((activity) => (
+                    <KanbanCard
+                      key={`daily-${activity.id}`}
+                      activity={activity}
+                      phases={phases}
+                      onEdit={() => onEditActivity(activity)}
+                      onDelete={() => onDeleteActivity(activity.id)}
+                      onToggle={() => onToggleActivity(activity.id, activity.status)}
+                      onMoveToBacklog={() => handleMoveToBacklog(activity.id)}
+                      isAdmin={isAdmin}
+                      hasStory={storyLinkedActivities.has(activity.id)}
+                      storyCount={storyLinkedActivities.get(activity.id) || 0}
+                      onStoryClick={() => { setStoryDrawerActivityId(activity.id); setStoryDrawerOpen(true); }}
+                      onCreateStory={() => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
+                      isQualityProject={isQualityProject}
+                    />
+                  ))
+                )}
               </div>
             </div>
           )}
