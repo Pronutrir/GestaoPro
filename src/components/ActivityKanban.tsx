@@ -979,6 +979,18 @@ export const ActivityKanban = ({
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
   const activeColumn = dragType === "column" && activeId ? visibleStages.find((s) => `col-${s.id}` === activeId) : null;
 
+  // "Tarefas do Dia" - quality only: activities where end_date or last_update_date <= today
+  const dailyTasks = useMemo(() => {
+    if (!isQualityProject) return [];
+    const todayStr = new Date().toISOString().split("T")[0];
+    return activities.filter((a) => {
+      if (a.status === "completed") return false;
+      const endMatch = a.end_date && a.end_date <= todayStr;
+      const updateMatch = a.last_update_date && a.last_update_date <= todayStr;
+      return endMatch || updateMatch;
+    });
+  }, [activities, isQualityProject]);
+
 
   if (stages.length === 0) {
     return (
@@ -1001,6 +1013,44 @@ export const ActivityKanban = ({
           strategy={horizontalListSortingStrategy}
         >
           <div ref={containerRef} className="flex pb-4 w-full" style={{ minHeight: 400 }}>
+          {/* Tarefas do Dia - Quality Only */}
+          {isQualityProject && dailyTasks.length > 0 && (
+            <div
+              className="relative min-w-0 rounded-xl border flex flex-col overflow-hidden bg-orange-500/5 border-orange-500/40"
+              style={{ flex: `1 1 ${100 / (visibleStages.length + 1)}%`, marginRight: 6 }}
+            >
+              <div className="p-2 border-b border-orange-500/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-3 h-3 rounded-full bg-orange-500 shrink-0" />
+                    <h3 className="text-sm font-semibold text-foreground truncate">Tarefas do Dia</h3>
+                  </div>
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center bg-orange-500/20 text-orange-600">
+                    {dailyTasks.length}
+                  </Badge>
+                </div>
+              </div>
+              <div className="flex-1 p-2 space-y-2 min-h-[120px] overflow-y-auto">
+                {dailyTasks.map((activity) => (
+                  <KanbanCard
+                    key={`daily-${activity.id}`}
+                    activity={activity}
+                    phases={phases}
+                    onEdit={() => onEditActivity(activity)}
+                    onDelete={() => onDeleteActivity(activity.id)}
+                    onToggle={() => onToggleActivity(activity.id, activity.status)}
+                    onMoveToBacklog={() => handleMoveToBacklog(activity.id)}
+                    isAdmin={isAdmin}
+                    hasStory={storyLinkedActivities.has(activity.id)}
+                    storyCount={storyLinkedActivities.get(activity.id) || 0}
+                    onStoryClick={() => { setStoryDrawerActivityId(activity.id); setStoryDrawerOpen(true); }}
+                    onCreateStory={() => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
+                    isQualityProject={isQualityProject}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
           {visibleStages.map((stage, idx) => {
             const stageActivities = activitiesByStage[stage.id] || [];
             const widthPct = columnWidths[stage.id] || (100 / visibleStages.length);

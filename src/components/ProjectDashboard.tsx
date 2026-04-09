@@ -330,9 +330,12 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
             </Select>
           </div>
 
-          {/* Pendency KPI row */}
+          {/* Pendency KPI row - clickable cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card className="p-3">
+            <Card
+              className="p-3 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => pendingActivities.length > 0 && setDialogData({ title: "Total Pendências", items: pendingActivities })}
+            >
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-md bg-primary/10">
                   <AlertCircle className="w-4 h-4 text-primary" />
@@ -343,7 +346,13 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
                 </div>
               </div>
             </Card>
-            <Card className="p-3">
+            <Card
+              className="p-3 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => {
+                const items = pendingActivities.filter(a => a.end_date && a.end_date < todayStr);
+                items.length > 0 && setDialogData({ title: "Vencidas", items });
+              }}
+            >
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-md bg-destructive/10">
                   <AlertTriangle className="w-4 h-4 text-destructive" />
@@ -354,7 +363,13 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
                 </div>
               </div>
             </Card>
-            <Card className="p-3">
+            <Card
+              className="p-3 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => {
+                const items = pendingActivities.filter(a => a.end_date === todayStr);
+                items.length > 0 && setDialogData({ title: "Vencem Hoje", items });
+              }}
+            >
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-md bg-orange-500/10">
                   <Calendar className="w-4 h-4 text-orange-500" />
@@ -365,7 +380,13 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
                 </div>
               </div>
             </Card>
-            <Card className="p-3">
+            <Card
+              className="p-3 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => {
+                const items = pendingActivities.filter(a => a.priority === "high");
+                items.length > 0 && setDialogData({ title: "Alta Prioridade", items });
+              }}
+            >
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-md bg-warning/10">
                   <Flag className="w-4 h-4 text-warning" />
@@ -377,113 +398,11 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
               </div>
             </Card>
           </div>
-
-          {/* Pendency Activity List */}
-          {pendingActivities.length > 0 ? (
-            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-              {pendingActivities.map((activity) => {
-                const flag = activity.deadline_flag ? FLAG_DISPLAY[activity.deadline_flag] : null;
-                const priority = PRIORITY_LABELS[activity.priority || "medium"];
-                const endDiff = activity.end_date ? getDaysInfo(activity.end_date) : null;
-                const updateDiff = activity.last_update_date ? getDaysInfo(activity.last_update_date) : null;
-
-                return (
-                  <Card
-                    key={activity.id}
-                    className="p-3 hover:shadow-md transition-shadow cursor-pointer border-border"
-                    onClick={() => onNavigateToActivity?.(activity)}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0 space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          {flag && (
-                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${flag.class}`}>
-                              {flag.label}
-                            </Badge>
-                          )}
-                          <p className="text-sm font-semibold text-foreground truncate">{activity.title}</p>
-                        </div>
-                        <div className="flex items-center gap-3 flex-wrap">
-                          {activity.assigned_to && (
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <User className="w-3 h-3" /> {activity.assigned_to}
-                            </span>
-                          )}
-                          {priority && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                              {priority}
-                            </Badge>
-                          )}
-                          {activity.end_date && endDiff !== null && (
-                            <span className={`flex items-center gap-1 text-[10px] font-medium ${endDiff < 0 ? "text-destructive" : endDiff === 0 ? "text-orange-600" : "text-muted-foreground"}`}>
-                              <Calendar className="w-3 h-3" />
-                              {endDiff < 0 ? `${Math.abs(endDiff)}d atrasado` : endDiff === 0 ? "Vence hoje" : `${endDiff}d restantes`}
-                            </span>
-                          )}
-                          {activity.last_update_date && updateDiff !== null && (
-                            <span className={`flex items-center gap-1 text-[10px] font-medium ${updateDiff < 0 ? "text-destructive" : updateDiff === 0 ? "text-orange-600" : "text-muted-foreground"}`}>
-                              <Clock className="w-3 h-3" />
-                              {updateDiff < 0 ? `Atualização ${Math.abs(updateDiff)}d atrás` : updateDiff === 0 ? "Atualização hoje" : `Atualização em ${updateDiff}d`}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); onNavigateToActivity?.(activity); }}>
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <CheckCircle2 className="w-10 h-10 text-emerald-500/40 mb-2" />
-              <p className="text-sm font-medium text-muted-foreground">Nenhuma pendência encontrada</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">Todas as atividades estão em dia! 🎉</p>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Charts Row */}
-      <div className={`grid gap-4 ${isQuality ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"}`}>
-        {/* Status Donut */}
-        <Card className="p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Distribuição por Status</h3>
-          {statusChartData.length > 0 ? (
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={statusChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {statusChartData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => [value, "Atividades"]} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex justify-center gap-4 -mt-2">
-                {statusChartData.map((entry) => (
-                  <div key={entry.name} className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-                    <span className="text-[10px] text-muted-foreground">{entry.name} ({entry.value})</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-8">Sem atividades</p>
-          )}
-        </Card>
+      {/* Charts Row - without Status Distribution */}
+      <div className={`grid gap-4 ${isQuality ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"}`}>
 
         {/* Phase Bars - Only for non-quality */}
         {!isQuality && (
