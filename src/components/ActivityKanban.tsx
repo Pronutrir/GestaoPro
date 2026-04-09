@@ -1051,6 +1051,8 @@ export const ActivityKanban = ({
               </div>
             </div>
           )}
+          {visibleStages.map((stage, idx) => {
+            const stageActivities = activitiesByStage[stage.id] || [];
             const widthPct = columnWidths[stage.id] || (100 / visibleStages.length);
             return (
               <SortableColumn
