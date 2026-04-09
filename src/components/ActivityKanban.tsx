@@ -979,6 +979,18 @@ export const ActivityKanban = ({
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
   const activeColumn = dragType === "column" && activeId ? visibleStages.find((s) => `col-${s.id}` === activeId) : null;
 
+  // "Tarefas do Dia" - quality only: activities where end_date or last_update_date <= today
+  const dailyTasks = useMemo(() => {
+    if (!isQualityProject) return [];
+    const todayStr = new Date().toISOString().split("T")[0];
+    return activities.filter((a) => {
+      if (a.status === "completed") return false;
+      const endMatch = a.end_date && a.end_date <= todayStr;
+      const updateMatch = a.last_update_date && a.last_update_date <= todayStr;
+      return endMatch || updateMatch;
+    });
+  }, [activities, isQualityProject]);
+
 
   if (stages.length === 0) {
     return (
