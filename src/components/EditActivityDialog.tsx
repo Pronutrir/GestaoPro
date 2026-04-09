@@ -467,6 +467,50 @@ export const EditActivityDialog = ({
             </div>
           )}
 
+          {/* Mover para Coluna */}
+          {activity && projectId && workflowStages.length > 0 && (
+            <div className="border-t border-border pt-4 space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <ArrowRightLeft className="w-4 h-4 text-primary" /> Mover para Coluna
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {workflowStages.map((stage) => (
+                  <button
+                    key={stage.id}
+                    type="button"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
+                      currentStageId === stage.id
+                        ? "ring-2 ring-primary/30 border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-foreground/30 hover:bg-accent/30"
+                    }`}
+                    onClick={async () => {
+                      if (currentStageId === stage.id) return;
+                      try {
+                        const updateData: any = { workflow_stage_id: stage.id };
+                        if (stage.is_final) {
+                          updateData.status = "completed";
+                          updateData.completed_at = new Date().toISOString();
+                        } else if (activity.status === "completed") {
+                          updateData.status = "pending";
+                          updateData.completed_at = null;
+                        }
+                        const { error } = await supabase.from("activities").update(updateData).eq("id", activity.id);
+                        if (error) throw error;
+                        setCurrentStageId(stage.id);
+                        toast({ title: `Movida para "${stage.title}"` });
+                        onActivityUpdated();
+                      } catch {
+                        toast({ title: "Erro ao mover", variant: "destructive" });
+                      }
+                    }}
+                  >
+                    <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: stage.color }} />
+                    {stage.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
 
           <DialogFooter className="gap-2">

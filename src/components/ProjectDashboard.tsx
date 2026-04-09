@@ -446,44 +446,8 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
         </div>
       )}
 
-      {/* Charts Row */}
-      <div className={`grid gap-4 ${isQuality ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"}`}>
-        {/* Status Donut */}
-        <Card className="p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Distribuição por Status</h3>
-          {statusChartData.length > 0 ? (
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={statusChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {statusChartData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => [value, "Atividades"]} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex justify-center gap-4 -mt-2">
-                {statusChartData.map((entry) => (
-                  <div key={entry.name} className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-                    <span className="text-[10px] text-muted-foreground">{entry.name} ({entry.value})</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-8">Sem atividades</p>
-          )}
-        </Card>
+      {/* Charts Row - without Status Distribution */}
+      <div className={`grid gap-4 ${isQuality ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"}`}>
 
         {/* Phase Bars - Only for non-quality */}
         {!isQuality && (
