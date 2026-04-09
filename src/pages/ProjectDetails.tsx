@@ -143,6 +143,23 @@ const ProjectDetails = () => {
       fetchMembers();
       supabase.rpc("generate_overdue_notifications", { p_project_id: id }).then();
     }
+
+    if (!id) return;
+
+    const activitiesChannel = supabase
+      .channel(`realtime-activities-${id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "activities", filter: `project_id=eq.${id}` },
+        () => {
+          fetchProjectData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(activitiesChannel);
+    };
   }, [id, authLoading]);
 
   const loadAccess = useCallback(async (silent = false) => {
