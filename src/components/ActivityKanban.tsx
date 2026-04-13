@@ -851,7 +851,7 @@ export const ActivityKanban = ({
       acceptance_criteria: [],
       priority: "medium",
       status: "draft",
-      stage_id: firstStageId,
+      stage_id: stageId,
     });
     setCreateStoryLoading(false);
     if (error) {
