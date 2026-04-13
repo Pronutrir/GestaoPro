@@ -19,7 +19,6 @@ import {
   BookOpen, ChevronDown, GripVertical, Upload, Link2,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 interface WorkflowStage {
   id: string;
   project_id: string;
