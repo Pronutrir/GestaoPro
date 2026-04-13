@@ -20,7 +20,16 @@ import {
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { UserStoryStageManager, type UserStoryStage } from "@/components/UserStoryStageManager";
+interface WorkflowStage {
+  id: string;
+  project_id: string;
+  title: string;
+  color: string;
+  display_order: number;
+  is_final: boolean;
+  is_visible: boolean;
+  is_blocked: boolean;
+}
 
 interface UserStory {
   id: string;
