@@ -1431,7 +1431,7 @@ export type Database = {
             foreignKeyName: "user_stories_stage_id_fkey"
             columns: ["stage_id"]
             isOneToOne: false
-            referencedRelation: "user_story_stages"
+            referencedRelation: "workflow_stages"
             referencedColumns: ["id"]
           },
         ]
