@@ -50,7 +50,7 @@ interface UserStory {
 }
 
 interface Phase { id: string; title: string; display_order: number | null; }
-interface Activity { id: string; title: string; phase_id: string | null; }
+interface Activity { id: string; title: string; phase_id: string | null; workflow_stage_id?: string | null; }
 
 interface Props { projectId: string; }
 
@@ -90,14 +90,20 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   const fetchPhasesAndActivities = async () => {
     const [{ data: ph }, { data: act }] = await Promise.all([
       supabase.from("phases").select("id, title, display_order").eq("project_id", projectId).order("display_order"),
-      supabase.from("activities").select("id, title, phase_id").eq("project_id", projectId).order("title"),
+      supabase.from("activities").select("id, title, phase_id, workflow_stage_id").eq("project_id", projectId).order("title"),
     ]);
     if (ph) setPhases(ph);
     if (act) setActivities(act);
   };
 
-  const getStoriesByStage = (stageId: string, isFirst: boolean) => 
-    stories.filter(s => s.stage_id === stageId || (isFirst && !s.stage_id));
+  const getEffectiveStageId = (story: UserStory) =>
+    activities.find((activity) => activity.id === story.activity_id)?.workflow_stage_id ?? story.stage_id;
+
+  const getStoriesByStage = (stageId: string, isFirst: boolean) =>
+    stories.filter((story) => {
+      const effectiveStageId = getEffectiveStageId(story);
+      return effectiveStageId === stageId || (isFirst && !effectiveStageId);
+    });
 
   const openCreateDialog = () => {
     setEditingStory(null);
@@ -137,23 +143,27 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
       toast({ title: "Preencha o título", variant: "destructive" });
       return;
     }
+
     const firstStage = stages[0];
+    const linkedActivityStageId = activities.find((activity) => activity.id === form.activity_id)?.workflow_stage_id || null;
+    const nextStageId = linkedActivityStageId || editingStory?.stage_id || firstStage?.id || null;
     const payload = {
       project_id: projectId, persona: "", action: "",
       benefit: "", title: form.title, narrative: form.narrative, image_url: form.image_url,
       acceptance_criteria: [], priority: "medium",
-      phase_id: form.phase_id, activity_id: form.activity_id,
+      phase_id: form.phase_id, activity_id: form.activity_id, stage_id: nextStageId,
     };
 
     if (editingStory) {
       await supabase.from("user_stories").update(payload).eq("id", editingStory.id);
       toast({ title: "História atualizada!" });
     } else {
-      await supabase.from("user_stories").insert({ ...payload, status: "draft", stage_id: firstStage?.id || null });
+      await supabase.from("user_stories").insert({ ...payload, status: "draft" });
       toast({ title: "História criada!" });
     }
     setDialogOpen(false);
     fetchStories();
+    fetchPhasesAndActivities();
   };
 
   const handleDelete = async (id: string) => {
@@ -164,9 +174,20 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleMoveStory = async (storyId: string, newStageId: string) => {
+    const story = stories.find((item) => item.id === storyId);
     setStories(prev => prev.map(s => s.id === storyId ? { ...s, stage_id: newStageId } : s));
-    const { error } = await supabase.from("user_stories").update({ stage_id: newStageId }).eq("id", storyId);
-    if (error) fetchStories();
+
+    const storyResult = await supabase.from("user_stories").update({ stage_id: newStageId }).eq("id", storyId);
+    const activityResult = story?.activity_id
+      ? await supabase.from("activities").update({ workflow_stage_id: newStageId }).eq("id", story.activity_id)
+      : null;
+
+    if (storyResult.error || activityResult?.error) {
+      fetchStories();
+      fetchPhasesAndActivities();
+    } else if (story?.activity_id) {
+      fetchPhasesAndActivities();
+    }
   };
 
   const handleDragStart = (event: DragStartEvent) => {
