@@ -96,7 +96,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
     if (act) setActivities(act);
   };
 
-  const getStoriesByStage = (stageId: string) => stories.filter(s => s.stage_id === stageId);
+  const getStoriesByStage = (stageId: string, isFirst: boolean) => 
+    stories.filter(s => s.stage_id === stageId || (isFirst && !s.stage_id));
 
   const openCreateDialog = () => {
     setEditingStory(null);
