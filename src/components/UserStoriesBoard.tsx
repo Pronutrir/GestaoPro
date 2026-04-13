@@ -218,8 +218,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
       {/* Kanban Board */}
       <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className={`grid ${gridCols} gap-3`}>
-          {stages.map(stage => {
-            const stageStories = getStoriesByStage(stage.id);
+          {stages.map((stage, idx) => {
+            const stageStories = getStoriesByStage(stage.id, idx === 0);
             return (
               <DroppableColumn key={stage.id} stageId={stage.id} color={stage.color} label={stage.title} count={stageStories.length}>
                 {stageStories.map(story => (
