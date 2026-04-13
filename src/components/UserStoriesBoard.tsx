@@ -208,9 +208,6 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
           <Badge variant="secondary" className="text-xs">{stories.length}</Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setShowStageManager(!showStageManager)} className="gap-1.5">
-            <Settings2 className="w-4 h-4" /> Etapas
-          </Button>
           <Button size="sm" onClick={openCreateDialog} className="gap-1.5">
             <Plus className="w-4 h-4" /> Nova História
           </Button>
