@@ -61,7 +61,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingStory, setEditingStory] = useState<UserStory | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [showStageManager, setShowStageManager] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
