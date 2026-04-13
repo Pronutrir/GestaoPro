@@ -58,7 +58,7 @@ interface Props { projectId: string; }
 export const UserStoriesBoard = ({ projectId }: Props) => {
   const { toast } = useToast();
   const [stories, setStories] = useState<UserStory[]>([]);
-  const [stages, setStages] = useState<UserStoryStage[]>([]);
+  const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingStory, setEditingStory] = useState<UserStory | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -79,8 +79,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   useEffect(() => { fetchStages(); fetchStories(); fetchPhasesAndActivities(); }, [projectId]);
 
   const fetchStages = async () => {
-    const { data } = await supabase.from("user_story_stages").select("*").eq("project_id", projectId).order("display_order");
-    if (data) setStages(data as UserStoryStage[]);
+    const { data } = await supabase.from("workflow_stages").select("*").eq("project_id", projectId).eq("is_visible", true).order("display_order");
+    if (data) setStages(data as WorkflowStage[]);
   };
 
   const fetchStories = async () => {
@@ -218,13 +218,6 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
         </div>
       </div>
 
-      {/* Stage Manager (collapsible) */}
-      <Collapsible open={showStageManager} onOpenChange={setShowStageManager}>
-        <CollapsibleContent>
-          <UserStoryStageManager projectId={projectId} stages={stages} onStagesChange={fetchStages} />
-        </CollapsibleContent>
-      </Collapsible>
-
       {/* Kanban Board */}
       <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className={`grid ${gridCols} gap-3`}>
@@ -360,7 +353,7 @@ const DroppableColumn = ({ stageId, color, label, count, children }: {
 
 /* ── Draggable Story Card ── */
 const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelete, onMove }: {
-  story: UserStory; stages: UserStoryStage[]; phases: Phase[]; activities: Activity[];
+  story: UserStory; stages: WorkflowStage[]; phases: Phase[]; activities: Activity[];
   onEdit: () => void; onDelete: () => void; onMove: (stageId: string) => void;
 }) => {
   const [showMenu, setShowMenu] = useState(false);
