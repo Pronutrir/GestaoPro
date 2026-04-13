@@ -827,14 +827,17 @@ export const ActivityKanban = ({
     if (!createStoryActivity || !createStoryTitle.trim()) return;
     setCreateStoryLoading(true);
 
-    // Fetch the first stage ("Rascunho") so the story appears in the Stories board
-    const { data: stagesData } = await supabase
-      .from("user_story_stages")
-      .select("id")
-      .eq("project_id", projectId)
-      .order("display_order", { ascending: true })
-      .limit(1);
-    const firstStageId = stagesData?.[0]?.id || null;
+    // Use the activity's own workflow stage, or fall back to the first workflow stage
+    let stageId = createStoryActivity.workflow_stage_id || null;
+    if (!stageId) {
+      const { data: stagesData } = await supabase
+        .from("workflow_stages")
+        .select("id")
+        .eq("project_id", projectId)
+        .order("display_order", { ascending: true })
+        .limit(1);
+      stageId = stagesData?.[0]?.id || null;
+    }
 
     const { error } = await supabase.from("user_stories").insert({
       project_id: projectId,
