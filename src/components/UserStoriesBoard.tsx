@@ -16,10 +16,10 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
   Plus, Trash2, X, Image as ImageIcon,
-  BookOpen, ChevronDown, GripVertical, Upload, Link2, Settings2,
+  BookOpen, ChevronDown, GripVertical, Upload, Link2,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 interface WorkflowStage {
   id: string;
   project_id: string;
