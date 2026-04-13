@@ -16,11 +16,19 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
   Plus, Trash2, X, Image as ImageIcon,
-  BookOpen, ChevronDown, GripVertical, Upload, Link2, Settings2,
+  BookOpen, ChevronDown, GripVertical, Upload, Link2,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { UserStoryStageManager, type UserStoryStage } from "@/components/UserStoryStageManager";
+interface WorkflowStage {
+  id: string;
+  project_id: string;
+  title: string;
+  color: string;
+  display_order: number;
+  is_final: boolean;
+  is_visible: boolean;
+  is_blocked: boolean;
+}
 
 interface UserStory {
   id: string;
@@ -49,11 +57,11 @@ interface Props { projectId: string; }
 export const UserStoriesBoard = ({ projectId }: Props) => {
   const { toast } = useToast();
   const [stories, setStories] = useState<UserStory[]>([]);
-  const [stages, setStages] = useState<UserStoryStage[]>([]);
+  const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingStory, setEditingStory] = useState<UserStory | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [showStageManager, setShowStageManager] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -70,8 +78,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   useEffect(() => { fetchStages(); fetchStories(); fetchPhasesAndActivities(); }, [projectId]);
 
   const fetchStages = async () => {
-    const { data } = await supabase.from("user_story_stages").select("*").eq("project_id", projectId).order("display_order");
-    if (data) setStages(data as UserStoryStage[]);
+    const { data } = await supabase.from("workflow_stages").select("*").eq("project_id", projectId).eq("is_visible", true).order("display_order");
+    if (data) setStages(data as WorkflowStage[]);
   };
 
   const fetchStories = async () => {
@@ -200,21 +208,11 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
           <Badge variant="secondary" className="text-xs">{stories.length}</Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setShowStageManager(!showStageManager)} className="gap-1.5">
-            <Settings2 className="w-4 h-4" /> Etapas
-          </Button>
           <Button size="sm" onClick={openCreateDialog} className="gap-1.5">
             <Plus className="w-4 h-4" /> Nova História
           </Button>
         </div>
       </div>
-
-      {/* Stage Manager (collapsible) */}
-      <Collapsible open={showStageManager} onOpenChange={setShowStageManager}>
-        <CollapsibleContent>
-          <UserStoryStageManager projectId={projectId} stages={stages} onStagesChange={fetchStages} />
-        </CollapsibleContent>
-      </Collapsible>
 
       {/* Kanban Board */}
       <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -351,7 +349,7 @@ const DroppableColumn = ({ stageId, color, label, count, children }: {
 
 /* ── Draggable Story Card ── */
 const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelete, onMove }: {
-  story: UserStory; stages: UserStoryStage[]; phases: Phase[]; activities: Activity[];
+  story: UserStory; stages: WorkflowStage[]; phases: Phase[]; activities: Activity[];
   onEdit: () => void; onDelete: () => void; onMove: (stageId: string) => void;
 }) => {
   const [showMenu, setShowMenu] = useState(false);
