@@ -496,6 +496,7 @@ export const EditActivityDialog = ({
                         }
                         const { error } = await supabase.from("activities").update(updateData).eq("id", activity.id);
                         if (error) throw error;
+                        await supabase.from("user_stories").update({ stage_id: stage.id }).eq("activity_id", activity.id);
                         setCurrentStageId(stage.id);
                         toast({ title: `Movida para "${stage.title}"` });
                         onActivityUpdated();

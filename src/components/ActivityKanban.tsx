@@ -780,6 +780,10 @@ export const ActivityKanban = ({
       .from("activities")
       .update({ workflow_stage_id: backlogStage.id })
       .eq("id", activityId);
+    await supabase
+      .from("user_stories")
+      .update({ stage_id: backlogStage.id })
+      .eq("activity_id", activityId); 
     onDataChanged();
     toast({ title: "Atividade movida para o Backlog" });
   };
@@ -954,14 +958,21 @@ export const ActivityKanban = ({
 
     // Fire DB update in background
     Promise.resolve(
-      supabase
-        .from("activities")
-        .update({
-          workflow_stage_id: targetStageId,
-          status: newStatus,
-          completed_at: completedAt,
-        })
-        .eq("id", activityId)
+      (async () => {
+        await supabase
+          .from("activities")
+          .update({
+            workflow_stage_id: targetStageId,
+            status: newStatus,
+            completed_at: completedAt,
+          })
+          .eq("id", activityId);
+
+        await supabase
+          .from("user_stories")
+          .update({ stage_id: targetStageId })
+          .eq("activity_id", activityId);
+      })()
     )
       .then(() => onDataChanged())
       .catch(() => {

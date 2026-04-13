@@ -177,13 +177,12 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
     const story = stories.find((item) => item.id === storyId);
     setStories(prev => prev.map(s => s.id === storyId ? { ...s, stage_id: newStageId } : s));
 
-    const updates = [supabase.from("user_stories").update({ stage_id: newStageId }).eq("id", storyId)];
-    if (story?.activity_id) {
-      updates.push(supabase.from("activities").update({ workflow_stage_id: newStageId }).eq("id", story.activity_id));
-    }
+    const storyResult = await supabase.from("user_stories").update({ stage_id: newStageId }).eq("id", storyId);
+    const activityResult = story?.activity_id
+      ? await supabase.from("activities").update({ workflow_stage_id: newStageId }).eq("id", story.activity_id)
+      : null;
 
-    const results = await Promise.all(updates);
-    if (results.some((result) => result.error)) {
+    if (storyResult.error || activityResult?.error) {
       fetchStories();
       fetchPhasesAndActivities();
     } else if (story?.activity_id) {
