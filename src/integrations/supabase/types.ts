@@ -17,10 +17,13 @@ export type Database = {
       activities: {
         Row: {
           assigned_to: string | null
+          closed_at: string | null
           completed_at: string | null
           context_metadata: Json
           cost: number | null
           created_at: string
+          created_by: string | null
+          created_by_email: string | null
           deadline_flag: string | null
           description: string | null
           display_order: number | null
@@ -49,10 +52,13 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          closed_at?: string | null
           completed_at?: string | null
           context_metadata?: Json
           cost?: number | null
           created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
           deadline_flag?: string | null
           description?: string | null
           display_order?: number | null
@@ -81,10 +87,13 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          closed_at?: string | null
           completed_at?: string | null
           context_metadata?: Json
           cost?: number | null
           created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
           deadline_flag?: string | null
           description?: string | null
           display_order?: number | null

@@ -14,8 +14,9 @@ import { cascadeDates } from "@/lib/criticalPath";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
 import { ActivityAttachments } from "@/components/ActivityAttachments";
 import { ActivityDependencies } from "@/components/ActivityDependencies";
+import { ActivityComments } from "@/components/ActivityComments";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { History, ChevronDown, Hash, Copy } from "lucide-react";
+import { History, ChevronDown, Hash, Copy, UserCircle, Lock } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -24,6 +25,9 @@ interface Activity {
   status: string;
   completed_at: string | null;
   created_at: string;
+  updated_at?: string;
+  closed_at?: string | null;
+  created_by_email?: string | null;
   assigned_to: string | null;
   start_date: string | null;
   end_date: string | null;
@@ -290,11 +294,37 @@ export const EditActivityDialog = ({
               <span>
                 Criada em {new Date(activity.created_at).toLocaleDateString("pt-BR")}
               </span>
+              {activity.created_by_email && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span className="flex items-center gap-1">
+                    <UserCircle className="w-3 h-3" />
+                    por {activity.created_by_email}
+                  </span>
+                </>
+              )}
+              {activity.updated_at && activity.updated_at !== activity.created_at && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span>
+                    Atualizada em {new Date(activity.updated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </>
+              )}
               {activity.completed_at && (
                 <>
                   <span className="opacity-50">·</span>
                   <span className="text-success">
                     Concluída em {new Date(activity.completed_at).toLocaleDateString("pt-BR")}
+                  </span>
+                </>
+              )}
+              {activity.closed_at && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span className="text-primary flex items-center gap-1">
+                    <Lock className="w-3 h-3" />
+                    Encerrada em {new Date(activity.closed_at).toLocaleDateString("pt-BR")}
                   </span>
                 </>
               )}
@@ -596,6 +626,13 @@ export const EditActivityDialog = ({
             </div>
           )}
 
+          {/* Comentários */}
+          {activity && (
+            <div className="border-t border-border pt-4">
+              <ActivityComments activityId={activity.id} />
+            </div>
+          )}
+
           {activity && (
             <Collapsible className="border border-border rounded-lg">
               <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-accent/30 transition-colors rounded-lg">
@@ -647,6 +684,28 @@ export const EditActivityDialog = ({
                 }}
               >
                 <CheckCircle2 className="w-4 h-4" /> Concluir Atividade
+              </Button>
+            )}
+            {activity && !activity.closed_at && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 text-primary border-primary/30 hover:bg-primary/10"
+                onClick={async () => {
+                  if (!activity) return;
+                  if (!confirm("Encerrar esta atividade? Após o encerramento, ela ficará marcada como finalizada administrativamente.")) return;
+                  try {
+                    const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", activity.id);
+                    if (error) throw error;
+                    toast({ title: "Atividade encerrada!" });
+                    onActivityUpdated();
+                    onOpenChange(false);
+                  } catch {
+                    toast({ title: "Erro ao encerrar", variant: "destructive" });
+                  }
+                }}
+              >
+                <Lock className="w-4 h-4" /> Encerrar
               </Button>
             )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
