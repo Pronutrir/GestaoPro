@@ -189,6 +189,7 @@ function KanbanCard({
   onStoryClick,
   onCreateStory,
   isQualityProject,
+  stageColor,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -204,6 +205,7 @@ function KanbanCard({
   onStoryClick?: () => void;
   onCreateStory?: () => void;
   isQualityProject?: boolean;
+  stageColor?: string;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -265,6 +267,11 @@ function KanbanCard({
                         ? "line-through text-muted-foreground"
                         : "text-foreground"
                     }`}
+                    style={
+                      activity.status !== "completed" && stageColor
+                        ? { color: stageColor }
+                        : undefined
+                    }
                   >
                     {activity.title}
                   </p>
