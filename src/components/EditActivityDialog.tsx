@@ -686,6 +686,28 @@ export const EditActivityDialog = ({
                 <CheckCircle2 className="w-4 h-4" /> Concluir Atividade
               </Button>
             )}
+            {activity && !activity.closed_at && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 text-primary border-primary/30 hover:bg-primary/10"
+                onClick={async () => {
+                  if (!activity) return;
+                  if (!confirm("Encerrar esta atividade? Após o encerramento, ela ficará marcada como finalizada administrativamente.")) return;
+                  try {
+                    const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", activity.id);
+                    if (error) throw error;
+                    toast({ title: "Atividade encerrada!" });
+                    onActivityUpdated();
+                    onOpenChange(false);
+                  } catch {
+                    toast({ title: "Erro ao encerrar", variant: "destructive" });
+                  }
+                }}
+              >
+                <Lock className="w-4 h-4" /> Encerrar
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button type="submit">Salvar Alterações</Button>
           </DialogFooter>
