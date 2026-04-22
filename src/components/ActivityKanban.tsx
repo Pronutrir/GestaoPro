@@ -108,6 +108,7 @@ interface ActivityKanbanProps {
   isAdmin?: boolean;
   canCreate?: boolean;
   isQualityProject?: boolean;
+  onOpenCreateTask?: (stageId: string) => void;
 }
 
 function SortableKanbanCard({
@@ -673,6 +674,7 @@ export const ActivityKanban = ({
   isAdmin = false,
   canCreate = false,
   isQualityProject = false,
+  onOpenCreateTask,
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
