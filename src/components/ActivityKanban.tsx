@@ -267,11 +267,6 @@ function KanbanCard({
                         ? "line-through text-muted-foreground"
                         : "text-foreground"
                     }`}
-                    style={
-                      activity.status !== "completed" && stageColor
-                        ? { color: stageColor }
-                        : undefined
-                    }
                   >
                     {activity.title}
                   </p>
@@ -450,8 +445,8 @@ function SortableColumn({
     opacity: isDragging ? 0.4 : 1,
     flex: `1 1 ${widthPct}%`,
     marginRight: isLast ? 0 : 6,
-    backgroundColor: stage.is_blocked ? undefined : `${stage.color}14`,
-    borderColor: stage.is_blocked ? undefined : `${stage.color}55`,
+    backgroundColor: stage.is_blocked ? undefined : `${stage.color}2E`,
+    borderColor: stage.is_blocked ? undefined : `${stage.color}66`,
   };
 
   const phaseOrderMap: Record<string, number> = {};
