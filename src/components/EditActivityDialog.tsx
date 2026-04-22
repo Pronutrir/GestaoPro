@@ -17,6 +17,7 @@ import { ActivityDependencies } from "@/components/ActivityDependencies";
 import { ActivityComments } from "@/components/ActivityComments";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { History, ChevronDown, Hash, Copy, UserCircle, Lock } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -109,6 +110,7 @@ export const EditActivityDialog = ({
   const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean }[]>([]);
   const [currentStageId, setCurrentStageId] = useState("");
   const [creatorName, setCreatorName] = useState<string | null>(null);
+  const [storiesCount, setStoriesCount] = useState<number>(0);
 
   useEffect(() => {
     if (!open) return;
@@ -124,6 +126,17 @@ export const EditActivityDialog = ({
       });
     } else {
       setCreatorName(null);
+    }
+
+    // Count linked user stories
+    if (activity?.id) {
+      supabase
+        .from("user_stories")
+        .select("id", { count: "exact", head: true })
+        .eq("activity_id", activity.id)
+        .then(({ count }) => setStoriesCount(count || 0));
+    } else {
+      setStoriesCount(0);
     }
 
     if (projectId) {
@@ -336,6 +349,19 @@ export const EditActivityDialog = ({
                     <Lock className="w-3 h-3" />
                     Encerrada em {new Date(activity.closed_at).toLocaleDateString("pt-BR")}
                   </span>
+                </>
+              )}
+              {storiesCount > 0 && projectId && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <a
+                    href={`/project/${projectId}?tab=stories&activity=${activity.id}`}
+                    className="flex items-center gap-1 text-primary hover:underline"
+                    title="Ver histórias vinculadas"
+                  >
+                    <BookOpen className="w-3 h-3" />
+                    {storiesCount} {storiesCount === 1 ? "história vinculada" : "histórias vinculadas"}
+                  </a>
                 </>
               )}
             </div>
