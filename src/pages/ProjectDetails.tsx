@@ -109,6 +109,8 @@ const ProjectDetails = () => {
   const [activeTab, setActiveTab] = useState("kanban");
   const [showDashboard, setShowDashboard] = useState(false);
   const [allowedTabs, setAllowedTabs] = useState<string[] | null>(null);
+  const [visibleTabs, setVisibleTabs] = useState<string[]>(["kanban"]);
+  const [tabPickerOpen, setTabPickerOpen] = useState(false);
   const [newActivity, setNewActivity] = useState("");
   const [newActivityAssigned, setNewActivityAssigned] = useState("");
   const [newActivityStartDate, setNewActivityStartDate] = useState("");
