@@ -94,7 +94,6 @@ const Calendario = () => {
             <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-success"/>Concluída</span>
             <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-primary"/>Em andamento</span>
             <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-warning"/>Pendente</span>
-            <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-warning/20 border border-warning/50"/>Hoje</span>
             <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-destructive/20 border border-destructive/40"/>Feriado</span>
             <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-sky-500/20 border border-sky-500/40"/>Férias</span>
           </div>
