@@ -108,6 +108,7 @@ export const EditActivityDialog = ({
   const [allProfiles, setAllProfiles] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean }[]>([]);
   const [currentStageId, setCurrentStageId] = useState("");
+  const [creatorName, setCreatorName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -115,6 +116,15 @@ export const EditActivityDialog = ({
     supabase.from("profiles").select("full_name, sector").eq("is_active", true).then(({ data }) => {
       if (data) setAllProfiles(data.filter(p => p.full_name));
     });
+
+    // Resolve creator's full name from email
+    if (activity?.created_by_email) {
+      supabase.from("profiles").select("full_name").eq("email", activity.created_by_email).maybeSingle().then(({ data }) => {
+        setCreatorName(data?.full_name || null);
+      });
+    } else {
+      setCreatorName(null);
+    }
 
     if (projectId) {
       // Always refetch workflow stages when dialog opens (catches newly created columns)
