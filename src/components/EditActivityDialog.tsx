@@ -125,6 +125,32 @@ export const EditActivityDialog = ({
 
   useEffect(() => {
     if (!open) return;
+    // Create a draft activity when opening in create mode
+    if (createMode && !draftActivity && !creatingDraft && projectId) {
+      setCreatingDraft(true);
+      const insertPayload: any = {
+        project_id: projectId,
+        title: "Nova atividade",
+        status: "pending",
+        priority: "medium",
+        workflow_stage_id: defaultStageId || null,
+        phase_id: defaultPhaseId || null,
+        parent_id: defaultParentId || null,
+      };
+      supabase.from("activities").insert(insertPayload).select("*").single().then(({ data, error }) => {
+        setCreatingDraft(false);
+        if (error || !data) {
+          toast({ title: "Erro ao iniciar nova atividade", variant: "destructive" });
+          onOpenChange(false);
+          return;
+        }
+        setDraftActivity(data as Activity);
+        onActivityCreated?.((data as any).id);
+        // Pre-fill title empty so user types fresh
+        setFormData((prev) => ({ ...prev, title: "" }));
+      });
+    }
+
     // Fetch all active profiles for participants dropdown
     supabase.from("profiles").select("full_name, sector").eq("is_active", true).then(({ data }) => {
       if (data) setAllProfiles(data.filter(p => p.full_name));
@@ -166,7 +192,7 @@ export const EditActivityDialog = ({
         }
       });
     }
-  }, [projectId, open, activity?.id]);
+  }, [projectId, open, activity?.id, createMode]);
 
   useEffect(() => {
     if (activity) {
