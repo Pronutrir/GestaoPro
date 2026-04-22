@@ -501,15 +501,19 @@ function SortableColumn({
         <div className="flex items-center justify-between cursor-grab active:cursor-grabbing" {...listeners}>
           <div className="flex items-center gap-2 min-w-0">
             <div
-              className="w-3 h-3 rounded-full shrink-0"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full shrink-0 max-w-full"
               style={{ backgroundColor: stage.color }}
-            />
-            <h3 className="text-sm font-semibold text-foreground truncate">{stage.title}</h3>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center">
+            >
+              <div className="w-2 h-2 rounded-full bg-white/90 shrink-0" />
+              <h3 className="text-[11px] font-bold text-white tracking-wide uppercase truncate">
+                {stage.title}
+              </h3>
+            </div>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
               {stageActivities.length}
             </Badge>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
             {canCreate && (
               <button
                 type="button"
