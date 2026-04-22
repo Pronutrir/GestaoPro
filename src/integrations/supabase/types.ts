@@ -766,6 +766,131 @@ export type Database = {
           },
         ]
       }
+      okr_key_results: {
+        Row: {
+          created_at: string
+          current_value: number
+          id: string
+          metric_type: string
+          objective_id: string
+          start_value: number
+          target_value: number
+          title: string
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_value?: number
+          id?: string
+          metric_type?: string
+          objective_id: string
+          start_value?: number
+          target_value?: number
+          title: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_value?: number
+          id?: string
+          metric_type?: string
+          objective_id?: string
+          start_value?: number
+          target_value?: number
+          title?: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "okr_key_results_objective_id_fkey"
+            columns: ["objective_id"]
+            isOneToOne: false
+            referencedRelation: "okr_objectives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      okr_objectives: {
+        Row: {
+          created_at: string
+          cycle: string
+          description: string | null
+          id: string
+          owner: string | null
+          progress: number
+          status: string
+          title: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          cycle?: string
+          description?: string | null
+          id?: string
+          owner?: string | null
+          progress?: number
+          status?: string
+          title: string
+          updated_at?: string
+          year?: number
+        }
+        Update: {
+          created_at?: string
+          cycle?: string
+          description?: string | null
+          id?: string
+          owner?: string | null
+          progress?: number
+          status?: string
+          title?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: []
+      }
+      okr_project_links: {
+        Row: {
+          contribution_weight: number
+          created_at: string
+          id: string
+          key_result_id: string
+          project_id: string
+        }
+        Insert: {
+          contribution_weight?: number
+          created_at?: string
+          id?: string
+          key_result_id: string
+          project_id: string
+        }
+        Update: {
+          contribution_weight?: number
+          created_at?: string
+          id?: string
+          key_result_id?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "okr_project_links_key_result_id_fkey"
+            columns: ["key_result_id"]
+            isOneToOne: false
+            referencedRelation: "okr_key_results"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "okr_project_links_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       phases: {
         Row: {
           created_at: string

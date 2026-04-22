@@ -39,8 +39,10 @@ import {
   Clock,
   Layers,
   GanttChart,
+  Zap,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { calculateCriticalPath } from "@/lib/criticalPath";
 
 interface Project {
   id: string;
@@ -113,13 +115,16 @@ const Timeline = () => {
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>("quarter");
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dependencies, setDependencies] = useState<{ predecessor_id: string; successor_id: string; lag_days: number | null }[]>([]);
+  const [showCritical, setShowCritical] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [projectsRes, activitiesRes, phasesRes] = await Promise.all([
+      const [projectsRes, activitiesRes, phasesRes, depsRes] = await Promise.all([
         supabase.from("projects").select("id,title,status,priority,due_date,category").order("title"),
         supabase.from("activities").select("id,title,status,start_date,end_date,assigned_to,project_id,phase_id,priority"),
         supabase.from("phases").select("id,title,project_id,display_order").order("display_order"),
+        supabase.from("task_dependencies").select("predecessor_id,successor_id,lag_days"),
       ]);
 
       const filtered = await filterProjects(projectsRes.data || []);
@@ -127,6 +132,7 @@ const Timeline = () => {
       const projectIds = new Set(filtered.map((p) => p.id));
       setActivities((activitiesRes.data || []).filter((a) => projectIds.has(a.project_id)));
       setPhases((phasesRes.data || []).filter((p) => projectIds.has(p.project_id)));
+      setDependencies(depsRes.data || []);
     } finally {
       setIsLoading(false);
     }
@@ -255,6 +261,20 @@ const Timeline = () => {
     };
   }, [scheduledActivities]);
 
+  // Critical path computed per-project (dependencies are scoped per project anyway)
+  const criticalIds = useMemo(() => {
+    if (!showCritical) return new Set<string>();
+    const all = new Set<string>();
+    projects.forEach(p => {
+      const projActs = scheduledActivities.filter(a => a.project_id === p.id);
+      const projActIds = new Set(projActs.map(a => a.id));
+      const projDeps = dependencies.filter(d => projActIds.has(d.predecessor_id) && projActIds.has(d.successor_id));
+      const cp = calculateCriticalPath(projActs, projDeps);
+      cp.forEach(id => all.add(id));
+    });
+    return all;
+  }, [projects, scheduledActivities, dependencies, showCritical]);
+
   const scrollToToday = () => {
     if (scrollRef.current && todayPosition !== null) {
       scrollRef.current.scrollLeft = todayPosition - scrollRef.current.clientWidth / 2;
@@ -369,6 +389,19 @@ const Timeline = () => {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Ir para Hoje</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={showCritical ? "default" : "ghost"}
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => setShowCritical(v => !v)}
+                  >
+                    <Zap className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Destacar caminho crítico</TooltipContent>
               </Tooltip>
               <div className="flex items-center border border-border rounded-lg overflow-hidden">
                 {(["month", "quarter", "half", "year"] as ZoomLevel[]).map((level) => (
@@ -618,6 +651,7 @@ const Timeline = () => {
                       const activity = row.data as Activity;
                       const status = getActivityStatus(activity);
                       const bar = getBarPosition(activity);
+                      const isCritical = criticalIds.has(activity.id);
 
                       return (
                         <div
@@ -633,10 +667,13 @@ const Timeline = () => {
                                   left: bar.left,
                                   width: Math.max(bar.width, 6),
                                   height: ROW_H - 12,
+                                  outline: isCritical ? "2px solid hsl(45, 93%, 47%)" : undefined,
+                                  outlineOffset: isCritical ? "1px" : undefined,
                                 }}
                               >
                                 {bar.width > 60 && (
                                   <span className="text-[10px] font-medium text-primary-foreground px-2 truncate block leading-6">
+                                    {isCritical && "⚡ "}
                                     {activity.title}
                                   </span>
                                 )}
@@ -645,6 +682,7 @@ const Timeline = () => {
                             <TooltipContent side="top" className="text-xs max-w-[220px]">
                               <p className="font-semibold">{activity.title}</p>
                               <p className="text-muted-foreground">{statusLabels[status]}</p>
+                              {isCritical && <p className="text-warning font-semibold">⚡ Caminho Crítico</p>}
                               {activity.assigned_to && <p>👤 {activity.assigned_to}</p>}
                               <div className="flex gap-2 mt-1">
                                 {activity.start_date && (

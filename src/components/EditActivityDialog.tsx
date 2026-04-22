@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { cascadeDates } from "@/lib/criticalPath";
 
 interface Activity {
   id: string;
@@ -199,6 +200,7 @@ export const EditActivityDialog = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activity) return;
+    const previousEndDate = activity.end_date;
     try {
       const { error } = await supabase.from("activities").update({
         title: formData.title,
@@ -220,6 +222,36 @@ export const EditActivityDialog = ({
         ui_color_tag: formData.ui_color_tag || null,
       } as any).eq("id", activity.id);
       if (error) throw error;
+
+      // Cascade dates to successors when end_date moved (skip quality projects)
+      if (
+        !isQualityProject &&
+        projectId &&
+        formData.end_date &&
+        formData.end_date !== previousEndDate
+      ) {
+        const [{ data: deps }, { data: acts }] = await Promise.all([
+          supabase.from("task_dependencies").select("predecessor_id, successor_id, lag_days, dependency_type"),
+          supabase.from("activities").select("id, start_date, end_date").eq("project_id", projectId),
+        ]);
+        const updates = cascadeDates(
+          activity.id,
+          formData.end_date,
+          (acts || []) as any,
+          (deps || []) as any,
+        );
+        if (updates.length > 0) {
+          await Promise.all(
+            updates.map(u =>
+              supabase.from("activities")
+                .update({ start_date: u.start_date, end_date: u.end_date })
+                .eq("id", u.id),
+            ),
+          );
+          toast({ title: `${updates.length} sucessor(es) replanejado(s) automaticamente` });
+        }
+      }
+
       toast({ title: "Atividade atualizada!" });
       onActivityUpdated();
       onOpenChange(false);

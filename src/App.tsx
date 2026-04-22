@@ -19,6 +19,7 @@ import Roadmap from "./pages/Roadmap";
 import Investments from "./pages/Investments";
 import CSC from "./pages/CSC";
 import QualityManagement from "./pages/QualityManagement";
+import OKRs from "./pages/OKRs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,7 @@ const App = () => (
             <Route path="/investments" element={<ProtectedRoute gestorOnly><Investments /></ProtectedRoute>} />
             <Route path="/csc" element={<ProtectedRoute gestorOnly><CSC /></ProtectedRoute>} />
             <Route path="/qualidade" element={<ProtectedRoute><QualityManagement /></ProtectedRoute>} />
+            <Route path="/okrs" element={<ProtectedRoute gestorOnly><OKRs /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute gestorOnly><Reports /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute adminOnly><Settings /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
