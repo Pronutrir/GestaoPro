@@ -23,10 +23,10 @@ interface ActivityOpt {
 }
 
 const TYPE_LABEL: Record<string, string> = {
-  finish_to_start: "FS (após terminar)",
-  start_to_start: "SS (juntas)",
+  finish_to_start: "FS (começa após a predecessora terminar)",
+  start_to_start: "SS (começam juntas)",
   finish_to_finish: "FF (terminam juntas)",
-  start_to_finish: "SF",
+  start_to_finish: "SF (termina após a predecessora começar)",
 };
 
 export const ActivityDependencies = ({ activityId, projectId }: ActivityDependenciesProps) => {
