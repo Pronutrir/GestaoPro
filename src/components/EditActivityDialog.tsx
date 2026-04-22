@@ -12,8 +12,10 @@ import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, 
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
+import { ActivityAttachments } from "@/components/ActivityAttachments";
+import { ActivityDependencies } from "@/components/ActivityDependencies";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { History, ChevronDown } from "lucide-react";
+import { History, ChevronDown, Hash, Copy } from "lucide-react";
 
 interface Activity {
   id: string;
