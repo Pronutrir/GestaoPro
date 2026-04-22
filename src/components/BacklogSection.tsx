@@ -390,24 +390,14 @@ export const BacklogSection = ({
             </span>
           </h4>
           {phaseId && onCreateActivityInPhase && (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs gap-1"
-                onClick={() => { setPackageDialogPhaseId(phaseId); setNewPackageTitle(""); }}
-              >
-                <Package className="w-3.5 h-3.5" /> Pacote
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs gap-1"
-                onClick={() => onCreateActivityInPhase(phaseId, null)}
-              >
-                <Plus className="w-3.5 h-3.5" /> Atividade
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs gap-1"
+              onClick={() => onCreateActivityInPhase(phaseId, null)}
+            >
+              <Plus className="w-3.5 h-3.5" /> Atividade
+            </Button>
           )}
         </div>
 
@@ -415,7 +405,7 @@ export const BacklogSection = ({
           <div className="space-y-1">
             {acts.length === 0 ? (
               <p className="text-xs text-muted-foreground/70 italic px-2 py-3 text-center">
-                Nenhuma atividade nesta fase. Clique em "+ Atividade" ou "+ Pacote" para começar.
+                Nenhuma atividade nesta fase. Clique em "+ Atividade" para começar.
               </p>
             ) : (
               acts.map((a) => renderActivityRow(a, 0))
