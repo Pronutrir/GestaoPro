@@ -14,8 +14,9 @@ import { cascadeDates } from "@/lib/criticalPath";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
 import { ActivityAttachments } from "@/components/ActivityAttachments";
 import { ActivityDependencies } from "@/components/ActivityDependencies";
+import { ActivityComments } from "@/components/ActivityComments";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { History, ChevronDown, Hash, Copy } from "lucide-react";
+import { History, ChevronDown, Hash, Copy, UserCircle, Lock } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -24,6 +25,9 @@ interface Activity {
   status: string;
   completed_at: string | null;
   created_at: string;
+  updated_at?: string;
+  closed_at?: string | null;
+  created_by_email?: string | null;
   assigned_to: string | null;
   start_date: string | null;
   end_date: string | null;
