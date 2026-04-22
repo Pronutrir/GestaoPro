@@ -40,9 +40,12 @@ import {
   Layers,
   GanttChart,
   Zap,
+  ExternalLink,
+  Check,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { calculateCriticalPath } from "@/lib/criticalPath";
+import { useToast } from "@/hooks/use-toast";
 
 interface Project {
   id: string;
@@ -104,6 +107,7 @@ const getActivityStatus = (activity: Activity) => {
 
 const Timeline = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { filterProjects, loading: authLoading } = useProjectAccess();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -279,6 +283,19 @@ const Timeline = () => {
     if (scrollRef.current && todayPosition !== null) {
       scrollRef.current.scrollLeft = todayPosition - scrollRef.current.clientWidth / 2;
     }
+  };
+
+  const completeActivity = async (id: string) => {
+    const { error } = await supabase
+      .from("activities")
+      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao concluir", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Atividade concluída" });
+    fetchData();
   };
 
   const ROW_H = 36;
@@ -656,13 +673,13 @@ const Timeline = () => {
                       return (
                         <div
                           key={`ar-${activity.id}`}
-                          className="absolute w-full"
+                          className="absolute w-full group/bar"
                           style={{ top, height: ROW_H }}
                         >
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div
-                                className={`absolute top-[6px] rounded-md cursor-pointer transition-all hover:brightness-110 shadow-sm ${statusColors[status]}`}
+                                className={`absolute top-[6px] rounded-md cursor-pointer transition-all duration-200 ease-out hover:brightness-110 hover:shadow-md shadow-sm ${statusColors[status]}`}
                                 style={{
                                   left: bar.left,
                                   width: Math.max(bar.width, 6),
@@ -694,6 +711,39 @@ const Timeline = () => {
                               </div>
                             </TooltipContent>
                           </Tooltip>
+
+                          {/* Floating action icons on hover */}
+                          <div
+                            className="absolute top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/bar:opacity-100 transition-opacity duration-200 z-20 pointer-events-none group-hover/bar:pointer-events-auto"
+                            style={{ left: bar.left + Math.max(bar.width, 6) + 6 }}
+                          >
+                            {status !== "completed" && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); completeActivity(activity.id); }}
+                                    className="h-6 w-6 rounded-full bg-success text-success-foreground flex items-center justify-center hover:scale-110 transition-transform shadow-md"
+                                    aria-label="Concluir"
+                                  >
+                                    <Check className="h-3.5 w-3.5" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>Concluir atividade</TooltipContent>
+                              </Tooltip>
+                            )}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); navigate(`/project/${activity.project_id}`); }}
+                                  className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:scale-110 transition-transform shadow-md"
+                                  aria-label="Abrir"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>Abrir projeto</TooltipContent>
+                            </Tooltip>
+                          </div>
                         </div>
                       );
                     }
