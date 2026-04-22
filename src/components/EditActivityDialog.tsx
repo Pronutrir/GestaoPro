@@ -122,6 +122,9 @@ export const EditActivityDialog = ({
   const [currentStageId, setCurrentStageId] = useState("");
   const [creatorName, setCreatorName] = useState<string | null>(null);
   const [storiesCount, setStoriesCount] = useState<number>(0);
+  const [creatorEmail, setCreatorEmail] = useState<string | null>(null);
+  const [lastEditorName, setLastEditorName] = useState<string | null>(null);
+  const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
