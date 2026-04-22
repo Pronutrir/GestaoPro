@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, Plus, X, ArrowRight, ArrowLeft } from "lucide-react";
+import { Link2, Plus, X, ArrowRight, ArrowLeft, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 interface ActivityDependenciesProps {
   activityId: string;
@@ -35,6 +36,7 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
   const [adding, setAdding] = useState<"pred" | "succ" | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [type, setType] = useState("finish_to_start");
+  const [search, setSearch] = useState("");
 
   const fetchAll = async () => {
     const [{ data: depData }, { data: actData }] = await Promise.all([
