@@ -21,6 +21,10 @@ interface Risk {
   responsible: string | null;
   category: string;
   created_at: string;
+  gravity?: number | null;
+  urgency?: number | null;
+  tendency?: number | null;
+  severity_score?: number | null;
 }
 
 interface RisksManagerProps {
@@ -58,6 +62,11 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const [showMatrix, setShowMatrix] = useState(false);
   // When user clicks a matrix cell, store the filter to show filtered list
   const [matrixFilter, setMatrixFilter] = useState<{ prob: string; imp: string } | null>(null);
+  // GUT Matrix fields
+  const [gravity, setGravity] = useState<number>(3);
+  const [urgency, setUrgency] = useState<number>(3);
+  const [tendency, setTendency] = useState<number>(3);
+  const [showGut, setShowGut] = useState(false);
 
   const fetchData = async () => {
     const { data } = await supabase.from("risks").select("*").eq("project_id", projectId).order("created_at", { ascending: false });
@@ -69,13 +78,16 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const resetForm = () => {
     setDescription(""); setProbability("medium"); setImpact("medium"); setStatus("identified");
     setMitigation(""); setContingency(""); setResponsible(""); setEditingId(null); setShowForm(false);
+    setGravity(3); setUrgency(3); setTendency(3);
   };
 
   const handleSave = async () => {
     if (!description.trim()) return;
+    const severity = gravity * urgency * tendency;
     const payload = {
       project_id: projectId, description, probability, impact, status,
       mitigation: mitigation || null, contingency: contingency || null, responsible: responsible || null,
+      gravity, urgency, tendency, severity_score: severity,
     };
 
     if (editingId) {
@@ -94,6 +106,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     setEditingId(item.id); setDescription(item.description); setProbability(item.probability);
     setImpact(item.impact); setStatus(item.status); setMitigation(item.mitigation || "");
     setContingency(item.contingency || ""); setResponsible(item.responsible || ""); setShowForm(true);
+    setGravity(item.gravity ?? 3); setUrgency(item.urgency ?? 3); setTendency(item.tendency ?? 3);
   };
 
   const handleDelete = async (id: string) => {
