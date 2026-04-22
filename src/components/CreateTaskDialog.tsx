@@ -99,6 +99,8 @@ export const CreateTaskDialog = ({
     story_points: "0",
     raci_role: "",
     participants: [] as string[],
+    deadline_flag: "",
+    last_update_date: "",
   });
   const [newTag, setNewTag] = useState("");
   const [stageId, setStageId] = useState<string | null>(null);
