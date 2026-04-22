@@ -41,6 +41,9 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
@@ -106,6 +109,8 @@ const ProjectDetails = () => {
   const [activeTab, setActiveTab] = useState("kanban");
   const [showDashboard, setShowDashboard] = useState(false);
   const [allowedTabs, setAllowedTabs] = useState<string[] | null>(null);
+  const [visibleTabs, setVisibleTabs] = useState<string[]>(["kanban"]);
+  const [tabPickerOpen, setTabPickerOpen] = useState(false);
   const [newActivity, setNewActivity] = useState("");
   const [newActivityAssigned, setNewActivityAssigned] = useState("");
   const [newActivityStartDate, setNewActivityStartDate] = useState("");
@@ -218,6 +223,32 @@ const ProjectDetails = () => {
     if (authLoading || !id) return;
     void loadAccess();
   }, [authLoading, id, loadAccess]);
+
+  // Load visible tabs preference (per user+project) from localStorage
+  useEffect(() => {
+    if (!id || !currentUser?.id) return;
+    const key = `project-visible-tabs-${currentUser.id}-${id}`;
+    const saved = localStorage.getItem(key);
+    let next: string[] = ["kanban"];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          next = parsed.includes("kanban") ? parsed : ["kanban", ...parsed];
+        }
+      } catch {
+        // ignore
+      }
+    }
+    setVisibleTabs(next);
+    setActiveTab((current) => (next.includes(current) ? current : "kanban"));
+  }, [id, currentUser?.id]);
+
+  const persistVisibleTabs = useCallback((next: string[]) => {
+    if (!id || !currentUser?.id) return;
+    const key = `project-visible-tabs-${currentUser.id}-${id}`;
+    localStorage.setItem(key, JSON.stringify(next));
+  }, [id, currentUser?.id]);
 
   useEffect(() => {
     if (authLoading || !id) return;
@@ -507,11 +538,8 @@ const ProjectDetails = () => {
 
           {/* Tabs — Phases tab REMOVED */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <DraggableTabBar
-              storageKey={`project-tabs-order-${id}`}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              tabs={[
+            {(() => {
+              const allDefinitions = [
                 { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" /> },
                 ...(isQualityProject ? [] : [
                   { value: "list", label: "Lista", icon: <ListTodo className="w-4 h-4" /> },
@@ -531,8 +559,74 @@ const ProjectDetails = () => {
                 { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
                 { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" /> },
                 { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" /> },
-              ].filter(tab => !allowedTabs || allowedTabs.includes(tab.value))}
-            />
+              ];
+              const permittedDefs = allDefinitions.filter(t => !allowedTabs || allowedTabs.includes(t.value));
+              const activeTabsSet = new Set(visibleTabs);
+              const renderedTabs = permittedDefs.filter(t => activeTabsSet.has(t.value));
+              const availableToAdd = permittedDefs.filter(t => !activeTabsSet.has(t.value) && t.value !== "kanban");
+
+              const handleAddTab = (val: string) => {
+                const next = [...visibleTabs, val];
+                setVisibleTabs(next);
+                persistVisibleTabs(next);
+                setActiveTab(val);
+                setTabPickerOpen(false);
+              };
+              const handleRemoveTab = (val: string) => {
+                if (val === "kanban") return;
+                const next = visibleTabs.filter(v => v !== val);
+                setVisibleTabs(next);
+                persistVisibleTabs(next);
+                if (activeTab === val) setActiveTab("kanban");
+              };
+
+              return (
+                <DraggableTabBar
+                  storageKey={`project-tabs-order-${id}`}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                  tabs={renderedTabs}
+                  onRemoveTab={handleRemoveTab}
+                  removableValues={renderedTabs.map(t => t.value).filter(v => v !== "kanban")}
+                  extraSlot={
+                    <Popover open={tabPickerOpen} onOpenChange={setTabPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-dashed border-border/60 transition-colors"
+                          aria-label="Adicionar visualização"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Visualização
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-64 p-2">
+                        <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5">
+                          Adicionar visualização
+                        </div>
+                        {availableToAdd.length === 0 ? (
+                          <div className="text-xs text-muted-foreground px-2 py-3 text-center">
+                            Todas as visualizações disponíveis já foram adicionadas.
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-0.5 max-h-80 overflow-y-auto">
+                            {availableToAdd.map(t => (
+                              <button
+                                key={t.value}
+                                onClick={() => handleAddTab(t.value)}
+                                className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-foreground hover:bg-accent transition-colors text-left"
+                              >
+                                {t.icon}
+                                <span>{t.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  }
+                />
+              );
+            })()}
 
             <TabsContent value="kanban" className="mt-0">
               <ActivityKanban
