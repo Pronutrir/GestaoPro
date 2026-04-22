@@ -1,4 +1,5 @@
 import { differenceInDays, parseISO, addDays, format } from "date-fns";
+import { isWorkingDay, type Holiday, type WorkSchedule } from "./workCalendar";
 
 export interface CPMActivity {
   id: string;
@@ -109,7 +110,9 @@ export function cascadeDates(
   changedId: string,
   newEndDateISO: string,
   activities: CPMActivity[],
-  dependencies: CPMDependency[]
+  dependencies: CPMDependency[],
+  holidays: Holiday[] = [],
+  schedule?: WorkSchedule
 ): { id: string; start_date: string; end_date: string }[] {
   const updates: { id: string; start_date: string; end_date: string }[] = [];
   const byId = new Map(activities.map(a => [a.id, { ...a }]));
@@ -130,7 +133,13 @@ export function cascadeDates(
       .forEach(d => {
         const succ = byId.get(d.successor_id);
         if (!succ?.start_date || !succ?.end_date) return;
-        const minStart = addDays(parseISO(cur.end_date!), (d.lag_days ?? 0) + 1);
+        let minStart = addDays(parseISO(cur.end_date!), (d.lag_days ?? 0) + 1);
+        // Pula dias não-úteis (feriados, fins de semana, férias)
+        if (holidays.length > 0 || schedule) {
+          while (!isWorkingDay(minStart, holidays, schedule)) {
+            minStart = addDays(minStart, 1);
+          }
+        }
         const curStart = parseISO(succ.start_date);
         if (minStart > curStart) {
           const shift = differenceInDays(minStart, curStart);

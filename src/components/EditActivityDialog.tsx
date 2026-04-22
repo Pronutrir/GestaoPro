@@ -11,6 +11,9 @@ import { useToast } from "@/hooks/use-toast";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
+import { AuditLogPanel } from "@/components/AuditLogPanel";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { History, ChevronDown } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -575,6 +578,19 @@ export const EditActivityDialog = ({
             </div>
           )}
 
+          {activity && (
+            <Collapsible className="border border-border rounded-lg">
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-accent/30 transition-colors rounded-lg">
+                <span className="text-sm font-semibold flex items-center gap-2">
+                  <History className="w-4 h-4" /> Histórico de alterações
+                </span>
+                <ChevronDown className="w-4 h-4 transition-transform data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="p-3 pt-0">
+                <AuditLogPanel recordId={activity.id} tableName="activities" />
+              </CollapsibleContent>
+            </Collapsible>
+          )}
 
           <DialogFooter className="gap-2">
             {activity && activity.status !== "completed" && (
