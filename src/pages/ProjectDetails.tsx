@@ -19,6 +19,8 @@ import { DocumentManager } from "@/components/DocumentManager";
 import { ProjectCharter } from "@/components/ProjectCharter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
+import { ProjectListView } from "@/components/project-views/ProjectListView";
+import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { MeetingsManager } from "@/components/MeetingsManager";
 import { AssumptionsManager } from "@/components/AssumptionsManager";
@@ -511,8 +513,14 @@ const ProjectDetails = () => {
               onTabChange={setActiveTab}
               tabs={[
                 { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" /> },
+                ...(isQualityProject ? [] : [
+                  { value: "list", label: "Lista", icon: <ListTodo className="w-4 h-4" /> },
+                ]),
                 { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" /> },
                 { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
+                ...(isQualityProject ? [] : [
+                  { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" /> },
+                ]),
                 { value: "deliveries", label: "Pacote de Entregas", icon: <Package className="w-4 h-4" /> },
                 { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" /> },
                 { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" /> },
@@ -544,6 +552,33 @@ const ProjectDetails = () => {
             <TabsContent value="timeline" className="mt-0">
               <TimelineView phases={phases} activities={activities} projectDueDate={project.due_date} onActivityClick={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }} />
             </TabsContent>
+
+            {!isQualityProject && (
+              <TabsContent value="list" className="mt-0">
+                <ProjectListView
+                  activities={activities as any}
+                  phases={phases}
+                  onEditActivity={(a) => { setEditingActivity(a as any); setEditActivityDialogOpen(true); }}
+                  onToggleActivity={handleToggleActivity}
+                  canCreate={canCreate}
+                  onAddActivity={() => { setActiveTab("backlog"); setShowAddActivity(true); }}
+                />
+              </TabsContent>
+            )}
+
+            {!isQualityProject && (
+              <TabsContent value="calendar" className="mt-0">
+                <ProjectCalendarView
+                  projectId={id!}
+                  activities={activities as any}
+                  onEditActivity={(actId) => {
+                    const act = activities.find(a => a.id === actId);
+                    if (act) { setEditingActivity(act); setEditActivityDialogOpen(true); }
+                  }}
+                  onDataChanged={fetchProjectData}
+                />
+              </TabsContent>
+            )}
 
             <TabsContent value="documents" className="mt-0">
               <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
