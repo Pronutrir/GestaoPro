@@ -718,7 +718,7 @@ const ProjectDetails = () => {
             <TabsContent value="backlog" className="mt-3 space-y-4">
               {canCreate && (
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant={showAddPhase ? "secondary" : "default"} onClick={() => { setShowAddPhase(!showAddPhase); setShowAddActivity(false); }} className="gap-2">
+                  <Button size="sm" variant="default" onClick={() => setShowAddPhase(true)} className="gap-2">
                     <Layers className="w-4 h-4" /> Nova Fase
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => {
@@ -726,7 +726,6 @@ const ProjectDetails = () => {
                     setCreateTaskPhaseId(null);
                     setCreateTaskParentId(null);
                     setShowAddActivity(true);
-                    setShowAddPhase(false);
                   }} className="gap-2">
                     <Plus className="w-4 h-4" /> Nova Atividade
                   </Button>
