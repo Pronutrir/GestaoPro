@@ -140,6 +140,8 @@ export const CreateTaskDialog = ({
         story_points: "0",
         raci_role: "",
         participants: [],
+        deadline_flag: "",
+        last_update_date: "",
       });
       setStageId(defaultStageId ?? null);
       setAttachment(null);
