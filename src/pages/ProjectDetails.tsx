@@ -607,7 +607,7 @@ const ProjectDetails = () => {
                                 onClick={() => handleAddTab(t.value)}
                                 className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-foreground hover:bg-accent transition-colors text-left"
                               >
-                                {t.icon}
+                                <span className={t.iconColor ?? ""}>{t.icon}</span>
                                 <span>{t.label}</span>
                               </button>
                             ))}
