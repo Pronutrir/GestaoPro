@@ -433,7 +433,7 @@ export const BacklogSection = ({
     <div className="space-y-4">
       {/* Toolbar */}
       {backlogActs.length > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-3">
             <Checkbox
               checked={allSelected}
@@ -446,12 +446,37 @@ export const BacklogSection = ({
                 : `${backlogActs.length} atividade(s) no backlog`}
             </p>
           </div>
-          {selectedIds.size > 0 && (
-            <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => setMoveDialogOpen(true)}>
-              <ArrowRight className="w-3.5 h-3.5" />
-              Mover para Kanban ({selectedIds.size})
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs gap-1"
+              onClick={() => { setCollapsedPhases(new Set()); setCollapsedPackages(new Set()); }}
+              title="Expandir tudo"
+            >
+              <ChevronsUpDown className="w-3.5 h-3.5" /> Expandir
             </Button>
-          )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs gap-1"
+              onClick={() => {
+                const allPhaseIds = phases.map(p => p.id);
+                const packageIds = backlogActs.filter(a => (childrenByParent.get(a.id) || []).length > 0).map(a => a.id);
+                setCollapsedPhases(new Set(allPhaseIds));
+                setCollapsedPackages(new Set(packageIds));
+              }}
+              title="Recolher tudo"
+            >
+              <ChevronsDownUp className="w-3.5 h-3.5" /> Recolher
+            </Button>
+            {selectedIds.size > 0 && (
+              <Button size="sm" className="h-7 text-xs gap-1.5 ml-1" onClick={() => setMoveDialogOpen(true)}>
+                <ArrowRight className="w-3.5 h-3.5" />
+                Mover para Kanban ({selectedIds.size})
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
