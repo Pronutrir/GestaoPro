@@ -776,13 +776,19 @@ const ProjectDetails = () => {
                 open={showAddActivity}
                 onOpenChange={(o) => {
                   setShowAddActivity(o);
-                  if (!o) setCreateTaskStageId(null);
+                  if (!o) {
+                    setCreateTaskStageId(null);
+                    setCreateTaskPhaseId(null);
+                    setCreateTaskParentId(null);
+                  }
                 }}
                 projectId={id!}
                 projectTitle={project.title}
                 phases={phases}
                 members={members}
                 defaultStageId={createTaskStageId}
+                defaultPhaseId={createTaskPhaseId}
+                defaultParentId={createTaskParentId}
                 onCreated={() => fetchProjectData()}
                 onOpenDetails={(activityId) => {
                   const created = activities.find((a) => a.id === activityId);
@@ -802,6 +808,12 @@ const ProjectDetails = () => {
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
                 isAdmin={canDelete}
+                onCreateActivityInPhase={(phaseId, parentId) => {
+                  setCreateTaskPhaseId(phaseId);
+                  setCreateTaskParentId(parentId ?? null);
+                  setCreateTaskStageId(null);
+                  setShowAddActivity(true);
+                }}
               />
             </TabsContent>
 
