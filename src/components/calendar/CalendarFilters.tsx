@@ -100,9 +100,10 @@ export const CalendarFilters = ({ value, onChange, options, showProjectFilter }:
       </div>
 
       <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2">
         <Input placeholder="🔍 Buscar título..." value={value.search}
           onChange={e => onChange({ ...value, search: e.target.value })}
-          className="h-8 text-xs w-48" />
+          className="h-8 text-xs" />
 
         {showProjectFilter && options.projects && (
           <MultiSelect label="Projeto" options={options.projects} selected={value.projects} onToggle={v => toggle("projects", v)} />
@@ -115,29 +116,31 @@ export const CalendarFilters = ({ value, onChange, options, showProjectFilter }:
         <MultiSelect label="Coluna" options={options.workflowStages} selected={value.workflowStages} onToggle={v => toggle("workflowStages", v)} />
         <MultiSelect label="Tags" options={options.tags} selected={value.tags} onToggle={v => toggle("tags", v)} />
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 gap-2 text-xs">
-              <CalendarIcon className="w-3 h-3" />
-              {value.dateFrom ? format(value.dateFrom, "dd/MM", { locale: ptBR }) : "De"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar mode="single" selected={value.dateFrom} onSelect={d => onChange({ ...value, dateFrom: d })} className={cn("p-3 pointer-events-auto")} />
-          </PopoverContent>
-        </Popover>
+        <div className="grid grid-cols-2 gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 w-full gap-2 text-xs justify-start">
+                <CalendarIcon className="w-3 h-3" />
+                {value.dateFrom ? format(value.dateFrom, "dd/MM", { locale: ptBR }) : "De"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={value.dateFrom} onSelect={d => onChange({ ...value, dateFrom: d })} className={cn("p-3 pointer-events-auto")} />
+            </PopoverContent>
+          </Popover>
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 gap-2 text-xs">
-              <CalendarIcon className="w-3 h-3" />
-              {value.dateTo ? format(value.dateTo, "dd/MM", { locale: ptBR }) : "Até"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar mode="single" selected={value.dateTo} onSelect={d => onChange({ ...value, dateTo: d })} className={cn("p-3 pointer-events-auto")} />
-          </PopoverContent>
-        </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 w-full gap-2 text-xs justify-start">
+                <CalendarIcon className="w-3 h-3" />
+                {value.dateTo ? format(value.dateTo, "dd/MM", { locale: ptBR }) : "Até"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={value.dateTo} onSelect={d => onChange({ ...value, dateTo: d })} className={cn("p-3 pointer-events-auto")} />
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
     </Card>
   );
