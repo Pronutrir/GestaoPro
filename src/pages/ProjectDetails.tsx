@@ -121,6 +121,7 @@ const ProjectDetails = () => {
   const [newActivityPhaseId, setNewActivityPhaseId] = useState("");
   const [newActivityPriority, setNewActivityPriority] = useState("medium");
   const [showAddActivity, setShowAddActivity] = useState(false);
+  const [createTaskStageId, setCreateTaskStageId] = useState<string | null>(null);
   const [showAddPhase, setShowAddPhase] = useState(false);
   const [newPhaseTitle, setNewPhaseTitle] = useState("");
   const [newPhaseDescription, setNewPhaseDescription] = useState("");
