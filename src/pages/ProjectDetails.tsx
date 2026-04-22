@@ -21,7 +21,6 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { ProjectListView } from "@/components/project-views/ProjectListView";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
-import { CreateTaskDialog } from "@/components/CreateTaskDialog";
 import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { MeetingsManager } from "@/components/MeetingsManager";
@@ -797,7 +796,8 @@ const ProjectDetails = () => {
           projectId={id!} isQualityProject={isQualityProject}
         />
         {project && (
-          <CreateTaskDialog
+          <EditActivityDialog
+            activity={null}
             open={showAddActivity}
             onOpenChange={(o) => {
               setShowAddActivity(o);
@@ -807,24 +807,15 @@ const ProjectDetails = () => {
                 setCreateTaskParentId(null);
               }
             }}
-            projectId={id!}
-            projectTitle={project.title}
+            onActivityUpdated={fetchProjectData}
             phases={phases}
-            members={members}
+            allActivities={activities}
+            projectId={id!}
+            isQualityProject={isQualityProject}
+            createMode
             defaultStageId={createTaskStageId}
             defaultPhaseId={createTaskPhaseId}
             defaultParentId={createTaskParentId}
-            isQualityProject={isQualityProject}
-            onCreated={() => fetchProjectData()}
-            onOpenDetails={(activityId) => {
-              const created = activities.find((a) => a.id === activityId);
-              if (created) {
-                setEditingActivity(created);
-                setEditActivityDialogOpen(true);
-              } else {
-                fetchProjectData();
-              }
-            }}
           />
         )}
         <CreatePhaseDialog

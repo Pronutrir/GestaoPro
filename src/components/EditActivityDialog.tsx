@@ -54,6 +54,12 @@ interface EditActivityDialogProps {
   allActivities?: Activity[];
   projectId?: string;
   isQualityProject?: boolean;
+  /** When true, opens in create mode: inserts a draft activity on open and lets user fill all fields with full feature parity. */
+  createMode?: boolean;
+  defaultStageId?: string | null;
+  defaultPhaseId?: string | null;
+  defaultParentId?: string | null;
+  onActivityCreated?: (activityId: string) => void;
 }
 
 const RACI_OPTIONS = [
@@ -89,8 +95,13 @@ function formatHoursDisplay(hours: number): string {
 export const EditActivityDialog = ({
   activity, open, onOpenChange, onActivityUpdated,
   phases = [], allActivities = [], projectId, isQualityProject = false,
+  createMode = false, defaultStageId = null, defaultPhaseId = null, defaultParentId = null,
+  onActivityCreated,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
+  const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
+  const [creatingDraft, setCreatingDraft] = useState(false);
+  const effectiveActivity = createMode ? draftActivity : activity;
   const [formData, setFormData] = useState({
     title: "", description: "", assigned_to: "",
     start_date: "", end_date: "", cost: "", hours: "",
@@ -114,14 +125,41 @@ export const EditActivityDialog = ({
 
   useEffect(() => {
     if (!open) return;
+    // Create a draft activity when opening in create mode
+    if (createMode && !draftActivity && !creatingDraft && projectId) {
+      setCreatingDraft(true);
+      const insertPayload: any = {
+        project_id: projectId,
+        title: "Nova atividade",
+        status: "pending",
+        priority: "medium",
+        workflow_stage_id: defaultStageId || null,
+        phase_id: defaultPhaseId || null,
+        parent_id: defaultParentId || null,
+      };
+      supabase.from("activities").insert(insertPayload).select("*").single().then(({ data, error }) => {
+        setCreatingDraft(false);
+        if (error || !data) {
+          toast({ title: "Erro ao iniciar nova atividade", variant: "destructive" });
+          onOpenChange(false);
+          return;
+        }
+        setDraftActivity(data as Activity);
+        onActivityCreated?.((data as any).id);
+        // Pre-fill title empty so user types fresh
+        setFormData((prev) => ({ ...prev, title: "" }));
+      });
+    }
+
     // Fetch all active profiles for participants dropdown
     supabase.from("profiles").select("full_name, sector").eq("is_active", true).then(({ data }) => {
       if (data) setAllProfiles(data.filter(p => p.full_name));
     });
 
     // Resolve creator's full name from email
-    if (activity?.created_by_email) {
-      supabase.from("profiles").select("full_name").eq("email", activity.created_by_email).maybeSingle().then(({ data }) => {
+    const act = createMode ? draftActivity : activity;
+    if (act?.created_by_email) {
+      supabase.from("profiles").select("full_name").eq("email", act.created_by_email).maybeSingle().then(({ data }) => {
         setCreatorName(data?.full_name || null);
       });
     } else {
@@ -129,11 +167,11 @@ export const EditActivityDialog = ({
     }
 
     // Count linked user stories
-    if (activity?.id) {
+    if (act?.id) {
       supabase
         .from("user_stories")
         .select("id", { count: "exact", head: true })
-        .eq("activity_id", activity.id)
+        .eq("activity_id", act.id)
         .then(({ count }) => setStoriesCount(count || 0));
     } else {
       setStoriesCount(0);
@@ -155,33 +193,34 @@ export const EditActivityDialog = ({
         }
       });
     }
-  }, [projectId, open, activity?.id]);
+  }, [projectId, open, activity?.id, createMode]);
 
   useEffect(() => {
-    if (activity) {
+    const act = createMode ? draftActivity : activity;
+    if (act) {
       setFormData({
-        title: activity.title || "",
-        description: activity.description || "",
-        assigned_to: activity.assigned_to || "",
-        start_date: activity.start_date || "",
-        end_date: activity.end_date || "",
-        cost: activity.cost?.toString() || "0",
-        hours: formatHoursDisplay(activity.hours || 0),
-        phase_id: activity.phase_id || "",
-        priority: activity.priority || "medium",
-        tags: activity.tags || [],
-        parent_id: activity.parent_id || "",
-        story_points: (activity as any).story_points?.toString() || "0",
-        raci_role: (activity as any).raci_role || "",
-        participants: (activity as any).participants || [],
-        deadline_flag: (activity as any).deadline_flag || "",
-        last_update_date: (activity as any).last_update_date || "",
-        ui_color_tag: (activity as any).ui_color_tag || "",
+        title: createMode ? "" : (act.title || ""),
+        description: act.description || "",
+        assigned_to: act.assigned_to || "",
+        start_date: act.start_date || "",
+        end_date: act.end_date || "",
+        cost: act.cost?.toString() || "0",
+        hours: formatHoursDisplay(act.hours || 0),
+        phase_id: act.phase_id || "",
+        priority: act.priority || "medium",
+        tags: act.tags || [],
+        parent_id: act.parent_id || "",
+        story_points: (act as any).story_points?.toString() || "0",
+        raci_role: (act as any).raci_role || "",
+        participants: (act as any).participants || [],
+        deadline_flag: (act as any).deadline_flag || "",
+        last_update_date: (act as any).last_update_date || "",
+        ui_color_tag: (act as any).ui_color_tag || "",
       });
-      setCurrentStageId((activity as any).workflow_stage_id || "");
-      fetchSubActivities(activity.id);
+      setCurrentStageId((act as any).workflow_stage_id || "");
+      fetchSubActivities(act.id);
     }
-  }, [activity]);
+  }, [activity, draftActivity, createMode]);
 
   
 
@@ -192,20 +231,21 @@ export const EditActivityDialog = ({
   };
 
   const handleAddSubActivity = async () => {
-    if (!newSubTitle.trim() || !activity || !projectId) return;
+    const act = effectiveActivity;
+    if (!newSubTitle.trim() || !act || !projectId) return;
     await supabase.from("activities").insert({
       project_id: projectId, title: newSubTitle.trim(),
-      phase_id: activity.phase_id, parent_id: activity.id,
+      phase_id: act.phase_id, parent_id: act.id,
       display_order: subActivities.length,
     });
     setNewSubTitle("");
-    fetchSubActivities(activity.id);
+    fetchSubActivities(act.id);
     onActivityUpdated();
   };
 
   const handleDeleteSubActivity = async (subId: string) => {
     await supabase.from("activities").delete().eq("id", subId);
-    if (activity) fetchSubActivities(activity.id);
+    if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
     onActivityUpdated();
   };
 
@@ -214,7 +254,7 @@ export const EditActivityDialog = ({
     await supabase.from("activities").update({
       status: newStatus, completed_at: newStatus === "completed" ? new Date().toISOString() : null,
     }).eq("id", sub.id);
-    if (activity) fetchSubActivities(activity.id);
+    if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
     onActivityUpdated();
   };
 
@@ -231,8 +271,9 @@ export const EditActivityDialog = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activity) return;
-    const previousEndDate = activity.end_date;
+    const act = createMode ? draftActivity : activity;
+    if (!act) return;
+    const previousEndDate = act.end_date;
     try {
       const { error } = await supabase.from("activities").update({
         title: formData.title,
@@ -252,7 +293,7 @@ export const EditActivityDialog = ({
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
         ui_color_tag: formData.ui_color_tag || null,
-      } as any).eq("id", activity.id);
+      } as any).eq("id", act.id);
       if (error) throw error;
 
       // Cascade dates to successors when end_date moved (skip quality projects)
@@ -267,7 +308,7 @@ export const EditActivityDialog = ({
           supabase.from("activities").select("id, start_date, end_date").eq("project_id", projectId),
         ]);
         const updates = cascadeDates(
-          activity.id,
+          act.id,
           formData.end_date,
           (acts || []) as any,
           (deps || []) as any,
@@ -284,7 +325,7 @@ export const EditActivityDialog = ({
         }
       }
 
-      toast({ title: "Atividade atualizada!" });
+      toast({ title: createMode ? "Atividade criada!" : "Atividade atualizada!" });
       onActivityUpdated();
       onOpenChange(false);
     } catch (error) {
@@ -293,12 +334,27 @@ export const EditActivityDialog = ({
     }
   };
 
+  const handleClose = async (newOpen: boolean) => {
+    if (!newOpen && createMode && draftActivity) {
+      // Discard draft if title is still empty (user cancelled without typing)
+      if (!formData.title.trim()) {
+        await supabase.from("activities").delete().eq("id", draftActivity.id);
+        onActivityUpdated();
+      }
+      setDraftActivity(null);
+    }
+    onOpenChange(newOpen);
+  };
+
+  // Use effective activity (draft when creating, real when editing) in JSX
+  const act = effectiveActivity;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Editar Atividade</DialogTitle>
-          {activity && (
+          <DialogTitle className="text-xl font-bold">{createMode ? "Nova Atividade" : "Editar Atividade"}</DialogTitle>
+          {act && !createMode && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
               <Hash className="w-3 h-3" />
               <button
@@ -306,48 +362,48 @@ export const EditActivityDialog = ({
                 className="font-mono hover:text-foreground transition-colors flex items-center gap-1"
                 title="Clique para copiar ID completo"
                 onClick={() => {
-                  navigator.clipboard.writeText(activity.id);
+                  navigator.clipboard.writeText(act.id);
                   toast({ title: "ID copiado!" });
                 }}
               >
-                {activity.id.slice(0, 8)}
+                {act.id.slice(0, 8)}
                 <Copy className="w-3 h-3 opacity-50" />
               </button>
               <span className="opacity-50">·</span>
               <span>
-                Criada em {new Date(activity.created_at).toLocaleDateString("pt-BR")}
+                Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")}
               </span>
-              {activity.created_by_email && (
+              {act.created_by_email && (
                 <>
                   <span className="opacity-50">·</span>
                   <span className="flex items-center gap-1">
                     <UserCircle className="w-3 h-3" />
-                    por {creatorName || activity.created_by_email}
+                    por {creatorName || act.created_by_email}
                   </span>
                 </>
               )}
-              {activity.updated_at && activity.updated_at !== activity.created_at && (
+              {act.updated_at && act.updated_at !== act.created_at && (
                 <>
                   <span className="opacity-50">·</span>
                   <span>
-                    Atualizada em {new Date(activity.updated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    Atualizada em {new Date(act.updated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </>
               )}
-              {activity.completed_at && (
+              {act.completed_at && (
                 <>
                   <span className="opacity-50">·</span>
                   <span className="text-success">
-                    Concluída em {new Date(activity.completed_at).toLocaleDateString("pt-BR")}
+                    Concluída em {new Date(act.completed_at).toLocaleDateString("pt-BR")}
                   </span>
                 </>
               )}
-              {activity.closed_at && (
+              {act.closed_at && (
                 <>
                   <span className="opacity-50">·</span>
                   <span className="text-primary flex items-center gap-1">
                     <Lock className="w-3 h-3" />
-                    Encerrada em {new Date(activity.closed_at).toLocaleDateString("pt-BR")}
+                    Encerrada em {new Date(act.closed_at).toLocaleDateString("pt-BR")}
                   </span>
                 </>
               )}
@@ -355,7 +411,7 @@ export const EditActivityDialog = ({
                 <>
                   <span className="opacity-50">·</span>
                   <a
-                    href={`/project/${projectId}?tab=stories&activity=${activity.id}`}
+                    href={`/project/${projectId}?tab=stories&activity=${act.id}`}
                     className="flex items-center gap-1 text-primary hover:underline"
                     title="Ver histórias vinculadas"
                   >
@@ -568,7 +624,7 @@ export const EditActivityDialog = ({
           </div>
 
           {/* Sub-atividades */}
-          {activity && projectId && (
+          {act && projectId && (
             <div className="border-t border-border pt-4 space-y-3">
               <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                 <Layers className="w-4 h-4 text-primary" />
@@ -603,7 +659,7 @@ export const EditActivityDialog = ({
           )}
 
           {/* Mover para Coluna */}
-          {activity && projectId && workflowStages.length > 0 && (
+          {act && projectId && workflowStages.length > 0 && (
             <div className="border-t border-border pt-4 space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <ArrowRightLeft className="w-4 h-4 text-primary" /> Mover para Coluna
@@ -625,13 +681,13 @@ export const EditActivityDialog = ({
                         if (stage.is_final) {
                           updateData.status = "completed";
                           updateData.completed_at = new Date().toISOString();
-                        } else if (activity.status === "completed") {
+                        } else if (act.status === "completed") {
                           updateData.status = "pending";
                           updateData.completed_at = null;
                         }
-                        const { error } = await supabase.from("activities").update(updateData).eq("id", activity.id);
+                        const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
                         if (error) throw error;
-                        await supabase.from("user_stories").update({ stage_id: stage.id }).eq("activity_id", activity.id);
+                        await supabase.from("user_stories").update({ stage_id: stage.id }).eq("activity_id", act.id);
                         setCurrentStageId(stage.id);
                         toast({ title: `Movida para "${stage.title}"` });
                         onActivityUpdated();
@@ -649,27 +705,27 @@ export const EditActivityDialog = ({
           )}
 
           {/* Anexos */}
-          {activity && projectId && (
+          {act && projectId && (
             <div className="border-t border-border pt-4">
-              <ActivityAttachments activityId={activity.id} projectId={projectId} />
+              <ActivityAttachments activityId={act.id} projectId={projectId} />
             </div>
           )}
 
           {/* Tarefas vinculadas (predecessoras / sucessoras) */}
-          {activity && projectId && (
+          {act && projectId && (
             <div className="border-t border-border pt-4">
-              <ActivityDependencies activityId={activity.id} projectId={projectId} />
+              <ActivityDependencies activityId={act.id} projectId={projectId} />
             </div>
           )}
 
           {/* Comentários */}
-          {activity && (
+          {act && (
             <div className="border-t border-border pt-4">
-              <ActivityComments activityId={activity.id} />
+              <ActivityComments activityId={act.id} />
             </div>
           )}
 
-          {activity && (
+          {act && !createMode && (
             <Collapsible className="border border-border rounded-lg">
               <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-accent/30 transition-colors rounded-lg">
                 <span className="text-sm font-semibold flex items-center gap-2">
@@ -678,19 +734,19 @@ export const EditActivityDialog = ({
                 <ChevronDown className="w-4 h-4 transition-transform data-[state=open]:rotate-180" />
               </CollapsibleTrigger>
               <CollapsibleContent className="p-3 pt-0">
-                <AuditLogPanel recordId={activity.id} tableName="activities" />
+                <AuditLogPanel recordId={act.id} tableName="activities" />
               </CollapsibleContent>
             </Collapsible>
           )}
 
           <DialogFooter className="gap-2">
-            {activity && activity.status !== "completed" && (
+            {act && !createMode && act.status !== "completed" && (
               <Button
                 type="button"
                 variant="outline"
                 className="mr-auto gap-2 text-success border-success/30 hover:bg-success/10"
                 onClick={async () => {
-                  if (!activity || !projectId) return;
+                  if (!act || !projectId) return;
                   try {
                     // Find the final workflow stage
                     const { data: finalStage } = await supabase
@@ -709,7 +765,7 @@ export const EditActivityDialog = ({
                       updateData.workflow_stage_id = finalStage.id;
                     }
 
-                    const { error } = await supabase.from("activities").update(updateData).eq("id", activity.id);
+                    const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
                     if (error) throw error;
                     toast({ title: "Atividade concluída!" });
                     onActivityUpdated();
@@ -722,16 +778,16 @@ export const EditActivityDialog = ({
                 <CheckCircle2 className="w-4 h-4" /> Concluir Atividade
               </Button>
             )}
-            {activity && !activity.closed_at && (
+            {act && !createMode && !act.closed_at && (
               <Button
                 type="button"
                 variant="outline"
                 className="gap-2 text-primary border-primary/30 hover:bg-primary/10"
                 onClick={async () => {
-                  if (!activity) return;
+                  if (!act) return;
                   if (!confirm("Encerrar esta atividade? Após o encerramento, ela ficará marcada como finalizada administrativamente.")) return;
                   try {
-                    const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", activity.id);
+                    const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", act.id);
                     if (error) throw error;
                     toast({ title: "Atividade encerrada!" });
                     onActivityUpdated();
@@ -744,8 +800,8 @@ export const EditActivityDialog = ({
                 <Lock className="w-4 h-4" /> Encerrar
               </Button>
             )}
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit">Salvar Alterações</Button>
+            <Button type="button" variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
+            <Button type="submit">{createMode ? "Criar Atividade" : "Salvar Alterações"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
