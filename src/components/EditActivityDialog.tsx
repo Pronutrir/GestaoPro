@@ -271,6 +271,35 @@ export const EditActivityDialog = ({
       <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Editar Atividade</DialogTitle>
+          {activity && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
+              <Hash className="w-3 h-3" />
+              <button
+                type="button"
+                className="font-mono hover:text-foreground transition-colors flex items-center gap-1"
+                title="Clique para copiar ID completo"
+                onClick={() => {
+                  navigator.clipboard.writeText(activity.id);
+                  toast({ title: "ID copiado!" });
+                }}
+              >
+                {activity.id.slice(0, 8)}
+                <Copy className="w-3 h-3 opacity-50" />
+              </button>
+              <span className="opacity-50">·</span>
+              <span>
+                Criada em {new Date(activity.created_at).toLocaleDateString("pt-BR")}
+              </span>
+              {activity.completed_at && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span className="text-success">
+                    Concluída em {new Date(activity.completed_at).toLocaleDateString("pt-BR")}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2 min-w-0">
