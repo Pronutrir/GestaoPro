@@ -122,6 +122,9 @@ export const EditActivityDialog = ({
   const [currentStageId, setCurrentStageId] = useState("");
   const [creatorName, setCreatorName] = useState<string | null>(null);
   const [storiesCount, setStoriesCount] = useState<number>(0);
+  const [creatorEmail, setCreatorEmail] = useState<string | null>(null);
+  const [lastEditorName, setLastEditorName] = useState<string | null>(null);
+  const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -162,8 +165,57 @@ export const EditActivityDialog = ({
       supabase.from("profiles").select("full_name").eq("email", act.created_by_email).maybeSingle().then(({ data }) => {
         setCreatorName(data?.full_name || null);
       });
+      setCreatorEmail(act.created_by_email);
     } else {
       setCreatorName(null);
+      setCreatorEmail(null);
+    }
+
+    // Fallback / additional metadata via audit log: original creator + last editor
+    if (act?.id && !createMode) {
+      supabase
+        .from("audit_log")
+        .select("operation, changed_by_email, created_at")
+        .eq("table_name", "activities")
+        .eq("record_id", act.id)
+        .order("created_at", { ascending: true })
+        .then(async ({ data }) => {
+          if (!data || data.length === 0) {
+            setLastEditorName(null);
+            setLastEditorEmail(null);
+            return;
+          }
+          const insertEntry = data.find((e: any) => e.operation === "INSERT");
+          const updates = data.filter((e: any) => e.operation === "UPDATE");
+          const lastUpdate = updates[updates.length - 1];
+
+          // Backfill creator if missing on the row
+          if (!act.created_by_email && insertEntry?.changed_by_email) {
+            setCreatorEmail(insertEntry.changed_by_email);
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("full_name")
+              .eq("email", insertEntry.changed_by_email)
+              .maybeSingle();
+            setCreatorName(prof?.full_name || null);
+          }
+
+          if (lastUpdate?.changed_by_email) {
+            setLastEditorEmail(lastUpdate.changed_by_email);
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("full_name")
+              .eq("email", lastUpdate.changed_by_email)
+              .maybeSingle();
+            setLastEditorName(prof?.full_name || null);
+          } else {
+            setLastEditorEmail(null);
+            setLastEditorName(null);
+          }
+        });
+    } else {
+      setLastEditorEmail(null);
+      setLastEditorName(null);
     }
 
     // Count linked user stories
@@ -373,12 +425,12 @@ export const EditActivityDialog = ({
               <span>
                 Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")}
               </span>
-              {act.created_by_email && (
+              {(creatorEmail || act.created_by_email) && (
                 <>
                   <span className="opacity-50">·</span>
                   <span className="flex items-center gap-1">
                     <UserCircle className="w-3 h-3" />
-                    por {creatorName || act.created_by_email}
+                    por {creatorName || creatorEmail || act.created_by_email}
                   </span>
                 </>
               )}
@@ -388,6 +440,12 @@ export const EditActivityDialog = ({
                   <span>
                     Atualizada em {new Date(act.updated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </span>
+                  {(lastEditorName || lastEditorEmail) && (
+                    <span className="flex items-center gap-1">
+                      <UserCircle className="w-3 h-3" />
+                      por {lastEditorName || lastEditorEmail}
+                    </span>
+                  )}
                 </>
               )}
               {act.completed_at && (
