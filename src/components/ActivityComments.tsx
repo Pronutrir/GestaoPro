@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Pencil, Trash2, MessageSquare, Send } from "lucide-react";
+import { Pencil, Trash2, MessageSquare, Send, UserCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Comment {
   id: string;
@@ -21,12 +21,15 @@ interface ActivityCommentsProps {
 
 export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
   const { toast } = useToast();
+  const { user, profile } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
-  const [newAuthor, setNewAuthor] = useState("");
   const [editingComment, setEditingComment] = useState<Comment | null>(null);
   const [editContent, setEditContent] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const currentAuthorName: string =
+    profile?.full_name?.trim() || user?.email || "Usuário";
 
   useEffect(() => {
     fetchComments();
