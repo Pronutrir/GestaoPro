@@ -73,7 +73,7 @@ function SortableTab({
         ${
           isActive
             ? "text-foreground border-foreground"
-            : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50"
+            : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/70"
         }
       `}
       onClick={onClick}
