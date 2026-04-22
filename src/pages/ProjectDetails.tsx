@@ -797,7 +797,8 @@ const ProjectDetails = () => {
           projectId={id!} isQualityProject={isQualityProject}
         />
         {project && (
-          <CreateTaskDialog
+          <EditActivityDialog
+            activity={null}
             open={showAddActivity}
             onOpenChange={(o) => {
               setShowAddActivity(o);
@@ -807,15 +808,15 @@ const ProjectDetails = () => {
                 setCreateTaskParentId(null);
               }
             }}
-            projectId={id!}
-            projectTitle={project.title}
+            onActivityUpdated={fetchProjectData}
             phases={phases}
-            members={members}
+            allActivities={activities}
+            projectId={id!}
+            isQualityProject={isQualityProject}
+            createMode
             defaultStageId={createTaskStageId}
             defaultPhaseId={createTaskPhaseId}
             defaultParentId={createTaskParentId}
-            isQualityProject={isQualityProject}
-            onCreated={() => fetchProjectData()}
             onOpenDetails={(activityId) => {
               const created = activities.find((a) => a.id === activityId);
               if (created) {
