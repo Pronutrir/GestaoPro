@@ -75,6 +75,7 @@ export const CreateTaskDialog = ({
   defaultStatus,
   onCreated,
   onOpenDetails,
+  isQualityProject = false,
 }: CreateTaskDialogProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
