@@ -54,6 +54,12 @@ interface EditActivityDialogProps {
   allActivities?: Activity[];
   projectId?: string;
   isQualityProject?: boolean;
+  /** When true, opens in create mode: inserts a draft activity on open and lets user fill all fields with full feature parity. */
+  createMode?: boolean;
+  defaultStageId?: string | null;
+  defaultPhaseId?: string | null;
+  defaultParentId?: string | null;
+  onActivityCreated?: (activityId: string) => void;
 }
 
 const RACI_OPTIONS = [
