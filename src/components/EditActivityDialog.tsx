@@ -333,12 +333,27 @@ export const EditActivityDialog = ({
     }
   };
 
+  const handleClose = async (newOpen: boolean) => {
+    if (!newOpen && createMode && draftActivity) {
+      // Discard draft if title is still empty (user cancelled without typing)
+      if (!formData.title.trim()) {
+        await supabase.from("activities").delete().eq("id", draftActivity.id);
+        onActivityUpdated();
+      }
+      setDraftActivity(null);
+    }
+    onOpenChange(newOpen);
+  };
+
+  // Use effective activity (draft when creating, real when editing) in JSX
+  const act = effectiveActivity;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Editar Atividade</DialogTitle>
-          {activity && (
+          <DialogTitle className="text-xl font-bold">{createMode ? "Nova Atividade" : "Editar Atividade"}</DialogTitle>
+          {act && !createMode && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
               <Hash className="w-3 h-3" />
               <button
@@ -346,48 +361,48 @@ export const EditActivityDialog = ({
                 className="font-mono hover:text-foreground transition-colors flex items-center gap-1"
                 title="Clique para copiar ID completo"
                 onClick={() => {
-                  navigator.clipboard.writeText(activity.id);
+                  navigator.clipboard.writeText(act.id);
                   toast({ title: "ID copiado!" });
                 }}
               >
-                {activity.id.slice(0, 8)}
+                {act.id.slice(0, 8)}
                 <Copy className="w-3 h-3 opacity-50" />
               </button>
               <span className="opacity-50">·</span>
               <span>
-                Criada em {new Date(activity.created_at).toLocaleDateString("pt-BR")}
+                Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")}
               </span>
-              {activity.created_by_email && (
+              {act.created_by_email && (
                 <>
                   <span className="opacity-50">·</span>
                   <span className="flex items-center gap-1">
                     <UserCircle className="w-3 h-3" />
-                    por {creatorName || activity.created_by_email}
+                    por {creatorName || act.created_by_email}
                   </span>
                 </>
               )}
-              {activity.updated_at && activity.updated_at !== activity.created_at && (
+              {act.updated_at && act.updated_at !== act.created_at && (
                 <>
                   <span className="opacity-50">·</span>
                   <span>
-                    Atualizada em {new Date(activity.updated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    Atualizada em {new Date(act.updated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </>
               )}
-              {activity.completed_at && (
+              {act.completed_at && (
                 <>
                   <span className="opacity-50">·</span>
                   <span className="text-success">
-                    Concluída em {new Date(activity.completed_at).toLocaleDateString("pt-BR")}
+                    Concluída em {new Date(act.completed_at).toLocaleDateString("pt-BR")}
                   </span>
                 </>
               )}
-              {activity.closed_at && (
+              {act.closed_at && (
                 <>
                   <span className="opacity-50">·</span>
                   <span className="text-primary flex items-center gap-1">
                     <Lock className="w-3 h-3" />
-                    Encerrada em {new Date(activity.closed_at).toLocaleDateString("pt-BR")}
+                    Encerrada em {new Date(act.closed_at).toLocaleDateString("pt-BR")}
                   </span>
                 </>
               )}
@@ -395,7 +410,7 @@ export const EditActivityDialog = ({
                 <>
                   <span className="opacity-50">·</span>
                   <a
-                    href={`/project/${projectId}?tab=stories&activity=${activity.id}`}
+                    href={`/project/${projectId}?tab=stories&activity=${act.id}`}
                     className="flex items-center gap-1 text-primary hover:underline"
                     title="Ver histórias vinculadas"
                   >
