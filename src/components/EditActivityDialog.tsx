@@ -17,6 +17,7 @@ import { ActivityDependencies } from "@/components/ActivityDependencies";
 import { ActivityComments } from "@/components/ActivityComments";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { History, ChevronDown, Hash, Copy, UserCircle, Lock } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
 interface Activity {
   id: string;
