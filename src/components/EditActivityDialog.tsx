@@ -626,6 +626,13 @@ export const EditActivityDialog = ({
             </div>
           )}
 
+          {/* Comentários */}
+          {activity && (
+            <div className="border-t border-border pt-4">
+              <ActivityComments activityId={activity.id} />
+            </div>
+          )}
+
           {activity && (
             <Collapsible className="border border-border rounded-lg">
               <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-accent/30 transition-colors rounded-lg">
