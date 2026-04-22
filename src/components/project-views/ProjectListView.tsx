@@ -149,6 +149,11 @@ export const ProjectListView = ({ activities, phases, onEditActivity, onToggleAc
                     onClick={() => onEditActivity(a)}
                   >
                     <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${flag.dot}`}
+                        title={`Prioridade: ${flag.label}`}
+                        aria-hidden
+                      />
                       <Checkbox
                         checked={a.status === "completed"}
                         onClick={(e) => e.stopPropagation()}
