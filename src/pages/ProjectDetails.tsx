@@ -783,35 +783,6 @@ const ProjectDetails = () => {
                 </Card>
               )}
 
-              <CreateTaskDialog
-                open={showAddActivity}
-                onOpenChange={(o) => {
-                  setShowAddActivity(o);
-                  if (!o) {
-                    setCreateTaskStageId(null);
-                    setCreateTaskPhaseId(null);
-                    setCreateTaskParentId(null);
-                  }
-                }}
-                projectId={id!}
-                projectTitle={project.title}
-                phases={phases}
-                members={members}
-                defaultStageId={createTaskStageId}
-                defaultPhaseId={createTaskPhaseId}
-                defaultParentId={createTaskParentId}
-                onCreated={() => fetchProjectData()}
-                onOpenDetails={(activityId) => {
-                  const created = activities.find((a) => a.id === activityId);
-                  if (created) {
-                    setEditingActivity(created);
-                    setEditActivityDialogOpen(true);
-                  } else {
-                    fetchProjectData();
-                  }
-                }}
-              />
-
               <BacklogSection
                 projectId={id!} activities={activities} phases={phases}
                 onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
