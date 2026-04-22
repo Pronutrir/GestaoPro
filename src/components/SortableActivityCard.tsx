@@ -5,11 +5,10 @@ import { GripVertical } from "lucide-react";
 interface SortableActivityCardProps {
   id: string;
   children: React.ReactNode;
-  colorTag?: string | null;
   isCritical?: boolean;
 }
 
-export const SortableActivityCard = ({ id, children, colorTag, isCritical }: SortableActivityCardProps) => {
+export const SortableActivityCard = ({ id, children, isCritical }: SortableActivityCardProps) => {
   const {
     attributes,
     listeners,
@@ -20,7 +19,7 @@ export const SortableActivityCard = ({ id, children, colorTag, isCritical }: Sor
     isDragging,
   } = useSortable({ id });
 
-  const accent = isCritical ? "hsl(45, 93%, 47%)" : colorTag;
+  const accent = isCritical ? "hsl(45, 93%, 47%)" : null;
 
   const style = {
     transform: CSS.Transform.toString(transform),
