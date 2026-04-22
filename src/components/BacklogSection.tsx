@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, Package, FolderOpen,
+  ChevronsUpDown, ChevronsDownUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -61,6 +62,11 @@ const priorityColors: Record<string, string> = {
   high: "bg-destructive/10 text-destructive border-destructive/20",
   medium: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   low: "bg-muted text-muted-foreground border-border",
+};
+const priorityDot: Record<string, string> = {
+  high: "bg-destructive",
+  medium: "bg-warning",
+  low: "bg-success",
 };
 
 export const BacklogSection = ({
