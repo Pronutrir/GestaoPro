@@ -231,20 +231,21 @@ export const EditActivityDialog = ({
   };
 
   const handleAddSubActivity = async () => {
-    if (!newSubTitle.trim() || !activity || !projectId) return;
+    const act = effectiveActivity;
+    if (!newSubTitle.trim() || !act || !projectId) return;
     await supabase.from("activities").insert({
       project_id: projectId, title: newSubTitle.trim(),
-      phase_id: activity.phase_id, parent_id: activity.id,
+      phase_id: act.phase_id, parent_id: act.id,
       display_order: subActivities.length,
     });
     setNewSubTitle("");
-    fetchSubActivities(activity.id);
+    fetchSubActivities(act.id);
     onActivityUpdated();
   };
 
   const handleDeleteSubActivity = async (subId: string) => {
     await supabase.from("activities").delete().eq("id", subId);
-    if (activity) fetchSubActivities(activity.id);
+    if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
     onActivityUpdated();
   };
 
@@ -253,7 +254,7 @@ export const EditActivityDialog = ({
     await supabase.from("activities").update({
       status: newStatus, completed_at: newStatus === "completed" ? new Date().toISOString() : null,
     }).eq("id", sub.id);
-    if (activity) fetchSubActivities(activity.id);
+    if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
     onActivityUpdated();
   };
 
