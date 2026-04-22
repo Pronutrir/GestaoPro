@@ -440,6 +440,8 @@ function SortableColumn({
     opacity: isDragging ? 0.4 : 1,
     flex: `1 1 ${widthPct}%`,
     marginRight: isLast ? 0 : 6,
+    backgroundColor: stage.is_blocked ? undefined : `${stage.color}14`,
+    borderColor: stage.is_blocked ? undefined : `${stage.color}55`,
   };
 
   const phaseOrderMap: Record<string, number> = {};
@@ -488,11 +490,14 @@ function SortableColumn({
       style={style}
       {...attributes}
       className={`relative min-w-0 rounded-xl border flex flex-col overflow-hidden ${
-        stage.is_blocked ? "bg-orange-500/10 border-orange-500/40" : "bg-muted/70 border-border/60"
+        stage.is_blocked ? "bg-orange-500/10 border-orange-500/40" : ""
       }`}
     >
       {/* Column Header - drag handle for column reordering */}
-      <div className="p-2 border-b border-border/50">
+      <div
+        className="p-2 border-b"
+        style={{ borderColor: stage.is_blocked ? undefined : `${stage.color}40` }}
+      >
         <div className="flex items-center justify-between cursor-grab active:cursor-grabbing" {...listeners}>
           <div className="flex items-center gap-2 min-w-0">
             <div
