@@ -241,7 +241,7 @@ function KanbanCard({
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`bg-card border rounded-lg p-2.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group ${cardBorderClass}`}
+            className={`bg-card border border-border/60 rounded-lg p-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group ${cardBorderClass}`}
             onClick={onEdit}
           >
             <div className="flex items-start gap-2">
@@ -485,7 +485,7 @@ function SortableColumn({
       style={style}
       {...attributes}
       className={`relative min-w-0 rounded-xl border flex flex-col overflow-hidden ${
-        stage.is_blocked ? "bg-orange-500/5 border-orange-500/40" : "bg-muted/30 border-border/50"
+        stage.is_blocked ? "bg-orange-500/10 border-orange-500/40" : "bg-muted/70 border-border/60"
       }`}
     >
       {/* Column Header - drag handle for column reordering */}
@@ -1055,7 +1055,7 @@ export const ActivityKanban = ({
           {/* Tarefas do Dia - Quality Only */}
           {isQualityProject && (
             <div
-              className="relative min-w-0 rounded-xl border flex flex-col overflow-hidden bg-orange-500/5 border-orange-500/40"
+              className="relative min-w-0 rounded-xl border flex flex-col overflow-hidden bg-orange-500/10 border-orange-500/40"
               style={{ flex: `1 1 ${100 / (visibleStages.length + 1)}%`, marginRight: 6 }}
             >
               <div className="p-2 border-b border-orange-500/30">
