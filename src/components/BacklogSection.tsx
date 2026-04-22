@@ -312,6 +312,13 @@ export const BacklogSection = ({
 
           {isPackage && <Package className="w-3.5 h-3.5 text-primary shrink-0" />}
 
+          {/* Color dot for priority */}
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${priorityDot[prio] || priorityDot.medium}`}
+            title={`Prioridade: ${priorityLabels[prio] || prio}`}
+            aria-hidden
+          />
+
           <div className="flex-1 min-w-0">
             <p className={`text-sm font-medium ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
               {activity.title}
