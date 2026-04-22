@@ -20,6 +20,7 @@ interface TabItem {
   value: string;
   label: string;
   icon: React.ReactNode;
+  iconColor?: string;
 }
 
 interface DraggableTabBarProps {
@@ -86,7 +87,7 @@ function SortableTab({
         <GripVertical className="w-3 h-3" />
       </button>
       <span className="flex items-center gap-1.5">
-        {tab.icon}
+        <span className={tab.iconColor ?? ""}>{tab.icon}</span>
         {tab.label}
       </span>
       {canRemove && onRemove && (
