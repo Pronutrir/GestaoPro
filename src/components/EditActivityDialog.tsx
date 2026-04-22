@@ -165,8 +165,57 @@ export const EditActivityDialog = ({
       supabase.from("profiles").select("full_name").eq("email", act.created_by_email).maybeSingle().then(({ data }) => {
         setCreatorName(data?.full_name || null);
       });
+      setCreatorEmail(act.created_by_email);
     } else {
       setCreatorName(null);
+      setCreatorEmail(null);
+    }
+
+    // Fallback / additional metadata via audit log: original creator + last editor
+    if (act?.id && !createMode) {
+      supabase
+        .from("audit_log")
+        .select("operation, changed_by_email, created_at")
+        .eq("table_name", "activities")
+        .eq("record_id", act.id)
+        .order("created_at", { ascending: true })
+        .then(async ({ data }) => {
+          if (!data || data.length === 0) {
+            setLastEditorName(null);
+            setLastEditorEmail(null);
+            return;
+          }
+          const insertEntry = data.find((e: any) => e.operation === "INSERT");
+          const updates = data.filter((e: any) => e.operation === "UPDATE");
+          const lastUpdate = updates[updates.length - 1];
+
+          // Backfill creator if missing on the row
+          if (!act.created_by_email && insertEntry?.changed_by_email) {
+            setCreatorEmail(insertEntry.changed_by_email);
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("full_name")
+              .eq("email", insertEntry.changed_by_email)
+              .maybeSingle();
+            setCreatorName(prof?.full_name || null);
+          }
+
+          if (lastUpdate?.changed_by_email) {
+            setLastEditorEmail(lastUpdate.changed_by_email);
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("full_name")
+              .eq("email", lastUpdate.changed_by_email)
+              .maybeSingle();
+            setLastEditorName(prof?.full_name || null);
+          } else {
+            setLastEditorEmail(null);
+            setLastEditorName(null);
+          }
+        });
+    } else {
+      setLastEditorEmail(null);
+      setLastEditorName(null);
     }
 
     // Count linked user stories
