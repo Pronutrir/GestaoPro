@@ -640,6 +640,10 @@ const ProjectDetails = () => {
                 isAdmin={canDelete}
                 canCreate={canCreate}
                 isQualityProject={isQualityProject}
+                onOpenCreateTask={(stageId) => {
+                  setCreateTaskStageId(stageId);
+                  setShowAddActivity(true);
+                }}
               />
             </TabsContent>
 
@@ -773,11 +777,15 @@ const ProjectDetails = () => {
 
               <CreateTaskDialog
                 open={showAddActivity}
-                onOpenChange={setShowAddActivity}
+                onOpenChange={(o) => {
+                  setShowAddActivity(o);
+                  if (!o) setCreateTaskStageId(null);
+                }}
                 projectId={id!}
                 projectTitle={project.title}
                 phases={phases}
                 members={members}
+                defaultStageId={createTaskStageId}
                 onCreated={() => fetchProjectData()}
                 onOpenDetails={(activityId) => {
                   const created = activities.find((a) => a.id === activityId);
