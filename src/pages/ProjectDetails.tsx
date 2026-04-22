@@ -820,6 +820,36 @@ const ProjectDetails = () => {
           onActivityUpdated={fetchProjectData} phases={phases} allActivities={activities}
           projectId={id!} isQualityProject={isQualityProject}
         />
+        {project && (
+          <CreateTaskDialog
+            open={showAddActivity}
+            onOpenChange={(o) => {
+              setShowAddActivity(o);
+              if (!o) {
+                setCreateTaskStageId(null);
+                setCreateTaskPhaseId(null);
+                setCreateTaskParentId(null);
+              }
+            }}
+            projectId={id!}
+            projectTitle={project.title}
+            phases={phases}
+            members={members}
+            defaultStageId={createTaskStageId}
+            defaultPhaseId={createTaskPhaseId}
+            defaultParentId={createTaskParentId}
+            onCreated={() => fetchProjectData()}
+            onOpenDetails={(activityId) => {
+              const created = activities.find((a) => a.id === activityId);
+              if (created) {
+                setEditingActivity(created);
+                setEditActivityDialogOpen(true);
+              } else {
+                fetchProjectData();
+              }
+            }}
+          />
+        )}
       </main>
     </AppLayout>
   );
