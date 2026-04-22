@@ -157,8 +157,9 @@ export const EditActivityDialog = ({
     });
 
     // Resolve creator's full name from email
-    if (activity?.created_by_email) {
-      supabase.from("profiles").select("full_name").eq("email", activity.created_by_email).maybeSingle().then(({ data }) => {
+    const act = createMode ? draftActivity : activity;
+    if (act?.created_by_email) {
+      supabase.from("profiles").select("full_name").eq("email", act.created_by_email).maybeSingle().then(({ data }) => {
         setCreatorName(data?.full_name || null);
       });
     } else {
@@ -166,11 +167,11 @@ export const EditActivityDialog = ({
     }
 
     // Count linked user stories
-    if (activity?.id) {
+    if (act?.id) {
       supabase
         .from("user_stories")
         .select("id", { count: "exact", head: true })
-        .eq("activity_id", activity.id)
+        .eq("activity_id", act.id)
         .then(({ count }) => setStoriesCount(count || 0));
     } else {
       setStoriesCount(0);
@@ -195,30 +196,31 @@ export const EditActivityDialog = ({
   }, [projectId, open, activity?.id, createMode]);
 
   useEffect(() => {
-    if (activity) {
+    const act = createMode ? draftActivity : activity;
+    if (act) {
       setFormData({
-        title: activity.title || "",
-        description: activity.description || "",
-        assigned_to: activity.assigned_to || "",
-        start_date: activity.start_date || "",
-        end_date: activity.end_date || "",
-        cost: activity.cost?.toString() || "0",
-        hours: formatHoursDisplay(activity.hours || 0),
-        phase_id: activity.phase_id || "",
-        priority: activity.priority || "medium",
-        tags: activity.tags || [],
-        parent_id: activity.parent_id || "",
-        story_points: (activity as any).story_points?.toString() || "0",
-        raci_role: (activity as any).raci_role || "",
-        participants: (activity as any).participants || [],
-        deadline_flag: (activity as any).deadline_flag || "",
-        last_update_date: (activity as any).last_update_date || "",
-        ui_color_tag: (activity as any).ui_color_tag || "",
+        title: createMode ? "" : (act.title || ""),
+        description: act.description || "",
+        assigned_to: act.assigned_to || "",
+        start_date: act.start_date || "",
+        end_date: act.end_date || "",
+        cost: act.cost?.toString() || "0",
+        hours: formatHoursDisplay(act.hours || 0),
+        phase_id: act.phase_id || "",
+        priority: act.priority || "medium",
+        tags: act.tags || [],
+        parent_id: act.parent_id || "",
+        story_points: (act as any).story_points?.toString() || "0",
+        raci_role: (act as any).raci_role || "",
+        participants: (act as any).participants || [],
+        deadline_flag: (act as any).deadline_flag || "",
+        last_update_date: (act as any).last_update_date || "",
+        ui_color_tag: (act as any).ui_color_tag || "",
       });
-      setCurrentStageId((activity as any).workflow_stage_id || "");
-      fetchSubActivities(activity.id);
+      setCurrentStageId((act as any).workflow_stage_id || "");
+      fetchSubActivities(act.id);
     }
-  }, [activity]);
+  }, [activity, draftActivity, createMode]);
 
   
 
