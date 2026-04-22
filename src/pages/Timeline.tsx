@@ -39,8 +39,10 @@ import {
   Clock,
   Layers,
   GanttChart,
+  Zap,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { calculateCriticalPath } from "@/lib/criticalPath";
 
 interface Project {
   id: string;
@@ -113,13 +115,16 @@ const Timeline = () => {
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>("quarter");
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dependencies, setDependencies] = useState<{ predecessor_id: string; successor_id: string; lag_days: number | null }[]>([]);
+  const [showCritical, setShowCritical] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [projectsRes, activitiesRes, phasesRes] = await Promise.all([
+      const [projectsRes, activitiesRes, phasesRes, depsRes] = await Promise.all([
         supabase.from("projects").select("id,title,status,priority,due_date,category").order("title"),
         supabase.from("activities").select("id,title,status,start_date,end_date,assigned_to,project_id,phase_id,priority"),
         supabase.from("phases").select("id,title,project_id,display_order").order("display_order"),
+        supabase.from("task_dependencies").select("predecessor_id,successor_id,lag_days"),
       ]);
 
       const filtered = await filterProjects(projectsRes.data || []);
@@ -127,6 +132,7 @@ const Timeline = () => {
       const projectIds = new Set(filtered.map((p) => p.id));
       setActivities((activitiesRes.data || []).filter((a) => projectIds.has(a.project_id)));
       setPhases((phasesRes.data || []).filter((p) => projectIds.has(p.project_id)));
+      setDependencies(depsRes.data || []);
     } finally {
       setIsLoading(false);
     }
