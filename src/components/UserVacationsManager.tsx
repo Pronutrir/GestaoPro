@@ -37,7 +37,15 @@ export const UserVacationsManager = () => {
     setLoading(true);
     supabase.from("user_work_schedules").select("*").eq("user_id", selectedUserId).maybeSingle()
       .then(({ data }) => {
-        setSchedule(data as Schedule || { user_id: selectedUserId, weekly_hours: { monday:8, tuesday:8, wednesday:8, thursday:8, friday:8, saturday:0, sunday:0 }, vacation_periods: [] });
+        if (data) {
+          setSchedule({
+            user_id: data.user_id,
+            weekly_hours: data.weekly_hours,
+            vacation_periods: (data.vacation_periods as unknown as VacationPeriod[]) || [],
+          });
+        } else {
+          setSchedule({ user_id: selectedUserId, weekly_hours: { monday:8, tuesday:8, wednesday:8, thursday:8, friday:8, saturday:0, sunday:0 }, vacation_periods: [] });
+        }
         setLoading(false);
       });
   }, [selectedUserId]);
