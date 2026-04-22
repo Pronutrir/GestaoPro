@@ -532,25 +532,25 @@ const ProjectDetails = () => {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {(() => {
               const allDefinitions = [
-                { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" /> },
+                { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" />, iconColor: "text-violet-500" },
                 ...(isQualityProject ? [] : [
-                  { value: "list", label: "Lista", icon: <ListTodo className="w-4 h-4" /> },
+                  { value: "list", label: "Lista", icon: <ListTodo className="w-4 h-4" />, iconColor: "text-sky-500" },
                 ]),
-                { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" /> },
-                { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
+                { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" />, iconColor: "text-amber-500" },
+                { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" />, iconColor: "text-emerald-500" },
                 ...(isQualityProject ? [] : [
-                  { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" /> },
+                  { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" />, iconColor: "text-rose-500" },
                 ]),
-                { value: "deliveries", label: "Pacote de Entregas", icon: <Package className="w-4 h-4" /> },
-                { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" /> },
-                { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" /> },
-                { value: "tap", label: "TAP", icon: <ClipboardList className="w-4 h-4" /> },
-                { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" /> },
-                { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" /> },
-                { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" /> },
-                { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
-                { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" /> },
-                { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" /> },
+                { value: "deliveries", label: "Pacote de Entregas", icon: <Package className="w-4 h-4" />, iconColor: "text-orange-500" },
+                { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" />, iconColor: "text-blue-500" },
+                { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" />, iconColor: "text-fuchsia-500" },
+                { value: "tap", label: "TAP", icon: <ClipboardList className="w-4 h-4" />, iconColor: "text-indigo-500" },
+                { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" />, iconColor: "text-teal-500" },
+                { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" />, iconColor: "text-lime-600" },
+                { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" />, iconColor: "text-red-500" },
+                { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" />, iconColor: "text-green-600" },
+                { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" />, iconColor: "text-yellow-500" },
+                { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" />, iconColor: "text-slate-500" },
               ];
               const permittedDefs = allDefinitions.filter(t => !allowedTabs || allowedTabs.includes(t.value));
               const activeTabsSet = new Set(visibleTabs);
