@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, Plus, X, ArrowRight, ArrowLeft } from "lucide-react";
+import { Link2, Plus, X, ArrowRight, ArrowLeft, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 interface ActivityDependenciesProps {
   activityId: string;
@@ -35,6 +36,7 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
   const [adding, setAdding] = useState<"pred" | "succ" | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [type, setType] = useState("finish_to_start");
+  const [search, setSearch] = useState("");
 
   const fetchAll = async () => {
     const [{ data: depData }, { data: actData }] = await Promise.all([
@@ -128,6 +130,7 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
             onClick={() => {
               setAdding(adding === "pred" ? null : "pred");
               setSelectedId("");
+              setSearch("");
             }}
           >
             <Plus className="w-3.5 h-3.5" /> Predecessora
@@ -151,6 +154,7 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
             onClick={() => {
               setAdding(adding === "succ" ? null : "succ");
               setSelectedId("");
+              setSearch("");
             }}
           >
             <Plus className="w-3.5 h-3.5" /> Sucessora
@@ -165,18 +169,50 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
       {/* Form de adicionar */}
       {adding && (
         <div className="p-2 bg-accent/30 rounded-md border border-border space-y-2">
-          <select
-            className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
-            value={selectedId}
-            onChange={(e) => setSelectedId(e.target.value)}
-          >
-            <option value="">Selecione uma atividade...</option>
-            {activities.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.title}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por título ou ID..."
+              className="h-9 pl-7 text-xs"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto rounded-md border border-border bg-background">
+            {(() => {
+              const q = search.trim().toLowerCase();
+              const list = q
+                ? activities.filter(
+                    (a) =>
+                      a.title.toLowerCase().includes(q) ||
+                      a.id.toLowerCase().includes(q)
+                  )
+                : activities;
+              if (list.length === 0) {
+                return (
+                  <p className="text-[11px] text-muted-foreground italic p-2">
+                    Nenhuma atividade encontrada.
+                  </p>
+                );
+              }
+              return list.slice(0, 50).map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setSelectedId(a.id)}
+                  className={`w-full text-left px-2 py-1.5 text-xs hover:bg-muted/60 border-b border-border/50 last:border-0 flex items-center gap-2 ${
+                    selectedId === a.id ? "bg-primary/10 text-primary font-medium" : ""
+                  }`}
+                >
+                  <span className="flex-1 truncate">{a.title}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {a.id.slice(0, 8)}
+                  </span>
+                </button>
+              ));
+            })()}
+          </div>
           <div className="flex gap-2">
             <select
               className="flex h-9 flex-1 rounded-md border border-input bg-background px-2 text-xs"
@@ -197,7 +233,7 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
               size="sm"
               variant="ghost"
               className="h-9"
-              onClick={() => setAdding(null)}
+              onClick={() => { setAdding(null); setSearch(""); setSelectedId(""); }}
             >
               Cancelar
             </Button>
