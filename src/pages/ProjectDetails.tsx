@@ -760,17 +760,6 @@ const ProjectDetails = () => {
                 </div>
               )}
 
-              {showAddPhase && (
-                <Card className="p-4 border-primary/20 bg-primary/5 space-y-3">
-                  <Input placeholder="Nome da fase *" value={newPhaseTitle} onChange={(e) => setNewPhaseTitle(e.target.value)} />
-                  <Input placeholder="Descrição (opcional)" value={newPhaseDescription} onChange={(e) => setNewPhaseDescription(e.target.value)} />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleAddPhase}>Criar Fase</Button>
-                    <Button size="sm" variant="outline" onClick={() => { setShowAddPhase(false); setNewPhaseTitle(""); setNewPhaseDescription(""); }}>Cancelar</Button>
-                  </div>
-                </Card>
-              )}
-
               <BacklogSection
                 projectId={id!} activities={activities} phases={phases}
                 onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
