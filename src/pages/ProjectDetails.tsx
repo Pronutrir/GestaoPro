@@ -125,8 +125,6 @@ const ProjectDetails = () => {
   const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
   const [createTaskParentId, setCreateTaskParentId] = useState<string | null>(null);
   const [showAddPhase, setShowAddPhase] = useState(false);
-  const [newPhaseTitle, setNewPhaseTitle] = useState("");
-  const [newPhaseDescription, setNewPhaseDescription] = useState("");
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
