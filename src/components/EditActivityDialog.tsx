@@ -11,6 +11,9 @@ import { useToast } from "@/hooks/use-toast";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
+import { AuditLogPanel } from "@/components/AuditLogPanel";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { History, ChevronDown } from "lucide-react";
 
 interface Activity {
   id: string;
