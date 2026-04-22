@@ -19,6 +19,8 @@ import { DocumentManager } from "@/components/DocumentManager";
 import { ProjectCharter } from "@/components/ProjectCharter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
+import { ProjectListView } from "@/components/project-views/ProjectListView";
+import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { MeetingsManager } from "@/components/MeetingsManager";
 import { AssumptionsManager } from "@/components/AssumptionsManager";
