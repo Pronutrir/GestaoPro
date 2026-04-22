@@ -54,8 +54,9 @@ const MultiSelect = ({ label, options, selected, onToggle }: {
 }) => (
   <Popover>
     <PopoverTrigger asChild>
-      <Button variant="outline" size="sm" className="h-8 justify-between gap-2 text-xs">
+      <Button variant="outline" size="sm" className="h-8 w-full justify-between gap-2 text-xs">
         <span className="truncate">{label}{selected.length > 0 && ` (${selected.length})`}</span>
+        <span className="text-muted-foreground">▾</span>
       </Button>
     </PopoverTrigger>
     <PopoverContent className="w-64 p-0" align="start">
