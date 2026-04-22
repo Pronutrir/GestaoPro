@@ -584,7 +584,7 @@ const ProjectDetails = () => {
                     <Popover open={tabPickerOpen} onOpenChange={setTabPickerOpen}>
                       <PopoverTrigger asChild>
                         <button
-                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-dashed border-border/60 transition-colors"
+                          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors"
                           aria-label="Adicionar visualização"
                         >
                           <Plus className="w-4 h-4" />
