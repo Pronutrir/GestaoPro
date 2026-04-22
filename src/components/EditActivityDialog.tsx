@@ -624,7 +624,7 @@ export const EditActivityDialog = ({
           </div>
 
           {/* Sub-atividades */}
-          {activity && projectId && (
+          {act && projectId && (
             <div className="border-t border-border pt-4 space-y-3">
               <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                 <Layers className="w-4 h-4 text-primary" />
@@ -659,7 +659,7 @@ export const EditActivityDialog = ({
           )}
 
           {/* Mover para Coluna */}
-          {activity && projectId && workflowStages.length > 0 && (
+          {act && projectId && workflowStages.length > 0 && (
             <div className="border-t border-border pt-4 space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <ArrowRightLeft className="w-4 h-4 text-primary" /> Mover para Coluna
@@ -681,13 +681,13 @@ export const EditActivityDialog = ({
                         if (stage.is_final) {
                           updateData.status = "completed";
                           updateData.completed_at = new Date().toISOString();
-                        } else if (activity.status === "completed") {
+                        } else if (act.status === "completed") {
                           updateData.status = "pending";
                           updateData.completed_at = null;
                         }
-                        const { error } = await supabase.from("activities").update(updateData).eq("id", activity.id);
+                        const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
                         if (error) throw error;
-                        await supabase.from("user_stories").update({ stage_id: stage.id }).eq("activity_id", activity.id);
+                        await supabase.from("user_stories").update({ stage_id: stage.id }).eq("activity_id", act.id);
                         setCurrentStageId(stage.id);
                         toast({ title: `Movida para "${stage.title}"` });
                         onActivityUpdated();
@@ -705,27 +705,27 @@ export const EditActivityDialog = ({
           )}
 
           {/* Anexos */}
-          {activity && projectId && (
+          {act && projectId && (
             <div className="border-t border-border pt-4">
-              <ActivityAttachments activityId={activity.id} projectId={projectId} />
+              <ActivityAttachments activityId={act.id} projectId={projectId} />
             </div>
           )}
 
           {/* Tarefas vinculadas (predecessoras / sucessoras) */}
-          {activity && projectId && (
+          {act && projectId && (
             <div className="border-t border-border pt-4">
-              <ActivityDependencies activityId={activity.id} projectId={projectId} />
+              <ActivityDependencies activityId={act.id} projectId={projectId} />
             </div>
           )}
 
           {/* Comentários */}
-          {activity && (
+          {act && (
             <div className="border-t border-border pt-4">
-              <ActivityComments activityId={activity.id} />
+              <ActivityComments activityId={act.id} />
             </div>
           )}
 
-          {activity && (
+          {act && !createMode && (
             <Collapsible className="border border-border rounded-lg">
               <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-accent/30 transition-colors rounded-lg">
                 <span className="text-sm font-semibold flex items-center gap-2">
@@ -734,19 +734,19 @@ export const EditActivityDialog = ({
                 <ChevronDown className="w-4 h-4 transition-transform data-[state=open]:rotate-180" />
               </CollapsibleTrigger>
               <CollapsibleContent className="p-3 pt-0">
-                <AuditLogPanel recordId={activity.id} tableName="activities" />
+                <AuditLogPanel recordId={act.id} tableName="activities" />
               </CollapsibleContent>
             </Collapsible>
           )}
 
           <DialogFooter className="gap-2">
-            {activity && activity.status !== "completed" && (
+            {act && !createMode && act.status !== "completed" && (
               <Button
                 type="button"
                 variant="outline"
                 className="mr-auto gap-2 text-success border-success/30 hover:bg-success/10"
                 onClick={async () => {
-                  if (!activity || !projectId) return;
+                  if (!act || !projectId) return;
                   try {
                     // Find the final workflow stage
                     const { data: finalStage } = await supabase
@@ -765,7 +765,7 @@ export const EditActivityDialog = ({
                       updateData.workflow_stage_id = finalStage.id;
                     }
 
-                    const { error } = await supabase.from("activities").update(updateData).eq("id", activity.id);
+                    const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
                     if (error) throw error;
                     toast({ title: "Atividade concluída!" });
                     onActivityUpdated();
@@ -778,16 +778,16 @@ export const EditActivityDialog = ({
                 <CheckCircle2 className="w-4 h-4" /> Concluir Atividade
               </Button>
             )}
-            {activity && !activity.closed_at && (
+            {act && !createMode && !act.closed_at && (
               <Button
                 type="button"
                 variant="outline"
                 className="gap-2 text-primary border-primary/30 hover:bg-primary/10"
                 onClick={async () => {
-                  if (!activity) return;
+                  if (!act) return;
                   if (!confirm("Encerrar esta atividade? Após o encerramento, ela ficará marcada como finalizada administrativamente.")) return;
                   try {
-                    const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", activity.id);
+                    const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", act.id);
                     if (error) throw error;
                     toast({ title: "Atividade encerrada!" });
                     onActivityUpdated();
@@ -800,8 +800,8 @@ export const EditActivityDialog = ({
                 <Lock className="w-4 h-4" /> Encerrar
               </Button>
             )}
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit">Salvar Alterações</Button>
+            <Button type="button" variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
+            <Button type="submit">{createMode ? "Criar Atividade" : "Salvar Alterações"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
