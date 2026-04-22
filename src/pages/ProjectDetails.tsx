@@ -814,6 +814,7 @@ const ProjectDetails = () => {
             defaultStageId={createTaskStageId}
             defaultPhaseId={createTaskPhaseId}
             defaultParentId={createTaskParentId}
+            isQualityProject={isQualityProject}
             onCreated={() => fetchProjectData()}
             onOpenDetails={(activityId) => {
               const created = activities.find((a) => a.id === activityId);

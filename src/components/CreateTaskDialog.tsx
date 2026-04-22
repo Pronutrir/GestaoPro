@@ -39,6 +39,8 @@ interface CreateTaskDialogProps {
   onCreated?: (activityId: string) => void;
   /** Optional: open edit drawer for newly created activity */
   onOpenDetails?: (activityId: string) => void;
+  /** Quality project: shows Flag de Prazo and Data de Atualização */
+  isQualityProject?: boolean;
 }
 
 const RACI_OPTIONS = [
@@ -73,6 +75,7 @@ export const CreateTaskDialog = ({
   defaultStatus,
   onCreated,
   onOpenDetails,
+  isQualityProject = false,
 }: CreateTaskDialogProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -96,6 +99,8 @@ export const CreateTaskDialog = ({
     story_points: "0",
     raci_role: "",
     participants: [] as string[],
+    deadline_flag: "",
+    last_update_date: "",
   });
   const [newTag, setNewTag] = useState("");
   const [stageId, setStageId] = useState<string | null>(null);
@@ -135,6 +140,8 @@ export const CreateTaskDialog = ({
         story_points: "0",
         raci_role: "",
         participants: [],
+        deadline_flag: "",
+        last_update_date: "",
       });
       setStageId(defaultStageId ?? null);
       setAttachment(null);
@@ -176,6 +183,8 @@ export const CreateTaskDialog = ({
         story_points: parseInt(formData.story_points) || 0,
         raci_role: formData.raci_role || null,
         tags: formData.tags.length ? formData.tags : null,
+        deadline_flag: formData.deadline_flag || null,
+        last_update_date: formData.last_update_date || null,
       };
 
       const { data: inserted, error } = await supabase
@@ -401,7 +410,7 @@ export const CreateTaskDialog = ({
           </div>
 
           {/* Datas */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className={`grid ${isQualityProject ? "grid-cols-3" : "grid-cols-2"} gap-4`}>
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Calendar className="w-4 h-4" /> Data de Início
@@ -414,7 +423,37 @@ export const CreateTaskDialog = ({
               </Label>
               <Input type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} />
             </div>
+            {isQualityProject && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Calendar className="w-4 h-4" /> Data de Atualização
+                </Label>
+                <Input type="date" value={formData.last_update_date} onChange={(e) => setFormData({ ...formData, last_update_date: e.target.value })} />
+              </div>
+            )}
           </div>
+
+          {/* Flag de Prazo - Apenas Qualidade */}
+          {isQualityProject && (
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Flag className="w-4 h-4" /> Flag de Prazo
+              </Label>
+              <div className="flex gap-2">
+                {[
+                  { value: "", label: "Nenhuma", color: "border-border text-muted-foreground" },
+                  { value: "green", label: "🟢 Em dia", color: "bg-emerald-500/20 text-emerald-600 border-emerald-500" },
+                  { value: "orange", label: "🟠 Atenção", color: "bg-orange-500/20 text-orange-600 border-orange-500" },
+                  { value: "red", label: "🔴 Vencido", color: "bg-destructive/20 text-destructive border-destructive" },
+                ].map((f) => (
+                  <button key={f.value} type="button"
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-all ${formData.deadline_flag === f.value ? `${f.color} ring-2 ring-current/20` : "border-border text-muted-foreground hover:border-foreground/30"}`}
+                    onClick={() => setFormData({ ...formData, deadline_flag: f.value })}
+                  >{f.label}</button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Recursos */}
           <div className="p-4 bg-accent/30 rounded-lg border border-border space-y-4">
