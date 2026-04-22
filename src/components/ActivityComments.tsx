@@ -55,7 +55,7 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
       const { error } = await supabase.from("activity_comments").insert({
         activity_id: activityId,
         content: newComment,
-        author: newAuthor || null,
+        author: currentAuthorName,
       });
 
       if (error) throw error;
