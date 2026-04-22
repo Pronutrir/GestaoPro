@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           assigned_to: string | null
           completed_at: string | null
+          context_metadata: Json
           cost: number | null
           created_at: string
           deadline_flag: string | null
@@ -26,6 +27,7 @@ export type Database = {
           end_date: string | null
           hours: number | null
           id: string
+          is_critical: boolean
           is_trashed: boolean
           last_update_date: string | null
           parent_id: string | null
@@ -41,12 +43,14 @@ export type Database = {
           tags: string[] | null
           title: string
           trashed_at: string | null
+          ui_color_tag: string | null
           updated_at: string
           workflow_stage_id: string | null
         }
         Insert: {
           assigned_to?: string | null
           completed_at?: string | null
+          context_metadata?: Json
           cost?: number | null
           created_at?: string
           deadline_flag?: string | null
@@ -55,6 +59,7 @@ export type Database = {
           end_date?: string | null
           hours?: number | null
           id?: string
+          is_critical?: boolean
           is_trashed?: boolean
           last_update_date?: string | null
           parent_id?: string | null
@@ -70,12 +75,14 @@ export type Database = {
           tags?: string[] | null
           title: string
           trashed_at?: string | null
+          ui_color_tag?: string | null
           updated_at?: string
           workflow_stage_id?: string | null
         }
         Update: {
           assigned_to?: string | null
           completed_at?: string | null
+          context_metadata?: Json
           cost?: number | null
           created_at?: string
           deadline_flag?: string | null
@@ -84,6 +91,7 @@ export type Database = {
           end_date?: string | null
           hours?: number | null
           id?: string
+          is_critical?: boolean
           is_trashed?: boolean
           last_update_date?: string | null
           parent_id?: string | null
@@ -99,6 +107,7 @@ export type Database = {
           tags?: string[] | null
           title?: string
           trashed_at?: string | null
+          ui_color_tag?: string | null
           updated_at?: string
           workflow_stage_id?: string | null
         }
@@ -1011,42 +1020,54 @@ export type Database = {
           contingency: string | null
           created_at: string
           description: string
+          gravity: number | null
           id: string
           impact: string
           mitigation: string | null
           probability: string
           project_id: string
           responsible: string | null
+          severity_score: number | null
           status: string
+          tendency: number | null
           updated_at: string
+          urgency: number | null
         }
         Insert: {
           category?: string | null
           contingency?: string | null
           created_at?: string
           description: string
+          gravity?: number | null
           id?: string
           impact?: string
           mitigation?: string | null
           probability?: string
           project_id: string
           responsible?: string | null
+          severity_score?: number | null
           status?: string
+          tendency?: number | null
           updated_at?: string
+          urgency?: number | null
         }
         Update: {
           category?: string | null
           contingency?: string | null
           created_at?: string
           description?: string
+          gravity?: number | null
           id?: string
           impact?: string
           mitigation?: string | null
           probability?: string
           project_id?: string
           responsible?: string | null
+          severity_score?: number | null
           status?: string
+          tendency?: number | null
           updated_at?: string
+          urgency?: number | null
         }
         Relationships: [
           {

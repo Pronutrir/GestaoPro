@@ -21,6 +21,10 @@ interface Risk {
   responsible: string | null;
   category: string;
   created_at: string;
+  gravity?: number | null;
+  urgency?: number | null;
+  tendency?: number | null;
+  severity_score?: number | null;
 }
 
 interface RisksManagerProps {
@@ -58,6 +62,11 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const [showMatrix, setShowMatrix] = useState(false);
   // When user clicks a matrix cell, store the filter to show filtered list
   const [matrixFilter, setMatrixFilter] = useState<{ prob: string; imp: string } | null>(null);
+  // GUT Matrix fields
+  const [gravity, setGravity] = useState<number>(3);
+  const [urgency, setUrgency] = useState<number>(3);
+  const [tendency, setTendency] = useState<number>(3);
+  const [showGut, setShowGut] = useState(false);
 
   const fetchData = async () => {
     const { data } = await supabase.from("risks").select("*").eq("project_id", projectId).order("created_at", { ascending: false });
@@ -69,13 +78,16 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const resetForm = () => {
     setDescription(""); setProbability("medium"); setImpact("medium"); setStatus("identified");
     setMitigation(""); setContingency(""); setResponsible(""); setEditingId(null); setShowForm(false);
+    setGravity(3); setUrgency(3); setTendency(3);
   };
 
   const handleSave = async () => {
     if (!description.trim()) return;
+    const severity = gravity * urgency * tendency;
     const payload = {
       project_id: projectId, description, probability, impact, status,
       mitigation: mitigation || null, contingency: contingency || null, responsible: responsible || null,
+      gravity, urgency, tendency, severity_score: severity,
     };
 
     if (editingId) {
@@ -94,6 +106,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     setEditingId(item.id); setDescription(item.description); setProbability(item.probability);
     setImpact(item.impact); setStatus(item.status); setMitigation(item.mitigation || "");
     setContingency(item.contingency || ""); setResponsible(item.responsible || ""); setShowForm(true);
+    setGravity(item.gravity ?? 3); setUrgency(item.urgency ?? 3); setTendency(item.tendency ?? 3);
   };
 
   const handleDelete = async (id: string) => {
@@ -137,6 +150,10 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
 
   const renderRiskCard = (item: Risk) => {
     const riskLevel = getRiskLevel(item.probability, item.impact);
+    const score = item.severity_score ?? (item.gravity && item.urgency && item.tendency ? item.gravity * item.urgency * item.tendency : null);
+    const gutBadge = score === null ? null : score >= 75 ? { label: `P1 · ${score}`, cls: "bg-destructive/15 text-destructive border-destructive/40" }
+      : score >= 30 ? { label: `P2 · ${score}`, cls: "bg-warning/15 text-warning border-warning/40" }
+      : { label: `P3 · ${score}`, cls: "bg-success/15 text-success border-success/40" };
     return (
       <Card key={item.id} className="p-4 space-y-2">
         <div className="flex items-start justify-between gap-4">
@@ -147,6 +164,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
               <Badge className={PROB_MAP[item.probability]?.class}>P: {PROB_MAP[item.probability]?.label}</Badge>
               <Badge className={PROB_MAP[item.impact]?.class}>I: {PROB_MAP[item.impact]?.label}</Badge>
               <Badge className={STATUS_MAP[item.status]?.class}>{STATUS_MAP[item.status]?.label}</Badge>
+              {gutBadge && <Badge className={gutBadge.cls}>GUT {gutBadge.label}</Badge>}
             </div>
           </div>
           {isAdmin && (
@@ -170,6 +188,9 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
           <AlertTriangle className="w-5 h-5 text-warning" /> Riscos ({items.length})
         </h3>
         <div className="flex gap-2">
+          <Button size="sm" variant={showGut ? "secondary" : "outline"} onClick={() => setShowGut(!showGut)} className="gap-2">
+            {showGut ? "Ocultar GUT" : "Matriz GUT"}
+          </Button>
           <Button size="sm" variant={showMatrix ? "secondary" : "outline"} onClick={() => { setShowMatrix(!showMatrix); setMatrixFilter(null); }} className="gap-2">
             {showMatrix ? "Lista" : "Matriz 3×3"}
           </Button>
@@ -216,10 +237,63 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
           <Textarea placeholder="Plano de mitigação (opcional)" value={mitigation} onChange={e => setMitigation(e.target.value)} rows={2} />
           <Textarea placeholder="Plano de contingência (opcional)" value={contingency} onChange={e => setContingency(e.target.value)} rows={2} />
           <Input placeholder="Responsável (opcional)" value={responsible} onChange={e => setResponsible(e.target.value)} />
+          <div className="border-t border-border/50 pt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-muted-foreground">📊 Matriz GUT (1-5) — Pontuação: <span className="text-foreground font-bold">{gravity * urgency * tendency}</span></label>
+              <Badge className={(() => { const s = gravity * urgency * tendency; return s >= 75 ? "bg-destructive/15 text-destructive border-destructive/40" : s >= 30 ? "bg-warning/15 text-warning border-warning/40" : "bg-success/15 text-success border-success/40"; })()}>
+                {(() => { const s = gravity * urgency * tendency; return s >= 75 ? "P1 - Crítico" : s >= 30 ? "P2 - Alto" : "P3 - Baixo"; })()}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { key: "G", val: gravity, set: setGravity, label: "Gravidade" },
+                { key: "U", val: urgency, set: setUrgency, label: "Urgência" },
+                { key: "T", val: tendency, set: setTendency, label: "Tendência" },
+              ].map((f) => (
+                <div key={f.key}>
+                  <label className="text-[10px] text-muted-foreground">{f.key} - {f.label}</label>
+                  <Select value={String(f.val)} onValueChange={(v) => f.set(parseInt(v))}>
+                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5].map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+          </div>
           <div className="flex gap-2">
             <Button size="sm" onClick={handleSave}>{editingId ? "Atualizar" : "Criar"}</Button>
             <Button size="sm" variant="outline" onClick={resetForm}>Cancelar</Button>
           </div>
+        </Card>
+      )}
+
+      {/* GUT Matrix view: ranked list by severity */}
+      {showGut && (
+        <Card className="p-4 space-y-3">
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            📊 Ranking GUT (Gravidade × Urgência × Tendência)
+          </h4>
+          {items.filter(i => i.severity_score).length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-4">Nenhum risco com pontuação GUT. Edite um risco para informar G, U e T.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {[...items].filter(i => i.severity_score).sort((a, b) => (b.severity_score || 0) - (a.severity_score || 0)).map((r, idx) => {
+                const s = r.severity_score || 0;
+                const cls = s >= 75 ? "bg-destructive/10 border-destructive/30" : s >= 30 ? "bg-warning/10 border-warning/30" : "bg-success/10 border-success/30";
+                const tier = s >= 75 ? "P1" : s >= 30 ? "P2" : "P3";
+                return (
+                  <div key={r.id} className={`flex items-center gap-3 border rounded-md p-2 ${cls}`}>
+                    <span className="text-xs font-bold text-muted-foreground w-6">{idx + 1}º</span>
+                    <Badge variant="outline" className="font-bold">{tier}</Badge>
+                    <span className="text-xs font-mono text-muted-foreground">{r.gravity}×{r.urgency}×{r.tendency}={s}</span>
+                    <span className="text-sm flex-1 truncate">{r.description}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Card>
       )}
 
