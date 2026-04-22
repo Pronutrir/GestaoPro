@@ -403,6 +403,7 @@ function SortableColumn({
   onStoryClick,
   onCreateStory,
   isQualityProject,
+  onOpenCreateTask,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -422,6 +423,7 @@ function SortableColumn({
   onStoryClick: (activityId: string) => void;
   onCreateStory: (activity: Activity) => void;
   isQualityProject?: boolean;
+  onOpenCreateTask?: (stageId: string) => void;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -507,7 +509,14 @@ function SortableColumn({
               <button
                 type="button"
                 className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                onClick={(e) => { e.stopPropagation(); setShowQuickAdd(!showQuickAdd); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenCreateTask) {
+                    onOpenCreateTask(stage.id);
+                  } else {
+                    setShowQuickAdd(!showQuickAdd);
+                  }
+                }}
                 title="Criar atividade nesta coluna"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -1122,6 +1131,7 @@ export const ActivityKanban = ({
                 onStoryClick={(activityId) => { setStoryDrawerActivityId(activityId); setStoryDrawerOpen(true); }}
                 onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
                 isQualityProject={isQualityProject}
+                onOpenCreateTask={onOpenCreateTask}
               />
             );
           })}
