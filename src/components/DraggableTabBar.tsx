@@ -112,6 +112,9 @@ export const DraggableTabBar = ({
   activeTab,
   onTabChange,
   storageKey,
+  onRemoveTab,
+  removableValues,
+  extraSlot,
 }: DraggableTabBarProps) => {
   const [orderedTabs, setOrderedTabs] = useState<TabItem[]>(tabs);
 
@@ -170,8 +173,11 @@ export const DraggableTabBar = ({
               tab={tab}
               isActive={activeTab === tab.value}
               onClick={() => onTabChange(tab.value)}
+              canRemove={!!onRemoveTab && (removableValues?.includes(tab.value) ?? true)}
+              onRemove={onRemoveTab ? () => onRemoveTab(tab.value) : undefined}
             />
           ))}
+          {extraSlot && <div className="flex items-center">{extraSlot}</div>}
         </div>
       </SortableContext>
     </DndContext>
