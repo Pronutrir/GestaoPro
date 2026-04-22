@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronRight, ChevronDown, Flag, Plus, User, Calendar } from "lucide-react";
+import { ChevronRight, ChevronDown, Flag, Plus, User, Calendar, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { format, parseISO, isBefore, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -30,10 +30,10 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   completed: { label: "CONCLUÍDA", color: "bg-success/15 text-success" },
 };
 
-const PRIORITY_FLAG: Record<string, { label: string; cls: string }> = {
-  high: { label: "Urgente", cls: "text-destructive" },
-  medium: { label: "Média", cls: "text-warning" },
-  low: { label: "Baixa", cls: "text-success" },
+const PRIORITY_FLAG: Record<string, { label: string; cls: string; dot: string }> = {
+  high: { label: "Urgente", cls: "text-destructive", dot: "bg-destructive" },
+  medium: { label: "Média", cls: "text-warning", dot: "bg-warning" },
+  low: { label: "Baixa", cls: "text-success", dot: "bg-success" },
 };
 
 export const ProjectListView = ({ activities, phases, onEditActivity, onToggleActivity, onAddActivity, canCreate }: Props) => {
