@@ -40,9 +40,12 @@ import {
   Layers,
   GanttChart,
   Zap,
+  ExternalLink,
+  Check,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { calculateCriticalPath } from "@/lib/criticalPath";
+import { useToast } from "@/hooks/use-toast";
 
 interface Project {
   id: string;
