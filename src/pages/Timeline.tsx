@@ -261,6 +261,20 @@ const Timeline = () => {
     };
   }, [scheduledActivities]);
 
+  // Critical path computed per-project (dependencies are scoped per project anyway)
+  const criticalIds = useMemo(() => {
+    if (!showCritical) return new Set<string>();
+    const all = new Set<string>();
+    projects.forEach(p => {
+      const projActs = scheduledActivities.filter(a => a.project_id === p.id);
+      const projActIds = new Set(projActs.map(a => a.id));
+      const projDeps = dependencies.filter(d => projActIds.has(d.predecessor_id) && projActIds.has(d.successor_id));
+      const cp = calculateCriticalPath(projActs, projDeps);
+      cp.forEach(id => all.add(id));
+    });
+    return all;
+  }, [projects, scheduledActivities, dependencies, showCritical]);
+
   const scrollToToday = () => {
     if (scrollRef.current && todayPosition !== null) {
       scrollRef.current.scrollLeft = todayPosition - scrollRef.current.clientWidth / 2;
@@ -375,6 +389,19 @@ const Timeline = () => {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Ir para Hoje</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={showCritical ? "default" : "ghost"}
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => setShowCritical(v => !v)}
+                  >
+                    <Zap className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Destacar caminho crítico</TooltipContent>
               </Tooltip>
               <div className="flex items-center border border-border rounded-lg overflow-hidden">
                 {(["month", "quarter", "half", "year"] as ZoomLevel[]).map((level) => (
@@ -624,6 +651,7 @@ const Timeline = () => {
                       const activity = row.data as Activity;
                       const status = getActivityStatus(activity);
                       const bar = getBarPosition(activity);
+                      const isCritical = criticalIds.has(activity.id);
 
                       return (
                         <div
@@ -639,10 +667,13 @@ const Timeline = () => {
                                   left: bar.left,
                                   width: Math.max(bar.width, 6),
                                   height: ROW_H - 12,
+                                  outline: isCritical ? "2px solid hsl(45, 93%, 47%)" : undefined,
+                                  outlineOffset: isCritical ? "1px" : undefined,
                                 }}
                               >
                                 {bar.width > 60 && (
                                   <span className="text-[10px] font-medium text-primary-foreground px-2 truncate block leading-6">
+                                    {isCritical && "⚡ "}
                                     {activity.title}
                                   </span>
                                 )}
@@ -651,6 +682,7 @@ const Timeline = () => {
                             <TooltipContent side="top" className="text-xs max-w-[220px]">
                               <p className="font-semibold">{activity.title}</p>
                               <p className="text-muted-foreground">{statusLabels[status]}</p>
+                              {isCritical && <p className="text-warning font-semibold">⚡ Caminho Crítico</p>}
                               {activity.assigned_to && <p>👤 {activity.assigned_to}</p>}
                               <div className="flex gap-2 mt-1">
                                 {activity.start_date && (
