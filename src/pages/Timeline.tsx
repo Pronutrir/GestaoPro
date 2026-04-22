@@ -512,7 +512,7 @@ const Timeline = () => {
                   {weekMarkers.map((w, i) => (
                     <div
                       key={i}
-                      className="absolute top-0 bottom-0 w-px bg-border/40"
+                      className="absolute top-0 bottom-0 w-px bg-border/15"
                       style={{ left: w.position }}
                     />
                   ))}
@@ -520,7 +520,7 @@ const Timeline = () => {
                   {monthMarkers.map((m, i) => (
                     <div
                       key={`mg-${i}`}
-                      className="absolute top-0 bottom-0 w-px bg-border"
+                      className="absolute top-0 bottom-0 w-px bg-border/40"
                       style={{ left: m.position }}
                     />
                   ))}
