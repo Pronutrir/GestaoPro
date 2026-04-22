@@ -39,6 +39,8 @@ interface CreateTaskDialogProps {
   onCreated?: (activityId: string) => void;
   /** Optional: open edit drawer for newly created activity */
   onOpenDetails?: (activityId: string) => void;
+  /** Quality project: shows Flag de Prazo and Data de Atualização */
+  isQualityProject?: boolean;
 }
 
 const RACI_OPTIONS = [
