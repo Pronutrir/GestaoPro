@@ -61,7 +61,7 @@ interface CreateTaskDialogProps {
   projectId: string;
   projectTitle?: string;
   phases: Phase[];
-  stages: WorkflowStage[];
+  stages?: WorkflowStage[];
   members: Member[];
   /** Pre-selected workflow stage (e.g., when opened from a Kanban column) */
   defaultStageId?: string | null;
@@ -128,7 +128,7 @@ export const CreateTaskDialog = ({
   projectId,
   projectTitle,
   phases,
-  stages,
+  stages: stagesProp,
   members,
   defaultStageId,
   defaultPhaseId,
@@ -138,6 +138,22 @@ export const CreateTaskDialog = ({
 }: CreateTaskDialogProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [fetchedStages, setFetchedStages] = useState<WorkflowStage[]>([]);
+  const stages = stagesProp && stagesProp.length > 0 ? stagesProp : fetchedStages;
+
+  // Fetch stages internally if not provided
+  useEffect(() => {
+    if (!open) return;
+    if (stagesProp && stagesProp.length > 0) return;
+    (async () => {
+      const { data } = await supabase
+        .from("workflow_stages")
+        .select("id, title, color, is_final")
+        .eq("project_id", projectId)
+        .order("display_order", { ascending: true });
+      if (data) setFetchedStages(data as WorkflowStage[]);
+    })();
+  }, [open, projectId, stagesProp]);
 
   // Form state
   const [title, setTitle] = useState("");
