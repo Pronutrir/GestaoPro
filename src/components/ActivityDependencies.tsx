@@ -130,6 +130,7 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
             onClick={() => {
               setAdding(adding === "pred" ? null : "pred");
               setSelectedId("");
+              setSearch("");
             }}
           >
             <Plus className="w-3.5 h-3.5" /> Predecessora
@@ -153,6 +154,7 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
             onClick={() => {
               setAdding(adding === "succ" ? null : "succ");
               setSelectedId("");
+              setSearch("");
             }}
           >
             <Plus className="w-3.5 h-3.5" /> Sucessora
