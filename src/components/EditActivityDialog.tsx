@@ -89,6 +89,7 @@ export const EditActivityDialog = ({
     participants: [] as string[],
     deadline_flag: "" as string,
     last_update_date: "",
+    ui_color_tag: "" as string,
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -142,6 +143,7 @@ export const EditActivityDialog = ({
         participants: (activity as any).participants || [],
         deadline_flag: (activity as any).deadline_flag || "",
         last_update_date: (activity as any).last_update_date || "",
+        ui_color_tag: (activity as any).ui_color_tag || "",
       });
       setCurrentStageId((activity as any).workflow_stage_id || "");
       fetchSubActivities(activity.id);
@@ -215,6 +217,7 @@ export const EditActivityDialog = ({
         participants: formData.participants,
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
+        ui_color_tag: formData.ui_color_tag || null,
       } as any).eq("id", activity.id);
       if (error) throw error;
       toast({ title: "Atividade atualizada!" });
