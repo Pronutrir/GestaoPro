@@ -125,6 +125,7 @@ function SortableKanbanCard({
   onStoryClick,
   onCreateStory,
   isQualityProject,
+  stageColor,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -139,6 +140,7 @@ function SortableKanbanCard({
   onStoryClick?: () => void;
   onCreateStory?: () => void;
   isQualityProject?: boolean;
+  stageColor?: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -166,6 +168,7 @@ function SortableKanbanCard({
         onStoryClick={onStoryClick}
         onCreateStory={onCreateStory}
         isQualityProject={isQualityProject}
+        stageColor={stageColor}
       />
     </div>
   );
@@ -186,6 +189,7 @@ function KanbanCard({
   onStoryClick,
   onCreateStory,
   isQualityProject,
+  stageColor,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -201,6 +205,7 @@ function KanbanCard({
   onStoryClick?: () => void;
   onCreateStory?: () => void;
   isQualityProject?: boolean;
+  stageColor?: string;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -262,6 +267,11 @@ function KanbanCard({
                         ? "line-through text-muted-foreground"
                         : "text-foreground"
                     }`}
+                    style={
+                      activity.status !== "completed" && stageColor
+                        ? { color: stageColor }
+                        : undefined
+                    }
                   >
                     {activity.title}
                   </p>
@@ -501,15 +511,19 @@ function SortableColumn({
         <div className="flex items-center justify-between cursor-grab active:cursor-grabbing" {...listeners}>
           <div className="flex items-center gap-2 min-w-0">
             <div
-              className="w-3 h-3 rounded-full shrink-0"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full shrink-0 max-w-full"
               style={{ backgroundColor: stage.color }}
-            />
-            <h3 className="text-sm font-semibold text-foreground truncate">{stage.title}</h3>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center">
+            >
+              <div className="w-2 h-2 rounded-full bg-white/90 shrink-0" />
+              <h3 className="text-[11px] font-bold text-white tracking-wide uppercase truncate">
+                {stage.title}
+              </h3>
+            </div>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
               {stageActivities.length}
             </Badge>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
             {canCreate && (
               <button
                 type="button"
@@ -615,9 +629,24 @@ function SortableColumn({
           items={sortedActivities.map((a) => a.id)}
           strategy={verticalListSortingStrategy}
         >
+          {canCreate && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOpenCreateTask) onOpenCreateTask(stage.id);
+                else setShowQuickAdd(true);
+              }}
+              className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md hover:bg-white/40 dark:hover:bg-white/5 transition-colors"
+              style={{ color: stage.color }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Adicionar Tarefa
+            </button>
+          )}
           {sortedActivities.length === 0 ? (
-            <div className="flex items-center justify-center h-20 border-2 border-dashed border-border/40 rounded-lg">
-              <p className="text-xs text-muted-foreground/50">Arraste aqui</p>
+            <div className="flex items-center justify-center h-16 border-2 border-dashed border-border/30 rounded-lg">
+              <p className="text-[11px] text-muted-foreground/50">Arraste aqui</p>
             </div>
           ) : (
             sortedActivities.map((activity) => (
@@ -636,6 +665,7 @@ function SortableColumn({
                 onStoryClick={() => onStoryClick(activity.id)}
                 onCreateStory={() => onCreateStory(activity)}
                 isQualityProject={isQualityProject}
+                stageColor={stage.color}
               />
             ))
           )}
