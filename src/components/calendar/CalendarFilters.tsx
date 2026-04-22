@@ -99,7 +99,6 @@ export const CalendarFilters = ({ value, onChange, options, showProjectFilter }:
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
       <div className="flex flex-col gap-2">
         <Input placeholder="🔍 Buscar título..." value={value.search}
           onChange={e => onChange({ ...value, search: e.target.value })}
