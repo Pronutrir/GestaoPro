@@ -458,7 +458,7 @@ export const PhaseManager = ({
                               const isActivityExpanded = expandedActivities.has(activity.id);
                               return (
                                 <div key={activity.id} className="space-y-1">
-                                  <SortableActivityCard id={activity.id}>
+                                  <SortableActivityCard id={activity.id} colorTag={(activity as any).ui_color_tag}>
                                     <ActivityCard
                                       activity={activity}
                                       phases={phases}
@@ -533,7 +533,7 @@ export const PhaseManager = ({
                 const isActivityExpanded = expandedActivities.has(activity.id);
                 return (
                   <div key={activity.id} className="space-y-1">
-                    <SortableActivityCard id={activity.id}>
+                    <SortableActivityCard id={activity.id} colorTag={(activity as any).ui_color_tag}>
                       <ActivityCard
                         activity={activity}
                         phases={phases}
