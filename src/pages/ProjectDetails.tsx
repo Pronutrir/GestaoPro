@@ -21,7 +21,6 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { ProjectListView } from "@/components/project-views/ProjectListView";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
-import { CreateTaskDialog } from "@/components/CreateTaskDialog";
 import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { MeetingsManager } from "@/components/MeetingsManager";
