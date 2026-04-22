@@ -110,6 +110,7 @@ export const EditActivityDialog = ({
   const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean }[]>([]);
   const [currentStageId, setCurrentStageId] = useState("");
   const [creatorName, setCreatorName] = useState<string | null>(null);
+  const [storiesCount, setStoriesCount] = useState<number>(0);
 
   useEffect(() => {
     if (!open) return;
@@ -125,6 +126,17 @@ export const EditActivityDialog = ({
       });
     } else {
       setCreatorName(null);
+    }
+
+    // Count linked user stories
+    if (activity?.id) {
+      supabase
+        .from("user_stories")
+        .select("id", { count: "exact", head: true })
+        .eq("activity_id", activity.id)
+        .then(({ count }) => setStoriesCount(count || 0));
+    } else {
+      setStoriesCount(0);
     }
 
     if (projectId) {
