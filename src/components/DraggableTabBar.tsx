@@ -14,7 +14,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { GripVertical, X } from "lucide-react";
 
 interface TabItem {
   value: string;
@@ -27,16 +27,23 @@ interface DraggableTabBarProps {
   activeTab: string;
   onTabChange: (value: string) => void;
   storageKey: string;
+  onRemoveTab?: (value: string) => void;
+  removableValues?: string[];
+  extraSlot?: React.ReactNode;
 }
 
 function SortableTab({
   tab,
   isActive,
   onClick,
+  onRemove,
+  canRemove,
 }: {
   tab: TabItem;
   isActive: boolean;
   onClick: () => void;
+  onRemove?: () => void;
+  canRemove?: boolean;
 }) {
   const {
     attributes,
@@ -59,7 +66,7 @@ function SortableTab({
       ref={setNodeRef}
       style={style}
       className={`
-        flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer select-none
+        group/tab relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer select-none
         transition-all duration-150 whitespace-nowrap
         ${isDragging ? "shadow-lg ring-2 ring-primary/30 scale-105" : ""}
         ${
@@ -82,6 +89,20 @@ function SortableTab({
         {tab.icon}
         {tab.label}
       </span>
+      {canRemove && onRemove && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className={`opacity-0 group-hover/tab:opacity-100 transition-opacity ml-1 -mr-1 rounded p-0.5 hover:bg-background/30 ${
+            isActive ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+          aria-label="Remover visualização"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
     </div>
   );
 }
