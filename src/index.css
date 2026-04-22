@@ -181,8 +181,7 @@
   animation: pulse-slow 3s ease-in-out infinite;
 }
 
-/* React Big Calendar — distinguir "hoje" de "férias" */
+/* React Big Calendar — sem destaque para "hoje" */
 .rbc-today {
-  background-color: hsl(var(--warning) / 0.12) !important;
-  box-shadow: inset 0 0 0 2px hsl(var(--warning) / 0.5);
+  background-color: transparent !important;
 }
