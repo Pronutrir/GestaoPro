@@ -827,6 +827,13 @@ const ProjectDetails = () => {
             }}
           />
         )}
+        <CreatePhaseDialog
+          open={showAddPhase}
+          onOpenChange={setShowAddPhase}
+          projectId={id!}
+          existingPhasesCount={phases.length}
+          onCreated={() => fetchProjectData()}
+        />
       </main>
     </AppLayout>
   );
