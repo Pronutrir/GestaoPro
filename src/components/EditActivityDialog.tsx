@@ -12,8 +12,10 @@ import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, 
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
+import { ActivityAttachments } from "@/components/ActivityAttachments";
+import { ActivityDependencies } from "@/components/ActivityDependencies";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { History, ChevronDown } from "lucide-react";
+import { History, ChevronDown, Hash, Copy } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -269,6 +271,35 @@ export const EditActivityDialog = ({
       <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Editar Atividade</DialogTitle>
+          {activity && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
+              <Hash className="w-3 h-3" />
+              <button
+                type="button"
+                className="font-mono hover:text-foreground transition-colors flex items-center gap-1"
+                title="Clique para copiar ID completo"
+                onClick={() => {
+                  navigator.clipboard.writeText(activity.id);
+                  toast({ title: "ID copiado!" });
+                }}
+              >
+                {activity.id.slice(0, 8)}
+                <Copy className="w-3 h-3 opacity-50" />
+              </button>
+              <span className="opacity-50">·</span>
+              <span>
+                Criada em {new Date(activity.created_at).toLocaleDateString("pt-BR")}
+              </span>
+              {activity.completed_at && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span className="text-success">
+                    Concluída em {new Date(activity.completed_at).toLocaleDateString("pt-BR")}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2 min-w-0">
@@ -548,6 +579,20 @@ export const EditActivityDialog = ({
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Anexos */}
+          {activity && projectId && (
+            <div className="border-t border-border pt-4">
+              <ActivityAttachments activityId={activity.id} projectId={projectId} />
+            </div>
+          )}
+
+          {/* Tarefas vinculadas (predecessoras / sucessoras) */}
+          {activity && projectId && (
+            <div className="border-t border-border pt-4">
+              <ActivityDependencies activityId={activity.id} projectId={projectId} />
             </div>
           )}
 
