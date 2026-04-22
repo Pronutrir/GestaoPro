@@ -351,6 +351,19 @@ export const EditActivityDialog = ({
                   </span>
                 </>
               )}
+              {storiesCount > 0 && projectId && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <a
+                    href={`/project/${projectId}?tab=stories&activity=${activity.id}`}
+                    className="flex items-center gap-1 text-primary hover:underline"
+                    title="Ver histórias vinculadas"
+                  >
+                    <BookOpen className="w-3 h-3" />
+                    {storiesCount} {storiesCount === 1 ? "história vinculada" : "histórias vinculadas"}
+                  </a>
+                </>
+              )}
             </div>
           )}
         </DialogHeader>
