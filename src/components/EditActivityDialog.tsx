@@ -294,11 +294,37 @@ export const EditActivityDialog = ({
               <span>
                 Criada em {new Date(activity.created_at).toLocaleDateString("pt-BR")}
               </span>
+              {activity.created_by_email && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span className="flex items-center gap-1">
+                    <UserCircle className="w-3 h-3" />
+                    por {activity.created_by_email}
+                  </span>
+                </>
+              )}
+              {activity.updated_at && activity.updated_at !== activity.created_at && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span>
+                    Atualizada em {new Date(activity.updated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </>
+              )}
               {activity.completed_at && (
                 <>
                   <span className="opacity-50">·</span>
                   <span className="text-success">
                     Concluída em {new Date(activity.completed_at).toLocaleDateString("pt-BR")}
+                  </span>
+                </>
+              )}
+              {activity.closed_at && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span className="text-primary flex items-center gap-1">
+                    <Lock className="w-3 h-3" />
+                    Encerrada em {new Date(activity.closed_at).toLocaleDateString("pt-BR")}
                   </span>
                 </>
               )}
