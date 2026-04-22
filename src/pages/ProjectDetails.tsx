@@ -229,18 +229,19 @@ const ProjectDetails = () => {
     if (!id || !currentUser?.id) return;
     const key = `project-visible-tabs-${currentUser.id}-${id}`;
     const saved = localStorage.getItem(key);
+    let next: string[] = ["kanban"];
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          setVisibleTabs(parsed.includes("kanban") ? parsed : ["kanban", ...parsed]);
-          return;
+          next = parsed.includes("kanban") ? parsed : ["kanban", ...parsed];
         }
       } catch {
-        // fall through to default
+        // ignore
       }
     }
-    setVisibleTabs(["kanban"]);
+    setVisibleTabs(next);
+    setActiveTab((current) => (next.includes(current) ? current : "kanban"));
   }, [id, currentUser?.id]);
 
   const persistVisibleTabs = useCallback((next: string[]) => {
