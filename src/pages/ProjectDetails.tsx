@@ -22,6 +22,7 @@ import { ActivityKanban } from "@/components/ActivityKanban";
 import { ProjectListView } from "@/components/project-views/ProjectListView";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { CreateTaskDialog } from "@/components/CreateTaskDialog";
+import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { MeetingsManager } from "@/components/MeetingsManager";
 import { AssumptionsManager } from "@/components/AssumptionsManager";
@@ -124,8 +125,6 @@ const ProjectDetails = () => {
   const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
   const [createTaskParentId, setCreateTaskParentId] = useState<string | null>(null);
   const [showAddPhase, setShowAddPhase] = useState(false);
-  const [newPhaseTitle, setNewPhaseTitle] = useState("");
-  const [newPhaseDescription, setNewPhaseDescription] = useState("");
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
@@ -370,16 +369,6 @@ const ProjectDetails = () => {
     }
   };
 
-  const handleAddPhase = async () => {
-    if (!newPhaseTitle.trim() || !id) return;
-    try {
-      const maxOrder = phases.reduce((max, p) => Math.max(max, p.display_order), 0);
-      await supabase.from("phases").insert({ project_id: id, title: newPhaseTitle, description: newPhaseDescription || null, display_order: maxOrder + 1 });
-      toast({ title: "Fase criada!" });
-      setNewPhaseTitle(""); setNewPhaseDescription(""); setShowAddPhase(false);
-      fetchProjectData();
-    } catch { toast({ title: "Erro ao criar fase", variant: "destructive" }); }
-  };
 
   const handleAddActivity = async () => {
     if (!newActivity.trim() || !id) return;
@@ -729,7 +718,7 @@ const ProjectDetails = () => {
             <TabsContent value="backlog" className="mt-3 space-y-4">
               {canCreate && (
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant={showAddPhase ? "secondary" : "default"} onClick={() => { setShowAddPhase(!showAddPhase); setShowAddActivity(false); }} className="gap-2">
+                  <Button size="sm" variant="default" onClick={() => setShowAddPhase(true)} className="gap-2">
                     <Layers className="w-4 h-4" /> Nova Fase
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => {
@@ -737,7 +726,6 @@ const ProjectDetails = () => {
                     setCreateTaskPhaseId(null);
                     setCreateTaskParentId(null);
                     setShowAddActivity(true);
-                    setShowAddPhase(false);
                   }} className="gap-2">
                     <Plus className="w-4 h-4" /> Nova Atividade
                   </Button>
@@ -770,17 +758,6 @@ const ProjectDetails = () => {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-              )}
-
-              {showAddPhase && (
-                <Card className="p-4 border-primary/20 bg-primary/5 space-y-3">
-                  <Input placeholder="Nome da fase *" value={newPhaseTitle} onChange={(e) => setNewPhaseTitle(e.target.value)} />
-                  <Input placeholder="Descrição (opcional)" value={newPhaseDescription} onChange={(e) => setNewPhaseDescription(e.target.value)} />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleAddPhase}>Criar Fase</Button>
-                    <Button size="sm" variant="outline" onClick={() => { setShowAddPhase(false); setNewPhaseTitle(""); setNewPhaseDescription(""); }}>Cancelar</Button>
-                  </div>
-                </Card>
               )}
 
               <BacklogSection
@@ -850,6 +827,13 @@ const ProjectDetails = () => {
             }}
           />
         )}
+        <CreatePhaseDialog
+          open={showAddPhase}
+          onOpenChange={setShowAddPhase}
+          projectId={id!}
+          existingPhasesCount={phases.length}
+          onCreated={() => fetchProjectData()}
+        />
       </main>
     </AppLayout>
   );

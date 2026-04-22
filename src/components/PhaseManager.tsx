@@ -27,6 +27,7 @@ import { SortableActivityCard } from "@/components/SortableActivityCard";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 
 interface Phase {
   id: string;
@@ -318,36 +319,13 @@ export const PhaseManager = ({
     <div className="space-y-4">
 
       {/* Add Phase Form */}
-      {showAddPhase && (
-        <Card className="p-4 space-y-3 border-primary/20 bg-primary/5">
-          <Input
-            placeholder="Nome da fase *"
-            value={newPhaseTitle}
-            onChange={(e) => setNewPhaseTitle(e.target.value)}
-          />
-          <Input
-            placeholder="Descrição (opcional)"
-            value={newPhaseDescription}
-            onChange={(e) => setNewPhaseDescription(e.target.value)}
-          />
-          <div className="flex gap-2">
-            <Button size="sm" onClick={handleAddPhase}>
-              Criar Fase
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setShowAddPhase(false);
-                setNewPhaseTitle("");
-                setNewPhaseDescription("");
-              }}
-            >
-              Cancelar
-            </Button>
-          </div>
-        </Card>
-      )}
+      <CreatePhaseDialog
+        open={showAddPhase}
+        onOpenChange={setShowAddPhase}
+        projectId={projectId}
+        existingPhasesCount={phases.length}
+        onCreated={() => onDataChanged()}
+      />
 
       {/* Phases List */}
       <div className="space-y-3">
