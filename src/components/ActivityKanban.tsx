@@ -267,11 +267,6 @@ function KanbanCard({
                         ? "line-through text-muted-foreground"
                         : "text-foreground"
                     }`}
-                    style={
-                      activity.status !== "completed" && stageColor
-                        ? { color: stageColor }
-                        : undefined
-                    }
                   >
                     {activity.title}
                   </p>
