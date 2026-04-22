@@ -541,7 +541,6 @@ const ProjectDetails = () => {
                 ...(isQualityProject ? [] : [
                   { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" />, iconColor: "text-rose-500" },
                 ]),
-                { value: "deliveries", label: "Pacote de Entregas", icon: <Package className="w-4 h-4" />, iconColor: "text-orange-500" },
                 { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" />, iconColor: "text-blue-500" },
                 { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" />, iconColor: "text-fuchsia-500" },
                 { value: "tap", label: "TAP", icon: <ClipboardList className="w-4 h-4" />, iconColor: "text-indigo-500" },
