@@ -39,6 +39,8 @@ const PRIORITY_FLAG: Record<string, { label: string; cls: string; dot: string }>
 export const ProjectListView = ({ activities, phases, onEditActivity, onToggleActivity, onAddActivity, canCreate }: Props) => {
   const [groupBy, setGroupBy] = useState<GroupBy>("status");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const expandAll = () => setCollapsed(new Set());
+  const collapseAll = () => setCollapsed(new Set(groups.map(g => g.key)));
 
   const visibleActivities = useMemo(() => activities.filter(a => !a.parent_id), [activities]);
 
@@ -82,7 +84,7 @@ export const ProjectListView = ({ activities, phases, onEditActivity, onToggleAc
   return (
     <div className="space-y-3">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 text-xs">
+      <div className="flex items-center gap-2 text-xs flex-wrap">
         <span className="text-muted-foreground">Agrupar por:</span>
         {(["status", "phase", "priority", "assignee"] as GroupBy[]).map(g => (
           <Button
@@ -95,6 +97,19 @@ export const ProjectListView = ({ activities, phases, onEditActivity, onToggleAc
             {g === "status" ? "Status" : g === "phase" ? "Fase" : g === "priority" ? "Prioridade" : "Responsável"}
           </Button>
         ))}
+        <div className="ml-auto flex items-center gap-1">
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={expandAll} title="Expandir tudo">
+            <ChevronsUpDown className="w-3.5 h-3.5" /> Expandir
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={collapseAll} title="Recolher tudo">
+            <ChevronsDownUp className="w-3.5 h-3.5" /> Recolher
+          </Button>
+          {canCreate && onAddActivity && (
+            <Button size="sm" className="h-7 px-3 text-xs gap-1" onClick={onAddActivity}>
+              <Plus className="w-3.5 h-3.5" /> Nova atividade
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Groups */}
