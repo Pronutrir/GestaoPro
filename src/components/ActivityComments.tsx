@@ -178,30 +178,26 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
 
       {/* Add comment */}
       <div className="space-y-2">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <UserCircle className="w-3.5 h-3.5" />
+          Comentando como <span className="font-medium text-foreground">{currentAuthorName}</span>
+        </div>
         <div className="flex gap-2">
-          <Input
-            placeholder="Seu nome"
-            value={newAuthor}
-            onChange={(e) => setNewAuthor(e.target.value)}
-            className="h-8 text-sm max-w-[150px]"
+          <Textarea
+            placeholder="Adicionar comentário..."
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            className="min-h-[36px] text-sm resize-none flex-1"
+            rows={1}
           />
-          <div className="flex-1 flex gap-2">
-            <Textarea
-              placeholder="Adicionar comentário..."
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              className="min-h-[36px] text-sm resize-none"
-              rows={1}
-            />
-            <Button
-              size="icon"
-              className="h-9 w-9 flex-shrink-0"
-              onClick={handleAddComment}
-              disabled={isLoading || !newComment.trim()}
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-          </div>
+          <Button
+            size="icon"
+            className="h-9 w-9 flex-shrink-0"
+            onClick={handleAddComment}
+            disabled={isLoading || !newComment.trim()}
+          >
+            <Send className="w-4 h-4" />
+          </Button>
         </div>
       </div>
     </div>
