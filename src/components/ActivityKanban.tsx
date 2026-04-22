@@ -242,7 +242,7 @@ function KanbanCard({
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`bg-card border border-border/60 rounded-lg p-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group ${cardBorderClass}`}
+            className={`bg-card border border-border rounded-lg p-2.5 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer group ${cardBorderClass}`}
             onClick={onEdit}
           >
             <div className="flex items-start gap-2">
