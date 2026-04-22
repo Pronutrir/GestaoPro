@@ -210,9 +210,9 @@ export const TimelineView = ({ phases, activities, projectDueDate, onActivityCli
                 const status = getActivityStatus(activity);
                 return (
                   <div key={activity.id} className="relative h-10 group mb-1" onClick={() => onActivityClick?.(activity)}>
-                    <div className="absolute inset-0 bg-accent/20 rounded">
-                      {weekMarkers.map((marker, idx) => <div key={idx} className="absolute top-0 bottom-0 w-px bg-border/50" style={{ left: `${marker.position}%` }} />)}
-                    </div>
+                     <div className="absolute inset-0 bg-accent/10 rounded">
+                       {weekMarkers.map((marker, idx) => <div key={idx} className="absolute top-0 bottom-0 w-px bg-border/15" style={{ left: `${marker.position}%` }} />)}
+                     </div>
                     <div
                       className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all hover:opacity-90 flex items-center px-2 gap-1.5 ${statusColors[status]}`}
                       style={{ left: `${position.left}%`, width: `${position.width}%` }}
