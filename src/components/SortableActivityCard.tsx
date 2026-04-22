@@ -5,9 +5,10 @@ import { GripVertical } from "lucide-react";
 interface SortableActivityCardProps {
   id: string;
   children: React.ReactNode;
+  colorTag?: string | null;
 }
 
-export const SortableActivityCard = ({ id, children }: SortableActivityCardProps) => {
+export const SortableActivityCard = ({ id, children, colorTag }: SortableActivityCardProps) => {
   const {
     attributes,
     listeners,
@@ -23,6 +24,9 @@ export const SortableActivityCard = ({ id, children }: SortableActivityCardProps
     transition,
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 50 : undefined,
+    borderLeft: colorTag ? `3px solid ${colorTag}` : undefined,
+    paddingLeft: colorTag ? "0.25rem" : undefined,
+    borderRadius: colorTag ? "0.375rem" : undefined,
   };
 
   return (
