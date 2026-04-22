@@ -309,7 +309,7 @@ export const EditActivityDialog = ({
                   <span className="opacity-50">·</span>
                   <span className="flex items-center gap-1">
                     <UserCircle className="w-3 h-3" />
-                    por {activity.created_by_email}
+                    por {creatorName || activity.created_by_email}
                   </span>
                 </>
               )}
