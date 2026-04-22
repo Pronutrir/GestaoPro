@@ -27,7 +27,6 @@ import { MeetingsManager } from "@/components/MeetingsManager";
 import { AssumptionsManager } from "@/components/AssumptionsManager";
 import { RisksManager } from "@/components/RisksManager";
 import { BacklogSection } from "@/components/BacklogSection";
-import { DeliveryPackagesManager } from "@/components/DeliveryPackagesManager";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
@@ -122,6 +121,8 @@ const ProjectDetails = () => {
   const [newActivityPriority, setNewActivityPriority] = useState("medium");
   const [showAddActivity, setShowAddActivity] = useState(false);
   const [createTaskStageId, setCreateTaskStageId] = useState<string | null>(null);
+  const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
+  const [createTaskParentId, setCreateTaskParentId] = useState<string | null>(null);
   const [showAddPhase, setShowAddPhase] = useState(false);
   const [newPhaseTitle, setNewPhaseTitle] = useState("");
   const [newPhaseDescription, setNewPhaseDescription] = useState("");
@@ -712,10 +713,6 @@ const ProjectDetails = () => {
               <LessonsLearned projectId={id!} phases={phases} />
             </TabsContent>
 
-            <TabsContent value="deliveries" className="mt-0">
-              <DeliveryPackagesManager projectId={id!} activities={activities.map(a => ({ id: a.id, title: a.title, status: a.status, created_at: a.created_at, completed_at: a.completed_at, phase_id: a.phase_id }))} phases={phases} />
-            </TabsContent>
-
             <TabsContent value="assumptions" className="mt-0">
               <AssumptionsManager projectId={id!} />
             </TabsContent>
@@ -779,13 +776,19 @@ const ProjectDetails = () => {
                 open={showAddActivity}
                 onOpenChange={(o) => {
                   setShowAddActivity(o);
-                  if (!o) setCreateTaskStageId(null);
+                  if (!o) {
+                    setCreateTaskStageId(null);
+                    setCreateTaskPhaseId(null);
+                    setCreateTaskParentId(null);
+                  }
                 }}
                 projectId={id!}
                 projectTitle={project.title}
                 phases={phases}
                 members={members}
                 defaultStageId={createTaskStageId}
+                defaultPhaseId={createTaskPhaseId}
+                defaultParentId={createTaskParentId}
                 onCreated={() => fetchProjectData()}
                 onOpenDetails={(activityId) => {
                   const created = activities.find((a) => a.id === activityId);
@@ -805,6 +808,12 @@ const ProjectDetails = () => {
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
                 isAdmin={canDelete}
+                onCreateActivityInPhase={(phaseId, parentId) => {
+                  setCreateTaskPhaseId(phaseId);
+                  setCreateTaskParentId(parentId ?? null);
+                  setCreateTaskStageId(null);
+                  setShowAddActivity(true);
+                }}
               />
             </TabsContent>
 

@@ -67,6 +67,8 @@ interface CreateTaskDialogProps {
   defaultStageId?: string | null;
   /** Pre-selected phase (e.g., when opened from Phase Manager) */
   defaultPhaseId?: string | null;
+  /** Pre-selected parent activity (subactivity creation) */
+  defaultParentId?: string | null;
   /** Pre-selected status (defaults to 'pending') */
   defaultStatus?: string;
   /** Called after successful creation. Receives created activity id. */
@@ -132,6 +134,7 @@ export const CreateTaskDialog = ({
   members,
   defaultStageId,
   defaultPhaseId,
+  defaultParentId,
   defaultStatus,
   onCreated,
   onOpenDetails,
@@ -225,6 +228,7 @@ export const CreateTaskDialog = ({
         priority,
         workflow_stage_id: stageId,
         phase_id: phaseId,
+        parent_id: defaultParentId ?? null,
         assigned_to: assignedTo || null,
         participants: participants.length ? participants : null,
         start_date: startDate ? format(startDate, "yyyy-MM-dd") : null,
