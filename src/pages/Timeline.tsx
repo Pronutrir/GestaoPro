@@ -107,6 +107,7 @@ const getActivityStatus = (activity: Activity) => {
 
 const Timeline = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { filterProjects, loading: authLoading } = useProjectAccess();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -282,6 +283,19 @@ const Timeline = () => {
     if (scrollRef.current && todayPosition !== null) {
       scrollRef.current.scrollLeft = todayPosition - scrollRef.current.clientWidth / 2;
     }
+  };
+
+  const completeActivity = async (id: string) => {
+    const { error } = await supabase
+      .from("activities")
+      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao concluir", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Atividade concluída" });
+    fetchData();
   };
 
   const ROW_H = 36;
