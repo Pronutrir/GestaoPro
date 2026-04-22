@@ -270,8 +270,9 @@ export const EditActivityDialog = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activity) return;
-    const previousEndDate = activity.end_date;
+    const act = createMode ? draftActivity : activity;
+    if (!act) return;
+    const previousEndDate = act.end_date;
     try {
       const { error } = await supabase.from("activities").update({
         title: formData.title,
@@ -291,7 +292,7 @@ export const EditActivityDialog = ({
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
         ui_color_tag: formData.ui_color_tag || null,
-      } as any).eq("id", activity.id);
+      } as any).eq("id", act.id);
       if (error) throw error;
 
       // Cascade dates to successors when end_date moved (skip quality projects)
@@ -306,7 +307,7 @@ export const EditActivityDialog = ({
           supabase.from("activities").select("id, start_date, end_date").eq("project_id", projectId),
         ]);
         const updates = cascadeDates(
-          activity.id,
+          act.id,
           formData.end_date,
           (acts || []) as any,
           (deps || []) as any,
@@ -323,7 +324,7 @@ export const EditActivityDialog = ({
         }
       }
 
-      toast({ title: "Atividade atualizada!" });
+      toast({ title: createMode ? "Atividade criada!" : "Atividade atualizada!" });
       onActivityUpdated();
       onOpenChange(false);
     } catch (error) {
