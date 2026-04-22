@@ -425,12 +425,12 @@ export const EditActivityDialog = ({
               <span>
                 Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")}
               </span>
-              {act.created_by_email && (
+              {(creatorEmail || act.created_by_email) && (
                 <>
                   <span className="opacity-50">·</span>
                   <span className="flex items-center gap-1">
                     <UserCircle className="w-3 h-3" />
-                    por {creatorName || act.created_by_email}
+                    por {creatorName || creatorEmail || act.created_by_email}
                   </span>
                 </>
               )}
@@ -440,6 +440,12 @@ export const EditActivityDialog = ({
                   <span>
                     Atualizada em {new Date(act.updated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </span>
+                  {(lastEditorName || lastEditorEmail) && (
+                    <span className="flex items-center gap-1">
+                      <UserCircle className="w-3 h-3" />
+                      por {lastEditorName || lastEditorEmail}
+                    </span>
+                  )}
                 </>
               )}
               {act.completed_at && (
