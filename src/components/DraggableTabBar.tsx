@@ -165,7 +165,7 @@ export const DraggableTabBar = ({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={orderedTabs.map((t) => t.value)} strategy={horizontalListSortingStrategy}>
-        <div className="flex gap-1 px-1 border-b border-border/60 overflow-x-auto scrollbar-none -mt-[10px]">
+        <div className="flex gap-1 px-1 border-b border-border/70 overflow-x-auto scrollbar-none -mt-[10px]">
           {orderedTabs.map((tab) => (
             <SortableTab
               key={tab.value}
