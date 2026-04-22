@@ -224,6 +224,31 @@ const ProjectDetails = () => {
     void loadAccess();
   }, [authLoading, id, loadAccess]);
 
+  // Load visible tabs preference (per user+project) from localStorage
+  useEffect(() => {
+    if (!id || !currentUser?.id) return;
+    const key = `project-visible-tabs-${currentUser.id}-${id}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setVisibleTabs(parsed.includes("kanban") ? parsed : ["kanban", ...parsed]);
+          return;
+        }
+      } catch {
+        // fall through to default
+      }
+    }
+    setVisibleTabs(["kanban"]);
+  }, [id, currentUser?.id]);
+
+  const persistVisibleTabs = useCallback((next: string[]) => {
+    if (!id || !currentUser?.id) return;
+    const key = `project-visible-tabs-${currentUser.id}-${id}`;
+    localStorage.setItem(key, JSON.stringify(next));
+  }, [id, currentUser?.id]);
+
   useEffect(() => {
     if (authLoading || !id) return;
 
