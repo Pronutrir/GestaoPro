@@ -662,7 +662,12 @@ const ProjectDetails = () => {
                   onEditActivity={(a) => { setEditingActivity(a as any); setEditActivityDialogOpen(true); }}
                   onToggleActivity={handleToggleActivity}
                   canCreate={canCreate}
-                  onAddActivity={() => { setActiveTab("backlog"); setShowAddActivity(true); }}
+                  onAddActivity={() => {
+                    setCreateTaskStageId(null);
+                    setCreateTaskPhaseId(null);
+                    setCreateTaskParentId(null);
+                    setShowAddActivity(true);
+                  }}
                 />
               </TabsContent>
             )}
