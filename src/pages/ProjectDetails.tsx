@@ -369,16 +369,6 @@ const ProjectDetails = () => {
     }
   };
 
-  const handleAddPhase = async () => {
-    if (!newPhaseTitle.trim() || !id) return;
-    try {
-      const maxOrder = phases.reduce((max, p) => Math.max(max, p.display_order), 0);
-      await supabase.from("phases").insert({ project_id: id, title: newPhaseTitle, description: newPhaseDescription || null, display_order: maxOrder + 1 });
-      toast({ title: "Fase criada!" });
-      setNewPhaseTitle(""); setNewPhaseDescription(""); setShowAddPhase(false);
-      fetchProjectData();
-    } catch { toast({ title: "Erro ao criar fase", variant: "destructive" }); }
-  };
 
   const handleAddActivity = async () => {
     if (!newActivity.trim() || !id) return;
