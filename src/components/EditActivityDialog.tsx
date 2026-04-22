@@ -425,29 +425,6 @@ export const EditActivityDialog = ({
               <span>
                 Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")}
               </span>
-              {(creatorEmail || act.created_by_email) && (
-                <>
-                  <span className="opacity-50">·</span>
-                  <span className="flex items-center gap-1">
-                    <UserCircle className="w-3 h-3" />
-                    por {creatorName || creatorEmail || act.created_by_email}
-                  </span>
-                </>
-              )}
-              {act.updated_at && act.updated_at !== act.created_at && (
-                <>
-                  <span className="opacity-50">·</span>
-                  <span>
-                    Atualizada em {new Date(act.updated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                  {(lastEditorName || lastEditorEmail) && (
-                    <span className="flex items-center gap-1">
-                      <UserCircle className="w-3 h-3" />
-                      por {lastEditorName || lastEditorEmail}
-                    </span>
-                  )}
-                </>
-              )}
               {act.completed_at && (
                 <>
                   <span className="opacity-50">·</span>
