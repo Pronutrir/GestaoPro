@@ -1081,7 +1081,7 @@ export const ActivityKanban = ({
   }
 
   return (
-    <div className="space-y-3 mt-10">
+    <div className="space-y-3 mt-5">
       <DndContext
         sensors={sensors}
         collisionDetection={rectIntersection}
