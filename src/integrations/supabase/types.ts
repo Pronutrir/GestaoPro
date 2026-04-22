@@ -308,6 +308,45 @@ export type Database = {
           },
         ]
       }
+      audit_log: {
+        Row: {
+          changed_by: string | null
+          changed_by_email: string | null
+          changed_fields: string[] | null
+          created_at: string
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          operation: string
+          record_id: string
+          table_name: string
+        }
+        Insert: {
+          changed_by?: string | null
+          changed_by_email?: string | null
+          changed_fields?: string[] | null
+          created_at?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          operation: string
+          record_id: string
+          table_name: string
+        }
+        Update: {
+          changed_by?: string | null
+          changed_by_email?: string | null
+          changed_fields?: string[] | null
+          created_at?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          operation?: string
+          record_id?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
       csc_sla_configs: {
         Row: {
           created_at: string
@@ -501,6 +540,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      holidays: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          is_national: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          is_national?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          is_national?: boolean
+          name?: string
+        }
+        Relationships: []
       }
       lessons_learned: {
         Row: {
@@ -1641,6 +1704,27 @@ export type Database = {
           id?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_work_schedules: {
+        Row: {
+          updated_at: string
+          user_id: string
+          vacation_periods: Json
+          weekly_hours: Json
+        }
+        Insert: {
+          updated_at?: string
+          user_id: string
+          vacation_periods?: Json
+          weekly_hours?: Json
+        }
+        Update: {
+          updated_at?: string
+          user_id?: string
+          vacation_periods?: Json
+          weekly_hours?: Json
         }
         Relationships: []
       }
