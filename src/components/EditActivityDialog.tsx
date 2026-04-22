@@ -432,6 +432,33 @@ export const EditActivityDialog = ({
                   ))}
                 </div>
               </div>
+              {!isQualityProject && (
+                <div className="space-y-2 col-span-full">
+                  <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    🎨 Etiqueta de cor
+                  </Label>
+                  <div className="flex gap-1.5 flex-wrap items-center">
+                    {[
+                      { hex: "", label: "Nenhuma" },
+                      { hex: "#ef4444", label: "Vermelho" },
+                      { hex: "#f97316", label: "Laranja" },
+                      { hex: "#eab308", label: "Amarelo" },
+                      { hex: "#22c55e", label: "Verde" },
+                      { hex: "#06b6d4", label: "Ciano" },
+                      { hex: "#3b82f6", label: "Azul" },
+                      { hex: "#8b5cf6", label: "Roxo" },
+                      { hex: "#ec4899", label: "Rosa" },
+                    ].map((c) => (
+                      <button key={c.hex || "none"} type="button" title={c.label}
+                        onClick={() => setFormData({ ...formData, ui_color_tag: c.hex })}
+                        className={`w-7 h-7 rounded-full border-2 transition-all ${formData.ui_color_tag === c.hex ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-110" : "border-border hover:scale-105"}`}
+                        style={{ backgroundColor: c.hex || "transparent", backgroundImage: !c.hex ? "linear-gradient(45deg, transparent 45%, hsl(var(--muted-foreground)) 45%, hsl(var(--muted-foreground)) 55%, transparent 55%)" : undefined }}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Aparece como borda colorida no card.</p>
+                </div>
+              )}
             </div>
           </div>
 
