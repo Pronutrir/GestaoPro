@@ -95,8 +95,13 @@ function formatHoursDisplay(hours: number): string {
 export const EditActivityDialog = ({
   activity, open, onOpenChange, onActivityUpdated,
   phases = [], allActivities = [], projectId, isQualityProject = false,
+  createMode = false, defaultStageId = null, defaultPhaseId = null, defaultParentId = null,
+  onActivityCreated,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
+  const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
+  const [creatingDraft, setCreatingDraft] = useState(false);
+  const effectiveActivity = createMode ? draftActivity : activity;
   const [formData, setFormData] = useState({
     title: "", description: "", assigned_to: "",
     start_date: "", end_date: "", cost: "", hours: "",
