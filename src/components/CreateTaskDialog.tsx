@@ -67,6 +67,8 @@ interface CreateTaskDialogProps {
   defaultStageId?: string | null;
   /** Pre-selected phase (e.g., when opened from Phase Manager) */
   defaultPhaseId?: string | null;
+  /** Pre-selected parent activity (subactivity creation) */
+  defaultParentId?: string | null;
   /** Pre-selected status (defaults to 'pending') */
   defaultStatus?: string;
   /** Called after successful creation. Receives created activity id. */
