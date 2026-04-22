@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Pencil, Trash2, MessageSquare, Send } from "lucide-react";
+import { Pencil, Trash2, MessageSquare, Send, UserCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Comment {
   id: string;
@@ -21,12 +21,15 @@ interface ActivityCommentsProps {
 
 export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
   const { toast } = useToast();
+  const { user, profile } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
-  const [newAuthor, setNewAuthor] = useState("");
   const [editingComment, setEditingComment] = useState<Comment | null>(null);
   const [editContent, setEditContent] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const currentAuthorName: string =
+    profile?.full_name?.trim() || user?.email || "Usuário";
 
   useEffect(() => {
     fetchComments();
@@ -52,7 +55,7 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
       const { error } = await supabase.from("activity_comments").insert({
         activity_id: activityId,
         content: newComment,
-        author: newAuthor || null,
+        author: currentAuthorName,
       });
 
       if (error) throw error;
@@ -175,30 +178,26 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
 
       {/* Add comment */}
       <div className="space-y-2">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <UserCircle className="w-3.5 h-3.5" />
+          Comentando como <span className="font-medium text-foreground">{currentAuthorName}</span>
+        </div>
         <div className="flex gap-2">
-          <Input
-            placeholder="Seu nome"
-            value={newAuthor}
-            onChange={(e) => setNewAuthor(e.target.value)}
-            className="h-8 text-sm max-w-[150px]"
+          <Textarea
+            placeholder="Adicionar comentário..."
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            className="min-h-[36px] text-sm resize-none flex-1"
+            rows={1}
           />
-          <div className="flex-1 flex gap-2">
-            <Textarea
-              placeholder="Adicionar comentário..."
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              className="min-h-[36px] text-sm resize-none"
-              rows={1}
-            />
-            <Button
-              size="icon"
-              className="h-9 w-9 flex-shrink-0"
-              onClick={handleAddComment}
-              disabled={isLoading || !newComment.trim()}
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-          </div>
+          <Button
+            size="icon"
+            className="h-9 w-9 flex-shrink-0"
+            onClick={handleAddComment}
+            disabled={isLoading || !newComment.trim()}
+          >
+            <Send className="w-4 h-4" />
+          </Button>
         </div>
       </div>
     </div>
