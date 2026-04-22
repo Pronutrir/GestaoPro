@@ -817,15 +817,6 @@ const ProjectDetails = () => {
             defaultStageId={createTaskStageId}
             defaultPhaseId={createTaskPhaseId}
             defaultParentId={createTaskParentId}
-            onOpenDetails={(activityId) => {
-              const created = activities.find((a) => a.id === activityId);
-              if (created) {
-                setEditingActivity(created);
-                setEditActivityDialogOpen(true);
-              } else {
-                fetchProjectData();
-              }
-            }}
           />
         )}
         <CreatePhaseDialog
