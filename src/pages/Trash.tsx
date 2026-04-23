@@ -81,7 +81,7 @@ const Trash = () => {
       toast({ title: "Erro ao carregar lixeira", variant: "destructive" });
       setItems([]);
     } else {
-      setItems((data as TrashRow[]) || []);
+      setItems(((data as unknown) as TrashRow[]) || []);
     }
     setLoading(false);
   };
