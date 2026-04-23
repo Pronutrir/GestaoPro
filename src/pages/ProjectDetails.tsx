@@ -26,6 +26,7 @@ import { MeetingsManager } from "@/components/MeetingsManager";
 import { AssumptionsManager } from "@/components/AssumptionsManager";
 import { RisksManager } from "@/components/RisksManager";
 import { ChangeRequestsManager } from "@/components/ChangeRequestsManager";
+import { ProjectDependenciesView } from "@/components/ProjectDependenciesView";
 import { BacklogSection } from "@/components/BacklogSection";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
@@ -707,6 +708,7 @@ const ProjectDetails = () => {
                 { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-lime-600" },
                 { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-red-500" },
                 { value: "changes", label: "Mudanças", icon: <GitPullRequest className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-orange-500" },
+                { value: "dependencies", label: "Dependências", icon: <GitPullRequest className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-cyan-500" },
                 { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-green-600" },
                 { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-yellow-500" },
               ];
@@ -878,6 +880,16 @@ const ProjectDetails = () => {
                 projectId={id!}
                 projectOwner={project.owner}
                 onChanged={fetchPendingChangeRequests}
+              />
+            </TabsContent>
+
+            <TabsContent value="dependencies" className="mt-0">
+              <ProjectDependenciesView
+                projectId={id!}
+                onEditActivity={(actId) => {
+                  const act = activities.find((a) => a.id === actId);
+                  if (act) { setEditingActivity(act); setEditActivityDialogOpen(true); }
+                }}
               />
             </TabsContent>
 
