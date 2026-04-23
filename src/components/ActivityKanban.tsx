@@ -1298,6 +1298,64 @@ export const ActivityKanban = ({
 
 
   const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
+
+  // ===== Stage management handlers (admin/gestor only) =====
+  const handleCreateStage = useCallback(async (title: string) => {
+    const maxOrder = stages.reduce((max, s) => Math.max(max, s.display_order), -1);
+    const colorIdx = stages.length % STAGE_PRESET_COLORS.length;
+    const { error } = await supabase.from("workflow_stages").insert({
+      project_id: projectId,
+      title,
+      color: STAGE_PRESET_COLORS[colorIdx],
+      display_order: maxOrder + 1,
+      is_final: false,
+    });
+    if (error) {
+      toast({ title: "Erro ao criar grupo", variant: "destructive" });
+    } else {
+      toast({ title: "Grupo criado!" });
+      fetchStages();
+    }
+  }, [stages, projectId, toast]);
+
+  const handleRenameStage = useCallback(async (id: string, title: string) => {
+    const { error } = await supabase.from("workflow_stages").update({ title }).eq("id", id);
+    if (error) toast({ title: "Erro ao renomear", variant: "destructive" });
+    else fetchStages();
+  }, [toast]);
+
+  const handleDeleteStage = useCallback(async (id: string) => {
+    const stage = stages.find((s) => s.id === id);
+    if (stage && stage.display_order === 0) {
+      toast({ title: "A etapa Backlog não pode ser excluída", variant: "destructive" });
+      return;
+    }
+    if (!confirm("Atividades nesta coluna perderão a associação. Continuar?")) return;
+    const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
+    if (error) toast({ title: "Erro ao excluir", variant: "destructive" });
+    else { toast({ title: "Coluna excluída!" }); fetchStages(); }
+  }, [stages, toast]);
+
+  const handleChangeStageColor = useCallback(async (id: string, color: string) => {
+    await supabase.from("workflow_stages").update({ color }).eq("id", id);
+    fetchStages();
+  }, []);
+
+  const handleToggleStageFinal = useCallback(async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_final: !current, ...(current ? {} : { is_blocked: false }) }).eq("id", id);
+    fetchStages();
+  }, []);
+
+  const handleToggleStageBlocked = useCallback(async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_blocked: !current, ...(current ? {} : { is_final: false }) }).eq("id", id);
+    fetchStages();
+  }, []);
+
+  const handleToggleStageVisible = useCallback(async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_visible: !current }).eq("id", id);
+    fetchStages();
+  }, []);
+
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
   const activeColumn = dragType === "column" && activeId ? visibleStages.find((s) => `col-${s.id}` === activeId) : null;
 
