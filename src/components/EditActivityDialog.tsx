@@ -456,7 +456,7 @@ export const EditActivityDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="!max-w-[96vw] w-[96vw] h-[95vh] max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           {parentActivityTitle && onBackToParent && (
             <button
