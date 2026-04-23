@@ -390,6 +390,17 @@ function KanbanCard({
                       {activity.hours}h
                     </Badge>
                   )}
+                  {dependencyCount && (dependencyCount.pred > 0 || dependencyCount.succ > 0) && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30 font-semibold"
+                      title={`${dependencyCount.pred} predecessora(s) · ${dependencyCount.succ} sucessora(s)`}
+                    >
+                      🔗 {dependencyCount.pred > 0 && `←${dependencyCount.pred}`}
+                      {dependencyCount.pred > 0 && dependencyCount.succ > 0 && " "}
+                      {dependencyCount.succ > 0 && `→${dependencyCount.succ}`}
+                    </Badge>
+                  )}
                 </div>
                 {subActivityCount && subActivityCount > 0 ? (
                   <div className="flex items-center gap-1 mt-1.5 text-[10px] text-muted-foreground">
