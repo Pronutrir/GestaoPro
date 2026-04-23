@@ -319,6 +319,7 @@ export const EditActivityDialog = ({
         deadline_flag: (act as any).deadline_flag || "",
         last_update_date: (act as any).last_update_date || "",
         ui_color_tag: (act as any).ui_color_tag || "",
+        is_milestone: !!(act as any).is_milestone,
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       fetchSubActivities(act.id);
@@ -396,6 +397,7 @@ export const EditActivityDialog = ({
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
         ui_color_tag: formData.ui_color_tag || null,
+        is_milestone: formData.is_milestone,
       } as any).eq("id", act.id);
       if (error) throw error;
 
