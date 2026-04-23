@@ -1220,6 +1220,29 @@ export const EditActivityDialog = ({
             </div>
           )}
 
+          {/* Relacionamentos estilo ClickUp: vinculação genérica, bloqueio, em espera */}
+          {act && projectId && (
+            <div className="border-t border-border pt-4">
+              <TaskRelations activityId={act.id} projectId={projectId} />
+            </div>
+          )}
+
+          {/* Aviso de bloqueio pendente */}
+          {act && isBlockedByOthers && (
+            <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive">
+              <AlertOctagon className="w-4 h-4 mt-0.5 shrink-0" />
+              <div className="text-xs">
+                <p className="font-bold mb-1">Esta tarefa está BLOQUEADA por {blockers.length} tarefa{blockers.length > 1 ? "s" : ""}:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {blockers.map((b) => (
+                    <li key={b.relationId}>{b.title}</li>
+                  ))}
+                </ul>
+                <p className="mt-1.5 italic">Conclua os bloqueios antes de marcar esta como concluída.</p>
+              </div>
+            </div>
+          )}
+
           {/* Comentários */}
           {act && (
             <div className="border-t border-border pt-4">
