@@ -10,8 +10,10 @@ Cada projeto tem aba "Mudanças" (ícone GitPullRequest, laranja). Tabela `chang
 - Com itens = bloqueia apenas as atividades/fases listadas. Hook `useChangeRequestBlocks(projectId)` expõe `isActivityBlocked(id, phaseId)`, `isPhaseBlocked(id)`, `hasGlobalBlock`.
 
 **Liberação**:
-- Aprovada → deleta itens de escopo, libera imediatamente.
+- Aprovada → muda status para `approved`; libera imediatamente (o hook só bloqueia status='pending'). Itens de escopo são **preservados** para histórico.
 - Rejeitada → mantém itens travados; só destrava quando alguém com `canManage` arquiva a RFC (soft-delete).
+
+**Visualização do card**: Pendentes mostram tudo aberto. Decididas (aprovada/rejeitada) ficam recolhidas — botão "Ver detalhes da solicitação" expande/recolhe justificativa, benefícios, 4 impactos e parecer. Painel de atividades bloqueadas continua acessível mesmo após aprovação (histórico do que foi liberado).
 
 **IA**: Todos os textos da RFC (título, descrição, justificativa, benefícios, 4 impactos, parecer da decisão) têm `AIAssistButton`.
 

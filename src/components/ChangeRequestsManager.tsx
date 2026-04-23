@@ -69,6 +69,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
   const [activities, setActivities] = useState<ActivityLite[]>([]);
   const [phases, setPhases] = useState<PhaseLite[]>([]);
   const [expandedScope, setExpandedScope] = useState<Set<string>>(new Set());
+  const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [decisionFor, setDecisionFor] = useState<{ id: string; action: "approved" | "rejected" } | null>(null);
@@ -288,8 +289,8 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
       .eq("id", decisionFor.id);
     if (error) { toast({ title: "Erro ao registrar decisão", variant: "destructive" }); return; }
     if (decisionFor.action === "approved") {
-      // Liberação imediata: remove os itens de escopo (já não bloqueia mais)
-      await supabase.from("change_request_scope_items" as any).delete().eq("change_request_id", decisionFor.id);
+      // Liberação imediata via mudança de status (hook só bloqueia status='pending').
+      // Mantemos os itens de escopo para preservar o histórico do que foi solicitado/liberado.
       toast({ title: "Mudança aprovada — atividades liberadas" });
     } else {
       toast({ title: "Mudança rejeitada — atividades permanecem bloqueadas até arquivar" });
@@ -315,6 +316,12 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
     const next = new Set(expandedScope);
     if (next.has(id)) next.delete(id); else next.add(id);
     setExpandedScope(next);
+  };
+
+  const toggleDetails = (id: string) => {
+    const next = new Set(expandedDetails);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setExpandedDetails(next);
   };
 
   return (
@@ -517,6 +524,9 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
               ? isDesignatedDecider
               : (canManage || isOwner);
             const isAwaitingMyDecision = item.status === "pending" && isDesignatedDecider;
+            const hasDetails = !!(item.justification || item.expected_benefits || item.impact_scope || item.impact_schedule || item.impact_cost || item.impact_quality || item.decision_notes || item.approver);
+            // Pendentes mostram tudo aberto; decididas só abrem quando o usuário clica em "Ver detalhes".
+            const showDetails = item.status === "pending" || expandedDetails.has(item.id);
             return (
               <Card key={item.id} className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-4">
@@ -612,7 +622,19 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                   </div>
                 )}
 
-                {(item.justification || item.expected_benefits) && (
+                {/* Botão para decididas: alterna detalhes (justificativa, impactos, parecer) */}
+                {item.status !== "pending" && hasDetails && (
+                  <button
+                    type="button"
+                    onClick={() => toggleDetails(item.id)}
+                    className="w-full flex items-center justify-between rounded-md border border-border bg-muted/40 hover:bg-muted px-3 py-2 text-xs font-medium text-foreground"
+                  >
+                    <span>Ver detalhes da solicitação (justificativa, impactos e parecer)</span>
+                    {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                )}
+
+                {showDetails && (item.justification || item.expected_benefits) && (
                   <div className="grid md:grid-cols-2 gap-3 text-sm">
                     {item.justification && (
                       <div><span className="text-xs font-semibold text-muted-foreground">Justificativa:</span> <p>{item.justification}</p></div>
@@ -623,7 +645,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                   </div>
                 )}
 
-                {(item.impact_scope || item.impact_schedule || item.impact_cost || item.impact_quality) && (
+                {showDetails && (item.impact_scope || item.impact_schedule || item.impact_cost || item.impact_quality) && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-border">
                     {[
                       { l: "Escopo", v: item.impact_scope },
@@ -639,11 +661,16 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                   </div>
                 )}
 
-                {item.status !== "pending" && (item.approver || item.decision_notes) && (
+                {showDetails && item.status !== "pending" && (item.approver || item.decision_notes) && (
                   <div className="pt-2 border-t border-border text-xs text-muted-foreground">
                     Decidido por <strong>{item.approver || "—"}</strong>
                     {item.decision_date && ` em ${new Date(item.decision_date).toLocaleDateString("pt-BR")}`}
-                    {item.decision_notes && <p className="mt-1 italic">"{item.decision_notes}"</p>}
+                    {item.decision_notes && (
+                      <div className="mt-2 p-2 rounded border border-border bg-muted/30 text-foreground">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase mb-1">Parecer da decisão</p>
+                        <p className="italic">"{item.decision_notes}"</p>
+                      </div>
+                    )}
                      {item.status === "rejected" && itemScope.length > 0 && (
                        <p className="mt-1 text-amber-700 dark:text-amber-400">
                          ⚠ Atividades permanecem bloqueadas — arquive esta solicitação para liberar.
