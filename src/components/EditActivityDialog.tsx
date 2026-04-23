@@ -502,6 +502,22 @@ export const EditActivityDialog = ({
                   </span>
                 </>
               )}
+              {(creatorName || creatorEmail) && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span title={creatorEmail || ""}>
+                    por <span className="font-semibold text-foreground">{creatorName || creatorEmail}</span>
+                  </span>
+                </>
+              )}
+              {(lastEditorName || lastEditorEmail) && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span title={lastEditorEmail || ""} className="italic">
+                    última edição por <span className="font-semibold text-foreground not-italic">{lastEditorName || lastEditorEmail}</span>
+                  </span>
+                </>
+              )}
               {act.closed_at && (
                 <>
                   <span className="opacity-50">·</span>
