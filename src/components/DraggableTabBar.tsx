@@ -31,6 +31,7 @@ interface DraggableTabBarProps {
   onRemoveTab?: (value: string) => void;
   removableValues?: string[];
   extraSlot?: React.ReactNode;
+  extraSlotPosition?: "left" | "right";
 }
 
 function SortableTab({
@@ -114,6 +115,7 @@ export const DraggableTabBar = ({
   onRemoveTab,
   removableValues,
   extraSlot,
+  extraSlotPosition = "right",
 }: DraggableTabBarProps) => {
   const [orderedTabs, setOrderedTabs] = useState<TabItem[]>(tabs);
 
@@ -166,6 +168,9 @@ export const DraggableTabBar = ({
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={orderedTabs.map((t) => t.value)} strategy={horizontalListSortingStrategy}>
         <div className="flex gap-1 px-1 border-b border-border/70 overflow-x-auto scrollbar-none -mt-[10px]">
+          {extraSlot && extraSlotPosition === "left" && (
+            <div className="flex items-center">{extraSlot}</div>
+          )}
           {orderedTabs.map((tab) => (
             <SortableTab
               key={tab.value}
@@ -176,7 +181,9 @@ export const DraggableTabBar = ({
               onRemove={onRemoveTab ? () => onRemoveTab(tab.value) : undefined}
             />
           ))}
-          {extraSlot && <div className="flex items-center">{extraSlot}</div>}
+          {extraSlot && extraSlotPosition === "right" && (
+            <div className="flex items-center">{extraSlot}</div>
+          )}
         </div>
       </SortableContext>
     </DndContext>
