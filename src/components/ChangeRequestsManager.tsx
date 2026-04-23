@@ -288,8 +288,8 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
       .eq("id", decisionFor.id);
     if (error) { toast({ title: "Erro ao registrar decisão", variant: "destructive" }); return; }
     if (decisionFor.action === "approved") {
-      // Liberação imediata: remove os itens de escopo (já não bloqueia mais)
-      await supabase.from("change_request_scope_items" as any).delete().eq("change_request_id", decisionFor.id);
+      // Liberação imediata via mudança de status (hook só bloqueia status='pending').
+      // Mantemos os itens de escopo para preservar o histórico do que foi solicitado/liberado.
       toast({ title: "Mudança aprovada — atividades liberadas" });
     } else {
       toast({ title: "Mudança rejeitada — atividades permanecem bloqueadas até arquivar" });
