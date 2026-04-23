@@ -163,8 +163,8 @@ const ProjectDetails = () => {
   const openEditActivity = useCallback((activity: any) => {
     if (activity && isActivityBlocked(activity.id, activity.phase_id)) {
       toast({
-        title: "Atividade bloqueada por RFC",
-        description: "Esta atividade só pode ser editada após a aprovação (ou arquivamento) da Requisição de Mudança.",
+        title: "Atividade bloqueada",
+        description: "Esta atividade só pode ser editada após a aprovação (ou arquivamento) da solicitação de mudança que a afeta.",
         variant: "destructive",
       });
       return;
