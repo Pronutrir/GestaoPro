@@ -1188,6 +1188,7 @@ export const ActivityKanban = ({
                 onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
                 isQualityProject={isQualityProject}
                 onOpenCreateTask={onOpenCreateTask}
+                subActivityCounts={subActivityCounts}
               />
             );
           })}
