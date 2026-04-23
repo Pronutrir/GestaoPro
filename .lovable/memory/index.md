@@ -1,0 +1,1 @@
+- [TAP Three Pillars](mem://features/tap-three-pillars) — Ficha de Abertura em POR QUÊ / O QUÊ / PARA QUÊ, sincroniza Riscos/Premissas/Dependências
