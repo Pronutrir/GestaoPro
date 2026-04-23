@@ -651,7 +651,7 @@ const ProjectDetails = () => {
               activities={activities}
               phases={phases}
               project={project}
-              onNavigateToActivity={(activity) => { setEditingActivity(activity as any); setEditActivityDialogOpen(true); }}
+              onNavigateToActivity={(activity) => openEditActivity(activity as any)}
             />
           )}
 
