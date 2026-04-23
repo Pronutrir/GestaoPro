@@ -727,6 +727,7 @@ export const EditActivityDialog = ({
             </div>
           )}
 
+          {!formData.is_milestone && (
           <div className="p-4 bg-accent/30 rounded-lg border border-border space-y-4">
             <h3 className="text-sm font-bold text-foreground">Recursos da Atividade</h3>
             <div className="grid grid-cols-3 gap-4">
