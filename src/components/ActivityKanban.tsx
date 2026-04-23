@@ -721,7 +721,7 @@ function SortableColumn({
             )}
           </div>
         </div>
-        <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+        <div className="-mt-[3.5px]" onClick={(e) => e.stopPropagation()}>
             <Select value={colSort} onValueChange={setColSort}>
               <SelectTrigger className="h-6 text-[10px] w-full border-border/40 bg-background/50">
                 <div className="flex items-center gap-1">
