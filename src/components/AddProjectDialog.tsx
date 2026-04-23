@@ -272,52 +272,6 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>Patrocinador</Label>
-                <Select
-                  value={formData.sponsor || "_none"}
-                  onValueChange={(v) =>
-                    setFormData({ ...formData, sponsor: v === "_none" ? "" : v })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o patrocinador" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Sem patrocinador</SelectItem>
-                    {profiles.map((p) => (
-                      <SelectItem key={`sp-${p.id}`} value={p.full_name!}>
-                        {p.full_name}
-                        {p.sector ? ` — ${p.sector}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Gestor do Projeto</Label>
-                <Select
-                  value={formData.manager || "_none"}
-                  onValueChange={(v) =>
-                    setFormData({ ...formData, manager: v === "_none" ? "" : v })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o gestor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Sem gestor</SelectItem>
-                    {profiles.map((p) => (
-                      <SelectItem key={`mg-${p.id}`} value={p.full_name!}>
-                        {p.full_name}
-                        {p.sector ? ` — ${p.sector}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
                 <Label>Líder do Projeto</Label>
                 <Select
                   value={formData.owner || "_none"}
