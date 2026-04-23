@@ -541,23 +541,23 @@ const ProjectDetails = () => {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {(() => {
               const allDefinitions = [
-                { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" />, iconColor: "text-violet-500" },
+                { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-violet-500" },
                 ...(isQualityProject ? [] : [
-                  { value: "list", label: "Lista", icon: <ListTodo className="w-4 h-4" />, iconColor: "text-sky-500" },
+                  { value: "list", label: "Lista", icon: <ListTodo className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-sky-500" },
                 ]),
-                { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" />, iconColor: "text-amber-500" },
-                { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" />, iconColor: "text-emerald-500" },
+                { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-amber-500" },
+                { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-emerald-500" },
                 ...(isQualityProject ? [] : [
-                  { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" />, iconColor: "text-rose-500" },
+                  { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-rose-500" },
                 ]),
-                { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" />, iconColor: "text-blue-500" },
-                { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" />, iconColor: "text-fuchsia-500" },
-                { value: "tap", label: "TAP", icon: <ClipboardList className="w-4 h-4" />, iconColor: "text-indigo-500" },
-                { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" />, iconColor: "text-teal-500" },
-                { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" />, iconColor: "text-lime-600" },
-                { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" />, iconColor: "text-red-500" },
-                { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" />, iconColor: "text-green-600" },
-                { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" />, iconColor: "text-yellow-500" },
+                { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-blue-500" },
+                { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-fuchsia-500" },
+                { value: "tap", label: "TAP", icon: <ClipboardList className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-indigo-500" },
+                { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-teal-500" },
+                { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-lime-600" },
+                { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-red-500" },
+                { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-green-600" },
+                { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-yellow-500" },
               ];
               const permittedDefs = allDefinitions.filter(t => !allowedTabs || allowedTabs.includes(t.value));
               const activeTabsSet = new Set(visibleTabs);
