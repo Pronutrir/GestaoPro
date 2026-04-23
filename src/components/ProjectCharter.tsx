@@ -169,12 +169,57 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
   }, [projectId]);
 
   const fetchRelations = async () => {
-    const [r, a] = await Promise.all([
+    const [r, a, prof, adminRoles, mem] = await Promise.all([
       supabase.from("risks").select("id, description, probability, impact, status").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false }),
       supabase.from("assumptions").select("id, description").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false }),
+      supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
+      supabase.from("user_roles").select("user_id").eq("role", "admin"),
+      supabase.from("project_members").select("id, user_id").eq("project_id", projectId),
     ]);
     if (r.data) setRisks(r.data);
     if (a.data) setAssumptionsList(a.data);
+    const adminIds = new Set((adminRoles.data || []).map((x: any) => x.user_id));
+    const profiles = (prof.data || []).filter((p: any) => p.full_name && !adminIds.has(p.id));
+    setAllProfiles(profiles);
+    if (mem.data) {
+      const rows = mem.data.map((m: any) => {
+        const p = profiles.find((pp) => pp.id === m.user_id);
+        return { id: m.id, user_id: m.user_id, full_name: p?.full_name || "—", sector: p?.sector || null };
+      });
+      setMemberRows(rows);
+    }
+  };
+
+  const handleAddStakeholder = async () => {
+    if (!selectedProfileId) return;
+    setAddingMember(true);
+    const profile = allProfiles.find((p) => p.id === selectedProfileId);
+    const { error } = await supabase.from("project_members").insert({
+      project_id: projectId,
+      user_id: selectedProfileId,
+      sector: profile?.sector || null,
+      can_create: false, can_edit: false, can_delete: false, can_move: false,
+    });
+    setAddingMember(false);
+    if (error) {
+      toast({ title: "Erro ao adicionar stakeholder", description: error.message, variant: "destructive" });
+      return;
+    }
+    setSelectedProfileId("");
+    await fetchRelations();
+    onMembersChanged?.();
+    toast({ title: "Stakeholder adicionado" });
+  };
+
+  const handleRemoveStakeholder = async (memberId: string) => {
+    const { error } = await supabase.from("project_members").delete().eq("id", memberId);
+    if (error) {
+      toast({ title: "Erro ao remover", description: error.message, variant: "destructive" });
+      return;
+    }
+    await fetchRelations();
+    onMembersChanged?.();
+    toast({ title: "Stakeholder removido" });
   };
 
   const handleSave = async () => {
