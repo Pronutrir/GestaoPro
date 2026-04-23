@@ -475,6 +475,7 @@ function SortableColumn({
   isQualityProject,
   onOpenCreateTask,
   subActivityCounts,
+  dependencyCounts,
   isAdminOrGestor,
   onRenameStage,
   onDeleteStage,
@@ -503,6 +504,7 @@ function SortableColumn({
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;
   subActivityCounts: Map<string, number>;
+  dependencyCounts?: Map<string, { pred: number; succ: number }>;
   isAdminOrGestor?: boolean;
   onRenameStage: (id: string, title: string) => Promise<void>;
   onDeleteStage: (id: string) => Promise<void>;
@@ -843,6 +845,7 @@ function SortableColumn({
                 onCreateStory={() => onCreateStory(activity)}
                 isQualityProject={isQualityProject}
                 stageColor={stage.color}
+                dependencyCount={dependencyCounts?.get(activity.id)}
                 subActivityCount={subActivityCounts.get(activity.id) || 0}
               />
             ))
@@ -1467,6 +1470,7 @@ export const ActivityKanban = ({
                 isQualityProject={isQualityProject}
                 onOpenCreateTask={onOpenCreateTask}
                 subActivityCounts={subActivityCounts}
+                dependencyCounts={dependencyCounts}
                 isAdminOrGestor={isAdmin || canCreate}
                 onRenameStage={handleRenameStage}
                 onDeleteStage={handleDeleteStage}
