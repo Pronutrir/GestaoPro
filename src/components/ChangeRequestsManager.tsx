@@ -318,6 +318,12 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
     setExpandedScope(next);
   };
 
+  const toggleDetails = (id: string) => {
+    const next = new Set(expandedDetails);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setExpandedDetails(next);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
