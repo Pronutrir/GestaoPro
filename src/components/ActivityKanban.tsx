@@ -32,6 +32,11 @@ import {
   Plus,
   BookOpen,
   GitFork,
+  MoreHorizontal,
+  Check,
+  X as XIcon,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   DndContext,
@@ -56,6 +61,26 @@ import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { UserStoryDrawer } from "@/components/UserStoryDrawer";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+const STAGE_PRESET_COLORS = [
+  "hsl(220, 15%, 50%)",
+  "hsl(38, 92%, 50%)",
+  "hsl(220, 90%, 56%)",
+  "hsl(199, 89%, 48%)",
+  "hsl(270, 70%, 55%)",
+  "hsl(142, 76%, 36%)",
+  "hsl(0, 84%, 60%)",
+  "hsl(340, 82%, 52%)",
+];
 
 interface WorkflowStage {
   id: string;
@@ -422,6 +447,13 @@ function SortableColumn({
   isQualityProject,
   onOpenCreateTask,
   subActivityCounts,
+  isAdminOrGestor,
+  onRenameStage,
+  onDeleteStage,
+  onChangeStageColor,
+  onToggleStageFinal,
+  onToggleStageBlocked,
+  onToggleStageVisible,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -443,6 +475,13 @@ function SortableColumn({
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;
   subActivityCounts: Map<string, number>;
+  isAdminOrGestor?: boolean;
+  onRenameStage: (id: string, title: string) => Promise<void>;
+  onDeleteStage: (id: string) => Promise<void>;
+  onChangeStageColor: (id: string, color: string) => Promise<void>;
+  onToggleStageFinal: (id: string, current: boolean) => Promise<void>;
+  onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
+  onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -450,6 +489,8 @@ function SortableColumn({
   const [quickPhase, setQuickPhase] = useState("");
   const [quickOrder, setQuickOrder] = useState("");
   const [quickLoading, setQuickLoading] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(stage.title);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
 
@@ -524,9 +565,37 @@ function SortableColumn({
               style={{ backgroundColor: stage.color }}
             >
               <div className="w-2 h-2 rounded-full bg-white/90 shrink-0" />
-              <h3 className="text-[11px] font-bold text-white tracking-wide uppercase truncate">
-                {stage.title}
-              </h3>
+              {renaming ? (
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onBlur={() => {
+                    if (renameValue.trim() && renameValue.trim() !== stage.title) {
+                      onRenameStage(stage.id, renameValue.trim());
+                    }
+                    setRenaming(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (renameValue.trim() && renameValue.trim() !== stage.title) {
+                        onRenameStage(stage.id, renameValue.trim());
+                      }
+                      setRenaming(false);
+                    } else if (e.key === "Escape") {
+                      setRenameValue(stage.title);
+                      setRenaming(false);
+                    }
+                  }}
+                  className="text-[11px] font-bold text-white tracking-wide uppercase bg-transparent border-b border-white/40 outline-none w-32"
+                />
+              ) : (
+                <h3 className="text-[11px] font-bold text-white tracking-wide uppercase truncate">
+                  {stage.title}
+                </h3>
+              )}
             </div>
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
               {stageActivities.length}
@@ -549,6 +618,96 @@ function SortableColumn({
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
+            )}
+            {isAdminOrGestor && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    title="Opções da coluna"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-56"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <DropdownMenuLabel className="text-xs">Gerenciar coluna</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setRenameValue(stage.title);
+                      setRenaming(true);
+                    }}
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-2" /> Renomear
+                  </DropdownMenuItem>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                        <div className="w-3.5 h-3.5 mr-2 rounded-full" style={{ backgroundColor: stage.color }} />
+                        Alterar cor
+                      </DropdownMenuItem>
+                    </PopoverTrigger>
+                    <PopoverContent side="left" className="w-auto p-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {STAGE_PRESET_COLORS.map((c) => (
+                          <button
+                            key={c}
+                            className="w-6 h-6 rounded-full ring-1 ring-border hover:ring-primary"
+                            style={{ backgroundColor: c }}
+                            onClick={() => onChangeStageColor(stage.id, c)}
+                          />
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onToggleStageFinal(stage.id, stage.is_final);
+                    }}
+                  >
+                    <Check className="w-3.5 h-3.5 mr-2 text-success" />
+                    {stage.is_final ? "Remover marca de Final" : "Marcar como Final"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onToggleStageBlocked(stage.id, stage.is_blocked);
+                    }}
+                  >
+                    <AlertCircle className="w-3.5 h-3.5 mr-2 text-orange-500" />
+                    {stage.is_blocked ? "Remover Bloqueio" : "Marcar como Bloqueio"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onToggleStageVisible(stage.id, stage.is_visible);
+                    }}
+                  >
+                    {stage.is_visible ? <EyeOff className="w-3.5 h-3.5 mr-2" /> : <Eye className="w-3.5 h-3.5 mr-2" />}
+                    {stage.is_visible ? "Ocultar coluna" : "Mostrar coluna"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onDeleteStage(stage.id);
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir coluna
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -713,6 +872,64 @@ function DroppableColumn({
       }`}
     >
       {children}
+    </div>
+  );
+}
+
+function AddStageColumn({ onCreate }: { onCreate: (title: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    if (!value.trim()) return;
+    setLoading(true);
+    try {
+      await onCreate(value.trim());
+      setValue("");
+      setEditing(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="shrink-0 flex flex-col items-stretch justify-start pt-3"
+      style={{ width: 200 }}
+    >
+      {editing ? (
+        <div className="px-2 space-y-1.5">
+          <Input
+            autoFocus
+            placeholder="Nome do grupo..."
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+              if (e.key === "Escape") { setEditing(false); setValue(""); }
+            }}
+            className="h-8 text-xs"
+          />
+          <div className="flex gap-1">
+            <Button size="sm" className="h-7 text-xs flex-1" onClick={submit} disabled={!value.trim() || loading}>
+              {loading ? "Criando..." : "Criar"}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setEditing(false); setValue(""); }}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors w-full"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Adicionar grupo
+        </button>
+      )}
     </div>
   );
 }
@@ -1081,6 +1298,64 @@ export const ActivityKanban = ({
 
 
   const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
+
+  // ===== Stage management handlers (admin/gestor only) =====
+  const handleCreateStage = useCallback(async (title: string) => {
+    const maxOrder = stages.reduce((max, s) => Math.max(max, s.display_order), -1);
+    const colorIdx = stages.length % STAGE_PRESET_COLORS.length;
+    const { error } = await supabase.from("workflow_stages").insert({
+      project_id: projectId,
+      title,
+      color: STAGE_PRESET_COLORS[colorIdx],
+      display_order: maxOrder + 1,
+      is_final: false,
+    });
+    if (error) {
+      toast({ title: "Erro ao criar grupo", variant: "destructive" });
+    } else {
+      toast({ title: "Grupo criado!" });
+      fetchStages();
+    }
+  }, [stages, projectId, toast]);
+
+  const handleRenameStage = useCallback(async (id: string, title: string) => {
+    const { error } = await supabase.from("workflow_stages").update({ title }).eq("id", id);
+    if (error) toast({ title: "Erro ao renomear", variant: "destructive" });
+    else fetchStages();
+  }, [toast]);
+
+  const handleDeleteStage = useCallback(async (id: string) => {
+    const stage = stages.find((s) => s.id === id);
+    if (stage && stage.display_order === 0) {
+      toast({ title: "A etapa Backlog não pode ser excluída", variant: "destructive" });
+      return;
+    }
+    if (!confirm("Atividades nesta coluna perderão a associação. Continuar?")) return;
+    const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
+    if (error) toast({ title: "Erro ao excluir", variant: "destructive" });
+    else { toast({ title: "Coluna excluída!" }); fetchStages(); }
+  }, [stages, toast]);
+
+  const handleChangeStageColor = useCallback(async (id: string, color: string) => {
+    await supabase.from("workflow_stages").update({ color }).eq("id", id);
+    fetchStages();
+  }, []);
+
+  const handleToggleStageFinal = useCallback(async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_final: !current, ...(current ? {} : { is_blocked: false }) }).eq("id", id);
+    fetchStages();
+  }, []);
+
+  const handleToggleStageBlocked = useCallback(async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_blocked: !current, ...(current ? {} : { is_final: false }) }).eq("id", id);
+    fetchStages();
+  }, []);
+
+  const handleToggleStageVisible = useCallback(async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_visible: !current }).eq("id", id);
+    fetchStages();
+  }, []);
+
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
   const activeColumn = dragType === "column" && activeId ? visibleStages.find((s) => `col-${s.id}` === activeId) : null;
 
@@ -1189,9 +1464,19 @@ export const ActivityKanban = ({
                 isQualityProject={isQualityProject}
                 onOpenCreateTask={onOpenCreateTask}
                 subActivityCounts={subActivityCounts}
+                isAdminOrGestor={isAdmin || canCreate}
+                onRenameStage={handleRenameStage}
+                onDeleteStage={handleDeleteStage}
+                onChangeStageColor={handleChangeStageColor}
+                onToggleStageFinal={handleToggleStageFinal}
+                onToggleStageBlocked={handleToggleStageBlocked}
+                onToggleStageVisible={handleToggleStageVisible}
               />
             );
           })}
+          {(isAdmin || canCreate) && (
+            <AddStageColumn onCreate={handleCreateStage} />
+          )}
         </div>
       </SortableContext>
 

@@ -12,7 +12,6 @@ export const ALL_PROJECT_TABS = [
   { value: "risks", label: "Riscos" },
   { value: "financials", label: "Financeiro" },
   { value: "lessons", label: "Lições" },
-  { value: "workflow", label: "Workflow" },
 ] as const;
 
 export const ALL_TAB_VALUES = ALL_PROJECT_TABS.map(t => t.value);
