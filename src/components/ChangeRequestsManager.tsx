@@ -509,6 +509,14 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
             const isFullBlock = item.status === "pending" && itemScope.length === 0;
             const isExpanded = expandedScope.has(item.id);
             const stillBlocking = item.status === "pending" || item.status === "rejected";
+            const itemApprovers = approvers.filter(a => a.change_request_id === item.id);
+            const isDesignatedDecider = !!user?.id && itemApprovers.some(a => a.user_id === user.id);
+            // Regra: se há decisores designados, SOMENTE eles podem aprovar/rejeitar.
+            // Sem decisores designados, fallback para Admin/Gestor/Líder do projeto.
+            const canDecide = itemApprovers.length > 0
+              ? isDesignatedDecider
+              : (canManage || isOwner);
+            const isAwaitingMyDecision = item.status === "pending" && isDesignatedDecider;
             return (
               <Card key={item.id} className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-4">
@@ -518,6 +526,11 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                       <Badge className={`gap-1 ${meta.class}`}>
                         <Icon className="w-3 h-3" /> {meta.label}
                       </Badge>
+                      {isAwaitingMyDecision && (
+                        <Badge className="gap-1 bg-primary/15 text-primary border border-primary/40 animate-pulse">
+                          <Bell className="w-3 h-3" /> Aguardando sua decisão
+                        </Badge>
+                      )}
                        {stillBlocking && (
                          isFullBlock ? (
                            <Badge variant="outline" className="gap-1 border-amber-500/60 text-amber-700 dark:text-amber-400">
@@ -535,6 +548,15 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                       Solicitado por <strong>{item.requested_by || "—"}</strong> em{" "}
                       {new Date(item.created_at).toLocaleDateString("pt-BR")}
                     </p>
+                    {itemApprovers.length > 0 && (
+                      <p className="text-xs text-muted-foreground flex items-start gap-1.5 flex-wrap">
+                        <UserCheck className="w-3 h-3 mt-0.5 text-primary shrink-0" />
+                        <span>
+                          <strong>Decisor{itemApprovers.length > 1 ? "es" : ""} designado{itemApprovers.length > 1 ? "s" : ""}:</strong>{" "}
+                          {itemApprovers.map(a => a.user_name || "—").join(", ")}
+                        </span>
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-1 shrink-0">
                     {item.status === "pending" && (
@@ -630,7 +652,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                   </div>
                 )}
 
-                {item.status === "pending" && canApprove && (
+                {item.status === "pending" && canDecide && (
                   <div className="flex gap-2 pt-2 border-t border-border">
                     <Button size="sm" variant="default" className="gap-2 bg-success hover:bg-success/90 text-success-foreground" onClick={() => { setDecisionFor({ id: item.id, action: "approved" }); setDecisionNotes(""); }}>
                       <CheckCircle2 className="w-4 h-4" /> Aprovar
@@ -641,10 +663,12 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                   </div>
                 )}
 
-                {item.status === "pending" && !canApprove && (
+                {item.status === "pending" && !canDecide && (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
                     <AlertCircle className="w-3 h-3" />
-                    Aguardando decisão de Admin, Gestor ou Líder do projeto.
+                    {itemApprovers.length > 0
+                      ? `Aguardando decisão de: ${itemApprovers.map(a => a.user_name || "—").join(", ")}`
+                      : "Aguardando decisão de Admin, Gestor ou Líder do projeto."}
                   </div>
                 )}
               </Card>
