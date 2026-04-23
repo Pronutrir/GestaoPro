@@ -104,6 +104,7 @@ export const EditActivityDialog = ({
   phases = [], allActivities = [], projectId, isQualityProject = false,
   createMode = false, defaultStageId = null, defaultPhaseId = null, defaultParentId = null,
   onActivityCreated,
+  parentActivityTitle, onBackToParent,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
