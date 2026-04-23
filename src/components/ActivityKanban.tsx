@@ -1449,7 +1449,7 @@ export const ActivityKanban = ({
             );
           })}
           {(isAdmin || canCreate) && (
-            <AddStageColumn onCreate={handleCreateStage} />
+            <AddStageColumn projectId={projectId} />
           )}
         </div>
       </SortableContext>
