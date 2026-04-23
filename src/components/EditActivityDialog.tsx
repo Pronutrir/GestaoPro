@@ -668,28 +668,105 @@ export const EditActivityDialog = ({
                 Sub-atividades ({subActivities.length})
               </h3>
               {subActivities.length > 0 && (
-                <div className="space-y-1.5">
+                <div className="rounded-md border border-border overflow-hidden">
+                  <div className="grid grid-cols-[28px_1fr_180px_120px_140px_64px] items-center gap-2 px-2 py-1.5 bg-muted/40 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
+                    <span></span>
+                    <span>Nome</span>
+                    <span>Responsável</span>
+                    <span>Prioridade</span>
+                    <span>Data de vencimento</span>
+                    <span className="text-right pr-1">Ações</span>
+                  </div>
                   {subActivities.map((sub) => (
-                    <div key={sub.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded-md border border-border/50 group">
-                      <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={() => handleToggleSubActivity(sub)}>
-                        {sub.status === "completed" ? <CheckCircle2 className="w-3.5 h-3.5 text-success" /> : <Circle className="w-3.5 h-3.5 text-muted-foreground" />}
-                      </Button>
-                      <p className={`text-xs font-medium truncate flex-1 ${sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                        {sub.title}
-                      </p>
-                      {sub.assigned_to && <span className="text-[10px] text-muted-foreground">👤 {sub.assigned_to}</span>}
+                    <div
+                      key={sub.id}
+                      className="grid grid-cols-[28px_1fr_180px_120px_140px_64px] items-center gap-2 px-2 py-1.5 border-b border-border/60 last:border-0 hover:bg-muted/30 group"
+                    >
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                        onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
-                        title="Editar sub-atividade"
+                        className="h-6 w-6 shrink-0"
+                        onClick={() => handleToggleSubActivity(sub)}
+                        title={sub.status === "completed" ? "Marcar como pendente" : "Concluir"}
                       >
-                        <Pencil className="w-3 h-3" />
+                        {sub.status === "completed" ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                        ) : (
+                          <Circle className="w-3.5 h-3.5 text-muted-foreground" />
+                        )}
                       </Button>
-                      <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive" onClick={() => handleDeleteSubActivity(sub.id)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
+                        className={`text-xs font-medium truncate text-left ${
+                          sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground hover:text-primary"
+                        }`}
+                        title={sub.title}
+                      >
+                        {sub.title}
+                      </button>
+                      <select
+                        className="h-7 rounded border border-input bg-background px-1.5 text-xs"
+                        value={sub.assigned_to || ""}
+                        onChange={async (e) => {
+                          const value = e.target.value || null;
+                          await supabase.from("activities").update({ assigned_to: value }).eq("id", sub.id);
+                          if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                          onActivityUpdated();
+                        }}
+                      >
+                        <option value="">Sem responsável</option>
+                        {members.map((m) => (
+                          <option key={m.full_name} value={m.full_name!}>
+                            {m.full_name}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="h-7 rounded border border-input bg-background px-1.5 text-xs"
+                        value={sub.priority || "medium"}
+                        onChange={async (e) => {
+                          await supabase.from("activities").update({ priority: e.target.value }).eq("id", sub.id);
+                          if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                          onActivityUpdated();
+                        }}
+                      >
+                        <option value="low">Baixa</option>
+                        <option value="medium">Média</option>
+                        <option value="high">Alta</option>
+                        <option value="critical">Crítica</option>
+                      </select>
+                      <Input
+                        type="date"
+                        value={sub.end_date || ""}
+                        onChange={async (e) => {
+                          const value = e.target.value || null;
+                          await supabase.from("activities").update({ end_date: value }).eq("id", sub.id);
+                          if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                          onActivityUpdated();
+                        }}
+                        className="h-7 text-xs px-1.5"
+                      />
+                      <div className="flex justify-end gap-0.5">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                          onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
+                          title="Editar sub-atividade"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
+                          onClick={() => handleDeleteSubActivity(sub.id)}
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
