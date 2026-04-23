@@ -10,6 +10,7 @@ import {
   CheckCircle2, AlertTriangle, Clock, DollarSign, Briefcase,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line,
@@ -22,6 +23,7 @@ const COLORS_ARRAY = [
 
 const Reports = () => {
   const navigate = useNavigate();
+  const { filterProjects } = useProjectAccess();
   const [projects, setProjects] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
   const [timeEntries, setTimeEntries] = useState<any[]>([]);
@@ -36,14 +38,16 @@ const Reports = () => {
         supabase.from("time_entries").select("*"),
         supabase.from("lessons_learned").select("*").eq("is_trashed", false),
       ]);
-      if (p.data) setProjects(p.data);
-      if (a.data) setActivities(a.data);
-      if (t.data) setTimeEntries(t.data);
-      if (l.data) setLessons(l.data);
+      const filteredProjects = await filterProjects(p.data || []);
+      const allowedIds = new Set(filteredProjects.map((pr: any) => pr.id));
+      setProjects(filteredProjects);
+      if (a.data) setActivities(a.data.filter((x: any) => allowedIds.has(x.project_id)));
+      if (t.data) setTimeEntries(t.data.filter((x: any) => allowedIds.has(x.project_id)));
+      if (l.data) setLessons(l.data.filter((x: any) => allowedIds.has(x.project_id)));
       setIsLoading(false);
     };
     fetchAll();
-  }, []);
+  }, [filterProjects]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

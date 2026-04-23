@@ -99,7 +99,8 @@ const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { canManage: isAdmin, user: currentUser, loading: authLoading } = useAuth();
+  const { isAdmin: isRealAdmin, canManage: isAdmin, user: currentUser, loading: authLoading } = useAuth();
+  const [accessDenied, setAccessDenied] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -172,10 +173,11 @@ const ProjectDetails = () => {
   const loadAccess = useCallback(async (silent = false) => {
     if (!id) return;
 
-    if (isAdmin) {
+    if (isRealAdmin) {
       setUserPerms({ can_create: true, can_edit: true, can_delete: true, can_move: true });
       setAllowedTabs(null);
       setPermissionsLoading(false);
+      setAccessDenied(false);
       return;
     }
 
@@ -205,7 +207,15 @@ const ProjectDetails = () => {
           .maybeSingle(),
       ]);
 
-      setUserPerms(perms ?? { can_create: false, can_edit: false, can_delete: false, can_move: false });
+      // Non-admins (including Gestores) must be explicit project members to access the project.
+      if (!perms) {
+        setAccessDenied(true);
+        setUserPerms({ can_create: false, can_edit: false, can_delete: false, can_move: false });
+        setAllowedTabs(normalizeProjectTabs());
+        return;
+      }
+      setAccessDenied(false);
+      setUserPerms(perms);
 
       if (tabError) {
         console.error("Tab permissions fetch error:", tabError);
@@ -217,7 +227,7 @@ const ProjectDetails = () => {
     } finally {
       setPermissionsLoading(false);
     }
-  }, [id, currentUser?.id, isAdmin]);
+  }, [id, currentUser?.id, isRealAdmin]);
 
   useEffect(() => {
     if (authLoading || !id) return;
@@ -457,6 +467,17 @@ const ProjectDetails = () => {
 
   if (isLoading || authLoading || permissionsLoading) {
     return (<div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Carregando projeto...</p></div>);
+  }
+  if (accessDenied) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center max-w-md px-6">
+          <p className="text-lg font-semibold text-foreground mb-2">Acesso restrito</p>
+          <p className="text-sm text-muted-foreground mb-4">Você não tem autorização para visualizar este projeto. Solicite ao administrador para ser adicionado como membro.</p>
+          <Button onClick={() => navigate("/projects")}>Voltar</Button>
+        </div>
+      </div>
+    );
   }
   if (!project) {
     return (<div className="min-h-screen bg-background flex items-center justify-center"><div className="text-center"><p className="text-muted-foreground mb-4">Projeto não encontrado</p><Button onClick={() => navigate("/projects")}>Voltar</Button></div></div>);

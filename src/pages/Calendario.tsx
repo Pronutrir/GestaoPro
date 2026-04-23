@@ -7,6 +7,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { Card } from "@/components/ui/card";
 import { isHoliday, isOnVacation, type Holiday, type WorkSchedule } from "@/lib/workCalendar";
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -28,6 +29,7 @@ interface CalEvent {
 const Calendario = () => {
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { filterProjects } = useProjectAccess();
   const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [projects, setProjects] = useState<{ id: string; title: string; category: string | null }[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
@@ -42,8 +44,10 @@ const Calendario = () => {
       supabase.from("holidays").select("date,name").order("date"),
       profile?.id ? supabase.from("user_work_schedules").select("*").eq("user_id", profile.id).maybeSingle() : Promise.resolve({ data: null } as any),
     ]);
-    setActivities((actsRes.data || []) as ActivityRow[]);
-    setProjects((projsRes.data || []) as any);
+    const filteredProjects = await filterProjects((projsRes.data || []) as any);
+    const allowedIds = new Set(filteredProjects.map((p: any) => p.id));
+    setProjects(filteredProjects as any);
+    setActivities(((actsRes.data || []) as ActivityRow[]).filter(a => allowedIds.has(a.project_id)));
     setHolidays((holsRes.data || []) as Holiday[]);
     if (schedRes && (schedRes as any).data) setSchedule((schedRes as any).data as WorkSchedule);
   };

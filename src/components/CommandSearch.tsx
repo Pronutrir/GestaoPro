@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 import {
   CommandDialog,
   CommandEmpty,
@@ -57,6 +58,7 @@ export function CommandSearch() {
   const [projects, setProjects] = useState<SearchResult[]>([]);
   const navigate = useNavigate();
   const { isAdmin, canManage } = useAuth();
+  const { filterProjects } = useProjectAccess();
 
   const visiblePages = pages.filter((page) => {
     if (page.minRole === "admin") return isAdmin;
@@ -84,8 +86,9 @@ export function CommandSearch() {
         .order("updated_at", { ascending: false })
         .limit(20);
       if (data) {
+        const filtered = await filterProjects(data);
         setProjects(
-          data.map((p) => ({
+          filtered.map((p) => ({
             id: p.id,
             title: p.title,
             type: "project" as const,
@@ -96,7 +99,7 @@ export function CommandSearch() {
       }
     };
     fetchProjects();
-  }, [open]);
+  }, [open, filterProjects]);
 
   const handleSelect = useCallback(
     (url: string) => {
