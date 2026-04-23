@@ -764,6 +764,7 @@ export const EditActivityDialog = ({
               </div>
             </div>
           </div>
+          )}
 
           {/* Sub-atividades */}
           {act && projectId && (
