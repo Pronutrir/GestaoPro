@@ -125,6 +125,7 @@ const Timeline = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dependencies, setDependencies] = useState<{ predecessor_id: string; successor_id: string; lag_days: number | null }[]>([]);
   const [showCritical, setShowCritical] = useState(true);
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
