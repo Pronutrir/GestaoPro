@@ -158,6 +158,20 @@ const ProjectDetails = () => {
   const canDelete = baseCanDelete && !isChangeBlocked;
   const canMove = baseCanMove && !isChangeBlocked;
   const isQualityProject = project?.category === "qualidade";
+
+  // Helper que abre o EditActivityDialog respeitando bloqueios escopados
+  const openEditActivity = useCallback((activity: any) => {
+    if (activity && isActivityBlocked(activity.id, activity.phase_id)) {
+      toast({
+        title: "Atividade bloqueada por RFC",
+        description: "Esta atividade só pode ser editada após a aprovação (ou arquivamento) da Requisição de Mudança.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setEditingActivity(activity);
+    setEditActivityDialogOpen(true);
+  }, [isActivityBlocked, toast]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
