@@ -454,6 +454,25 @@ const Timeline = () => {
             <div className="flex items-center gap-1">
               <Tooltip>
                 <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => setLeftPanelOpen((v) => !v)}
+                  >
+                    {leftPanelOpen ? (
+                      <PanelLeftClose className="h-4 w-4" />
+                    ) : (
+                      <PanelLeftOpen className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {leftPanelOpen ? "Ocultar painel de projetos" : "Mostrar painel de projetos"}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-9 w-9" onClick={scrollToToday}>
                     <Calendar className="h-4 w-4" />
                   </Button>
