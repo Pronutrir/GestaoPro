@@ -358,6 +358,56 @@ export const EditProjectDialog = ({
                 onChange={(e) => setFormData({ ...formData, program: e.target.value })}
               />
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-sponsor">Patrocinador</Label>
+                <Input
+                  id="edit-sponsor"
+                  placeholder="Nome do patrocinador"
+                  value={formData.sponsor}
+                  onChange={(e) => setFormData({ ...formData, sponsor: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-manager">Gerente</Label>
+                <Input
+                  id="edit-manager"
+                  placeholder="Nome do gerente"
+                  value={formData.manager}
+                  onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-objective">Objetivo</Label>
+              <Textarea
+                id="edit-objective"
+                placeholder="Descreva o objetivo do projeto..."
+                value={formData.objective}
+                onChange={(e) => setFormData({ ...formData, objective: e.target.value })}
+                rows={2}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-problem_statement">Declaração do Problema</Label>
+              <Textarea
+                id="edit-problem_statement"
+                placeholder="Qual problema este projeto resolve?"
+                value={formData.problem_statement}
+                onChange={(e) => setFormData({ ...formData, problem_statement: e.target.value })}
+                rows={2}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-root_cause">Causa Raiz</Label>
+              <Textarea
+                id="edit-root_cause"
+                placeholder="Qual a causa raiz do problema?"
+                value={formData.root_cause}
+                onChange={(e) => setFormData({ ...formData, root_cause: e.target.value })}
+                rows={2}
+              />
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-blockers">Bloqueios/Impedimentos</Label>
               <Textarea
