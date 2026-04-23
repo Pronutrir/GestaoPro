@@ -1220,14 +1220,7 @@ export const EditActivityDialog = ({
             </div>
           )}
 
-          {/* Tarefas vinculadas (predecessoras / sucessoras) */}
-          {act && projectId && (
-            <div className="border-t border-border pt-4">
-              <ActivityDependencies activityId={act.id} projectId={projectId} />
-            </div>
-          )}
-
-          {/* Relacionamentos estilo ClickUp: vinculação genérica, bloqueio, em espera */}
+          {/* Painel unificado de relacionamentos (predecessora, sucessora, vinculada, bloqueio, em espera) */}
           {act && projectId && (
             <div className="border-t border-border pt-4">
               <TaskRelations activityId={act.id} projectId={projectId} />
