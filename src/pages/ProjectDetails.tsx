@@ -424,7 +424,18 @@ const ProjectDetails = () => {
 
   const handleDeleteActivity = async (activityId: string) => {
     if (!confirm("Tem certeza que deseja mover esta atividade para a lixeira?")) return;
-    await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any) as any).eq("id", activityId);
+    const trashedAt = new Date().toISOString();
+    // Coletar a atividade + todos os descendentes (subtarefas em qualquer nível)
+    const idsToTrash = new Set<string>([activityId]);
+    let frontier: string[] = [activityId];
+    while (frontier.length > 0) {
+      const children = activities.filter(a => a.parent_id && frontier.includes(a.parent_id));
+      const newIds = children.map(c => c.id).filter(cid => !idsToTrash.has(cid));
+      if (newIds.length === 0) break;
+      newIds.forEach(nid => idsToTrash.add(nid));
+      frontier = newIds;
+    }
+    await (supabase.from("activities").update({ is_trashed: true, trashed_at: trashedAt } as any) as any).in("id", Array.from(idsToTrash));
     toast({ title: "Atividade movida para a lixeira!" });
     fetchProjectData();
   };
