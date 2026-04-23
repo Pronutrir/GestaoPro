@@ -238,16 +238,6 @@ const Timeline = () => {
     return bands;
   }, [minDate, maxDate, dayWidth]);
 
-  // Projects without any dependencies → critical path is not meaningful
-  const projectsWithoutDeps = useMemo(() => {
-    if (!showCritical) return [] as Project[];
-    return filteredProjects.filter((p) => {
-      const acts = scheduledActivities.filter((a) => a.project_id === p.id);
-      const ids = new Set(acts.map((a) => a.id));
-      const hasDep = dependencies.some((d) => ids.has(d.predecessor_id) && ids.has(d.successor_id));
-      return acts.length > 1 && !hasDep;
-    });
-  }, [filteredProjects, scheduledActivities, dependencies, showCritical]);
 
   const todayPosition = useMemo(() => {
     const t = startOfDay(new Date());
