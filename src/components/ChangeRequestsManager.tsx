@@ -387,7 +387,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
           </p>
           {decisionFor.action === "rejected" && (
             <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded p-2">
-              ⚠ Ao rejeitar, os itens permanecem bloqueados até alguém arquivar esta RFC.
+              ⚠ Ao rejeitar, as atividades permanecem bloqueadas até alguém arquivar esta solicitação.
             </p>
           )}
           <div className="flex items-center justify-between">
@@ -408,7 +408,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
       )}
 
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-8">Nenhuma requisição de mudança registrada.</p>
+        <p className="text-sm text-muted-foreground text-center py-8">Nenhuma solicitação de mudança registrada.</p>
       ) : (
         <div className="space-y-2">
           {items.map(item => {
