@@ -371,6 +371,55 @@ export type Database = {
         }
         Relationships: []
       }
+      change_request_scope_items: {
+        Row: {
+          activity_id: string | null
+          change_request_id: string
+          created_at: string
+          id: string
+          item_type: string
+          phase_id: string | null
+        }
+        Insert: {
+          activity_id?: string | null
+          change_request_id: string
+          created_at?: string
+          id?: string
+          item_type: string
+          phase_id?: string | null
+        }
+        Update: {
+          activity_id?: string | null
+          change_request_id?: string
+          created_at?: string
+          id?: string
+          item_type?: string
+          phase_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_request_scope_items_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_request_scope_items_change_request_id_fkey"
+            columns: ["change_request_id"]
+            isOneToOne: false
+            referencedRelation: "change_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_request_scope_items_phase_id_fkey"
+            columns: ["phase_id"]
+            isOneToOne: false
+            referencedRelation: "phases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       change_requests: {
         Row: {
           approver: string | null
