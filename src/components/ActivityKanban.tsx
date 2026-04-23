@@ -807,21 +807,6 @@ function SortableColumn({
           items={sortedActivities.map((a) => a.id)}
           strategy={verticalListSortingStrategy}
         >
-          {canCreate && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onOpenCreateTask) onOpenCreateTask(stage.id);
-                else setShowQuickAdd(true);
-              }}
-              className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md hover:bg-white/40 dark:hover:bg-white/5 transition-colors"
-              style={{ color: stage.color }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Adicionar Tarefa
-            </button>
-          )}
           {sortedActivities.length === 0 ? (
             <div className="flex items-center justify-center h-16 border-2 border-dashed border-border/30 rounded-lg">
               <p className="text-[11px] text-muted-foreground/50">Arraste aqui</p>
