@@ -184,7 +184,7 @@ const QualityManagement = () => {
               {statusCards.filter(s => !statusFilter || statusFilter === s.key).map(s => (
                 <ProjectColumn key={s.key} title={s.label} status={s.key} color={s.color} projects={s.projects}
                   onEdit={handleEdit} onDelete={handleDelete} onStatusChange={handleStatusChange} isAdmin={isAdmin}
-                  onCardClick={(p: Project) => navigate(`/projeto/${p.id}`)} />
+                  onCardClick={(p: Project) => navigate(`/project/${p.id}`)} />
               ))}
             </div>
           </DndContext>
