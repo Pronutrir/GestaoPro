@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 
 /**
  * Returns filtered project IDs for the current user.
- * Admins and Gestors see all projects; regular users see only projects they're assigned to.
+ * Only Admins see all projects. Gestors and regular users see only projects
+ * they're explicitly assigned to as members.
  */
 export const useProjectAccess = () => {
   const { user, isAdmin, isGestor, canManage, loading } = useAuth();
@@ -14,7 +15,7 @@ export const useProjectAccess = () => {
   const loadMemberships = useCallback(async () => {
     if (loading) return;
 
-    if (canManage || !user?.id) {
+    if (isAdmin || !user?.id) {
       setMemberProjectIds(new Set());
       setMembershipsLoading(false);
       return;
@@ -29,14 +30,14 @@ export const useProjectAccess = () => {
 
     setMemberProjectIds(new Set((memberships || []).map((m: any) => m.project_id)));
     setMembershipsLoading(false);
-  }, [canManage, loading, user?.id]);
+  }, [isAdmin, loading, user?.id]);
 
   useEffect(() => {
     loadMemberships();
   }, [loadMemberships]);
 
   useEffect(() => {
-    if (loading || canManage || !user?.id) return;
+    if (loading || isAdmin || !user?.id) return;
 
     const refresh = () => {
       loadMemberships();
@@ -68,10 +69,10 @@ export const useProjectAccess = () => {
       window.clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
-  }, [canManage, loadMemberships, loading, user?.id]);
+  }, [isAdmin, loadMemberships, loading, user?.id]);
 
   const filterProjects = async <T extends { id: string }>(projects: T[]): Promise<T[]> => {
-    if (canManage || !user) return projects;
+    if (isAdmin || !user) return projects;
 
     return projects.filter((p) => memberProjectIds.has(p.id));
   };
