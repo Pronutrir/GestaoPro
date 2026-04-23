@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, GitPullRequest, CheckCircle2, XCircle, AlertCircle, Clock, Lock, ChevronDown, ChevronUp, ListTodo, Layers } from "lucide-react";
+import { Plus, Pencil, Trash2, GitPullRequest, CheckCircle2, XCircle, AlertCircle, Clock, Lock, ChevronDown, ChevronUp, ListTodo, Layers, UserCheck, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -52,6 +52,8 @@ interface ScopeItem {
 }
 interface ActivityLite { id: string; title: string; phase_id: string | null }
 interface PhaseLite { id: string; title: string }
+interface ApproverItem { id: string; change_request_id: string; user_id: string; user_name: string | null }
+interface ProfileLite { id: string; full_name: string | null; email: string | null; sector: string | null }
 
 export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Props) => {
   const { toast } = useToast();
