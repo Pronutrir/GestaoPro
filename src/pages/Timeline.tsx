@@ -44,6 +44,8 @@ import {
   ExternalLink,
   Check,
   Info,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { calculateCriticalPath } from "@/lib/criticalPath";
@@ -123,6 +125,7 @@ const Timeline = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dependencies, setDependencies] = useState<{ predecessor_id: string; successor_id: string; lag_days: number | null }[]>([]);
   const [showCritical, setShowCritical] = useState(true);
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
@@ -451,6 +454,25 @@ const Timeline = () => {
             <div className="flex items-center gap-1">
               <Tooltip>
                 <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => setLeftPanelOpen((v) => !v)}
+                  >
+                    {leftPanelOpen ? (
+                      <PanelLeftClose className="h-4 w-4" />
+                    ) : (
+                      <PanelLeftOpen className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {leftPanelOpen ? "Ocultar painel de projetos" : "Mostrar painel de projetos"}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-9 w-9" onClick={scrollToToday}>
                     <Calendar className="h-4 w-4" />
                   </Button>
@@ -545,7 +567,8 @@ const Timeline = () => {
         ) : (
           <div className="flex-1 flex overflow-hidden">
             {/* Left Panel: Row Labels */}
-            <div className="flex-none w-[180px] sm:w-[260px] lg:w-[320px] border-r border-border bg-card flex flex-col">
+            {leftPanelOpen && (
+            <div className="flex-none w-[180px] sm:w-[260px] lg:w-[320px] border-r border-border bg-card flex flex-col transition-all">
               {/* Header */}
               <div
                 className="flex items-center px-4 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider gap-2"
@@ -622,6 +645,7 @@ const Timeline = () => {
                 })}
               </div>
             </div>
+            )}
 
             {/* Right Panel: Gantt Bars */}
             <div className="flex-1 flex flex-col overflow-hidden">
