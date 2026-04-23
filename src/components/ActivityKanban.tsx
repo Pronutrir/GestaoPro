@@ -675,6 +675,7 @@ function SortableColumn({
                 onCreateStory={() => onCreateStory(activity)}
                 isQualityProject={isQualityProject}
                 stageColor={stage.color}
+                subActivityCount={subActivityCounts.get(activity.id) || 0}
               />
             ))
           )}
