@@ -430,6 +430,38 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
             </div>
           </div>
 
+          {/* Decisores designados */}
+          <div className="space-y-2 pt-2 border-t border-primary/20">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <UserCheck className="w-3.5 h-3.5" /> Quem vai decidir? ({selectedApproverIds.size})
+              </p>
+              <p className="text-[11px] text-muted-foreground italic">
+                {canAssignApprovers
+                  ? "Selecione um ou mais usuários — basta um aprovar"
+                  : "Apenas Admin, Gestor ou Líder do projeto podem designar"}
+              </p>
+            </div>
+            <div className="border border-border rounded-md max-h-40 overflow-y-auto bg-background">
+              {activeProfiles.length === 0 ? (
+                <p className="text-xs text-muted-foreground p-2">Nenhum usuário ativo encontrado.</p>
+              ) : activeProfiles.map(p => (
+                <label
+                  key={p.id}
+                  className={`flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-muted ${canAssignApprovers ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
+                >
+                  <Checkbox
+                    checked={selectedApproverIds.has(p.id)}
+                    disabled={!canAssignApprovers}
+                    onCheckedChange={() => canAssignApprovers && toggleSelected(selectedApproverIds, p.id, setSelectedApproverIds)}
+                  />
+                  <span className="truncate">{p.full_name || p.email}</span>
+                  {p.sector && <Badge variant="outline" className="text-[10px] ml-auto shrink-0">{p.sector}</Badge>}
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="flex gap-2">
             <Button size="sm" onClick={handleSave}>{editingId ? "Atualizar" : "Criar"}</Button>
             <Button size="sm" variant="outline" onClick={resetForm}>Cancelar</Button>
