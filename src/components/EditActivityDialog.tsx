@@ -721,47 +721,10 @@ export const EditActivityDialog = ({
           {/* Sub-atividades */}
           {act && projectId && (
             <div className="border-t border-border pt-4 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-primary" />
-                  Sub-atividades ({subActivities.length})
-                </h3>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 gap-1.5 text-xs border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
-                      title="Adicionar/remover colunas da tabela"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Colunas
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-56 p-2" align="end">
-                    <div className="text-[11px] font-semibold text-muted-foreground mb-1.5">
-                      Colunas extras
-                    </div>
-                    <div className="space-y-0.5">
-                      {ALL_EXTRA_COLS.map((col) => {
-                        const checked = extraCols.includes(col.id);
-                        return (
-                          <label
-                            key={col.id}
-                            className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-muted cursor-pointer text-xs font-normal"
-                          >
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={() => toggleExtraCol(col.id)}
-                            />
-                            <span>{col.label}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <Layers className="w-4 h-4 text-primary" />
+                Sub-atividades ({subActivities.length})
+              </h3>
               {subActivities.length > 0 && (
                 <div className="rounded-md border border-border overflow-x-auto">
                   <div
@@ -777,7 +740,41 @@ export const EditActivityDialog = ({
                       const col = ALL_EXTRA_COLS.find((c) => c.id === id);
                       return <span key={id}>{col?.label}</span>;
                     })}
-                    <span></span>
+                    <span className="flex justify-end">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="h-5 w-5 inline-flex items-center justify-center rounded-full border border-muted-foreground/30 text-muted-foreground hover:text-primary hover:border-primary/50"
+                            title="Adicionar colunas"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-56 p-2" align="end">
+                          <div className="text-[11px] font-semibold text-muted-foreground mb-1.5 normal-case">
+                            Colunas extras
+                          </div>
+                          <div className="space-y-0.5">
+                            {ALL_EXTRA_COLS.map((col) => {
+                              const checked = extraCols.includes(col.id);
+                              return (
+                                <label
+                                  key={col.id}
+                                  className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-muted cursor-pointer text-xs normal-case font-normal"
+                                >
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={() => toggleExtraCol(col.id)}
+                                  />
+                                  <span>{col.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </span>
                   </div>
                   {subActivities.map((sub) => {
                     const initials = (sub.assigned_to || "")
