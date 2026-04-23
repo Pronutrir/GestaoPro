@@ -447,6 +447,13 @@ function SortableColumn({
   isQualityProject,
   onOpenCreateTask,
   subActivityCounts,
+  isAdminOrGestor,
+  onRenameStage,
+  onDeleteStage,
+  onChangeStageColor,
+  onToggleStageFinal,
+  onToggleStageBlocked,
+  onToggleStageVisible,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -468,6 +475,13 @@ function SortableColumn({
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;
   subActivityCounts: Map<string, number>;
+  isAdminOrGestor?: boolean;
+  onRenameStage: (id: string, title: string) => Promise<void>;
+  onDeleteStage: (id: string) => Promise<void>;
+  onChangeStageColor: (id: string, color: string) => Promise<void>;
+  onToggleStageFinal: (id: string, current: boolean) => Promise<void>;
+  onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
+  onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -475,6 +489,8 @@ function SortableColumn({
   const [quickPhase, setQuickPhase] = useState("");
   const [quickOrder, setQuickOrder] = useState("");
   const [quickLoading, setQuickLoading] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(stage.title);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
 
