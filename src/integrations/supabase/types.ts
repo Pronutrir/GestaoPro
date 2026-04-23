@@ -1222,6 +1222,7 @@ export type Database = {
           due_date: string | null
           expected_benefits: string | null
           id: string
+          is_trashed: boolean
           manager: string | null
           objective: string | null
           out_of_scope: string | null
@@ -1239,6 +1240,7 @@ export type Database = {
           start_date: string | null
           status: string
           title: string
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -1254,6 +1256,7 @@ export type Database = {
           due_date?: string | null
           expected_benefits?: string | null
           id?: string
+          is_trashed?: boolean
           manager?: string | null
           objective?: string | null
           out_of_scope?: string | null
@@ -1271,6 +1274,7 @@ export type Database = {
           start_date?: string | null
           status?: string
           title: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -1286,6 +1290,7 @@ export type Database = {
           due_date?: string | null
           expected_benefits?: string | null
           id?: string
+          is_trashed?: boolean
           manager?: string | null
           objective?: string | null
           out_of_scope?: string | null
@@ -1303,6 +1308,7 @@ export type Database = {
           start_date?: string | null
           status?: string
           title?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: []
