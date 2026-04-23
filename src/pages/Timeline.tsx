@@ -328,7 +328,9 @@ const Timeline = () => {
   };
 
   const ROW_H = 36;
-  const HEADER_H = 56;
+  const HEADER_H = 76;
+  const QUARTER_H = 22;
+  const MONTH_H = HEADER_H - QUARTER_H;
 
   // Build row list
   const rows = useMemo(() => {
