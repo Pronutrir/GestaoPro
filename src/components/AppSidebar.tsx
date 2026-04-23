@@ -126,7 +126,7 @@ export function AppSidebar() {
       <div className="p-4 border-b border-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shrink-0">
-            <LayoutDashboard className="w-4 h-4 text-primary-foreground -translate-x-[5px]" />
+            <LayoutDashboard className="w-4 h-4 text-primary-foreground" />
           </div>
           {!collapsed && <span className="font-bold text-foreground text-sm">GestãoPro</span>}
         </div>
