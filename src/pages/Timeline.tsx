@@ -443,10 +443,17 @@ const Timeline = () => {
                 { key: "overdue", label: "Atrasadas", count: stats.overdue, color: "bg-destructive" },
                 { key: "pending", label: "Pendentes", count: stats.pending, color: "bg-muted-foreground/60" },
               ].map((s) => (
-                <div key={s.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <div className={`w-2.5 h-2.5 rounded-full ${s.color}`} />
-                  <span>{s.count}</span>
-                </div>
+                <Tooltip key={s.key}>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-help">
+                      <div className={`w-2.5 h-2.5 rounded-full ${s.color}`} />
+                      <span>{s.count}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <span className="font-medium">{s.label}:</span> {s.count} {s.count === 1 ? "atividade" : "atividades"}
+                  </TooltipContent>
+                </Tooltip>
               ))}
             </div>
 
