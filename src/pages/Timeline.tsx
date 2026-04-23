@@ -44,6 +44,8 @@ import {
   ExternalLink,
   Check,
   Info,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { calculateCriticalPath } from "@/lib/criticalPath";
