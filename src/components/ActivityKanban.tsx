@@ -1156,6 +1156,7 @@ export const ActivityKanban = ({
                       onStoryClick={() => { setStoryDrawerActivityId(activity.id); setStoryDrawerOpen(true); }}
                       onCreateStory={() => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
                       isQualityProject={isQualityProject}
+                      subActivityCount={subActivityCounts.get(activity.id) || 0}
                     />
                   ))
                 )}
