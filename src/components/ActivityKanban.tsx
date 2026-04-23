@@ -421,6 +421,7 @@ function SortableColumn({
   onCreateStory,
   isQualityProject,
   onOpenCreateTask,
+  subActivityCounts,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
