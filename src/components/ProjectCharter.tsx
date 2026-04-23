@@ -222,46 +222,6 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
     return m[`${imp}-${prob}`] || { label: "Média", cls: "bg-muted" };
   };
 
-  const Section = ({
-    n, icon: Icon, title, children,
-  }: { n: number; icon: React.ElementType; title: string; children: React.ReactNode }) => (
-    <Card className="p-5">
-      <div className="flex items-center gap-3 mb-3 pb-3 border-b border-border">
-        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-          <Icon className="w-5 h-5 text-primary" />
-        </div>
-        <h3 className="text-base font-semibold text-foreground">
-          <span className="text-primary mr-1.5">{n}.</span>{title}
-        </h3>
-      </div>
-      <div className="space-y-3">{children}</div>
-    </Card>
-  );
-
-  const TextField = ({
-    value, onChange, placeholder, multiline = true, rows = 3, aiContext,
-  }: { value: string; onChange: (v: string) => void; placeholder: string; multiline?: boolean; rows?: number; aiContext?: AIContext }) => {
-    if (editing) {
-      return multiline ? (
-        <div className="space-y-1.5">
-          {aiContext && (
-            <div className="flex justify-end">
-              <AIAssistButton value={value} onChange={onChange} context={aiContext} />
-            </div>
-          )}
-          <Textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} className="text-sm resize-none" />
-        </div>
-      ) : (
-        <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="text-sm" />
-      );
-    }
-    return value ? (
-      <p className="text-sm text-foreground whitespace-pre-line">{value}</p>
-    ) : (
-      <p className="text-sm text-muted-foreground italic">Não preenchido</p>
-    );
-  };
-
   return (
     <div className="space-y-4">
       {/* Header */}
