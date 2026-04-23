@@ -123,6 +123,7 @@ interface Activity {
   participants?: string[];
   deadline_flag?: string | null;
   last_update_date?: string | null;
+  is_milestone?: boolean;
 }
 
 interface ActivityKanbanProps {
