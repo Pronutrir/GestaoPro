@@ -564,6 +564,14 @@ const Timeline = () => {
                     const actCount = scheduledActivities.filter(
                       (a) => a.project_id === project.id
                     ).length;
+                    const projectActs = scheduledActivities.filter((a) => a.project_id === project.id);
+                    const endDates = projectActs
+                      .map((a) => a.end_date || a.start_date)
+                      .filter(Boolean)
+                      .map((d) => parseISO(d!));
+                    const projEnd = endDates.length
+                      ? new Date(Math.max(...endDates.map((d) => d.getTime())))
+                      : null;
                     return (
                       <div
                         key={`p-${project.id}`}
@@ -582,6 +590,9 @@ const Timeline = () => {
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                           {actCount}
                         </Badge>
+                        <span className="w-[72px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
+                          {projEnd ? format(projEnd, "dd/MM/yy") : "—"}
+                        </span>
                       </div>
                     );
                   } else {
@@ -602,6 +613,9 @@ const Timeline = () => {
                             {row.phaseName}
                           </span>
                         )}
+                        <span className="w-[72px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
+                          {activity.end_date ? format(parseISO(activity.end_date), "dd/MM/yy") : "—"}
+                        </span>
                       </div>
                     );
                   }
