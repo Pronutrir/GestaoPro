@@ -10,11 +10,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   FileText, Save, ClipboardList, Users, AlertTriangle, ShieldCheck,
-  Ban, CheckCircle2, Calendar, Target, Layers, ListChecks, Award,
+  Ban, CheckCircle2, Calendar, Target, Layers, ListChecks, Award, UserPlus, X,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AIAssistButton, AIContext } from "@/components/AIAssistButton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Phase { id: string; title: string }
 interface Risk { id: string; description: string; probability: string; impact: string; status: string }
@@ -36,6 +37,7 @@ interface ProjectCharterProps {
   };
   phases: Phase[];
   members: { full_name: string; sector: string | null }[];
+  onMembersChanged?: () => void;
 }
 
 interface CharterData {
@@ -102,7 +104,7 @@ const Section = ({ n, icon: Icon, title, children }: SectionProps) => (
   </Card>
 );
 
-export const ProjectCharter = ({ projectId, project, phases, members }: ProjectCharterProps) => {
+export const ProjectCharter = ({ projectId, project, phases, members, onMembersChanged }: ProjectCharterProps) => {
   const { toast } = useToast();
   const { canManage: isAdmin } = useAuth();
 
@@ -110,6 +112,10 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
   const [saving, setSaving] = useState(false);
   const [risks, setRisks] = useState<Risk[]>([]);
   const [assumptionsList, setAssumptionsList] = useState<{ id: string; description: string }[]>([]);
+  const [allProfiles, setAllProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
+  const [memberRows, setMemberRows] = useState<{ id: string; user_id: string; full_name: string; sector: string | null }[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [addingMember, setAddingMember] = useState(false);
 
   // Charter data persisted in projects.description as JSON merged with native fields
   const [data, setData] = useState<CharterData>({
@@ -163,12 +169,57 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
   }, [projectId]);
 
   const fetchRelations = async () => {
-    const [r, a] = await Promise.all([
+    const [r, a, prof, adminRoles, mem] = await Promise.all([
       supabase.from("risks").select("id, description, probability, impact, status").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false }),
       supabase.from("assumptions").select("id, description").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false }),
+      supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
+      supabase.from("user_roles").select("user_id").eq("role", "admin"),
+      supabase.from("project_members").select("id, user_id").eq("project_id", projectId),
     ]);
     if (r.data) setRisks(r.data);
     if (a.data) setAssumptionsList(a.data);
+    const adminIds = new Set((adminRoles.data || []).map((x: any) => x.user_id));
+    const profiles = (prof.data || []).filter((p: any) => p.full_name && !adminIds.has(p.id));
+    setAllProfiles(profiles);
+    if (mem.data) {
+      const rows = mem.data.map((m: any) => {
+        const p = profiles.find((pp) => pp.id === m.user_id);
+        return { id: m.id, user_id: m.user_id, full_name: p?.full_name || "—", sector: p?.sector || null };
+      });
+      setMemberRows(rows);
+    }
+  };
+
+  const handleAddStakeholder = async () => {
+    if (!selectedProfileId) return;
+    setAddingMember(true);
+    const profile = allProfiles.find((p) => p.id === selectedProfileId);
+    const { error } = await supabase.from("project_members").insert({
+      project_id: projectId,
+      user_id: selectedProfileId,
+      sector: profile?.sector || null,
+      can_create: false, can_edit: false, can_delete: false, can_move: false,
+    });
+    setAddingMember(false);
+    if (error) {
+      toast({ title: "Erro ao adicionar stakeholder", description: error.message, variant: "destructive" });
+      return;
+    }
+    setSelectedProfileId("");
+    await fetchRelations();
+    onMembersChanged?.();
+    toast({ title: "Stakeholder adicionado" });
+  };
+
+  const handleRemoveStakeholder = async (memberId: string) => {
+    const { error } = await supabase.from("project_members").delete().eq("id", memberId);
+    if (error) {
+      toast({ title: "Erro ao remover", description: error.message, variant: "destructive" });
+      return;
+    }
+    await fetchRelations();
+    onMembersChanged?.();
+    toast({ title: "Stakeholder removido" });
   };
 
   const handleSave = async () => {
@@ -351,10 +402,10 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
       </Section>
 
       <Section n={11} icon={Users} title="Stakeholders Principais">
-        {members.length > 0 ? (
+        {memberRows.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {members.map((m, i) => (
-              <div key={i} className="flex items-center gap-2 p-2 rounded-md border border-border bg-card">
+            {memberRows.map((m) => (
+              <div key={m.id} className="flex items-center gap-2 p-2 rounded-md border border-border bg-card">
                 <Avatar className="w-8 h-8">
                   <AvatarFallback className="text-xs bg-primary/10 text-primary">
                     {m.full_name.charAt(0).toUpperCase()}
@@ -364,11 +415,51 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
                   <p className="text-sm font-medium text-foreground truncate">{m.full_name}</p>
                   {m.sector && <p className="text-xs text-muted-foreground truncate">{m.sector}</p>}
                 </div>
+                {editing && isAdmin && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleRemoveStakeholder(m.id)}
+                    title="Remover stakeholder"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             ))}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground italic">Nenhum membro cadastrado</p>
+        )}
+        {editing && isAdmin && (
+          <div className="pt-3 mt-1 border-t border-border flex flex-col sm:flex-row gap-2">
+            <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
+              <SelectTrigger className="text-sm flex-1">
+                <SelectValue placeholder="Selecione um stakeholder para adicionar..." />
+              </SelectTrigger>
+              <SelectContent>
+                {allProfiles
+                  .filter((p) => !memberRows.some((m) => m.user_id === p.id))
+                  .map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.full_name}{p.sector ? ` — ${p.sector}` : ""}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleAddStakeholder}
+              disabled={!selectedProfileId || addingMember}
+              className="gap-1"
+            >
+              <UserPlus className="w-4 h-4" />
+              {addingMember ? "Adicionando..." : "Adicionar"}
+            </Button>
+          </div>
         )}
       </Section>
 

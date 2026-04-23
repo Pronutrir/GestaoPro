@@ -712,7 +712,7 @@ const ProjectDetails = () => {
             </TabsContent>
 
             <TabsContent value="tap" className="mt-0">
-              <ProjectCharter projectId={id!} project={project} phases={phases} members={members} />
+              <ProjectCharter projectId={id!} project={project} phases={phases} members={members} onMembersChanged={fetchMembers} />
             </TabsContent>
 
             <TabsContent value="meetings" className="mt-0">
