@@ -157,16 +157,16 @@ const Trash = () => {
                     className="pl-10"
                   />
                 </div>
-                {canManage && items.length > 0 && tab === m.key && (
+                {isAdmin && items.length > 0 && tab === m.key && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="destructive" size="sm" className="gap-2">
-                        <Trash2 className="w-4 h-4" /> Esvaziar
+                        <Trash2 className="w-4 h-4" /> Esvaziar arquivo
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Esvaziar lixeira de {m.label}?</AlertDialogTitle>
+                        <AlertDialogTitle>Esvaziar arquivo de {m.label}?</AlertDialogTitle>
                         <AlertDialogDescription>
                           Os {items.length} item(ns) serão excluídos definitivamente.
                           Esta ação não pode ser desfeita.
@@ -193,7 +193,7 @@ const Trash = () => {
                   <CardContent className="py-12 flex flex-col items-center text-center gap-2">
                     <Inbox className="w-10 h-10 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
-                      Nenhum item de {m.label.toLowerCase()} na lixeira.
+                      Nenhum item de {m.label.toLowerCase()} no arquivo.
                     </p>
                   </CardContent>
                 </Card>
@@ -213,18 +213,18 @@ const Trash = () => {
                               </p>
                             )}
                             <p className="text-xs text-muted-foreground mt-1">
-                              Excluído em {it.trashed_at ? new Date(it.trashed_at).toLocaleString("pt-BR") : "—"}
+                              Arquivado em {it.trashed_at ? new Date(it.trashed_at).toLocaleString("pt-BR") : "—"}
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
                             <Button size="sm" variant="outline" onClick={() => restore(it.id)} className="gap-2">
                               <RotateCcw className="w-4 h-4" /> Restaurar
                             </Button>
-                            {canManage && (
+                            {isAdmin && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button size="sm" variant="destructive" className="gap-2">
-                                    <Trash2 className="w-4 h-4" /> Excluir
+                                    <Trash2 className="w-4 h-4" /> Excluir definitivamente
                                   </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
