@@ -15,6 +15,6 @@ Cada projeto tem aba "Mudanças" (ícone GitPullRequest, laranja). Tabela `chang
 
 **IA**: Todos os textos da RFC (título, descrição, justificativa, benefícios, 4 impactos, parecer da decisão) têm `AIAssistButton`.
 
-**Aprovação**: Admin, Gestor (`canManage`) ou Líder do projeto (`project.owner` case-insensitive).
+**Decisores designados** (tabela `change_request_approvers`): múltiplos usuários podem ser escolhidos ao criar/editar a solicitação. Quem pode designar: Admin, Gestor ou Líder do projeto. Se houver decisores designados, **somente eles** podem aprovar/rejeitar (basta um); sem designados, fallback para Admin/Gestor/Líder. Ao designar usuários novos, é criada notificação `change_request_decision` no sino e o card mostra badge âmbar "Aguardando sua decisão" para o usuário-alvo.
 
 **Pontos de gate**: `handleToggleActivity`, `handleDeleteActivity` e helper `openEditActivity` em ProjectDetails toastam e bloqueiam quando o item está travado. Banner âmbar diferencia "projeto inteiro" vs "X fases / Y atividades bloqueadas".
