@@ -53,6 +53,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { getProjectDeadlineInfo, formatProjectDueDate } from "@/lib/projectDeadline";
 import { normalizeProjectTabs } from "@/lib/projectTabs";
+import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 
 interface Project {
   id: string;
@@ -135,7 +136,19 @@ const ProjectDetails = () => {
   const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
   const [pendingChangeRequests, setPendingChangeRequests] = useState(0);
 
-  const isChangeBlocked = pendingChangeRequests > 0;
+  // Bloqueio escopado: o hook lê RFCs pendentes E suas RFCs rejeitadas (não arquivadas)
+  // que tenham itens de escopo cadastrados.
+  const {
+    hasGlobalBlock,
+    blockedActivityIds,
+    blockedPhaseIds,
+    isActivityBlocked,
+    isPhaseBlocked,
+    refresh: refreshBlocks,
+  } = useChangeRequestBlocks(id);
+
+  const hasScopedBlocks = blockedActivityIds.size > 0 || blockedPhaseIds.size > 0;
+  const isChangeBlocked = hasGlobalBlock; // bloqueio amplo = sem escopo selecionado
   const baseCanCreate = !permissionsLoading && (isAdmin || (userPerms?.can_create ?? false));
   const baseCanEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
   const baseCanDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
