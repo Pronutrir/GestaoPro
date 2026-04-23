@@ -1002,8 +1002,10 @@ export type Database = {
           description: string | null
           display_order: number | null
           id: string
+          is_trashed: boolean
           project_id: string
           title: string
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -1011,8 +1013,10 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           id?: string
+          is_trashed?: boolean
           project_id: string
           title: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -1020,8 +1024,10 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           id?: string
+          is_trashed?: boolean
           project_id?: string
           title?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
