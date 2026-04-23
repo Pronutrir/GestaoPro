@@ -42,6 +42,7 @@ import {
   Zap,
   ExternalLink,
   Check,
+  Info,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { calculateCriticalPath } from "@/lib/criticalPath";
@@ -78,10 +79,10 @@ interface Phase {
 type ZoomLevel = "month" | "quarter" | "half" | "year";
 
 const statusColors: Record<string, string> = {
-  completed: "bg-success",
-  overdue: "bg-destructive",
-  in_progress: "bg-primary",
-  pending: "bg-muted-foreground/60",
+  completed: "bg-gradient-to-r from-success to-success/80",
+  overdue: "bg-gradient-to-r from-destructive to-destructive/80",
+  in_progress: "bg-gradient-to-r from-primary to-primary/80",
+  pending: "bg-gradient-to-r from-muted-foreground/70 to-muted-foreground/50",
 };
 
 const statusLabels: Record<string, string> = {
