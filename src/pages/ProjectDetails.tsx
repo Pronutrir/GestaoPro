@@ -25,6 +25,7 @@ import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 import { MeetingsManager } from "@/components/MeetingsManager";
 import { AssumptionsManager } from "@/components/AssumptionsManager";
 import { RisksManager } from "@/components/RisksManager";
+import { ChangeRequestsManager } from "@/components/ChangeRequestsManager";
 import { BacklogSection } from "@/components/BacklogSection";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
@@ -34,7 +35,7 @@ import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, ListTodo, GanttChart, BookOpen, FileText, Flag,
   ChevronRight, Settings2, Kanban, Users, ShieldCheck, AlertTriangle,
-  Package, Inbox, DollarSign, ClipboardList, LayoutDashboard,
+  Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -132,16 +133,43 @@ const ProjectDetails = () => {
   const [activeSprintId, setActiveSprintId] = useState<string | null>(null);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
+  const [pendingChangeRequests, setPendingChangeRequests] = useState(0);
 
-  const canCreate = !permissionsLoading && (isAdmin || (userPerms?.can_create ?? false));
-  const canEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
-  const canDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
-  const canMove = !permissionsLoading && (isAdmin || (userPerms?.can_move ?? false));
+  const isChangeBlocked = pendingChangeRequests > 0;
+  const baseCanCreate = !permissionsLoading && (isAdmin || (userPerms?.can_create ?? false));
+  const baseCanEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
+  const baseCanDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
+  const baseCanMove = !permissionsLoading && (isAdmin || (userPerms?.can_move ?? false));
+  const canCreate = baseCanCreate && !isChangeBlocked;
+  const canEdit = baseCanEdit && !isChangeBlocked;
+  const canDelete = baseCanDelete && !isChangeBlocked;
+  const canMove = baseCanMove && !isChangeBlocked;
   const isQualityProject = project?.category === "qualidade";
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  const fetchPendingChangeRequests = useCallback(async () => {
+    if (!id) return;
+    const { count } = await supabase
+      .from("change_requests" as any)
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", id)
+      .eq("is_trashed", false)
+      .eq("status", "pending");
+    setPendingChangeRequests(count ?? 0);
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    fetchPendingChangeRequests();
+    const channel = supabase
+      .channel(`pending-changes-${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "change_requests", filter: `project_id=eq.${id}` }, () => fetchPendingChangeRequests())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [id, fetchPendingChangeRequests]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -590,8 +618,24 @@ const ProjectDetails = () => {
             />
           )}
 
-
-
+          {isChangeBlocked && (
+            <Card className="px-4 py-3 border-2 border-amber-500/60 bg-amber-500/10">
+              <div className="flex items-start gap-3">
+                <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1 text-sm">
+                  <p className="font-semibold text-amber-900 dark:text-amber-200">
+                    Projeto bloqueado: {pendingChangeRequests} requisição{pendingChangeRequests > 1 ? "ões" : ""} de mudança aguardando aprovação
+                  </p>
+                  <p className="text-amber-800/80 dark:text-amber-300/80 text-xs mt-0.5">
+                    Nenhuma alteração no projeto pode ser feita até que as RFCs pendentes sejam aprovadas ou rejeitadas.
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" className="border-amber-500/60" onClick={() => setActiveTab("changes")}>
+                  Ver requisições
+                </Button>
+              </div>
+            </Card>
+          )}
 
           {/* Tabs — Phases tab REMOVED */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -612,6 +656,7 @@ const ProjectDetails = () => {
                 { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-teal-500" },
                 { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-lime-600" },
                 { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-red-500" },
+                { value: "changes", label: "Mudanças", icon: <GitPullRequest className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-orange-500" },
                 { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-green-600" },
                 { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-yellow-500" },
               ];
@@ -776,6 +821,14 @@ const ProjectDetails = () => {
 
             <TabsContent value="risks" className="mt-0">
               <RisksManager projectId={id!} />
+            </TabsContent>
+
+            <TabsContent value="changes" className="mt-0">
+              <ChangeRequestsManager
+                projectId={id!}
+                projectOwner={project.owner}
+                onChanged={fetchPendingChangeRequests}
+              />
             </TabsContent>
 
             <TabsContent value="backlog" className="mt-3 space-y-4">
