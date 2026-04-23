@@ -84,7 +84,7 @@ export const ProjectListView = ({ activities, phases, onEditActivity, onToggleAc
   return (
     <div className="space-y-3">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 text-xs flex-wrap">
+      <div className="flex items-center gap-2 text-xs flex-wrap mt-[10px]">
         <span className="text-muted-foreground">Agrupar por:</span>
         {(["status", "phase", "priority", "assignee"] as GroupBy[]).map(g => (
           <Button
