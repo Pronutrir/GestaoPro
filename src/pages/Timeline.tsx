@@ -216,6 +216,25 @@ const Timeline = () => {
     }));
   }, [minDate, maxDate, dayWidth]);
 
+  // Quarter markers (Q1=jan-mar, Q2=abr-jun, Q3=jul-set, Q4=out-dez)
+  const quarterMarkers = useMemo(() => {
+    const result: { label: string; year: number; position: number; width: number }[] = [];
+    const seen = new Set<string>();
+    eachMonthOfInterval({ start: minDate, end: maxDate }).forEach((date) => {
+      const q = Math.floor(date.getMonth() / 3) + 1;
+      const y = date.getFullYear();
+      const key = `${y}-Q${q}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const qStart = new Date(y, (q - 1) * 3, 1);
+      const qEnd = new Date(y, q * 3, 0); // last day of quarter
+      const left = differenceInDays(qStart, minDate) * dayWidth;
+      const right = (differenceInDays(qEnd, minDate) + 1) * dayWidth;
+      result.push({ label: `Q${q}`, year: y, position: left, width: right - left });
+    });
+    return result;
+  }, [minDate, maxDate, dayWidth]);
+
   // Week markers
   const weekMarkers = useMemo(() => {
     return eachWeekOfInterval({ start: minDate, end: maxDate }).map((date) => ({
@@ -328,7 +347,9 @@ const Timeline = () => {
   };
 
   const ROW_H = 36;
-  const HEADER_H = 56;
+  const HEADER_H = 76;
+  const QUARTER_H = 22;
+  const MONTH_H = HEADER_H - QUARTER_H;
 
   // Build row list
   const rows = useMemo(() => {
@@ -524,14 +545,15 @@ const Timeline = () => {
         ) : (
           <div className="flex-1 flex overflow-hidden">
             {/* Left Panel: Row Labels */}
-            <div className="flex-none w-[260px] border-r border-border bg-card flex flex-col">
+            <div className="flex-none w-[340px] border-r border-border bg-card flex flex-col">
               {/* Header */}
               <div
-                className="flex items-center px-4 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+                className="flex items-center px-4 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider gap-2"
                 style={{ height: HEADER_H }}
               >
-                <Layers className="w-3.5 h-3.5 mr-2" />
-                Projetos / Atividades
+                <Layers className="w-3.5 h-3.5" />
+                <span className="flex-1">Projetos / Atividades</span>
+                <span className="w-[72px] text-right normal-case tracking-normal text-[11px]">Data final</span>
               </div>
               {/* Rows */}
               <div className="flex-1 overflow-y-auto overflow-x-hidden">
@@ -542,6 +564,14 @@ const Timeline = () => {
                     const actCount = scheduledActivities.filter(
                       (a) => a.project_id === project.id
                     ).length;
+                    const projectActs = scheduledActivities.filter((a) => a.project_id === project.id);
+                    const endDates = projectActs
+                      .map((a) => a.end_date || a.start_date)
+                      .filter(Boolean)
+                      .map((d) => parseISO(d!));
+                    const projEnd = endDates.length
+                      ? new Date(Math.max(...endDates.map((d) => d.getTime())))
+                      : null;
                     return (
                       <div
                         key={`p-${project.id}`}
@@ -560,6 +590,9 @@ const Timeline = () => {
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                           {actCount}
                         </Badge>
+                        <span className="w-[72px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
+                          {projEnd ? format(projEnd, "dd/MM/yy") : "—"}
+                        </span>
                       </div>
                     );
                   } else {
@@ -580,6 +613,9 @@ const Timeline = () => {
                             {row.phaseName}
                           </span>
                         )}
+                        <span className="w-[72px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
+                          {activity.end_date ? format(parseISO(activity.end_date), "dd/MM/yy") : "—"}
+                        </span>
                       </div>
                     );
                   }
@@ -596,18 +632,27 @@ const Timeline = () => {
                 style={{ height: HEADER_H }}
               >
                 <div className="relative" style={{ width: totalWidth, height: HEADER_H }}>
-                  {/* Month labels */}
+                  {/* Quarter row */}
+                  {quarterMarkers.map((q, i) => (
+                    <div
+                      key={`q-${i}`}
+                      className="absolute top-0 flex items-center justify-center border-l border-border/60 bg-muted/40 text-[11px] font-bold text-foreground/80 tracking-wide"
+                      style={{ left: q.position, width: q.width, height: QUARTER_H }}
+                    >
+                      <span className="truncate px-1">
+                        {q.year} <span className="text-primary">{q.label}</span>
+                      </span>
+                    </div>
+                  ))}
+                  {/* Month labels (below quarters) */}
                   {monthMarkers.map((m, i) => (
                     <div
                       key={i}
-                      className="absolute top-0 flex flex-col items-start justify-center h-full border-l border-border/60"
-                      style={{ left: m.position, width: m.width }}
+                      className="absolute flex items-center justify-start border-l border-border/60"
+                      style={{ left: m.position, width: m.width, top: QUARTER_H, height: MONTH_H }}
                     >
-                      <span className="pl-2 text-xs font-semibold text-foreground capitalize">
-                        {format(m.date, "MMMM", { locale: ptBR })}
-                      </span>
-                      <span className="pl-2 text-[10px] text-muted-foreground">
-                        {format(m.date, "yyyy")}
+                      <span className="pl-2 text-xs font-medium text-muted-foreground capitalize truncate">
+                        {format(m.date, "MMM", { locale: ptBR })}
                       </span>
                     </div>
                   ))}
