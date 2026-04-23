@@ -69,6 +69,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
   const [activities, setActivities] = useState<ActivityLite[]>([]);
   const [phases, setPhases] = useState<PhaseLite[]>([]);
   const [expandedScope, setExpandedScope] = useState<Set<string>>(new Set());
+  const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [decisionFor, setDecisionFor] = useState<{ id: string; action: "approved" | "rejected" } | null>(null);
