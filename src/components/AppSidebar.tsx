@@ -45,7 +45,7 @@ const allNavItems = [
   { path: "/calendario", label: "Calendário", icon: Calendar, minRole: "user" as const, moduleKey: "calendario" },
   { path: "/reports", label: "Relatórios", icon: BarChart3, minRole: "gestor" as const, moduleKey: "reports" },
   { path: "/csc", label: "CSC", icon: Layers, minRole: "gestor" as const, moduleKey: "csc" },
-  { path: "/trash", label: "Lixeira", icon: Trash2, minRole: "gestor" as const, moduleKey: "projects" },
+  { path: "/trash", label: "Arquivo", icon: Trash2, minRole: "gestor" as const, moduleKey: "projects" },
   { path: "/settings", label: "Configurações", icon: Settings, minRole: "admin" as const, moduleKey: "settings" },
 ];
 

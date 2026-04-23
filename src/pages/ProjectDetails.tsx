@@ -362,7 +362,7 @@ const ProjectDetails = () => {
       setProject(projectData);
 
       const { data: phasesData } = await supabase
-        .from("phases").select("*").eq("project_id", id).order("display_order", { ascending: true });
+        .from("phases").select("*").eq("project_id", id).eq("is_trashed", false).order("display_order", { ascending: true });
       setPhases(phasesData || []);
 
       const { data: activitiesData } = await (supabase
@@ -767,20 +767,20 @@ const ProjectDetails = () => {
                     <DropdownMenuContent align="end">
                       {phases.length > 0 && (
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          if (!confirm(`Excluir TODAS as ${phases.length} fases? Esta ação é irreversível.`)) return;
-                          await supabase.from("phases").delete().eq("project_id", id);
-                          toast({ title: `${phases.length} fases excluídas!` }); fetchProjectData();
+                          if (!confirm(`Arquivar TODAS as ${phases.length} fases? Elas podem ser restauradas no Arquivo.`)) return;
+                          await (supabase.from("phases").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id));
+                          toast({ title: `${phases.length} fases arquivadas!` }); fetchProjectData();
                         }}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Excluir todas as fases
+                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as fases
                         </DropdownMenuItem>
                       )}
                       {activities.length > 0 && (
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          if (!confirm(`Excluir TODAS as ${activities.length} atividades? Elas serão movidas para a lixeira.`)) return;
+                          if (!confirm(`Arquivar TODAS as ${activities.length} atividades? Elas podem ser restauradas no Arquivo.`)) return;
                           await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id) as any).eq("is_trashed", false);
-                          toast({ title: `${activities.length} atividades movidas para a lixeira!` }); fetchProjectData();
+                          toast({ title: `${activities.length} atividades arquivadas!` }); fetchProjectData();
                         }}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Excluir todas as atividades
+                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as atividades
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuContent>

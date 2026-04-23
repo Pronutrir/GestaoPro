@@ -1,1 +1,2 @@
 - [TAP Three Pillars](mem://features/tap-three-pillars) — Ficha de Abertura em POR QUÊ / O QUÊ / PARA QUÊ, sincroniza Riscos/Premissas/Dependências
+- [Archive Instead of Delete](mem://features/archive-instead-of-delete) — Soft-delete (arquivamento) substitui exclusão; só Admin pode excluir definitivamente em /trash
