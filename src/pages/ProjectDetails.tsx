@@ -234,14 +234,14 @@ const ProjectDetails = () => {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          next = parsed.includes("kanban") ? parsed : ["kanban", ...parsed];
+          next = parsed.length > 0 ? parsed : ["kanban"];
         }
       } catch {
         // ignore
       }
     }
     setVisibleTabs(next);
-    setActiveTab((current) => (next.includes(current) ? current : "kanban"));
+    setActiveTab((current) => (next.includes(current) ? current : next[0] ?? "kanban"));
   }, [id, currentUser?.id]);
 
   const persistVisibleTabs = useCallback((next: string[]) => {
