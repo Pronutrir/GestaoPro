@@ -12,7 +12,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -202,17 +201,6 @@ export const EditProjectDialog = ({
                 required
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-description">Descrição</Label>
-              <Textarea
-                id="edit-description"
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                rows={3}
-              />
-            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="edit-project_type">Tipo do Projeto</Label>
@@ -237,19 +225,6 @@ export const EditProjectDialog = ({
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="edit-start_date">Data de Início</Label>
-                <Input
-                  id="edit-start_date"
-                  type="date"
-                  value={formData.start_date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, start_date: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
                 <Label htmlFor="edit-budget_planned">Orçamento Planejado (R$)</Label>
                 <CurrencyInput
                   id="edit-budget_planned"
@@ -259,6 +234,19 @@ export const EditProjectDialog = ({
                   value={formData.budget_planned}
                   onChange={(e) =>
                     setFormData({ ...formData, budget_planned: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-start_date">Data de Início</Label>
+                <Input
+                  id="edit-start_date"
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, start_date: e.target.value })
                   }
                 />
               </div>
