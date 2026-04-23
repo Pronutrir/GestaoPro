@@ -20,6 +20,7 @@ import { History, ChevronDown, Hash, Copy, UserCircle, Lock } from "lucide-react
 import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserPlus2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -62,6 +63,10 @@ interface EditActivityDialogProps {
   defaultPhaseId?: string | null;
   defaultParentId?: string | null;
   onActivityCreated?: (activityId: string) => void;
+  /** When set, shows a breadcrumb back to the parent activity (used when editing a sub-activity). */
+  parentActivityTitle?: string;
+  /** Called when user clicks the "Back" arrow — used to close only the nested dialog and return to parent. */
+  onBackToParent?: () => void;
 }
 
 const RACI_OPTIONS = [
@@ -99,6 +104,7 @@ export const EditActivityDialog = ({
   phases = [], allActivities = [], projectId, isQualityProject = false,
   createMode = false, defaultStageId = null, defaultPhaseId = null, defaultParentId = null,
   onActivityCreated,
+  parentActivityTitle, onBackToParent,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
@@ -409,7 +415,22 @@ export const EditActivityDialog = ({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">{createMode ? "Nova Atividade" : "Editar Atividade"}</DialogTitle>
+          {parentActivityTitle && onBackToParent && (
+            <button
+              type="button"
+              onClick={onBackToParent}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors mb-2 w-fit"
+              title="Voltar para a atividade principal"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span className="truncate max-w-[480px]">
+                Voltar para <span className="font-medium text-foreground">{parentActivityTitle}</span>
+              </span>
+            </button>
+          )}
+          <DialogTitle className="text-xl font-bold">
+            {createMode ? "Nova Atividade" : parentActivityTitle ? "Editar Sub-atividade" : "Editar Atividade"}
+          </DialogTitle>
           {act && !createMode && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
               <Hash className="w-3 h-3" />
@@ -1024,6 +1045,11 @@ export const EditActivityDialog = ({
           allActivities={allActivities}
           projectId={projectId}
           isQualityProject={isQualityProject}
+          parentActivityTitle={effectiveActivity?.title}
+          onBackToParent={() => {
+            setEditingSubOpen(false);
+            setEditingSubActivity(null);
+          }}
         />
       )}
     </Dialog>
