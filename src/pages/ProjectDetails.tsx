@@ -548,7 +548,6 @@ const ProjectDetails = () => {
                 { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" />, iconColor: "text-red-500" },
                 { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" />, iconColor: "text-green-600" },
                 { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" />, iconColor: "text-yellow-500" },
-                { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" />, iconColor: "text-slate-500" },
               ];
               const permittedDefs = allDefinitions.filter(t => !allowedTabs || allowedTabs.includes(t.value));
               const activeTabsSet = new Set(visibleTabs);
@@ -781,10 +780,6 @@ const ProjectDetails = () => {
                 budgetUsed={project.budget_used}
                 onProjectUpdated={fetchProjectData}
               />
-            </TabsContent>
-
-            <TabsContent value="workflow" className="mt-0">
-              <WorkflowStageManager projectId={id!} />
             </TabsContent>
           </Tabs>
         </div>
