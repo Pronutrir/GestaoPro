@@ -133,11 +133,17 @@ const ProjectDetails = () => {
   const [activeSprintId, setActiveSprintId] = useState<string | null>(null);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
+  const [pendingChangeRequests, setPendingChangeRequests] = useState(0);
 
-  const canCreate = !permissionsLoading && (isAdmin || (userPerms?.can_create ?? false));
-  const canEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
-  const canDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
-  const canMove = !permissionsLoading && (isAdmin || (userPerms?.can_move ?? false));
+  const isChangeBlocked = pendingChangeRequests > 0;
+  const baseCanCreate = !permissionsLoading && (isAdmin || (userPerms?.can_create ?? false));
+  const baseCanEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
+  const baseCanDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
+  const baseCanMove = !permissionsLoading && (isAdmin || (userPerms?.can_move ?? false));
+  const canCreate = baseCanCreate && !isChangeBlocked;
+  const canEdit = baseCanEdit && !isChangeBlocked;
+  const canDelete = baseCanDelete && !isChangeBlocked;
+  const canMove = baseCanMove && !isChangeBlocked;
   const isQualityProject = project?.category === "qualidade";
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
