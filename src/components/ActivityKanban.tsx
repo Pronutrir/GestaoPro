@@ -37,6 +37,7 @@ import {
   X as XIcon,
   Eye,
   EyeOff,
+  Diamond,
 } from "lucide-react";
 import {
   DndContext,
