@@ -84,7 +84,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const fetchStories = async () => {
-    const { data } = await supabase.from("user_stories").select("*").eq("project_id", projectId).order("created_at", { ascending: true });
+    const { data } = await supabase.from("user_stories").select("*").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: true });
     if (data) setStories(data as UserStory[]);
   };
 
@@ -169,8 +169,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta história?")) return;
-    await supabase.from("user_stories").delete().eq("id", id);
-    toast({ title: "História excluída!" });
+    await supabase.from("user_stories").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
+    toast({ title: "História movida para a lixeira" });
     fetchStories();
   };
 

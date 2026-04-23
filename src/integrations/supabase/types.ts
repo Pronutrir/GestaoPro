@@ -168,6 +168,8 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          is_trashed: boolean
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -176,6 +178,8 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          is_trashed?: boolean
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -184,6 +188,8 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          is_trashed?: boolean
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -286,8 +292,10 @@ export type Database = {
           description: string
           id: string
           impact: string | null
+          is_trashed: boolean
           project_id: string
           status: string
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -296,8 +304,10 @@ export type Database = {
           description: string
           id?: string
           impact?: string | null
+          is_trashed?: boolean
           project_id: string
           status?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -306,8 +316,10 @@ export type Database = {
           description?: string
           id?: string
           impact?: string | null
+          is_trashed?: boolean
           project_id?: string
           status?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -509,12 +521,14 @@ export type Database = {
           description: string | null
           end_date: string | null
           id: string
+          is_trashed: boolean
           project_id: string
           responsible: string | null
           sector: string | null
           start_date: string | null
           status: string
           title: string
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -522,12 +536,14 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          is_trashed?: boolean
           project_id: string
           responsible?: string | null
           sector?: string | null
           start_date?: string | null
           status?: string
           title: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -535,12 +551,14 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          is_trashed?: boolean
           project_id?: string
           responsible?: string | null
           sector?: string | null
           start_date?: string | null
           status?: string
           title?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -583,12 +601,14 @@ export type Database = {
           created_at: string
           id: string
           impact: string | null
+          is_trashed: boolean
           phase_id: string | null
           problem: string
           project_id: string
           reported_by: string | null
           solution: string | null
           suggestion: string | null
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -596,12 +616,14 @@ export type Database = {
           created_at?: string
           id?: string
           impact?: string | null
+          is_trashed?: boolean
           phase_id?: string | null
           problem: string
           project_id: string
           reported_by?: string | null
           solution?: string | null
           suggestion?: string | null
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -609,12 +631,14 @@ export type Database = {
           created_at?: string
           id?: string
           impact?: string | null
+          is_trashed?: boolean
           phase_id?: string | null
           problem?: string
           project_id?: string
           reported_by?: string | null
           solution?: string | null
           suggestion?: string | null
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -718,6 +742,7 @@ export type Database = {
           created_by: string | null
           end_time: string | null
           id: string
+          is_trashed: boolean
           location: string | null
           meeting_date: string | null
           meeting_type: string
@@ -729,6 +754,7 @@ export type Database = {
           sprint_id: string | null
           start_time: string | null
           title: string
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -737,6 +763,7 @@ export type Database = {
           created_by?: string | null
           end_time?: string | null
           id?: string
+          is_trashed?: boolean
           location?: string | null
           meeting_date?: string | null
           meeting_type?: string
@@ -748,6 +775,7 @@ export type Database = {
           sprint_id?: string | null
           start_time?: string | null
           title: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -756,6 +784,7 @@ export type Database = {
           created_by?: string | null
           end_time?: string | null
           id?: string
+          is_trashed?: boolean
           location?: string | null
           meeting_date?: string | null
           meeting_type?: string
@@ -767,6 +796,7 @@ export type Database = {
           sprint_id?: string | null
           start_time?: string | null
           title?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1104,8 +1134,10 @@ export type Database = {
           file_type: string | null
           file_url: string
           id: string
+          is_trashed: boolean
           phase_id: string | null
           project_id: string
+          trashed_at: string | null
           updated_at: string
           uploaded_by: string | null
           version: number
@@ -1119,8 +1151,10 @@ export type Database = {
           file_type?: string | null
           file_url: string
           id?: string
+          is_trashed?: boolean
           phase_id?: string | null
           project_id: string
+          trashed_at?: string | null
           updated_at?: string
           uploaded_by?: string | null
           version?: number
@@ -1134,8 +1168,10 @@ export type Database = {
           file_type?: string | null
           file_url?: string
           id?: string
+          is_trashed?: boolean
           phase_id?: string | null
           project_id?: string
+          trashed_at?: string | null
           updated_at?: string
           uploaded_by?: string | null
           version?: number
@@ -1322,6 +1358,7 @@ export type Database = {
           gravity: number | null
           id: string
           impact: string
+          is_trashed: boolean
           mitigation: string | null
           probability: string
           project_id: string
@@ -1329,6 +1366,7 @@ export type Database = {
           severity_score: number | null
           status: string
           tendency: number | null
+          trashed_at: string | null
           updated_at: string
           urgency: number | null
         }
@@ -1340,6 +1378,7 @@ export type Database = {
           gravity?: number | null
           id?: string
           impact?: string
+          is_trashed?: boolean
           mitigation?: string | null
           probability?: string
           project_id: string
@@ -1347,6 +1386,7 @@ export type Database = {
           severity_score?: number | null
           status?: string
           tendency?: number | null
+          trashed_at?: string | null
           updated_at?: string
           urgency?: number | null
         }
@@ -1358,6 +1398,7 @@ export type Database = {
           gravity?: number | null
           id?: string
           impact?: string
+          is_trashed?: boolean
           mitigation?: string | null
           probability?: string
           project_id?: string
@@ -1365,6 +1406,7 @@ export type Database = {
           severity_score?: number | null
           status?: string
           tendency?: number | null
+          trashed_at?: string | null
           updated_at?: string
           urgency?: number | null
         }
@@ -1679,6 +1721,7 @@ export type Database = {
           created_at: string
           id: string
           image_url: string | null
+          is_trashed: boolean
           narrative: string | null
           persona: string
           phase_id: string | null
@@ -1687,6 +1730,7 @@ export type Database = {
           stage_id: string | null
           status: string
           title: string
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -1697,6 +1741,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          is_trashed?: boolean
           narrative?: string | null
           persona?: string
           phase_id?: string | null
@@ -1705,6 +1750,7 @@ export type Database = {
           stage_id?: string | null
           status?: string
           title?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -1715,6 +1761,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          is_trashed?: boolean
           narrative?: string | null
           persona?: string
           phase_id?: string | null
@@ -1723,6 +1770,7 @@ export type Database = {
           stage_id?: string | null
           status?: string
           title?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [

@@ -15,7 +15,7 @@ export interface HealthScoreResult {
 export async function calculateHealthScore(projectId: string): Promise<HealthScoreResult> {
   const [activitiesRes, risksRes, projectRes] = await Promise.all([
     supabase.from("activities").select("id, status, end_date").eq("project_id", projectId),
-    supabase.from("risks").select("id, probability, impact, status").eq("project_id", projectId),
+    supabase.from("risks").select("id, probability, impact, status").eq("project_id", projectId).eq("is_trashed", false),
     supabase.from("projects").select("budget_planned, budget_used, updated_at").eq("id", projectId).single(),
   ]);
 

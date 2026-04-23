@@ -86,7 +86,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const [matrixFilter, setMatrixFilter] = useState<{ prob: string; imp: string } | null>(null);
 
   const fetchData = async () => {
-    const { data } = await supabase.from("risks").select("*").eq("project_id", projectId).order("created_at", { ascending: false });
+    const { data } = await supabase.from("risks").select("*").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false });
     if (data) setItems(data as Risk[]);
   };
 
@@ -144,8 +144,8 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir este risco?")) return;
-    await supabase.from("risks").delete().eq("id", id);
-    toast({ title: "Risco excluído!" }); fetchData();
+    await supabase.from("risks").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
+    toast({ title: "Risco movido para a lixeira" }); fetchData();
   };
 
   // Build matrix grid

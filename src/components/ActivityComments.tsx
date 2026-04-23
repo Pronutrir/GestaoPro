@@ -41,6 +41,7 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
       .from("activity_comments")
       .select("*")
       .eq("activity_id", activityId)
+      .eq("is_trashed", false)
       .order("created_at", { ascending: true });
 
     if (!error && data) {
@@ -96,7 +97,7 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
     try {
       const { error } = await supabase
         .from("activity_comments")
-        .delete()
+        .update({ is_trashed: true, trashed_at: new Date().toISOString() })
         .eq("id", commentId);
 
       if (error) throw error;
