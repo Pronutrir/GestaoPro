@@ -402,10 +402,10 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </Section>
 
       <Section n={11} icon={Users} title="Stakeholders Principais">
-        {members.length > 0 ? (
+        {memberRows.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {members.map((m, i) => (
-              <div key={i} className="flex items-center gap-2 p-2 rounded-md border border-border bg-card">
+            {memberRows.map((m) => (
+              <div key={m.id} className="flex items-center gap-2 p-2 rounded-md border border-border bg-card">
                 <Avatar className="w-8 h-8">
                   <AvatarFallback className="text-xs bg-primary/10 text-primary">
                     {m.full_name.charAt(0).toUpperCase()}
@@ -415,11 +415,51 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                   <p className="text-sm font-medium text-foreground truncate">{m.full_name}</p>
                   {m.sector && <p className="text-xs text-muted-foreground truncate">{m.sector}</p>}
                 </div>
+                {editing && isAdmin && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleRemoveStakeholder(m.id)}
+                    title="Remover stakeholder"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             ))}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground italic">Nenhum membro cadastrado</p>
+        )}
+        {editing && isAdmin && (
+          <div className="pt-3 mt-1 border-t border-border flex flex-col sm:flex-row gap-2">
+            <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
+              <SelectTrigger className="text-sm flex-1">
+                <SelectValue placeholder="Selecione um stakeholder para adicionar..." />
+              </SelectTrigger>
+              <SelectContent>
+                {allProfiles
+                  .filter((p) => !memberRows.some((m) => m.user_id === p.id))
+                  .map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.full_name}{p.sector ? ` — ${p.sector}` : ""}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleAddStakeholder}
+              disabled={!selectedProfileId || addingMember}
+              className="gap-1"
+            >
+              <UserPlus className="w-4 h-4" />
+              {addingMember ? "Adicionando..." : "Adicionar"}
+            </Button>
+          </div>
         )}
       </Section>
 
