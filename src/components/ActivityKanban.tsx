@@ -573,42 +573,40 @@ function SortableColumn({
         <div className="flex items-center justify-between cursor-grab active:cursor-grabbing" {...listeners}>
           <div className="flex items-center gap-2 min-w-0">
             <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full shrink-0 max-w-full"
+              className="w-2.5 h-2.5 rounded-full shrink-0"
               style={{ backgroundColor: stage.color }}
-            >
-              <div className="w-2 h-2 rounded-full bg-white/90 shrink-0" />
-              {renaming ? (
-                <input
-                  autoFocus
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onBlur={() => {
+            />
+            {renaming ? (
+              <input
+                autoFocus
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onBlur={() => {
+                  if (renameValue.trim() && renameValue.trim() !== stage.title) {
+                    onRenameStage(stage.id, renameValue.trim());
+                  }
+                  setRenaming(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
                     if (renameValue.trim() && renameValue.trim() !== stage.title) {
                       onRenameStage(stage.id, renameValue.trim());
                     }
                     setRenaming(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      if (renameValue.trim() && renameValue.trim() !== stage.title) {
-                        onRenameStage(stage.id, renameValue.trim());
-                      }
-                      setRenaming(false);
-                    } else if (e.key === "Escape") {
-                      setRenameValue(stage.title);
-                      setRenaming(false);
-                    }
-                  }}
-                  className="text-[11px] font-bold text-white tracking-wide uppercase bg-transparent border-b border-white/40 outline-none w-32"
-                />
-              ) : (
-                <h3 className="text-[11px] font-bold text-white tracking-wide uppercase truncate">
-                  {stage.title}
-                </h3>
-              )}
-            </div>
+                  } else if (e.key === "Escape") {
+                    setRenameValue(stage.title);
+                    setRenaming(false);
+                  }
+                }}
+                className="text-sm font-semibold text-foreground bg-transparent border-b border-border outline-none w-32"
+              />
+            ) : (
+              <h3 className="text-sm font-semibold text-foreground truncate">
+                {stage.title}
+              </h3>
+            )}
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
               {stageActivities.length}
             </Badge>
