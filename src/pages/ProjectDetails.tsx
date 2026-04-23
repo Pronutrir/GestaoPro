@@ -562,7 +562,7 @@ const ProjectDetails = () => {
               const permittedDefs = allDefinitions.filter(t => !allowedTabs || allowedTabs.includes(t.value));
               const activeTabsSet = new Set(visibleTabs);
               const renderedTabs = permittedDefs.filter(t => activeTabsSet.has(t.value));
-              const availableToAdd = permittedDefs.filter(t => !activeTabsSet.has(t.value) && t.value !== "kanban");
+              const availableToAdd = permittedDefs.filter(t => !activeTabsSet.has(t.value));
 
               const handleAddTab = (val: string) => {
                 const next = [...visibleTabs, val];
@@ -572,11 +572,10 @@ const ProjectDetails = () => {
                 setTabPickerOpen(false);
               };
               const handleRemoveTab = (val: string) => {
-                if (val === "kanban") return;
                 const next = visibleTabs.filter(v => v !== val);
                 setVisibleTabs(next);
                 persistVisibleTabs(next);
-                if (activeTab === val) setActiveTab("kanban");
+                if (activeTab === val) setActiveTab(next[0] ?? "kanban");
               };
 
               return (
@@ -586,7 +585,8 @@ const ProjectDetails = () => {
                   onTabChange={setActiveTab}
                   tabs={renderedTabs}
                   onRemoveTab={handleRemoveTab}
-                  removableValues={renderedTabs.map(t => t.value).filter(v => v !== "kanban")}
+                  removableValues={renderedTabs.map(t => t.value)}
+                  extraSlotPosition="left"
                   extraSlot={
                     <Popover open={tabPickerOpen} onOpenChange={setTabPickerOpen}>
                       <PopoverTrigger asChild>
@@ -598,7 +598,7 @@ const ProjectDetails = () => {
                           Visualização
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent align="end" className="w-64 p-2">
+                      <PopoverContent align="start" className="w-64 p-2">
                         <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5">
                           Adicionar visualização
                         </div>
