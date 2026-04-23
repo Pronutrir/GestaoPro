@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { ProjectMembersManager } from "@/components/ProjectMembersManager";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,7 +20,6 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
 
 interface Project {
   id: string;
@@ -59,7 +57,6 @@ export const EditProjectDialog = ({
   onProjectUpdated,
 }: EditProjectDialogProps) => {
   const { toast } = useToast();
-  const { canManage: isAdmin } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
 
@@ -337,9 +334,6 @@ export const EditProjectDialog = ({
                 />
               </div>
             </div>
-            {project && isAdmin && (
-              <ProjectMembersManager projectId={project.id} />
-            )}
           </div>
           <DialogFooter>
             <Button
