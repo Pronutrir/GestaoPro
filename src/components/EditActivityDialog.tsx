@@ -678,6 +678,15 @@ export const EditActivityDialog = ({
                         {sub.title}
                       </p>
                       {sub.assigned_to && <span className="text-[10px] text-muted-foreground">👤 {sub.assigned_to}</span>}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                        onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
+                        title="Editar sub-atividade"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </Button>
                       <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive" onClick={() => handleDeleteSubActivity(sub.id)}>
                         <Trash2 className="w-3 h-3" />
                       </Button>
