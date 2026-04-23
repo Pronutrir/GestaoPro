@@ -165,7 +165,6 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   value={formData.title}
                   onChange={(next) => setFormData({ ...formData, title: next })}
                   context="project_title"
-                  actions={["correct", "improve"]}
                 />
               </div>
               <Input
