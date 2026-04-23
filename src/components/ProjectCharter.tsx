@@ -37,6 +37,7 @@ interface ProjectCharterProps {
   };
   phases: Phase[];
   members: { full_name: string; sector: string | null }[];
+  onMembersChanged?: () => void;
 }
 
 interface CharterData {
@@ -103,7 +104,7 @@ const Section = ({ n, icon: Icon, title, children }: SectionProps) => (
   </Card>
 );
 
-export const ProjectCharter = ({ projectId, project, phases, members }: ProjectCharterProps) => {
+export const ProjectCharter = ({ projectId, project, phases, members, onMembersChanged }: ProjectCharterProps) => {
   const { toast } = useToast();
   const { canManage: isAdmin } = useAuth();
 
@@ -111,6 +112,10 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
   const [saving, setSaving] = useState(false);
   const [risks, setRisks] = useState<Risk[]>([]);
   const [assumptionsList, setAssumptionsList] = useState<{ id: string; description: string }[]>([]);
+  const [allProfiles, setAllProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
+  const [memberRows, setMemberRows] = useState<{ id: string; user_id: string; full_name: string; sector: string | null }[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [addingMember, setAddingMember] = useState(false);
 
   // Charter data persisted in projects.description as JSON merged with native fields
   const [data, setData] = useState<CharterData>({
