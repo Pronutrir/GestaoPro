@@ -1178,6 +1178,14 @@ export const EditActivityDialog = ({
                     }`}
                     onClick={async () => {
                       if (currentStageId === stage.id) return;
+                      if (stage.is_final && isBlockedByOthers) {
+                        toast({
+                          title: "Tarefa bloqueada",
+                          description: `Não é possível mover para "${stage.title}" — há ${blockers.length} bloqueio(s) pendente(s).`,
+                          variant: "destructive",
+                        });
+                        return;
+                      }
                       try {
                         const updateData: any = { workflow_stage_id: stage.id };
                         if (stage.is_final) {
