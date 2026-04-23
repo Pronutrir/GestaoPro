@@ -257,11 +257,14 @@ function KanbanCard({
   const parseDate = (d: string) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day); };
   const isOverdue = activity.end_date && parseDate(activity.end_date) < new Date() && activity.status !== "completed";
 
-  const cardBorderClass = isBlocked
-    ? "border-orange-500 border-l-[3px] border-l-orange-500 bg-orange-500/5"
-    : isOverdue
-      ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue"
-      : "border-border";
+  const isMilestone = !!(activity as any).is_milestone;
+  const cardBorderClass = isMilestone
+    ? "border-amber-500 border-l-[4px] border-l-amber-500 bg-amber-500/5"
+    : isBlocked
+      ? "border-orange-500 border-l-[3px] border-l-orange-500 bg-orange-500/5"
+      : isOverdue
+        ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue"
+        : "border-border";
 
   const tooltipLines = [
     activity.title,
