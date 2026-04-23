@@ -216,6 +216,25 @@ const Timeline = () => {
     }));
   }, [minDate, maxDate, dayWidth]);
 
+  // Quarter markers (Q1=jan-mar, Q2=abr-jun, Q3=jul-set, Q4=out-dez)
+  const quarterMarkers = useMemo(() => {
+    const result: { label: string; year: number; position: number; width: number }[] = [];
+    const seen = new Set<string>();
+    eachMonthOfInterval({ start: minDate, end: maxDate }).forEach((date) => {
+      const q = Math.floor(date.getMonth() / 3) + 1;
+      const y = date.getFullYear();
+      const key = `${y}-Q${q}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const qStart = new Date(y, (q - 1) * 3, 1);
+      const qEnd = new Date(y, q * 3, 0); // last day of quarter
+      const left = differenceInDays(qStart, minDate) * dayWidth;
+      const right = (differenceInDays(qEnd, minDate) + 1) * dayWidth;
+      result.push({ label: `Q${q}`, year: y, position: left, width: right - left });
+    });
+    return result;
+  }, [minDate, maxDate, dayWidth]);
+
   // Week markers
   const weekMarkers = useMemo(() => {
     return eachWeekOfInterval({ start: minDate, end: maxDate }).map((date) => ({
