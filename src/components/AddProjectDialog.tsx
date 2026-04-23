@@ -58,6 +58,8 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     blockers: "",
     category: defaultCategory || "",
     program: "",
+    project_type: "",
+    objective: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,6 +85,8 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         blockers: formData.blockers,
         category: formData.category || "general",
         program: formData.program || null,
+        project_type: formData.project_type || null,
+        objective: formData.objective || null,
       });
 
       if (error) throw error;
@@ -104,6 +108,8 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         blockers: "",
         category: defaultCategory || "general",
         program: "",
+        project_type: "",
+        objective: "",
       });
       setOpen(false);
       onProjectAdded();
