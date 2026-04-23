@@ -690,10 +690,10 @@ const Timeline = () => {
                   {quarterMarkers.map((q, i) => (
                     <div
                       key={`q-${i}`}
-                      className="absolute top-0 flex items-center justify-center border-l border-border/60 bg-muted/40 text-[11px] font-bold text-foreground/80 tracking-wide"
+                      className="absolute top-0 flex items-center justify-start border-l border-border/60 bg-muted/40 text-[11px] font-bold text-foreground/80 tracking-wide"
                       style={{ left: q.position, width: q.width, height: QUARTER_H }}
                     >
-                      <span className="truncate px-1">
+                      <span className="truncate pl-3 pr-2">
                         {q.year} <span className="text-primary">{q.label}</span>
                       </span>
                     </div>
