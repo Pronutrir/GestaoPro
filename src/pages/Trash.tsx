@@ -125,7 +125,7 @@ const Trash = () => {
   });
 
   return (
-    <AppLayout title="Lixeira">
+    <AppLayout title="Arquivo">
       <div className="px-4 py-4 space-y-4">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="flex flex-wrap h-auto gap-1">
