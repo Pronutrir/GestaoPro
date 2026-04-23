@@ -415,7 +415,22 @@ export const EditActivityDialog = ({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">{createMode ? "Nova Atividade" : "Editar Atividade"}</DialogTitle>
+          {parentActivityTitle && onBackToParent && (
+            <button
+              type="button"
+              onClick={onBackToParent}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors mb-2 w-fit"
+              title="Voltar para a atividade principal"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span className="truncate max-w-[480px]">
+                Voltar para <span className="font-medium text-foreground">{parentActivityTitle}</span>
+              </span>
+            </button>
+          )}
+          <DialogTitle className="text-xl font-bold">
+            {createMode ? "Nova Atividade" : parentActivityTitle ? "Editar Sub-atividade" : "Editar Atividade"}
+          </DialogTitle>
           {act && !createMode && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
               <Hash className="w-3 h-3" />
