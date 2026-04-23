@@ -87,6 +87,13 @@ export const EditProjectDialog = ({
     blockers: "",
     category: "",
     program: "",
+    project_type: "",
+    start_date: "",
+    sponsor: "",
+    manager: "",
+    objective: "",
+    problem_statement: "",
+    root_cause: "",
   });
 
   useEffect(() => {
@@ -103,6 +110,13 @@ export const EditProjectDialog = ({
         blockers: project.blockers || "",
         category: (project as any).category || "general",
         program: (project as any).program || "",
+        project_type: (project as any).project_type || "",
+        start_date: (project as any).start_date || "",
+        sponsor: (project as any).sponsor || "",
+        manager: (project as any).manager || "",
+        objective: (project as any).objective || "",
+        problem_statement: (project as any).problem_statement || "",
+        root_cause: (project as any).root_cause || "",
       });
     }
   }, [project]);
