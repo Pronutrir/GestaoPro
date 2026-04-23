@@ -333,6 +333,18 @@ const ProjectDetails = () => {
           void loadAccess(true);
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "projects",
+          filter: `id=eq.${id}`,
+        },
+        () => {
+          void loadAccess(true);
+        }
+      )
       .subscribe();
 
     return () => {
