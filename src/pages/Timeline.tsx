@@ -545,15 +545,15 @@ const Timeline = () => {
         ) : (
           <div className="flex-1 flex overflow-hidden">
             {/* Left Panel: Row Labels */}
-            <div className="flex-none w-[340px] border-r border-border bg-card flex flex-col">
+            <div className="flex-none w-[180px] sm:w-[260px] lg:w-[320px] border-r border-border bg-card flex flex-col">
               {/* Header */}
               <div
                 className="flex items-center px-4 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider gap-2"
                 style={{ height: HEADER_H }}
               >
-                <Layers className="w-3.5 h-3.5" />
-                <span className="flex-1">Projetos / Atividades</span>
-                <span className="w-[72px] text-right normal-case tracking-normal text-[11px]">Data final</span>
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span className="flex-1 truncate">Projetos / Atividades</span>
+                <span className="hidden sm:inline w-[64px] text-right normal-case tracking-normal text-[11px] shrink-0">Data final</span>
               </div>
               {/* Rows */}
               <div className="flex-1 overflow-y-auto overflow-x-hidden">
@@ -590,7 +590,7 @@ const Timeline = () => {
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                           {actCount}
                         </Badge>
-                        <span className="w-[72px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
+                        <span className="hidden sm:inline w-[64px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
                           {projEnd ? format(projEnd, "dd/MM/yy") : "—"}
                         </span>
                       </div>
@@ -609,11 +609,11 @@ const Timeline = () => {
                         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColors[status]}`} />
                         <span className="text-xs text-foreground truncate flex-1">{activity.title}</span>
                         {row.phaseName && (
-                          <span className="text-[10px] text-muted-foreground truncate max-w-[60px]">
+                          <span className="hidden md:inline text-[10px] text-muted-foreground truncate max-w-[60px]">
                             {row.phaseName}
                           </span>
                         )}
-                        <span className="w-[72px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
+                        <span className="hidden sm:inline w-[64px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
                           {activity.end_date ? format(parseISO(activity.end_date), "dd/MM/yy") : "—"}
                         </span>
                       </div>
