@@ -144,6 +144,10 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
         fetchData();
         onChanged?.();
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "change_request_approvers" }, () => {
+        fetchData();
+        onChanged?.();
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [projectId, fetchData, onChanged]);
@@ -152,6 +156,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
     setTitle(""); setDescription(""); setJustification(""); setBenefits("");
     setImpactScope(""); setImpactSchedule(""); setImpactCost(""); setImpactQuality("");
     setSelectedActivityIds(new Set()); setSelectedPhaseIds(new Set());
+    setSelectedApproverIds(new Set());
     setEditingId(null); setShowForm(false);
   };
 
