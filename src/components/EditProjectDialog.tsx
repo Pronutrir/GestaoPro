@@ -37,6 +37,13 @@ interface Project {
   blockers: string | null;
   category?: string;
   program?: string | null;
+  project_type?: string | null;
+  start_date?: string | null;
+  sponsor?: string | null;
+  manager?: string | null;
+  objective?: string | null;
+  problem_statement?: string | null;
+  root_cause?: string | null;
 }
 
 interface EditProjectDialogProps {
@@ -80,6 +87,13 @@ export const EditProjectDialog = ({
     blockers: "",
     category: "",
     program: "",
+    project_type: "",
+    start_date: "",
+    sponsor: "",
+    manager: "",
+    objective: "",
+    problem_statement: "",
+    root_cause: "",
   });
 
   useEffect(() => {
@@ -96,6 +110,13 @@ export const EditProjectDialog = ({
         blockers: project.blockers || "",
         category: (project as any).category || "general",
         program: (project as any).program || "",
+        project_type: (project as any).project_type || "",
+        start_date: (project as any).start_date || "",
+        sponsor: (project as any).sponsor || "",
+        manager: (project as any).manager || "",
+        objective: (project as any).objective || "",
+        problem_statement: (project as any).problem_statement || "",
+        root_cause: (project as any).root_cause || "",
       });
     }
   }, [project]);
@@ -126,6 +147,13 @@ export const EditProjectDialog = ({
           blockers: formData.blockers,
           category: formData.category || "general",
           program: formData.program || null,
+          project_type: formData.project_type || null,
+          start_date: formData.start_date || null,
+          sponsor: formData.sponsor || null,
+          manager: formData.manager || null,
+          objective: formData.objective || null,
+          problem_statement: formData.problem_statement || null,
+          root_cause: formData.root_cause || null,
         })
         .eq("id", project.id);
 
@@ -184,6 +212,41 @@ export const EditProjectDialog = ({
                 }
                 rows={3}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-project_type">Tipo do Projeto</Label>
+                <Select
+                  value={formData.project_type || "_none"}
+                  onValueChange={(v) =>
+                    setFormData({ ...formData, project_type: v === "_none" ? "" : v })
+                  }
+                >
+                  <SelectTrigger id="edit-project_type">
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Não definido</SelectItem>
+                    <SelectItem value="estrategico">Estratégico</SelectItem>
+                    <SelectItem value="operacional">Operacional</SelectItem>
+                    <SelectItem value="novos_negocios">Novos Negócios</SelectItem>
+                    <SelectItem value="parceria">Parceria</SelectItem>
+                    <SelectItem value="melhoria_processo">Melhoria de Processo</SelectItem>
+                    <SelectItem value="inovacao">Inovação</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-start_date">Data de Início</Label>
+                <Input
+                  id="edit-start_date"
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, start_date: e.target.value })
+                  }
+                />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
@@ -293,6 +356,56 @@ export const EditProjectDialog = ({
                 placeholder="Nome do programa (opcional)"
                 value={formData.program}
                 onChange={(e) => setFormData({ ...formData, program: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-sponsor">Patrocinador</Label>
+                <Input
+                  id="edit-sponsor"
+                  placeholder="Nome do patrocinador"
+                  value={formData.sponsor}
+                  onChange={(e) => setFormData({ ...formData, sponsor: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-manager">Gerente</Label>
+                <Input
+                  id="edit-manager"
+                  placeholder="Nome do gerente"
+                  value={formData.manager}
+                  onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-objective">Objetivo</Label>
+              <Textarea
+                id="edit-objective"
+                placeholder="Descreva o objetivo do projeto..."
+                value={formData.objective}
+                onChange={(e) => setFormData({ ...formData, objective: e.target.value })}
+                rows={2}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-problem_statement">Declaração do Problema</Label>
+              <Textarea
+                id="edit-problem_statement"
+                placeholder="Qual problema este projeto resolve?"
+                value={formData.problem_statement}
+                onChange={(e) => setFormData({ ...formData, problem_statement: e.target.value })}
+                rows={2}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-root_cause">Causa Raiz</Label>
+              <Textarea
+                id="edit-root_cause"
+                placeholder="Qual a causa raiz do problema?"
+                value={formData.root_cause}
+                onChange={(e) => setFormData({ ...formData, root_cause: e.target.value })}
+                rows={2}
               />
             </div>
             <div className="grid gap-2">
