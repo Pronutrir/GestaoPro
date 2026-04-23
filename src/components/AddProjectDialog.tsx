@@ -60,6 +60,11 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     program: "",
     project_type: "",
     objective: "",
+    start_date: "",
+    sponsor: "",
+    manager: "",
+    problem_statement: "",
+    root_cause: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -87,6 +92,11 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         program: formData.program || null,
         project_type: formData.project_type || null,
         objective: formData.objective || null,
+        start_date: formData.start_date || null,
+        sponsor: formData.sponsor || null,
+        manager: formData.manager || null,
+        problem_statement: formData.problem_statement || null,
+        root_cause: formData.root_cause || null,
       });
 
       if (error) throw error;
@@ -110,6 +120,11 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         program: "",
         project_type: "",
         objective: "",
+        start_date: "",
+        sponsor: "",
+        manager: "",
+        problem_statement: "",
+        root_cause: "",
       });
       setOpen(false);
       onProjectAdded();
