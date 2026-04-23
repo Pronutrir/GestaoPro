@@ -1778,6 +1778,54 @@ export type Database = {
           },
         ]
       }
+      task_relations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          created_by_email: string | null
+          id: string
+          note: string | null
+          relation_type: string
+          source_activity_id: string
+          target_activity_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          id?: string
+          note?: string | null
+          relation_type: string
+          source_activity_id: string
+          target_activity_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          id?: string
+          note?: string | null
+          relation_type?: string
+          source_activity_id?: string
+          target_activity_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_relations_source_activity_id_fkey"
+            columns: ["source_activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_relations_target_activity_id_fkey"
+            columns: ["target_activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_entries: {
         Row: {
           activity_id: string

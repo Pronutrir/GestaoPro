@@ -15,8 +15,10 @@ import { AuditLogPanel } from "@/components/AuditLogPanel";
 import { ActivityAttachments } from "@/components/ActivityAttachments";
 import { ActivityDependencies } from "@/components/ActivityDependencies";
 import { ActivityComments } from "@/components/ActivityComments";
+import { TaskRelations } from "@/components/TaskRelations";
+import { useTaskBlockers } from "@/hooks/useTaskBlockers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { History, ChevronDown, Hash, Copy, UserCircle, Lock } from "lucide-react";
+import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon } from "lucide-react";
 import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserPlus2 } from "lucide-react";
@@ -111,6 +113,7 @@ export const EditActivityDialog = ({
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
   const [creatingDraft, setCreatingDraft] = useState(false);
   const effectiveActivity = createMode ? draftActivity : activity;
+  const { blockers, isBlocked: isBlockedByOthers } = useTaskBlockers(effectiveActivity?.id);
   const [formData, setFormData] = useState({
     title: "", description: "", assigned_to: "",
     start_date: "", end_date: "", cost: "", hours: "",
@@ -1175,6 +1178,14 @@ export const EditActivityDialog = ({
                     }`}
                     onClick={async () => {
                       if (currentStageId === stage.id) return;
+                      if (stage.is_final && isBlockedByOthers) {
+                        toast({
+                          title: "Tarefa bloqueada",
+                          description: `Não é possível mover para "${stage.title}" — há ${blockers.length} bloqueio(s) pendente(s).`,
+                          variant: "destructive",
+                        });
+                        return;
+                      }
                       try {
                         const updateData: any = { workflow_stage_id: stage.id };
                         if (stage.is_final) {
@@ -1217,6 +1228,29 @@ export const EditActivityDialog = ({
             </div>
           )}
 
+          {/* Relacionamentos estilo ClickUp: vinculação genérica, bloqueio, em espera */}
+          {act && projectId && (
+            <div className="border-t border-border pt-4">
+              <TaskRelations activityId={act.id} projectId={projectId} />
+            </div>
+          )}
+
+          {/* Aviso de bloqueio pendente */}
+          {act && isBlockedByOthers && (
+            <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive">
+              <AlertOctagon className="w-4 h-4 mt-0.5 shrink-0" />
+              <div className="text-xs">
+                <p className="font-bold mb-1">Esta tarefa está BLOQUEADA por {blockers.length} tarefa{blockers.length > 1 ? "s" : ""}:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {blockers.map((b) => (
+                    <li key={b.relationId}>{b.title}</li>
+                  ))}
+                </ul>
+                <p className="mt-1.5 italic">Conclua os bloqueios antes de marcar esta como concluída.</p>
+              </div>
+            </div>
+          )}
+
           {/* Comentários */}
           {act && (
             <div className="border-t border-border pt-4">
@@ -1243,9 +1277,19 @@ export const EditActivityDialog = ({
               <Button
                 type="button"
                 variant="outline"
-                className="mr-auto gap-2 text-success border-success/30 hover:bg-success/10"
+                className="mr-auto gap-2 text-success border-success/30 hover:bg-success/10 disabled:opacity-50"
+                disabled={isBlockedByOthers}
+                title={isBlockedByOthers ? "Conclua as tarefas bloqueadoras primeiro" : "Concluir atividade"}
                 onClick={async () => {
                   if (!act || !projectId) return;
+                  if (isBlockedByOthers) {
+                    toast({
+                      title: "Tarefa bloqueada",
+                      description: `Existem ${blockers.length} bloqueio(s) pendente(s). Conclua-os antes.`,
+                      variant: "destructive",
+                    });
+                    return;
+                  }
                   try {
                     // Find the final workflow stage
                     const { data: finalStage } = await supabase
