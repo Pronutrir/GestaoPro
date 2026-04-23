@@ -136,6 +136,41 @@ export const EditActivityDialog = ({
   const [lastEditorName, setLastEditorName] = useState<string | null>(null);
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
 
+  // Colunas extras opcionais na tabela de sub-atividades (persistido por usuário no localStorage)
+  const SUB_EXTRA_COLS_KEY = "subActivityExtraCols.v1";
+  const ALL_EXTRA_COLS: { id: string; label: string; width: string }[] = [
+    { id: "start_date", label: "Início", width: "84px" },
+    { id: "hours", label: "Horas", width: "64px" },
+    { id: "cost", label: "Custo", width: "84px" },
+    { id: "story_points", label: "Pontos", width: "56px" },
+    { id: "status", label: "Status", width: "96px" },
+    { id: "tags", label: "Etiquetas", width: "120px" },
+    { id: "raci_role", label: "RACI", width: "56px" },
+    { id: "id_short", label: "ID", width: "72px" },
+  ];
+  const [extraCols, setExtraCols] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      return JSON.parse(localStorage.getItem(SUB_EXTRA_COLS_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const toggleExtraCol = (id: string) => {
+    setExtraCols((prev) => {
+      const next = prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id];
+      try {
+        localStorage.setItem(SUB_EXTRA_COLS_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+  // grid-template-columns dinâmico: [check][nome][resp][prio][venc][...extras][ações]
+  const subGridTemplate =
+    `24px minmax(140px,1fr) 72px 56px 84px ${extraCols
+      .map((id) => ALL_EXTRA_COLS.find((c) => c.id === id)?.width || "80px")
+      .join(" ")} 28px`;
+
   useEffect(() => {
     if (!open) return;
     // Create a draft activity when opening in create mode
