@@ -738,13 +738,14 @@ export const EditActivityDialog = ({
                   >
                     <span></span>
                     <span>Nome</span>
-                    <span className="text-center">Resp.</span>
-                    <span className="text-center">Prio.</span>
-                    <span>Vencimento</span>
-                    {extraCols.map((id) => {
-                      const col = ALL_EXTRA_COLS.find((c) => c.id === id);
-                      return <span key={id}>{col?.label}</span>;
-                    })}
+                    {ALL_COLS.filter((c) => visibleCols.includes(c.id)).map((col) => (
+                      <span
+                        key={col.id}
+                        className={col.id === "assigned_to" || col.id === "priority" ? "text-center" : ""}
+                      >
+                        {col.label}
+                      </span>
+                    ))}
                     <span className="flex justify-end">
                       <Popover>
                         <PopoverTrigger asChild>
@@ -758,11 +759,11 @@ export const EditActivityDialog = ({
                         </PopoverTrigger>
                         <PopoverContent className="w-56 p-2" align="end">
                           <div className="text-[11px] font-semibold text-muted-foreground mb-1.5 normal-case">
-                            Colunas extras
+                            Colunas visíveis
                           </div>
                           <div className="space-y-0.5">
-                            {ALL_EXTRA_COLS.map((col) => {
-                              const checked = extraCols.includes(col.id);
+                            {ALL_COLS.map((col) => {
+                              const checked = visibleCols.includes(col.id);
                               return (
                                 <label
                                   key={col.id}
@@ -770,7 +771,7 @@ export const EditActivityDialog = ({
                                 >
                                   <Checkbox
                                     checked={checked}
-                                    onCheckedChange={() => toggleExtraCol(col.id)}
+                                    onCheckedChange={() => toggleCol(col.id)}
                                   />
                                   <span>{col.label}</span>
                                 </label>
