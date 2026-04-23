@@ -90,7 +90,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
   const fetchPhasesAndActivities = async () => {
     const [{ data: ph }, { data: act }] = await Promise.all([
-      supabase.from("phases").select("id, title, display_order").eq("project_id", projectId).order("display_order"),
+      supabase.from("phases").select("id, title, display_order").eq("project_id", projectId).eq("is_trashed", false).order("display_order"),
       supabase.from("activities").select("id, title, phase_id, workflow_stage_id").eq("project_id", projectId).order("title"),
     ]);
     if (ph) setPhases(ph);

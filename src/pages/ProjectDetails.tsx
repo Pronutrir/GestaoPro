@@ -362,7 +362,7 @@ const ProjectDetails = () => {
       setProject(projectData);
 
       const { data: phasesData } = await supabase
-        .from("phases").select("*").eq("project_id", id).order("display_order", { ascending: true });
+        .from("phases").select("*").eq("project_id", id).eq("is_trashed", false).order("display_order", { ascending: true });
       setPhases(phasesData || []);
 
       const { data: activitiesData } = await (supabase
