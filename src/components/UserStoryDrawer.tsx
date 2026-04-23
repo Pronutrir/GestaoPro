@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { AIAssistButton } from "@/components/AIAssistButton";
 import { useToast } from "@/hooks/use-toast";
 
 interface UserStory {
@@ -208,7 +209,10 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
                       <Input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className="h-8 text-sm" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Narrativa</Label>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Narrativa</Label>
+                        <AIAssistButton value={editForm.narrative} onChange={(v) => setEditForm({ ...editForm, narrative: v })} context="story_narrative" />
+                      </div>
                       <Textarea value={editForm.narrative} onChange={e => setEditForm({ ...editForm, narrative: e.target.value })} rows={3} />
                     </div>
                     <div className="space-y-1">

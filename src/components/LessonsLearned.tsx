@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AIAssistButton } from "@/components/AIAssistButton";
 import { BookOpen, Plus, Pencil, Trash2, Lightbulb, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -281,9 +282,27 @@ export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
               </select>
             )}
           </div>
-          <Textarea placeholder="Problema encontrado *" value={form.problem} onChange={(e) => setForm({ ...form, problem: e.target.value })} rows={2} />
-          <Textarea placeholder="Solução aplicada" value={form.solution} onChange={(e) => setForm({ ...form, solution: e.target.value })} rows={2} />
-          <Textarea placeholder="Sugestão para o futuro" value={form.suggestion} onChange={(e) => setForm({ ...form, suggestion: e.target.value })} rows={2} />
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Problema *</span>
+              <AIAssistButton value={form.problem} onChange={(v) => setForm({ ...form, problem: v })} context="lesson_problem" />
+            </div>
+            <Textarea placeholder="Problema encontrado *" value={form.problem} onChange={(e) => setForm({ ...form, problem: e.target.value })} rows={2} />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Solução</span>
+              <AIAssistButton value={form.solution} onChange={(v) => setForm({ ...form, solution: v })} context="lesson_solution" />
+            </div>
+            <Textarea placeholder="Solução aplicada" value={form.solution} onChange={(e) => setForm({ ...form, solution: e.target.value })} rows={2} />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Sugestão</span>
+              <AIAssistButton value={form.suggestion} onChange={(v) => setForm({ ...form, suggestion: v })} context="lesson_suggestion" />
+            </div>
+            <Textarea placeholder="Sugestão para o futuro" value={form.suggestion} onChange={(e) => setForm({ ...form, suggestion: e.target.value })} rows={2} />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Input placeholder="Impacto (ex: Alto, Médio, Baixo)" value={form.impact} onChange={(e) => setForm({ ...form, impact: e.target.value })} />
             <Input placeholder="Reportado por" value={form.reported_by} onChange={(e) => setForm({ ...form, reported_by: e.target.value })} />

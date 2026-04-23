@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { AIAssistButton } from "@/components/AIAssistButton";
 
 interface Project {
   id: string;
@@ -188,7 +189,15 @@ export const EditProjectDialog = ({
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="edit-title">Título *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit-title">Título *</Label>
+                <AIAssistButton
+                  value={formData.title}
+                  onChange={(next) => setFormData({ ...formData, title: next })}
+                  context="project_title"
+                  actions={["correct", "improve"]}
+                />
+              </div>
               <Input
                 id="edit-title"
                 value={formData.title}
