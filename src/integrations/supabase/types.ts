@@ -31,6 +31,7 @@ export type Database = {
           hours: number | null
           id: string
           is_critical: boolean
+          is_milestone: boolean
           is_trashed: boolean
           last_update_date: string | null
           parent_id: string | null
@@ -66,6 +67,7 @@ export type Database = {
           hours?: number | null
           id?: string
           is_critical?: boolean
+          is_milestone?: boolean
           is_trashed?: boolean
           last_update_date?: string | null
           parent_id?: string | null
@@ -101,6 +103,7 @@ export type Database = {
           hours?: number | null
           id?: string
           is_critical?: boolean
+          is_milestone?: boolean
           is_trashed?: boolean
           last_update_date?: string | null
           parent_id?: string | null

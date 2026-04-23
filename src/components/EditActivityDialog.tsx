@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil } from "lucide-react";
+import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
@@ -120,6 +120,7 @@ export const EditActivityDialog = ({
     deadline_flag: "" as string,
     last_update_date: "",
     ui_color_tag: "" as string,
+    is_milestone: false,
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -318,6 +319,7 @@ export const EditActivityDialog = ({
         deadline_flag: (act as any).deadline_flag || "",
         last_update_date: (act as any).last_update_date || "",
         ui_color_tag: (act as any).ui_color_tag || "",
+        is_milestone: !!(act as any).is_milestone,
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       fetchSubActivities(act.id);
@@ -395,6 +397,7 @@ export const EditActivityDialog = ({
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
         ui_color_tag: formData.ui_color_tag || null,
+        is_milestone: formData.is_milestone,
       } as any).eq("id", act.id);
       if (error) throw error;
 
@@ -535,6 +538,44 @@ export const EditActivityDialog = ({
               autoResize
               className="min-h-[44px] w-full min-w-0 font-medium break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
             />
+          </div>
+
+          {/* Marco do Projeto */}
+          <div
+            className={`flex items-center justify-between gap-3 px-4 py-3 rounded-lg border transition-all ${
+              formData.is_milestone
+                ? "bg-amber-500/10 border-amber-500/40"
+                : "bg-muted/30 border-border hover:border-foreground/20"
+            }`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <Diamond
+                className={`w-5 h-5 shrink-0 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : "text-muted-foreground"}`}
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-foreground">Marco do Projeto</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {formData.is_milestone
+                    ? "Ponto-chave de entrega/decisão. Horas e custo ficam ocultos."
+                    : "Marque para destacar como entrega importante (milestone)."}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={formData.is_milestone}
+              onClick={() => setFormData({ ...formData, is_milestone: !formData.is_milestone })}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                formData.is_milestone ? "bg-amber-500" : "bg-input"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow ring-0 transition ${
+                  formData.is_milestone ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
           </div>
 
           <div className="space-y-2 min-w-0">
@@ -686,6 +727,7 @@ export const EditActivityDialog = ({
             </div>
           )}
 
+          {!formData.is_milestone && (
           <div className="p-4 bg-accent/30 rounded-lg border border-border space-y-4">
             <h3 className="text-sm font-bold text-foreground">Recursos da Atividade</h3>
             <div className="grid grid-cols-3 gap-4">
@@ -722,6 +764,7 @@ export const EditActivityDialog = ({
               </div>
             </div>
           </div>
+          )}
 
           {/* Sub-atividades */}
           {act && projectId && (
