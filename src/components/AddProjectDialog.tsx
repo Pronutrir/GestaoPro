@@ -351,42 +351,6 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 />
               </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="objective">Objetivo (o que será feito)</Label>
-              <Textarea
-                id="objective"
-                placeholder="Descreva o objetivo principal do projeto..."
-                value={formData.objective}
-                onChange={(e) =>
-                  setFormData({ ...formData, objective: e.target.value })
-                }
-                rows={2}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="problem_statement">Problema / Necessidade de Melhoria (passado)</Label>
-              <Textarea
-                id="problem_statement"
-                placeholder="Qual problema ou necessidade motivou este projeto?"
-                value={formData.problem_statement}
-                onChange={(e) =>
-                  setFormData({ ...formData, problem_statement: e.target.value })
-                }
-                rows={2}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="root_cause">Causa</Label>
-              <Textarea
-                id="root_cause"
-                placeholder="Causa-raiz identificada..."
-                value={formData.root_cause}
-                onChange={(e) =>
-                  setFormData({ ...formData, root_cause: e.target.value })
-                }
-                rows={2}
-              />
-            </div>
           </div>
           <DialogFooter>
             <Button
