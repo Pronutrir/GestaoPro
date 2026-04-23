@@ -371,6 +371,78 @@ export type Database = {
         }
         Relationships: []
       }
+      change_requests: {
+        Row: {
+          approver: string | null
+          approver_id: string | null
+          created_at: string
+          decision_date: string | null
+          decision_notes: string | null
+          description: string | null
+          expected_benefits: string | null
+          id: string
+          impact_cost: string | null
+          impact_quality: string | null
+          impact_schedule: string | null
+          impact_scope: string | null
+          is_trashed: boolean
+          justification: string | null
+          project_id: string
+          requested_by: string | null
+          requested_by_id: string | null
+          status: string
+          title: string
+          trashed_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          approver?: string | null
+          approver_id?: string | null
+          created_at?: string
+          decision_date?: string | null
+          decision_notes?: string | null
+          description?: string | null
+          expected_benefits?: string | null
+          id?: string
+          impact_cost?: string | null
+          impact_quality?: string | null
+          impact_schedule?: string | null
+          impact_scope?: string | null
+          is_trashed?: boolean
+          justification?: string | null
+          project_id: string
+          requested_by?: string | null
+          requested_by_id?: string | null
+          status?: string
+          title: string
+          trashed_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approver?: string | null
+          approver_id?: string | null
+          created_at?: string
+          decision_date?: string | null
+          decision_notes?: string | null
+          description?: string | null
+          expected_benefits?: string | null
+          id?: string
+          impact_cost?: string | null
+          impact_quality?: string | null
+          impact_schedule?: string | null
+          impact_scope?: string | null
+          is_trashed?: boolean
+          justification?: string | null
+          project_id?: string
+          requested_by?: string | null
+          requested_by_id?: string | null
+          status?: string
+          title?: string
+          trashed_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       csc_sla_configs: {
         Row: {
           created_at: string
