@@ -1,10 +1,7 @@
----
-name: TAP em três pilares
-description: Ficha de Abertura (TAP) reestruturada em POR QUÊ / O QUÊ / PARA QUÊ com sincronização real
+name: TAP padrão PMBOK 7
+description: Termo de Abertura do Projeto seguindo PMBOK 7ª ed. com 13 cards numerados e sincronização com módulos
 type: feature
 ---
-A Ficha de Abertura do Projeto (TAP) é organizada em 3 pilares visuais: POR QUÊ (Tipo do Projeto, Objetivo, Problema/Necessidade, Causa Raiz), O QUÊ (Escopo, Fora do Escopo, Restrições, Requisitos Regulamentares + Premissas, Riscos e Dependências sincronizados) e PARA QUÊ (Benefícios Esperados, Problema que soluciona).
+TAP em 13 cards numerados conforme PMBOK 7ª edição: 1.Título · 2.Gerente · 3.Patrocinador · 4.Datas (início/término) · 5.Justificativa · 6.Objetivos · 7.Escopo (em/fora) · 8.Entregáveis (+ lista de fases) · 9.Premissas · 10.Restrições · 11.Stakeholders (membros do projeto) · 12.Requisitos de Aprovação · 13.Riscos Iniciais.
 
-Os campos textuais ficam em `projects` (project_type, objective, problem_statement, root_cause, scope, out_of_scope, restrictions, regulatory_requirements, expected_benefits, solved_problem). Premissas e Riscos no TAP **gravam direto** nas tabelas `assumptions` e `risks` (mesma fonte dos módulos dedicados). Dependências usam tabela `project_dependencies` com vínculo opcional a outro projeto via `linked_project_id` e status (pendente/em_andamento/resolvida/bloqueada).
-
-Tipos de projeto: estrategico, operacional, novos_negocios, parceria, melhoria_processo, inovacao. Tipo + Objetivo também aparecem no AddProjectDialog para captura desde a criação.
+Persistência: campos nativos em `projects` (objective, problem_statement, scope, out_of_scope, restrictions, expected_benefits). Campos extras (sponsor, start_date, justification, deliverables, assumptions textuais, approval_requirements) ficam serializados como JSON dentro de `projects.description` com flag `__charter:true`. Stakeholders vêm de `project_members`+profiles. Riscos vêm da tabela `risks`. Fases listadas a partir da tabela `phases`. Apenas Admin/Gestor edita via botão "Editar TAP".
