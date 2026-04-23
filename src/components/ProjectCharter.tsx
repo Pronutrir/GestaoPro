@@ -149,8 +149,22 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
     }
   };
 
-  const probLabel = (p: string) => ({ low: "Baixa", medium: "Média", high: "Alta" }[p] || p);
-  const impactLabel = (i: string) => ({ low: "Baixo", medium: "Médio", high: "Alto" }[i] || i);
+  const probLabel = (p: string) => ({ low: "30%", medium: "60%", high: "90%" }[p] || p);
+  const impactLabel = (i: string) => ({ low: "30%", medium: "60%", high: "90%" }[i] || i);
+  const riskLevel = (imp: string, prob: string): { label: string; cls: string } => {
+    const m: Record<string, { label: string; cls: string }> = {
+      "low-low":      { label: "Muito Baixa", cls: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/40" },
+      "low-medium":   { label: "Baixa",       cls: "bg-green-500/15 text-green-700 dark:text-green-300 border-green-500/40" },
+      "low-high":     { label: "Média",       cls: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border-yellow-500/40" },
+      "medium-low":   { label: "Baixa",       cls: "bg-green-500/15 text-green-700 dark:text-green-300 border-green-500/40" },
+      "medium-medium":{ label: "Média",       cls: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border-yellow-500/40" },
+      "medium-high":  { label: "Alta",        cls: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/40" },
+      "high-low":     { label: "Média",       cls: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border-yellow-500/40" },
+      "high-medium":  { label: "Alta",        cls: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/40" },
+      "high-high":    { label: "Muito Alta",  cls: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/50" },
+    };
+    return m[`${imp}-${prob}`] || { label: "Média", cls: "bg-muted" };
+  };
 
   const Section = ({
     n, icon: Icon, title, children,
@@ -342,16 +356,20 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
       <Section n={13} icon={AlertTriangle} title="Riscos Iniciais Identificados">
         {risks.length > 0 ? (
           <div className="space-y-2">
-            {risks.map((r) => (
-              <div key={r.id} className="p-3 rounded-md border border-border bg-card">
-                <p className="text-sm font-medium text-foreground mb-1">{r.description}</p>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <Badge variant="outline">Prob: {probLabel(r.probability)}</Badge>
-                  <Badge variant="outline">Impacto: {impactLabel(r.impact)}</Badge>
-                  <Badge variant="outline" className="bg-muted">{r.status}</Badge>
+            {risks.map((r) => {
+              const lvl = riskLevel(r.impact, r.probability);
+              return (
+                <div key={r.id} className="p-3 rounded-md border border-border bg-card">
+                  <p className="text-sm font-medium text-foreground mb-1">{r.description}</p>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Badge className={lvl.cls}>{lvl.label}</Badge>
+                    <Badge variant="outline">Prob: {probLabel(r.probability)}</Badge>
+                    <Badge variant="outline">Impacto: {impactLabel(r.impact)}</Badge>
+                    <Badge variant="outline" className="bg-muted">{r.status}</Badge>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground italic">Nenhum risco cadastrado no módulo de Riscos</p>
