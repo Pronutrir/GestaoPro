@@ -10,11 +10,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   FileText, Save, ClipboardList, Users, AlertTriangle, ShieldCheck,
-  Ban, CheckCircle2, Calendar, Target, Layers, ListChecks, Award,
+  Ban, CheckCircle2, Calendar, Target, Layers, ListChecks, Award, UserPlus, X,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AIAssistButton, AIContext } from "@/components/AIAssistButton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Phase { id: string; title: string }
 interface Risk { id: string; description: string; probability: string; impact: string; status: string }
