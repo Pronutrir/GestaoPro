@@ -935,6 +935,162 @@ export const EditActivityDialog = ({
                           />
                         </label>
 
+                        {/* Colunas extras dinâmicas */}
+                        {extraCols.map((colId) => {
+                          const updateField = async (value: any) => {
+                            await supabase.from("activities").update({ [colId]: value }).eq("id", sub.id);
+                            if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                            onActivityUpdated();
+                          };
+                          if (colId === "start_date") {
+                            const ds = sub.start_date
+                              ? (() => {
+                                  const [y, m, d] = sub.start_date!.split("-").map(Number);
+                                  return `${m}/${d}/${String(y).slice(-2)}`;
+                                })()
+                              : "—";
+                            return (
+                              <label key={colId} className="relative cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                                <span>{ds}</span>
+                                <input
+                                  type="date"
+                                  value={sub.start_date || ""}
+                                  onChange={(e) => updateField(e.target.value || null)}
+                                  className="absolute inset-0 opacity-0 cursor-pointer"
+                                />
+                              </label>
+                            );
+                          }
+                          if (colId === "hours") {
+                            return (
+                              <input
+                                key={colId}
+                                type="number"
+                                step="0.5"
+                                value={sub.hours ?? ""}
+                                onChange={(e) => updateField(e.target.value === "" ? null : parseFloat(e.target.value))}
+                                className="h-6 w-full text-xs px-1.5 rounded border border-input bg-background"
+                                placeholder="0"
+                              />
+                            );
+                          }
+                          if (colId === "cost") {
+                            return (
+                              <input
+                                key={colId}
+                                type="number"
+                                step="0.01"
+                                value={sub.cost ?? ""}
+                                onChange={(e) => updateField(e.target.value === "" ? null : parseFloat(e.target.value))}
+                                className="h-6 w-full text-xs px-1.5 rounded border border-input bg-background"
+                                placeholder="R$"
+                              />
+                            );
+                          }
+                          if (colId === "story_points") {
+                            return (
+                              <input
+                                key={colId}
+                                type="number"
+                                value={(sub as any).story_points ?? ""}
+                                onChange={(e) => updateField(e.target.value === "" ? null : parseInt(e.target.value))}
+                                className="h-6 w-full text-xs px-1.5 rounded border border-input bg-background text-center"
+                                placeholder="0"
+                              />
+                            );
+                          }
+                          if (colId === "status") {
+                            const stageId = (sub as any).workflow_stage_id || "";
+                            const stage = workflowStages.find((s) => s.id === stageId);
+                            return (
+                              <Popover key={colId}>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="h-6 px-1.5 rounded text-[10px] font-medium border truncate hover:bg-muted"
+                                    style={stage ? { borderColor: stage.color, color: stage.color } : {}}
+                                    title={stage?.title || "Sem coluna"}
+                                  >
+                                    {stage?.title || "—"}
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-44 p-1" align="center">
+                                  {workflowStages.map((s) => (
+                                    <button
+                                      key={s.id}
+                                      type="button"
+                                      className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted ${
+                                        stageId === s.id ? "bg-primary/10 text-primary font-medium" : ""
+                                      }`}
+                                      onClick={async () => {
+                                        const upd: any = { workflow_stage_id: s.id };
+                                        if (s.is_final) {
+                                          upd.status = "completed";
+                                          upd.completed_at = new Date().toISOString();
+                                        }
+                                        await supabase.from("activities").update(upd).eq("id", sub.id);
+                                        if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                                        onActivityUpdated();
+                                      }}
+                                    >
+                                      <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                                      {s.title}
+                                    </button>
+                                  ))}
+                                </PopoverContent>
+                              </Popover>
+                            );
+                          }
+                          if (colId === "tags") {
+                            const tags = (sub as any).tags as string[] | null;
+                            return (
+                              <button
+                                key={colId}
+                                type="button"
+                                onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
+                                className="text-[10px] truncate text-left text-muted-foreground hover:text-primary"
+                                title={tags?.join(", ") || "Adicionar etiquetas"}
+                              >
+                                {tags && tags.length > 0 ? tags.join(", ") : "—"}
+                              </button>
+                            );
+                          }
+                          if (colId === "raci_role") {
+                            const raci = (sub as any).raci_role || "";
+                            return (
+                              <select
+                                key={colId}
+                                value={raci}
+                                onChange={(e) => updateField(e.target.value || null)}
+                                className="h-6 w-full text-xs px-1 rounded border border-input bg-background text-center"
+                              >
+                                <option value="">—</option>
+                                <option value="R">R</option>
+                                <option value="A">A</option>
+                                <option value="C">C</option>
+                                <option value="I">I</option>
+                              </select>
+                            );
+                          }
+                          if (colId === "id_short") {
+                            return (
+                              <button
+                                key={colId}
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(sub.id);
+                                  toast({ title: "ID copiado!" });
+                                }}
+                                className="font-mono text-[10px] text-muted-foreground hover:text-primary text-left truncate"
+                                title="Clique para copiar ID completo"
+                              >
+                                {sub.id.slice(0, 8)}
+                              </button>
+                            );
+                          }
+                          return <span key={colId}>—</span>;
+                        })}
+
                         <Button
                           size="icon"
                           variant="ghost"
