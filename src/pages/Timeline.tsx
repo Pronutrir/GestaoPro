@@ -632,18 +632,27 @@ const Timeline = () => {
                 style={{ height: HEADER_H }}
               >
                 <div className="relative" style={{ width: totalWidth, height: HEADER_H }}>
-                  {/* Month labels */}
+                  {/* Quarter row */}
+                  {quarterMarkers.map((q, i) => (
+                    <div
+                      key={`q-${i}`}
+                      className="absolute top-0 flex items-center justify-center border-l border-border/60 bg-muted/40 text-[11px] font-bold text-foreground/80 tracking-wide"
+                      style={{ left: q.position, width: q.width, height: QUARTER_H }}
+                    >
+                      <span className="truncate px-1">
+                        {q.year} <span className="text-primary">{q.label}</span>
+                      </span>
+                    </div>
+                  ))}
+                  {/* Month labels (below quarters) */}
                   {monthMarkers.map((m, i) => (
                     <div
                       key={i}
-                      className="absolute top-0 flex flex-col items-start justify-center h-full border-l border-border/60"
-                      style={{ left: m.position, width: m.width }}
+                      className="absolute flex items-center justify-start border-l border-border/60"
+                      style={{ left: m.position, width: m.width, top: QUARTER_H, height: MONTH_H }}
                     >
-                      <span className="pl-2 text-xs font-semibold text-foreground capitalize">
-                        {format(m.date, "MMMM", { locale: ptBR })}
-                      </span>
-                      <span className="pl-2 text-[10px] text-muted-foreground">
-                        {format(m.date, "yyyy")}
+                      <span className="pl-2 text-xs font-medium text-muted-foreground capitalize truncate">
+                        {format(m.date, "MMM", { locale: ptBR })}
                       </span>
                     </div>
                   ))}
