@@ -37,6 +37,13 @@ interface Project {
   blockers: string | null;
   category?: string;
   program?: string | null;
+  project_type?: string | null;
+  start_date?: string | null;
+  sponsor?: string | null;
+  manager?: string | null;
+  objective?: string | null;
+  problem_statement?: string | null;
+  root_cause?: string | null;
 }
 
 interface EditProjectDialogProps {
