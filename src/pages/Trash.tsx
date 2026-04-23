@@ -11,9 +11,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useProjectAccess } from "@/hooks/useProjectAccess";
+import { useAuth } from "@/contexts/AuthContext";
 import {
-  Trash2, RotateCcw, Search, Inbox, FolderKanban, ListChecks, AlertTriangle,
+  Trash2, RotateCcw, Search, Inbox, FolderKanban, ListChecks, AlertTriangle, Layers,
   ShieldCheck, Calendar, FileText, Lightbulb, BookOpen, Package, MessageSquare,
 } from "lucide-react";
 
@@ -23,7 +23,7 @@ type Module = {
   table:
     | "projects" | "activities" | "risks" | "assumptions" | "meetings"
     | "project_documents" | "lessons_learned" | "user_stories"
-    | "delivery_packages" | "activity_comments";
+    | "delivery_packages" | "activity_comments" | "phases";
   titleField: string;
   subtitleField?: string;
   icon: any;
@@ -31,6 +31,7 @@ type Module = {
 
 const MODULES: Module[] = [
   { key: "projects", label: "Projetos", table: "projects", titleField: "title", subtitleField: "description", icon: FolderKanban },
+  { key: "phases", label: "Fases", table: "phases", titleField: "title", subtitleField: "description", icon: Layers },
   { key: "activities", label: "Atividades", table: "activities", titleField: "title", subtitleField: "description", icon: ListChecks },
   { key: "risks", label: "Riscos", table: "risks", titleField: "description", subtitleField: "mitigation", icon: AlertTriangle },
   { key: "assumptions", label: "Premissas", table: "assumptions", titleField: "description", icon: ShieldCheck },
@@ -50,7 +51,7 @@ interface TrashRow {
 
 const Trash = () => {
   const { toast } = useToast();
-  const { canManage } = useProjectAccess();
+  const { isAdmin } = useAuth();
   const [tab, setTab] = useState<string>("projects");
   const [search, setSearch] = useState("");
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -78,7 +79,7 @@ const Trash = () => {
       .eq("is_trashed", true)
       .order("trashed_at", { ascending: false });
     if (error) {
-      toast({ title: "Erro ao carregar lixeira", variant: "destructive" });
+      toast({ title: "Erro ao carregar arquivo", variant: "destructive" });
       setItems([]);
     } else {
       setItems(((data as unknown) as TrashRow[]) || []);
@@ -108,8 +109,8 @@ const Trash = () => {
 
   const emptyAll = async () => {
     const { error } = await supabase.from(currentModule.table as any).delete().eq("is_trashed", true);
-    if (error) return toast({ title: "Erro ao esvaziar lixeira", variant: "destructive" });
-    toast({ title: `Lixeira de ${currentModule.label} esvaziada` });
+    if (error) return toast({ title: "Erro ao esvaziar arquivo", variant: "destructive" });
+    toast({ title: `Arquivo de ${currentModule.label} esvaziado` });
     fetchItems(); fetchCounts();
   };
 
