@@ -4,11 +4,12 @@ import { useAuth } from "@/contexts/AuthContext";
 
 /**
  * Returns filtered project IDs for the current user.
- * Only Admins see all projects. Gestors and regular users see only projects
- * they're explicitly assigned to as members.
+ * Only Admins see all projects. Gestors and regular users see projects where
+ * they are: (a) explicitly added as members, (b) the project Líder (owner),
+ * or (c) listed as participants (assignees) by full name.
  */
 export const useProjectAccess = () => {
-  const { user, isAdmin, isGestor, canManage, loading } = useAuth();
+  const { user, isAdmin, isGestor, canManage, profile, loading } = useAuth();
   const [memberProjectIds, setMemberProjectIds] = useState<Set<string>>(new Set());
   const [membershipsLoading, setMembershipsLoading] = useState(true);
 
@@ -23,14 +24,28 @@ export const useProjectAccess = () => {
 
     setMembershipsLoading(true);
 
-    const { data: memberships } = await supabase
-      .from("project_members")
-      .select("project_id")
-      .eq("user_id", user.id);
+    const fullName = profile?.full_name || null;
 
-    setMemberProjectIds(new Set((memberships || []).map((m: any) => m.project_id)));
+    const [membersRes, ownedRes, assigneeRes] = await Promise.all([
+      supabase
+        .from("project_members")
+        .select("project_id")
+        .eq("user_id", user.id),
+      fullName
+        ? supabase.from("projects").select("id").eq("owner", fullName)
+        : Promise.resolve({ data: [] as { id: string }[] } as any),
+      fullName
+        ? supabase.from("projects").select("id").contains("assignees", [fullName])
+        : Promise.resolve({ data: [] as { id: string }[] } as any),
+    ]);
+
+    const ids = new Set<string>();
+    (membersRes.data || []).forEach((m: any) => ids.add(m.project_id));
+    (ownedRes.data || []).forEach((p: any) => ids.add(p.id));
+    (assigneeRes.data || []).forEach((p: any) => ids.add(p.id));
+    setMemberProjectIds(ids);
     setMembershipsLoading(false);
-  }, [isAdmin, loading, user?.id]);
+  }, [isAdmin, loading, user?.id, profile?.full_name]);
 
   useEffect(() => {
     loadMemberships();
@@ -56,6 +71,11 @@ export const useProjectAccess = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "project_members", filter: `user_id=eq.${user.id}` },
+        refresh
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "projects" },
         refresh
       )
       .subscribe();
