@@ -567,7 +567,8 @@ const Timeline = () => {
         ) : (
           <div className="flex-1 flex overflow-hidden">
             {/* Left Panel: Row Labels */}
-            <div className="flex-none w-[180px] sm:w-[260px] lg:w-[320px] border-r border-border bg-card flex flex-col">
+            {leftPanelOpen && (
+            <div className="flex-none w-[180px] sm:w-[260px] lg:w-[320px] border-r border-border bg-card flex flex-col transition-all">
               {/* Header */}
               <div
                 className="flex items-center px-4 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider gap-2"
@@ -644,6 +645,7 @@ const Timeline = () => {
                 })}
               </div>
             </div>
+            )}
 
             {/* Right Panel: Gantt Bars */}
             <div className="flex-1 flex flex-col overflow-hidden">
