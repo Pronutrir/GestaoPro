@@ -61,6 +61,26 @@ import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { UserStoryDrawer } from "@/components/UserStoryDrawer";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+const STAGE_PRESET_COLORS = [
+  "hsl(220, 15%, 50%)",
+  "hsl(38, 92%, 50%)",
+  "hsl(220, 90%, 56%)",
+  "hsl(199, 89%, 48%)",
+  "hsl(270, 70%, 55%)",
+  "hsl(142, 76%, 36%)",
+  "hsl(0, 84%, 60%)",
+  "hsl(340, 82%, 52%)",
+];
 
 interface WorkflowStage {
   id: string;
