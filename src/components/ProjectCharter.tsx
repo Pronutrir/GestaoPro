@@ -356,16 +356,20 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
       <Section n={13} icon={AlertTriangle} title="Riscos Iniciais Identificados">
         {risks.length > 0 ? (
           <div className="space-y-2">
-            {risks.map((r) => (
-              <div key={r.id} className="p-3 rounded-md border border-border bg-card">
-                <p className="text-sm font-medium text-foreground mb-1">{r.description}</p>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <Badge variant="outline">Prob: {probLabel(r.probability)}</Badge>
-                  <Badge variant="outline">Impacto: {impactLabel(r.impact)}</Badge>
-                  <Badge variant="outline" className="bg-muted">{r.status}</Badge>
+            {risks.map((r) => {
+              const lvl = riskLevel(r.impact, r.probability);
+              return (
+                <div key={r.id} className="p-3 rounded-md border border-border bg-card">
+                  <p className="text-sm font-medium text-foreground mb-1">{r.description}</p>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Badge className={lvl.cls}>{lvl.label}</Badge>
+                    <Badge variant="outline">Prob: {probLabel(r.probability)}</Badge>
+                    <Badge variant="outline">Impacto: {impactLabel(r.impact)}</Badge>
+                    <Badge variant="outline" className="bg-muted">{r.status}</Badge>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground italic">Nenhum risco cadastrado no módulo de Riscos</p>
