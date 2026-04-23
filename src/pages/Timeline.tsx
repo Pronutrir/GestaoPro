@@ -223,6 +223,32 @@ const Timeline = () => {
     }));
   }, [minDate, maxDate, dayWidth]);
 
+  // Weekend bands (Sat + Sun) — only render when zoom is wide enough
+  const weekendBands = useMemo(() => {
+    if (dayWidth < 6) return [] as { left: number; width: number }[];
+    const bands: { left: number; width: number }[] = [];
+    const total = differenceInDays(maxDate, minDate);
+    for (let i = 0; i <= total; i++) {
+      const d = addDays(minDate, i);
+      const dow = d.getDay();
+      if (dow === 0 || dow === 6) {
+        bands.push({ left: i * dayWidth, width: dayWidth });
+      }
+    }
+    return bands;
+  }, [minDate, maxDate, dayWidth]);
+
+  // Projects without any dependencies → critical path is not meaningful
+  const projectsWithoutDeps = useMemo(() => {
+    if (!showCritical) return [] as Project[];
+    return filteredProjects.filter((p) => {
+      const acts = scheduledActivities.filter((a) => a.project_id === p.id);
+      const ids = new Set(acts.map((a) => a.id));
+      const hasDep = dependencies.some((d) => ids.has(d.predecessor_id) && ids.has(d.successor_id));
+      return acts.length > 1 && !hasDep;
+    });
+  }, [filteredProjects, scheduledActivities, dependencies, showCritical]);
+
   const todayPosition = useMemo(() => {
     const t = startOfDay(new Date());
     if (t < minDate || t > maxDate) return null;
