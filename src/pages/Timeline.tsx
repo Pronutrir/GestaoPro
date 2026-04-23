@@ -745,17 +745,17 @@ const Timeline = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div
-                                className="absolute top-2 h-3 rounded-full bg-foreground/10 cursor-pointer hover:bg-foreground/15 transition-colors overflow-hidden"
+                                className="absolute top-2 h-3 rounded-full bg-foreground/15 cursor-pointer hover:bg-foreground/25 transition-all overflow-hidden ring-1 ring-foreground/20 hover:shadow-md"
                                 style={{ left, width: Math.max(width, 8) }}
                                 onClick={() => navigate(`/project/${project.id}`)}
                               >
                                 <div
-                                  className="h-full bg-primary/40 rounded-full transition-all"
+                                  className="h-full bg-gradient-to-r from-primary to-primary/70 rounded-full transition-all"
                                   style={{ width: `${progress}%` }}
                                 />
                                 {/* Diamond markers at start and end */}
-                                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-foreground/60 rotate-45 rounded-sm" />
-                                <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-foreground/60 rotate-45 rounded-sm" />
+                                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-foreground/70 rotate-45 rounded-sm shadow-sm" />
+                                <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-foreground/70 rotate-45 rounded-sm shadow-sm" />
                               </div>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs">
