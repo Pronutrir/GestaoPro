@@ -442,6 +442,7 @@ function SortableColumn({
   onCreateStory: (activity: Activity) => void;
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;
+  subActivityCounts: Map<string, number>;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
