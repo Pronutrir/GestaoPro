@@ -489,7 +489,7 @@ const ProjectDetails = () => {
   const handleToggleActivity = async (activityId: string, currentStatus: string) => {
     const act = activities.find(a => a.id === activityId);
     if (act && isActivityBlocked(activityId, act.phase_id)) {
-      toast({ title: "Atividade bloqueada por RFC", description: "Resolva a Requisição de Mudança que afeta este item.", variant: "destructive" });
+      toast({ title: "Atividade bloqueada", description: "Resolva a solicitação de mudança que afeta esta atividade.", variant: "destructive" });
       return;
     }
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
@@ -530,7 +530,7 @@ const ProjectDetails = () => {
   const handleDeleteActivity = async (activityId: string) => {
     const act = activities.find(a => a.id === activityId);
     if (act && isActivityBlocked(activityId, act.phase_id)) {
-      toast({ title: "Atividade bloqueada por RFC", description: "Resolva a Requisição de Mudança que afeta este item.", variant: "destructive" });
+      toast({ title: "Atividade bloqueada", description: "Resolva a solicitação de mudança que afeta esta atividade.", variant: "destructive" });
       return;
     }
     if (!confirm("Tem certeza que deseja mover esta atividade para a lixeira?")) return;
