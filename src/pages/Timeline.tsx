@@ -42,6 +42,7 @@ import {
   Zap,
   ExternalLink,
   Check,
+  Info,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { calculateCriticalPath } from "@/lib/criticalPath";
@@ -78,10 +79,10 @@ interface Phase {
 type ZoomLevel = "month" | "quarter" | "half" | "year";
 
 const statusColors: Record<string, string> = {
-  completed: "bg-success",
-  overdue: "bg-destructive",
-  in_progress: "bg-primary",
-  pending: "bg-muted-foreground/60",
+  completed: "bg-gradient-to-r from-success to-success/80",
+  overdue: "bg-gradient-to-r from-destructive to-destructive/80",
+  in_progress: "bg-gradient-to-r from-primary to-primary/80",
+  pending: "bg-gradient-to-r from-muted-foreground/70 to-muted-foreground/50",
 };
 
 const statusLabels: Record<string, string> = {
@@ -222,6 +223,22 @@ const Timeline = () => {
     }));
   }, [minDate, maxDate, dayWidth]);
 
+  // Weekend bands (Sat + Sun) — only render when zoom is wide enough
+  const weekendBands = useMemo(() => {
+    if (dayWidth < 6) return [] as { left: number; width: number }[];
+    const bands: { left: number; width: number }[] = [];
+    const total = differenceInDays(maxDate, minDate);
+    for (let i = 0; i <= total; i++) {
+      const d = addDays(minDate, i);
+      const dow = d.getDay();
+      if (dow === 0 || dow === 6) {
+        bands.push({ left: i * dayWidth, width: dayWidth });
+      }
+    }
+    return bands;
+  }, [minDate, maxDate, dayWidth]);
+
+
   const todayPosition = useMemo(() => {
     const t = startOfDay(new Date());
     if (t < minDate || t > maxDate) return null;
@@ -278,6 +295,17 @@ const Timeline = () => {
     });
     return all;
   }, [projects, scheduledActivities, dependencies, showCritical]);
+
+  // Projects without any dependencies → critical path is not meaningful
+  const projectsWithoutDeps = useMemo(() => {
+    if (!showCritical) return [] as Project[];
+    return filteredProjects.filter((p) => {
+      const acts = scheduledActivities.filter((a) => a.project_id === p.id);
+      const ids = new Set(acts.map((a) => a.id));
+      const hasDep = dependencies.some((d) => ids.has(d.predecessor_id) && ids.has(d.successor_id));
+      return acts.length > 1 && !hasDep;
+    });
+  }, [filteredProjects, scheduledActivities, dependencies, showCritical]);
 
   const scrollToToday = () => {
     if (scrollRef.current && todayPosition !== null) {
@@ -441,6 +469,21 @@ const Timeline = () => {
           </div>
         </div>
 
+        {/* Critical path dependency warning */}
+        {showCritical && projectsWithoutDeps.length > 0 && (
+          <div className="flex-none px-6 py-2 bg-warning/10 border-b border-warning/30 flex items-start gap-2">
+            <Info className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+            <div className="flex-1 text-xs text-foreground">
+              <span className="font-semibold">Caminho crítico pouco confiável: </span>
+              {projectsWithoutDeps.length === 1 ? (
+                <>O projeto <span className="font-medium">"{projectsWithoutDeps[0].title}"</span> não possui dependências cadastradas entre as tarefas. Cadastre dependências na aba "Dependências" das atividades para um cálculo realista.</>
+              ) : (
+                <>{projectsWithoutDeps.length} projetos não possuem dependências cadastradas — todas as tarefas aparecerão como críticas. Cadastre dependências para um cálculo realista.</>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Gantt Area */}
         {filteredProjects.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
@@ -560,6 +603,24 @@ const Timeline = () => {
                 }}
               >
                 <div className="relative" style={{ width: totalWidth, minHeight: rows.length * ROW_H }}>
+                  {/* Weekend bands */}
+                  {weekendBands.map((b, i) => (
+                    <div
+                      key={`wk-${i}`}
+                      className="absolute top-0 bottom-0 bg-muted/30 pointer-events-none"
+                      style={{ left: b.left, width: b.width }}
+                    />
+                  ))}
+                  {/* Zebra row backgrounds */}
+                  {rows.map((_, idx) =>
+                    idx % 2 === 1 ? (
+                      <div
+                        key={`zb-${idx}`}
+                        className="absolute left-0 right-0 bg-muted/15 pointer-events-none"
+                        style={{ top: idx * ROW_H, height: ROW_H }}
+                      />
+                    ) : null
+                  )}
                   {/* Week grid lines */}
                   {weekMarkers.map((w, i) => (
                     <div
@@ -579,7 +640,7 @@ const Timeline = () => {
                   {/* Today line */}
                   {todayPosition !== null && (
                     <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-primary/80 z-10"
+                      className="absolute top-0 bottom-0 w-0.5 bg-primary z-10 shadow-[0_0_8px_hsl(var(--primary)/0.6)]"
                       style={{ left: todayPosition }}
                     >
                       <div className="absolute -top-0 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[9px] font-bold px-1 rounded-b">
@@ -587,6 +648,59 @@ const Timeline = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Dependency arrows (SVG) */}
+                  <svg
+                    className="absolute top-0 left-0 pointer-events-none"
+                    width={totalWidth}
+                    height={rows.length * ROW_H}
+                    style={{ overflow: "visible" }}
+                  >
+                    <defs>
+                      <marker
+                        id="dep-arrow"
+                        viewBox="0 0 10 10"
+                        refX="8"
+                        refY="5"
+                        markerWidth="6"
+                        markerHeight="6"
+                        orient="auto-start-reverse"
+                      >
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--muted-foreground))" />
+                      </marker>
+                    </defs>
+                    {dependencies.map((dep, i) => {
+                      const predIdx = rows.findIndex(
+                        (r) => r.type === "activity" && (r.data as Activity).id === dep.predecessor_id
+                      );
+                      const succIdx = rows.findIndex(
+                        (r) => r.type === "activity" && (r.data as Activity).id === dep.successor_id
+                      );
+                      if (predIdx === -1 || succIdx === -1) return null;
+                      const pred = rows[predIdx].data as Activity;
+                      const succ = rows[succIdx].data as Activity;
+                      if (!pred.start_date || !succ.start_date) return null;
+                      const predBar = getBarPosition(pred);
+                      const succBar = getBarPosition(succ);
+                      const x1 = predBar.left + predBar.width;
+                      const y1 = predIdx * ROW_H + ROW_H / 2;
+                      const x2 = succBar.left;
+                      const y2 = succIdx * ROW_H + ROW_H / 2;
+                      const midX = x1 + Math.max(12, (x2 - x1) / 2);
+                      const path = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+                      return (
+                        <path
+                          key={`dep-${i}`}
+                          d={path}
+                          stroke="hsl(var(--muted-foreground))"
+                          strokeWidth="1.2"
+                          strokeOpacity="0.55"
+                          fill="none"
+                          markerEnd="url(#dep-arrow)"
+                        />
+                      );
+                    })}
+                  </svg>
 
                   {/* Row backgrounds + bars */}
                   {rows.map((row, idx) => {
@@ -631,17 +745,17 @@ const Timeline = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div
-                                className="absolute top-2 h-3 rounded-full bg-foreground/10 cursor-pointer hover:bg-foreground/15 transition-colors overflow-hidden"
+                                className="absolute top-2 h-3 rounded-full bg-foreground/15 cursor-pointer hover:bg-foreground/25 transition-all overflow-hidden ring-1 ring-foreground/20 hover:shadow-md"
                                 style={{ left, width: Math.max(width, 8) }}
                                 onClick={() => navigate(`/project/${project.id}`)}
                               >
                                 <div
-                                  className="h-full bg-primary/40 rounded-full transition-all"
+                                  className="h-full bg-gradient-to-r from-primary to-primary/70 rounded-full transition-all"
                                   style={{ width: `${progress}%` }}
                                 />
                                 {/* Diamond markers at start and end */}
-                                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-foreground/60 rotate-45 rounded-sm" />
-                                <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-foreground/60 rotate-45 rounded-sm" />
+                                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-foreground/70 rotate-45 rounded-sm shadow-sm" />
+                                <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-foreground/70 rotate-45 rounded-sm shadow-sm" />
                               </div>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs">
@@ -681,17 +795,30 @@ const Timeline = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div
-                                className={`absolute top-[6px] rounded-md cursor-pointer transition-all duration-200 ease-out hover:brightness-110 hover:shadow-md shadow-sm ${statusColors[status]}`}
+                                className={`absolute top-[6px] rounded-md cursor-pointer transition-all duration-200 ease-out hover:brightness-110 hover:shadow-lg hover:-translate-y-0.5 shadow-md ring-1 ring-black/5 dark:ring-white/10 ${statusColors[status]}`}
                                 style={{
                                   left: bar.left,
                                   width: Math.max(bar.width, 6),
                                   height: ROW_H - 12,
                                   outline: isCritical ? "2px solid hsl(45, 93%, 47%)" : undefined,
-                                  outlineOffset: isCritical ? "1px" : undefined,
+                                  outlineOffset: isCritical ? "2px" : undefined,
+                                  boxShadow: isCritical
+                                    ? "0 0 12px hsl(45, 93%, 47%, 0.5), 0 1px 3px rgba(0,0,0,0.15)"
+                                    : undefined,
                                 }}
                               >
+                                {/* Priority indicator stripe */}
+                                <div
+                                  className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-md ${
+                                    activity.priority === "high"
+                                      ? "bg-destructive"
+                                      : activity.priority === "medium"
+                                      ? "bg-warning"
+                                      : "bg-success"
+                                  }`}
+                                />
                                 {bar.width > 60 && (
-                                  <span className="text-[10px] font-medium text-primary-foreground px-2 truncate block leading-6">
+                                  <span className="text-[10px] font-medium text-primary-foreground pl-3 pr-2 truncate block leading-6 drop-shadow-sm">
                                     {isCritical && "⚡ "}
                                     {activity.title}
                                   </span>
