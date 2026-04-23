@@ -881,16 +881,14 @@ function AddStageColumn({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div
-      className="shrink-0 flex flex-col items-stretch justify-start pt-3"
-      style={{ width: 200 }}
-    >
+    <div className="shrink-0 self-start pt-3 pl-2">
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors w-full"
+        title="Criar grupo"
+        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors whitespace-nowrap"
       >
-        <Plus className="w-3.5 h-3.5" />
+        <Plus className="w-3 h-3" />
         Criar grupo
       </button>
 
