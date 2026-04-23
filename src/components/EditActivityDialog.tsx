@@ -13,7 +13,6 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
 import { ActivityAttachments } from "@/components/ActivityAttachments";
-import { ActivityDependencies } from "@/components/ActivityDependencies";
 import { ActivityComments } from "@/components/ActivityComments";
 import { TaskRelations } from "@/components/TaskRelations";
 import { useTaskBlockers } from "@/hooks/useTaskBlockers";
