@@ -156,6 +156,7 @@ function SortableKanbanCard({
   isQualityProject,
   stageColor,
   subActivityCount,
+  dependencyCount,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -172,6 +173,7 @@ function SortableKanbanCard({
   isQualityProject?: boolean;
   stageColor?: string;
   subActivityCount?: number;
+  dependencyCount?: { pred: number; succ: number };
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -201,6 +203,7 @@ function SortableKanbanCard({
         isQualityProject={isQualityProject}
         stageColor={stageColor}
         subActivityCount={subActivityCount}
+        dependencyCount={dependencyCount}
       />
     </div>
   );
@@ -223,6 +226,7 @@ function KanbanCard({
   isQualityProject,
   stageColor,
   subActivityCount,
+  dependencyCount,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -240,6 +244,7 @@ function KanbanCard({
   isQualityProject?: boolean;
   stageColor?: string;
   subActivityCount?: number;
+  dependencyCount?: { pred: number; succ: number };
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -385,6 +390,17 @@ function KanbanCard({
                       {activity.hours}h
                     </Badge>
                   )}
+                  {dependencyCount && (dependencyCount.pred > 0 || dependencyCount.succ > 0) && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30 font-semibold"
+                      title={`${dependencyCount.pred} predecessora(s) · ${dependencyCount.succ} sucessora(s)`}
+                    >
+                      🔗 {dependencyCount.pred > 0 && `←${dependencyCount.pred}`}
+                      {dependencyCount.pred > 0 && dependencyCount.succ > 0 && " "}
+                      {dependencyCount.succ > 0 && `→${dependencyCount.succ}`}
+                    </Badge>
+                  )}
                 </div>
                 {subActivityCount && subActivityCount > 0 ? (
                   <div className="flex items-center gap-1 mt-1.5 text-[10px] text-muted-foreground">
@@ -459,6 +475,7 @@ function SortableColumn({
   isQualityProject,
   onOpenCreateTask,
   subActivityCounts,
+  dependencyCounts,
   isAdminOrGestor,
   onRenameStage,
   onDeleteStage,
@@ -487,6 +504,7 @@ function SortableColumn({
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;
   subActivityCounts: Map<string, number>;
+  dependencyCounts?: Map<string, { pred: number; succ: number }>;
   isAdminOrGestor?: boolean;
   onRenameStage: (id: string, title: string) => Promise<void>;
   onDeleteStage: (id: string) => Promise<void>;
@@ -827,6 +845,7 @@ function SortableColumn({
                 onCreateStory={() => onCreateStory(activity)}
                 isQualityProject={isQualityProject}
                 stageColor={stage.color}
+                dependencyCount={dependencyCounts?.get(activity.id)}
                 subActivityCount={subActivityCounts.get(activity.id) || 0}
               />
             ))
@@ -917,6 +936,7 @@ export const ActivityKanban = ({
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Map<string, number>>(new Map());
+  const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
@@ -992,6 +1012,28 @@ export const ActivityKanban = ({
           setStoryLinkedActivities(countMap);
         }
       });
+    // Fetch task dependencies for badge counters
+    const ids = activities.map((a) => a.id);
+    if (ids.length > 0) {
+      supabase
+        .from("task_dependencies")
+        .select("predecessor_id, successor_id")
+        .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`)
+        .then(({ data }) => {
+          const map = new Map<string, { pred: number; succ: number }>();
+          (data || []).forEach((d: any) => {
+            const p = map.get(d.successor_id) || { pred: 0, succ: 0 };
+            p.pred += 1;
+            map.set(d.successor_id, p);
+            const s = map.get(d.predecessor_id) || { pred: 0, succ: 0 };
+            s.succ += 1;
+            map.set(d.predecessor_id, s);
+          });
+          setDependencyCounts(map);
+        });
+    } else {
+      setDependencyCounts(new Map());
+    }
   }, [projectId, activities]);
 
   
@@ -1428,6 +1470,7 @@ export const ActivityKanban = ({
                 isQualityProject={isQualityProject}
                 onOpenCreateTask={onOpenCreateTask}
                 subActivityCounts={subActivityCounts}
+                dependencyCounts={dependencyCounts}
                 isAdminOrGestor={isAdmin || canCreate}
                 onRenameStage={handleRenameStage}
                 onDeleteStage={handleDeleteStage}
