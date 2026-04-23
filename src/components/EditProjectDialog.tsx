@@ -215,6 +215,41 @@ export const EditProjectDialog = ({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
+                <Label htmlFor="edit-project_type">Tipo do Projeto</Label>
+                <Select
+                  value={formData.project_type || "_none"}
+                  onValueChange={(v) =>
+                    setFormData({ ...formData, project_type: v === "_none" ? "" : v })
+                  }
+                >
+                  <SelectTrigger id="edit-project_type">
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Não definido</SelectItem>
+                    <SelectItem value="estrategico">Estratégico</SelectItem>
+                    <SelectItem value="operacional">Operacional</SelectItem>
+                    <SelectItem value="novos_negocios">Novos Negócios</SelectItem>
+                    <SelectItem value="parceria">Parceria</SelectItem>
+                    <SelectItem value="melhoria_processo">Melhoria de Processo</SelectItem>
+                    <SelectItem value="inovacao">Inovação</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-start_date">Data de Início</Label>
+                <Input
+                  id="edit-start_date"
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, start_date: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
                 <Label htmlFor="edit-budget_planned">Orçamento Planejado (R$)</Label>
                 <CurrencyInput
                   id="edit-budget_planned"
