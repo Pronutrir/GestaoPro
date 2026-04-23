@@ -99,7 +99,7 @@ const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { isAdmin: isRealAdmin, canManage: isAdmin, user: currentUser, loading: authLoading } = useAuth();
+  const { isAdmin: isRealAdmin, canManage: isAdmin, user: currentUser, profile, loading: authLoading } = useAuth();
   const [accessDenied, setAccessDenied] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
