@@ -450,7 +450,7 @@ const Timeline = () => {
                       <span>{s.count}</span>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">
+                  <TooltipContent side="top">
                     <span className="font-medium">{s.label}:</span> {s.count} {s.count === 1 ? "atividade" : "atividades"}
                   </TooltipContent>
                 </Tooltip>
