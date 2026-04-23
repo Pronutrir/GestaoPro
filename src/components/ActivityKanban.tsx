@@ -982,7 +982,7 @@ export const ActivityKanban = ({
   useEffect(() => {
     fetchStages();
     // Fetch activities that have linked user stories
-    supabase.from("user_stories").select("activity_id").eq("project_id", projectId).not("activity_id", "is", null)
+    supabase.from("user_stories").select("activity_id").eq("project_id", projectId).eq("is_trashed", false).not("activity_id", "is", null)
       .then(({ data }) => {
         if (data) {
           const countMap = new Map<string, number>();
@@ -1473,7 +1473,7 @@ export const ActivityKanban = ({
         open={storyDrawerOpen}
         onOpenChange={setStoryDrawerOpen}
         onStoriesChanged={() => {
-          supabase.from("user_stories").select("activity_id").eq("project_id", projectId).not("activity_id", "is", null)
+          supabase.from("user_stories").select("activity_id").eq("project_id", projectId).eq("is_trashed", false).not("activity_id", "is", null)
             .then(({ data }) => {
               if (data) {
                 const countMap = new Map<string, number>();
