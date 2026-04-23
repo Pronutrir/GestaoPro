@@ -58,6 +58,8 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     blockers: "",
     category: defaultCategory || "",
     program: "",
+    project_type: "",
+    objective: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,6 +85,8 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         blockers: formData.blockers,
         category: formData.category || "general",
         program: formData.program || null,
+        project_type: formData.project_type || null,
+        objective: formData.objective || null,
       });
 
       if (error) throw error;
@@ -104,6 +108,8 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         blockers: "",
         category: defaultCategory || "general",
         program: "",
+        project_type: "",
+        objective: "",
       });
       setOpen(false);
       onProjectAdded();
@@ -157,6 +163,41 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 }
                 rows={3}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="project_type">Tipo do Projeto</Label>
+                <Select
+                  value={formData.project_type || "_none"}
+                  onValueChange={(v) =>
+                    setFormData({ ...formData, project_type: v === "_none" ? "" : v })
+                  }
+                >
+                  <SelectTrigger id="project_type">
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Não definido</SelectItem>
+                    <SelectItem value="estrategico">Estratégico</SelectItem>
+                    <SelectItem value="operacional">Operacional</SelectItem>
+                    <SelectItem value="novos_negocios">Novos Negócios</SelectItem>
+                    <SelectItem value="parceria">Parceria</SelectItem>
+                    <SelectItem value="melhoria_processo">Melhoria de Processo</SelectItem>
+                    <SelectItem value="inovacao">Inovação</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="objective">O que será feito? (Objetivo)</Label>
+                <Input
+                  id="objective"
+                  placeholder="Descreva o objetivo principal"
+                  value={formData.objective}
+                  onChange={(e) =>
+                    setFormData({ ...formData, objective: e.target.value })
+                  }
+                />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">

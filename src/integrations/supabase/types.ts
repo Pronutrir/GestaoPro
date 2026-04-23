@@ -1040,6 +1040,60 @@ export type Database = {
         }
         Relationships: []
       }
+      project_dependencies: {
+        Row: {
+          created_at: string
+          depends_on: string | null
+          description: string
+          due_date: string | null
+          id: string
+          linked_project_id: string | null
+          project_id: string
+          responsible: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          depends_on?: string | null
+          description: string
+          due_date?: string | null
+          id?: string
+          linked_project_id?: string | null
+          project_id: string
+          responsible?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          depends_on?: string | null
+          description?: string
+          due_date?: string | null
+          id?: string
+          linked_project_id?: string | null
+          project_id?: string
+          responsible?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_dependencies_linked_project_id_fkey"
+            columns: ["linked_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_dependencies_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_documents: {
         Row: {
           activity_id: string | null
@@ -1166,10 +1220,20 @@ export type Database = {
           description: string | null
           display_order: number | null
           due_date: string | null
+          expected_benefits: string | null
           id: string
+          objective: string | null
+          out_of_scope: string | null
           owner: string | null
           priority: string
+          problem_statement: string | null
           program: string | null
+          project_type: string | null
+          regulatory_requirements: string | null
+          restrictions: string | null
+          root_cause: string | null
+          scope: string | null
+          solved_problem: string | null
           status: string
           title: string
           updated_at: string
@@ -1185,10 +1249,20 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           due_date?: string | null
+          expected_benefits?: string | null
           id?: string
+          objective?: string | null
+          out_of_scope?: string | null
           owner?: string | null
           priority?: string
+          problem_statement?: string | null
           program?: string | null
+          project_type?: string | null
+          regulatory_requirements?: string | null
+          restrictions?: string | null
+          root_cause?: string | null
+          scope?: string | null
+          solved_problem?: string | null
           status?: string
           title: string
           updated_at?: string
@@ -1204,10 +1278,20 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           due_date?: string | null
+          expected_benefits?: string | null
           id?: string
+          objective?: string | null
+          out_of_scope?: string | null
           owner?: string | null
           priority?: string
+          problem_statement?: string | null
           program?: string | null
+          project_type?: string | null
+          regulatory_requirements?: string | null
+          restrictions?: string | null
+          root_cause?: string | null
+          scope?: string | null
+          solved_problem?: string | null
           status?: string
           title?: string
           updated_at?: string
