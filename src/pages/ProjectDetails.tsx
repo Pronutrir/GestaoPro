@@ -663,25 +663,25 @@ const ProjectDetails = () => {
                   {isChangeBlocked ? (
                     <>
                       <p className="font-semibold text-amber-900 dark:text-amber-200">
-                        Projeto bloqueado: {pendingChangeRequests} requisição{pendingChangeRequests > 1 ? "ões" : ""} de mudança aguardando aprovação
+                        Projeto bloqueado: {pendingChangeRequests} solicitação{pendingChangeRequests > 1 ? "ões" : ""} de mudança aguardando aprovação
                       </p>
                       <p className="text-amber-800/80 dark:text-amber-300/80 text-xs mt-0.5">
-                        Nenhuma alteração pode ser feita até que as RFCs sem escopo sejam aprovadas ou rejeitadas.
+                        Nenhuma alteração pode ser feita até que as solicitações sejam aprovadas ou rejeitadas.
                       </p>
                     </>
                   ) : (
                     <>
                       <p className="font-semibold text-amber-900 dark:text-amber-200">
-                        {blockedPhaseIds.size} fase{blockedPhaseIds.size !== 1 ? "s" : ""} e {blockedActivityIds.size} atividade{blockedActivityIds.size !== 1 ? "s" : ""} bloqueadas por RFC
+                        {blockedActivityIds.size} atividade{blockedActivityIds.size !== 1 ? "s" : ""} bloqueada{blockedActivityIds.size !== 1 ? "s" : ""}{blockedPhaseIds.size > 0 ? ` e ${blockedPhaseIds.size} fase${blockedPhaseIds.size !== 1 ? "s" : ""}` : ""} por solicitação de mudança
                       </p>
                       <p className="text-amber-800/80 dark:text-amber-300/80 text-xs mt-0.5">
-                        Os itens marcados com cadeado só serão liberados quando a RFC for aprovada (ou arquivada se rejeitada).
+                        Os itens marcados com cadeado só serão liberados quando a solicitação for aprovada (ou arquivada se rejeitada).
                       </p>
                     </>
                   )}
                 </div>
                 <Button size="sm" variant="outline" className="border-amber-500/60" onClick={() => setActiveTab("changes")}>
-                  Ver requisições
+                  Ver solicitações
                 </Button>
               </div>
             </Card>
