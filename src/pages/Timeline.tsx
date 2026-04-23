@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -450,6 +451,48 @@ const Timeline = () => {
                   {showCritical ? "Ocultar caminho crítico" : "Destacar caminho crítico"}
                 </TooltipContent>
               </Tooltip>
+              {showCritical && projectsWithoutDeps.length > 0 && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 relative text-warning hover:text-warning hover:bg-warning/10 animate-pulse"
+                      aria-label="Aviso sobre caminho crítico"
+                    >
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="absolute top-1 right-1 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-warning" />
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent side="bottom" align="end" className="w-80">
+                    <div className="flex items-start gap-2">
+                      <Info className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                      <div className="text-xs text-foreground">
+                        <p className="font-semibold mb-1">Caminho crítico pouco confiável</p>
+                        {projectsWithoutDeps.length === 1 ? (
+                          <p>
+                            O projeto <span className="font-medium">"{projectsWithoutDeps[0].title}"</span> não possui dependências cadastradas entre as tarefas. Cadastre dependências na aba "Dependências" das atividades para um cálculo realista.
+                          </p>
+                        ) : (
+                          <>
+                            <p className="mb-2">
+                              {projectsWithoutDeps.length} projetos não possuem dependências cadastradas — todas as tarefas aparecerão como críticas.
+                            </p>
+                            <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground max-h-40 overflow-auto">
+                              {projectsWithoutDeps.map((p) => (
+                                <li key={p.id} className="truncate">{p.title}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
               <div className="flex items-center border border-border rounded-lg overflow-hidden">
                 {(["month", "quarter", "half", "year"] as ZoomLevel[]).map((level) => (
                   <button
@@ -468,21 +511,6 @@ const Timeline = () => {
             </div>
           </div>
         </div>
-
-        {/* Critical path dependency warning */}
-        {showCritical && projectsWithoutDeps.length > 0 && (
-          <div className="flex-none px-6 py-2 bg-warning/10 border-b border-warning/30 flex items-start gap-2">
-            <Info className="h-4 w-4 text-warning shrink-0 mt-0.5" />
-            <div className="flex-1 text-xs text-foreground">
-              <span className="font-semibold">Caminho crítico pouco confiável: </span>
-              {projectsWithoutDeps.length === 1 ? (
-                <>O projeto <span className="font-medium">"{projectsWithoutDeps[0].title}"</span> não possui dependências cadastradas entre as tarefas. Cadastre dependências na aba "Dependências" das atividades para um cálculo realista.</>
-              ) : (
-                <>{projectsWithoutDeps.length} projetos não possuem dependências cadastradas — todas as tarefas aparecerão como críticas. Cadastre dependências para um cálculo realista.</>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Gantt Area */}
         {filteredProjects.length === 0 ? (
