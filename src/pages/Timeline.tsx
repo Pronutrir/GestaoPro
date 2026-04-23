@@ -296,6 +296,17 @@ const Timeline = () => {
     return all;
   }, [projects, scheduledActivities, dependencies, showCritical]);
 
+  // Projects without any dependencies → critical path is not meaningful
+  const projectsWithoutDeps = useMemo(() => {
+    if (!showCritical) return [] as Project[];
+    return filteredProjects.filter((p) => {
+      const acts = scheduledActivities.filter((a) => a.project_id === p.id);
+      const ids = new Set(acts.map((a) => a.id));
+      const hasDep = dependencies.some((d) => ids.has(d.predecessor_id) && ids.has(d.successor_id));
+      return acts.length > 1 && !hasDep;
+    });
+  }, [filteredProjects, scheduledActivities, dependencies, showCritical]);
+
   const scrollToToday = () => {
     if (scrollRef.current && todayPosition !== null) {
       scrollRef.current.scrollLeft = todayPosition - scrollRef.current.clientWidth / 2;
