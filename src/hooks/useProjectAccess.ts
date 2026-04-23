@@ -24,25 +24,42 @@ export const useProjectAccess = () => {
 
     setMembershipsLoading(true);
 
-    const fullName = profile?.full_name || null;
+    const fullName = (profile?.full_name || "").trim();
+    const fullNameLower = fullName.toLowerCase();
 
-    const [membersRes, ownedRes, assigneeRes] = await Promise.all([
+    // Fetch project_members + ALL non-trashed projects so we can do robust
+    // case/whitespace-insensitive matching for owner/assignees in JS.
+    const [membersRes, projectsRes] = await Promise.all([
       supabase
         .from("project_members")
         .select("project_id")
         .eq("user_id", user.id),
       fullName
-        ? supabase.from("projects").select("id").eq("owner", fullName)
-        : Promise.resolve({ data: [] as { id: string }[] } as any),
-      fullName
-        ? supabase.from("projects").select("id").contains("assignees", [fullName])
-        : Promise.resolve({ data: [] as { id: string }[] } as any),
+        ? supabase
+            .from("projects")
+            .select("id, owner, assignees")
+            .eq("is_trashed", false)
+        : Promise.resolve({ data: [] as any[] } as any),
     ]);
 
     const ids = new Set<string>();
     (membersRes.data || []).forEach((m: any) => ids.add(m.project_id));
-    (ownedRes.data || []).forEach((p: any) => ids.add(p.id));
-    (assigneeRes.data || []).forEach((p: any) => ids.add(p.id));
+
+    if (fullNameLower) {
+      (projectsRes.data || []).forEach((p: any) => {
+        const ownerMatch =
+          typeof p.owner === "string" &&
+          p.owner.trim().toLowerCase() === fullNameLower;
+        const assigneeMatch =
+          Array.isArray(p.assignees) &&
+          p.assignees.some(
+            (a: any) =>
+              typeof a === "string" && a.trim().toLowerCase() === fullNameLower
+          );
+        if (ownerMatch || assigneeMatch) ids.add(p.id);
+      });
+    }
+
     setMemberProjectIds(ids);
     setMembershipsLoading(false);
   }, [isAdmin, loading, user?.id, profile?.full_name]);
