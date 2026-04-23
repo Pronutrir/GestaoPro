@@ -473,6 +473,11 @@ const ProjectDetails = () => {
   };
 
   const handleToggleActivity = async (activityId: string, currentStatus: string) => {
+    const act = activities.find(a => a.id === activityId);
+    if (act && isActivityBlocked(activityId, act.phase_id)) {
+      toast({ title: "Atividade bloqueada por RFC", description: "Resolva a Requisição de Mudança que afeta este item.", variant: "destructive" });
+      return;
+    }
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
     const updatePayload: any = { status: newStatus, completed_at: completedAt };
@@ -509,6 +514,11 @@ const ProjectDetails = () => {
   };
 
   const handleDeleteActivity = async (activityId: string) => {
+    const act = activities.find(a => a.id === activityId);
+    if (act && isActivityBlocked(activityId, act.phase_id)) {
+      toast({ title: "Atividade bloqueada por RFC", description: "Resolva a Requisição de Mudança que afeta este item.", variant: "destructive" });
+      return;
+    }
     if (!confirm("Tem certeza que deseja mover esta atividade para a lixeira?")) return;
     const trashedAt = new Date().toISOString();
     // Coletar a atividade + todos os descendentes (subtarefas em qualquer nível)
