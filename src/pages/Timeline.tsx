@@ -795,17 +795,30 @@ const Timeline = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div
-                                className={`absolute top-[6px] rounded-md cursor-pointer transition-all duration-200 ease-out hover:brightness-110 hover:shadow-md shadow-sm ${statusColors[status]}`}
+                                className={`absolute top-[6px] rounded-md cursor-pointer transition-all duration-200 ease-out hover:brightness-110 hover:shadow-lg hover:-translate-y-0.5 shadow-md ring-1 ring-black/5 dark:ring-white/10 ${statusColors[status]}`}
                                 style={{
                                   left: bar.left,
                                   width: Math.max(bar.width, 6),
                                   height: ROW_H - 12,
                                   outline: isCritical ? "2px solid hsl(45, 93%, 47%)" : undefined,
-                                  outlineOffset: isCritical ? "1px" : undefined,
+                                  outlineOffset: isCritical ? "2px" : undefined,
+                                  boxShadow: isCritical
+                                    ? "0 0 12px hsl(45, 93%, 47%, 0.5), 0 1px 3px rgba(0,0,0,0.15)"
+                                    : undefined,
                                 }}
                               >
+                                {/* Priority indicator stripe */}
+                                <div
+                                  className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-md ${
+                                    activity.priority === "high"
+                                      ? "bg-destructive"
+                                      : activity.priority === "medium"
+                                      ? "bg-warning"
+                                      : "bg-success"
+                                  }`}
+                                />
                                 {bar.width > 60 && (
-                                  <span className="text-[10px] font-medium text-primary-foreground px-2 truncate block leading-6">
+                                  <span className="text-[10px] font-medium text-primary-foreground pl-3 pr-2 truncate block leading-6 drop-shadow-sm">
                                     {isCritical && "⚡ "}
                                     {activity.title}
                                   </span>
