@@ -47,6 +47,61 @@ interface CharterData {
   approval_requirements: string;
 }
 
+interface TextFieldProps {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  multiline?: boolean;
+  rows?: number;
+  aiContext?: AIContext;
+  editing: boolean;
+}
+
+const TextField = ({
+  value, onChange, placeholder, multiline = true, rows = 3, aiContext, editing,
+}: TextFieldProps) => {
+  if (editing) {
+    return multiline ? (
+      <div className="space-y-1.5">
+        {aiContext && (
+          <div className="flex justify-end">
+            <AIAssistButton value={value} onChange={onChange} context={aiContext} />
+          </div>
+        )}
+        <Textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} className="text-sm resize-none" />
+      </div>
+    ) : (
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="text-sm" />
+    );
+  }
+  return value ? (
+    <p className="text-sm text-foreground whitespace-pre-line">{value}</p>
+  ) : (
+    <p className="text-sm text-muted-foreground italic">Não preenchido</p>
+  );
+};
+
+interface SectionProps {
+  n: number;
+  icon: React.ElementType;
+  title: string;
+  children: React.ReactNode;
+}
+
+const Section = ({ n, icon: Icon, title, children }: SectionProps) => (
+  <Card className="p-5">
+    <div className="flex items-center gap-3 mb-3 pb-3 border-b border-border">
+      <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <Icon className="w-5 h-5 text-primary" />
+      </div>
+      <h3 className="text-base font-semibold text-foreground">
+        <span className="text-primary mr-1.5">{n}.</span>{title}
+      </h3>
+    </div>
+    <div className="space-y-3">{children}</div>
+  </Card>
+);
+
 export const ProjectCharter = ({ projectId, project, phases, members }: ProjectCharterProps) => {
   const { toast } = useToast();
   const { canManage: isAdmin } = useAuth();
@@ -167,46 +222,6 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
     return m[`${imp}-${prob}`] || { label: "Média", cls: "bg-muted" };
   };
 
-  const Section = ({
-    n, icon: Icon, title, children,
-  }: { n: number; icon: React.ElementType; title: string; children: React.ReactNode }) => (
-    <Card className="p-5">
-      <div className="flex items-center gap-3 mb-3 pb-3 border-b border-border">
-        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-          <Icon className="w-5 h-5 text-primary" />
-        </div>
-        <h3 className="text-base font-semibold text-foreground">
-          <span className="text-primary mr-1.5">{n}.</span>{title}
-        </h3>
-      </div>
-      <div className="space-y-3">{children}</div>
-    </Card>
-  );
-
-  const TextField = ({
-    value, onChange, placeholder, multiline = true, rows = 3, aiContext,
-  }: { value: string; onChange: (v: string) => void; placeholder: string; multiline?: boolean; rows?: number; aiContext?: AIContext }) => {
-    if (editing) {
-      return multiline ? (
-        <div className="space-y-1.5">
-          {aiContext && (
-            <div className="flex justify-end">
-              <AIAssistButton value={value} onChange={onChange} context={aiContext} />
-            </div>
-          )}
-          <Textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} className="text-sm resize-none" />
-        </div>
-      ) : (
-        <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="text-sm" />
-      );
-    }
-    return value ? (
-      <p className="text-sm text-foreground whitespace-pre-line">{value}</p>
-    ) : (
-      <p className="text-sm text-muted-foreground italic">Não preenchido</p>
-    );
-  };
-
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -253,7 +268,7 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
       </Section>
 
       <Section n={3} icon={Award} title="Patrocinador do Projeto">
-        <TextField value={data.sponsor} onChange={(v) => setData({ ...data, sponsor: v })} placeholder="Nome do patrocinador..." multiline={false} />
+        <TextField editing={editing} value={data.sponsor} onChange={(v) => setData({ ...data, sponsor: v })} placeholder="Nome do patrocinador..." multiline={false} />
       </Section>
 
       <Section n={4} icon={Calendar} title="Data de Início e Término Previstas">
@@ -275,11 +290,11 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
       </Section>
 
       <Section n={5} icon={Target} title="Justificativa do Projeto">
-        <TextField value={data.justification} onChange={(v) => setData({ ...data, justification: v })} placeholder="Por que este projeto é necessário?" rows={4} aiContext="tap_problem" />
+        <TextField editing={editing} value={data.justification} onChange={(v) => setData({ ...data, justification: v })} placeholder="Por que este projeto é necessário?" rows={4} aiContext="tap_problem" />
       </Section>
 
       <Section n={6} icon={Target} title="Objetivos do Projeto">
-        <TextField value={form.objective} onChange={(v) => setForm({ ...form, objective: v })} placeholder="Objetivos SMART do projeto..." rows={4} aiContext="tap_objective" />
+        <TextField editing={editing} value={form.objective} onChange={(v) => setForm({ ...form, objective: v })} placeholder="Objetivos SMART do projeto..." rows={4} aiContext="tap_objective" />
       </Section>
 
       <Section n={7} icon={Layers} title="Escopo do Projeto">
@@ -288,19 +303,19 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
             <label className="text-xs font-semibold text-success uppercase tracking-wide flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5" /> Em Escopo
             </label>
-            <TextField value={form.scope} onChange={(v) => setForm({ ...form, scope: v })} placeholder="O que será entregue..." rows={4} aiContext="tap_scope" />
+            <TextField editing={editing} value={form.scope} onChange={(v) => setForm({ ...form, scope: v })} placeholder="O que será entregue..." rows={4} aiContext="tap_scope" />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-destructive uppercase tracking-wide flex items-center gap-1.5">
               <Ban className="w-3.5 h-3.5" /> Fora de Escopo
             </label>
-            <TextField value={form.out_of_scope} onChange={(v) => setForm({ ...form, out_of_scope: v })} placeholder="O que NÃO faz parte..." rows={4} aiContext="tap_out_of_scope" />
+            <TextField editing={editing} value={form.out_of_scope} onChange={(v) => setForm({ ...form, out_of_scope: v })} placeholder="O que NÃO faz parte..." rows={4} aiContext="tap_out_of_scope" />
           </div>
         </div>
       </Section>
 
       <Section n={8} icon={ListChecks} title="Entregáveis Principais">
-        <TextField value={data.deliverables} onChange={(v) => setData({ ...data, deliverables: v })} placeholder="Liste as principais entregas..." rows={3} aiContext="tap_benefits" />
+        <TextField editing={editing} value={data.deliverables} onChange={(v) => setData({ ...data, deliverables: v })} placeholder="Liste as principais entregas..." rows={3} aiContext="tap_benefits" />
         {phases.length > 0 && (
           <div className="pt-2 border-t border-border">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Fases cadastradas:</p>
@@ -317,7 +332,7 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
       </Section>
 
       <Section n={9} icon={ShieldCheck} title="Premissas">
-        <TextField value={data.assumptions} onChange={(v) => setData({ ...data, assumptions: v })} placeholder="Premissas adotadas..." rows={3} aiContext="assumption_description" />
+        <TextField editing={editing} value={data.assumptions} onChange={(v) => setData({ ...data, assumptions: v })} placeholder="Premissas adotadas..." rows={3} aiContext="assumption_description" />
         {assumptionsList.length > 0 && (
           <div className="pt-2 border-t border-border space-y-1">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Cadastradas no módulo:</p>
@@ -332,7 +347,7 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
       </Section>
 
       <Section n={10} icon={Ban} title="Restrições">
-        <TextField value={form.restrictions} onChange={(v) => setForm({ ...form, restrictions: v })} placeholder="Limitações de tempo, custo, recursos..." rows={3} aiContext="tap_restrictions" />
+        <TextField editing={editing} value={form.restrictions} onChange={(v) => setForm({ ...form, restrictions: v })} placeholder="Limitações de tempo, custo, recursos..." rows={3} aiContext="tap_restrictions" />
       </Section>
 
       <Section n={11} icon={Users} title="Stakeholders Principais">
@@ -358,7 +373,7 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
       </Section>
 
       <Section n={12} icon={CheckCircle2} title="Requisitos de Aprovação do Projeto">
-        <TextField value={data.approval_requirements} onChange={(v) => setData({ ...data, approval_requirements: v })} placeholder="Critérios de sucesso e aprovação..." rows={3} aiContext="tap_regulatory" />
+        <TextField editing={editing} value={data.approval_requirements} onChange={(v) => setData({ ...data, approval_requirements: v })} placeholder="Critérios de sucesso e aprovação..." rows={3} aiContext="tap_regulatory" />
       </Section>
 
       <Section n={13} icon={AlertTriangle} title="Riscos Iniciais Identificados">
