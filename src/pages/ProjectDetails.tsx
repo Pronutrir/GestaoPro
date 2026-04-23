@@ -618,8 +618,24 @@ const ProjectDetails = () => {
             />
           )}
 
-
-
+          {isChangeBlocked && (
+            <Card className="px-4 py-3 border-2 border-amber-500/60 bg-amber-500/10">
+              <div className="flex items-start gap-3">
+                <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1 text-sm">
+                  <p className="font-semibold text-amber-900 dark:text-amber-200">
+                    Projeto bloqueado: {pendingChangeRequests} requisição{pendingChangeRequests > 1 ? "ões" : ""} de mudança aguardando aprovação
+                  </p>
+                  <p className="text-amber-800/80 dark:text-amber-300/80 text-xs mt-0.5">
+                    Nenhuma alteração no projeto pode ser feita até que as RFCs pendentes sejam aprovadas ou rejeitadas.
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" className="border-amber-500/60" onClick={() => setActiveTab("changes")}>
+                  Ver requisições
+                </Button>
+              </div>
+            </Card>
+          )}
 
           {/* Tabs — Phases tab REMOVED */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
