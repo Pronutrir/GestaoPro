@@ -261,7 +261,6 @@ export const CreateTaskDialog = ({
                 value={formData.title}
                 onChange={(next) => setFormData({ ...formData, title: next })}
                 context="activity_title"
-                actions={["correct", "improve"]}
               />
             </div>
             <Textarea
