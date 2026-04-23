@@ -20,6 +20,7 @@ import { History, ChevronDown, Hash, Copy, UserCircle, Lock } from "lucide-react
 import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserPlus2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -62,6 +63,10 @@ interface EditActivityDialogProps {
   defaultPhaseId?: string | null;
   defaultParentId?: string | null;
   onActivityCreated?: (activityId: string) => void;
+  /** When set, shows a breadcrumb back to the parent activity (used when editing a sub-activity). */
+  parentActivityTitle?: string;
+  /** Called when user clicks the "Back" arrow — used to close only the nested dialog and return to parent. */
+  onBackToParent?: () => void;
 }
 
 const RACI_OPTIONS = [
