@@ -849,6 +849,16 @@ export const ActivityKanban = ({
     setOptimisticMoves({});
   }, [activities]);
 
+  const subActivityCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    activities.forEach((a) => {
+      if (a.parent_id) {
+        counts.set(a.parent_id, (counts.get(a.parent_id) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [activities]);
+
   const activitiesByStage = useMemo(() => {
     const map: Record<string, Activity[]> = {};
     stages.forEach((s) => (map[s.id] = []));
