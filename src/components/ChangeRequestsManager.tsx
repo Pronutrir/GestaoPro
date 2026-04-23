@@ -203,6 +203,34 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
       if (scopeRows.length > 0) {
         await supabase.from("change_request_scope_items" as any).insert(scopeRows);
       }
+
+      // Reset decisores e regravar
+      const { data: prevApprovers } = await supabase
+        .from("change_request_approvers" as any)
+        .select("user_id")
+        .eq("change_request_id", rfcId);
+      const prevSet = new Set(((prevApprovers as any[]) || []).map(a => a.user_id));
+      await supabase.from("change_request_approvers" as any).delete().eq("change_request_id", rfcId);
+      if (selectedApproverIds.size > 0) {
+        const profById = new Map(activeProfiles.map(p => [p.id, p]));
+        const apprRows = Array.from(selectedApproverIds).map(uid => ({
+          change_request_id: rfcId,
+          user_id: uid,
+          user_name: profById.get(uid)?.full_name || profById.get(uid)?.email || null,
+        }));
+        await supabase.from("change_request_approvers" as any).insert(apprRows);
+
+        // Notifica decisores recém-designados (somente os novos)
+        const newOnes = Array.from(selectedApproverIds).filter(uid => !prevSet.has(uid));
+        if (newOnes.length > 0) {
+          await supabase.from("notifications").insert(newOnes.map(_uid => ({
+            project_id: projectId,
+            type: "change_request_decision",
+            title: "🔔 Você foi designado como decisor",
+            message: `Solicitação de mudança "${title.trim()}" aguarda sua aprovação.`,
+          })));
+        }
+      }
     }
 
     resetForm();
@@ -223,6 +251,8 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
     const itemScope = scopeItems.filter(s => s.change_request_id === item.id);
     setSelectedActivityIds(new Set(itemScope.filter(s => s.item_type === "activity" && s.activity_id).map(s => s.activity_id as string)));
     setSelectedPhaseIds(new Set(itemScope.filter(s => s.item_type === "phase" && s.phase_id).map(s => s.phase_id as string)));
+    const itemApprovers = approvers.filter(a => a.change_request_id === item.id);
+    setSelectedApproverIds(new Set(itemApprovers.map(a => a.user_id)));
     setShowForm(true);
   };
 
