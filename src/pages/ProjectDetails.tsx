@@ -99,7 +99,7 @@ const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { isAdmin: isRealAdmin, canManage: isAdmin, user: currentUser, loading: authLoading } = useAuth();
+  const { isAdmin: isRealAdmin, canManage: isAdmin, user: currentUser, profile, loading: authLoading } = useAuth();
   const [accessDenied, setAccessDenied] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -193,7 +193,7 @@ const ProjectDetails = () => {
     }
 
     try {
-      const [{ data: perms }, { data: tabPerms, error: tabError }] = await Promise.all([
+      const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }] = await Promise.all([
         supabase
           .from("project_members")
           .select("can_create, can_edit, can_delete, can_move")
@@ -205,17 +205,40 @@ const ProjectDetails = () => {
           .select("allowed_tabs")
           .eq("user_id", currentUser.id)
           .maybeSingle(),
+        supabase
+          .from("projects")
+          .select("owner, assignees")
+          .eq("id", id)
+          .maybeSingle(),
       ]);
 
-      // Non-admins (including Gestores) must be explicit project members to access the project.
-      if (!perms) {
+      // Compute access from three sources: explicit member, project Líder (owner),
+      // or listed Participante (assignees). Robust to whitespace/casing differences.
+      const fullNameLower = (profile?.full_name || "").trim().toLowerCase();
+      const ownerMatch =
+        !!fullNameLower &&
+        typeof projectRow?.owner === "string" &&
+        projectRow.owner.trim().toLowerCase() === fullNameLower;
+      const assigneeMatch =
+        !!fullNameLower &&
+        Array.isArray(projectRow?.assignees) &&
+        projectRow!.assignees!.some(
+          (a: any) => typeof a === "string" && a.trim().toLowerCase() === fullNameLower
+        );
+      const hasImplicitAccess = ownerMatch || assigneeMatch;
+
+      if (!perms && !hasImplicitAccess) {
         setAccessDenied(true);
         setUserPerms({ can_create: false, can_edit: false, can_delete: false, can_move: false });
         setAllowedTabs(normalizeProjectTabs());
         return;
       }
       setAccessDenied(false);
-      setUserPerms(perms);
+      // If member exists, use those granular permissions. Otherwise (Líder/Participante),
+      // grant full operational permissions by default.
+      setUserPerms(
+        perms ?? { can_create: true, can_edit: true, can_delete: true, can_move: true }
+      );
 
       if (tabError) {
         console.error("Tab permissions fetch error:", tabError);
@@ -227,7 +250,7 @@ const ProjectDetails = () => {
     } finally {
       setPermissionsLoading(false);
     }
-  }, [id, currentUser?.id, isRealAdmin]);
+  }, [id, currentUser?.id, isRealAdmin, profile?.full_name]);
 
   useEffect(() => {
     if (authLoading || !id) return;
@@ -305,6 +328,18 @@ const ProjectDetails = () => {
           schema: "public",
           table: "user_tab_permissions",
           filter: `user_id=eq.${currentUser.id}`,
+        },
+        () => {
+          void loadAccess(true);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "projects",
+          filter: `id=eq.${id}`,
         },
         () => {
           void loadAccess(true);
