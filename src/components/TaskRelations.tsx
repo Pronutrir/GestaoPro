@@ -273,7 +273,7 @@ export const TaskRelations = ({ activityId, projectId }: Props) => {
   }, [activities, search, activityId]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Cabeçalho compacto: título + contador + botão único "+ Vincular" com menu */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
