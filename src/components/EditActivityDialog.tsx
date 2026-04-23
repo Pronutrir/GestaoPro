@@ -136,9 +136,12 @@ export const EditActivityDialog = ({
   const [lastEditorName, setLastEditorName] = useState<string | null>(null);
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
 
-  // Colunas extras opcionais na tabela de sub-atividades (persistido por usuário no localStorage)
-  const SUB_EXTRA_COLS_KEY = "subActivityExtraCols.v1";
-  const ALL_EXTRA_COLS: { id: string; label: string; width: string }[] = [
+  // Colunas opcionais na tabela de sub-atividades (todas selecionáveis; persistido por usuário no localStorage)
+  const SUB_COLS_KEY = "subActivityCols.v2";
+  const ALL_COLS: { id: string; label: string; width: string }[] = [
+    { id: "assigned_to", label: "Resp.", width: "72px" },
+    { id: "priority", label: "Prio.", width: "56px" },
+    { id: "end_date", label: "Vencimento", width: "84px" },
     { id: "start_date", label: "Início", width: "84px" },
     { id: "hours", label: "Horas", width: "64px" },
     { id: "cost", label: "Custo", width: "84px" },
@@ -148,28 +151,30 @@ export const EditActivityDialog = ({
     { id: "raci_role", label: "RACI", width: "56px" },
     { id: "id_short", label: "ID", width: "72px" },
   ];
-  const [extraCols, setExtraCols] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
+  const DEFAULT_COLS = ["assigned_to", "priority", "end_date"];
+  const [visibleCols, setVisibleCols] = useState<string[]>(() => {
+    if (typeof window === "undefined") return DEFAULT_COLS;
     try {
-      return JSON.parse(localStorage.getItem(SUB_EXTRA_COLS_KEY) || "[]");
+      const stored = localStorage.getItem(SUB_COLS_KEY);
+      return stored ? JSON.parse(stored) : DEFAULT_COLS;
     } catch {
-      return [];
+      return DEFAULT_COLS;
     }
   });
-  const toggleExtraCol = (id: string) => {
-    setExtraCols((prev) => {
+  const toggleCol = (id: string) => {
+    setVisibleCols((prev) => {
       const next = prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id];
       try {
-        localStorage.setItem(SUB_EXTRA_COLS_KEY, JSON.stringify(next));
+        localStorage.setItem(SUB_COLS_KEY, JSON.stringify(next));
       } catch {}
       return next;
     });
   };
-  // grid-template-columns dinâmico: [check][nome][resp][prio][venc][...extras][ações]
-  const subGridTemplate =
-    `24px minmax(140px,1fr) 72px 56px 84px ${extraCols
-      .map((id) => ALL_EXTRA_COLS.find((c) => c.id === id)?.width || "80px")
-      .join(" ")} 28px`;
+  // grid-template-columns dinâmico: [check][nome][...colunas][ações]
+  const subGridTemplate = `24px minmax(140px,1fr) ${ALL_COLS
+    .filter((c) => visibleCols.includes(c.id))
+    .map((c) => c.width)
+    .join(" ")} 28px`;
 
   useEffect(() => {
     if (!open) return;
