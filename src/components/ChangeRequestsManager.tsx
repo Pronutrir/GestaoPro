@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, GitPullRequest, CheckCircle2, XCircle, AlertCircle, Clock, Lock, ChevronDown, ChevronUp, ListTodo, Layers } from "lucide-react";
+import { Plus, Pencil, Trash2, GitPullRequest, CheckCircle2, XCircle, AlertCircle, Clock, Lock, ChevronDown, ChevronUp, ListTodo, Layers, UserCheck, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -52,16 +52,20 @@ interface ScopeItem {
 }
 interface ActivityLite { id: string; title: string; phase_id: string | null }
 interface PhaseLite { id: string; title: string }
+interface ApproverItem { id: string; change_request_id: string; user_id: string; user_name: string | null }
+interface ProfileLite { id: string; full_name: string | null; email: string | null; sector: string | null }
 
 export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Props) => {
   const { toast } = useToast();
-  const { canManage, profile } = useAuth();
+  const { canManage, profile, user } = useAuth();
   const userName = (profile?.full_name || "").trim();
   const isOwner = !!userName && !!projectOwner && userName.toLowerCase() === projectOwner.trim().toLowerCase();
-  const canApprove = canManage || isOwner;
+  const canAssignApprovers = canManage || isOwner;
 
   const [items, setItems] = useState<ChangeRequest[]>([]);
   const [scopeItems, setScopeItems] = useState<ScopeItem[]>([]);
+  const [approvers, setApprovers] = useState<ApproverItem[]>([]);
+  const [activeProfiles, setActiveProfiles] = useState<ProfileLite[]>([]);
   const [activities, setActivities] = useState<ActivityLite[]>([]);
   const [phases, setPhases] = useState<PhaseLite[]>([]);
   const [expandedScope, setExpandedScope] = useState<Set<string>>(new Set());
@@ -80,9 +84,10 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
   const [impactQuality, setImpactQuality] = useState("");
   const [selectedActivityIds, setSelectedActivityIds] = useState<Set<string>>(new Set());
   const [selectedPhaseIds, setSelectedPhaseIds] = useState<Set<string>>(new Set());
+  const [selectedApproverIds, setSelectedApproverIds] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
-    const [reqRes, actRes, phaseRes] = await Promise.all([
+    const [reqRes, actRes, phaseRes, profRes] = await Promise.all([
       supabase
         .from("change_requests" as any)
         .select("*")
@@ -101,20 +106,28 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
         .eq("project_id", projectId)
         .eq("is_trashed", false)
         .order("display_order"),
+      supabase
+        .from("profiles")
+        .select("id, full_name, email, sector")
+        .eq("is_active", true)
+        .order("full_name"),
     ]);
     if (reqRes.data) setItems(reqRes.data as any);
     if (actRes.data) setActivities(actRes.data as any);
     if (phaseRes.data) setPhases(phaseRes.data as any);
+    if (profRes.data) setActiveProfiles(profRes.data as any);
 
     const reqIds = ((reqRes.data as any[]) || []).map(r => r.id);
     if (reqIds.length > 0) {
-      const { data: scopeData } = await supabase
-        .from("change_request_scope_items" as any)
-        .select("*")
-        .in("change_request_id", reqIds);
+      const [{ data: scopeData }, { data: apprData }] = await Promise.all([
+        supabase.from("change_request_scope_items" as any).select("*").in("change_request_id", reqIds),
+        supabase.from("change_request_approvers" as any).select("*").in("change_request_id", reqIds),
+      ]);
       setScopeItems((scopeData as any) || []);
+      setApprovers((apprData as any) || []);
     } else {
       setScopeItems([]);
+      setApprovers([]);
     }
   }, [projectId]);
 
@@ -131,6 +144,10 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
         fetchData();
         onChanged?.();
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "change_request_approvers" }, () => {
+        fetchData();
+        onChanged?.();
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [projectId, fetchData, onChanged]);
@@ -139,6 +156,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
     setTitle(""); setDescription(""); setJustification(""); setBenefits("");
     setImpactScope(""); setImpactSchedule(""); setImpactCost(""); setImpactQuality("");
     setSelectedActivityIds(new Set()); setSelectedPhaseIds(new Set());
+    setSelectedApproverIds(new Set());
     setEditingId(null); setShowForm(false);
   };
 
@@ -185,6 +203,34 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
       if (scopeRows.length > 0) {
         await supabase.from("change_request_scope_items" as any).insert(scopeRows);
       }
+
+      // Reset decisores e regravar
+      const { data: prevApprovers } = await supabase
+        .from("change_request_approvers" as any)
+        .select("user_id")
+        .eq("change_request_id", rfcId);
+      const prevSet = new Set(((prevApprovers as any[]) || []).map(a => a.user_id));
+      await supabase.from("change_request_approvers" as any).delete().eq("change_request_id", rfcId);
+      if (selectedApproverIds.size > 0) {
+        const profById = new Map(activeProfiles.map(p => [p.id, p]));
+        const apprRows = Array.from(selectedApproverIds).map(uid => ({
+          change_request_id: rfcId,
+          user_id: uid,
+          user_name: profById.get(uid)?.full_name || profById.get(uid)?.email || null,
+        }));
+        await supabase.from("change_request_approvers" as any).insert(apprRows);
+
+        // Notifica decisores recém-designados (somente os novos)
+        const newOnes = Array.from(selectedApproverIds).filter(uid => !prevSet.has(uid));
+        if (newOnes.length > 0) {
+          await supabase.from("notifications").insert(newOnes.map(_uid => ({
+            project_id: projectId,
+            type: "change_request_decision",
+            title: "🔔 Você foi designado como decisor",
+            message: `Solicitação de mudança "${title.trim()}" aguarda sua aprovação.`,
+          })));
+        }
+      }
     }
 
     resetForm();
@@ -205,6 +251,8 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
     const itemScope = scopeItems.filter(s => s.change_request_id === item.id);
     setSelectedActivityIds(new Set(itemScope.filter(s => s.item_type === "activity" && s.activity_id).map(s => s.activity_id as string)));
     setSelectedPhaseIds(new Set(itemScope.filter(s => s.item_type === "phase" && s.phase_id).map(s => s.phase_id as string)));
+    const itemApprovers = approvers.filter(a => a.change_request_id === item.id);
+    setSelectedApproverIds(new Set(itemApprovers.map(a => a.user_id)));
     setShowForm(true);
   };
 
@@ -220,6 +268,15 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
 
   const handleDecide = async () => {
     if (!decisionFor) return;
+    const itemApprovers = approvers.filter(a => a.change_request_id === decisionFor.id);
+    if (itemApprovers.length > 0 && user?.id && !itemApprovers.some(a => a.user_id === user.id)) {
+      toast({
+        title: "Decisão restrita",
+        description: "Apenas decisores designados podem aprovar ou rejeitar esta solicitação.",
+        variant: "destructive",
+      });
+      return;
+    }
     const { error } = await supabase
       .from("change_requests" as any)
       .update({
@@ -373,6 +430,38 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
             </div>
           </div>
 
+          {/* Decisores designados */}
+          <div className="space-y-2 pt-2 border-t border-primary/20">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <UserCheck className="w-3.5 h-3.5" /> Quem vai decidir? ({selectedApproverIds.size})
+              </p>
+              <p className="text-[11px] text-muted-foreground italic">
+                {canAssignApprovers
+                  ? "Selecione um ou mais usuários — basta um aprovar"
+                  : "Apenas Admin, Gestor ou Líder do projeto podem designar"}
+              </p>
+            </div>
+            <div className="border border-border rounded-md max-h-40 overflow-y-auto bg-background">
+              {activeProfiles.length === 0 ? (
+                <p className="text-xs text-muted-foreground p-2">Nenhum usuário ativo encontrado.</p>
+              ) : activeProfiles.map(p => (
+                <label
+                  key={p.id}
+                  className={`flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-muted ${canAssignApprovers ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
+                >
+                  <Checkbox
+                    checked={selectedApproverIds.has(p.id)}
+                    disabled={!canAssignApprovers}
+                    onCheckedChange={() => canAssignApprovers && toggleSelected(selectedApproverIds, p.id, setSelectedApproverIds)}
+                  />
+                  <span className="truncate">{p.full_name || p.email}</span>
+                  {p.sector && <Badge variant="outline" className="text-[10px] ml-auto shrink-0">{p.sector}</Badge>}
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="flex gap-2">
             <Button size="sm" onClick={handleSave}>{editingId ? "Atualizar" : "Criar"}</Button>
             <Button size="sm" variant="outline" onClick={resetForm}>Cancelar</Button>
@@ -420,6 +509,14 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
             const isFullBlock = item.status === "pending" && itemScope.length === 0;
             const isExpanded = expandedScope.has(item.id);
             const stillBlocking = item.status === "pending" || item.status === "rejected";
+            const itemApprovers = approvers.filter(a => a.change_request_id === item.id);
+            const isDesignatedDecider = !!user?.id && itemApprovers.some(a => a.user_id === user.id);
+            // Regra: se há decisores designados, SOMENTE eles podem aprovar/rejeitar.
+            // Sem decisores designados, fallback para Admin/Gestor/Líder do projeto.
+            const canDecide = itemApprovers.length > 0
+              ? isDesignatedDecider
+              : (canManage || isOwner);
+            const isAwaitingMyDecision = item.status === "pending" && isDesignatedDecider;
             return (
               <Card key={item.id} className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-4">
@@ -429,6 +526,11 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                       <Badge className={`gap-1 ${meta.class}`}>
                         <Icon className="w-3 h-3" /> {meta.label}
                       </Badge>
+                      {isAwaitingMyDecision && (
+                        <Badge className="gap-1 bg-primary/15 text-primary border border-primary/40 animate-pulse">
+                          <Bell className="w-3 h-3" /> Aguardando sua decisão
+                        </Badge>
+                      )}
                        {stillBlocking && (
                          isFullBlock ? (
                            <Badge variant="outline" className="gap-1 border-amber-500/60 text-amber-700 dark:text-amber-400">
@@ -446,6 +548,15 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                       Solicitado por <strong>{item.requested_by || "—"}</strong> em{" "}
                       {new Date(item.created_at).toLocaleDateString("pt-BR")}
                     </p>
+                    {itemApprovers.length > 0 && (
+                      <p className="text-xs text-muted-foreground flex items-start gap-1.5 flex-wrap">
+                        <UserCheck className="w-3 h-3 mt-0.5 text-primary shrink-0" />
+                        <span>
+                          <strong>Decisor{itemApprovers.length > 1 ? "es" : ""} designado{itemApprovers.length > 1 ? "s" : ""}:</strong>{" "}
+                          {itemApprovers.map(a => a.user_name || "—").join(", ")}
+                        </span>
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-1 shrink-0">
                     {item.status === "pending" && (
@@ -541,7 +652,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                   </div>
                 )}
 
-                {item.status === "pending" && canApprove && (
+                {item.status === "pending" && canDecide && (
                   <div className="flex gap-2 pt-2 border-t border-border">
                     <Button size="sm" variant="default" className="gap-2 bg-success hover:bg-success/90 text-success-foreground" onClick={() => { setDecisionFor({ id: item.id, action: "approved" }); setDecisionNotes(""); }}>
                       <CheckCircle2 className="w-4 h-4" /> Aprovar
@@ -552,10 +663,12 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                   </div>
                 )}
 
-                {item.status === "pending" && !canApprove && (
+                {item.status === "pending" && !canDecide && (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
                     <AlertCircle className="w-3 h-3" />
-                    Aguardando decisão de Admin, Gestor ou Líder do projeto.
+                    {itemApprovers.length > 0
+                      ? `Aguardando decisão de: ${itemApprovers.map(a => a.user_name || "—").join(", ")}`
+                      : "Aguardando decisão de Admin, Gestor ou Líder do projeto."}
                   </div>
                 )}
               </Card>
