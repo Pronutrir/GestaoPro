@@ -209,11 +209,11 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
   };
 
   const handleArchive = async (id: string) => {
-    if (!confirm("Arquivar esta requisição de mudança?")) return;
+    if (!confirm("Arquivar esta solicitação de mudança?")) return;
     await supabase.from("change_requests" as any)
       .update({ is_trashed: true, trashed_at: new Date().toISOString() })
       .eq("id", id);
-    toast({ title: "RFC arquivada" });
+    toast({ title: "Solicitação arquivada" });
     fetchData();
     onChanged?.();
   };
@@ -233,9 +233,9 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
     if (decisionFor.action === "approved") {
       // Liberação imediata: remove os itens de escopo (já não bloqueia mais)
       await supabase.from("change_request_scope_items" as any).delete().eq("change_request_id", decisionFor.id);
-      toast({ title: "RFC aprovada — itens liberados" });
+      toast({ title: "Mudança aprovada — atividades liberadas" });
     } else {
-      toast({ title: "RFC rejeitada — itens permanecem bloqueados até arquivar a RFC" });
+      toast({ title: "Mudança rejeitada — atividades permanecem bloqueadas até arquivar" });
     }
     setDecisionFor(null);
     setDecisionNotes("");
