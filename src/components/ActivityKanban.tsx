@@ -1464,9 +1464,19 @@ export const ActivityKanban = ({
                 isQualityProject={isQualityProject}
                 onOpenCreateTask={onOpenCreateTask}
                 subActivityCounts={subActivityCounts}
+                isAdminOrGestor={isAdmin || canCreate}
+                onRenameStage={handleRenameStage}
+                onDeleteStage={handleDeleteStage}
+                onChangeStageColor={handleChangeStageColor}
+                onToggleStageFinal={handleToggleStageFinal}
+                onToggleStageBlocked={handleToggleStageBlocked}
+                onToggleStageVisible={handleToggleStageVisible}
               />
             );
           })}
+          {(isAdmin || canCreate) && (
+            <AddStageColumn onCreate={handleCreateStage} />
+          )}
         </div>
       </SortableContext>
 
