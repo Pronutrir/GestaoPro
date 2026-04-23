@@ -109,8 +109,8 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
 
   const fetchRelations = async () => {
     const [r, a] = await Promise.all([
-      supabase.from("risks").select("id, description, probability, impact, status").eq("project_id", projectId).order("created_at", { ascending: false }),
-      supabase.from("assumptions").select("id, description").eq("project_id", projectId).order("created_at", { ascending: false }),
+      supabase.from("risks").select("id, description, probability, impact, status").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false }),
+      supabase.from("assumptions").select("id, description").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false }),
     ]);
     if (r.data) setRisks(r.data);
     if (a.data) setAssumptionsList(a.data);
