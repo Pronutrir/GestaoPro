@@ -32,6 +32,11 @@ import {
   Plus,
   BookOpen,
   GitFork,
+  MoreHorizontal,
+  Check,
+  X as XIcon,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   DndContext,
