@@ -53,6 +53,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { getProjectDeadlineInfo, formatProjectDueDate } from "@/lib/projectDeadline";
 import { normalizeProjectTabs } from "@/lib/projectTabs";
+import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 
 interface Project {
   id: string;
@@ -135,7 +136,19 @@ const ProjectDetails = () => {
   const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
   const [pendingChangeRequests, setPendingChangeRequests] = useState(0);
 
-  const isChangeBlocked = pendingChangeRequests > 0;
+  // Bloqueio escopado: o hook lê RFCs pendentes E suas RFCs rejeitadas (não arquivadas)
+  // que tenham itens de escopo cadastrados.
+  const {
+    hasGlobalBlock,
+    blockedActivityIds,
+    blockedPhaseIds,
+    isActivityBlocked,
+    isPhaseBlocked,
+    refresh: refreshBlocks,
+  } = useChangeRequestBlocks(id);
+
+  const hasScopedBlocks = blockedActivityIds.size > 0 || blockedPhaseIds.size > 0;
+  const isChangeBlocked = hasGlobalBlock; // bloqueio amplo = sem escopo selecionado
   const baseCanCreate = !permissionsLoading && (isAdmin || (userPerms?.can_create ?? false));
   const baseCanEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
   const baseCanDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
@@ -145,6 +158,20 @@ const ProjectDetails = () => {
   const canDelete = baseCanDelete && !isChangeBlocked;
   const canMove = baseCanMove && !isChangeBlocked;
   const isQualityProject = project?.category === "qualidade";
+
+  // Helper que abre o EditActivityDialog respeitando bloqueios escopados
+  const openEditActivity = useCallback((activity: any) => {
+    if (activity && isActivityBlocked(activity.id, activity.phase_id)) {
+      toast({
+        title: "Atividade bloqueada por RFC",
+        description: "Esta atividade só pode ser editada após a aprovação (ou arquivamento) da Requisição de Mudança.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setEditingActivity(activity);
+    setEditActivityDialogOpen(true);
+  }, [isActivityBlocked, toast]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -460,6 +487,11 @@ const ProjectDetails = () => {
   };
 
   const handleToggleActivity = async (activityId: string, currentStatus: string) => {
+    const act = activities.find(a => a.id === activityId);
+    if (act && isActivityBlocked(activityId, act.phase_id)) {
+      toast({ title: "Atividade bloqueada por RFC", description: "Resolva a Requisição de Mudança que afeta este item.", variant: "destructive" });
+      return;
+    }
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
     const updatePayload: any = { status: newStatus, completed_at: completedAt };
@@ -496,6 +528,11 @@ const ProjectDetails = () => {
   };
 
   const handleDeleteActivity = async (activityId: string) => {
+    const act = activities.find(a => a.id === activityId);
+    if (act && isActivityBlocked(activityId, act.phase_id)) {
+      toast({ title: "Atividade bloqueada por RFC", description: "Resolva a Requisição de Mudança que afeta este item.", variant: "destructive" });
+      return;
+    }
     if (!confirm("Tem certeza que deseja mover esta atividade para a lixeira?")) return;
     const trashedAt = new Date().toISOString();
     // Coletar a atividade + todos os descendentes (subtarefas em qualquer nível)
@@ -614,21 +651,34 @@ const ProjectDetails = () => {
               activities={activities}
               phases={phases}
               project={project}
-              onNavigateToActivity={(activity) => { setEditingActivity(activity as any); setEditActivityDialogOpen(true); }}
+              onNavigateToActivity={(activity) => openEditActivity(activity as any)}
             />
           )}
 
-          {isChangeBlocked && (
+          {(isChangeBlocked || hasScopedBlocks) && (
             <Card className="px-4 py-3 border-2 border-amber-500/60 bg-amber-500/10">
               <div className="flex items-start gap-3">
                 <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div className="flex-1 text-sm">
-                  <p className="font-semibold text-amber-900 dark:text-amber-200">
-                    Projeto bloqueado: {pendingChangeRequests} requisição{pendingChangeRequests > 1 ? "ões" : ""} de mudança aguardando aprovação
-                  </p>
-                  <p className="text-amber-800/80 dark:text-amber-300/80 text-xs mt-0.5">
-                    Nenhuma alteração no projeto pode ser feita até que as RFCs pendentes sejam aprovadas ou rejeitadas.
-                  </p>
+                  {isChangeBlocked ? (
+                    <>
+                      <p className="font-semibold text-amber-900 dark:text-amber-200">
+                        Projeto bloqueado: {pendingChangeRequests} requisição{pendingChangeRequests > 1 ? "ões" : ""} de mudança aguardando aprovação
+                      </p>
+                      <p className="text-amber-800/80 dark:text-amber-300/80 text-xs mt-0.5">
+                        Nenhuma alteração pode ser feita até que as RFCs sem escopo sejam aprovadas ou rejeitadas.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold text-amber-900 dark:text-amber-200">
+                        {blockedPhaseIds.size} fase{blockedPhaseIds.size !== 1 ? "s" : ""} e {blockedActivityIds.size} atividade{blockedActivityIds.size !== 1 ? "s" : ""} bloqueadas por RFC
+                      </p>
+                      <p className="text-amber-800/80 dark:text-amber-300/80 text-xs mt-0.5">
+                        Os itens marcados com cadeado só serão liberados quando a RFC for aprovada (ou arquivada se rejeitada).
+                      </p>
+                    </>
+                  )}
                 </div>
                 <Button size="sm" variant="outline" className="border-amber-500/60" onClick={() => setActiveTab("changes")}>
                   Ver requisições
@@ -732,7 +782,7 @@ const ProjectDetails = () => {
               <ActivityKanban
                 projectId={id!} activities={activities} phases={phases}
                 onDataChanged={fetchProjectData}
-                onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+                onEditActivity={(activity) => openEditActivity(activity)}
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 isAdmin={canDelete}
@@ -756,7 +806,7 @@ const ProjectDetails = () => {
                 <ProjectListView
                   activities={activities as any}
                   phases={phases}
-                  onEditActivity={(a) => { setEditingActivity(a as any); setEditActivityDialogOpen(true); }}
+                  onEditActivity={(a) => openEditActivity(a as any)}
                   onToggleActivity={handleToggleActivity}
                   canCreate={canCreate}
                   onAddActivity={() => {
@@ -878,7 +928,7 @@ const ProjectDetails = () => {
 
               <BacklogSection
                 projectId={id!} activities={activities} phases={phases}
-                onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+                onEditActivity={(activity) => openEditActivity(activity)}
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
