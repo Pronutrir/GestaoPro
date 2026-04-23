@@ -917,6 +917,7 @@ export const ActivityKanban = ({
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Map<string, number>>(new Map());
+  const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
@@ -992,6 +993,28 @@ export const ActivityKanban = ({
           setStoryLinkedActivities(countMap);
         }
       });
+    // Fetch task dependencies for badge counters
+    const ids = activities.map((a) => a.id);
+    if (ids.length > 0) {
+      supabase
+        .from("task_dependencies")
+        .select("predecessor_id, successor_id")
+        .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`)
+        .then(({ data }) => {
+          const map = new Map<string, { pred: number; succ: number }>();
+          (data || []).forEach((d: any) => {
+            const p = map.get(d.successor_id) || { pred: 0, succ: 0 };
+            p.pred += 1;
+            map.set(d.successor_id, p);
+            const s = map.get(d.predecessor_id) || { pred: 0, succ: 0 };
+            s.succ += 1;
+            map.set(d.predecessor_id, s);
+          });
+          setDependencyCounts(map);
+        });
+    } else {
+      setDependencyCounts(new Map());
+    }
   }, [projectId, activities]);
 
   
