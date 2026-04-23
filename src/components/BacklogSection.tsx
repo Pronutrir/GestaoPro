@@ -92,6 +92,31 @@ export const BacklogSection = ({
   const [collapsedPackages, setCollapsedPackages] = useState<Set<string>>(new Set());
   const [packageDialogPhaseId, setPackageDialogPhaseId] = useState<string | null>(null);
   const [newPackageTitle, setNewPackageTitle] = useState("");
+  const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
+
+  useEffect(() => {
+    const ids = activities.map((a) => a.id);
+    if (ids.length === 0) {
+      setDependencyCounts(new Map());
+      return;
+    }
+    supabase
+      .from("task_dependencies")
+      .select("predecessor_id, successor_id")
+      .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`)
+      .then(({ data }) => {
+        const map = new Map<string, { pred: number; succ: number }>();
+        (data || []).forEach((d: any) => {
+          const p = map.get(d.successor_id) || { pred: 0, succ: 0 };
+          p.pred += 1;
+          map.set(d.successor_id, p);
+          const s = map.get(d.predecessor_id) || { pred: 0, succ: 0 };
+          s.succ += 1;
+          map.set(d.predecessor_id, s);
+        });
+        setDependencyCounts(map);
+      });
+  }, [activities]);
 
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -337,6 +362,19 @@ export const BacklogSection = ({
             {activity.assigned_to && (
               <Badge variant="secondary" className="text-[10px]">👤 {activity.assigned_to}</Badge>
             )}
+            {(() => {
+              const dc = dependencyCounts.get(activity.id);
+              if (!dc || (dc.pred === 0 && dc.succ === 0)) return null;
+              return (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-primary/10 text-primary border-primary/30 font-semibold"
+                  title={`${dc.pred} predecessora(s) · ${dc.succ} sucessora(s)`}
+                >
+                  🔗 {dc.pred > 0 ? `←${dc.pred}` : ""}{dc.pred > 0 && dc.succ > 0 ? " " : ""}{dc.succ > 0 ? `→${dc.succ}` : ""}
+                </Badge>
+              );
+            })()}
             {onCreateActivityInPhase && depth === 0 && (
               <Button
                 size="icon"
