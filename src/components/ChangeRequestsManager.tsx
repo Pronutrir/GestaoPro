@@ -429,17 +429,17 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                       <Badge className={`gap-1 ${meta.class}`}>
                         <Icon className="w-3 h-3" /> {meta.label}
                       </Badge>
-                      {stillBlocking && (
-                        isFullBlock ? (
-                          <Badge variant="outline" className="gap-1 border-amber-500/60 text-amber-700 dark:text-amber-400">
-                            <Lock className="w-3 h-3" /> Bloqueia projeto inteiro
-                          </Badge>
-                        ) : itemScope.length > 0 ? (
-                          <Badge variant="outline" className="gap-1 border-amber-500/60 text-amber-700 dark:text-amber-400">
-                            <Lock className="w-3 h-3" /> {lockedPhases.length} fase{lockedPhases.length !== 1 ? "s" : ""} • {lockedActivities.length} atividade{lockedActivities.length !== 1 ? "s" : ""}
-                          </Badge>
-                        ) : null
-                      )}
+                       {stillBlocking && (
+                         isFullBlock ? (
+                           <Badge variant="outline" className="gap-1 border-amber-500/60 text-amber-700 dark:text-amber-400">
+                             <Lock className="w-3 h-3" /> Projeto inteiro bloqueado
+                           </Badge>
+                         ) : itemScope.length > 0 ? (
+                           <Badge variant="outline" className="gap-1 border-amber-500/60 text-amber-700 dark:text-amber-400">
+                             <Lock className="w-3 h-3" /> {lockedActivities.length} atividade{lockedActivities.length !== 1 ? "s" : ""} bloqueada{lockedActivities.length !== 1 ? "s" : ""}{lockedPhases.length > 0 ? ` • ${lockedPhases.length} fase${lockedPhases.length !== 1 ? "s" : ""}` : ""}
+                           </Badge>
+                         ) : null
+                       )}
                     </div>
                     {item.description && <p className="text-sm text-muted-foreground">{item.description}</p>}
                     <p className="text-xs text-muted-foreground">
@@ -463,17 +463,17 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
 
                 {itemScope.length > 0 && (
                   <div className="rounded-md border border-amber-500/30 bg-amber-500/5">
-                    <button
-                      type="button"
-                      onClick={() => toggleExpanded(item.id)}
-                      className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-amber-800 dark:text-amber-300 hover:bg-amber-500/10"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Lock className="w-3.5 h-3.5" />
-                        Itens bloqueados por esta RFC
-                      </span>
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
+                     <button
+                       type="button"
+                       onClick={() => toggleExpanded(item.id)}
+                       className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-amber-800 dark:text-amber-300 hover:bg-amber-500/10"
+                     >
+                       <span className="flex items-center gap-1.5">
+                         <Lock className="w-3.5 h-3.5" />
+                         Atividades bloqueadas por esta solicitação
+                       </span>
+                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                     </button>
                     {isExpanded && (
                       <div className="px-3 pb-3 space-y-2 text-sm">
                         {lockedPhases.length > 0 && (
@@ -533,11 +533,11 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
                     Decidido por <strong>{item.approver || "—"}</strong>
                     {item.decision_date && ` em ${new Date(item.decision_date).toLocaleDateString("pt-BR")}`}
                     {item.decision_notes && <p className="mt-1 italic">"{item.decision_notes}"</p>}
-                    {item.status === "rejected" && itemScope.length > 0 && (
-                      <p className="mt-1 text-amber-700 dark:text-amber-400">
-                        ⚠ Itens permanecem bloqueados — arquive esta RFC para liberar.
-                      </p>
-                    )}
+                     {item.status === "rejected" && itemScope.length > 0 && (
+                       <p className="mt-1 text-amber-700 dark:text-amber-400">
+                         ⚠ Atividades permanecem bloqueadas — arquive esta solicitação para liberar.
+                       </p>
+                     )}
                   </div>
                 )}
 
