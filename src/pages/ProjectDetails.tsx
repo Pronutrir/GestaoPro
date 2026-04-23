@@ -782,7 +782,7 @@ const ProjectDetails = () => {
               <ActivityKanban
                 projectId={id!} activities={activities} phases={phases}
                 onDataChanged={fetchProjectData}
-                onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+                onEditActivity={(activity) => openEditActivity(activity)}
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 isAdmin={canDelete}
