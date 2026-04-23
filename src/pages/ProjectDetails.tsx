@@ -22,7 +22,6 @@ import { ActivityKanban } from "@/components/ActivityKanban";
 import { ProjectListView } from "@/components/project-views/ProjectListView";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
-import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { MeetingsManager } from "@/components/MeetingsManager";
 import { AssumptionsManager } from "@/components/AssumptionsManager";
 import { RisksManager } from "@/components/RisksManager";
