@@ -18,6 +18,8 @@ import { ActivityComments } from "@/components/ActivityComments";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { History, ChevronDown, Hash, Copy, UserCircle, Lock } from "lucide-react";
 import { BookOpen } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { UserPlus2 } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -669,106 +671,183 @@ export const EditActivityDialog = ({
               </h3>
               {subActivities.length > 0 && (
                 <div className="rounded-md border border-border overflow-hidden">
-                  <div className="grid grid-cols-[28px_1fr_180px_120px_140px_64px] items-center gap-2 px-2 py-1.5 bg-muted/40 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
+                  <div className="grid grid-cols-[24px_1fr_72px_56px_84px_28px] items-center gap-2 px-2 py-1 bg-muted/30 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
                     <span></span>
                     <span>Nome</span>
-                    <span>Responsável</span>
-                    <span>Prioridade</span>
-                    <span>Data de vencimento</span>
-                    <span className="text-right pr-1">Ações</span>
+                    <span className="text-center">Resp.</span>
+                    <span className="text-center">Prio.</span>
+                    <span>Vencimento</span>
+                    <span></span>
                   </div>
-                  {subActivities.map((sub) => (
-                    <div
-                      key={sub.id}
-                      className="grid grid-cols-[28px_1fr_180px_120px_140px_64px] items-center gap-2 px-2 py-1.5 border-b border-border/60 last:border-0 hover:bg-muted/30 group"
-                    >
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6 shrink-0"
-                        onClick={() => handleToggleSubActivity(sub)}
-                        title={sub.status === "completed" ? "Marcar como pendente" : "Concluir"}
+                  {subActivities.map((sub) => {
+                    const initials = (sub.assigned_to || "")
+                      .split(" ")
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((n) => n[0]?.toUpperCase())
+                      .join("");
+                    const prio = sub.priority || "medium";
+                    const prioClass =
+                      prio === "critical" ? "text-red-600"
+                      : prio === "high" ? "text-orange-500"
+                      : prio === "low" ? "text-muted-foreground"
+                      : "text-amber-500";
+                    const prioLabel =
+                      prio === "critical" ? "Crítica"
+                      : prio === "high" ? "Alta"
+                      : prio === "low" ? "Baixa" : "Média";
+                    const dateShort = sub.end_date
+                      ? (() => {
+                          const [y, m, d] = sub.end_date.split("-").map(Number);
+                          return `${m}/${d}/${String(y).slice(-2)}`;
+                        })()
+                      : "—";
+                    return (
+                      <div
+                        key={sub.id}
+                        className="grid grid-cols-[24px_1fr_72px_56px_84px_28px] items-center gap-2 px-2 py-1 border-b border-border/50 last:border-0 hover:bg-muted/20 group"
                       >
-                        {sub.status === "completed" ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-                        ) : (
-                          <Circle className="w-3.5 h-3.5 text-muted-foreground" />
-                        )}
-                      </Button>
-                      <button
-                        type="button"
-                        onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
-                        className={`text-xs font-medium truncate text-left ${
-                          sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground hover:text-primary"
-                        }`}
-                        title={sub.title}
-                      >
-                        {sub.title}
-                      </button>
-                      <select
-                        className="h-7 rounded border border-input bg-background px-1.5 text-xs"
-                        value={sub.assigned_to || ""}
-                        onChange={async (e) => {
-                          const value = e.target.value || null;
-                          await supabase.from("activities").update({ assigned_to: value }).eq("id", sub.id);
-                          if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
-                          onActivityUpdated();
-                        }}
-                      >
-                        <option value="">Sem responsável</option>
-                        {members.map((m) => (
-                          <option key={m.full_name} value={m.full_name!}>
-                            {m.full_name}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="h-7 rounded border border-input bg-background px-1.5 text-xs"
-                        value={sub.priority || "medium"}
-                        onChange={async (e) => {
-                          await supabase.from("activities").update({ priority: e.target.value }).eq("id", sub.id);
-                          if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
-                          onActivityUpdated();
-                        }}
-                      >
-                        <option value="low">Baixa</option>
-                        <option value="medium">Média</option>
-                        <option value="high">Alta</option>
-                        <option value="critical">Crítica</option>
-                      </select>
-                      <Input
-                        type="date"
-                        value={sub.end_date || ""}
-                        onChange={async (e) => {
-                          const value = e.target.value || null;
-                          await supabase.from("activities").update({ end_date: value }).eq("id", sub.id);
-                          if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
-                          onActivityUpdated();
-                        }}
-                        className="h-7 text-xs px-1.5"
-                      />
-                      <div className="flex justify-end gap-0.5">
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                          onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
-                          title="Editar sub-atividade"
+                          className="h-5 w-5 shrink-0"
+                          onClick={() => handleToggleSubActivity(sub)}
+                          title={sub.status === "completed" ? "Reabrir" : "Concluir"}
                         >
-                          <Pencil className="w-3 h-3" />
+                          {sub.status === "completed" ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                          ) : (
+                            <Circle className="w-3.5 h-3.5 text-muted-foreground" />
+                          )}
                         </Button>
+                        <button
+                          type="button"
+                          onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
+                          className={`text-xs truncate text-left ${
+                            sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground hover:text-primary"
+                          }`}
+                          title={sub.title}
+                        >
+                          {sub.title}
+                        </button>
+
+                        {/* Responsável: avatar circular */}
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="mx-auto h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all hover:ring-2 hover:ring-primary/30"
+                              title={sub.assigned_to || "Atribuir responsável"}
+                            >
+                              {sub.assigned_to ? (
+                                <span className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                                  {initials}
+                                </span>
+                              ) : (
+                                <span className="h-6 w-6 rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground flex items-center justify-center">
+                                  <UserPlus2 className="w-3 h-3" />
+                                </span>
+                              )}
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-56 p-1" align="center">
+                            <div className="max-h-56 overflow-y-auto">
+                              <button
+                                type="button"
+                                className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted"
+                                onClick={async () => {
+                                  await supabase.from("activities").update({ assigned_to: null }).eq("id", sub.id);
+                                  if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                                  onActivityUpdated();
+                                }}
+                              >
+                                Sem responsável
+                              </button>
+                              {members.map((m) => (
+                                <button
+                                  key={m.full_name}
+                                  type="button"
+                                  className={`w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted ${
+                                    sub.assigned_to === m.full_name ? "bg-primary/10 text-primary font-medium" : ""
+                                  }`}
+                                  onClick={async () => {
+                                    await supabase.from("activities").update({ assigned_to: m.full_name }).eq("id", sub.id);
+                                    if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                                    onActivityUpdated();
+                                  }}
+                                >
+                                  {m.full_name}
+                                  {m.sector && <span className="text-muted-foreground"> — {m.sector}</span>}
+                                </button>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+
+                        {/* Prioridade: ícone bandeira */}
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="mx-auto h-6 w-6 rounded flex items-center justify-center hover:bg-muted"
+                              title={`Prioridade: ${prioLabel}`}
+                            >
+                              <Flag className={`w-3.5 h-3.5 ${prioClass}`} />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-40 p-1" align="center">
+                            {[
+                              { v: "low", l: "Baixa", c: "text-muted-foreground" },
+                              { v: "medium", l: "Média", c: "text-amber-500" },
+                              { v: "high", l: "Alta", c: "text-orange-500" },
+                              { v: "critical", l: "Crítica", c: "text-red-600" },
+                            ].map((opt) => (
+                              <button
+                                key={opt.v}
+                                type="button"
+                                className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted ${
+                                  prio === opt.v ? "bg-primary/10 text-primary font-medium" : ""
+                                }`}
+                                onClick={async () => {
+                                  await supabase.from("activities").update({ priority: opt.v }).eq("id", sub.id);
+                                  if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                                  onActivityUpdated();
+                                }}
+                              >
+                                <Flag className={`w-3.5 h-3.5 ${opt.c}`} /> {opt.l}
+                              </button>
+                            ))}
+                          </PopoverContent>
+                        </Popover>
+
+                        {/* Data: texto curto + input nativo escondido */}
+                        <label className="relative cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                          <span>{dateShort}</span>
+                          <input
+                            type="date"
+                            value={sub.end_date || ""}
+                            onChange={async (e) => {
+                              const value = e.target.value || null;
+                              await supabase.from("activities").update({ end_date: value }).eq("id", sub.id);
+                              if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                              onActivityUpdated();
+                            }}
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                          />
+                        </label>
+
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
+                          className="h-5 w-5 opacity-0 group-hover:opacity-100 text-destructive"
                           onClick={() => handleDeleteSubActivity(sub.id)}
                           title="Excluir"
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               <div className="flex gap-2">
