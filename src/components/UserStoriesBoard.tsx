@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { AIAssistButton } from "@/components/AIAssistButton";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -302,13 +303,19 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">Título *</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Título *</Label>
+                <AIAssistButton value={form.title} onChange={(v) => setForm({ ...form, title: v })} context="story_title" />
+              </div>
               <Input placeholder="Título da história..." value={form.title}
                 onChange={e => setForm({ ...form, title: e.target.value })} autoFocus />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">Narrativa / Contexto</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Narrativa / Contexto</Label>
+                <AIAssistButton value={form.narrative} onChange={(v) => setForm({ ...form, narrative: v })} context="story_narrative" />
+              </div>
               <Textarea placeholder="Conte a história com mais detalhes..." value={form.narrative}
                 onChange={e => setForm({ ...form, narrative: e.target.value })} rows={4} autoResize
                 className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />

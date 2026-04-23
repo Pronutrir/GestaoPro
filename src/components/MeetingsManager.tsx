@@ -379,6 +379,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
           />
+          {form.title.trim() && (
+            <div className="flex justify-end -mt-2">
+              <AIAssistButton value={form.title} onChange={(v) => setForm({ ...form, title: v })} context="meeting_title" />
+            </div>
+          )}
           <Input
             placeholder="Proponente / Responsável pela reunião"
             value={form.responsible}
@@ -727,6 +732,9 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                             onKeyDown={(e) => e.key === "Enter" && handleAddDecision(meeting.id)}
                             className="text-sm h-8"
                           />
+                          {newDecision.trim() && (
+                            <AIAssistButton value={newDecision} onChange={setNewDecision} context="meeting_decision" size="icon" />
+                          )}
                           <Button size="sm" variant="outline" className="h-8" onClick={() => handleAddDecision(meeting.id)}>
                             <Plus className="w-3 h-3" />
                           </Button>
@@ -796,6 +804,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                               <Plus className="w-3 h-3" />
                             </Button>
                           </div>
+                        </div>
+                      )}
+                      {canEditMeeting && newAction.description.trim() && (
+                        <div className="flex justify-end mt-1">
+                          <AIAssistButton value={newAction.description} onChange={(v) => setNewAction({ ...newAction, description: v })} context="meeting_action" />
                         </div>
                       )}
                     </div>

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AIAssistButton } from "@/components/AIAssistButton";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -622,7 +623,10 @@ export const BacklogSection = ({
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-2">
-              <Label>Título do pacote *</Label>
+              <div className="flex items-center justify-between">
+                <Label>Título do pacote *</Label>
+                <AIAssistButton value={newPackageTitle} onChange={setNewPackageTitle} context="package_title" />
+              </div>
               <Input
                 placeholder="Ex: Implementação Backend"
                 value={newPackageTitle}

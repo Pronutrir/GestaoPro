@@ -5,6 +5,7 @@ import { Pencil, Trash2, MessageSquare, Send, UserCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { AIAssistButton } from "@/components/AIAssistButton";
 
 interface Comment {
   id: string;
@@ -118,6 +119,9 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
           {comments.map((comment) =>
             editingComment?.id === comment.id ? (
               <div key={comment.id} className="space-y-2 p-2 bg-accent/50 rounded-lg">
+                <div className="flex justify-end">
+                  <AIAssistButton value={editContent} onChange={setEditContent} context="comment" />
+                </div>
                 <Textarea
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
@@ -178,9 +182,14 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
 
       {/* Add comment */}
       <div className="space-y-2">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <UserCircle className="w-3.5 h-3.5" />
-          Comentando como <span className="font-medium text-foreground">{currentAuthorName}</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <UserCircle className="w-3.5 h-3.5" />
+            Comentando como <span className="font-medium text-foreground">{currentAuthorName}</span>
+          </div>
+          {newComment.trim() && (
+            <AIAssistButton value={newComment} onChange={setNewComment} context="comment" />
+          )}
         </div>
         <div className="flex gap-2">
           <Textarea
