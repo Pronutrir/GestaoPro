@@ -164,7 +164,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
       const { error } = await supabase.from("change_requests" as any).update(payload).eq("id", editingId);
       if (error) { toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" }); return; }
       rfcId = editingId;
-      toast({ title: "RFC atualizada!" });
+      toast({ title: "Solicitação de mudança atualizada!" });
     } else {
       const { data, error } = await supabase
         .from("change_requests" as any)
@@ -173,7 +173,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
         .single();
       if (error) { toast({ title: "Erro ao criar", description: error.message, variant: "destructive" }); return; }
       rfcId = (data as any)?.id ?? null;
-      toast({ title: "RFC criada — aguardando aprovação" });
+      toast({ title: "Solicitação criada — aguardando aprovação" });
     }
 
     if (rfcId) {
