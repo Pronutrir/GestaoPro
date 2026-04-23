@@ -1045,6 +1045,11 @@ export const EditActivityDialog = ({
           allActivities={allActivities}
           projectId={projectId}
           isQualityProject={isQualityProject}
+          parentActivityTitle={effectiveActivity?.title}
+          onBackToParent={() => {
+            setEditingSubOpen(false);
+            setEditingSubActivity(null);
+          }}
         />
       )}
     </Dialog>
