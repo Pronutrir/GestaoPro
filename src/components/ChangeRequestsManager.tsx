@@ -57,13 +57,15 @@ interface ProfileLite { id: string; full_name: string | null; email: string | nu
 
 export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Props) => {
   const { toast } = useToast();
-  const { canManage, profile } = useAuth();
+  const { canManage, profile, user } = useAuth();
   const userName = (profile?.full_name || "").trim();
   const isOwner = !!userName && !!projectOwner && userName.toLowerCase() === projectOwner.trim().toLowerCase();
-  const canApprove = canManage || isOwner;
+  const canAssignApprovers = canManage || isOwner;
 
   const [items, setItems] = useState<ChangeRequest[]>([]);
   const [scopeItems, setScopeItems] = useState<ScopeItem[]>([]);
+  const [approvers, setApprovers] = useState<ApproverItem[]>([]);
+  const [activeProfiles, setActiveProfiles] = useState<ProfileLite[]>([]);
   const [activities, setActivities] = useState<ActivityLite[]>([]);
   const [phases, setPhases] = useState<PhaseLite[]>([]);
   const [expandedScope, setExpandedScope] = useState<Set<string>>(new Set());
@@ -82,9 +84,10 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
   const [impactQuality, setImpactQuality] = useState("");
   const [selectedActivityIds, setSelectedActivityIds] = useState<Set<string>>(new Set());
   const [selectedPhaseIds, setSelectedPhaseIds] = useState<Set<string>>(new Set());
+  const [selectedApproverIds, setSelectedApproverIds] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
-    const [reqRes, actRes, phaseRes] = await Promise.all([
+    const [reqRes, actRes, phaseRes, profRes] = await Promise.all([
       supabase
         .from("change_requests" as any)
         .select("*")
@@ -103,20 +106,28 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
         .eq("project_id", projectId)
         .eq("is_trashed", false)
         .order("display_order"),
+      supabase
+        .from("profiles")
+        .select("id, full_name, email, sector")
+        .eq("is_active", true)
+        .order("full_name"),
     ]);
     if (reqRes.data) setItems(reqRes.data as any);
     if (actRes.data) setActivities(actRes.data as any);
     if (phaseRes.data) setPhases(phaseRes.data as any);
+    if (profRes.data) setActiveProfiles(profRes.data as any);
 
     const reqIds = ((reqRes.data as any[]) || []).map(r => r.id);
     if (reqIds.length > 0) {
-      const { data: scopeData } = await supabase
-        .from("change_request_scope_items" as any)
-        .select("*")
-        .in("change_request_id", reqIds);
+      const [{ data: scopeData }, { data: apprData }] = await Promise.all([
+        supabase.from("change_request_scope_items" as any).select("*").in("change_request_id", reqIds),
+        supabase.from("change_request_approvers" as any).select("*").in("change_request_id", reqIds),
+      ]);
       setScopeItems((scopeData as any) || []);
+      setApprovers((apprData as any) || []);
     } else {
       setScopeItems([]);
+      setApprovers([]);
     }
   }, [projectId]);
 
