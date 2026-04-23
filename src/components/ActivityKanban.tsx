@@ -31,6 +31,7 @@ import {
   ArrowUpDown,
   Plus,
   BookOpen,
+  GitFork,
 } from "lucide-react";
 import {
   DndContext,
@@ -126,6 +127,7 @@ function SortableKanbanCard({
   onCreateStory,
   isQualityProject,
   stageColor,
+  subActivityCount,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -141,6 +143,7 @@ function SortableKanbanCard({
   onCreateStory?: () => void;
   isQualityProject?: boolean;
   stageColor?: string;
+  subActivityCount?: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -169,6 +172,7 @@ function SortableKanbanCard({
         onCreateStory={onCreateStory}
         isQualityProject={isQualityProject}
         stageColor={stageColor}
+        subActivityCount={subActivityCount}
       />
     </div>
   );
@@ -190,6 +194,7 @@ function KanbanCard({
   onCreateStory,
   isQualityProject,
   stageColor,
+  subActivityCount,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -206,6 +211,7 @@ function KanbanCard({
   onCreateStory?: () => void;
   isQualityProject?: boolean;
   stageColor?: string;
+  subActivityCount?: number;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -343,6 +349,12 @@ function KanbanCard({
                     </Badge>
                   )}
                 </div>
+                {subActivityCount && subActivityCount > 0 ? (
+                  <div className="flex items-center gap-1 mt-1.5 text-[10px] text-muted-foreground">
+                    <GitFork className="w-3 h-3" />
+                    <span>{subActivityCount} {subActivityCount === 1 ? "subtarefa" : "subtarefas"}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -409,6 +421,7 @@ function SortableColumn({
   onCreateStory,
   isQualityProject,
   onOpenCreateTask,
+  subActivityCounts,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -429,6 +442,7 @@ function SortableColumn({
   onCreateStory: (activity: Activity) => void;
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;
+  subActivityCounts: Map<string, number>;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -661,6 +675,7 @@ function SortableColumn({
                 onCreateStory={() => onCreateStory(activity)}
                 isQualityProject={isQualityProject}
                 stageColor={stage.color}
+                subActivityCount={subActivityCounts.get(activity.id) || 0}
               />
             ))
           )}
@@ -832,6 +847,16 @@ export const ActivityKanban = ({
   // Clear optimistic moves when activities prop changes (parent refetched)
   useEffect(() => {
     setOptimisticMoves({});
+  }, [activities]);
+
+  const subActivityCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    activities.forEach((a) => {
+      if (a.parent_id) {
+        counts.set(a.parent_id, (counts.get(a.parent_id) || 0) + 1);
+      }
+    });
+    return counts;
   }, [activities]);
 
   const activitiesByStage = useMemo(() => {
@@ -1131,6 +1156,7 @@ export const ActivityKanban = ({
                       onStoryClick={() => { setStoryDrawerActivityId(activity.id); setStoryDrawerOpen(true); }}
                       onCreateStory={() => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
                       isQualityProject={isQualityProject}
+                      subActivityCount={subActivityCounts.get(activity.id) || 0}
                     />
                   ))
                 )}
@@ -1162,6 +1188,7 @@ export const ActivityKanban = ({
                 onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
                 isQualityProject={isQualityProject}
                 onOpenCreateTask={onOpenCreateTask}
+                subActivityCounts={subActivityCounts}
               />
             );
           })}
