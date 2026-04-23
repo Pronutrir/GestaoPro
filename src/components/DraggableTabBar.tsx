@@ -31,6 +31,7 @@ interface DraggableTabBarProps {
   onRemoveTab?: (value: string) => void;
   removableValues?: string[];
   extraSlot?: React.ReactNode;
+  extraSlotPosition?: "left" | "right";
 }
 
 function SortableTab({
