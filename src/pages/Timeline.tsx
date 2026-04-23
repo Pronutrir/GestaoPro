@@ -545,15 +545,15 @@ const Timeline = () => {
         ) : (
           <div className="flex-1 flex overflow-hidden">
             {/* Left Panel: Row Labels */}
-            <div className="flex-none w-[340px] border-r border-border bg-card flex flex-col">
+            <div className="flex-none w-[180px] sm:w-[260px] lg:w-[320px] border-r border-border bg-card flex flex-col">
               {/* Header */}
               <div
                 className="flex items-center px-4 border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider gap-2"
                 style={{ height: HEADER_H }}
               >
-                <Layers className="w-3.5 h-3.5" />
-                <span className="flex-1">Projetos / Atividades</span>
-                <span className="w-[72px] text-right normal-case tracking-normal text-[11px]">Data final</span>
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span className="flex-1 truncate">Projetos / Atividades</span>
+                <span className="hidden sm:inline w-[64px] text-right normal-case tracking-normal text-[11px] shrink-0">Data final</span>
               </div>
               {/* Rows */}
               <div className="flex-1 overflow-y-auto overflow-x-hidden">
