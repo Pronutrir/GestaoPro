@@ -502,6 +502,22 @@ export const EditActivityDialog = ({
                   </span>
                 </>
               )}
+              {(creatorName || creatorEmail) && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span title={creatorEmail || ""}>
+                    por <span className="font-semibold text-foreground">{creatorName || creatorEmail}</span>
+                  </span>
+                </>
+              )}
+              {(lastEditorName || lastEditorEmail) && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span title={lastEditorEmail || ""} className="italic">
+                    última edição por <span className="font-semibold text-foreground not-italic">{lastEditorName || lastEditorEmail}</span>
+                  </span>
+                </>
+              )}
               {act.closed_at && (
                 <>
                   <span className="opacity-50">·</span>
@@ -1209,7 +1225,7 @@ export const EditActivityDialog = ({
           )}
 
           {act && !createMode && (
-            <Collapsible className="border border-border rounded-lg">
+            <Collapsible defaultOpen className="border border-border rounded-lg">
               <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-accent/30 transition-colors rounded-lg">
                 <span className="text-sm font-semibold flex items-center gap-2">
                   <History className="w-4 h-4" /> Histórico de alterações
