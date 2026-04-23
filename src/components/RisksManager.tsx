@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AIAssistButton } from "@/components/AIAssistButton";
 import { Plus, Pencil, Trash2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -220,7 +221,12 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
           <div className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
               <label className="text-sm font-medium text-right md:text-right"><span className="text-destructive">*</span> Descrição</label>
-              <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} />
+              <div className="space-y-1">
+                <div className="flex justify-end">
+                  <AIAssistButton value={description} onChange={setDescription} context="risk_description" />
+                </div>
+                <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
@@ -307,7 +313,12 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
 
           <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-start gap-3">
             <label className="text-sm font-medium text-right pt-2">Contramedida</label>
-            <Textarea value={contramedida} onChange={e => setContramedida(e.target.value)} rows={3} placeholder="Plano de ação para responder ao risco" />
+            <div className="space-y-1">
+              <div className="flex justify-end">
+                <AIAssistButton value={contramedida} onChange={setContramedida} context="risk_mitigation" />
+              </div>
+              <Textarea value={contramedida} onChange={e => setContramedida(e.target.value)} rows={3} placeholder="Plano de ação para responder ao risco" />
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-border/50">
