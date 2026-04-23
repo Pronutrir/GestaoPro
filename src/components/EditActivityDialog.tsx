@@ -835,118 +835,107 @@ export const EditActivityDialog = ({
                           {sub.title}
                         </button>
 
-                        {/* Responsável: avatar circular */}
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="mx-auto h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all hover:ring-2 hover:ring-primary/30"
-                              title={sub.assigned_to || "Atribuir responsável"}
-                            >
-                              {sub.assigned_to ? (
-                                <span className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                                  {initials}
-                                </span>
-                              ) : (
-                                <span className="h-6 w-6 rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground flex items-center justify-center">
-                                  <UserPlus2 className="w-3 h-3" />
-                                </span>
-                              )}
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-56 p-1" align="center">
-                            <div className="max-h-56 overflow-y-auto">
-                              <button
-                                type="button"
-                                className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted"
-                                onClick={async () => {
-                                  await supabase.from("activities").update({ assigned_to: null }).eq("id", sub.id);
-                                  if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
-                                  onActivityUpdated();
-                                }}
-                              >
-                                Sem responsável
-                              </button>
-                              {members.map((m) => (
-                                <button
-                                  key={m.full_name}
-                                  type="button"
-                                  className={`w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted ${
-                                    sub.assigned_to === m.full_name ? "bg-primary/10 text-primary font-medium" : ""
-                                  }`}
-                                  onClick={async () => {
-                                    await supabase.from("activities").update({ assigned_to: m.full_name }).eq("id", sub.id);
-                                    if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
-                                    onActivityUpdated();
-                                  }}
-                                >
-                                  {m.full_name}
-                                  {m.sector && <span className="text-muted-foreground"> — {m.sector}</span>}
-                                </button>
-                              ))}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-
-                        {/* Prioridade: ícone bandeira */}
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="mx-auto h-6 w-6 rounded flex items-center justify-center hover:bg-muted"
-                              title={`Prioridade: ${prioLabel}`}
-                            >
-                              <Flag className={`w-3.5 h-3.5 ${prioClass}`} />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-40 p-1" align="center">
-                            {[
-                              { v: "low", l: "Baixa", c: "text-muted-foreground" },
-                              { v: "medium", l: "Média", c: "text-amber-500" },
-                              { v: "high", l: "Alta", c: "text-orange-500" },
-                              { v: "critical", l: "Crítica", c: "text-red-600" },
-                            ].map((opt) => (
-                              <button
-                                key={opt.v}
-                                type="button"
-                                className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted ${
-                                  prio === opt.v ? "bg-primary/10 text-primary font-medium" : ""
-                                }`}
-                                onClick={async () => {
-                                  await supabase.from("activities").update({ priority: opt.v }).eq("id", sub.id);
-                                  if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
-                                  onActivityUpdated();
-                                }}
-                              >
-                                <Flag className={`w-3.5 h-3.5 ${opt.c}`} /> {opt.l}
-                              </button>
-                            ))}
-                          </PopoverContent>
-                        </Popover>
-
-                        {/* Data: texto curto + input nativo escondido */}
-                        <label className="relative cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                          <span>{dateShort}</span>
-                          <input
-                            type="date"
-                            value={sub.end_date || ""}
-                            onChange={async (e) => {
-                              const value = e.target.value || null;
-                              await supabase.from("activities").update({ end_date: value }).eq("id", sub.id);
-                              if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
-                              onActivityUpdated();
-                            }}
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                          />
-                        </label>
-
-                        {/* Colunas extras dinâmicas */}
-                        {extraCols.map((colId) => {
+                        {/* Colunas dinâmicas (na ordem de ALL_COLS, apenas as visíveis) */}
+                        {ALL_COLS.filter((c) => visibleCols.includes(c.id)).map(({ id: colId }) => {
                           const updateField = async (value: any) => {
                             await supabase.from("activities").update({ [colId]: value }).eq("id", sub.id);
                             if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
                             onActivityUpdated();
                           };
+                          if (colId === "assigned_to") {
+                            return (
+                              <Popover key={colId}>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="mx-auto h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all hover:ring-2 hover:ring-primary/30"
+                                    title={sub.assigned_to || "Atribuir responsável"}
+                                  >
+                                    {sub.assigned_to ? (
+                                      <span className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                                        {initials}
+                                      </span>
+                                    ) : (
+                                      <span className="h-6 w-6 rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground flex items-center justify-center">
+                                        <UserPlus2 className="w-3 h-3" />
+                                      </span>
+                                    )}
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-56 p-1" align="center">
+                                  <div className="max-h-56 overflow-y-auto">
+                                    <button
+                                      type="button"
+                                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted"
+                                      onClick={() => updateField(null)}
+                                    >
+                                      Sem responsável
+                                    </button>
+                                    {members.map((m) => (
+                                      <button
+                                        key={m.full_name}
+                                        type="button"
+                                        className={`w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted ${
+                                          sub.assigned_to === m.full_name ? "bg-primary/10 text-primary font-medium" : ""
+                                        }`}
+                                        onClick={() => updateField(m.full_name)}
+                                      >
+                                        {m.full_name}
+                                        {m.sector && <span className="text-muted-foreground"> — {m.sector}</span>}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            );
+                          }
+                          if (colId === "priority") {
+                            return (
+                              <Popover key={colId}>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="mx-auto h-6 w-6 rounded flex items-center justify-center hover:bg-muted"
+                                    title={`Prioridade: ${prioLabel}`}
+                                  >
+                                    <Flag className={`w-3.5 h-3.5 ${prioClass}`} />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-40 p-1" align="center">
+                                  {[
+                                    { v: "low", l: "Baixa", c: "text-muted-foreground" },
+                                    { v: "medium", l: "Média", c: "text-amber-500" },
+                                    { v: "high", l: "Alta", c: "text-orange-500" },
+                                    { v: "critical", l: "Crítica", c: "text-red-600" },
+                                  ].map((opt) => (
+                                    <button
+                                      key={opt.v}
+                                      type="button"
+                                      className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted ${
+                                        prio === opt.v ? "bg-primary/10 text-primary font-medium" : ""
+                                      }`}
+                                      onClick={() => updateField(opt.v)}
+                                    >
+                                      <Flag className={`w-3.5 h-3.5 ${opt.c}`} /> {opt.l}
+                                    </button>
+                                  ))}
+                                </PopoverContent>
+                              </Popover>
+                            );
+                          }
+                          if (colId === "end_date") {
+                            return (
+                              <label key={colId} className="relative cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                                <span>{dateShort}</span>
+                                <input
+                                  type="date"
+                                  value={sub.end_date || ""}
+                                  onChange={(e) => updateField(e.target.value || null)}
+                                  className="absolute inset-0 opacity-0 cursor-pointer"
+                                />
+                              </label>
+                            );
+                          }
                           if (colId === "start_date") {
                             const ds = sub.start_date
                               ? (() => {
