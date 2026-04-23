@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Target,
   Calendar,
+  Trash2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -44,6 +45,7 @@ const allNavItems = [
   { path: "/calendario", label: "Calendário", icon: Calendar, minRole: "user" as const, moduleKey: "calendario" },
   { path: "/reports", label: "Relatórios", icon: BarChart3, minRole: "gestor" as const, moduleKey: "reports" },
   { path: "/csc", label: "CSC", icon: Layers, minRole: "gestor" as const, moduleKey: "csc" },
+  { path: "/projects/trash", label: "Lixeira de Projetos", icon: Trash2, minRole: "gestor" as const, moduleKey: "projects" },
   { path: "/settings", label: "Configurações", icon: Settings, minRole: "admin" as const, moduleKey: "settings" },
 ];
 
