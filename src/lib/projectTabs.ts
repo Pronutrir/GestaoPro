@@ -10,6 +10,7 @@ export const ALL_PROJECT_TABS = [
   { value: "meetings", label: "Reuniões" },
   { value: "assumptions", label: "Premissas" },
   { value: "risks", label: "Riscos" },
+  { value: "changes", label: "Mudanças" },
   { value: "financials", label: "Financeiro" },
   { value: "lessons", label: "Lições" },
 ] as const;
