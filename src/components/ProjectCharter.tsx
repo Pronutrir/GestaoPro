@@ -11,12 +11,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  FileText, Target, ShieldCheck, AlertTriangle, Save, ClipboardList,
-  HelpCircle, Lightbulb, Rocket, Calendar, User, Activity, Tag,
-  FileSearch, Ban, Scale, BookOpen, Users,
+  FileText, Target, ShieldCheck, AlertTriangle, Save,
+  ClipboardList, Ban, HelpCircle, Lightbulb, Rocket,
+  Plus, Trash2, Link2, Scale, Users,
 } from "lucide-react";
 
 interface Phase { id: string; title: string }
+interface Risk { id: string; description: string; probability: string; impact: string; status: string }
+interface Assumption { id: string; description: string; status: string; impact: string | null }
+interface Dependency {
+  id: string;
+  description: string;
+  depends_on: string | null;
+  linked_project_id: string | null;
+  responsible: string | null;
+  status: string;
+  due_date: string | null;
+}
 
 interface ProjectCharterProps {
   projectId: string;
@@ -50,9 +61,11 @@ const PROJECT_TYPES: Record<string, string> = {
   inovacao: "Inovação",
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  ideacao: "Ideação", poc: "POC", mvp: "MVP",
-  blocked: "Bloqueio", drawer: "Gaveta", "em-execucao": "Em Execução",
+const DEP_STATUS: Record<string, { label: string; cls: string }> = {
+  pendente: { label: "Pendente", cls: "bg-warning/10 text-warning border-warning/30" },
+  em_andamento: { label: "Em andamento", cls: "bg-primary/10 text-primary border-primary/30" },
+  resolvida: { label: "Resolvida", cls: "bg-success/10 text-success border-success/30" },
+  bloqueada: { label: "Bloqueada", cls: "bg-destructive/10 text-destructive border-destructive/30" },
 };
 
 export const ProjectCharter = ({ projectId, project, phases, members }: ProjectCharterProps) => {
@@ -61,6 +74,10 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [risks, setRisks] = useState<Risk[]>([]);
+  const [assumptions, setAssumptions] = useState<Assumption[]>([]);
+  const [dependencies, setDependencies] = useState<Dependency[]>([]);
+  const [otherProjects, setOtherProjects] = useState<{ id: string; title: string }[]>([]);
 
   const [form, setForm] = useState({
     project_type: project.project_type || "",
@@ -73,6 +90,13 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
     regulatory_requirements: project.regulatory_requirements || "",
     expected_benefits: project.expected_benefits || "",
     solved_problem: project.solved_problem || "",
+  });
+
+  // Inline add states
+  const [newRisk, setNewRisk] = useState("");
+  const [newAssumption, setNewAssumption] = useState("");
+  const [newDep, setNewDep] = useState({
+    description: "", depends_on: "", linked_project_id: "", responsible: "", status: "pendente",
   });
 
   useEffect(() => {
@@ -89,6 +113,23 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
       solved_problem: project.solved_problem || "",
     });
   }, [project]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [projectId]);
+
+  const fetchAll = async () => {
+    const [r, a, d, p] = await Promise.all([
+      supabase.from("risks").select("id, description, probability, impact, status").eq("project_id", projectId).order("created_at", { ascending: false }),
+      supabase.from("assumptions").select("id, description, status, impact").eq("project_id", projectId).order("created_at", { ascending: false }),
+      supabase.from("project_dependencies").select("*").eq("project_id", projectId).order("created_at", { ascending: false }),
+      supabase.from("projects").select("id, title").neq("id", projectId).order("title"),
+    ]);
+    if (r.data) setRisks(r.data);
+    if (a.data) setAssumptions(a.data);
+    if (d.data) setDependencies(d.data);
+    if (p.data) setOtherProjects(p.data);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -116,68 +157,94 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
     toast({ title: "TAP salvo com sucesso!" });
   };
 
-  const formatDate = (d: string | null) => {
-    if (!d) return "Não definido";
-    const [y, m, day] = d.split("-").map(Number);
-    return new Date(y, m - 1, day).toLocaleDateString("pt-BR");
+  const addRisk = async () => {
+    if (!newRisk.trim()) return;
+    const { error } = await supabase.from("risks").insert({
+      project_id: projectId, description: newRisk.trim(),
+      probability: "medium", impact: "medium", status: "identified",
+    });
+    if (!error) { setNewRisk(""); fetchAll(); toast({ title: "Risco adicionado" }); }
   };
 
-  const TapCard = ({
-    icon: Icon, label, value, field, color = "primary", multiline = true, isSelect = false,
-  }: {
-    icon: React.ElementType;
-    label: string;
-    value: string;
-    field?: keyof typeof form;
-    color?: string;
-    multiline?: boolean;
-    isSelect?: boolean;
-  }) => (
-    <Card className="p-4 hover:shadow-md transition-shadow">
-      <div className="flex items-start gap-3">
-        <div className={`w-9 h-9 rounded-lg bg-${color}/10 flex items-center justify-center flex-shrink-0`}>
-          <Icon className={`w-4 h-4 text-${color}`} />
+  const removeRisk = async (id: string) => {
+    await supabase.from("risks").delete().eq("id", id);
+    fetchAll();
+  };
+
+  const addAssumption = async () => {
+    if (!newAssumption.trim()) return;
+    const { error } = await supabase.from("assumptions").insert({
+      project_id: projectId, description: newAssumption.trim(), status: "active",
+    });
+    if (!error) { setNewAssumption(""); fetchAll(); toast({ title: "Premissa adicionada" }); }
+  };
+
+  const removeAssumption = async (id: string) => {
+    await supabase.from("assumptions").delete().eq("id", id);
+    fetchAll();
+  };
+
+  const addDependency = async () => {
+    if (!newDep.description.trim()) return;
+    const { error } = await supabase.from("project_dependencies").insert({
+      project_id: projectId,
+      description: newDep.description.trim(),
+      depends_on: newDep.depends_on || null,
+      linked_project_id: newDep.linked_project_id || null,
+      responsible: newDep.responsible || null,
+      status: newDep.status,
+    });
+    if (!error) {
+      setNewDep({ description: "", depends_on: "", linked_project_id: "", responsible: "", status: "pendente" });
+      fetchAll();
+      toast({ title: "Dependência adicionada" });
+    }
+  };
+
+  const removeDependency = async (id: string) => {
+    await supabase.from("project_dependencies").delete().eq("id", id);
+    fetchAll();
+  };
+
+  const updateDepStatus = async (id: string, status: string) => {
+    await supabase.from("project_dependencies").update({ status }).eq("id", id);
+    fetchAll();
+  };
+
+  const Pillar = ({
+    icon: Icon, title, subtitle, color, children,
+  }: { icon: React.ElementType; title: string; subtitle: string; color: string; children: React.ReactNode }) => (
+    <Card className={`p-5 border-l-4 border-l-${color}`}>
+      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-border">
+        <div className={`w-10 h-10 rounded-lg bg-${color}/10 flex items-center justify-center`}>
+          <Icon className={`w-5 h-5 text-${color}`} />
         </div>
-        <div className="flex-1 min-w-0">
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{label}</h4>
-          {editing && field ? (
-            isSelect ? (
-              <Select value={form[field] || "_none"} onValueChange={(v) => setForm({ ...form, [field]: v === "_none" ? "" : v })}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">Não definido</SelectItem>
-                  {Object.entries(PROJECT_TYPES).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : multiline ? (
-              <Textarea
-                value={form[field]}
-                onChange={(e) => setForm({ ...form, [field]: e.target.value })}
-                className="min-h-[70px] text-sm resize-none"
-              />
-            ) : (
-              <Input
-                value={form[field]}
-                onChange={(e) => setForm({ ...form, [field]: e.target.value })}
-                className="text-sm h-9"
-              />
-            )
-          ) : value ? (
-            isSelect ? (
-              <Badge variant="outline" className={`bg-${color}/10 text-${color} border-${color}/30`}>
-                {PROJECT_TYPES[value] || value}
-              </Badge>
-            ) : (
-              <p className="text-sm text-foreground whitespace-pre-line">{value}</p>
-            )
-          ) : (
-            <p className="text-sm text-muted-foreground italic">Não preenchido</p>
-          )}
+        <div>
+          <h3 className="text-lg font-bold text-foreground">{title}</h3>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
       </div>
+      <div className="space-y-4">{children}</div>
     </Card>
+  );
+
+  const Field = ({ label, value, onChange, placeholder, multiline = true }: {
+    label: string; value: string; onChange: (v: string) => void; placeholder: string; multiline?: boolean;
+  }) => (
+    <div className="space-y-1.5">
+      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
+      {editing ? (
+        multiline ? (
+          <Textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="min-h-[70px] text-sm resize-none" />
+        ) : (
+          <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="text-sm" />
+        )
+      ) : value ? (
+        <p className="text-sm text-foreground whitespace-pre-line">{value}</p>
+      ) : (
+        <p className="text-sm text-muted-foreground italic">Não preenchido</p>
+      )}
+    </div>
   );
 
   return (
@@ -191,7 +258,7 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
             </div>
             <div>
               <h2 className="text-lg font-semibold text-foreground">Ficha de Abertura do Projeto</h2>
-              <p className="text-xs text-muted-foreground">TAP — Termo de Abertura</p>
+              <p className="text-xs text-muted-foreground">TAP — Estruturada em POR QUÊ • O QUÊ • PARA QUÊ</p>
             </div>
           </div>
           {isAdmin && (
@@ -213,28 +280,194 @@ export const ProjectCharter = ({ projectId, project, phases, members }: ProjectC
         </div>
       </Card>
 
-      {/* Identificação (somente leitura — vem do projeto) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        <TapCard icon={FileText} label="Título do Projeto" value={project.title} color="primary" />
-        <TapCard icon={User} label="Líder do Projeto" value={project.owner || ""} color="primary" />
-        <TapCard icon={Calendar} label="Prazo de Entrega" value={formatDate(project.due_date)} color="primary" />
-        <TapCard icon={Activity} label="Status Atual" value={STATUS_LABELS[project.status] || project.status} color="primary" />
-        <TapCard icon={BookOpen} label="Descrição" value={project.description || ""} color="primary" />
-        <TapCard icon={Tag} label="Tipo do Projeto" value={form.project_type} field="project_type" color="warning" isSelect />
-      </div>
+      {/* PILAR 1: POR QUÊ */}
+      <Pillar icon={HelpCircle} title="POR QUÊ?" subtitle="Justificativa da iniciativa" color="warning">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tipo do Projeto</label>
+            {editing ? (
+              <Select value={form.project_type || "_none"} onValueChange={(v) => setForm({ ...form, project_type: v === "_none" ? "" : v })}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Não definido</SelectItem>
+                  {Object.entries(PROJECT_TYPES).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : form.project_type ? (
+              <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">{PROJECT_TYPES[form.project_type] || form.project_type}</Badge>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">Não definido</p>
+            )}
+          </div>
+          <Field label="Objetivo (O que será feito?)" value={form.objective} onChange={(v) => setForm({ ...form, objective: v })} placeholder="Descreva o objetivo principal..." multiline={false} />
+        </div>
+        <Field label="Problema / Necessidade de Melhoria (passado)" value={form.problem_statement} onChange={(v) => setForm({ ...form, problem_statement: v })} placeholder="Qual problema motivou este projeto?" />
+        <Field label="Causa Raiz" value={form.root_cause} onChange={(v) => setForm({ ...form, root_cause: v })} placeholder="Qual a origem do problema?" />
+      </Pillar>
 
-      {/* TAP Cards — POR QUÊ / O QUÊ / PARA QUÊ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        <TapCard icon={Target} label="Objetivo (O que será feito?)" value={form.objective} field="objective" color="warning" multiline={false} />
-        <TapCard icon={HelpCircle} label="Problema / Necessidade" value={form.problem_statement} field="problem_statement" color="warning" />
-        <TapCard icon={FileSearch} label="Causa Raiz" value={form.root_cause} field="root_cause" color="warning" />
-        <TapCard icon={Lightbulb} label="Escopo" value={form.scope} field="scope" color="primary" />
-        <TapCard icon={Ban} label="Fora do Escopo" value={form.out_of_scope} field="out_of_scope" color="primary" />
-        <TapCard icon={Scale} label="Restrições" value={form.restrictions} field="restrictions" color="primary" />
-        <TapCard icon={ShieldCheck} label="Requisitos Regulamentares" value={form.regulatory_requirements} field="regulatory_requirements" color="primary" />
-        <TapCard icon={Rocket} label="Benefícios Esperados" value={form.expected_benefits} field="expected_benefits" color="success" />
-        <TapCard icon={AlertTriangle} label="Benefício / Problema Solucionado" value={form.solved_problem} field="solved_problem" color="success" />
-      </div>
+      {/* PILAR 2: O QUÊ */}
+      <Pillar icon={Lightbulb} title="O QUÊ?" subtitle="Definição e fronteiras" color="primary">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Escopo (em escopo)" value={form.scope} onChange={(v) => setForm({ ...form, scope: v })} placeholder="O que será entregue..." />
+          <Field label="Fora do Escopo" value={form.out_of_scope} onChange={(v) => setForm({ ...form, out_of_scope: v })} placeholder="O que NÃO faz parte..." />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Restrições" value={form.restrictions} onChange={(v) => setForm({ ...form, restrictions: v })} placeholder="Limitações de tempo, custo, recursos..." />
+          <Field label="Requisitos Regulamentares" value={form.regulatory_requirements} onChange={(v) => setForm({ ...form, regulatory_requirements: v })} placeholder="Normas e regulamentações aplicáveis..." />
+        </div>
+
+        {/* Premissas — sincronizado com módulo */}
+        <div className="space-y-2 pt-2 border-t border-border">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-success" /> Premissas
+              <Badge variant="outline" className="text-[10px] ml-1">{assumptions.length}</Badge>
+            </label>
+          </div>
+          {assumptions.length > 0 ? (
+            <div className="space-y-1.5">
+              {assumptions.map((a) => (
+                <div key={a.id} className="flex items-start gap-2 p-2 rounded border border-border bg-card text-sm">
+                  <ShieldCheck className="w-3.5 h-3.5 text-success mt-0.5 flex-shrink-0" />
+                  <span className="flex-1 text-foreground">{a.description}</span>
+                  {isAdmin && (
+                    <button onClick={() => removeAssumption(a.id)} className="text-muted-foreground hover:text-destructive">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">Nenhuma premissa cadastrada</p>
+          )}
+          {isAdmin && (
+            <div className="flex gap-2">
+              <Input placeholder="Nova premissa..." value={newAssumption} onChange={(e) => setNewAssumption(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addAssumption()} className="text-sm h-8" />
+              <Button size="sm" onClick={addAssumption} className="h-8 gap-1"><Plus className="w-3.5 h-3.5" /> Adicionar</Button>
+            </div>
+          )}
+        </div>
+
+        {/* Riscos — sincronizado com módulo */}
+        <div className="space-y-2 pt-2 border-t border-border">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-warning" /> Riscos
+              <Badge variant="outline" className="text-[10px] ml-1">{risks.length}</Badge>
+            </label>
+          </div>
+          {risks.length > 0 ? (
+            <div className="space-y-1.5">
+              {risks.map((r) => (
+                <div key={r.id} className="flex items-start gap-2 p-2 rounded border border-border bg-card text-sm">
+                  <AlertTriangle className="w-3.5 h-3.5 text-warning mt-0.5 flex-shrink-0" />
+                  <span className="flex-1 text-foreground">{r.description}</span>
+                  {isAdmin && (
+                    <button onClick={() => removeRisk(r.id)} className="text-muted-foreground hover:text-destructive">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">Nenhum risco cadastrado</p>
+          )}
+          {isAdmin && (
+            <div className="flex gap-2">
+              <Input placeholder="Novo risco..." value={newRisk} onChange={(e) => setNewRisk(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addRisk()} className="text-sm h-8" />
+              <Button size="sm" onClick={addRisk} className="h-8 gap-1"><Plus className="w-3.5 h-3.5" /> Adicionar</Button>
+            </div>
+          )}
+        </div>
+
+        {/* Dependências */}
+        <div className="space-y-2 pt-2 border-t border-border">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <Link2 className="w-3.5 h-3.5 text-primary" /> Dependências
+            <Badge variant="outline" className="text-[10px] ml-1">{dependencies.length}</Badge>
+          </label>
+          {dependencies.length > 0 ? (
+            <div className="space-y-1.5">
+              {dependencies.map((d) => {
+                const linked = otherProjects.find((p) => p.id === d.linked_project_id);
+                const stConf = DEP_STATUS[d.status] || DEP_STATUS.pendente;
+                return (
+                  <div key={d.id} className="p-2.5 rounded border border-border bg-card text-sm space-y-1">
+                    <div className="flex items-start gap-2">
+                      <Link2 className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground">{d.description}</p>
+                        <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
+                          {d.depends_on && <span>De: <strong className="text-foreground">{d.depends_on}</strong></span>}
+                          {linked && <span className="flex items-center gap-1">→ <Badge variant="outline" className="text-[10px]">{linked.title}</Badge></span>}
+                          {d.responsible && <span>Resp.: {d.responsible}</span>}
+                        </div>
+                      </div>
+                      {isAdmin && (
+                        <Select value={d.status} onValueChange={(v) => updateDepStatus(d.id, v)}>
+                          <SelectTrigger className="h-7 w-auto px-2 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(DEP_STATUS).map(([k, v]) => (
+                              <SelectItem key={k} value={k} className="text-xs">{v.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {!isAdmin && <Badge variant="outline" className={`text-[10px] ${stConf.cls}`}>{stConf.label}</Badge>}
+                      {isAdmin && (
+                        <button onClick={() => removeDependency(d.id)} className="text-muted-foreground hover:text-destructive">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">Nenhuma dependência registrada</p>
+          )}
+          {isAdmin && (
+            <div className="p-2.5 rounded border border-dashed border-border space-y-2">
+              <Input placeholder="Qual é a dependência?" value={newDep.description} onChange={(e) => setNewDep({ ...newDep, description: e.target.value })} className="text-sm h-8" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <Input placeholder="De quem dependemos? (área, pessoa, fornecedor)" value={newDep.depends_on} onChange={(e) => setNewDep({ ...newDep, depends_on: e.target.value })} className="text-sm h-8" />
+                <Input placeholder="Responsável (opcional)" value={newDep.responsible} onChange={(e) => setNewDep({ ...newDep, responsible: e.target.value })} className="text-sm h-8" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <Select value={newDep.linked_project_id || "_none"} onValueChange={(v) => setNewDep({ ...newDep, linked_project_id: v === "_none" ? "" : v })}>
+                  <SelectTrigger className="text-sm h-8"><SelectValue placeholder="Vincular a outro projeto (opcional)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Nenhum</SelectItem>
+                    {otherProjects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={newDep.status} onValueChange={(v) => setNewDep({ ...newDep, status: v })}>
+                  <SelectTrigger className="text-sm h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(DEP_STATUS).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button size="sm" onClick={addDependency} className="w-full gap-1 h-8"><Plus className="w-3.5 h-3.5" /> Adicionar dependência</Button>
+            </div>
+          )}
+        </div>
+      </Pillar>
+
+      {/* PILAR 3: PARA QUÊ */}
+      <Pillar icon={Rocket} title="PARA QUÊ?" subtitle="Benefícios esperados (futuro)" color="success">
+        <Field label="Benefícios Esperados" value={form.expected_benefits} onChange={(v) => setForm({ ...form, expected_benefits: v })} placeholder="Quais ganhos o projeto trará?" />
+        <Field label="Qual benefício / problema irá solucionar?" value={form.solved_problem} onChange={(v) => setForm({ ...form, solved_problem: v })} placeholder="Como medirá o sucesso?" />
+      </Pillar>
 
       {/* Contexto adicional: Equipe + Fases */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
