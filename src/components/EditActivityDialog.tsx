@@ -540,6 +540,44 @@ export const EditActivityDialog = ({
             />
           </div>
 
+          {/* Marco do Projeto */}
+          <div
+            className={`flex items-center justify-between gap-3 px-4 py-3 rounded-lg border transition-all ${
+              formData.is_milestone
+                ? "bg-amber-500/10 border-amber-500/40"
+                : "bg-muted/30 border-border hover:border-foreground/20"
+            }`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <Diamond
+                className={`w-5 h-5 shrink-0 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : "text-muted-foreground"}`}
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-foreground">Marco do Projeto</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {formData.is_milestone
+                    ? "Ponto-chave de entrega/decisão. Horas e custo ficam ocultos."
+                    : "Marque para destacar como entrega importante (milestone)."}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={formData.is_milestone}
+              onClick={() => setFormData({ ...formData, is_milestone: !formData.is_milestone })}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                formData.is_milestone ? "bg-amber-500" : "bg-input"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow ring-0 transition ${
+                  formData.is_milestone ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
           <div className="space-y-2 min-w-0">
             <Label htmlFor="description" className="text-sm font-semibold text-foreground">Descrição</Label>
             <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} autoResize placeholder="Descreva a atividade..." className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
