@@ -136,6 +136,41 @@ export const EditActivityDialog = ({
   const [lastEditorName, setLastEditorName] = useState<string | null>(null);
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
 
+  // Colunas extras opcionais na tabela de sub-atividades (persistido por usuário no localStorage)
+  const SUB_EXTRA_COLS_KEY = "subActivityExtraCols.v1";
+  const ALL_EXTRA_COLS: { id: string; label: string; width: string }[] = [
+    { id: "start_date", label: "Início", width: "84px" },
+    { id: "hours", label: "Horas", width: "64px" },
+    { id: "cost", label: "Custo", width: "84px" },
+    { id: "story_points", label: "Pontos", width: "56px" },
+    { id: "status", label: "Status", width: "96px" },
+    { id: "tags", label: "Etiquetas", width: "120px" },
+    { id: "raci_role", label: "RACI", width: "56px" },
+    { id: "id_short", label: "ID", width: "72px" },
+  ];
+  const [extraCols, setExtraCols] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      return JSON.parse(localStorage.getItem(SUB_EXTRA_COLS_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const toggleExtraCol = (id: string) => {
+    setExtraCols((prev) => {
+      const next = prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id];
+      try {
+        localStorage.setItem(SUB_EXTRA_COLS_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+  // grid-template-columns dinâmico: [check][nome][resp][prio][venc][...extras][ações]
+  const subGridTemplate =
+    `24px minmax(140px,1fr) 72px 56px 84px ${extraCols
+      .map((id) => ALL_EXTRA_COLS.find((c) => c.id === id)?.width || "80px")
+      .join(" ")} 28px`;
+
   useEffect(() => {
     if (!open) return;
     // Create a draft activity when opening in create mode
@@ -691,13 +726,55 @@ export const EditActivityDialog = ({
                 Sub-atividades ({subActivities.length})
               </h3>
               {subActivities.length > 0 && (
-                <div className="rounded-md border border-border overflow-hidden">
-                  <div className="grid grid-cols-[24px_1fr_72px_56px_84px_28px] items-center gap-2 px-2 py-1 bg-muted/30 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
+                <div className="rounded-md border border-border overflow-x-auto">
+                  <div
+                    className="grid items-center gap-2 px-2 py-1 bg-muted/30 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border min-w-fit"
+                    style={{ gridTemplateColumns: subGridTemplate }}
+                  >
                     <span></span>
                     <span>Nome</span>
                     <span className="text-center">Resp.</span>
                     <span className="text-center">Prio.</span>
-                    <span>Vencimento</span>
+                    <span className="flex items-center gap-1">
+                      Vencimento
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="ml-1 h-4 w-4 inline-flex items-center justify-center rounded hover:bg-primary/15 text-primary"
+                            title="Adicionar/remover colunas"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-56 p-2" align="end">
+                          <div className="text-[11px] font-semibold text-muted-foreground mb-1.5 normal-case">
+                            Colunas extras
+                          </div>
+                          <div className="space-y-0.5">
+                            {ALL_EXTRA_COLS.map((col) => {
+                              const checked = extraCols.includes(col.id);
+                              return (
+                                <label
+                                  key={col.id}
+                                  className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-muted cursor-pointer text-xs normal-case font-normal"
+                                >
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={() => toggleExtraCol(col.id)}
+                                  />
+                                  <span>{col.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </span>
+                    {extraCols.map((id) => {
+                      const col = ALL_EXTRA_COLS.find((c) => c.id === id);
+                      return <span key={id}>{col?.label}</span>;
+                    })}
                     <span></span>
                   </div>
                   {subActivities.map((sub) => {
@@ -726,7 +803,8 @@ export const EditActivityDialog = ({
                     return (
                       <div
                         key={sub.id}
-                        className="grid grid-cols-[24px_1fr_72px_56px_84px_28px] items-center gap-2 px-2 py-1 border-b border-border/50 last:border-0 hover:bg-muted/20 group"
+                        className="grid items-center gap-2 px-2 py-1 border-b border-border/50 last:border-0 hover:bg-muted/20 group min-w-fit"
+                        style={{ gridTemplateColumns: subGridTemplate }}
                       >
                         <Button
                           size="icon"
@@ -856,6 +934,162 @@ export const EditActivityDialog = ({
                             className="absolute inset-0 opacity-0 cursor-pointer"
                           />
                         </label>
+
+                        {/* Colunas extras dinâmicas */}
+                        {extraCols.map((colId) => {
+                          const updateField = async (value: any) => {
+                            await supabase.from("activities").update({ [colId]: value }).eq("id", sub.id);
+                            if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                            onActivityUpdated();
+                          };
+                          if (colId === "start_date") {
+                            const ds = sub.start_date
+                              ? (() => {
+                                  const [y, m, d] = sub.start_date!.split("-").map(Number);
+                                  return `${m}/${d}/${String(y).slice(-2)}`;
+                                })()
+                              : "—";
+                            return (
+                              <label key={colId} className="relative cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                                <span>{ds}</span>
+                                <input
+                                  type="date"
+                                  value={sub.start_date || ""}
+                                  onChange={(e) => updateField(e.target.value || null)}
+                                  className="absolute inset-0 opacity-0 cursor-pointer"
+                                />
+                              </label>
+                            );
+                          }
+                          if (colId === "hours") {
+                            return (
+                              <input
+                                key={colId}
+                                type="number"
+                                step="0.5"
+                                value={sub.hours ?? ""}
+                                onChange={(e) => updateField(e.target.value === "" ? null : parseFloat(e.target.value))}
+                                className="h-6 w-full text-xs px-1.5 rounded border border-input bg-background"
+                                placeholder="0"
+                              />
+                            );
+                          }
+                          if (colId === "cost") {
+                            return (
+                              <input
+                                key={colId}
+                                type="number"
+                                step="0.01"
+                                value={sub.cost ?? ""}
+                                onChange={(e) => updateField(e.target.value === "" ? null : parseFloat(e.target.value))}
+                                className="h-6 w-full text-xs px-1.5 rounded border border-input bg-background"
+                                placeholder="R$"
+                              />
+                            );
+                          }
+                          if (colId === "story_points") {
+                            return (
+                              <input
+                                key={colId}
+                                type="number"
+                                value={(sub as any).story_points ?? ""}
+                                onChange={(e) => updateField(e.target.value === "" ? null : parseInt(e.target.value))}
+                                className="h-6 w-full text-xs px-1.5 rounded border border-input bg-background text-center"
+                                placeholder="0"
+                              />
+                            );
+                          }
+                          if (colId === "status") {
+                            const stageId = (sub as any).workflow_stage_id || "";
+                            const stage = workflowStages.find((s) => s.id === stageId);
+                            return (
+                              <Popover key={colId}>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="h-6 px-1.5 rounded text-[10px] font-medium border truncate hover:bg-muted"
+                                    style={stage ? { borderColor: stage.color, color: stage.color } : {}}
+                                    title={stage?.title || "Sem coluna"}
+                                  >
+                                    {stage?.title || "—"}
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-44 p-1" align="center">
+                                  {workflowStages.map((s) => (
+                                    <button
+                                      key={s.id}
+                                      type="button"
+                                      className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted ${
+                                        stageId === s.id ? "bg-primary/10 text-primary font-medium" : ""
+                                      }`}
+                                      onClick={async () => {
+                                        const upd: any = { workflow_stage_id: s.id };
+                                        if (s.is_final) {
+                                          upd.status = "completed";
+                                          upd.completed_at = new Date().toISOString();
+                                        }
+                                        await supabase.from("activities").update(upd).eq("id", sub.id);
+                                        if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                                        onActivityUpdated();
+                                      }}
+                                    >
+                                      <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                                      {s.title}
+                                    </button>
+                                  ))}
+                                </PopoverContent>
+                              </Popover>
+                            );
+                          }
+                          if (colId === "tags") {
+                            const tags = (sub as any).tags as string[] | null;
+                            return (
+                              <button
+                                key={colId}
+                                type="button"
+                                onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
+                                className="text-[10px] truncate text-left text-muted-foreground hover:text-primary"
+                                title={tags?.join(", ") || "Adicionar etiquetas"}
+                              >
+                                {tags && tags.length > 0 ? tags.join(", ") : "—"}
+                              </button>
+                            );
+                          }
+                          if (colId === "raci_role") {
+                            const raci = (sub as any).raci_role || "";
+                            return (
+                              <select
+                                key={colId}
+                                value={raci}
+                                onChange={(e) => updateField(e.target.value || null)}
+                                className="h-6 w-full text-xs px-1 rounded border border-input bg-background text-center"
+                              >
+                                <option value="">—</option>
+                                <option value="R">R</option>
+                                <option value="A">A</option>
+                                <option value="C">C</option>
+                                <option value="I">I</option>
+                              </select>
+                            );
+                          }
+                          if (colId === "id_short") {
+                            return (
+                              <button
+                                key={colId}
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(sub.id);
+                                  toast({ title: "ID copiado!" });
+                                }}
+                                className="font-mono text-[10px] text-muted-foreground hover:text-primary text-left truncate"
+                                title="Clique para copiar ID completo"
+                              >
+                                {sub.id.slice(0, 8)}
+                              </button>
+                            );
+                          }
+                          return <span key={colId}>—</span>;
+                        })}
 
                         <Button
                           size="icon"
