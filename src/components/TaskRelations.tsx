@@ -314,26 +314,20 @@ export const TaskRelations = ({ activityId, projectId }: Props) => {
         </DropdownMenu>
       </div>
 
-      {/* Lista única harmonizada */}
+      {/* Lista única harmonizada — densa */}
       {totalCount === 0 ? (
-        <p className="text-xs text-muted-foreground italic text-center py-3">
-          Nenhum vínculo ainda. Use os botões acima para começar.
+        <p className="text-[11px] text-muted-foreground italic">
+          Nenhum vínculo. Use "+ Vincular" para adicionar.
         </p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {ORDER.map((kind) => {
             const list = grouped[kind];
             if (list.length === 0) return null;
             const meta = META[kind];
             const Icon = meta.icon;
             return (
-              <div key={kind} className="space-y-1">
-                <div className="flex items-center gap-1.5 px-1">
-                  <Icon className="w-3.5 h-3.5 opacity-70" />
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                    {meta.label} <span className="opacity-60">({list.length})</span>
-                  </span>
-                </div>
+              <div key={kind} className="space-y-0.5">
                 {list.map((row) => {
                   const otherStatus = statusOf(row.otherId);
                   const isCompleted = otherStatus === "completed";
@@ -341,45 +335,43 @@ export const TaskRelations = ({ activityId, projectId }: Props) => {
                   let dirLabel = "";
                   if (row.source === "rels" && row.raw) {
                     if (kind === "blocking") {
-                      dirLabel = row.raw.isOutgoing ? "Está bloqueando" : "Bloqueada por";
+                      dirLabel = row.raw.isOutgoing ? "bloqueia" : "bloqueada por";
                     } else if (kind === "waiting_on") {
-                      dirLabel = row.raw.isOutgoing ? "Aguardando" : "Aguardada por";
+                      dirLabel = row.raw.isOutgoing ? "aguardando" : "aguardada por";
                     } else if (kind === "related") {
-                      dirLabel = "Vinculada";
+                      dirLabel = "vinculada";
                     }
                   } else if (kind === "predecessor") {
-                    dirLabel = "Esta depende de";
+                    dirLabel = "depende de";
                   } else if (kind === "successor") {
-                    dirLabel = "Depende desta";
+                    dirLabel = "depende desta";
                   }
 
                   return (
                     <div
                       key={row.id}
-                      className={`flex items-center gap-2 p-2 rounded-md border group transition-colors bg-muted/30 border-border/50 hover:bg-muted/50`}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded border group transition-colors bg-muted/20 border-border/40 hover:bg-muted/40"
                     >
-                      <Badge variant="outline" className={`text-[9px] shrink-0 uppercase ${meta.chipClass}`}>
+                      <Icon className={`w-3 h-3 shrink-0 ${meta.chipClass.split(" ").find(c => c.startsWith("text-")) || ""}`} />
+                      <span className="text-[10px] text-muted-foreground shrink-0 lowercase">
                         {dirLabel}
-                      </Badge>
+                      </span>
                       <span className={`text-xs flex-1 truncate ${isCompleted ? "line-through text-muted-foreground" : "text-foreground"}`}>
                         {titleOf(row.otherId)}
                       </span>
-                      <span className="font-mono text-[9px] text-muted-foreground hidden md:inline">
+                      <span className="font-mono text-[9px] text-muted-foreground/70 hidden md:inline shrink-0">
                         #{row.otherId.slice(0, 6)}
                       </span>
                       {isCompleted && (
-                        <Badge variant="outline" className="text-[9px] bg-success/10 text-success border-success/30 shrink-0">
-                          <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
-                          Concluída
-                        </Badge>
+                        <CheckCircle2 className="w-3 h-3 text-success shrink-0" />
                       )}
                       <Button
                         size="icon" variant="ghost"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive shrink-0"
+                        className="h-5 w-5 opacity-0 group-hover:opacity-100 text-destructive shrink-0"
                         onClick={() => handleDelete(row)}
                         title="Remover vínculo"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-3 h-3" />
                       </Button>
                     </div>
                   );
