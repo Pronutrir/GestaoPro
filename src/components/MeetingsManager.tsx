@@ -151,6 +151,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       .from("meetings")
       .select("*")
       .eq("project_id", projectId)
+      .eq("is_trashed", false)
       .order("meeting_date", { ascending: false });
     if (data) setMeetings(data);
   };
@@ -273,7 +274,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta reunião?")) return;
-    await supabase.from("meetings").delete().eq("id", id);
+    await supabase.from("meetings").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     fetchMeetings();
   };
 

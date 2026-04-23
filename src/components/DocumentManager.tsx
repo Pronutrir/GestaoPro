@@ -67,6 +67,7 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
       .from("project_documents")
       .select("*")
       .eq("project_id", projectId)
+      .eq("is_trashed", false)
       .order("created_at", { ascending: false });
 
     if (!error && data) setDocuments(data);
@@ -130,7 +131,7 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir este documento?")) return;
-    await supabase.from("project_documents").delete().eq("id", id);
+    await supabase.from("project_documents").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     fetchDocuments();
   };
 

@@ -49,6 +49,7 @@ export const AssumptionsManager = ({ projectId }: AssumptionsManagerProps) => {
       .from("assumptions")
       .select("*")
       .eq("project_id", projectId)
+      .eq("is_trashed", false)
       .order("created_at", { ascending: false });
     if (data) setItems(data);
   };
@@ -83,8 +84,8 @@ export const AssumptionsManager = ({ projectId }: AssumptionsManagerProps) => {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta premissa?")) return;
-    await supabase.from("assumptions").delete().eq("id", id);
-    toast({ title: "Premissa excluída!" }); fetchData();
+    await supabase.from("assumptions").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
+    toast({ title: "Premissa movida para a lixeira" }); fetchData();
   };
 
   return (

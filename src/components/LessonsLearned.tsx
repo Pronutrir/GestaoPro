@@ -68,6 +68,7 @@ export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
       .from("lessons_learned")
       .select("*")
       .eq("project_id", projectId)
+      .eq("is_trashed", false)
       .order("created_at", { ascending: false });
 
     if (!error && data) setLessons(data);
@@ -82,6 +83,7 @@ export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
     const { data } = await supabase
       .from("lessons_learned")
       .select("*")
+      .eq("is_trashed", false)
       .or(`problem.ilike.%${term}%,solution.ilike.%${term}%,suggestion.ilike.%${term}%`)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -152,7 +154,7 @@ export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta lição?")) return;
-    await supabase.from("lessons_learned").delete().eq("id", id);
+    await supabase.from("lessons_learned").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     fetchLessons();
   };
 

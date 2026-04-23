@@ -107,11 +107,11 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta história?")) return;
-    const { error } = await supabase.from("user_stories").delete().eq("id", id);
+    const { error } = await supabase.from("user_stories").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     if (error) {
       toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "História excluída!" });
+      toast({ title: "História movida para a lixeira" });
       setStories(prev => prev.filter(s => s.id !== id));
       onStoriesChanged?.();
     }
