@@ -147,6 +147,13 @@ export const EditProjectDialog = ({
           blockers: formData.blockers,
           category: formData.category || "general",
           program: formData.program || null,
+          project_type: formData.project_type || null,
+          start_date: formData.start_date || null,
+          sponsor: formData.sponsor || null,
+          manager: formData.manager || null,
+          objective: formData.objective || null,
+          problem_statement: formData.problem_statement || null,
+          root_cause: formData.root_cause || null,
         })
         .eq("id", project.id);
 
