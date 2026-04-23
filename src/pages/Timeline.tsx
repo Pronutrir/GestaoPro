@@ -577,6 +577,20 @@ const Timeline = () => {
                 <Layers className="w-3.5 h-3.5 shrink-0" />
                 <span className="flex-1 truncate">Projetos / Atividades</span>
                 <span className="hidden sm:inline w-[64px] text-right normal-case tracking-normal text-[11px] shrink-0">Data final</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 shrink-0 -mr-1 hover:bg-primary/10 hover:text-primary"
+                      onClick={() => setLeftPanelOpen(false)}
+                      aria-label="Recolher painel"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Recolher painel</TooltipContent>
+                </Tooltip>
               </div>
               {/* Rows */}
               <div className="flex-1 overflow-y-auto overflow-x-hidden">
@@ -648,7 +662,23 @@ const Timeline = () => {
             )}
 
             {/* Right Panel: Gantt Bars */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+              {!leftPanelOpen && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="icon"
+                      className="absolute left-2 top-2 z-30 h-7 w-7 shadow-md rounded-full"
+                      onClick={() => setLeftPanelOpen(true)}
+                      aria-label="Mostrar painel"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Mostrar painel de projetos</TooltipContent>
+                </Tooltip>
+              )}
               {/* Timeline header */}
               <div
                 ref={scrollRef}
