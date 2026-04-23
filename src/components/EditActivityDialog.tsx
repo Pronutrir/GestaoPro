@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft } from "lucide-react";
+import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
@@ -116,6 +116,8 @@ export const EditActivityDialog = ({
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
+  const [editingSubActivity, setEditingSubActivity] = useState<Activity | null>(null);
+  const [editingSubOpen, setEditingSubOpen] = useState(false);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [allProfiles, setAllProfiles] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean }[]>([]);
@@ -676,6 +678,15 @@ export const EditActivityDialog = ({
                         {sub.title}
                       </p>
                       {sub.assigned_to && <span className="text-[10px] text-muted-foreground">👤 {sub.assigned_to}</span>}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                        onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
+                        title="Editar sub-atividade"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </Button>
                       <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive" onClick={() => handleDeleteSubActivity(sub.id)}>
                         <Trash2 className="w-3 h-3" />
                       </Button>
@@ -840,6 +851,25 @@ export const EditActivityDialog = ({
           </DialogFooter>
         </form>
       </DialogContent>
+      {/* Editor aninhado para sub-atividade — mesmos campos da atividade principal */}
+      {editingSubActivity && (
+        <EditActivityDialog
+          activity={editingSubActivity}
+          open={editingSubOpen}
+          onOpenChange={(o) => {
+            setEditingSubOpen(o);
+            if (!o) setEditingSubActivity(null);
+          }}
+          onActivityUpdated={() => {
+            if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+            onActivityUpdated();
+          }}
+          phases={phases}
+          allActivities={allActivities}
+          projectId={projectId}
+          isQualityProject={isQualityProject}
+        />
+      )}
     </Dialog>
   );
 };
