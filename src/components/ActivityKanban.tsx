@@ -565,9 +565,37 @@ function SortableColumn({
               style={{ backgroundColor: stage.color }}
             >
               <div className="w-2 h-2 rounded-full bg-white/90 shrink-0" />
-              <h3 className="text-[11px] font-bold text-white tracking-wide uppercase truncate">
-                {stage.title}
-              </h3>
+              {renaming ? (
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onBlur={() => {
+                    if (renameValue.trim() && renameValue.trim() !== stage.title) {
+                      onRenameStage(stage.id, renameValue.trim());
+                    }
+                    setRenaming(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (renameValue.trim() && renameValue.trim() !== stage.title) {
+                        onRenameStage(stage.id, renameValue.trim());
+                      }
+                      setRenaming(false);
+                    } else if (e.key === "Escape") {
+                      setRenameValue(stage.title);
+                      setRenaming(false);
+                    }
+                  }}
+                  className="text-[11px] font-bold text-white tracking-wide uppercase bg-transparent border-b border-white/40 outline-none w-32"
+                />
+              ) : (
+                <h3 className="text-[11px] font-bold text-white tracking-wide uppercase truncate">
+                  {stage.title}
+                </h3>
+              )}
             </div>
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
               {stageActivities.length}
@@ -590,6 +618,96 @@ function SortableColumn({
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
+            )}
+            {isAdminOrGestor && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    title="Opções da coluna"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-56"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <DropdownMenuLabel className="text-xs">Gerenciar coluna</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setRenameValue(stage.title);
+                      setRenaming(true);
+                    }}
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-2" /> Renomear
+                  </DropdownMenuItem>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                        <div className="w-3.5 h-3.5 mr-2 rounded-full" style={{ backgroundColor: stage.color }} />
+                        Alterar cor
+                      </DropdownMenuItem>
+                    </PopoverTrigger>
+                    <PopoverContent side="left" className="w-auto p-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {STAGE_PRESET_COLORS.map((c) => (
+                          <button
+                            key={c}
+                            className="w-6 h-6 rounded-full ring-1 ring-border hover:ring-primary"
+                            style={{ backgroundColor: c }}
+                            onClick={() => onChangeStageColor(stage.id, c)}
+                          />
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onToggleStageFinal(stage.id, stage.is_final);
+                    }}
+                  >
+                    <Check className="w-3.5 h-3.5 mr-2 text-success" />
+                    {stage.is_final ? "Remover marca de Final" : "Marcar como Final"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onToggleStageBlocked(stage.id, stage.is_blocked);
+                    }}
+                  >
+                    <AlertCircle className="w-3.5 h-3.5 mr-2 text-orange-500" />
+                    {stage.is_blocked ? "Remover Bloqueio" : "Marcar como Bloqueio"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onToggleStageVisible(stage.id, stage.is_visible);
+                    }}
+                  >
+                    {stage.is_visible ? <EyeOff className="w-3.5 h-3.5 mr-2" /> : <Eye className="w-3.5 h-3.5 mr-2" />}
+                    {stage.is_visible ? "Ocultar coluna" : "Mostrar coluna"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onDeleteStage(stage.id);
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir coluna
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
