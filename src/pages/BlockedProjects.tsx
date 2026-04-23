@@ -26,7 +26,9 @@ const BlockedProjects = () => {
     const fetch = async () => {
       try {
         const { data, error } = await supabase.from("projects").select("*")
-          .not("blockers", "is", null).neq("blockers", "").neq("status", "done").order("created_at", { ascending: false });
+          .not("blockers", "is", null).neq("blockers", "").neq("status", "done")
+          .eq("is_trashed", false)
+          .order("created_at", { ascending: false });
         if (error) throw error;
         setProjects(data || []);
       } catch { toast({ title: "Erro ao carregar projetos bloqueados", variant: "destructive" }); }

@@ -60,6 +60,7 @@ const Dashboard = () => {
     try {
       const { data, error } = await supabase.from("projects").select("*")
         .neq("category", "qualidade")
+        .eq("is_trashed", false)
         .order("display_order", { ascending: true }).order("created_at", { ascending: false });
       if (error) throw error;
       const filtered = await filterProjects(data || []);
@@ -97,10 +98,14 @@ const Dashboard = () => {
   const handleEdit = (project: Project) => { setEditingProject(project); setEditDialogOpen(true); };
   const handleDelete = async (projectId: string) => {
     try {
-      const { error } = await supabase.from("projects").delete().eq("id", projectId);
+      const { error } = await supabase
+        .from("projects")
+        .update({ is_trashed: true, trashed_at: new Date().toISOString() })
+        .eq("id", projectId);
       if (error) throw error;
-      toast({ title: "Projeto excluído!" }); fetchProjects();
-    } catch { toast({ title: "Erro ao excluir projeto", variant: "destructive" }); }
+      toast({ title: "Projeto movido para a lixeira", description: "Você pode restaurá-lo em Lixeira de Projetos." });
+      fetchProjects();
+    } catch { toast({ title: "Erro ao mover para a lixeira", variant: "destructive" }); }
   };
   const handleStatusChange = async (projectId: string, newStatus: string) => {
     try {

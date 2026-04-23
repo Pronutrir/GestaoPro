@@ -125,7 +125,7 @@ const Timeline = () => {
   const fetchData = useCallback(async () => {
     try {
       const [projectsRes, activitiesRes, phasesRes, depsRes] = await Promise.all([
-        supabase.from("projects").select("id,title,status,priority,due_date,category").order("title"),
+        supabase.from("projects").select("id,title,status,priority,due_date,category").eq("is_trashed", false).order("title"),
         supabase.from("activities").select("id,title,status,start_date,end_date,assigned_to,project_id,phase_id,priority"),
         supabase.from("phases").select("id,title,project_id,display_order").order("display_order"),
         supabase.from("task_dependencies").select("predecessor_id,successor_id,lag_days"),

@@ -70,7 +70,7 @@ const Investments = () => {
 
   const fetchData = async () => {
     const [projRes, invRes, actRes] = await Promise.all([
-      supabase.from("projects").select("id, title, budget_planned, budget_used, status"),
+      supabase.from("projects").select("id, title, budget_planned, budget_used, status").eq("is_trashed", false),
       supabase.from("activity_investments").select("id, activity_id, amount, description, project_id, responsible, category, recorded_at"),
       supabase.from("activities").select("id, title, assigned_to, project_id"),
     ]);
