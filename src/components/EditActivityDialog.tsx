@@ -21,6 +21,7 @@ import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserPlus2 } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
+import { AIAssistButton } from "@/components/AIAssistButton";
 
 interface Activity {
   id: string;
@@ -528,7 +529,15 @@ export const EditActivityDialog = ({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2 min-w-0">
-            <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
+              <AIAssistButton
+                value={formData.title}
+                onChange={(next) => setFormData({ ...formData, title: next })}
+                context="activity_title"
+                actions={["correct", "improve"]}
+              />
+            </div>
             <Textarea
               id="title"
               value={formData.title}
@@ -553,7 +562,14 @@ export const EditActivityDialog = ({
           </label>
 
           <div className="space-y-2 min-w-0">
-            <Label htmlFor="description" className="text-sm font-semibold text-foreground">Descrição</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="description" className="text-sm font-semibold text-foreground">Descrição</Label>
+              <AIAssistButton
+                value={formData.description}
+                onChange={(next) => setFormData({ ...formData, description: next })}
+                context="activity_description"
+              />
+            </div>
             <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} autoResize placeholder="Descreva a atividade..." className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
           </div>
 
