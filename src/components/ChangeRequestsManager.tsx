@@ -524,6 +524,10 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
               ? isDesignatedDecider
               : (canManage || isOwner);
             const isAwaitingMyDecision = item.status === "pending" && isDesignatedDecider;
+            const hasDetails = !!(item.justification || item.expected_benefits || item.impact_scope || item.impact_schedule || item.impact_cost || item.impact_quality || item.decision_notes || item.approver);
+            // Padrão: solicitações pendentes ficam expandidas; decididas ficam recolhidas até o usuário clicar.
+            const detailsExplicit = expandedDetails.has(item.id);
+            const showDetails = item.status === "pending" ? !detailsExplicit ? true : true : detailsExplicit;
             return (
               <Card key={item.id} className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-4">
