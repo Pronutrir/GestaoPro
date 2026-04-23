@@ -603,6 +603,24 @@ const Timeline = () => {
                 }}
               >
                 <div className="relative" style={{ width: totalWidth, minHeight: rows.length * ROW_H }}>
+                  {/* Weekend bands */}
+                  {weekendBands.map((b, i) => (
+                    <div
+                      key={`wk-${i}`}
+                      className="absolute top-0 bottom-0 bg-muted/30 pointer-events-none"
+                      style={{ left: b.left, width: b.width }}
+                    />
+                  ))}
+                  {/* Zebra row backgrounds */}
+                  {rows.map((_, idx) =>
+                    idx % 2 === 1 ? (
+                      <div
+                        key={`zb-${idx}`}
+                        className="absolute left-0 right-0 bg-muted/15 pointer-events-none"
+                        style={{ top: idx * ROW_H, height: ROW_H }}
+                      />
+                    ) : null
+                  )}
                   {/* Week grid lines */}
                   {weekMarkers.map((w, i) => (
                     <div
@@ -622,7 +640,7 @@ const Timeline = () => {
                   {/* Today line */}
                   {todayPosition !== null && (
                     <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-primary/80 z-10"
+                      className="absolute top-0 bottom-0 w-0.5 bg-primary z-10 shadow-[0_0_8px_hsl(var(--primary)/0.6)]"
                       style={{ left: todayPosition }}
                     >
                       <div className="absolute -top-0 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[9px] font-bold px-1 rounded-b">
@@ -630,6 +648,59 @@ const Timeline = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Dependency arrows (SVG) */}
+                  <svg
+                    className="absolute top-0 left-0 pointer-events-none"
+                    width={totalWidth}
+                    height={rows.length * ROW_H}
+                    style={{ overflow: "visible" }}
+                  >
+                    <defs>
+                      <marker
+                        id="dep-arrow"
+                        viewBox="0 0 10 10"
+                        refX="8"
+                        refY="5"
+                        markerWidth="6"
+                        markerHeight="6"
+                        orient="auto-start-reverse"
+                      >
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--muted-foreground))" />
+                      </marker>
+                    </defs>
+                    {dependencies.map((dep, i) => {
+                      const predIdx = rows.findIndex(
+                        (r) => r.type === "activity" && (r.data as Activity).id === dep.predecessor_id
+                      );
+                      const succIdx = rows.findIndex(
+                        (r) => r.type === "activity" && (r.data as Activity).id === dep.successor_id
+                      );
+                      if (predIdx === -1 || succIdx === -1) return null;
+                      const pred = rows[predIdx].data as Activity;
+                      const succ = rows[succIdx].data as Activity;
+                      if (!pred.start_date || !succ.start_date) return null;
+                      const predBar = getBarPosition(pred);
+                      const succBar = getBarPosition(succ);
+                      const x1 = predBar.left + predBar.width;
+                      const y1 = predIdx * ROW_H + ROW_H / 2;
+                      const x2 = succBar.left;
+                      const y2 = succIdx * ROW_H + ROW_H / 2;
+                      const midX = x1 + Math.max(12, (x2 - x1) / 2);
+                      const path = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+                      return (
+                        <path
+                          key={`dep-${i}`}
+                          d={path}
+                          stroke="hsl(var(--muted-foreground))"
+                          strokeWidth="1.2"
+                          strokeOpacity="0.55"
+                          fill="none"
+                          markerEnd="url(#dep-arrow)"
+                        />
+                      );
+                    })}
+                  </svg>
 
                   {/* Row backgrounds + bars */}
                   {rows.map((row, idx) => {
