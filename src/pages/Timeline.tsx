@@ -405,7 +405,7 @@ const Timeline = () => {
                     <Calendar className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Ir para Hoje</TooltipContent>
+                <TooltipContent side="bottom">Ir para Hoje</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -418,7 +418,9 @@ const Timeline = () => {
                     <Zap className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Destacar caminho crítico</TooltipContent>
+                <TooltipContent side="bottom">
+                  {showCritical ? "Ocultar caminho crítico" : "Destacar caminho crítico"}
+                </TooltipContent>
               </Tooltip>
               <div className="flex items-center border border-border rounded-lg overflow-hidden">
                 {(["month", "quarter", "half", "year"] as ZoomLevel[]).map((level) => (
