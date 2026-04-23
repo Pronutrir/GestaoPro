@@ -268,6 +268,15 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
 
   const handleDecide = async () => {
     if (!decisionFor) return;
+    const itemApprovers = approvers.filter(a => a.change_request_id === decisionFor.id);
+    if (itemApprovers.length > 0 && user?.id && !itemApprovers.some(a => a.user_id === user.id)) {
+      toast({
+        title: "Decisão restrita",
+        description: "Apenas decisores designados podem aprovar ou rejeitar esta solicitação.",
+        variant: "destructive",
+      });
+      return;
+    }
     const { error } = await supabase
       .from("change_requests" as any)
       .update({
