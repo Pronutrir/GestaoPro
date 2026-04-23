@@ -1251,7 +1251,7 @@ export const EditActivityDialog = ({
           )}
 
           {act && !createMode && (
-            <Collapsible defaultOpen className="border border-border rounded-lg">
+            <Collapsible className="border border-border rounded-lg">
               <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-accent/30 transition-colors rounded-lg">
                 <span className="text-sm font-semibold flex items-center gap-2">
                   <History className="w-4 h-4" /> Histórico de alterações
