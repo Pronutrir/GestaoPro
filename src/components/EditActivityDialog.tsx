@@ -851,6 +851,25 @@ export const EditActivityDialog = ({
           </DialogFooter>
         </form>
       </DialogContent>
+      {/* Editor aninhado para sub-atividade — mesmos campos da atividade principal */}
+      {editingSubActivity && (
+        <EditActivityDialog
+          activity={editingSubActivity}
+          open={editingSubOpen}
+          onOpenChange={(o) => {
+            setEditingSubOpen(o);
+            if (!o) setEditingSubActivity(null);
+          }}
+          onActivityUpdated={() => {
+            if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+            onActivityUpdated();
+          }}
+          phases={phases}
+          allActivities={allActivities}
+          projectId={projectId}
+          isQualityProject={isQualityProject}
+        />
+      )}
     </Dialog>
   );
 };
