@@ -662,7 +662,23 @@ const Timeline = () => {
             )}
 
             {/* Right Panel: Gantt Bars */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+              {!leftPanelOpen && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="icon"
+                      className="absolute left-2 top-2 z-30 h-7 w-7 shadow-md rounded-full"
+                      onClick={() => setLeftPanelOpen(true)}
+                      aria-label="Mostrar painel"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Mostrar painel de projetos</TooltipContent>
+                </Tooltip>
+              )}
               {/* Timeline header */}
               <div
                 ref={scrollRef}
