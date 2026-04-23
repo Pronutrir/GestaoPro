@@ -21,6 +21,7 @@ import CSC from "./pages/CSC";
 import QualityManagement from "./pages/QualityManagement";
 import OKRs from "./pages/OKRs";
 import Calendario from "./pages/Calendario";
+import ProjectsTrash from "./pages/ProjectsTrash";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="/okrs" element={<ProtectedRoute gestorOnly><OKRs /></ProtectedRoute>} />
             <Route path="/calendario" element={<ProtectedRoute><Calendario /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute gestorOnly><Reports /></ProtectedRoute>} />
+            <Route path="/projects/trash" element={<ProtectedRoute><ProjectsTrash /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute adminOnly><Settings /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
