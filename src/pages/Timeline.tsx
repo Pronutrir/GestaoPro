@@ -590,7 +590,7 @@ const Timeline = () => {
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                           {actCount}
                         </Badge>
-                        <span className="w-[72px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
+                        <span className="hidden sm:inline w-[64px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
                           {projEnd ? format(projEnd, "dd/MM/yy") : "—"}
                         </span>
                       </div>
@@ -609,11 +609,11 @@ const Timeline = () => {
                         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColors[status]}`} />
                         <span className="text-xs text-foreground truncate flex-1">{activity.title}</span>
                         {row.phaseName && (
-                          <span className="text-[10px] text-muted-foreground truncate max-w-[60px]">
+                          <span className="hidden md:inline text-[10px] text-muted-foreground truncate max-w-[60px]">
                             {row.phaseName}
                           </span>
                         )}
-                        <span className="w-[72px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
+                        <span className="hidden sm:inline w-[64px] text-right text-[11px] text-muted-foreground tabular-nums shrink-0">
                           {activity.end_date ? format(parseISO(activity.end_date), "dd/MM/yy") : "—"}
                         </span>
                       </div>
