@@ -1269,9 +1269,19 @@ export const EditActivityDialog = ({
               <Button
                 type="button"
                 variant="outline"
-                className="mr-auto gap-2 text-success border-success/30 hover:bg-success/10"
+                className="mr-auto gap-2 text-success border-success/30 hover:bg-success/10 disabled:opacity-50"
+                disabled={isBlockedByOthers}
+                title={isBlockedByOthers ? "Conclua as tarefas bloqueadoras primeiro" : "Concluir atividade"}
                 onClick={async () => {
                   if (!act || !projectId) return;
+                  if (isBlockedByOthers) {
+                    toast({
+                      title: "Tarefa bloqueada",
+                      description: `Existem ${blockers.length} bloqueio(s) pendente(s). Conclua-os antes.`,
+                      variant: "destructive",
+                    });
+                    return;
+                  }
                   try {
                     // Find the final workflow stage
                     const { data: finalStage } = await supabase
