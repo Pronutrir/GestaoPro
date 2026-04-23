@@ -1222,6 +1222,7 @@ export type Database = {
           due_date: string | null
           expected_benefits: string | null
           id: string
+          manager: string | null
           objective: string | null
           out_of_scope: string | null
           owner: string | null
@@ -1234,6 +1235,8 @@ export type Database = {
           root_cause: string | null
           scope: string | null
           solved_problem: string | null
+          sponsor: string | null
+          start_date: string | null
           status: string
           title: string
           updated_at: string
@@ -1251,6 +1254,7 @@ export type Database = {
           due_date?: string | null
           expected_benefits?: string | null
           id?: string
+          manager?: string | null
           objective?: string | null
           out_of_scope?: string | null
           owner?: string | null
@@ -1263,6 +1267,8 @@ export type Database = {
           root_cause?: string | null
           scope?: string | null
           solved_problem?: string | null
+          sponsor?: string | null
+          start_date?: string | null
           status?: string
           title: string
           updated_at?: string
@@ -1280,6 +1286,7 @@ export type Database = {
           due_date?: string | null
           expected_benefits?: string | null
           id?: string
+          manager?: string | null
           objective?: string | null
           out_of_scope?: string | null
           owner?: string | null
@@ -1292,6 +1299,8 @@ export type Database = {
           root_cause?: string | null
           scope?: string | null
           solved_problem?: string | null
+          sponsor?: string | null
+          start_date?: string | null
           status?: string
           title?: string
           updated_at?: string
