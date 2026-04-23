@@ -469,6 +469,21 @@ const Timeline = () => {
           </div>
         </div>
 
+        {/* Critical path dependency warning */}
+        {showCritical && projectsWithoutDeps.length > 0 && (
+          <div className="flex-none px-6 py-2 bg-warning/10 border-b border-warning/30 flex items-start gap-2">
+            <Info className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+            <div className="flex-1 text-xs text-foreground">
+              <span className="font-semibold">Caminho crítico pouco confiável: </span>
+              {projectsWithoutDeps.length === 1 ? (
+                <>O projeto <span className="font-medium">"{projectsWithoutDeps[0].title}"</span> não possui dependências cadastradas entre as tarefas. Cadastre dependências na aba "Dependências" das atividades para um cálculo realista.</>
+              ) : (
+                <>{projectsWithoutDeps.length} projetos não possuem dependências cadastradas — todas as tarefas aparecerão como críticas. Cadastre dependências para um cálculo realista.</>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Gantt Area */}
         {filteredProjects.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
