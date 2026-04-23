@@ -468,6 +468,17 @@ const ProjectDetails = () => {
   if (isLoading || authLoading || permissionsLoading) {
     return (<div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Carregando projeto...</p></div>);
   }
+  if (accessDenied) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center max-w-md px-6">
+          <p className="text-lg font-semibold text-foreground mb-2">Acesso restrito</p>
+          <p className="text-sm text-muted-foreground mb-4">Você não tem autorização para visualizar este projeto. Solicite ao administrador para ser adicionado como membro.</p>
+          <Button onClick={() => navigate("/projects")}>Voltar</Button>
+        </div>
+      </div>
+    );
+  }
   if (!project) {
     return (<div className="min-h-screen bg-background flex items-center justify-center"><div className="text-center"><p className="text-muted-foreground mb-4">Projeto não encontrado</p><Button onClick={() => navigate("/projects")}>Voltar</Button></div></div>);
   }
