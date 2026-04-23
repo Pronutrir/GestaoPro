@@ -113,6 +113,7 @@ export const EditActivityDialog = ({
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
   const [creatingDraft, setCreatingDraft] = useState(false);
   const effectiveActivity = createMode ? draftActivity : activity;
+  const { blockers, isBlocked: isBlockedByOthers } = useTaskBlockers(effectiveActivity?.id);
   const [formData, setFormData] = useState({
     title: "", description: "", assigned_to: "",
     start_date: "", end_date: "", cost: "", hours: "",
