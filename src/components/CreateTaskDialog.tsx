@@ -14,6 +14,7 @@ import {
 import {
   User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Paperclip, ChevronDown, Loader2,
 } from "lucide-react";
+import { AIAssistButton } from "@/components/AIAssistButton";
 
 export interface Phase { id: string; title: string }
 export interface WorkflowStage { id: string; title: string; color: string; is_final?: boolean }
@@ -254,7 +255,15 @@ export const CreateTaskDialog = ({
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Title */}
           <div className="space-y-2 min-w-0">
-            <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
+              <AIAssistButton
+                value={formData.title}
+                onChange={(next) => setFormData({ ...formData, title: next })}
+                context="activity_title"
+                actions={["correct", "improve"]}
+              />
+            </div>
             <Textarea
               id="title"
               ref={titleRef}
@@ -276,7 +285,14 @@ export const CreateTaskDialog = ({
 
           {/* Description */}
           <div className="space-y-2 min-w-0">
-            <Label htmlFor="description" className="text-sm font-semibold text-foreground">Descrição</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="description" className="text-sm font-semibold text-foreground">Descrição</Label>
+              <AIAssistButton
+                value={formData.description}
+                onChange={(next) => setFormData({ ...formData, description: next })}
+                context="activity_description"
+              />
+            </div>
             <Textarea
               id="description"
               value={formData.description}
