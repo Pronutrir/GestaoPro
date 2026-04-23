@@ -34,7 +34,7 @@ const Reports = () => {
         supabase.from("projects").select("*").eq("is_trashed", false),
         supabase.from("activities").select("*"),
         supabase.from("time_entries").select("*"),
-        supabase.from("lessons_learned").select("*"),
+        supabase.from("lessons_learned").select("*").eq("is_trashed", false),
       ]);
       if (p.data) setProjects(p.data);
       if (a.data) setActivities(a.data);
