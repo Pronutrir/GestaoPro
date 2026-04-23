@@ -150,6 +150,27 @@ const ProjectDetails = () => {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  const fetchPendingChangeRequests = useCallback(async () => {
+    if (!id) return;
+    const { count } = await supabase
+      .from("change_requests" as any)
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", id)
+      .eq("is_trashed", false)
+      .eq("status", "pending");
+    setPendingChangeRequests(count ?? 0);
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    fetchPendingChangeRequests();
+    const channel = supabase
+      .channel(`pending-changes-${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "change_requests", filter: `project_id=eq.${id}` }, () => fetchPendingChangeRequests())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [id, fetchPendingChangeRequests]);
+
   useEffect(() => {
     if (authLoading) return;
     if (id) {
