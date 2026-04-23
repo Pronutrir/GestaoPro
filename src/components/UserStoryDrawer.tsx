@@ -213,7 +213,23 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
                         <Label className="text-xs">Narrativa</Label>
                         <AIAssistButton value={editForm.narrative} onChange={(v) => setEditForm({ ...editForm, narrative: v })} context="story_narrative" />
                       </div>
-                      <Textarea value={editForm.narrative} onChange={e => setEditForm({ ...editForm, narrative: e.target.value })} rows={3} />
+                      <Textarea
+                        value={editForm.narrative}
+                        onChange={e => {
+                          setEditForm({ ...editForm, narrative: e.target.value });
+                          e.target.style.height = "auto";
+                          e.target.style.height = `${Math.min(e.target.scrollHeight, 600)}px`;
+                        }}
+                        ref={(el) => {
+                          if (el) {
+                            el.style.height = "auto";
+                            el.style.height = `${Math.min(el.scrollHeight, 600)}px`;
+                          }
+                        }}
+                        rows={6}
+                        className="min-h-[140px] max-h-[600px] text-sm leading-relaxed resize-y"
+                        placeholder="Descreva o contexto, motivações e detalhes da história..."
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Imagem</Label>
