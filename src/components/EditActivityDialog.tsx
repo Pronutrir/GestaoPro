@@ -803,7 +803,8 @@ export const EditActivityDialog = ({
                     return (
                       <div
                         key={sub.id}
-                        className="grid grid-cols-[24px_1fr_72px_56px_84px_28px] items-center gap-2 px-2 py-1 border-b border-border/50 last:border-0 hover:bg-muted/20 group"
+                        className="grid items-center gap-2 px-2 py-1 border-b border-border/50 last:border-0 hover:bg-muted/20 group min-w-fit"
+                        style={{ gridTemplateColumns: subGridTemplate }}
                       >
                         <Button
                           size="icon"
