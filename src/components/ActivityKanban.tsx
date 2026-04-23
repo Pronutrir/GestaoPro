@@ -127,6 +127,7 @@ function SortableKanbanCard({
   onCreateStory,
   isQualityProject,
   stageColor,
+  subActivityCount,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -142,6 +143,7 @@ function SortableKanbanCard({
   onCreateStory?: () => void;
   isQualityProject?: boolean;
   stageColor?: string;
+  subActivityCount?: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -170,6 +172,7 @@ function SortableKanbanCard({
         onCreateStory={onCreateStory}
         isQualityProject={isQualityProject}
         stageColor={stageColor}
+        subActivityCount={subActivityCount}
       />
     </div>
   );
