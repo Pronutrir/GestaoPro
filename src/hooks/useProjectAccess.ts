@@ -73,6 +73,11 @@ export const useProjectAccess = () => {
         { event: "*", schema: "public", table: "project_members", filter: `user_id=eq.${user.id}` },
         refresh
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "projects" },
+        refresh
+      )
       .subscribe();
 
     window.addEventListener("focus", handleFocus);
