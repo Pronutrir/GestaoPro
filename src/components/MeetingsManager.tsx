@@ -806,6 +806,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                           </div>
                         </div>
                       )}
+                      {canEditMeeting && newAction.description.trim() && (
+                        <div className="flex justify-end mt-1">
+                          <AIAssistButton value={newAction.description} onChange={(v) => setNewAction({ ...newAction, description: v })} context="meeting_action" />
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
