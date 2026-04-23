@@ -726,13 +726,55 @@ export const EditActivityDialog = ({
                 Sub-atividades ({subActivities.length})
               </h3>
               {subActivities.length > 0 && (
-                <div className="rounded-md border border-border overflow-hidden">
-                  <div className="grid grid-cols-[24px_1fr_72px_56px_84px_28px] items-center gap-2 px-2 py-1 bg-muted/30 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
+                <div className="rounded-md border border-border overflow-x-auto">
+                  <div
+                    className="grid items-center gap-2 px-2 py-1 bg-muted/30 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border min-w-fit"
+                    style={{ gridTemplateColumns: subGridTemplate }}
+                  >
                     <span></span>
                     <span>Nome</span>
                     <span className="text-center">Resp.</span>
                     <span className="text-center">Prio.</span>
-                    <span>Vencimento</span>
+                    <span className="flex items-center gap-1">
+                      Vencimento
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="ml-1 h-4 w-4 inline-flex items-center justify-center rounded hover:bg-primary/15 text-primary"
+                            title="Adicionar/remover colunas"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-56 p-2" align="end">
+                          <div className="text-[11px] font-semibold text-muted-foreground mb-1.5 normal-case">
+                            Colunas extras
+                          </div>
+                          <div className="space-y-0.5">
+                            {ALL_EXTRA_COLS.map((col) => {
+                              const checked = extraCols.includes(col.id);
+                              return (
+                                <label
+                                  key={col.id}
+                                  className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-muted cursor-pointer text-xs normal-case font-normal"
+                                >
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={() => toggleExtraCol(col.id)}
+                                  />
+                                  <span>{col.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </span>
+                    {extraCols.map((id) => {
+                      const col = ALL_EXTRA_COLS.find((c) => c.id === id);
+                      return <span key={id}>{col?.label}</span>;
+                    })}
                     <span></span>
                   </div>
                   {subActivities.map((sub) => {
