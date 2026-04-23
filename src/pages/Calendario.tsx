@@ -38,7 +38,7 @@ const Calendario = () => {
   const fetchAll = async () => {
     const [actsRes, projsRes, holsRes, schedRes] = await Promise.all([
       supabase.from("activities").select("id,title,start_date,end_date,assigned_to,project_id,status").not("start_date","is",null).not("end_date","is",null).eq("is_trashed", false),
-      supabase.from("projects").select("id,title,category"),
+      supabase.from("projects").select("id,title,category").eq("is_trashed", false),
       supabase.from("holidays").select("date,name").order("date"),
       profile?.id ? supabase.from("user_work_schedules").select("*").eq("user_id", profile.id).maybeSingle() : Promise.resolve({ data: null } as any),
     ]);

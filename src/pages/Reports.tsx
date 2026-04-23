@@ -31,7 +31,7 @@ const Reports = () => {
   useEffect(() => {
     const fetchAll = async () => {
       const [p, a, t, l] = await Promise.all([
-        supabase.from("projects").select("*"),
+        supabase.from("projects").select("*").eq("is_trashed", false),
         supabase.from("activities").select("*"),
         supabase.from("time_entries").select("*"),
         supabase.from("lessons_learned").select("*"),

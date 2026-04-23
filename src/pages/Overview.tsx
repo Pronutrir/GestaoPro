@@ -80,7 +80,7 @@ const Overview = () => {
   const fetchAllData = async () => {
     try {
       const [projectsRes, activitiesRes, timeRes] = await Promise.all([
-        supabase.from("projects").select("*"),
+        supabase.from("projects").select("*").eq("is_trashed", false),
         supabase.from("activities").select("*"),
         supabase.from("time_entries").select("duration_minutes, project_id, created_at"),
       ]);
