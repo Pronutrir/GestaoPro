@@ -806,7 +806,7 @@ const ProjectDetails = () => {
                 <ProjectListView
                   activities={activities as any}
                   phases={phases}
-                  onEditActivity={(a) => { setEditingActivity(a as any); setEditActivityDialogOpen(true); }}
+                  onEditActivity={(a) => openEditActivity(a as any)}
                   onToggleActivity={handleToggleActivity}
                   canCreate={canCreate}
                   onAddActivity={() => {
@@ -928,7 +928,7 @@ const ProjectDetails = () => {
 
               <BacklogSection
                 projectId={id!} activities={activities} phases={phases}
-                onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+                onEditActivity={(activity) => openEditActivity(activity)}
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
