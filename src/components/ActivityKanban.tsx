@@ -298,6 +298,12 @@ function KanbanCard({
               <div className="flex-1 min-w-0 overflow-hidden">
                 <div className="flex items-center gap-1.5 mb-1">
                   {getPriorityIndicator(activity.priority)}
+                  {isMilestone && (
+                    <Diamond
+                      className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0"
+                      aria-label="Marco"
+                    />
+                  )}
                   <p
                     className={`text-xs font-medium leading-snug line-clamp-2 ${
                       activity.status === "completed"
