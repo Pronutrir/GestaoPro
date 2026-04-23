@@ -823,6 +823,14 @@ const ProjectDetails = () => {
               <RisksManager projectId={id!} />
             </TabsContent>
 
+            <TabsContent value="changes" className="mt-0">
+              <ChangeRequestsManager
+                projectId={id!}
+                projectOwner={project.owner}
+                onChanged={fetchPendingChangeRequests}
+              />
+            </TabsContent>
+
             <TabsContent value="backlog" className="mt-3 space-y-4">
               {canCreate && (
                 <div className="flex flex-wrap gap-2">
