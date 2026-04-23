@@ -877,60 +877,33 @@ function DroppableColumn({
   );
 }
 
-function AddStageColumn({ onCreate }: { onCreate: (title: string) => Promise<void> }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submit = async () => {
-    if (!value.trim()) return;
-    setLoading(true);
-    try {
-      await onCreate(value.trim());
-      setValue("");
-      setEditing(false);
-    } finally {
-      setLoading(false);
-    }
-  };
+function AddStageColumn({ projectId }: { projectId: string }) {
+  const [open, setOpen] = useState(false);
 
   return (
     <div
       className="shrink-0 flex flex-col items-stretch justify-start pt-3"
       style={{ width: 200 }}
     >
-      {editing ? (
-        <div className="px-2 space-y-1.5">
-          <Input
-            autoFocus
-            placeholder="Nome do grupo..."
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit();
-              if (e.key === "Escape") { setEditing(false); setValue(""); }
-            }}
-            className="h-8 text-xs"
-          />
-          <div className="flex gap-1">
-            <Button size="sm" className="h-7 text-xs flex-1" onClick={submit} disabled={!value.trim() || loading}>
-              {loading ? "Criando..." : "Criar"}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setEditing(false); setValue(""); }}>
-              Cancelar
-            </Button>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors w-full"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        Criar grupo
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-[750px] p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle>Configurar grupos do Kanban</DialogTitle>
+          </DialogHeader>
+          <div className="p-4">
+            <WorkflowStageManager projectId={projectId} />
           </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors w-full"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Adicionar grupo
-        </button>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
