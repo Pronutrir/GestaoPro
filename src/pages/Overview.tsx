@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Sparkline } from "@/components/Sparkline";
+import { PipelineByTypeLanes } from "@/components/PipelineByTypeLanes";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -32,6 +33,9 @@ interface Project {
   due_date: string | null;
   owner: string | null;
   blockers: string | null;
+  project_type?: string | null;
+  priority?: string;
+  completion_percentage?: number | null;
 }
 
 interface Activity {
