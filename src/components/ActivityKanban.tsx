@@ -1164,10 +1164,19 @@ export const ActivityKanban = ({
           `source_activity_id.in.(${ids.join(",")}),target_activity_id.in.(${ids.join(",")})`,
         )
         .then(({ data }) => {
-          const map = new Map<string, number>();
+          const titleById = new Map<string, string>();
+          activities.forEach((a) => titleById.set(a.id, a.title));
+          const map = new Map<string, { id: string; title: string }[]>();
+          const push = (key: string, otherId: string) => {
+            const list = map.get(key) || [];
+            if (!list.find((x) => x.id === otherId)) {
+              list.push({ id: otherId, title: titleById.get(otherId) || "" });
+              map.set(key, list);
+            }
+          };
           (data || []).forEach((r: any) => {
-            map.set(r.source_activity_id, (map.get(r.source_activity_id) || 0) + 1);
-            map.set(r.target_activity_id, (map.get(r.target_activity_id) || 0) + 1);
+            push(r.source_activity_id, r.target_activity_id);
+            push(r.target_activity_id, r.source_activity_id);
           });
           setRelationCounts(map);
         });
