@@ -796,6 +796,7 @@ export const EditActivityDialog = ({
             <Diamond className={`w-3.5 h-3.5 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : ""}`} />
             <span>Marco do projeto (milestone)</span>
           </label>
+          </div>
 
           <div className="space-y-2 min-w-0">
             <div className="flex items-center justify-between">
@@ -809,8 +810,8 @@ export const EditActivityDialog = ({
             <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} autoResize placeholder="Descreva a atividade..." className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
           </div>
 
-          {/* Priority */}
-          <div className="space-y-2">
+          {/* Priority — duplicado no painel superior; mantemos oculto */}
+          <div className="hidden space-y-2">
             <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Flag className="w-4 h-4" /> Prioridade
             </Label>
