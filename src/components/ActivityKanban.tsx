@@ -38,6 +38,8 @@ import {
   Eye,
   EyeOff,
   Diamond,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import {
   DndContext,
