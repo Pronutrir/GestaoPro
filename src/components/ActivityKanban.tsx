@@ -40,6 +40,7 @@ import {
   Diamond,
   ChevronRight,
   ChevronDown,
+  Link2,
 } from "lucide-react";
 import {
   DndContext,
@@ -169,7 +170,7 @@ function SortableKanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
-  relationCount,
+  relationItems,
   isExpanded,
   onToggleExpand,
 }: {
@@ -189,7 +190,7 @@ function SortableKanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
-  relationCount?: number;
+  relationItems?: { id: string; title: string }[];
   isExpanded?: boolean;
   onToggleExpand?: () => void;
 }) {
@@ -222,7 +223,7 @@ function SortableKanbanCard({
         stageColor={stageColor}
         subActivityCount={subActivityCount}
         dependencyCount={dependencyCount}
-        relationCount={relationCount}
+        relationItems={relationItems}
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
       />
@@ -248,7 +249,7 @@ function KanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
-  relationCount,
+  relationItems,
   isExpanded,
   onToggleExpand,
 }: {
@@ -269,7 +270,7 @@ function KanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
-  relationCount?: number;
+  relationItems?: { id: string; title: string }[];
   isExpanded?: boolean;
   onToggleExpand?: () => void;
 }) {
@@ -428,14 +429,36 @@ function KanbanCard({
                       {dependencyCount.succ > 0 && `→${dependencyCount.succ}`}
                     </Badge>
                   )}
-                  {relationCount && relationCount > 0 ? (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] px-1.5 py-0 bg-accent/40 text-foreground border-accent font-semibold"
-                      title={`${relationCount} vínculo(s)`}
-                    >
-                      🔗 {relationCount}
-                    </Badge>
+                  {relationItems && relationItems.length > 0 ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 h-5 gap-1 bg-background text-muted-foreground border-border/60 hover:bg-muted/40 hover:text-foreground transition-colors font-medium"
+                        >
+                          <Link2 className="w-2.5 h-2.5" strokeWidth={2.25} />
+                          {relationItems.length}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" align="start" className="max-w-xs p-2">
+                        <div className="text-[11px] font-semibold mb-1 text-foreground">
+                          {relationItems.length} {relationItems.length === 1 ? "vínculo" : "vínculos"}
+                        </div>
+                        <ul className="space-y-0.5">
+                          {relationItems.slice(0, 6).map((r) => (
+                            <li key={r.id} className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                              <span className="font-mono text-[9px] text-muted-foreground/60">#{r.id.slice(0, 6)}</span>
+                              <span className="truncate">{r.title || "(sem título)"}</span>
+                            </li>
+                          ))}
+                          {relationItems.length > 6 && (
+                            <li className="text-[10px] text-muted-foreground/70 italic">
+                              + {relationItems.length - 6} mais…
+                            </li>
+                          )}
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
                   ) : null}
                 </div>
                 {subActivityCount && subActivityCount > 0 ? (
@@ -548,7 +571,7 @@ function SortableColumn({
   onOpenCreateTask?: (stageId: string) => void;
   subActivityCounts: Map<string, number>;
   dependencyCounts?: Map<string, { pred: number; succ: number }>;
-  relationCounts?: Map<string, number>;
+  relationCounts?: Map<string, { id: string; title: string }[]>;
   isAdminOrGestor?: boolean;
   onRenameStage: (id: string, title: string) => Promise<void>;
   onDeleteStage: (id: string) => Promise<void>;
@@ -917,7 +940,7 @@ function SortableColumn({
                     isQualityProject={isQualityProject}
                     stageColor={stage.color}
                     dependencyCount={dependencyCounts?.get(activity.id)}
-                    relationCount={relationCounts?.get(activity.id) || 0}
+                    relationItems={relationCounts?.get(activity.id) || []}
                     subActivityCount={children.length}
                     isExpanded={expanded}
                     onToggleExpand={() => toggleExpanded(activity.id)}
@@ -942,7 +965,7 @@ function SortableColumn({
                           isQualityProject={isQualityProject}
                           stageColor={stage.color}
                           dependencyCount={dependencyCounts?.get(child.id)}
-                          relationCount={relationCounts?.get(child.id) || 0}
+                          relationItems={relationCounts?.get(child.id) || []}
                           subActivityCount={0}
                         />
                       ))}
@@ -1039,7 +1062,7 @@ export const ActivityKanban = ({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Map<string, number>>(new Map());
   const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
-  const [relationCounts, setRelationCounts] = useState<Map<string, number>>(new Map());
+  const [relationCounts, setRelationCounts] = useState<Map<string, { id: string; title: string }[]>>(new Map());
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
@@ -1141,10 +1164,19 @@ export const ActivityKanban = ({
           `source_activity_id.in.(${ids.join(",")}),target_activity_id.in.(${ids.join(",")})`,
         )
         .then(({ data }) => {
-          const map = new Map<string, number>();
+          const titleById = new Map<string, string>();
+          activities.forEach((a) => titleById.set(a.id, a.title));
+          const map = new Map<string, { id: string; title: string }[]>();
+          const push = (key: string, otherId: string) => {
+            const list = map.get(key) || [];
+            if (!list.find((x) => x.id === otherId)) {
+              list.push({ id: otherId, title: titleById.get(otherId) || "" });
+              map.set(key, list);
+            }
+          };
           (data || []).forEach((r: any) => {
-            map.set(r.source_activity_id, (map.get(r.source_activity_id) || 0) + 1);
-            map.set(r.target_activity_id, (map.get(r.target_activity_id) || 0) + 1);
+            push(r.source_activity_id, r.target_activity_id);
+            push(r.target_activity_id, r.source_activity_id);
           });
           setRelationCounts(map);
         });
