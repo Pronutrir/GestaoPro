@@ -170,6 +170,7 @@ function SortableKanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
+  relationItems,
   isExpanded,
   onToggleExpand,
 }: {
@@ -189,6 +190,7 @@ function SortableKanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
+  relationItems?: { id: string; title: string }[];
   isExpanded?: boolean;
   onToggleExpand?: () => void;
 }) {
