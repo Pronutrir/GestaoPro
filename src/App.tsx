@@ -23,6 +23,7 @@ import OKRs from "./pages/OKRs";
 import Calendario from "./pages/Calendario";
 import Trash from "./pages/Trash";
 import NotFound from "./pages/NotFound";
+import PipelineTiposTest from "./pages/PipelineTiposTest";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,7 @@ const App = () => (
             <Route path="/reports" element={<ProtectedRoute gestorOnly><Reports /></ProtectedRoute>} />
             <Route path="/trash" element={<ProtectedRoute><Trash /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute adminOnly><Settings /></ProtectedRoute>} />
+            <Route path="/pipeline-tipos-test" element={<ProtectedRoute><PipelineTiposTest /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
