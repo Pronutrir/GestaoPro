@@ -920,61 +920,7 @@ export const EditActivityDialog = ({
             </div>
           )}
 
-          {!formData.is_milestone && (
-          <div className="p-4 bg-accent/30 rounded-lg border border-border space-y-4">
-            <h3 className="text-sm font-bold text-foreground">Recursos da Atividade</h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-primary" /> Horas Estimadas
-                </Label>
-                <Input
-                  placeholder="Ex: 2h 30m"
-                  value={formData.hours}
-                  onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
-                  className="font-semibold text-lg"
-                />
-                {/* Atalhos rápidos: clique para preencher */}
-                <div className="flex gap-1 flex-wrap">
-                  {[0.25, 0.5, 1, 2, 4, 8].map((h) => {
-                    const label = h < 1 ? `${h * 60}m` : `${h}h`;
-                    const active = String(formData.hours).trim() === String(h);
-                    return (
-                      <button
-                        key={h}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, hours: String(h) })}
-                        className={`px-2 h-6 rounded-md text-[11px] font-medium border transition-all ${active ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50 hover:text-primary"}`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[10px] text-muted-foreground">Formato: 2h 30m, 1.5h ou 90m</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-success" /> Custo
-                </Label>
-                <CurrencyInput step="0.01" min="0" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} className="font-semibold text-lg" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  🎯 Story Points
-                </Label>
-                <div className="flex gap-1 flex-wrap">
-                  {[0, 1, 2, 3, 5, 8, 13, 21].map((sp) => (
-                    <button key={sp} type="button"
-                      className={`w-9 h-9 rounded-md text-sm font-bold border transition-all ${parseInt(formData.story_points) === sp ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
-                      onClick={() => setFormData({ ...formData, story_points: sp.toString() })}
-                    >{sp}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-          )}
+          {/* Tempo, Custo já estão no painel superior. Story Points removidos. */}
 
             </TabsContent>
 
