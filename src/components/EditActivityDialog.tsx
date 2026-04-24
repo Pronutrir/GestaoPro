@@ -1371,9 +1371,33 @@ export const EditActivityDialog = ({
             </div>
           )}
 
-          {/* Mover para Coluna */}
-          {act && projectId && workflowStages.length > 0 && (
-            <div className="border-t border-border pt-4 space-y-2">
+            </TabsContent>
+
+            {/* ===== ABA ANEXOS ===== */}
+            <TabsContent value="attachments" className="pt-4 mt-0">
+          {act && projectId && (
+            <ActivityAttachments activityId={act.id} projectId={projectId} />
+          )}
+            </TabsContent>
+
+            {/* ===== ABA COMENTÁRIOS ===== */}
+            <TabsContent value="comments" className="pt-4 mt-0">
+          {act && (
+            <ActivityComments activityId={act.id} />
+          )}
+            </TabsContent>
+
+            {/* ===== ABA HISTÓRICO ===== */}
+            <TabsContent value="history" className="pt-4 mt-0">
+          {act && !createMode && (
+            <AuditLogPanel recordId={act.id} tableName="activities" />
+          )}
+            </TabsContent>
+          </Tabs>
+
+          {/* Mover para Coluna — oculto: já no painel superior (Status) */}
+          {false && act && projectId && workflowStages.length > 0 && (
+            <div className="hidden border-t border-border pt-4 space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <ArrowRightLeft className="w-4 h-4 text-primary" /> Mover para Coluna
               </Label>
@@ -1425,19 +1449,7 @@ export const EditActivityDialog = ({
             </div>
           )}
 
-          {/* Anexos */}
-          {act && projectId && (
-            <div className="border-t border-border pt-4">
-              <ActivityAttachments activityId={act.id} projectId={projectId} />
-            </div>
-          )}
-
-          {/* Painel unificado de relacionamentos (predecessora, sucessora, vinculada, bloqueio, em espera) */}
-          {act && projectId && (
-            <div className="border-t border-border pt-4">
-              <TaskRelations activityId={act.id} projectId={projectId} />
-            </div>
-          )}
+          {/* Anexos, Comentários, Histórico, Relacionamentos: agora dentro das abas / pills inline */}
 
           {/* Aviso de bloqueio pendente */}
           {act && isBlockedByOthers && (
@@ -1453,27 +1465,6 @@ export const EditActivityDialog = ({
                 <p className="mt-1.5 italic">Conclua os bloqueios antes de marcar esta como concluída.</p>
               </div>
             </div>
-          )}
-
-          {/* Comentários */}
-          {act && (
-            <div className="border-t border-border pt-4">
-              <ActivityComments activityId={act.id} />
-            </div>
-          )}
-
-          {act && !createMode && (
-            <Collapsible className="border border-border rounded-lg">
-              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-accent/30 transition-colors rounded-lg">
-                <span className="text-sm font-semibold flex items-center gap-2">
-                  <History className="w-4 h-4" /> Histórico de alterações
-                </span>
-                <ChevronDown className="w-4 h-4 transition-transform data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="p-3 pt-0">
-                <AuditLogPanel recordId={act.id} tableName="activities" />
-              </CollapsibleContent>
-            </Collapsible>
           )}
 
           <DialogFooter className="gap-2">
