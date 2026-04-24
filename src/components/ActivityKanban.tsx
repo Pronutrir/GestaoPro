@@ -223,7 +223,7 @@ function SortableKanbanCard({
         stageColor={stageColor}
         subActivityCount={subActivityCount}
         dependencyCount={dependencyCount}
-        relationCount={relationCount}
+        relationItems={relationItems}
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
       />
