@@ -893,6 +893,7 @@ function SortableColumn({
                     isQualityProject={isQualityProject}
                     stageColor={stage.color}
                     dependencyCount={dependencyCounts?.get(activity.id)}
+                    relationCount={relationCounts?.get(activity.id) || 0}
                     subActivityCount={children.length}
                     isExpanded={expanded}
                     onToggleExpand={() => toggleExpanded(activity.id)}
@@ -917,6 +918,7 @@ function SortableColumn({
                           isQualityProject={isQualityProject}
                           stageColor={stage.color}
                           dependencyCount={dependencyCounts?.get(child.id)}
+                          relationCount={relationCounts?.get(child.id) || 0}
                           subActivityCount={0}
                         />
                       ))}
