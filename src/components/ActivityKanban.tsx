@@ -75,6 +75,16 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 
+const formatHours = (hours: number): string => {
+  if (!hours || hours <= 0) return "";
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h${m}m`;
+};
+
 const STAGE_PRESET_COLORS = [
   "hsl(220, 15%, 50%)",
   "hsl(38, 92%, 50%)",
