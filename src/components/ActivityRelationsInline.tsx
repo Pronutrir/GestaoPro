@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Link2, Ban, Clock3, ArrowLeft, ArrowRight, Plus } from "lucide-react";
 import { TaskRelations } from "@/components/TaskRelations";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
  * Versão MINIMAL e INLINE dos relacionamentos da atividade.
@@ -99,17 +100,23 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
   ]), [counts]);
 
   const TYPE_OPTIONS = [
-    { kind: "predecessor", label: "Predecessora", Icon: ArrowLeft },
-    { kind: "successor", label: "Sucessora", Icon: ArrowRight },
-    { kind: "blocking", label: "Bloqueio", Icon: Ban },
-    { kind: "waiting_on", label: "Em espera", Icon: Clock3 },
-    { kind: "related", label: "Vinculada", Icon: Link2 },
+    { kind: "predecessor", label: "Predecessora", Icon: ArrowLeft,
+      desc: "Esta atividade só pode começar depois que a predecessora for concluída." },
+    { kind: "successor", label: "Sucessora", Icon: ArrowRight,
+      desc: "A sucessora só pode começar depois que esta atividade for concluída." },
+    { kind: "blocking", label: "Bloqueio", Icon: Ban,
+      desc: "Indica que esta atividade impede o andamento de outra (ou vice-versa)." },
+    { kind: "waiting_on", label: "Em espera", Icon: Clock3,
+      desc: "Esta atividade está aguardando uma ação ou retorno externo para prosseguir." },
+    { kind: "related", label: "Vinculada", Icon: Link2,
+      desc: "Vínculo informativo: tarefas relacionadas, sem impacto direto no fluxo." },
   ] as const;
 
   // ESTADO VAZIO: dropdown direto com os 5 tipos (sem popover intermediário).
   if (total === 0) {
     return (
       <>
+        <TooltipProvider delayDuration={150}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -123,21 +130,28 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            {TYPE_OPTIONS.map(({ kind, label, Icon }) => (
-              <DropdownMenuItem
-                key={kind}
-                onClick={() => {
-                  setAutoOpenAdd(true);
-                  setCreateDialogOpen(true);
-                }}
-                className="text-xs gap-2 cursor-pointer"
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span className="flex-1">{label}</span>
-              </DropdownMenuItem>
+            {TYPE_OPTIONS.map(({ kind, label, Icon, desc }) => (
+              <Tooltip key={kind}>
+                <TooltipTrigger asChild>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setAutoOpenAdd(true);
+                      setCreateDialogOpen(true);
+                    }}
+                    className="text-xs gap-2 cursor-pointer"
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span className="flex-1">{label}</span>
+                  </DropdownMenuItem>
+                </TooltipTrigger>
+                <TooltipContent side="right" align="start" className="max-w-[240px] text-xs leading-snug">
+                  {desc}
+                </TooltipContent>
+              </Tooltip>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        </TooltipProvider>
 
         <Dialog
           open={createDialogOpen}
