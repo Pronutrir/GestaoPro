@@ -539,6 +539,29 @@ function SortableColumn({
   const [quickLoading, setQuickLoading] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(stage.title);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  // Map: parentId -> list of children, ordered by display_order
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, Activity[]>();
+    activities.forEach((a) => {
+      if (a.parent_id) {
+        if (!map.has(a.parent_id)) map.set(a.parent_id, []);
+        map.get(a.parent_id)!.push(a);
+      }
+    });
+    map.forEach((arr) =>
+      arr.sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999)),
+    );
+    return map;
+  }, [activities]);
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
 
