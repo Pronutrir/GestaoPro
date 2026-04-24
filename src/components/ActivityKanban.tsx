@@ -587,6 +587,8 @@ function SortableColumn({
   subActivityCounts,
   dependencyCounts,
   relationCounts,
+  onOpenRelated,
+  onRemoveRelation,
   isAdminOrGestor,
   onRenameStage,
   onDeleteStage,
