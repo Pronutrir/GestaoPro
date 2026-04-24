@@ -722,7 +722,7 @@ export const EditActivityDialog = ({
                       min="0"
                       value={formData.cost}
                       onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                      className="h-7 px-2 text-xs w-[140px]"
+                      className="h-7 pl-8 pr-2 py-0 text-xs w-[140px]"
                     />
                   </PropertyRow>
                 )}
