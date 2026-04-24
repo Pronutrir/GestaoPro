@@ -694,22 +694,22 @@ export const EditActivityDialog = ({
                         onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
                         className="h-7 px-2 text-xs w-[110px]"
                       />
-                      <div className="flex gap-1">
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) setFormData({ ...formData, hours: e.target.value });
+                        }}
+                        className="h-7 rounded-md border border-input bg-background px-2 text-xs cursor-pointer hover:border-primary/50"
+                        title="Selecionar tempo rápido"
+                      >
+                        <option value="">Selecionar…</option>
                         {[0.25, 0.5, 1, 2, 4, 8].map((h) => {
-                          const label = h < 1 ? `${h * 60}m` : `${h}h`;
-                          const active = String(formData.hours).trim() === String(h);
+                          const label = h < 1 ? `${h * 60} minutos` : h === 1 ? "1 hora" : `${h} horas`;
                           return (
-                            <button
-                              key={h}
-                              type="button"
-                              onClick={() => setFormData({ ...formData, hours: String(h) })}
-                              className={`px-1.5 h-6 rounded text-[10px] font-medium border transition-all ${active ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50 hover:text-primary"}`}
-                            >
-                              {label}
-                            </button>
+                            <option key={h} value={String(h)}>{label}</option>
                           );
                         })}
-                      </div>
+                      </select>
                     </div>
                   </PropertyRow>
                 )}
