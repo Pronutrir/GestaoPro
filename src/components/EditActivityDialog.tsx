@@ -1351,62 +1351,6 @@ export const EditActivityDialog = ({
             </TabsContent>
           </Tabs>
 
-          {/* Mover para Coluna — oculto: já no painel superior (Status) */}
-          {false && act && projectId && workflowStages.length > 0 && (
-            <div className="hidden border-t border-border pt-4 space-y-2">
-              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <ArrowRightLeft className="w-4 h-4 text-primary" /> Mover para Coluna
-              </Label>
-              <div className="flex flex-wrap gap-1.5">
-                {workflowStages.map((stage) => (
-                  <button
-                    key={stage.id}
-                    type="button"
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
-                      currentStageId === stage.id
-                        ? "ring-2 ring-primary/30 border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:border-foreground/30 hover:bg-accent/30"
-                    }`}
-                    onClick={async () => {
-                      if (currentStageId === stage.id) return;
-                      if (stage.is_final && isBlockedByOthers) {
-                        toast({
-                          title: "Tarefa bloqueada",
-                          description: `Não é possível mover para "${stage.title}" — há ${blockers.length} bloqueio(s) pendente(s).`,
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      try {
-                        const updateData: any = { workflow_stage_id: stage.id };
-                        if (stage.is_final) {
-                          updateData.status = "completed";
-                          updateData.completed_at = new Date().toISOString();
-                        } else if (act.status === "completed") {
-                          updateData.status = "pending";
-                          updateData.completed_at = null;
-                        }
-                        const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
-                        if (error) throw error;
-                        await supabase.from("user_stories").update({ stage_id: stage.id }).eq("activity_id", act.id);
-                        setCurrentStageId(stage.id);
-                        toast({ title: `Movida para "${stage.title}"` });
-                        onActivityUpdated();
-                      } catch {
-                        toast({ title: "Erro ao mover", variant: "destructive" });
-                      }
-                    }}
-                  >
-                    <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: stage.color }} />
-                    {stage.title}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Anexos, Comentários, Histórico, Relacionamentos: agora dentro das abas / pills inline */}
-
           {/* Aviso de bloqueio pendente */}
           {act && isBlockedByOthers && (
             <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive">
