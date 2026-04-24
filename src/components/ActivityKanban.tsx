@@ -1690,6 +1690,42 @@ export const ActivityKanban = ({
                 subActivityCounts={subActivityCounts}
                 dependencyCounts={dependencyCounts}
                 relationCounts={relationCounts}
+                onOpenRelated={(activityId) => {
+                  const target = activities.find((a) => a.id === activityId);
+                  if (target) {
+                    onEditActivity(target);
+                  } else {
+                    toast({
+                      title: "Atividade vinculada não encontrada",
+                      description: "A atividade pode estar em outro projeto ou foi removida.",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                onRemoveRelation={async (relationId) => {
+                  const { error } = await supabase
+                    .from("task_relations")
+                    .delete()
+                    .eq("id", relationId);
+                  if (error) {
+                    toast({
+                      title: "Erro ao remover vínculo",
+                      description: error.message,
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setRelationCounts((prev) => {
+                    const next = new Map(prev);
+                    next.forEach((list, key) => {
+                      const filtered = list.filter((r) => r.relationId !== relationId);
+                      if (filtered.length === 0) next.delete(key);
+                      else next.set(key, filtered);
+                    });
+                    return next;
+                  });
+                  toast({ title: "Vínculo removido" });
+                }}
                 isAdminOrGestor={isAdmin || canCreate}
                 onRenameStage={handleRenameStage}
                 onDeleteStage={handleDeleteStage}
