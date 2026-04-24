@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond } from "lucide-react";
+import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2 } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
@@ -26,6 +26,17 @@ import { AIAssistButton } from "@/components/AIAssistButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ActivityRelationsInline } from "@/components/ActivityRelationsInline";
 import { MessageSquare, Paperclip, ListTree, FileText } from "lucide-react";
+
+/** Linha de propriedade densa (ícone + label cinza + valor) usada no painel ClickUp-like. */
+const PropertyRow = ({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) => (
+  <div className="flex items-center gap-2 min-h-[28px]">
+    <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 w-[88px]">
+      <span className="text-muted-foreground/70">{icon}</span>
+      {label}
+    </span>
+    <div className="flex-1 min-w-0">{children}</div>
+  </div>
+);
 
 interface Activity {
   id: string;
