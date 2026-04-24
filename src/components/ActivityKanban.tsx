@@ -429,14 +429,36 @@ function KanbanCard({
                       {dependencyCount.succ > 0 && `→${dependencyCount.succ}`}
                     </Badge>
                   )}
-                  {relationCount && relationCount > 0 ? (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] px-1.5 py-0 bg-accent/40 text-foreground border-accent font-semibold"
-                      title={`${relationCount} vínculo(s)`}
-                    >
-                      🔗 {relationCount}
-                    </Badge>
+                  {relationItems && relationItems.length > 0 ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 h-5 gap-1 bg-background text-muted-foreground border-border/60 hover:bg-muted/40 hover:text-foreground transition-colors font-medium"
+                        >
+                          <Link2 className="w-2.5 h-2.5" strokeWidth={2.25} />
+                          {relationItems.length}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" align="start" className="max-w-xs p-2">
+                        <div className="text-[11px] font-semibold mb-1 text-foreground">
+                          {relationItems.length} {relationItems.length === 1 ? "vínculo" : "vínculos"}
+                        </div>
+                        <ul className="space-y-0.5">
+                          {relationItems.slice(0, 6).map((r) => (
+                            <li key={r.id} className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                              <span className="font-mono text-[9px] text-muted-foreground/60">#{r.id.slice(0, 6)}</span>
+                              <span className="truncate">{r.title || "(sem título)"}</span>
+                            </li>
+                          ))}
+                          {relationItems.length > 6 && (
+                            <li className="text-[10px] text-muted-foreground/70 italic">
+                              + {relationItems.length - 6} mais…
+                            </li>
+                          )}
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
                   ) : null}
                 </div>
                 {subActivityCount && subActivityCount > 0 ? (
