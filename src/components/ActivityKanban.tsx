@@ -1561,6 +1561,7 @@ export const ActivityKanban = ({
                 onOpenCreateTask={onOpenCreateTask}
                 subActivityCounts={subActivityCounts}
                 dependencyCounts={dependencyCounts}
+                relationCounts={relationCounts}
                 isAdminOrGestor={isAdmin || canCreate}
                 onRenameStage={handleRenameStage}
                 onDeleteStage={handleDeleteStage}
