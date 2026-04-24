@@ -418,6 +418,15 @@ function KanbanCard({
                       {dependencyCount.succ > 0 && `→${dependencyCount.succ}`}
                     </Badge>
                   )}
+                  {relationCount && relationCount > 0 ? (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 bg-accent/40 text-foreground border-accent font-semibold"
+                      title={`${relationCount} vínculo(s)`}
+                    >
+                      🔗 {relationCount}
+                    </Badge>
+                  ) : null}
                 </div>
                 {subActivityCount && subActivityCount > 0 ? (
                   <button
