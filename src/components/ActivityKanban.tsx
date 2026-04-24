@@ -40,6 +40,7 @@ import {
   Diamond,
   ChevronRight,
   ChevronDown,
+  Link2,
 } from "lucide-react";
 import {
   DndContext,
