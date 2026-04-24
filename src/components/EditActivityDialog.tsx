@@ -670,6 +670,20 @@ export const EditActivityDialog = ({
                   </div>
                 </PropertyRow>
 
+                {/* Fase */}
+                {phases.length > 0 && (
+                  <PropertyRow icon={<Layers className="w-3.5 h-3.5" />} label="Fase">
+                    <select
+                      className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[260px] truncate"
+                      value={formData.phase_id}
+                      onChange={(e) => setFormData({ ...formData, phase_id: e.target.value })}
+                    >
+                      <option value="">Sem fase</option>
+                      {phases.map((phase) => (<option key={phase.id} value={phase.id}>{phase.title}</option>))}
+                    </select>
+                  </PropertyRow>
+                )}
+
                 {/* Tempo */}
                 {!formData.is_milestone && (
                   <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
@@ -826,7 +840,7 @@ export const EditActivityDialog = ({
             <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} autoResize placeholder="Descreva a atividade..." className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
           </div>
 
-          {/* RACI (Líder e Prioridade já estão no painel superior) */}
+          {/* RACI + Participantes lado a lado (Fase já está no painel superior) */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -842,48 +856,37 @@ export const EditActivityDialog = ({
                 ))}
               </select>
             </div>
-            {phases.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Layers className="w-4 h-4" /> Fase
-                </Label>
-                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.phase_id} onChange={(e) => setFormData({ ...formData, phase_id: e.target.value })}>
-                  <option value="">Sem fase</option>
-                  {phases.map((phase) => (<option key={phase.id} value={phase.id}>{phase.title}</option>))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {/* Participantes */}
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-              👥 Participantes
-            </Label>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {formData.participants.map((p) => (
-                <Badge key={p} variant="secondary" className="gap-1 text-xs">
-                  {p}
-                  <button type="button" onClick={() => setFormData({ ...formData, participants: formData.participants.filter(x => x !== p) })}>
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                👥 Participantes
+              </Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value=""
+                onChange={(e) => {
+                  if (e.target.value && !formData.participants.includes(e.target.value)) {
+                    setFormData({ ...formData, participants: [...formData.participants, e.target.value] });
+                  }
+                }}
+              >
+                <option value="">Adicionar participante...</option>
+                {allProfiles.filter(m => m.full_name && !formData.participants.includes(m.full_name!)).map((m) => (
+                  <option key={m.full_name} value={m.full_name!}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
+                ))}
+              </select>
+              {formData.participants.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {formData.participants.map((p) => (
+                    <Badge key={p} variant="secondary" className="gap-1 text-xs">
+                      {p}
+                      <button type="button" onClick={() => setFormData({ ...formData, participants: formData.participants.filter(x => x !== p) })}>
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value=""
-              onChange={(e) => {
-                if (e.target.value && !formData.participants.includes(e.target.value)) {
-                  setFormData({ ...formData, participants: [...formData.participants, e.target.value] });
-                }
-              }}
-            >
-              <option value="">Adicionar participante...</option>
-              {allProfiles.filter(m => m.full_name && !formData.participants.includes(m.full_name!)).map((m) => (
-                <option key={m.full_name} value={m.full_name!}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
-              ))}
-            </select>
           </div>
 
           {/* Datas Início/Fim já estão no painel superior; mantemos apenas Data de Atualização (qualidade) */}
