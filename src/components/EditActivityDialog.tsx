@@ -691,16 +691,18 @@ export const EditActivityDialog = ({
 
               {/* Coluna direita */}
               <div className="space-y-1.5">
-                {/* Responsável */}
+                {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
                 <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
                   <select
-                    className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[200px] truncate"
+                    className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[220px] truncate"
                     value={formData.assigned_to}
                     onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
                   >
                     <option value="">Sem líder</option>
-                    {members.map((m) => (
-                      <option key={m.full_name} value={m.full_name!}>{m.full_name}</option>
+                    {allProfiles.map((m) => (
+                      <option key={m.full_name} value={m.full_name!}>
+                        {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
+                      </option>
                     ))}
                   </select>
                 </PropertyRow>
@@ -718,29 +720,6 @@ export const EditActivityDialog = ({
                         onClick={() => setFormData({ ...formData, priority: p.value })}
                       >{p.label}</button>
                     ))}
-                  </div>
-                </PropertyRow>
-
-                {/* Etiquetas */}
-                <PropertyRow icon={<Tag className="w-3.5 h-3.5" />} label="Etiquetas">
-                  <div className="flex items-center gap-1 flex-wrap">
-                    {formData.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="gap-1 text-[10px] py-0 px-1.5">
-                        {tag}
-                        <button type="button" onClick={() => handleRemoveTag(tag)}>
-                          <X className="w-2.5 h-2.5" />
-                        </button>
-                      </Badge>
-                    ))}
-                    <div className="flex items-center gap-1">
-                      <Input
-                        value={newTag}
-                        onChange={(e) => setNewTag(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
-                        placeholder="+"
-                        className="h-6 px-1.5 text-[11px] w-16"
-                      />
-                    </div>
                   </div>
                 </PropertyRow>
 
