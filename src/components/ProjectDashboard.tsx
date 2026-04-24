@@ -435,30 +435,6 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
         </div>
       )}
 
-      {/* Budget Bar (conditionally shown) */}
-      {budgetPlanned > 0 && (
-        <Card className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-foreground">Orçamento</h3>
-            <span className="text-xs text-muted-foreground">
-              {budgetPct.toFixed(0)}% utilizado
-            </span>
-          </div>
-          <div className="space-y-2">
-            <div className="h-3 bg-muted rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${budgetPct > 100 ? "bg-destructive" : budgetPct > 80 ? "bg-warning" : "bg-success"}`}
-                style={{ width: `${Math.min(budgetPct, 100)}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Utilizado: R$ {budgetUsed.toLocaleString("pt-BR")}</span>
-              <span>Planejado: R$ {budgetPlanned.toLocaleString("pt-BR")}</span>
-            </div>
-          </div>
-        </Card>
-      )}
-
       {/* Detail Dialog */}
       <Dialog open={!!dialogData} onOpenChange={() => setDialogData(null)}>
         <DialogContent className="sm:max-w-xl max-h-[60vh] overflow-y-auto">
