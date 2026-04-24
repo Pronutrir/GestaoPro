@@ -1106,8 +1106,23 @@ export const ActivityKanban = ({
           });
           setDependencyCounts(map);
         });
+      supabase
+        .from("task_relations")
+        .select("source_activity_id, target_activity_id")
+        .or(
+          `source_activity_id.in.(${ids.join(",")}),target_activity_id.in.(${ids.join(",")})`,
+        )
+        .then(({ data }) => {
+          const map = new Map<string, number>();
+          (data || []).forEach((r: any) => {
+            map.set(r.source_activity_id, (map.get(r.source_activity_id) || 0) + 1);
+            map.set(r.target_activity_id, (map.get(r.target_activity_id) || 0) + 1);
+          });
+          setRelationCounts(map);
+        });
     } else {
       setDependencyCounts(new Map());
+      setRelationCounts(new Map());
     }
   }, [projectId, activities]);
 
