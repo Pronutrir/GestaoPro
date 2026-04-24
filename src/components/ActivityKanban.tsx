@@ -171,6 +171,8 @@ function SortableKanbanCard({
   subActivityCount,
   dependencyCount,
   relationItems,
+  onOpenRelated,
+  onRemoveRelation,
   isExpanded,
   onToggleExpand,
 }: {
@@ -190,7 +192,9 @@ function SortableKanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
-  relationItems?: { id: string; title: string }[];
+  relationItems?: { id: string; title: string; relationId: string; relationType: string }[];
+  onOpenRelated?: (activityId: string) => void;
+  onRemoveRelation?: (relationId: string) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
 }) {
@@ -224,6 +228,8 @@ function SortableKanbanCard({
         subActivityCount={subActivityCount}
         dependencyCount={dependencyCount}
         relationItems={relationItems}
+        onOpenRelated={onOpenRelated}
+        onRemoveRelation={onRemoveRelation}
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
       />
