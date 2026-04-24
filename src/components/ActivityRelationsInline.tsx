@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dialog";
 import { Link2, Ban, Clock3, ArrowLeft, ArrowRight, Plus } from "lucide-react";
 import { TaskRelations } from "@/components/TaskRelations";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
  * Versão MINIMAL e INLINE dos relacionamentos da atividade.
@@ -116,7 +115,6 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
   if (total === 0) {
     return (
       <>
-        <TooltipProvider delayDuration={150}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -129,29 +127,27 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
               </span>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuContent align="start" className="w-72">
             {TYPE_OPTIONS.map(({ kind, label, Icon, desc }) => (
-              <Tooltip key={kind}>
-                <TooltipTrigger asChild>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setAutoOpenAdd(true);
-                      setCreateDialogOpen(true);
-                    }}
-                    className="text-xs gap-2 cursor-pointer"
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span className="flex-1">{label}</span>
-                  </DropdownMenuItem>
-                </TooltipTrigger>
-                <TooltipContent side="right" align="start" className="max-w-[240px] text-xs leading-snug">
-                  {desc}
-                </TooltipContent>
-              </Tooltip>
+              <DropdownMenuItem
+                key={kind}
+                onClick={() => {
+                  setAutoOpenAdd(true);
+                  setCreateDialogOpen(true);
+                }}
+                className="gap-2 cursor-pointer items-start py-2"
+              >
+                <Icon className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium leading-tight">{label}</div>
+                  <div className="text-[11px] text-muted-foreground leading-snug mt-0.5 whitespace-normal">
+                    {desc}
+                  </div>
+                </div>
+              </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        </TooltipProvider>
 
         <Dialog
           open={createDialogOpen}
