@@ -75,6 +75,16 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 
+const formatHours = (hours: number): string => {
+  if (!hours || hours <= 0) return "";
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h${m}m`;
+};
+
 const STAGE_PRESET_COLORS = [
   "hsl(220, 15%, 50%)",
   "hsl(38, 92%, 50%)",
@@ -297,7 +307,7 @@ function KanbanCard({
     activity.end_date ? `📅 Fim: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}` : null,
     isQualityProject && activity.last_update_date ? `🔄 Atualização: ${parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}` : null,
     isQualityProject && activity.deadline_flag ? `🚦 Flag: ${activity.deadline_flag === "green" ? "Em dia" : activity.deadline_flag === "orange" ? "Atenção" : activity.deadline_flag === "red" ? "Vencido" : ""}` : null,
-    activity.hours > 0 ? `⏱ Horas: ${activity.hours}h` : null,
+    activity.hours > 0 ? `⏱ Tempo: ${formatHours(activity.hours)}` : null,
     activity.status === "completed" ? "✅ Concluída" : null,
   ].filter(Boolean);
 
@@ -404,7 +414,7 @@ function KanbanCard({
                   )}
                   {activity.hours > 0 && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                      {activity.hours}h
+                      {formatHours(activity.hours)}
                     </Badge>
                   )}
                   {dependencyCount && (dependencyCount.pred > 0 || dependencyCount.succ > 0) && (
