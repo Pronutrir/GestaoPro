@@ -763,6 +763,14 @@ export const EditActivityDialog = ({
                   <MessageSquare className="w-3.5 h-3.5" /> Comentários
                 </TabsTrigger>
               )}
+              {act && projectId && (
+                <TabsTrigger value="stories" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                  <BookOpen className="w-3.5 h-3.5" /> Histórias
+                  {storiesCount > 0 && (
+                    <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{storiesCount}</span>
+                  )}
+                </TabsTrigger>
+              )}
               {act && !createMode && (
                 <TabsTrigger value="history" className="text-xs gap-1.5 data-[state=active]:bg-background">
                   <History className="w-3.5 h-3.5" /> Histórico
