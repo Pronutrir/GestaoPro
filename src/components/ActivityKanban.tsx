@@ -235,6 +235,8 @@ function KanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
+  isExpanded,
+  onToggleExpand,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -253,6 +255,8 @@ function KanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
