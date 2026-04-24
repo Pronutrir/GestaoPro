@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Sparkline } from "@/components/Sparkline";
+import { PipelineByTypeLanes } from "@/components/PipelineByTypeLanes";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -32,6 +33,9 @@ interface Project {
   due_date: string | null;
   owner: string | null;
   blockers: string | null;
+  project_type?: string | null;
+  priority?: string;
+  completion_percentage?: number | null;
 }
 
 interface Activity {
@@ -569,6 +573,21 @@ const Overview = () => {
                 </div>
               </Card>
             </div>
+
+            {/* Pipeline por Tipo de Projeto (swim lanes) */}
+            <PipelineByTypeLanes
+              projects={projects.map((p) => ({
+                id: p.id,
+                title: p.title,
+                status: p.status,
+                project_type: (p as any).project_type ?? null,
+                priority: (p as any).priority ?? "medium",
+                owner: p.owner,
+                budget_planned: p.budget_planned ?? 0,
+                budget_used: p.budget_used ?? 0,
+                completion_percentage: (p as any).completion_percentage ?? 0,
+              }))}
+            />
           </>
         )}
       </main>
