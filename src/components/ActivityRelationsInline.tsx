@@ -123,7 +123,7 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[420px] max-w-[92vw] p-3" align="start" side="bottom">
-        <TaskRelations activityId={activityId} projectId={projectId} autoOpenAdd={autoOpenAdd} />
+        <TaskRelations activityId={activityId} projectId={projectId} autoOpenAdd={autoOpenAdd} hideHeader />
       </PopoverContent>
     </Popover>
   );
