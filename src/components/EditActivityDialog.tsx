@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond } from "lucide-react";
+import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2 } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
@@ -23,6 +23,20 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { UserPlus2 } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ActivityRelationsInline } from "@/components/ActivityRelationsInline";
+import { MessageSquare, Paperclip, ListTree, FileText } from "lucide-react";
+
+/** Linha de propriedade densa (ícone + label cinza + valor) usada no painel ClickUp-like. */
+const PropertyRow = ({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) => (
+  <div className="flex items-center gap-2 min-h-[28px]">
+    <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 w-[88px]">
+      <span className="text-muted-foreground/70">{icon}</span>
+      {label}
+    </span>
+    <div className="flex-1 min-w-0">{children}</div>
+  </div>
+);
 
 interface Activity {
   id: string;
@@ -139,6 +153,7 @@ export const EditActivityDialog = ({
   const [creatorEmail, setCreatorEmail] = useState<string | null>(null);
   const [lastEditorName, setLastEditorName] = useState<string | null>(null);
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "history">("details");
 
   // Colunas opcionais na tabela de sub-atividades (todas selecionáveis; persistido por usuário no localStorage)
   const SUB_COLS_KEY = "subActivityCols.v2";
@@ -546,25 +561,240 @@ export const EditActivityDialog = ({
           )}
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-2 min-w-0">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
-              <AIAssistButton
+          {/* ============= CABEÇALHO COMPACTO (estilo ClickUp) ============= */}
+          {/* Título grande inline */}
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-start gap-2">
+              <Textarea
+                id="title"
                 value={formData.title}
-                onChange={(next) => setFormData({ ...formData, title: next })}
-                context="activity_title"
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                required
+                rows={1}
+                autoResize
+                placeholder="Título da atividade..."
+                className="min-h-[44px] flex-1 min-w-0 text-xl font-bold break-words whitespace-pre-wrap [overflow-wrap:anywhere] border-0 px-0 shadow-none focus-visible:ring-0 focus-visible:border-b focus-visible:border-primary rounded-none resize-none"
               />
+              <div className="pt-2 shrink-0">
+                <AIAssistButton
+                  value={formData.title}
+                  onChange={(next) => setFormData({ ...formData, title: next })}
+                  context="activity_title"
+                />
+              </div>
             </div>
-            <Textarea
-              id="title"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              required
-              rows={1}
-              autoResize
-              className="min-h-[44px] w-full min-w-0 font-medium break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
-            />
           </div>
+
+          {/* Painel de propriedades — 2 colunas, linhas densas (label + valor) */}
+          {act && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5 p-3 rounded-lg border border-border bg-muted/10">
+              {/* Coluna esquerda */}
+              <div className="space-y-1.5">
+                {/* Status / Etapa */}
+                {workflowStages.length > 0 && (
+                  <PropertyRow icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium border hover:bg-muted/40 transition-colors"
+                          style={(() => {
+                            const s = workflowStages.find(s => s.id === currentStageId);
+                            return s ? { borderColor: s.color, color: s.color } : {};
+                          })()}
+                        >
+                          <span className="w-2 h-2 rounded-full" style={{ background: workflowStages.find(s => s.id === currentStageId)?.color || "hsl(var(--muted-foreground))" }} />
+                          {workflowStages.find(s => s.id === currentStageId)?.title || "Sem coluna"}
+                          <ChevronDown className="w-3 h-3 opacity-60" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-48 p-1" align="start">
+                        {workflowStages.map((stage) => (
+                          <button
+                            key={stage.id}
+                            type="button"
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted ${currentStageId === stage.id ? "bg-primary/10 text-primary font-medium" : ""}`}
+                            onClick={async () => {
+                              if (currentStageId === stage.id) return;
+                              if (stage.is_final && isBlockedByOthers) {
+                                toast({ title: "Tarefa bloqueada", description: `Há ${blockers.length} bloqueio(s) pendente(s).`, variant: "destructive" });
+                                return;
+                              }
+                              try {
+                                const updateData: any = { workflow_stage_id: stage.id };
+                                if (stage.is_final) {
+                                  updateData.status = "completed";
+                                  updateData.completed_at = new Date().toISOString();
+                                } else if (act.status === "completed") {
+                                  updateData.status = "pending";
+                                  updateData.completed_at = null;
+                                }
+                                const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
+                                if (error) throw error;
+                                await supabase.from("user_stories").update({ stage_id: stage.id }).eq("activity_id", act.id);
+                                setCurrentStageId(stage.id);
+                                toast({ title: `Movida para "${stage.title}"` });
+                                onActivityUpdated();
+                              } catch {
+                                toast({ title: "Erro ao mover", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <span className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
+                            {stage.title}
+                          </button>
+                        ))}
+                      </PopoverContent>
+                    </Popover>
+                  </PropertyRow>
+                )}
+
+                {/* Datas inline */}
+                <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label="Datas">
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Input
+                      type="date"
+                      value={formData.start_date}
+                      onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                      className="h-7 px-1.5 text-xs w-[130px]"
+                    />
+                    <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                    <Input
+                      type="date"
+                      value={formData.end_date}
+                      onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                      className="h-7 px-1.5 text-xs w-[130px]"
+                    />
+                  </div>
+                </PropertyRow>
+
+                {/* Tempo */}
+                {!formData.is_milestone && (
+                  <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
+                    <Input
+                      placeholder="Ex: 2h 30m"
+                      value={formData.hours}
+                      onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
+                      className="h-7 px-2 text-xs w-[120px]"
+                    />
+                  </PropertyRow>
+                )}
+
+                {/* Relacionamentos inline */}
+                {projectId && (
+                  <PropertyRow icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
+                    <ActivityRelationsInline activityId={act.id} projectId={projectId} />
+                  </PropertyRow>
+                )}
+              </div>
+
+              {/* Coluna direita */}
+              <div className="space-y-1.5">
+                {/* Responsável */}
+                <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
+                  <select
+                    className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[200px] truncate"
+                    value={formData.assigned_to}
+                    onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+                  >
+                    <option value="">Sem líder</option>
+                    {members.map((m) => (
+                      <option key={m.full_name} value={m.full_name!}>{m.full_name}</option>
+                    ))}
+                  </select>
+                </PropertyRow>
+
+                {/* Prioridade compacta */}
+                <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade">
+                  <div className="flex gap-1">
+                    {[
+                      { value: "low", label: "Baixa", color: "bg-muted text-muted-foreground border-border" },
+                      { value: "medium", label: "Média", color: "bg-warning/15 text-warning border-warning/30" },
+                      { value: "high", label: "Alta", color: "bg-destructive/15 text-destructive border-destructive/30" },
+                    ].map((p) => (
+                      <button key={p.value} type="button"
+                        className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-all ${formData.priority === p.value ? `${p.color} ring-1 ring-current/30` : "border-border text-muted-foreground hover:border-foreground/30"}`}
+                        onClick={() => setFormData({ ...formData, priority: p.value })}
+                      >{p.label}</button>
+                    ))}
+                  </div>
+                </PropertyRow>
+
+                {/* Etiquetas */}
+                <PropertyRow icon={<Tag className="w-3.5 h-3.5" />} label="Etiquetas">
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {formData.tags.map((tag) => (
+                      <Badge key={tag} variant="secondary" className="gap-1 text-[10px] py-0 px-1.5">
+                        {tag}
+                        <button type="button" onClick={() => handleRemoveTag(tag)}>
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </Badge>
+                    ))}
+                    <div className="flex items-center gap-1">
+                      <Input
+                        value={newTag}
+                        onChange={(e) => setNewTag(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
+                        placeholder="+"
+                        className="h-6 px-1.5 text-[11px] w-16"
+                      />
+                    </div>
+                  </div>
+                </PropertyRow>
+
+                {/* Marco */}
+                <PropertyRow icon={<Diamond className={`w-3.5 h-3.5 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : ""}`} />} label="Marco">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_milestone}
+                      onChange={(e) => setFormData({ ...formData, is_milestone: e.target.checked })}
+                      className="h-3 w-3 rounded border-border accent-amber-500 cursor-pointer"
+                    />
+                    <span>{formData.is_milestone ? "Sim" : "Não"}</span>
+                  </label>
+                </PropertyRow>
+              </div>
+            </div>
+          )}
+
+          {/* ============= ABAS ============= */}
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+            <TabsList className="w-full justify-start h-9 bg-transparent border-b border-border rounded-none p-0 gap-1">
+              <TabsTrigger value="details" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                <FileText className="w-3.5 h-3.5" /> Detalhes
+              </TabsTrigger>
+              {act && projectId && (
+                <TabsTrigger value="subtasks" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                  <ListTree className="w-3.5 h-3.5" /> Subatividades
+                  {subActivities.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{subActivities.length}</span>
+                  )}
+                </TabsTrigger>
+              )}
+              {act && projectId && (
+                <TabsTrigger value="attachments" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                  <Paperclip className="w-3.5 h-3.5" /> Anexos
+                </TabsTrigger>
+              )}
+              {act && (
+                <TabsTrigger value="comments" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                  <MessageSquare className="w-3.5 h-3.5" /> Comentários
+                </TabsTrigger>
+              )}
+              {act && !createMode && (
+                <TabsTrigger value="history" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                  <History className="w-3.5 h-3.5" /> Histórico
+                </TabsTrigger>
+              )}
+            </TabsList>
+
+            {/* ===== ABA DETALHES ===== */}
+            <TabsContent value="details" className="space-y-5 pt-4 mt-0">
+
+          {/* (Marco já está no painel acima — bloco antigo abaixo segue intacto para não quebrar; já remove pela ausência) */}
+          <div className="hidden">
 
           {/* Marco do Projeto */}
           <label className="flex items-center gap-2 cursor-pointer w-fit text-xs text-muted-foreground hover:text-foreground transition-colors">
@@ -577,6 +807,7 @@ export const EditActivityDialog = ({
             <Diamond className={`w-3.5 h-3.5 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : ""}`} />
             <span>Marco do projeto (milestone)</span>
           </label>
+          </div>
 
           <div className="space-y-2 min-w-0">
             <div className="flex items-center justify-between">
@@ -590,8 +821,8 @@ export const EditActivityDialog = ({
             <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} autoResize placeholder="Descreva a atividade..." className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
           </div>
 
-          {/* Priority */}
-          <div className="space-y-2">
+          {/* Priority — duplicado no painel superior; mantemos oculto */}
+          <div className="hidden space-y-2">
             <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Flag className="w-4 h-4" /> Prioridade
             </Label>
@@ -689,28 +920,17 @@ export const EditActivityDialog = ({
             )}
           </div>
 
-          <div className={`grid ${isQualityProject ? "grid-cols-3" : "grid-cols-2"} gap-4`}>
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Calendar className="w-4 h-4" /> Data de Início
-              </Label>
-              <Input type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Calendar className="w-4 h-4" /> Data de Fim
-              </Label>
-              <Input type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} />
-            </div>
-            {isQualityProject && (
+          {/* Datas Início/Fim já estão no painel superior; mantemos apenas Data de Atualização (qualidade) */}
+          {isQualityProject && (
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
                 <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Calendar className="w-4 h-4" /> Data de Atualização
                 </Label>
                 <Input type="date" value={formData.last_update_date} onChange={(e) => setFormData({ ...formData, last_update_date: e.target.value })} />
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Flag de Prazo - Apenas Qualidade */}
           {isQualityProject && (
@@ -773,9 +993,12 @@ export const EditActivityDialog = ({
           </div>
           )}
 
-          {/* Sub-atividades */}
+            </TabsContent>
+
+            {/* ===== ABA SUBATIVIDADES ===== */}
+            <TabsContent value="subtasks" className="pt-4 mt-0">
           {act && projectId && (
-            <div className="border-t border-border pt-4 space-y-3">
+            <div className="space-y-3">
               <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                 <Layers className="w-4 h-4 text-primary" />
                 Sub-atividades ({subActivities.length})
@@ -1159,9 +1382,33 @@ export const EditActivityDialog = ({
             </div>
           )}
 
-          {/* Mover para Coluna */}
-          {act && projectId && workflowStages.length > 0 && (
-            <div className="border-t border-border pt-4 space-y-2">
+            </TabsContent>
+
+            {/* ===== ABA ANEXOS ===== */}
+            <TabsContent value="attachments" className="pt-4 mt-0">
+          {act && projectId && (
+            <ActivityAttachments activityId={act.id} projectId={projectId} />
+          )}
+            </TabsContent>
+
+            {/* ===== ABA COMENTÁRIOS ===== */}
+            <TabsContent value="comments" className="pt-4 mt-0">
+          {act && (
+            <ActivityComments activityId={act.id} />
+          )}
+            </TabsContent>
+
+            {/* ===== ABA HISTÓRICO ===== */}
+            <TabsContent value="history" className="pt-4 mt-0">
+          {act && !createMode && (
+            <AuditLogPanel recordId={act.id} tableName="activities" />
+          )}
+            </TabsContent>
+          </Tabs>
+
+          {/* Mover para Coluna — oculto: já no painel superior (Status) */}
+          {false && act && projectId && workflowStages.length > 0 && (
+            <div className="hidden border-t border-border pt-4 space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <ArrowRightLeft className="w-4 h-4 text-primary" /> Mover para Coluna
               </Label>
@@ -1213,19 +1460,7 @@ export const EditActivityDialog = ({
             </div>
           )}
 
-          {/* Anexos */}
-          {act && projectId && (
-            <div className="border-t border-border pt-4">
-              <ActivityAttachments activityId={act.id} projectId={projectId} />
-            </div>
-          )}
-
-          {/* Painel unificado de relacionamentos (predecessora, sucessora, vinculada, bloqueio, em espera) */}
-          {act && projectId && (
-            <div className="border-t border-border pt-4">
-              <TaskRelations activityId={act.id} projectId={projectId} />
-            </div>
-          )}
+          {/* Anexos, Comentários, Histórico, Relacionamentos: agora dentro das abas / pills inline */}
 
           {/* Aviso de bloqueio pendente */}
           {act && isBlockedByOthers && (
@@ -1241,27 +1476,6 @@ export const EditActivityDialog = ({
                 <p className="mt-1.5 italic">Conclua os bloqueios antes de marcar esta como concluída.</p>
               </div>
             </div>
-          )}
-
-          {/* Comentários */}
-          {act && (
-            <div className="border-t border-border pt-4">
-              <ActivityComments activityId={act.id} />
-            </div>
-          )}
-
-          {act && !createMode && (
-            <Collapsible className="border border-border rounded-lg">
-              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-accent/30 transition-colors rounded-lg">
-                <span className="text-sm font-semibold flex items-center gap-2">
-                  <History className="w-4 h-4" /> Histórico de alterações
-                </span>
-                <ChevronDown className="w-4 h-4 transition-transform data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="p-3 pt-0">
-                <AuditLogPanel recordId={act.id} tableName="activities" />
-              </CollapsibleContent>
-            </Collapsible>
           )}
 
           <DialogFooter className="gap-2">
