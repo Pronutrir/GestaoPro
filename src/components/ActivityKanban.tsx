@@ -990,6 +990,8 @@ function SortableColumn({
                     stageColor={stage.color}
                     dependencyCount={dependencyCounts?.get(activity.id)}
                     relationItems={relationCounts?.get(activity.id) || []}
+                    onOpenRelated={onOpenRelated}
+                    onRemoveRelation={onRemoveRelation}
                     subActivityCount={children.length}
                     isExpanded={expanded}
                     onToggleExpand={() => toggleExpanded(activity.id)}
@@ -1015,6 +1017,8 @@ function SortableColumn({
                           stageColor={stage.color}
                           dependencyCount={dependencyCounts?.get(child.id)}
                           relationItems={relationCounts?.get(child.id) || []}
+                          onOpenRelated={onOpenRelated}
+                          onRemoveRelation={onRemoveRelation}
                           subActivityCount={0}
                         />
                       ))}
