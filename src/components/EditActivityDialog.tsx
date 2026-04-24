@@ -909,28 +909,17 @@ export const EditActivityDialog = ({
             )}
           </div>
 
-          <div className={`grid ${isQualityProject ? "grid-cols-3" : "grid-cols-2"} gap-4`}>
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Calendar className="w-4 h-4" /> Data de Início
-              </Label>
-              <Input type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Calendar className="w-4 h-4" /> Data de Fim
-              </Label>
-              <Input type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} />
-            </div>
-            {isQualityProject && (
+          {/* Datas Início/Fim já estão no painel superior; mantemos apenas Data de Atualização (qualidade) */}
+          {isQualityProject && (
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
                 <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Calendar className="w-4 h-4" /> Data de Atualização
                 </Label>
                 <Input type="date" value={formData.last_update_date} onChange={(e) => setFormData({ ...formData, last_update_date: e.target.value })} />
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Flag de Prazo - Apenas Qualidade */}
           {isQualityProject && (
