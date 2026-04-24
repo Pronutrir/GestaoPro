@@ -37,6 +37,10 @@ interface Props {
   projectId: string;
   /** Quando true, abre automaticamente o diálogo de criação de vínculo (tipo "related") ao montar. */
   autoOpenAdd?: boolean;
+  /** Quando true, oculta o cabeçalho interno (título + botão "+ Vincular").
+   *  Usado quando o painel é embutido em outro container que já tem cabeçalho próprio,
+   *  como o popover de pills inline na atividade. */
+  hideHeader?: boolean;
 }
 
 interface ActivityOpt {
@@ -105,7 +109,7 @@ const META: Record<UnifiedKind, {
 
 const ORDER: UnifiedKind[] = ["predecessor", "successor", "blocking", "waiting_on", "related"];
 
-export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false }: Props) => {
+export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hideHeader = false }: Props) => {
   const { toast } = useToast();
   const [rows, setRows] = useState<UnifiedRow[]>([]);
   const [activities, setActivities] = useState<ActivityOpt[]>([]);
@@ -289,7 +293,9 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false }: Pr
 
   return (
     <div className="space-y-2">
-      {/* Cabeçalho compacto: título + contador + botão único "+ Vincular" com menu */}
+      {/* Cabeçalho compacto: título + contador + botão único "+ Vincular" com menu.
+          Pode ser ocultado quando embutido em popover inline (hideHeader). */}
+      {!hideHeader && (
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
           <Link2 className="w-3.5 h-3.5 text-primary" />
@@ -328,6 +334,38 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false }: Pr
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      )}
+
+      {/* Quando o cabeçalho está oculto, ainda precisamos abrir o menu de tipos
+          via autoOpenAdd. Renderizamos um menu sem trigger visível, controlado
+          por estado, ancorado no topo do painel. */}
+      {hideHeader && (
+        <DropdownMenu open={typeMenuOpen} onOpenChange={setTypeMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <span className="sr-only" aria-hidden />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            {ORDER.map((kind) => {
+              const meta = META[kind];
+              const Icon = meta.icon;
+              const count = grouped[kind].length;
+              return (
+                <DropdownMenuItem
+                  key={kind}
+                  onClick={() => { setTypeMenuOpen(false); openDialog(kind); }}
+                  className="text-xs gap-2 cursor-pointer"
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span className="flex-1">{meta.label}</span>
+                  {count > 0 && (
+                    <span className="text-[10px] text-muted-foreground">{count}</span>
+                  )}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       {/* Lista única harmonizada — densa */}
       {totalCount === 0 ? (
