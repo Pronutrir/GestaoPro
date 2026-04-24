@@ -171,6 +171,8 @@ function SortableKanbanCard({
   subActivityCount,
   dependencyCount,
   relationItems,
+  onOpenRelated,
+  onRemoveRelation,
   isExpanded,
   onToggleExpand,
 }: {
@@ -190,7 +192,9 @@ function SortableKanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
-  relationItems?: { id: string; title: string }[];
+  relationItems?: { id: string; title: string; relationId: string; relationType: string }[];
+  onOpenRelated?: (activityId: string) => void;
+  onRemoveRelation?: (relationId: string) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
 }) {
@@ -224,6 +228,8 @@ function SortableKanbanCard({
         subActivityCount={subActivityCount}
         dependencyCount={dependencyCount}
         relationItems={relationItems}
+        onOpenRelated={onOpenRelated}
+        onRemoveRelation={onRemoveRelation}
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
       />
@@ -250,6 +256,8 @@ function KanbanCard({
   subActivityCount,
   dependencyCount,
   relationItems,
+  onOpenRelated,
+  onRemoveRelation,
   isExpanded,
   onToggleExpand,
 }: {
@@ -270,7 +278,9 @@ function KanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
-  relationItems?: { id: string; title: string }[];
+  relationItems?: { id: string; title: string; relationId: string; relationType: string }[];
+  onOpenRelated?: (activityId: string) => void;
+  onRemoveRelation?: (relationId: string) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
 }) {
@@ -430,35 +440,70 @@ function KanbanCard({
                     </Badge>
                   )}
                   {relationItems && relationItems.length > 0 ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1.5 py-0 h-5 gap-1 bg-background text-muted-foreground border-border/60 hover:bg-muted/40 hover:text-foreground transition-colors font-medium"
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium bg-background text-muted-foreground border border-border/60 hover:bg-muted/40 hover:text-foreground transition-colors"
+                          title="Gerenciar vínculos"
                         >
                           <Link2 className="w-2.5 h-2.5" strokeWidth={2.25} />
                           {relationItems.length}
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" align="start" className="max-w-xs p-2">
-                        <div className="text-[11px] font-semibold mb-1 text-foreground">
-                          {relationItems.length} {relationItems.length === 1 ? "vínculo" : "vínculos"}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="top"
+                        align="start"
+                        className="w-72 p-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-[11px] font-semibold text-foreground">
+                            {relationItems.length} {relationItems.length === 1 ? "vínculo" : "vínculos"}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                            className="text-[10px] text-primary hover:underline font-medium"
+                            title="Adicionar/editar vínculos na atividade"
+                          >
+                            + Adicionar
+                          </button>
                         </div>
-                        <ul className="space-y-0.5">
-                          {relationItems.slice(0, 6).map((r) => (
-                            <li key={r.id} className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                              <span className="font-mono text-[9px] text-muted-foreground/60">#{r.id.slice(0, 6)}</span>
-                              <span className="truncate">{r.title || "(sem título)"}</span>
+                        <ul className="space-y-1 max-h-64 overflow-auto">
+                          {relationItems.map((r) => (
+                            <li
+                              key={r.relationId}
+                              className="group flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-muted/60"
+                            >
+                              <span className="font-mono text-[9px] text-muted-foreground/60 shrink-0">
+                                #{r.id.slice(0, 6)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onOpenRelated?.(r.id); }}
+                                className="flex-1 min-w-0 text-left text-[11px] text-foreground truncate hover:text-primary hover:underline"
+                                title="Abrir atividade vinculada"
+                              >
+                                {r.title || "(sem título)"}
+                              </button>
+                              <span className="text-[9px] text-muted-foreground/70 shrink-0 capitalize">
+                                {r.relationType.replace(/_/g, " ")}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onRemoveRelation?.(r.relationId); }}
+                                className="p-0.5 rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                                title="Remover vínculo"
+                              >
+                                <XIcon className="w-3 h-3" />
+                              </button>
                             </li>
                           ))}
-                          {relationItems.length > 6 && (
-                            <li className="text-[10px] text-muted-foreground/70 italic">
-                              + {relationItems.length - 6} mais…
-                            </li>
-                          )}
                         </ul>
-                      </TooltipContent>
-                    </Tooltip>
+                      </PopoverContent>
+                    </Popover>
                   ) : null}
                 </div>
                 {subActivityCount && subActivityCount > 0 ? (
@@ -542,6 +587,8 @@ function SortableColumn({
   subActivityCounts,
   dependencyCounts,
   relationCounts,
+  onOpenRelated,
+  onRemoveRelation,
   isAdminOrGestor,
   onRenameStage,
   onDeleteStage,
@@ -571,7 +618,9 @@ function SortableColumn({
   onOpenCreateTask?: (stageId: string) => void;
   subActivityCounts: Map<string, number>;
   dependencyCounts?: Map<string, { pred: number; succ: number }>;
-  relationCounts?: Map<string, { id: string; title: string }[]>;
+  relationCounts?: Map<string, { id: string; title: string; relationId: string; relationType: string }[]>;
+  onOpenRelated?: (activityId: string) => void;
+  onRemoveRelation?: (relationId: string) => void;
   isAdminOrGestor?: boolean;
   onRenameStage: (id: string, title: string) => Promise<void>;
   onDeleteStage: (id: string) => Promise<void>;
@@ -941,6 +990,8 @@ function SortableColumn({
                     stageColor={stage.color}
                     dependencyCount={dependencyCounts?.get(activity.id)}
                     relationItems={relationCounts?.get(activity.id) || []}
+                    onOpenRelated={onOpenRelated}
+                    onRemoveRelation={onRemoveRelation}
                     subActivityCount={children.length}
                     isExpanded={expanded}
                     onToggleExpand={() => toggleExpanded(activity.id)}
@@ -966,6 +1017,8 @@ function SortableColumn({
                           stageColor={stage.color}
                           dependencyCount={dependencyCounts?.get(child.id)}
                           relationItems={relationCounts?.get(child.id) || []}
+                          onOpenRelated={onOpenRelated}
+                          onRemoveRelation={onRemoveRelation}
                           subActivityCount={0}
                         />
                       ))}
@@ -1062,7 +1115,9 @@ export const ActivityKanban = ({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Map<string, number>>(new Map());
   const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
-  const [relationCounts, setRelationCounts] = useState<Map<string, { id: string; title: string }[]>>(new Map());
+  const [relationCounts, setRelationCounts] = useState<
+    Map<string, { id: string; title: string; relationId: string; relationType: string }[]>
+  >(new Map());
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
@@ -1159,24 +1214,37 @@ export const ActivityKanban = ({
         });
       supabase
         .from("task_relations")
-        .select("source_activity_id, target_activity_id")
+        .select("id, source_activity_id, target_activity_id, relation_type")
         .or(
           `source_activity_id.in.(${ids.join(",")}),target_activity_id.in.(${ids.join(",")})`,
         )
         .then(({ data }) => {
           const titleById = new Map<string, string>();
           activities.forEach((a) => titleById.set(a.id, a.title));
-          const map = new Map<string, { id: string; title: string }[]>();
-          const push = (key: string, otherId: string) => {
+          const map = new Map<
+            string,
+            { id: string; title: string; relationId: string; relationType: string }[]
+          >();
+          const push = (
+            key: string,
+            otherId: string,
+            relationId: string,
+            relationType: string,
+          ) => {
             const list = map.get(key) || [];
-            if (!list.find((x) => x.id === otherId)) {
-              list.push({ id: otherId, title: titleById.get(otherId) || "" });
+            if (!list.find((x) => x.relationId === relationId)) {
+              list.push({
+                id: otherId,
+                title: titleById.get(otherId) || "",
+                relationId,
+                relationType,
+              });
               map.set(key, list);
             }
           };
           (data || []).forEach((r: any) => {
-            push(r.source_activity_id, r.target_activity_id);
-            push(r.target_activity_id, r.source_activity_id);
+            push(r.source_activity_id, r.target_activity_id, r.id, r.relation_type);
+            push(r.target_activity_id, r.source_activity_id, r.id, r.relation_type);
           });
           setRelationCounts(map);
         });
@@ -1622,6 +1690,42 @@ export const ActivityKanban = ({
                 subActivityCounts={subActivityCounts}
                 dependencyCounts={dependencyCounts}
                 relationCounts={relationCounts}
+                onOpenRelated={(activityId) => {
+                  const target = activities.find((a) => a.id === activityId);
+                  if (target) {
+                    onEditActivity(target);
+                  } else {
+                    toast({
+                      title: "Atividade vinculada não encontrada",
+                      description: "A atividade pode estar em outro projeto ou foi removida.",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                onRemoveRelation={async (relationId) => {
+                  const { error } = await supabase
+                    .from("task_relations")
+                    .delete()
+                    .eq("id", relationId);
+                  if (error) {
+                    toast({
+                      title: "Erro ao remover vínculo",
+                      description: error.message,
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setRelationCounts((prev) => {
+                    const next = new Map(prev);
+                    next.forEach((list, key) => {
+                      const filtered = list.filter((r) => r.relationId !== relationId);
+                      if (filtered.length === 0) next.delete(key);
+                      else next.set(key, filtered);
+                    });
+                    return next;
+                  });
+                  toast({ title: "Vínculo removido" });
+                }}
                 isAdminOrGestor={isAdmin || canCreate}
                 onRenameStage={handleRenameStage}
                 onDeleteStage={handleDeleteStage}
