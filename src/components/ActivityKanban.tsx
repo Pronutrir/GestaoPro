@@ -38,6 +38,8 @@ import {
   Eye,
   EyeOff,
   Diamond,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import {
   DndContext,
@@ -157,6 +159,8 @@ function SortableKanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
+  isExpanded,
+  onToggleExpand,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -174,6 +178,8 @@ function SortableKanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -204,6 +210,8 @@ function SortableKanbanCard({
         stageColor={stageColor}
         subActivityCount={subActivityCount}
         dependencyCount={dependencyCount}
+        isExpanded={isExpanded}
+        onToggleExpand={onToggleExpand}
       />
     </div>
   );
@@ -227,6 +235,8 @@ function KanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
+  isExpanded,
+  onToggleExpand,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -245,6 +255,8 @@ function KanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -403,10 +415,16 @@ function KanbanCard({
                   )}
                 </div>
                 {subActivityCount && subActivityCount > 0 ? (
-                  <div className="flex items-center gap-1 mt-1.5 text-[10px] text-muted-foreground">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}
+                    className="flex items-center gap-1 mt-1.5 text-[10px] font-medium text-primary hover:text-primary/80 hover:underline transition-colors"
+                    title={isExpanded ? "Recolher subtarefas" : "Expandir subtarefas"}
+                  >
+                    {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                     <GitFork className="w-3 h-3" />
                     <span>{subActivityCount} {subActivityCount === 1 ? "subtarefa" : "subtarefas"}</span>
-                  </div>
+                  </button>
                 ) : null}
               </div>
             </div>
@@ -521,6 +539,29 @@ function SortableColumn({
   const [quickLoading, setQuickLoading] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(stage.title);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  // Map: parentId -> list of children, ordered by display_order
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, Activity[]>();
+    activities.forEach((a) => {
+      if (a.parent_id) {
+        if (!map.has(a.parent_id)) map.set(a.parent_id, []);
+        map.get(a.parent_id)!.push(a);
+      }
+    });
+    map.forEach((arr) =>
+      arr.sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999)),
+    );
+    return map;
+  }, [activities]);
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
 
@@ -539,7 +580,8 @@ function SortableColumn({
   const priorityWeight: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
   const sortedActivities = useMemo(() => {
-    const sorted = [...stageActivities];
+    // Show only root activities at column level; sub-activities render inline below their parent when expanded
+    const sorted = stageActivities.filter((a) => !a.parent_id);
     sorted.sort((a, b) => {
       switch (colSort) {
         case "wbs_asc": {
@@ -828,27 +870,59 @@ function SortableColumn({
               <p className="text-[11px] text-muted-foreground/50">Arraste aqui</p>
             </div>
           ) : (
-            sortedActivities.map((activity) => (
-              <SortableKanbanCard
-                key={activity.id}
-                activity={activity}
-                phases={phases}
-                onEdit={() => onEditActivity(activity)}
-                onDelete={() => onDeleteActivity(activity.id)}
-                onToggle={() => onToggleActivity(activity.id, activity.status)}
-                onMoveToBacklog={() => onMoveToBacklog(activity.id)}
-                isAdmin={isAdmin}
-                isBlocked={stage.is_blocked}
-                hasStory={storyLinkedActivities.has(activity.id)}
-                storyCount={storyLinkedActivities.get(activity.id) || 0}
-                onStoryClick={() => onStoryClick(activity.id)}
-                onCreateStory={() => onCreateStory(activity)}
-                isQualityProject={isQualityProject}
-                stageColor={stage.color}
-                dependencyCount={dependencyCounts?.get(activity.id)}
-                subActivityCount={subActivityCounts.get(activity.id) || 0}
-              />
-            ))
+            sortedActivities.map((activity) => {
+              const children = childrenByParent.get(activity.id) || [];
+              const expanded = expandedIds.has(activity.id);
+              return (
+                <div key={activity.id} className="space-y-1.5">
+                  <SortableKanbanCard
+                    activity={activity}
+                    phases={phases}
+                    onEdit={() => onEditActivity(activity)}
+                    onDelete={() => onDeleteActivity(activity.id)}
+                    onToggle={() => onToggleActivity(activity.id, activity.status)}
+                    onMoveToBacklog={() => onMoveToBacklog(activity.id)}
+                    isAdmin={isAdmin}
+                    isBlocked={stage.is_blocked}
+                    hasStory={storyLinkedActivities.has(activity.id)}
+                    storyCount={storyLinkedActivities.get(activity.id) || 0}
+                    onStoryClick={() => onStoryClick(activity.id)}
+                    onCreateStory={() => onCreateStory(activity)}
+                    isQualityProject={isQualityProject}
+                    stageColor={stage.color}
+                    dependencyCount={dependencyCounts?.get(activity.id)}
+                    subActivityCount={children.length}
+                    isExpanded={expanded}
+                    onToggleExpand={() => toggleExpanded(activity.id)}
+                  />
+                  {expanded && children.length > 0 && (
+                    <div className="ml-4 pl-2 border-l-2 border-primary/30 space-y-1.5">
+                      {children.map((child) => (
+                        <KanbanCard
+                          key={child.id}
+                          activity={child}
+                          phases={phases}
+                          onEdit={() => onEditActivity(child)}
+                          onDelete={() => onDeleteActivity(child.id)}
+                          onToggle={() => onToggleActivity(child.id, child.status)}
+                          onMoveToBacklog={() => onMoveToBacklog(child.id)}
+                          isAdmin={isAdmin}
+                          isBlocked={stage.is_blocked}
+                          hasStory={storyLinkedActivities.has(child.id)}
+                          storyCount={storyLinkedActivities.get(child.id) || 0}
+                          onStoryClick={() => onStoryClick(child.id)}
+                          onCreateStory={() => onCreateStory(child)}
+                          isQualityProject={isQualityProject}
+                          stageColor={stage.color}
+                          dependencyCount={dependencyCounts?.get(child.id)}
+                          subActivityCount={0}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </SortableContext>
       </DroppableColumn>
