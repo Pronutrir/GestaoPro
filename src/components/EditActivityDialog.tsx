@@ -793,22 +793,6 @@ export const EditActivityDialog = ({
             {/* ===== ABA DETALHES ===== */}
             <TabsContent value="details" className="space-y-5 pt-4 mt-0">
 
-          {/* (Marco já está no painel acima — bloco antigo abaixo segue intacto para não quebrar; já remove pela ausência) */}
-          <div className="hidden">
-
-          {/* Marco do Projeto */}
-          <label className="flex items-center gap-2 cursor-pointer w-fit text-xs text-muted-foreground hover:text-foreground transition-colors">
-            <input
-              type="checkbox"
-              checked={formData.is_milestone}
-              onChange={(e) => setFormData({ ...formData, is_milestone: e.target.checked })}
-              className="h-3.5 w-3.5 rounded border-border accent-amber-500 cursor-pointer"
-            />
-            <Diamond className={`w-3.5 h-3.5 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : ""}`} />
-            <span>Marco do projeto (milestone)</span>
-          </label>
-          </div>
-
           <div className="space-y-2 min-w-0">
             <div className="flex items-center justify-between">
               <Label htmlFor="description" className="text-sm font-semibold text-foreground">Descrição</Label>
@@ -821,44 +805,8 @@ export const EditActivityDialog = ({
             <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} autoResize placeholder="Descreva a atividade..." className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
           </div>
 
-          {/* Priority — duplicado no painel superior; mantemos oculto */}
-          <div className="hidden space-y-2">
-            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Flag className="w-4 h-4" /> Prioridade
-            </Label>
-            <div className="flex gap-2">
-              {[
-                { value: "low", label: "Baixa", color: "bg-muted text-muted-foreground" },
-                { value: "medium", label: "Média", color: "bg-warning/20 text-warning" },
-                { value: "high", label: "Alta", color: "bg-destructive/20 text-destructive" },
-              ].map((p) => (
-                <button key={p.value} type="button"
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-all ${formData.priority === p.value ? `${p.color} border-current ring-2 ring-current/20` : "border-border text-muted-foreground hover:border-foreground/30"}`}
-                  onClick={() => setFormData({ ...formData, priority: p.value })}
-                >{p.label}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Responsável + RACI */}
+          {/* RACI (Líder e Prioridade já estão no painel superior) */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <User className="w-4 h-4" /> Responsável
-              </Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={formData.assigned_to}
-                onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-              >
-                <option value="">Sem responsável</option>
-                {members.map((m) => (
-                  <option key={m.full_name} value={m.full_name!}>
-                    {m.full_name}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 🏷️ Papel RACI
@@ -873,6 +821,17 @@ export const EditActivityDialog = ({
                 ))}
               </select>
             </div>
+            {phases.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Layers className="w-4 h-4" /> Fase
+                </Label>
+                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.phase_id} onChange={(e) => setFormData({ ...formData, phase_id: e.target.value })}>
+                  <option value="">Sem fase</option>
+                  {phases.map((phase) => (<option key={phase.id} value={phase.id}>{phase.title}</option>))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Participantes */}
@@ -904,20 +863,6 @@ export const EditActivityDialog = ({
                 <option key={m.full_name} value={m.full_name!}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
               ))}
             </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            {phases.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Layers className="w-4 h-4" /> Fase
-                </Label>
-                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={formData.phase_id} onChange={(e) => setFormData({ ...formData, phase_id: e.target.value })}>
-                  <option value="">Sem fase</option>
-                  {phases.map((phase) => (<option key={phase.id} value={phase.id}>{phase.title}</option>))}
-                </select>
-              </div>
-            )}
           </div>
 
           {/* Datas Início/Fim já estão no painel superior; mantemos apenas Data de Atualização (qualidade) */}
@@ -1405,62 +1350,6 @@ export const EditActivityDialog = ({
           )}
             </TabsContent>
           </Tabs>
-
-          {/* Mover para Coluna — oculto: já no painel superior (Status) */}
-          {false && act && projectId && workflowStages.length > 0 && (
-            <div className="hidden border-t border-border pt-4 space-y-2">
-              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <ArrowRightLeft className="w-4 h-4 text-primary" /> Mover para Coluna
-              </Label>
-              <div className="flex flex-wrap gap-1.5">
-                {workflowStages.map((stage) => (
-                  <button
-                    key={stage.id}
-                    type="button"
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
-                      currentStageId === stage.id
-                        ? "ring-2 ring-primary/30 border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:border-foreground/30 hover:bg-accent/30"
-                    }`}
-                    onClick={async () => {
-                      if (currentStageId === stage.id) return;
-                      if (stage.is_final && isBlockedByOthers) {
-                        toast({
-                          title: "Tarefa bloqueada",
-                          description: `Não é possível mover para "${stage.title}" — há ${blockers.length} bloqueio(s) pendente(s).`,
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      try {
-                        const updateData: any = { workflow_stage_id: stage.id };
-                        if (stage.is_final) {
-                          updateData.status = "completed";
-                          updateData.completed_at = new Date().toISOString();
-                        } else if (act.status === "completed") {
-                          updateData.status = "pending";
-                          updateData.completed_at = null;
-                        }
-                        const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
-                        if (error) throw error;
-                        await supabase.from("user_stories").update({ stage_id: stage.id }).eq("activity_id", act.id);
-                        setCurrentStageId(stage.id);
-                        toast({ title: `Movida para "${stage.title}"` });
-                        onActivityUpdated();
-                      } catch {
-                        toast({ title: "Erro ao mover", variant: "destructive" });
-                      }
-                    }}
-                  >
-                    <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: stage.color }} />
-                    {stage.title}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Anexos, Comentários, Histórico, Relacionamentos: agora dentro das abas / pills inline */}
 
           {/* Aviso de bloqueio pendente */}
           {act && isBlockedByOthers && (
