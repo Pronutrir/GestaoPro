@@ -541,7 +541,7 @@ export const EditActivityDialog = ({
                   <span className="opacity-50">·</span>
                   <span className="text-primary flex items-center gap-1">
                     <Lock className="w-3 h-3" />
-                    Encerrada em {new Date(act.closed_at).toLocaleDateString("pt-BR")}
+                    Arquivada em {new Date(act.closed_at).toLocaleDateString("pt-BR")}
                   </span>
                 </>
               )}
