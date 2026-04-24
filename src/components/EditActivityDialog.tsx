@@ -1330,13 +1330,11 @@ export const EditActivityDialog = ({
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddSubActivity(); } }}
                   className="h-8 text-sm flex-1"
                 />
-                {newSubTitle.trim() && (
-                  <AIAssistButton
-                    value={newSubTitle}
-                    onChange={setNewSubTitle}
-                    context="activity_title"
-                  />
-                )}
+                <AIAssistButton
+                  value={newSubTitle}
+                  onChange={setNewSubTitle}
+                  context="activity_title"
+                />
                 <Button
                   type="button"
                   size="sm"
