@@ -689,27 +689,21 @@ export const EditActivityDialog = ({
                   <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <Input
+                        list="hours-options"
                         placeholder="Ex: 2h 30m"
                         value={formData.hours}
                         onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
-                        className="h-7 px-2 text-xs w-[110px]"
+                        onFocus={(e) => e.currentTarget.select()}
+                        className="h-7 px-2 text-xs w-[140px] cursor-pointer"
                       />
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          if (e.target.value) setFormData({ ...formData, hours: e.target.value });
-                        }}
-                        className="h-7 rounded-md border border-input bg-background px-2 text-xs cursor-pointer hover:border-primary/50"
-                        title="Selecionar tempo rápido"
-                      >
-                        <option value="">Selecionar…</option>
-                        {[0.25, 0.5, 1, 2, 4, 8].map((h) => {
-                          const label = h < 1 ? `${h * 60} minutos` : h === 1 ? "1 hora" : `${h} horas`;
-                          return (
-                            <option key={h} value={String(h)}>{label}</option>
-                          );
-                        })}
-                      </select>
+                      <datalist id="hours-options">
+                        <option value="15m" label="15 minutos" />
+                        <option value="30m" label="30 minutos" />
+                        <option value="45m" label="45 minutos" />
+                        {Array.from({ length: 80 }, (_, i) => i + 1).map((h) => (
+                          <option key={h} value={`${h}h`} label={h === 1 ? "1 hora" : `${h} horas`} />
+                        ))}
+                      </datalist>
                     </div>
                   </PropertyRow>
                 )}
