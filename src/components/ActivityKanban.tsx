@@ -159,6 +159,8 @@ function SortableKanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
+  isExpanded,
+  onToggleExpand,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -176,6 +178,8 @@ function SortableKanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -206,6 +210,8 @@ function SortableKanbanCard({
         stageColor={stageColor}
         subActivityCount={subActivityCount}
         dependencyCount={dependencyCount}
+        isExpanded={isExpanded}
+        onToggleExpand={onToggleExpand}
       />
     </div>
   );
