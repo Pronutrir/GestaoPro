@@ -297,7 +297,7 @@ function KanbanCard({
     activity.end_date ? `📅 Fim: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}` : null,
     isQualityProject && activity.last_update_date ? `🔄 Atualização: ${parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}` : null,
     isQualityProject && activity.deadline_flag ? `🚦 Flag: ${activity.deadline_flag === "green" ? "Em dia" : activity.deadline_flag === "orange" ? "Atenção" : activity.deadline_flag === "red" ? "Vencido" : ""}` : null,
-    activity.hours > 0 ? `⏱ Horas: ${activity.hours}h` : null,
+    activity.hours > 0 ? `⏱ Tempo: ${formatHours(activity.hours)}` : null,
     activity.status === "completed" ? "✅ Concluída" : null,
   ].filter(Boolean);
 
@@ -404,7 +404,7 @@ function KanbanCard({
                   )}
                   {activity.hours > 0 && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                      {activity.hours}h
+                      {formatHours(activity.hours)}
                     </Badge>
                   )}
                   {dependencyCount && (dependencyCount.pred > 0 || dependencyCount.succ > 0) && (
