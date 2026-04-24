@@ -26,6 +26,7 @@ import { AIAssistButton } from "@/components/AIAssistButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ActivityRelationsInline } from "@/components/ActivityRelationsInline";
 import { MessageSquare, Paperclip, ListTree, FileText } from "lucide-react";
+import { ActivityStoriesPanel } from "@/components/ActivityStoriesPanel";
 
 /** Linha de propriedade densa (ícone + label cinza + valor) usada no painel ClickUp-like. */
 const PropertyRow = ({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) => (
