@@ -580,7 +580,8 @@ function SortableColumn({
   const priorityWeight: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
   const sortedActivities = useMemo(() => {
-    const sorted = [...stageActivities];
+    // Show only root activities at column level; sub-activities render inline below their parent when expanded
+    const sorted = stageActivities.filter((a) => !a.parent_id);
     sorted.sort((a, b) => {
       switch (colSort) {
         case "wbs_asc": {
