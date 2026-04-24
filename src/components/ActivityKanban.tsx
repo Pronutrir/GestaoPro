@@ -415,10 +415,16 @@ function KanbanCard({
                   )}
                 </div>
                 {subActivityCount && subActivityCount > 0 ? (
-                  <div className="flex items-center gap-1 mt-1.5 text-[10px] text-muted-foreground">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}
+                    className="flex items-center gap-1 mt-1.5 text-[10px] font-medium text-primary hover:text-primary/80 hover:underline transition-colors"
+                    title={isExpanded ? "Recolher subtarefas" : "Expandir subtarefas"}
+                  >
+                    {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                     <GitFork className="w-3 h-3" />
                     <span>{subActivityCount} {subActivityCount === 1 ? "subtarefa" : "subtarefas"}</span>
-                  </div>
+                  </button>
                 ) : null}
               </div>
             </div>
