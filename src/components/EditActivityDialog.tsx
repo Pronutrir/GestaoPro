@@ -1437,19 +1437,19 @@ export const EditActivityDialog = ({
                 className="gap-2 text-primary border-primary/30 hover:bg-primary/10"
                 onClick={async () => {
                   if (!act) return;
-                  if (!confirm("Encerrar esta atividade? Após o encerramento, ela ficará marcada como finalizada administrativamente.")) return;
+                  if (!confirm("Arquivar esta atividade? Ela ficará marcada como arquivada e poderá ser consultada no histórico.")) return;
                   try {
                     const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", act.id);
                     if (error) throw error;
-                    toast({ title: "Atividade encerrada!" });
+                    toast({ title: "Atividade arquivada!" });
                     onActivityUpdated();
                     onOpenChange(false);
                   } catch {
-                    toast({ title: "Erro ao encerrar", variant: "destructive" });
+                    toast({ title: "Erro ao arquivar", variant: "destructive" });
                   }
                 }}
               >
-                <Lock className="w-4 h-4" /> Encerrar
+                <Lock className="w-4 h-4" /> Arquivar
               </Button>
             )}
             <Button type="button" variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
