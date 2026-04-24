@@ -39,7 +39,6 @@ const STAGES = [
 ] as const;
 
 const TYPES = [
-const TYPES = [
   { key: "estrategico",    label: "Estratégico",          icon: Target,     accent: "bg-blue-500",     iconBg: "bg-blue-500/10",     iconFg: "text-blue-600 dark:text-blue-400" },
   { key: "operacional",    label: "Operacional",          icon: Settings2,  accent: "bg-slate-500",    iconBg: "bg-slate-500/10",    iconFg: "text-slate-600 dark:text-slate-300" },
   { key: "novos_negocios", label: "Novos Negócios",       icon: Briefcase,  accent: "bg-emerald-500",  iconBg: "bg-emerald-500/10",  iconFg: "text-emerald-600 dark:text-emerald-400" },
