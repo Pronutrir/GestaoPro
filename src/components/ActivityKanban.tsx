@@ -159,6 +159,7 @@ function SortableKanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
+  relationCount,
   isExpanded,
   onToggleExpand,
 }: {
@@ -178,6 +179,7 @@ function SortableKanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
+  relationCount?: number;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
 }) {
@@ -210,6 +212,7 @@ function SortableKanbanCard({
         stageColor={stageColor}
         subActivityCount={subActivityCount}
         dependencyCount={dependencyCount}
+        relationCount={relationCount}
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
       />
@@ -235,6 +238,7 @@ function KanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
+  relationCount,
   isExpanded,
   onToggleExpand,
 }: {
@@ -255,6 +259,7 @@ function KanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
+  relationCount?: number;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
 }) {
@@ -413,6 +418,15 @@ function KanbanCard({
                       {dependencyCount.succ > 0 && `→${dependencyCount.succ}`}
                     </Badge>
                   )}
+                  {relationCount && relationCount > 0 ? (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 bg-accent/40 text-foreground border-accent font-semibold"
+                      title={`${relationCount} vínculo(s)`}
+                    >
+                      🔗 {relationCount}
+                    </Badge>
+                  ) : null}
                 </div>
                 {subActivityCount && subActivityCount > 0 ? (
                   <button
@@ -494,6 +508,7 @@ function SortableColumn({
   onOpenCreateTask,
   subActivityCounts,
   dependencyCounts,
+  relationCounts,
   isAdminOrGestor,
   onRenameStage,
   onDeleteStage,
@@ -523,6 +538,7 @@ function SortableColumn({
   onOpenCreateTask?: (stageId: string) => void;
   subActivityCounts: Map<string, number>;
   dependencyCounts?: Map<string, { pred: number; succ: number }>;
+  relationCounts?: Map<string, number>;
   isAdminOrGestor?: boolean;
   onRenameStage: (id: string, title: string) => Promise<void>;
   onDeleteStage: (id: string) => Promise<void>;
@@ -891,6 +907,7 @@ function SortableColumn({
                     isQualityProject={isQualityProject}
                     stageColor={stage.color}
                     dependencyCount={dependencyCounts?.get(activity.id)}
+                    relationCount={relationCounts?.get(activity.id) || 0}
                     subActivityCount={children.length}
                     isExpanded={expanded}
                     onToggleExpand={() => toggleExpanded(activity.id)}
@@ -915,6 +932,7 @@ function SortableColumn({
                           isQualityProject={isQualityProject}
                           stageColor={stage.color}
                           dependencyCount={dependencyCounts?.get(child.id)}
+                          relationCount={relationCounts?.get(child.id) || 0}
                           subActivityCount={0}
                         />
                       ))}
@@ -1011,6 +1029,7 @@ export const ActivityKanban = ({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Map<string, number>>(new Map());
   const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
+  const [relationCounts, setRelationCounts] = useState<Map<string, number>>(new Map());
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
@@ -1105,8 +1124,23 @@ export const ActivityKanban = ({
           });
           setDependencyCounts(map);
         });
+      supabase
+        .from("task_relations")
+        .select("source_activity_id, target_activity_id")
+        .or(
+          `source_activity_id.in.(${ids.join(",")}),target_activity_id.in.(${ids.join(",")})`,
+        )
+        .then(({ data }) => {
+          const map = new Map<string, number>();
+          (data || []).forEach((r: any) => {
+            map.set(r.source_activity_id, (map.get(r.source_activity_id) || 0) + 1);
+            map.set(r.target_activity_id, (map.get(r.target_activity_id) || 0) + 1);
+          });
+          setRelationCounts(map);
+        });
     } else {
       setDependencyCounts(new Map());
+      setRelationCounts(new Map());
     }
   }, [projectId, activities]);
 
@@ -1545,6 +1579,7 @@ export const ActivityKanban = ({
                 onOpenCreateTask={onOpenCreateTask}
                 subActivityCounts={subActivityCounts}
                 dependencyCounts={dependencyCounts}
+                relationCounts={relationCounts}
                 isAdminOrGestor={isAdmin || canCreate}
                 onRenameStage={handleRenameStage}
                 onDeleteStage={handleDeleteStage}
