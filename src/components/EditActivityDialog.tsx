@@ -1331,6 +1331,13 @@ export const EditActivityDialog = ({
           )}
             </TabsContent>
 
+            {/* ===== ABA HISTÓRIAS ===== */}
+            <TabsContent value="stories" className="pt-4 mt-0">
+          {act && projectId && (
+            <ActivityStoriesPanel activityId={act.id} projectId={projectId} />
+          )}
+            </TabsContent>
+
             {/* ===== ABA HISTÓRICO ===== */}
             <TabsContent value="history" className="pt-4 mt-0">
           {act && !createMode && (
