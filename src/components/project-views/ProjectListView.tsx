@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronRight, ChevronDown, Flag, Plus, User, Calendar, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { ChevronRight, ChevronDown, Flag, Plus, User, Calendar, ChevronsDownUp, ChevronsUpDown, Eye, EyeOff } from "lucide-react";
 import { format, parseISO, isBefore, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -39,10 +39,14 @@ const PRIORITY_FLAG: Record<string, { label: string; cls: string; dot: string }>
 export const ProjectListView = ({ activities, phases, onEditActivity, onToggleActivity, onAddActivity, canCreate }: Props) => {
   const [groupBy, setGroupBy] = useState<GroupBy>("status");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [showCompleted, setShowCompleted] = useState(false);
   const expandAll = () => setCollapsed(new Set());
   const collapseAll = () => setCollapsed(new Set(groups.map(g => g.key)));
 
-  const visibleActivities = useMemo(() => activities.filter(a => !a.parent_id), [activities]);
+  const visibleActivities = useMemo(
+    () => activities.filter(a => !a.parent_id && (showCompleted || a.status !== "completed")),
+    [activities, showCompleted]
+  );
 
   const groups = useMemo(() => {
     const map = new Map<string, { key: string; label: string; color?: string; items: Activity[] }>();
@@ -98,6 +102,16 @@ export const ProjectListView = ({ activities, phases, onEditActivity, onToggleAc
           </Button>
         ))}
         <div className="ml-auto flex items-center gap-1">
+          <Button
+            size="sm"
+            variant={showCompleted ? "default" : "outline"}
+            className="h-7 px-2 text-xs gap-1"
+            onClick={() => setShowCompleted(v => !v)}
+            title={showCompleted ? "Ocultar concluídas" : "Mostrar concluídas"}
+          >
+            {showCompleted ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            {showCompleted ? "Concluídas visíveis" : "Só pendências"}
+          </Button>
           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={expandAll} title="Expandir tudo">
             <ChevronsUpDown className="w-3.5 h-3.5" /> Expandir
           </Button>
@@ -193,7 +207,9 @@ export const ProjectListView = ({ activities, phases, onEditActivity, onToggleAc
         })}
 
         {visibleActivities.length === 0 && (
-          <div className="p-12 text-center text-sm text-muted-foreground">Nenhuma atividade neste projeto.</div>
+          <div className="p-12 text-center text-sm text-muted-foreground">
+            {showCompleted ? "Nenhuma atividade neste projeto." : "Nenhuma pendência! 🎉"}
+          </div>
         )}
       </Card>
     </div>
