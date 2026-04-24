@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2 } from "lucide-react";
@@ -725,15 +726,16 @@ export const EditActivityDialog = ({
 
                 {/* Marco */}
                 <PropertyRow icon={<Diamond className={`w-3.5 h-3.5 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : ""}`} />} label="Marco">
-                  <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                    <input
-                      type="checkbox"
+                  <div className="flex items-center gap-2">
+                    <Switch
                       checked={formData.is_milestone}
-                      onChange={(e) => setFormData({ ...formData, is_milestone: e.target.checked })}
-                      className="h-3 w-3 rounded border-border accent-amber-500 cursor-pointer"
+                      onCheckedChange={(checked) => setFormData({ ...formData, is_milestone: checked })}
+                      className="data-[state=checked]:bg-amber-500"
                     />
-                    <span>{formData.is_milestone ? "Sim" : "Não"}</span>
-                  </label>
+                    <span className="text-xs text-muted-foreground">
+                      {formData.is_milestone ? "É um marco" : "Não é marco"}
+                    </span>
+                  </div>
                 </PropertyRow>
               </div>
             </div>
