@@ -142,6 +142,7 @@ export const EditActivityDialog = ({
   const [creatorEmail, setCreatorEmail] = useState<string | null>(null);
   const [lastEditorName, setLastEditorName] = useState<string | null>(null);
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "history">("details");
 
   // Colunas opcionais na tabela de sub-atividades (todas selecionáveis; persistido por usuário no localStorage)
   const SUB_COLS_KEY = "subActivityCols.v2";
