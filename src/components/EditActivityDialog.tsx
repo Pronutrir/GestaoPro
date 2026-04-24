@@ -550,25 +550,240 @@ export const EditActivityDialog = ({
           )}
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-2 min-w-0">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
-              <AIAssistButton
+          {/* ============= CABEÇALHO COMPACTO (estilo ClickUp) ============= */}
+          {/* Título grande inline */}
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-start gap-2">
+              <Textarea
+                id="title"
                 value={formData.title}
-                onChange={(next) => setFormData({ ...formData, title: next })}
-                context="activity_title"
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                required
+                rows={1}
+                autoResize
+                placeholder="Título da atividade..."
+                className="min-h-[44px] flex-1 min-w-0 text-xl font-bold break-words whitespace-pre-wrap [overflow-wrap:anywhere] border-0 px-0 shadow-none focus-visible:ring-0 focus-visible:border-b focus-visible:border-primary rounded-none resize-none"
               />
+              <div className="pt-2 shrink-0">
+                <AIAssistButton
+                  value={formData.title}
+                  onChange={(next) => setFormData({ ...formData, title: next })}
+                  context="activity_title"
+                />
+              </div>
             </div>
-            <Textarea
-              id="title"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              required
-              rows={1}
-              autoResize
-              className="min-h-[44px] w-full min-w-0 font-medium break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
-            />
           </div>
+
+          {/* Painel de propriedades — 2 colunas, linhas densas (label + valor) */}
+          {act && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5 p-3 rounded-lg border border-border bg-muted/10">
+              {/* Coluna esquerda */}
+              <div className="space-y-1.5">
+                {/* Status / Etapa */}
+                {workflowStages.length > 0 && (
+                  <PropertyRow icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium border hover:bg-muted/40 transition-colors"
+                          style={(() => {
+                            const s = workflowStages.find(s => s.id === currentStageId);
+                            return s ? { borderColor: s.color, color: s.color } : {};
+                          })()}
+                        >
+                          <span className="w-2 h-2 rounded-full" style={{ background: workflowStages.find(s => s.id === currentStageId)?.color || "hsl(var(--muted-foreground))" }} />
+                          {workflowStages.find(s => s.id === currentStageId)?.title || "Sem coluna"}
+                          <ChevronDown className="w-3 h-3 opacity-60" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-48 p-1" align="start">
+                        {workflowStages.map((stage) => (
+                          <button
+                            key={stage.id}
+                            type="button"
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted ${currentStageId === stage.id ? "bg-primary/10 text-primary font-medium" : ""}`}
+                            onClick={async () => {
+                              if (currentStageId === stage.id) return;
+                              if (stage.is_final && isBlockedByOthers) {
+                                toast({ title: "Tarefa bloqueada", description: `Há ${blockers.length} bloqueio(s) pendente(s).`, variant: "destructive" });
+                                return;
+                              }
+                              try {
+                                const updateData: any = { workflow_stage_id: stage.id };
+                                if (stage.is_final) {
+                                  updateData.status = "completed";
+                                  updateData.completed_at = new Date().toISOString();
+                                } else if (act.status === "completed") {
+                                  updateData.status = "pending";
+                                  updateData.completed_at = null;
+                                }
+                                const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
+                                if (error) throw error;
+                                await supabase.from("user_stories").update({ stage_id: stage.id }).eq("activity_id", act.id);
+                                setCurrentStageId(stage.id);
+                                toast({ title: `Movida para "${stage.title}"` });
+                                onActivityUpdated();
+                              } catch {
+                                toast({ title: "Erro ao mover", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <span className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
+                            {stage.title}
+                          </button>
+                        ))}
+                      </PopoverContent>
+                    </Popover>
+                  </PropertyRow>
+                )}
+
+                {/* Datas inline */}
+                <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label="Datas">
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Input
+                      type="date"
+                      value={formData.start_date}
+                      onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                      className="h-7 px-1.5 text-xs w-[130px]"
+                    />
+                    <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                    <Input
+                      type="date"
+                      value={formData.end_date}
+                      onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                      className="h-7 px-1.5 text-xs w-[130px]"
+                    />
+                  </div>
+                </PropertyRow>
+
+                {/* Tempo */}
+                {!formData.is_milestone && (
+                  <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
+                    <Input
+                      placeholder="Ex: 2h 30m"
+                      value={formData.hours}
+                      onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
+                      className="h-7 px-2 text-xs w-[120px]"
+                    />
+                  </PropertyRow>
+                )}
+
+                {/* Relacionamentos inline */}
+                {projectId && (
+                  <PropertyRow icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
+                    <ActivityRelationsInline activityId={act.id} projectId={projectId} />
+                  </PropertyRow>
+                )}
+              </div>
+
+              {/* Coluna direita */}
+              <div className="space-y-1.5">
+                {/* Responsável */}
+                <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
+                  <select
+                    className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[200px] truncate"
+                    value={formData.assigned_to}
+                    onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+                  >
+                    <option value="">Sem líder</option>
+                    {members.map((m) => (
+                      <option key={m.full_name} value={m.full_name!}>{m.full_name}</option>
+                    ))}
+                  </select>
+                </PropertyRow>
+
+                {/* Prioridade compacta */}
+                <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade">
+                  <div className="flex gap-1">
+                    {[
+                      { value: "low", label: "Baixa", color: "bg-muted text-muted-foreground border-border" },
+                      { value: "medium", label: "Média", color: "bg-warning/15 text-warning border-warning/30" },
+                      { value: "high", label: "Alta", color: "bg-destructive/15 text-destructive border-destructive/30" },
+                    ].map((p) => (
+                      <button key={p.value} type="button"
+                        className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-all ${formData.priority === p.value ? `${p.color} ring-1 ring-current/30` : "border-border text-muted-foreground hover:border-foreground/30"}`}
+                        onClick={() => setFormData({ ...formData, priority: p.value })}
+                      >{p.label}</button>
+                    ))}
+                  </div>
+                </PropertyRow>
+
+                {/* Etiquetas */}
+                <PropertyRow icon={<Tag className="w-3.5 h-3.5" />} label="Etiquetas">
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {formData.tags.map((tag) => (
+                      <Badge key={tag} variant="secondary" className="gap-1 text-[10px] py-0 px-1.5">
+                        {tag}
+                        <button type="button" onClick={() => handleRemoveTag(tag)}>
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </Badge>
+                    ))}
+                    <div className="flex items-center gap-1">
+                      <Input
+                        value={newTag}
+                        onChange={(e) => setNewTag(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
+                        placeholder="+"
+                        className="h-6 px-1.5 text-[11px] w-16"
+                      />
+                    </div>
+                  </div>
+                </PropertyRow>
+
+                {/* Marco */}
+                <PropertyRow icon={<Diamond className={`w-3.5 h-3.5 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : ""}`} />} label="Marco">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_milestone}
+                      onChange={(e) => setFormData({ ...formData, is_milestone: e.target.checked })}
+                      className="h-3 w-3 rounded border-border accent-amber-500 cursor-pointer"
+                    />
+                    <span>{formData.is_milestone ? "Sim" : "Não"}</span>
+                  </label>
+                </PropertyRow>
+              </div>
+            </div>
+          )}
+
+          {/* ============= ABAS ============= */}
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+            <TabsList className="w-full justify-start h-9 bg-transparent border-b border-border rounded-none p-0 gap-1">
+              <TabsTrigger value="details" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                <FileText className="w-3.5 h-3.5" /> Detalhes
+              </TabsTrigger>
+              {act && projectId && (
+                <TabsTrigger value="subtasks" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                  <ListTree className="w-3.5 h-3.5" /> Subatividades
+                  {subActivities.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{subActivities.length}</span>
+                  )}
+                </TabsTrigger>
+              )}
+              {act && projectId && (
+                <TabsTrigger value="attachments" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                  <Paperclip className="w-3.5 h-3.5" /> Anexos
+                </TabsTrigger>
+              )}
+              {act && (
+                <TabsTrigger value="comments" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                  <MessageSquare className="w-3.5 h-3.5" /> Comentários
+                </TabsTrigger>
+              )}
+              {act && !createMode && (
+                <TabsTrigger value="history" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                  <History className="w-3.5 h-3.5" /> Histórico
+                </TabsTrigger>
+              )}
+            </TabsList>
+
+            {/* ===== ABA DETALHES ===== */}
+            <TabsContent value="details" className="space-y-5 pt-4 mt-0">
+
+          {/* (Marco já está no painel acima — bloco antigo abaixo segue intacto para não quebrar; já remove pela ausência) */}
+          <div className="hidden">
 
           {/* Marco do Projeto */}
           <label className="flex items-center gap-2 cursor-pointer w-fit text-xs text-muted-foreground hover:text-foreground transition-colors">
