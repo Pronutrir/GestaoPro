@@ -573,6 +573,21 @@ const Overview = () => {
                 </div>
               </Card>
             </div>
+
+            {/* Pipeline por Tipo de Projeto (swim lanes) */}
+            <PipelineByTypeLanes
+              projects={projects.map((p) => ({
+                id: p.id,
+                title: p.title,
+                status: p.status,
+                project_type: (p as any).project_type ?? null,
+                priority: (p as any).priority ?? "medium",
+                owner: p.owner,
+                budget_planned: p.budget_planned ?? 0,
+                budget_used: p.budget_used ?? 0,
+                completion_percentage: (p as any).completion_percentage ?? 0,
+              }))}
+            />
           </>
         )}
       </main>
