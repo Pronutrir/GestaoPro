@@ -1214,24 +1214,37 @@ export const ActivityKanban = ({
         });
       supabase
         .from("task_relations")
-        .select("source_activity_id, target_activity_id")
+        .select("id, source_activity_id, target_activity_id, relation_type")
         .or(
           `source_activity_id.in.(${ids.join(",")}),target_activity_id.in.(${ids.join(",")})`,
         )
         .then(({ data }) => {
           const titleById = new Map<string, string>();
           activities.forEach((a) => titleById.set(a.id, a.title));
-          const map = new Map<string, { id: string; title: string }[]>();
-          const push = (key: string, otherId: string) => {
+          const map = new Map<
+            string,
+            { id: string; title: string; relationId: string; relationType: string }[]
+          >();
+          const push = (
+            key: string,
+            otherId: string,
+            relationId: string,
+            relationType: string,
+          ) => {
             const list = map.get(key) || [];
-            if (!list.find((x) => x.id === otherId)) {
-              list.push({ id: otherId, title: titleById.get(otherId) || "" });
+            if (!list.find((x) => x.relationId === relationId)) {
+              list.push({
+                id: otherId,
+                title: titleById.get(otherId) || "",
+                relationId,
+                relationType,
+              });
               map.set(key, list);
             }
           };
           (data || []).forEach((r: any) => {
-            push(r.source_activity_id, r.target_activity_id);
-            push(r.target_activity_id, r.source_activity_id);
+            push(r.source_activity_id, r.target_activity_id, r.id, r.relation_type);
+            push(r.target_activity_id, r.source_activity_id, r.id, r.relation_type);
           });
           setRelationCounts(map);
         });
