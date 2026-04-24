@@ -565,7 +565,7 @@ export const EditActivityDialog = ({
           {/* ============= CABEÇALHO COMPACTO (estilo ClickUp) ============= */}
           {/* Título grande inline */}
           <div className="space-y-1 min-w-0">
-            <div className="flex items-start gap-2">
+            <div className="flex items-start gap-2 rounded-md border border-input bg-background px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
               <Textarea
                 id="title"
                 value={formData.title}
@@ -574,9 +574,9 @@ export const EditActivityDialog = ({
                 rows={1}
                 autoResize
                 placeholder="Título da atividade..."
-                className="min-h-[44px] flex-1 min-w-0 text-xl font-bold break-words whitespace-pre-wrap [overflow-wrap:anywhere] border-0 px-0 shadow-none focus-visible:ring-0 focus-visible:border-b focus-visible:border-primary rounded-none resize-none"
+                className="min-h-[36px] flex-1 min-w-0 text-xl font-bold break-words whitespace-pre-wrap [overflow-wrap:anywhere] border-0 px-0 py-0 shadow-none focus-visible:ring-0 rounded-none resize-none bg-transparent"
               />
-              <div className="pt-2 shrink-0">
+              <div className="pt-1 shrink-0">
                 <AIAssistButton
                   value={formData.title}
                   onChange={(next) => setFormData({ ...formData, title: next })}
