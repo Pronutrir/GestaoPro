@@ -114,6 +114,8 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false }: Pr
   const [selectedTargetId, setSelectedTargetId] = useState<string>("");
   const [direction, setDirection] = useState<"outgoing" | "incoming">("outgoing");
   const [saving, setSaving] = useState(false);
+  /** Controla a abertura do menu de tipos (usado pelo autoOpenAdd vindo do pai). */
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
 
   const fetchAll = async () => {
     const [{ data: actData }, { data: depData }, { data: relData }] = await Promise.all([
@@ -184,14 +186,15 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false }: Pr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activityId, projectId]);
 
-  // Abre o seletor de criação automaticamente quando solicitado pelo pai
+  // Quando o pai pede para "adicionar vínculo", abrimos primeiro o MENU
+  // com os 5 tipos (predecessora, sucessora, bloqueio, em espera, vinculada).
+  // Só após o usuário escolher um tipo é que abrimos o diálogo de seleção
+  // de tarefa. Isso evita "pular" para 'related' sem perguntar.
   useEffect(() => {
     if (autoOpenAdd) {
-      // pequeno delay para que o painel monte primeiro
-      const t = setTimeout(() => openDialog("related"), 50);
+      const t = setTimeout(() => setTypeMenuOpen(true), 50);
       return () => clearTimeout(t);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpenAdd]);
 
   const titleOf = (id: string) => activities.find((a) => a.id === id)?.title || "—";
@@ -297,7 +300,7 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false }: Pr
             </span>
           )}
         </div>
-        <DropdownMenu>
+        <DropdownMenu open={typeMenuOpen} onOpenChange={setTypeMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-7 gap-1 text-xs">
               <Plus className="w-3.5 h-3.5" /> Vincular
@@ -311,7 +314,7 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false }: Pr
               return (
                 <DropdownMenuItem
                   key={kind}
-                  onClick={() => openDialog(kind)}
+                  onClick={() => { setTypeMenuOpen(false); openDialog(kind); }}
                   className="text-xs gap-2 cursor-pointer"
                 >
                   <Icon className="w-3.5 h-3.5" />
