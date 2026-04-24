@@ -1,6 +1,18 @@
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Link2, Ban, Clock3, ArrowLeft, ArrowRight, Plus } from "lucide-react";
 import { TaskRelations } from "@/components/TaskRelations";
 
@@ -32,8 +44,9 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
     predecessor: 0, successor: 0, blocking: 0, waiting_on: 0, related: 0,
   });
   const [open, setOpen] = useState(false);
-  /** Marca que o popover foi aberto pelo botão "Adicionar vínculo" (estado vazio).
-   *  Nesse caso o painel TaskRelations já abre o seletor de criação. */
+  /** Quando o usuário escolhe um tipo no menu (estado vazio), abrimos um diálogo
+   *  com o painel TaskRelations ancorado em "criar vínculo daquele tipo". */
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [autoOpenAdd, setAutoOpenAdd] = useState(false);
 
   const fetchCounts = async () => {
@@ -85,45 +98,97 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
       cls: "bg-muted text-foreground border-border hover:bg-muted/80" },
   ]), [counts]);
 
+  const TYPE_OPTIONS = [
+    { kind: "predecessor", label: "Predecessora", Icon: ArrowLeft },
+    { kind: "successor", label: "Sucessora", Icon: ArrowRight },
+    { kind: "blocking", label: "Bloqueio", Icon: Ban },
+    { kind: "waiting_on", label: "Em espera", Icon: Clock3 },
+    { kind: "related", label: "Vinculada", Icon: Link2 },
+  ] as const;
+
+  // ESTADO VAZIO: dropdown direto com os 5 tipos (sem popover intermediário).
+  if (total === 0) {
+    return (
+      <>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center min-h-[28px] text-left"
+              title="Adicionar vínculo"
+            >
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary px-2 py-0.5 rounded-md border border-dashed border-border hover:border-primary/50 transition-colors">
+                <Plus className="w-3 h-3" /> Adicionar vínculo
+              </span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            {TYPE_OPTIONS.map(({ kind, label, Icon }) => (
+              <DropdownMenuItem
+                key={kind}
+                onClick={() => {
+                  setAutoOpenAdd(true);
+                  setCreateDialogOpen(true);
+                }}
+                className="text-xs gap-2 cursor-pointer"
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span className="flex-1">{label}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Dialog
+          open={createDialogOpen}
+          onOpenChange={(v) => {
+            setCreateDialogOpen(v);
+            if (!v) setAutoOpenAdd(false);
+          }}
+        >
+          <DialogContent className="max-w-[520px] p-4">
+            <DialogHeader>
+              <DialogTitle className="text-sm">Adicionar vínculo</DialogTitle>
+            </DialogHeader>
+            <TaskRelations
+              activityId={activityId}
+              projectId={projectId}
+              autoOpenAdd={autoOpenAdd}
+              hideHeader
+            />
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+
+  // ESTADO COM VÍNCULOS: popover com painel completo de gestão.
   return (
     <Popover
       open={open}
-      onOpenChange={(v) => {
-        setOpen(v);
-        if (!v) setAutoOpenAdd(false);
-      }}
+      onOpenChange={setOpen}
     >
       <PopoverTrigger asChild>
         <button
           type="button"
           className="flex items-center gap-1 flex-wrap min-h-[28px] w-full text-left"
           title="Gerenciar relacionamentos"
-          onClick={() => {
-            // Se ainda não há vínculos, abrir já no modo "criar"
-            if (total === 0) setAutoOpenAdd(true);
-          }}
         >
-          {total === 0 ? (
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary px-2 py-0.5 rounded-md border border-dashed border-border hover:border-primary/50 transition-colors">
-              <Plus className="w-3 h-3" /> Adicionar vínculo
-            </span>
-          ) : (
-            pills
-              .filter(p => p.count > 0)
-              .map(({ key, count, label, Icon, cls }) => (
-                <span
-                  key={key}
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] font-medium transition-colors ${cls}`}
-                >
-                  <Icon className="w-3 h-3" />
-                  {count} {label}
-                </span>
-              ))
-          )}
+          {pills
+            .filter((p) => p.count > 0)
+            .map(({ key, count, label, Icon, cls }) => (
+              <span
+                key={key}
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] font-medium transition-colors ${cls}`}
+              >
+                <Icon className="w-3 h-3" />
+                {count} {label}
+              </span>
+            ))}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[420px] max-w-[92vw] p-3" align="start" side="bottom">
-        <TaskRelations activityId={activityId} projectId={projectId} autoOpenAdd={autoOpenAdd} hideHeader />
+        <TaskRelations activityId={activityId} projectId={projectId} hideHeader={false} />
       </PopoverContent>
     </Popover>
   );
