@@ -35,6 +35,8 @@ type UnifiedKind = "predecessor" | "successor" | "related" | "blocking" | "waiti
 interface Props {
   activityId: string;
   projectId: string;
+  /** Quando true, abre automaticamente o diálogo de criação de vínculo (tipo "related") ao montar. */
+  autoOpenAdd?: boolean;
 }
 
 interface ActivityOpt {
@@ -103,7 +105,7 @@ const META: Record<UnifiedKind, {
 
 const ORDER: UnifiedKind[] = ["predecessor", "successor", "blocking", "waiting_on", "related"];
 
-export const TaskRelations = ({ activityId, projectId }: Props) => {
+export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false }: Props) => {
   const { toast } = useToast();
   const [rows, setRows] = useState<UnifiedRow[]>([]);
   const [activities, setActivities] = useState<ActivityOpt[]>([]);
@@ -181,6 +183,16 @@ export const TaskRelations = ({ activityId, projectId }: Props) => {
     return () => { supabase.removeChannel(channel); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activityId, projectId]);
+
+  // Abre o seletor de criação automaticamente quando solicitado pelo pai
+  useEffect(() => {
+    if (autoOpenAdd) {
+      // pequeno delay para que o painel monte primeiro
+      const t = setTimeout(() => openDialog("related"), 50);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenAdd]);
 
   const titleOf = (id: string) => activities.find((a) => a.id === id)?.title || "—";
   const statusOf = (id: string) => activities.find((a) => a.id === id)?.status || "";
