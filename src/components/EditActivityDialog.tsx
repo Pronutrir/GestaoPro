@@ -1305,10 +1305,29 @@ export const EditActivityDialog = ({
                   })}
                 </div>
               )}
-              <div className="flex gap-2">
-                <Input placeholder="Adicionar sub-atividade..." value={newSubTitle} onChange={(e) => setNewSubTitle(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddSubActivity(); } }} className="h-8 text-sm" />
-                <Button type="button" size="sm" variant="outline" className="h-8 px-2" onClick={handleAddSubActivity}>
+              <div className="flex gap-2 items-center">
+                <Input
+                  placeholder="Adicionar sub-atividade..."
+                  value={newSubTitle}
+                  onChange={(e) => setNewSubTitle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddSubActivity(); } }}
+                  className="h-8 text-sm flex-1"
+                />
+                {newSubTitle.trim() && (
+                  <AIAssistButton
+                    value={newSubTitle}
+                    onChange={setNewSubTitle}
+                    context="activity_title"
+                  />
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2"
+                  onClick={handleAddSubActivity}
+                  disabled={!newSubTitle.trim()}
+                >
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
