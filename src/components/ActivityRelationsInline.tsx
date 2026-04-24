@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dialog";
 import { Link2, Ban, Clock3, ArrowLeft, ArrowRight, Plus } from "lucide-react";
 import { TaskRelations } from "@/components/TaskRelations";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
  * Versão MINIMAL e INLINE dos relacionamentos da atividade.
