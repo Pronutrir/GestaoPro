@@ -187,19 +187,23 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
         {TYPES.map((t) => {
           const items = grouped.map[t.key];
           const m = computeMetrics(items);
-          const isCollapsed = collapsed[t.key];
+          const isEmpty = m.total === 0;
+          // Vazias colapsam por padrão; usuário pode expandir manualmente
+          const isCollapsed = collapsed[t.key] ?? isEmpty;
           const TypeIcon = t.icon;
 
           return (
             <Card
               key={t.key}
-              className="overflow-hidden border border-border/60 bg-card hover:border-border transition-all relative"
+              className={`overflow-hidden border bg-card transition-all relative ${
+                isEmpty ? "border-border/40 opacity-70 hover:opacity-100" : "border-border/60 hover:border-border"
+              }`}
             >
               {/* Faixa de acento lateral */}
-              <div className={`absolute left-0 top-0 bottom-0 w-1 ${t.accent}`} />
+              <div className={`absolute left-0 top-0 bottom-0 w-1 ${t.accent} ${isEmpty ? "opacity-40" : ""}`} />
 
               {/* HEADER limpo */}
-              <div className="pl-5 pr-4 py-3.5 border-b border-border/60">
+              <div className={`pl-5 pr-4 ${isEmpty ? "py-2.5" : "py-3.5"} ${!isCollapsed ? "border-b border-border/60" : ""}`}>
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                   <button
                     onClick={() => toggle(t.key)}
@@ -210,41 +214,46 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
                     ) : (
                       <ChevronDown className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                     )}
-                    <div className={`h-9 w-9 rounded-lg ${t.iconBg} flex items-center justify-center shrink-0`}>
-                      <TypeIcon className={`h-4.5 w-4.5 ${t.iconFg}`} />
+                    <div className={`${isEmpty ? "h-7 w-7" : "h-9 w-9"} rounded-lg ${t.iconBg} flex items-center justify-center shrink-0`}>
+                      <TypeIcon className={`${isEmpty ? "h-3.5 w-3.5" : "h-4 w-4"} ${t.iconFg}`} />
                     </div>
                     <div className="text-left min-w-0">
-                      <h3 className="text-[15px] font-semibold text-foreground tracking-tight">{t.label}</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        <span className="font-medium text-foreground">{m.total}</span> projeto{m.total !== 1 ? "s" : ""}
-                        {m.live > 0 && <> · <span className="text-emerald-600 dark:text-emerald-400 font-medium">{m.live}</span> em execução</>}
-                        {m.blocked > 0 && <> · <span className="text-red-600 dark:text-red-400 font-medium">{m.blocked}</span> bloqueado{m.blocked !== 1 ? "s" : ""}</>}
-                      </p>
+                      <h3 className={`${isEmpty ? "text-sm" : "text-[15px]"} font-semibold text-foreground tracking-tight`}>
+                        {t.label}
+                      </h3>
+                      {!isEmpty && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          <span className="font-medium text-foreground">{m.total}</span> projeto{m.total !== 1 ? "s" : ""}
+                          {m.live > 0 && <> · <span className="text-emerald-600 dark:text-emerald-400 font-medium">{m.live}</span> em execução</>}
+                          {m.blocked > 0 && <> · <span className="text-red-600 dark:text-red-400 font-medium">{m.blocked}</span> bloqueado{m.blocked !== 1 ? "s" : ""}</>}
+                        </p>
+                      )}
                     </div>
                   </button>
 
-                  {/* Mini-pipeline minimalista */}
-                  <div className="flex items-center gap-1 ml-auto">
-                    {STAGES.map((s) => {
-                      const c = m.stageCount[s.key];
-                      const active = c > 0;
-                      return (
-                        <div
-                          key={s.key}
-                          title={`${s.label}: ${c}`}
-                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                            active
-                              ? "bg-muted/60 text-foreground"
-                              : "text-muted-foreground/40"
-                          }`}
-                        >
-                          <span className={`h-1.5 w-1.5 rounded-full ${active ? s.dot : "bg-muted-foreground/20"}`} />
-                          <span className="tracking-tight">{s.short}</span>
-                          <span className={active ? "tabular-nums" : "tabular-nums opacity-60"}>{c}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {/* Mini-pipeline: só renderiza estágios com projetos */}
+                  {isEmpty ? (
+                    <span className="ml-auto text-[11px] text-muted-foreground/60 italic">
+                      Sem projetos
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-1 ml-auto flex-wrap">
+                      {STAGES.filter((s) => m.stageCount[s.key] > 0).map((s) => {
+                        const c = m.stageCount[s.key];
+                        return (
+                          <div
+                            key={s.key}
+                            title={`${s.label}: ${c}`}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium bg-muted/60 text-foreground"
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+                            <span className="tracking-tight">{s.short}</span>
+                            <span className="tabular-nums">{c}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Métricas compactas em uma linha */}
