@@ -249,7 +249,7 @@ function KanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
-  relationCount,
+  relationItems,
   isExpanded,
   onToggleExpand,
 }: {
@@ -270,7 +270,7 @@ function KanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
-  relationCount?: number;
+  relationItems?: { id: string; title: string }[];
   isExpanded?: boolean;
   onToggleExpand?: () => void;
 }) {
