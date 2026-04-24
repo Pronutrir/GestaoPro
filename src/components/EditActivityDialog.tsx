@@ -670,6 +670,20 @@ export const EditActivityDialog = ({
                   </div>
                 </PropertyRow>
 
+                {/* Fase */}
+                {phases.length > 0 && (
+                  <PropertyRow icon={<Layers className="w-3.5 h-3.5" />} label="Fase">
+                    <select
+                      className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[260px] truncate"
+                      value={formData.phase_id}
+                      onChange={(e) => setFormData({ ...formData, phase_id: e.target.value })}
+                    >
+                      <option value="">Sem fase</option>
+                      {phases.map((phase) => (<option key={phase.id} value={phase.id}>{phase.title}</option>))}
+                    </select>
+                  </PropertyRow>
+                )}
+
                 {/* Tempo */}
                 {!formData.is_milestone && (
                   <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
