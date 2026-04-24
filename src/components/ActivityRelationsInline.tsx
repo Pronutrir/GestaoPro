@@ -32,6 +32,9 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
     predecessor: 0, successor: 0, blocking: 0, waiting_on: 0, related: 0,
   });
   const [open, setOpen] = useState(false);
+  /** Marca que o popover foi aberto pelo botão "Adicionar vínculo" (estado vazio).
+   *  Nesse caso o painel TaskRelations já abre o seletor de criação. */
+  const [autoOpenAdd, setAutoOpenAdd] = useState(false);
 
   const fetchCounts = async () => {
     const [{ data: deps }, { data: rels }] = await Promise.all([
@@ -83,12 +86,22 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
   ]), [counts]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) setAutoOpenAdd(false);
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
           className="flex items-center gap-1 flex-wrap min-h-[28px] w-full text-left"
           title="Gerenciar relacionamentos"
+          onClick={() => {
+            // Se ainda não há vínculos, abrir já no modo "criar"
+            if (total === 0) setAutoOpenAdd(true);
+          }}
         >
           {total === 0 ? (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary px-2 py-0.5 rounded-md border border-dashed border-border hover:border-primary/50 transition-colors">
@@ -110,7 +123,7 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[420px] max-w-[92vw] p-3" align="start" side="bottom">
-        <TaskRelations activityId={activityId} projectId={projectId} />
+        <TaskRelations activityId={activityId} projectId={projectId} autoOpenAdd={autoOpenAdd} />
       </PopoverContent>
     </Popover>
   );

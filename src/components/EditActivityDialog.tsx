@@ -26,6 +26,7 @@ import { AIAssistButton } from "@/components/AIAssistButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ActivityRelationsInline } from "@/components/ActivityRelationsInline";
 import { MessageSquare, Paperclip, ListTree, FileText } from "lucide-react";
+import { ActivityStoriesPanel } from "@/components/ActivityStoriesPanel";
 
 /** Linha de propriedade densa (ícone + label cinza + valor) usada no painel ClickUp-like. */
 const PropertyRow = ({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) => (
@@ -153,7 +154,7 @@ export const EditActivityDialog = ({
   const [creatorEmail, setCreatorEmail] = useState<string | null>(null);
   const [lastEditorName, setLastEditorName] = useState<string | null>(null);
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "history">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "stories" | "history">("details");
 
   // Colunas opcionais na tabela de sub-atividades (todas selecionáveis; persistido por usuário no localStorage)
   const SUB_COLS_KEY = "subActivityCols.v2";
@@ -540,7 +541,7 @@ export const EditActivityDialog = ({
                   <span className="opacity-50">·</span>
                   <span className="text-primary flex items-center gap-1">
                     <Lock className="w-3 h-3" />
-                    Encerrada em {new Date(act.closed_at).toLocaleDateString("pt-BR")}
+                    Arquivada em {new Date(act.closed_at).toLocaleDateString("pt-BR")}
                   </span>
                 </>
               )}
@@ -690,16 +691,18 @@ export const EditActivityDialog = ({
 
               {/* Coluna direita */}
               <div className="space-y-1.5">
-                {/* Responsável */}
+                {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
                 <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
                   <select
-                    className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[200px] truncate"
+                    className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[220px] truncate"
                     value={formData.assigned_to}
                     onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
                   >
                     <option value="">Sem líder</option>
-                    {members.map((m) => (
-                      <option key={m.full_name} value={m.full_name!}>{m.full_name}</option>
+                    {allProfiles.map((m) => (
+                      <option key={m.full_name} value={m.full_name!}>
+                        {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
+                      </option>
                     ))}
                   </select>
                 </PropertyRow>
@@ -717,29 +720,6 @@ export const EditActivityDialog = ({
                         onClick={() => setFormData({ ...formData, priority: p.value })}
                       >{p.label}</button>
                     ))}
-                  </div>
-                </PropertyRow>
-
-                {/* Etiquetas */}
-                <PropertyRow icon={<Tag className="w-3.5 h-3.5" />} label="Etiquetas">
-                  <div className="flex items-center gap-1 flex-wrap">
-                    {formData.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="gap-1 text-[10px] py-0 px-1.5">
-                        {tag}
-                        <button type="button" onClick={() => handleRemoveTag(tag)}>
-                          <X className="w-2.5 h-2.5" />
-                        </button>
-                      </Badge>
-                    ))}
-                    <div className="flex items-center gap-1">
-                      <Input
-                        value={newTag}
-                        onChange={(e) => setNewTag(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
-                        placeholder="+"
-                        className="h-6 px-1.5 text-[11px] w-16"
-                      />
-                    </div>
                   </div>
                 </PropertyRow>
 
@@ -781,6 +761,14 @@ export const EditActivityDialog = ({
               {act && (
                 <TabsTrigger value="comments" className="text-xs gap-1.5 data-[state=active]:bg-background">
                   <MessageSquare className="w-3.5 h-3.5" /> Comentários
+                </TabsTrigger>
+              )}
+              {act && projectId && (
+                <TabsTrigger value="stories" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                  <BookOpen className="w-3.5 h-3.5" /> Histórias
+                  {storiesCount > 0 && (
+                    <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{storiesCount}</span>
+                  )}
                 </TabsTrigger>
               )}
               {act && !createMode && (
@@ -1317,10 +1305,29 @@ export const EditActivityDialog = ({
                   })}
                 </div>
               )}
-              <div className="flex gap-2">
-                <Input placeholder="Adicionar sub-atividade..." value={newSubTitle} onChange={(e) => setNewSubTitle(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddSubActivity(); } }} className="h-8 text-sm" />
-                <Button type="button" size="sm" variant="outline" className="h-8 px-2" onClick={handleAddSubActivity}>
+              <div className="flex gap-2 items-center">
+                <Input
+                  placeholder="Adicionar sub-atividade..."
+                  value={newSubTitle}
+                  onChange={(e) => setNewSubTitle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddSubActivity(); } }}
+                  className="h-8 text-sm flex-1"
+                />
+                {newSubTitle.trim() && (
+                  <AIAssistButton
+                    value={newSubTitle}
+                    onChange={setNewSubTitle}
+                    context="activity_title"
+                  />
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2"
+                  onClick={handleAddSubActivity}
+                  disabled={!newSubTitle.trim()}
+                >
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
@@ -1340,6 +1347,13 @@ export const EditActivityDialog = ({
             <TabsContent value="comments" className="pt-4 mt-0">
           {act && (
             <ActivityComments activityId={act.id} />
+          )}
+            </TabsContent>
+
+            {/* ===== ABA HISTÓRIAS ===== */}
+            <TabsContent value="stories" className="pt-4 mt-0">
+          {act && projectId && (
+            <ActivityStoriesPanel activityId={act.id} projectId={projectId} />
           )}
             </TabsContent>
 
@@ -1423,19 +1437,19 @@ export const EditActivityDialog = ({
                 className="gap-2 text-primary border-primary/30 hover:bg-primary/10"
                 onClick={async () => {
                   if (!act) return;
-                  if (!confirm("Encerrar esta atividade? Após o encerramento, ela ficará marcada como finalizada administrativamente.")) return;
+                  if (!confirm("Arquivar esta atividade? Ela ficará marcada como arquivada e poderá ser consultada no histórico.")) return;
                   try {
                     const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", act.id);
                     if (error) throw error;
-                    toast({ title: "Atividade encerrada!" });
+                    toast({ title: "Atividade arquivada!" });
                     onActivityUpdated();
                     onOpenChange(false);
                   } catch {
-                    toast({ title: "Erro ao encerrar", variant: "destructive" });
+                    toast({ title: "Erro ao arquivar", variant: "destructive" });
                   }
                 }}
               >
-                <Lock className="w-4 h-4" /> Encerrar
+                <Lock className="w-4 h-4" /> Arquivar
               </Button>
             )}
             <Button type="button" variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
