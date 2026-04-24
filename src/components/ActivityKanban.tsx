@@ -571,7 +571,7 @@ function SortableColumn({
   onOpenCreateTask?: (stageId: string) => void;
   subActivityCounts: Map<string, number>;
   dependencyCounts?: Map<string, { pred: number; succ: number }>;
-  relationCounts?: Map<string, number>;
+  relationCounts?: Map<string, { id: string; title: string }[]>;
   isAdminOrGestor?: boolean;
   onRenameStage: (id: string, title: string) => Promise<void>;
   onDeleteStage: (id: string) => Promise<void>;
