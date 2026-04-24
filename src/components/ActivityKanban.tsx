@@ -440,35 +440,70 @@ function KanbanCard({
                     </Badge>
                   )}
                   {relationItems && relationItems.length > 0 ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1.5 py-0 h-5 gap-1 bg-background text-muted-foreground border-border/60 hover:bg-muted/40 hover:text-foreground transition-colors font-medium"
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium bg-background text-muted-foreground border border-border/60 hover:bg-muted/40 hover:text-foreground transition-colors"
+                          title="Gerenciar vínculos"
                         >
                           <Link2 className="w-2.5 h-2.5" strokeWidth={2.25} />
                           {relationItems.length}
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" align="start" className="max-w-xs p-2">
-                        <div className="text-[11px] font-semibold mb-1 text-foreground">
-                          {relationItems.length} {relationItems.length === 1 ? "vínculo" : "vínculos"}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="top"
+                        align="start"
+                        className="w-72 p-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-[11px] font-semibold text-foreground">
+                            {relationItems.length} {relationItems.length === 1 ? "vínculo" : "vínculos"}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                            className="text-[10px] text-primary hover:underline font-medium"
+                            title="Adicionar/editar vínculos na atividade"
+                          >
+                            + Adicionar
+                          </button>
                         </div>
-                        <ul className="space-y-0.5">
-                          {relationItems.slice(0, 6).map((r) => (
-                            <li key={r.id} className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                              <span className="font-mono text-[9px] text-muted-foreground/60">#{r.id.slice(0, 6)}</span>
-                              <span className="truncate">{r.title || "(sem título)"}</span>
+                        <ul className="space-y-1 max-h-64 overflow-auto">
+                          {relationItems.map((r) => (
+                            <li
+                              key={r.relationId}
+                              className="group flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-muted/60"
+                            >
+                              <span className="font-mono text-[9px] text-muted-foreground/60 shrink-0">
+                                #{r.id.slice(0, 6)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onOpenRelated?.(r.id); }}
+                                className="flex-1 min-w-0 text-left text-[11px] text-foreground truncate hover:text-primary hover:underline"
+                                title="Abrir atividade vinculada"
+                              >
+                                {r.title || "(sem título)"}
+                              </button>
+                              <span className="text-[9px] text-muted-foreground/70 shrink-0 capitalize">
+                                {r.relationType.replace(/_/g, " ")}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onRemoveRelation?.(r.relationId); }}
+                                className="p-0.5 rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                                title="Remover vínculo"
+                              >
+                                <XIcon className="w-3 h-3" />
+                              </button>
                             </li>
                           ))}
-                          {relationItems.length > 6 && (
-                            <li className="text-[10px] text-muted-foreground/70 italic">
-                              + {relationItems.length - 6} mais…
-                            </li>
-                          )}
                         </ul>
-                      </TooltipContent>
-                    </Tooltip>
+                      </PopoverContent>
+                    </Popover>
                   ) : null}
                 </div>
                 {subActivityCount && subActivityCount > 0 ? (
