@@ -684,43 +684,6 @@ export const EditActivityDialog = ({
                   </PropertyRow>
                 )}
 
-                {/* Tempo */}
-                {!formData.is_milestone && (
-                  <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <Input
-                        list="hours-options"
-                        placeholder="Ex: 2h 30m"
-                        value={formData.hours}
-                        onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
-                        onFocus={(e) => e.currentTarget.select()}
-                        className="h-7 px-2 text-xs w-[140px] cursor-pointer"
-                      />
-                      <datalist id="hours-options">
-                        <option value="15m" label="15 minutos" />
-                        <option value="30m" label="30 minutos" />
-                        <option value="45m" label="45 minutos" />
-                        {Array.from({ length: 80 }, (_, i) => i + 1).map((h) => (
-                          <option key={h} value={`${h}h`} label={h === 1 ? "1 hora" : `${h} horas`} />
-                        ))}
-                      </datalist>
-                    </div>
-                  </PropertyRow>
-                )}
-
-                {/* Custo */}
-                {!formData.is_milestone && (
-                  <PropertyRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Custo">
-                    <CurrencyInput
-                      step="0.01"
-                      min="0"
-                      value={formData.cost}
-                      onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                      className="h-7 pl-8 pr-2 py-0 text-xs w-[140px]"
-                    />
-                  </PropertyRow>
-                )}
-
                 {/* Relacionamentos inline */}
                 {projectId && (
                   <PropertyRow icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
@@ -762,6 +725,43 @@ export const EditActivityDialog = ({
                     ))}
                   </div>
                 </PropertyRow>
+
+                {/* Tempo */}
+                {!formData.is_milestone && (
+                  <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Input
+                        list="hours-options"
+                        placeholder="Ex: 2h 30m"
+                        value={formData.hours}
+                        onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
+                        onFocus={(e) => e.currentTarget.select()}
+                        className="h-7 px-2 text-xs w-[140px] cursor-pointer"
+                      />
+                      <datalist id="hours-options">
+                        <option value="15m" label="15 minutos" />
+                        <option value="30m" label="30 minutos" />
+                        <option value="45m" label="45 minutos" />
+                        {Array.from({ length: 80 }, (_, i) => i + 1).map((h) => (
+                          <option key={h} value={`${h}h`} label={h === 1 ? "1 hora" : `${h} horas`} />
+                        ))}
+                      </datalist>
+                    </div>
+                  </PropertyRow>
+                )}
+
+                {/* Custo */}
+                {!formData.is_milestone && (
+                  <PropertyRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Custo">
+                    <CurrencyInput
+                      step="0.01"
+                      min="0"
+                      value={formData.cost}
+                      onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+                      className="h-7 pl-8 pr-2 py-0 text-xs w-[140px]"
+                    />
+                  </PropertyRow>
+                )}
 
                 {/* Marco */}
                 <PropertyRow icon={<Diamond className={`w-3.5 h-3.5 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : ""}`} />} label="Marco">
