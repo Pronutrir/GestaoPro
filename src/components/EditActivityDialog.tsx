@@ -23,6 +23,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { UserPlus2 } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ActivityRelationsInline } from "@/components/ActivityRelationsInline";
+import { MessageSquare, Paperclip, ListTree, FileText } from "lucide-react";
 
 interface Activity {
   id: string;
