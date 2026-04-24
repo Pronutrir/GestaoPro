@@ -256,6 +256,8 @@ function KanbanCard({
   subActivityCount,
   dependencyCount,
   relationItems,
+  onOpenRelated,
+  onRemoveRelation,
   isExpanded,
   onToggleExpand,
 }: {
@@ -276,7 +278,9 @@ function KanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
-  relationItems?: { id: string; title: string }[];
+  relationItems?: { id: string; title: string; relationId: string; relationType: string }[];
+  onOpenRelated?: (activityId: string) => void;
+  onRemoveRelation?: (relationId: string) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
 }) {
