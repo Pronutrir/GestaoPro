@@ -39,12 +39,13 @@ const STAGES = [
 ] as const;
 
 const TYPES = [
-  { key: "estrategico",    label: "Estratégico",          icon: Target,     ring: "ring-blue-500/40",     soft: "bg-blue-500/10" },
-  { key: "operacional",    label: "Operacional",          icon: Settings2,  ring: "ring-slate-500/40",    soft: "bg-slate-500/10" },
-  { key: "novos_negocios", label: "Novos Negócios",       icon: Briefcase,  ring: "ring-emerald-500/40",  soft: "bg-emerald-500/10" },
-  { key: "parceria",       label: "Parceria",             icon: Handshake,  ring: "ring-amber-500/40",    soft: "bg-amber-500/10" },
-  { key: "melhoria",       label: "Melhoria de Processo", icon: TrendingUp, ring: "ring-cyan-500/40",     soft: "bg-cyan-500/10" },
-  { key: "inovacao",       label: "Inovação",             icon: Sparkles,   ring: "ring-fuchsia-500/40",  soft: "bg-fuchsia-500/10" },
+const TYPES = [
+  { key: "estrategico",    label: "Estratégico",          icon: Target,     accent: "bg-blue-500",     iconBg: "bg-blue-500/10",     iconFg: "text-blue-600 dark:text-blue-400" },
+  { key: "operacional",    label: "Operacional",          icon: Settings2,  accent: "bg-slate-500",    iconBg: "bg-slate-500/10",    iconFg: "text-slate-600 dark:text-slate-300" },
+  { key: "novos_negocios", label: "Novos Negócios",       icon: Briefcase,  accent: "bg-emerald-500",  iconBg: "bg-emerald-500/10",  iconFg: "text-emerald-600 dark:text-emerald-400" },
+  { key: "parceria",       label: "Parceria",             icon: Handshake,  accent: "bg-amber-500",    iconBg: "bg-amber-500/10",    iconFg: "text-amber-600 dark:text-amber-400" },
+  { key: "melhoria",       label: "Melhoria de Processo", icon: TrendingUp, accent: "bg-cyan-500",     iconBg: "bg-cyan-500/10",     iconFg: "text-cyan-600 dark:text-cyan-400" },
+  { key: "inovacao",       label: "Inovação",             icon: Sparkles,   accent: "bg-fuchsia-500",  iconBg: "bg-fuchsia-500/10",  iconFg: "text-fuchsia-600 dark:text-fuchsia-400" },
 ] as const;
 
 const normalize = (v: string | null | undefined) =>
@@ -97,13 +98,11 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
   const grouped = useMemo(() => {
     const map: Record<string, PipelineProject[]> = {};
     TYPES.forEach((t) => (map[t.key] = []));
-    const semTipo: PipelineProject[] = [];
     filtered.forEach((p) => {
       const tKey = matchType(p.project_type);
       if (tKey) map[tKey].push(p);
-      else semTipo.push(p);
     });
-    return { map, semTipo };
+    return { map };
   }, [filtered]);
 
   const computeMetrics = (items: PipelineProject[]) => {
@@ -193,73 +192,88 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
           const TypeIcon = t.icon;
 
           return (
-            <Card key={t.key} className={`overflow-hidden ring-1 ${t.ring} bg-card transition-all`}>
-              <div className={`px-4 py-3 ${t.soft} border-b border-border`}>
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <button onClick={() => toggle(t.key)} className="flex items-center gap-3 group">
+            <Card
+              key={t.key}
+              className="overflow-hidden border border-border/60 bg-card hover:border-border transition-all relative"
+            >
+              {/* Faixa de acento lateral */}
+              <div className={`absolute left-0 top-0 bottom-0 w-1 ${t.accent}`} />
+
+              {/* HEADER limpo */}
+              <div className="pl-5 pr-4 py-3.5 border-b border-border/60">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <button
+                    onClick={() => toggle(t.key)}
+                    className="flex items-center gap-3 group min-w-0"
+                  >
                     {isCollapsed ? (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                     ) : (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                      <ChevronDown className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                     )}
-                    <div className={`h-9 w-9 rounded-lg ${t.soft} ring-1 ${t.ring} flex items-center justify-center`}>
-                      <TypeIcon className="h-4 w-4 text-foreground" />
+                    <div className={`h-9 w-9 rounded-lg ${t.iconBg} flex items-center justify-center shrink-0`}>
+                      <TypeIcon className={`h-4.5 w-4.5 ${t.iconFg}`} />
                     </div>
-                    <div className="text-left">
-                      <h3 className="text-base font-bold text-foreground">{t.label}</h3>
-                      <p className="text-[11px] text-muted-foreground">
-                        {m.total} projeto{m.total !== 1 ? "s" : ""} · {m.live} em execução · {m.blocked} bloqueado{m.blocked !== 1 ? "s" : ""}
+                    <div className="text-left min-w-0">
+                      <h3 className="text-[15px] font-semibold text-foreground tracking-tight">{t.label}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        <span className="font-medium text-foreground">{m.total}</span> projeto{m.total !== 1 ? "s" : ""}
+                        {m.live > 0 && <> · <span className="text-emerald-600 dark:text-emerald-400 font-medium">{m.live}</span> em execução</>}
+                        {m.blocked > 0 && <> · <span className="text-red-600 dark:text-red-400 font-medium">{m.blocked}</span> bloqueado{m.blocked !== 1 ? "s" : ""}</>}
                       </p>
                     </div>
                   </button>
 
-                  <div className="flex items-center gap-1.5 ml-auto">
+                  {/* Mini-pipeline minimalista */}
+                  <div className="flex items-center gap-1 ml-auto">
                     {STAGES.map((s) => {
                       const c = m.stageCount[s.key];
+                      const active = c > 0;
                       return (
                         <div
                           key={s.key}
-                          className={`px-2 py-1 rounded-md text-[10px] font-semibold flex items-center gap-1.5 border ${
-                            c > 0
-                              ? "bg-card border-border text-foreground"
-                              : "bg-transparent border-dashed border-border/60 text-muted-foreground/50"
+                          title={`${s.label}: ${c}`}
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                            active
+                              ? "bg-muted/60 text-foreground"
+                              : "text-muted-foreground/40"
                           }`}
-                          title={s.label}
                         >
-                          <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-                          {s.short} <span className="ml-0.5">{c}</span>
+                          <span className={`h-1.5 w-1.5 rounded-full ${active ? s.dot : "bg-muted-foreground/20"}`} />
+                          <span className="tracking-tight">{s.short}</span>
+                          <span className={active ? "tabular-nums" : "tabular-nums opacity-60"}>{c}</span>
                         </div>
                       );
                     })}
                   </div>
                 </div>
 
+                {/* Métricas compactas em uma linha */}
                 {m.total > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                    <div>
-                      <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-                        <span>Progresso médio</span>
-                        <span className="font-semibold text-foreground">{m.avgProgress}%</span>
-                      </div>
-                      <Progress value={m.avgProgress} className="h-1.5" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 mt-3 pl-7">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] text-muted-foreground w-28 shrink-0">Progresso médio</span>
+                      <Progress value={m.avgProgress} className="h-1 flex-1" />
+                      <span className="text-[11px] font-semibold text-foreground tabular-nums w-9 text-right">{m.avgProgress}%</span>
                     </div>
-                    <div>
-                      <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-                        <span>Orçamento usado</span>
-                        <span className="font-semibold text-foreground">
-                          {fmtCurrency(m.used)} / {fmtCurrency(m.planned)}
-                        </span>
-                      </div>
-                      <Progress value={m.planned ? Math.min(100, (m.used / m.planned) * 100) : 0} className="h-1.5" />
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] text-muted-foreground w-28 shrink-0">Orçamento usado</span>
+                      <Progress
+                        value={m.planned ? Math.min(100, (m.used / m.planned) * 100) : 0}
+                        className="h-1 flex-1"
+                      />
+                      <span className="text-[11px] font-medium text-muted-foreground tabular-nums whitespace-nowrap">
+                        {fmtCurrency(m.used)} <span className="opacity-50">/</span> {fmtCurrency(m.planned)}
+                      </span>
                     </div>
                   </div>
                 )}
               </div>
 
               {!isCollapsed && (
-                <div className="p-3">
+                <div className="p-3 pl-4">
                   {m.total === 0 ? (
-                    <div className="py-8 text-center text-xs text-muted-foreground border border-dashed border-border rounded-md">
+                    <div className="py-6 text-center text-xs text-muted-foreground/70">
                       Nenhum projeto deste tipo {stageFilter !== "all" ? "no estágio selecionado" : "ainda"}.
                     </div>
                   ) : (
@@ -270,29 +284,29 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
                           <button
                             key={p.id}
                             onClick={() => navigate(`/project/${p.id}`)}
-                            className="text-left p-3 rounded-lg border border-border bg-card hover:border-primary/50 hover:shadow-md hover:-translate-y-0.5 transition-all group"
+                            className="text-left p-3 rounded-lg border border-border/60 bg-background hover:border-primary/40 hover:shadow-sm hover:-translate-y-0.5 transition-all group"
                           >
                             <div className="flex items-start justify-between gap-2 mb-2">
-                              <h4 className="text-sm font-semibold text-foreground line-clamp-2 group-hover:text-primary">
+                              <h4 className="text-sm font-semibold text-foreground line-clamp-2 group-hover:text-primary transition-colors leading-tight">
                                 {p.title}
                               </h4>
                               <PriorityDot p={p.priority} />
                             </div>
                             <div className="flex items-center justify-between gap-2 mb-2">
                               {stage && (
-                                <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0">
+                                <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 font-normal">
                                   <span className={`h-1.5 w-1.5 rounded-full ${stage.dot}`} />
                                   {stage.label}
                                 </Badge>
                               )}
-                              <span className="text-[10px] font-semibold text-muted-foreground">
+                              <span className="text-[10px] font-semibold text-muted-foreground tabular-nums">
                                 {p.completion_percentage || 0}%
                               </span>
                             </div>
                             <Progress value={p.completion_percentage || 0} className="h-1" />
                             {p.owner && (
                               <p className="text-[10px] text-muted-foreground mt-2 truncate">
-                                👤 {p.owner}
+                                {p.owner}
                               </p>
                             )}
                           </button>
@@ -305,31 +319,6 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
             </Card>
           );
         })}
-
-        {grouped.semTipo.length > 0 && (
-          <Card className="overflow-hidden border-dashed">
-            <div className="px-4 py-3 bg-muted/30 border-b border-dashed border-border">
-              <h3 className="text-sm font-semibold text-muted-foreground">
-                Sem tipo definido · {grouped.semTipo.length}
-              </h3>
-              <p className="text-[11px] text-muted-foreground/80">
-                Defina o tipo destes projetos para que apareçam nas faixas acima.
-              </p>
-            </div>
-            <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
-              {grouped.semTipo.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => navigate(`/project/${p.id}`)}
-                  className="text-left p-3 rounded-lg border border-dashed border-border bg-muted/20 hover:bg-card hover:border-primary/50 transition-all"
-                >
-                  <h4 className="text-sm font-semibold text-foreground line-clamp-2">{p.title}</h4>
-                  <p className="text-[10px] text-muted-foreground mt-1">Tipo não definido</p>
-                </button>
-              ))}
-            </div>
-          </Card>
-        )}
       </div>
     </div>
   );
