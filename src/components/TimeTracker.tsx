@@ -236,29 +236,54 @@ export const TimeTracker = ({ projectId, activities }: TimeTrackerProps) => {
 
       {/* Manual Entry Form */}
       {showManualForm && (
-        <div className="flex gap-2 items-end p-3 bg-accent/30 rounded-lg">
-          <div>
-            <label className="text-xs text-muted-foreground">Horas</label>
-            <Input
-              type="number"
-              min="0"
-              value={manualHours}
-              onChange={(e) => setManualHours(e.target.value)}
-              className="w-20"
-            />
+        <div className="space-y-2 p-3 bg-accent/30 rounded-lg">
+          <div className="flex gap-2 items-end">
+            <div>
+              <label className="text-xs text-muted-foreground">Horas</label>
+              <Input
+                type="number"
+                min="0"
+                value={manualHours}
+                onChange={(e) => setManualHours(e.target.value)}
+                className="w-20"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Minutos</label>
+              <Input
+                type="number"
+                min="0"
+                max="59"
+                value={manualMinutes}
+                onChange={(e) => setManualMinutes(e.target.value)}
+                className="w-20"
+              />
+            </div>
+            <Button size="sm" onClick={handleManualEntry}>Registrar</Button>
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Minutos</label>
-            <Input
-              type="number"
-              min="0"
-              max="59"
-              value={manualMinutes}
-              onChange={(e) => setManualMinutes(e.target.value)}
-              className="w-20"
-            />
+          {/* Atalhos rápidos de tempo */}
+          <div className="flex gap-1 flex-wrap pt-1">
+            <span className="text-[11px] text-muted-foreground self-center mr-1">Atalhos:</span>
+            {[0.25, 0.5, 1, 2, 4, 8].map((h) => {
+              const totalMin = Math.round(h * 60);
+              const hh = Math.floor(totalMin / 60);
+              const mm = totalMin % 60;
+              const label = h < 1 ? `${totalMin}m` : `${h}h`;
+              return (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => {
+                    setManualHours(String(hh));
+                    setManualMinutes(String(mm));
+                  }}
+                  className="px-2 h-6 rounded-md text-[11px] font-medium border border-border text-muted-foreground hover:border-primary/50 hover:text-primary transition-all"
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
-          <Button size="sm" onClick={handleManualEntry}>Registrar</Button>
         </div>
       )}
 
