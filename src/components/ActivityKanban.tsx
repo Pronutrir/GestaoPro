@@ -676,10 +676,12 @@ function SortableColumn({
   const phaseOrderMap: Record<string, number> = {};
   phases.forEach((p, i) => { phaseOrderMap[p.id] = i; });
   const priorityWeight: Record<string, number> = { high: 0, medium: 1, low: 2 };
+  const stageActivityIds = useMemo(() => new Set(stageActivities.map((a) => a.id)), [stageActivities]);
 
   const sortedActivities = useMemo(() => {
-    // Show only root activities at column level; sub-activities render inline below their parent when expanded
-    const sorted = stageActivities.filter((a) => !a.parent_id);
+    // Exibe como card toda atividade desta coluna, exceto subtarefas cujo pai também está nesta mesma coluna.
+    // Essas continuam aparecendo inline apenas quando o pai é expandido.
+    const sorted = stageActivities.filter((a) => !a.parent_id || !stageActivityIds.has(a.parent_id));
     sorted.sort((a, b) => {
       switch (colSort) {
         case "wbs_asc": {
@@ -712,7 +714,14 @@ function SortableColumn({
       }
     });
     return sorted;
-  }, [stageActivities, colSort, phases]);
+  }, [stageActivities, stageActivityIds, colSort, phases]);
+
+  const visibleCardCount = useMemo(() => {
+    return sortedActivities.reduce((total, activity) => {
+      const inlineChildren = (childrenByParent.get(activity.id) || []).filter((child) => stageActivityIds.has(child.id));
+      return total + 1 + (expandedIds.has(activity.id) ? inlineChildren.length : 0);
+    }, 0);
+  }, [sortedActivities, childrenByParent, stageActivityIds, expandedIds]);
 
   return (
     <div
@@ -765,28 +774,13 @@ function SortableColumn({
                 {stage.title}
               </h3>
             )}
-            {(() => {
-              const visibleCount = sortedActivities.length;        // pais exibidos como cards
-              const subCount = stageActivities.length - visibleCount; // subtarefas desta coluna cujo pai está em outra
-              return (
-                <Badge
-                  variant="secondary"
-                  className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0"
-                  title={
-                    subCount > 0
-                      ? `${visibleCount} card(s) nesta coluna + ${subCount} subtarefa(s) cujo pai está em outra coluna`
-                      : `${visibleCount} card(s) nesta coluna`
-                  }
-                >
-                  {visibleCount}
-                  {subCount > 0 && (
-                    <span className="ml-1 text-muted-foreground font-normal">
-                      +{subCount}
-                    </span>
-                  )}
-                </Badge>
-              );
-            })()}
+            <Badge
+              variant="secondary"
+              className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0"
+              title={`${visibleCardCount} card(s) visível(is) nesta coluna`}
+            >
+              {visibleCardCount}
+            </Badge>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {canCreate && (
@@ -988,7 +982,7 @@ function SortableColumn({
             </div>
           ) : (
             sortedActivities.map((activity) => {
-              const children = childrenByParent.get(activity.id) || [];
+              const children = (childrenByParent.get(activity.id) || []).filter((child) => stageActivityIds.has(child.id));
               const expanded = expandedIds.has(activity.id);
               return (
                 <div key={activity.id} className="space-y-1.5">
