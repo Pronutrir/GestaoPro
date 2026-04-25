@@ -123,6 +123,15 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
 
   const portfolio = useMemo(() => computeMetrics(filtered), [filtered]);
 
+  // Ordena tipos dinamicamente: mais projetos primeiro; vazios ao final
+  const sortedTypes = useMemo(() => {
+    return [...TYPES].sort((a, b) => {
+      const ca = grouped.map[a.key].length;
+      const cb = grouped.map[b.key].length;
+      return cb - ca;
+    });
+  }, [grouped]);
+
   const toggle = (k: string) => setCollapsed((prev) => ({ ...prev, [k]: !prev[k] }));
 
   return (
@@ -184,7 +193,7 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
 
       {/* SWIM LANES */}
       <div className="space-y-4">
-        {TYPES.map((t) => {
+        {sortedTypes.map((t) => {
           const items = grouped.map[t.key];
           const m = computeMetrics(items);
           const isEmpty = m.total === 0;
