@@ -242,6 +242,60 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     onActivityCreated?.();
   }, [editor, projectId, stages, onActivityCreated]);
 
+  /* ---------- AI assist on selection (or current line) ---------- */
+  const getAITargetRange = useCallback(() => {
+    if (!editor) return null;
+    const { state } = editor;
+    const { from, to, empty } = state.selection;
+    if (!empty) {
+      const text = state.doc.textBetween(from, to, "\n", " ").trim();
+      return text ? { from, to, text, mode: "selection" as const } : null;
+    }
+    const $from = state.doc.resolve(from);
+    const blockStart = $from.start();
+    const blockEnd = $from.end();
+    const text = state.doc.textBetween(blockStart, blockEnd, "\n", " ").trim();
+    return text ? { from: blockStart, to: blockEnd, text, mode: "line" as const } : null;
+  }, [editor]);
+
+  const [aiTargetText, setAiTargetText] = useState("");
+  const aiRangeRef = useRef<{ from: number; to: number } | null>(null);
+
+  const refreshAITarget = useCallback(() => {
+    const target = getAITargetRange();
+    if (target) {
+      setAiTargetText(target.text);
+      aiRangeRef.current = { from: target.from, to: target.to };
+    } else {
+      setAiTargetText("");
+      aiRangeRef.current = null;
+    }
+  }, [getAITargetRange]);
+
+  useEffect(() => {
+    if (!editor) return;
+    refreshAITarget();
+    editor.on("selectionUpdate", refreshAITarget);
+    editor.on("update", refreshAITarget);
+    return () => {
+      editor.off("selectionUpdate", refreshAITarget);
+      editor.off("update", refreshAITarget);
+    };
+  }, [editor, refreshAITarget]);
+
+  const applyAIResult = useCallback(
+    (next: string) => {
+      if (!editor || !aiRangeRef.current) return;
+      const { from, to } = aiRangeRef.current;
+      editor
+        .chain()
+        .focus()
+        .insertContentAt({ from, to }, next)
+        .run();
+    },
+    [editor]
+  );
+
   /* ---------- Apply slash command ---------- */
   const applySlash = useCallback(
     async (key: SlashKey) => {
