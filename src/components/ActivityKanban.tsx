@@ -982,7 +982,8 @@ function SortableColumn({
             </div>
           ) : (
             sortedActivities.map((activity) => {
-              const children = (childrenByParent.get(activity.id) || []).filter((child) => stageActivityIds.has(child.id));
+              const allChildren = childrenByParent.get(activity.id) || [];
+              const inlineChildren = allChildren.filter((child) => stageActivityIds.has(child.id));
               const expanded = expandedIds.has(activity.id);
               return (
                 <div key={activity.id} className="space-y-1.5">
@@ -1005,13 +1006,13 @@ function SortableColumn({
                     relationItems={relationCounts?.get(activity.id) || []}
                     onOpenRelated={onOpenRelated}
                     onRemoveRelation={onRemoveRelation}
-                    subActivityCount={children.length}
+                    subActivityCount={allChildren.length}
                     isExpanded={expanded}
                     onToggleExpand={() => toggleExpanded(activity.id)}
                   />
-                  {expanded && children.length > 0 && (
+                  {expanded && inlineChildren.length > 0 && (
                     <div className="ml-4 pl-2 border-l-2 border-primary/30 space-y-1.5">
-                      {children.map((child) => (
+                      {inlineChildren.map((child) => (
                         <KanbanCard
                           key={child.id}
                           activity={child}
