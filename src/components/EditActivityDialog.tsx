@@ -418,9 +418,11 @@ export const EditActivityDialog = ({
         tags: formData.tags,
         parent_id: formData.parent_id || null,
         story_points: parseInt(formData.story_points) || 0,
-        raci_role: formData.raci_role || null,
-        participants: formData.participants,
-        participant_roles: formData.participant_roles ?? {},
+        raci_role: "A", // Líder do projeto é sempre Accountable
+        participants: formData.participants.filter((p) => p && p.trim().length > 0),
+        participant_roles: Object.fromEntries(
+          Object.entries(formData.participant_roles ?? {}).filter(([k]) => k && k.trim().length > 0)
+        ),
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
         ui_color_tag: formData.ui_color_tag || null,
