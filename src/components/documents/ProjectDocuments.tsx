@@ -586,6 +586,13 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                     >
                       <CheckSquare className="h-3.5 w-3.5" /> Criar tarefa no Kanban
                     </Button>
+                    <AIAssistButton
+                      value={aiTargetText}
+                      onChange={applyAIResult}
+                      context="generic"
+                      label={aiTargetText ? "IA" : "IA (selecione texto)"}
+                      className="h-7"
+                    />
                   </div>
                 )}
 
