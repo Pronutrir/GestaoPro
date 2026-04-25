@@ -188,8 +188,8 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
           const items = grouped.map[t.key];
           const m = computeMetrics(items);
           const isEmpty = m.total === 0;
-          // Vazias colapsam por padrão; usuário pode expandir manualmente
-          const isCollapsed = collapsed[t.key] ?? isEmpty;
+          // Todas as faixas iniciam colapsadas — usuário expande manualmente
+          const isCollapsed = collapsed[t.key] ?? true;
           const TypeIcon = t.icon;
 
           return (
@@ -247,7 +247,7 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
                             className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium bg-muted/60 text-foreground"
                           >
                             <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-                            <span className="tracking-tight">{s.short}</span>
+                            <span className="tracking-tight">{s.label}</span>
                             <span className="tabular-nums">{c}</span>
                           </div>
                         );
