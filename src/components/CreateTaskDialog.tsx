@@ -15,6 +15,7 @@ import {
   User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Paperclip, ChevronDown, Loader2,
 } from "lucide-react";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { GutPrioritySelector } from "@/components/GutPrioritySelector";
 
 export interface Phase { id: string; title: string }
 export interface WorkflowStage { id: string; title: string; color: string; is_final?: boolean }
