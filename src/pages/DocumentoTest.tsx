@@ -15,7 +15,7 @@ import {
   Bold, Italic, List, ListOrdered, Heading1, Heading2, Quote,
   Type, ListChecks, ArrowRight,
 } from "lucide-react";
-import { useEditor, EditorContent, BubbleMenu } from "@tiptap/react";
+import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
@@ -502,7 +502,7 @@ export default function DocumentoTest() {
                 />
 
                 {editor && (
-                  <BubbleMenu editor={editor} className="flex items-center gap-0.5 p-1 rounded-md border bg-popover shadow-lg">
+                  <div className="sticky top-0 z-10 -mx-2 mb-3 flex items-center gap-0.5 p-1 rounded-md border bg-card/95 backdrop-blur shadow-sm w-fit">
                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
                       onClick={() => editor.chain().focus().toggleBold().run()}>
                       <Bold className="h-3.5 w-3.5" />
@@ -511,12 +511,32 @@ export default function DocumentoTest() {
                       onClick={() => editor.chain().focus().toggleItalic().run()}>
                       <Italic className="h-3.5 w-3.5" />
                     </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                      onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
+                      <Heading1 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                      onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
+                      <Heading2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                      onClick={() => editor.chain().focus().toggleBulletList().run()}>
+                      <List className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                      onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+                      <ListOrdered className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                      onClick={() => editor.chain().focus().toggleTaskList().run()}>
+                      <ListChecks className="h-3.5 w-3.5" />
+                    </Button>
                     <div className="h-4 w-px bg-border mx-0.5" />
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1"
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1 text-primary"
                       onClick={convertCurrentLineToTask}>
                       <CheckSquare className="h-3.5 w-3.5" /> Criar tarefa
                     </Button>
-                  </BubbleMenu>
+                  </div>
                 )}
 
                 <EditorContent editor={editor} />
