@@ -727,19 +727,16 @@ export const EditActivityDialog = ({
                   </select>
                 </PropertyRow>
 
-                {/* Prioridade compacta */}
-                <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade">
-                  <div className="flex gap-1">
-                    {[
-                      { value: "low", label: "Baixa", color: "bg-muted text-muted-foreground border-border" },
-                      { value: "medium", label: "Média", color: "bg-warning/15 text-warning border-warning/30" },
-                      { value: "high", label: "Alta", color: "bg-destructive/15 text-destructive border-destructive/30" },
-                    ].map((p) => (
-                      <button key={p.value} type="button"
-                        className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-all ${formData.priority === p.value ? `${p.color} ring-1 ring-current/30` : "border-border text-muted-foreground hover:border-foreground/30"}`}
-                        onClick={() => setFormData({ ...formData, priority: p.value })}
-                      >{p.label}</button>
-                    ))}
+                {/* Prioridade — método GUT */}
+                <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
+                  <div className="w-full">
+                    <GutPrioritySelector
+                      gravity={formData.gravity}
+                      urgency={formData.urgency}
+                      tendency={formData.tendency}
+                      onChange={(v) => setFormData({ ...formData, ...v })}
+                      compact
+                    />
                   </div>
                 </PropertyRow>
 
