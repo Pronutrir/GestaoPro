@@ -204,11 +204,11 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
             <Card
               key={t.key}
               className={`overflow-hidden border bg-card transition-all relative ${
-                isEmpty ? "border-border/40 opacity-70 hover:opacity-100" : "border-border/60 hover:border-border"
+                isEmpty ? "border-border/60 hover:border-border" : "border-border/60 hover:border-border"
               }`}
             >
               {/* Faixa de acento lateral */}
-              <div className={`absolute left-0 top-0 bottom-0 w-1 ${t.accent} ${isEmpty ? "opacity-40" : ""}`} />
+              <div className={`absolute left-0 top-0 bottom-0 w-1 ${t.accent}`} />
 
               {/* HEADER limpo */}
               <div className={`pl-5 pr-4 ${isEmpty ? "py-2.5" : "py-3.5"} ${!isCollapsed ? "border-b border-border/60" : ""}`}>
