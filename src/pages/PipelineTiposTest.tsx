@@ -23,9 +23,9 @@ import {
 } from "recharts";
 
 /**
- * PÁGINA DE TESTE — junção do Dashboard Geral (KPIs + gráficos) com a nova
- * visualização "Pipeline por Tipo de Projeto" (swim lanes).
- * Rota: /pipeline-tipos-test  — não substitui a Visão Geral oficial.
+ * Visão Geral oficial — Dashboard Geral (KPIs + gráficos) +
+ * Pipeline por Tipo de Projeto (swim lanes).
+ * Rota: /
  */
 
 interface Project {
@@ -186,15 +186,12 @@ const PipelineTiposTest = () => {
   ];
 
   return (
-    <AppLayout title="🧪 Visão Geral + Pipeline por Tipo">
+    <AppLayout title="Visão Geral">
       <main className="px-4 py-6 space-y-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h2 className="text-3xl font-bold text-foreground mb-2">Dashboard Geral</h2>
           </div>
-          <Badge variant="outline" className="border-amber-500/40 text-amber-600">
-            🧪 Página de teste · /pipeline-tipos-test
-          </Badge>
         </div>
 
         {isLoading ? (

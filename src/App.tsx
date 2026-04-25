@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
-import Overview from "./pages/Overview";
+import Overview from "./pages/PipelineTiposTest";
 import Dashboard from "./pages/Dashboard";
 import ProjectDetails from "./pages/ProjectDetails";
 import Setup from "./pages/Setup";
@@ -23,7 +23,6 @@ import OKRs from "./pages/OKRs";
 import Calendario from "./pages/Calendario";
 import Trash from "./pages/Trash";
 import NotFound from "./pages/NotFound";
-import PipelineTiposTest from "./pages/PipelineTiposTest";
 import DocumentoTest from "./pages/DocumentoTest";
 
 const queryClient = new QueryClient();
@@ -53,7 +52,6 @@ const App = () => (
             <Route path="/reports" element={<ProtectedRoute gestorOnly><Reports /></ProtectedRoute>} />
             <Route path="/trash" element={<ProtectedRoute><Trash /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute adminOnly><Settings /></ProtectedRoute>} />
-            <Route path="/pipeline-tipos-test" element={<ProtectedRoute><PipelineTiposTest /></ProtectedRoute>} />
             <Route path="/documento-test" element={<ProtectedRoute><DocumentoTest /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
