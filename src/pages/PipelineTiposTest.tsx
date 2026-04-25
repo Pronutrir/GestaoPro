@@ -479,18 +479,6 @@ const PipelineTiposTest = () => {
                 completion_percentage: p.completion_percentage ?? 0,
               }))}
             />
-
-            {/* Rodapé de teste */}
-            <Card className="p-4 bg-amber-500/5 border-amber-500/30">
-              <p className="text-xs text-muted-foreground">
-                ⚠️ <strong>Página de teste isolada.</strong> Junção do Dashboard Geral com a visão de swim lanes por tipo de projeto. A Visão Geral oficial permanece inalterada.
-              </p>
-              <div className="flex gap-2 mt-3">
-                <Button size="sm" variant="outline" onClick={() => navigate("/")}>
-                  Voltar à Visão Geral
-                </Button>
-              </div>
-            </Card>
           </>
         )}
       </main>
