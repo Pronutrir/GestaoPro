@@ -30,6 +30,7 @@ import { TableHeader } from "@tiptap/extension-table-header";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TaskReferenceNode } from "./TaskReferenceCard";
+import { AIAssistButton, type AIAction } from "@/components/AIAssistButton";
 
 interface PageDoc {
   id: string;
