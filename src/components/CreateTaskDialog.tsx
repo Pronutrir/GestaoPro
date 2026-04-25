@@ -15,6 +15,7 @@ import {
   User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Paperclip, ChevronDown, Loader2,
 } from "lucide-react";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { GutPrioritySelector } from "@/components/GutPrioritySelector";
 
 export interface Phase { id: string; title: string }
 export interface WorkflowStage { id: string; title: string; color: string; is_final?: boolean }
@@ -95,7 +96,10 @@ export const CreateTaskDialog = ({
     cost: "0",
     hours: "",
     phase_id: "",
-    priority: "medium",
+    priority: "pendente",
+    gravity: null as number | null,
+    urgency: null as number | null,
+    tendency: null as number | null,
     tags: [] as string[],
     story_points: "0",
     raci_role: "",
@@ -137,7 +141,10 @@ export const CreateTaskDialog = ({
         cost: "0",
         hours: "",
         phase_id: defaultPhaseId ?? "",
-        priority: "medium",
+        priority: "pendente",
+        gravity: null,
+        urgency: null,
+        tendency: null,
         tags: [],
         story_points: "0",
         raci_role: "",
@@ -173,7 +180,9 @@ export const CreateTaskDialog = ({
         title: formData.title.trim(),
         description: formData.description.trim() || null,
         status: defaultStatus || "pending",
-        priority: formData.priority,
+        gravity: formData.gravity,
+        urgency: formData.urgency,
+        tendency: formData.tendency,
         workflow_stage_id: stageId,
         phase_id: formData.phase_id || null,
         parent_id: defaultParentId ?? null,
@@ -306,23 +315,18 @@ export const CreateTaskDialog = ({
             />
           </div>
 
-          {/* Priority */}
+          {/* Priority — método GUT */}
           <div className="space-y-2">
             <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Flag className="w-4 h-4" /> Prioridade
+              <Flag className="w-4 h-4" /> Prioridade (GUT)
             </Label>
-            <div className="flex gap-2">
-              {[
-                { value: "low", label: "Baixa", color: "bg-muted text-muted-foreground" },
-                { value: "medium", label: "Média", color: "bg-warning/20 text-warning" },
-                { value: "high", label: "Alta", color: "bg-destructive/20 text-destructive" },
-              ].map((p) => (
-                <button key={p.value} type="button"
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-all ${formData.priority === p.value ? `${p.color} border-current ring-2 ring-current/20` : "border-border text-muted-foreground hover:border-foreground/30"}`}
-                  onClick={() => setFormData({ ...formData, priority: p.value })}
-                >{p.label}</button>
-              ))}
-            </div>
+            <GutPrioritySelector
+              gravity={formData.gravity}
+              urgency={formData.urgency}
+              tendency={formData.tendency}
+              onChange={(v) => setFormData({ ...formData, ...v })}
+              compact
+            />
           </div>
 
           {/* Responsável + RACI */}

@@ -18,6 +18,7 @@ import { ActivityComments } from "@/components/ActivityComments";
 import { TaskRelations } from "@/components/TaskRelations";
 import { useTaskBlockers } from "@/hooks/useTaskBlockers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { GutPrioritySelector } from "@/components/GutPrioritySelector";
 import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon } from "lucide-react";
 import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -132,7 +133,10 @@ export const EditActivityDialog = ({
   const [formData, setFormData] = useState({
     title: "", description: "", assigned_to: "",
     start_date: "", end_date: "", cost: "", hours: "",
-    phase_id: "", priority: "medium",
+    phase_id: "", priority: "pendente",
+    gravity: null as number | null,
+    urgency: null as number | null,
+    tendency: null as number | null,
     tags: [] as string[], parent_id: "",
     story_points: "0", raci_role: "",
     participants: [] as string[],
@@ -331,7 +335,10 @@ export const EditActivityDialog = ({
         cost: act.cost?.toString() || "0",
         hours: formatHoursDisplay(act.hours || 0),
         phase_id: act.phase_id || "",
-        priority: act.priority || "medium",
+        priority: act.priority || "pendente",
+        gravity: (act as any).gravity ?? null,
+        urgency: (act as any).urgency ?? null,
+        tendency: (act as any).tendency ?? null,
         tags: act.tags || [],
         parent_id: act.parent_id || "",
         story_points: (act as any).story_points?.toString() || "0",
@@ -414,7 +421,9 @@ export const EditActivityDialog = ({
         cost: parseFloat(formData.cost) || 0,
         hours: parseHoursInput(formData.hours),
         phase_id: formData.phase_id || null,
-        priority: formData.priority,
+        gravity: formData.gravity,
+        urgency: formData.urgency,
+        tendency: formData.tendency,
         tags: formData.tags,
         parent_id: formData.parent_id || null,
         story_points: parseInt(formData.story_points) || 0,
@@ -719,19 +728,16 @@ export const EditActivityDialog = ({
                   </select>
                 </PropertyRow>
 
-                {/* Prioridade compacta */}
-                <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade">
-                  <div className="flex gap-1">
-                    {[
-                      { value: "low", label: "Baixa", color: "bg-muted text-muted-foreground border-border" },
-                      { value: "medium", label: "Média", color: "bg-warning/15 text-warning border-warning/30" },
-                      { value: "high", label: "Alta", color: "bg-destructive/15 text-destructive border-destructive/30" },
-                    ].map((p) => (
-                      <button key={p.value} type="button"
-                        className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-all ${formData.priority === p.value ? `${p.color} ring-1 ring-current/30` : "border-border text-muted-foreground hover:border-foreground/30"}`}
-                        onClick={() => setFormData({ ...formData, priority: p.value })}
-                      >{p.label}</button>
-                    ))}
+                {/* Prioridade — método GUT */}
+                <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
+                  <div className="w-full">
+                    <GutPrioritySelector
+                      gravity={formData.gravity}
+                      urgency={formData.urgency}
+                      tendency={formData.tendency}
+                      onChange={(v) => setFormData({ ...formData, ...v })}
+                      compact
+                    />
                   </div>
                 </PropertyRow>
 

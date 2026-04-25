@@ -28,6 +28,7 @@ export type Database = {
           description: string | null
           display_order: number | null
           end_date: string | null
+          gravity: number | null
           hours: number | null
           id: string
           is_critical: boolean
@@ -39,6 +40,7 @@ export type Database = {
           participants: string[] | null
           phase_id: string | null
           priority: string
+          priority_score: number | null
           project_id: string
           raci_role: string | null
           sprint_id: string | null
@@ -46,10 +48,12 @@ export type Database = {
           status: string
           story_points: number | null
           tags: string[] | null
+          tendency: number | null
           title: string
           trashed_at: string | null
           ui_color_tag: string | null
           updated_at: string
+          urgency: number | null
           workflow_stage_id: string | null
         }
         Insert: {
@@ -65,6 +69,7 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           end_date?: string | null
+          gravity?: number | null
           hours?: number | null
           id?: string
           is_critical?: boolean
@@ -76,6 +81,7 @@ export type Database = {
           participants?: string[] | null
           phase_id?: string | null
           priority?: string
+          priority_score?: number | null
           project_id: string
           raci_role?: string | null
           sprint_id?: string | null
@@ -83,10 +89,12 @@ export type Database = {
           status?: string
           story_points?: number | null
           tags?: string[] | null
+          tendency?: number | null
           title: string
           trashed_at?: string | null
           ui_color_tag?: string | null
           updated_at?: string
+          urgency?: number | null
           workflow_stage_id?: string | null
         }
         Update: {
@@ -102,6 +110,7 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           end_date?: string | null
+          gravity?: number | null
           hours?: number | null
           id?: string
           is_critical?: boolean
@@ -113,6 +122,7 @@ export type Database = {
           participants?: string[] | null
           phase_id?: string | null
           priority?: string
+          priority_score?: number | null
           project_id?: string
           raci_role?: string | null
           sprint_id?: string | null
@@ -120,10 +130,12 @@ export type Database = {
           status?: string
           story_points?: number | null
           tags?: string[] | null
+          tendency?: number | null
           title?: string
           trashed_at?: string | null
           ui_color_tag?: string | null
           updated_at?: string
+          urgency?: number | null
           workflow_stage_id?: string | null
         }
         Relationships: [
@@ -1458,6 +1470,7 @@ export type Database = {
           display_order: number | null
           due_date: string | null
           expected_benefits: string | null
+          gravity: number | null
           id: string
           is_trashed: boolean
           manager: string | null
@@ -1465,6 +1478,7 @@ export type Database = {
           out_of_scope: string | null
           owner: string | null
           priority: string
+          priority_score: number | null
           problem_statement: string | null
           program: string | null
           project_type: string | null
@@ -1476,9 +1490,11 @@ export type Database = {
           sponsor: string | null
           start_date: string | null
           status: string
+          tendency: number | null
           title: string
           trashed_at: string | null
           updated_at: string
+          urgency: number | null
         }
         Insert: {
           assignees?: string[] | null
@@ -1492,6 +1508,7 @@ export type Database = {
           display_order?: number | null
           due_date?: string | null
           expected_benefits?: string | null
+          gravity?: number | null
           id?: string
           is_trashed?: boolean
           manager?: string | null
@@ -1499,6 +1516,7 @@ export type Database = {
           out_of_scope?: string | null
           owner?: string | null
           priority?: string
+          priority_score?: number | null
           problem_statement?: string | null
           program?: string | null
           project_type?: string | null
@@ -1510,9 +1528,11 @@ export type Database = {
           sponsor?: string | null
           start_date?: string | null
           status?: string
+          tendency?: number | null
           title: string
           trashed_at?: string | null
           updated_at?: string
+          urgency?: number | null
         }
         Update: {
           assignees?: string[] | null
@@ -1526,6 +1546,7 @@ export type Database = {
           display_order?: number | null
           due_date?: string | null
           expected_benefits?: string | null
+          gravity?: number | null
           id?: string
           is_trashed?: boolean
           manager?: string | null
@@ -1533,6 +1554,7 @@ export type Database = {
           out_of_scope?: string | null
           owner?: string | null
           priority?: string
+          priority_score?: number | null
           problem_statement?: string | null
           program?: string | null
           project_type?: string | null
@@ -1544,9 +1566,11 @@ export type Database = {
           sponsor?: string | null
           start_date?: string | null
           status?: string
+          tendency?: number | null
           title?: string
           trashed_at?: string | null
           updated_at?: string
+          urgency?: number | null
         }
         Relationships: []
       }
@@ -2218,6 +2242,7 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: undefined
       }
+      gut_label: { Args: { _score: number }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
