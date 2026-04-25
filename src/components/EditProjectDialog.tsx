@@ -221,10 +221,9 @@ export const EditProjectDialog = ({
                   <SelectContent>
                     <SelectItem value="_none">Não definido</SelectItem>
                     <SelectItem value="estrategico">Estratégico</SelectItem>
-                    <SelectItem value="operacional">Operacional</SelectItem>
+                    <SelectItem value="operacional">Operacional Crítico</SelectItem>
                     <SelectItem value="novos_negocios">Novos Negócios</SelectItem>
                     <SelectItem value="parceria">Parceria</SelectItem>
-                    <SelectItem value="melhoria_processo">Melhoria de Processo</SelectItem>
                     <SelectItem value="inovacao">Inovação</SelectItem>
                   </SelectContent>
                 </Select>

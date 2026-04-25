@@ -40,10 +40,9 @@ const STAGES = [
 
 const TYPES = [
   { key: "estrategico",    label: "Estratégico",          icon: Target,     accent: "bg-blue-500",     iconBg: "bg-blue-500/10",     iconFg: "text-blue-600 dark:text-blue-400" },
-  { key: "operacional",    label: "Operacional",          icon: Settings2,  accent: "bg-slate-500",    iconBg: "bg-slate-500/10",    iconFg: "text-slate-600 dark:text-slate-300" },
+  { key: "operacional",    label: "Operacional Crítico", icon: Settings2,  accent: "bg-slate-500",    iconBg: "bg-slate-500/10",    iconFg: "text-slate-600 dark:text-slate-300" },
   { key: "novos_negocios", label: "Novos Negócios",       icon: Briefcase,  accent: "bg-emerald-500",  iconBg: "bg-emerald-500/10",  iconFg: "text-emerald-600 dark:text-emerald-400" },
   { key: "parceria",       label: "Parceria",             icon: Handshake,  accent: "bg-amber-500",    iconBg: "bg-amber-500/10",    iconFg: "text-amber-600 dark:text-amber-400" },
-  { key: "melhoria",       label: "Melhoria de Processo", icon: TrendingUp, accent: "bg-cyan-500",     iconBg: "bg-cyan-500/10",     iconFg: "text-cyan-600 dark:text-cyan-400" },
   { key: "inovacao",       label: "Inovação",             icon: Sparkles,   accent: "bg-fuchsia-500",  iconBg: "bg-fuchsia-500/10",  iconFg: "text-fuchsia-600 dark:text-fuchsia-400" },
 ] as const;
 
@@ -55,9 +54,9 @@ const matchType = (raw: string | null) => {
   if (!n) return null;
   if (n.includes("estrateg")) return "estrategico";
   if (n.includes("operacion")) return "operacional";
+  if (n.includes("melhor") || n.includes("process")) return "operacional";
   if (n.includes("novo") || n.includes("negoc")) return "novos_negocios";
   if (n.includes("parc")) return "parceria";
-  if (n.includes("melhor") || n.includes("process")) return "melhoria";
   if (n.includes("inov")) return "inovacao";
   return null;
 };
