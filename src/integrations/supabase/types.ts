@@ -35,6 +35,7 @@ export type Database = {
           is_trashed: boolean
           last_update_date: string | null
           parent_id: string | null
+          participant_roles: Json
           participants: string[] | null
           phase_id: string | null
           priority: string
@@ -71,6 +72,7 @@ export type Database = {
           is_trashed?: boolean
           last_update_date?: string | null
           parent_id?: string | null
+          participant_roles?: Json
           participants?: string[] | null
           phase_id?: string | null
           priority?: string
@@ -107,6 +109,7 @@ export type Database = {
           is_trashed?: boolean
           last_update_date?: string | null
           parent_id?: string | null
+          participant_roles?: Json
           participants?: string[] | null
           phase_id?: string | null
           priority?: string

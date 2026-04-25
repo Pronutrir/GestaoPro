@@ -136,6 +136,7 @@ export const EditActivityDialog = ({
     tags: [] as string[], parent_id: "",
     story_points: "0", raci_role: "",
     participants: [] as string[],
+    participant_roles: {} as Record<string, string>,
     deadline_flag: "" as string,
     last_update_date: "",
     ui_color_tag: "" as string,
@@ -336,6 +337,9 @@ export const EditActivityDialog = ({
         story_points: (act as any).story_points?.toString() || "0",
         raci_role: (act as any).raci_role || "",
         participants: (act as any).participants || [],
+        participant_roles: ((act as any).participant_roles && typeof (act as any).participant_roles === "object")
+          ? (act as any).participant_roles
+          : {},
         deadline_flag: (act as any).deadline_flag || "",
         last_update_date: (act as any).last_update_date || "",
         ui_color_tag: (act as any).ui_color_tag || "",
@@ -414,6 +418,7 @@ export const EditActivityDialog = ({
         story_points: parseInt(formData.story_points) || 0,
         raci_role: formData.raci_role || null,
         participants: formData.participants,
+        participant_roles: formData.participant_roles ?? {},
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
         ui_color_tag: formData.ui_color_tag || null,
@@ -835,17 +840,23 @@ export const EditActivityDialog = ({
           </div>
 
           {/* Participantes (esq) + RACI (dir) — Fase já está no painel superior */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2 md:col-span-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 👥 Participantes
+                <span className="text-[11px] font-normal text-muted-foreground">— sem limite, com papel RACI individual</span>
               </Label>
               <select
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value=""
                 onChange={(e) => {
-                  if (e.target.value && !formData.participants.includes(e.target.value)) {
-                    setFormData({ ...formData, participants: [...formData.participants, e.target.value] });
+                  const name = e.target.value;
+                  if (name && !formData.participants.includes(name)) {
+                    setFormData({
+                      ...formData,
+                      participants: [...formData.participants, name],
+                      participant_roles: { ...formData.participant_roles, [name]: formData.participant_roles[name] || "" },
+                    });
                   }
                 }}
               >
@@ -855,26 +866,55 @@ export const EditActivityDialog = ({
                 ))}
               </select>
               {formData.participants.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="space-y-1.5 mt-2">
                   {formData.participants.map((p) => (
-                    <Badge key={p} variant="secondary" className="gap-1 text-xs">
-                      {p}
-                      <button type="button" onClick={() => setFormData({ ...formData, participants: formData.participants.filter(x => x !== p) })}>
-                        <X className="w-3 h-3" />
+                    <div key={p} className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
+                      <span className="flex-1 min-w-0 truncate text-xs font-medium text-foreground">{p}</span>
+                      <select
+                        className="h-7 rounded-md border border-input bg-background px-2 text-[11px]"
+                        value={formData.participant_roles[p] || ""}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            participant_roles: { ...formData.participant_roles, [p]: e.target.value },
+                          })
+                        }
+                        title="Papel RACI deste participante"
+                      >
+                        {RACI_OPTIONS.map((r) => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                        onClick={() => {
+                          const nextRoles = { ...formData.participant_roles };
+                          delete nextRoles[p];
+                          setFormData({
+                            ...formData,
+                            participants: formData.participants.filter((x) => x !== p),
+                            participant_roles: nextRoles,
+                          });
+                        }}
+                        title="Remover participante"
+                      >
+                        <X className="w-3.5 h-3.5" />
                       </button>
-                    </Badge>
+                    </div>
                   ))}
                 </div>
               )}
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                🏷️ Papel RACI
+                🏷️ Papel RACI (Líder)
               </Label>
               <select
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={formData.raci_role}
                 onChange={(e) => setFormData({ ...formData, raci_role: e.target.value })}
+                title="Papel RACI do responsável principal (Líder) da atividade"
               >
                 {RACI_OPTIONS.map((r) => (
                   <option key={r.value} value={r.value}>{r.label}</option>

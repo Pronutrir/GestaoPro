@@ -100,6 +100,7 @@ export const CreateTaskDialog = ({
     story_points: "0",
     raci_role: "",
     participants: [] as string[],
+    participant_roles: {} as Record<string, string>,
     deadline_flag: "",
     last_update_date: "",
   });
@@ -141,6 +142,7 @@ export const CreateTaskDialog = ({
         story_points: "0",
         raci_role: "",
         participants: [],
+        participant_roles: {},
         deadline_flag: "",
         last_update_date: "",
       });
@@ -177,6 +179,7 @@ export const CreateTaskDialog = ({
         parent_id: defaultParentId ?? null,
         assigned_to: formData.assigned_to || null,
         participants: formData.participants.length ? formData.participants : null,
+        participant_roles: formData.participant_roles ?? {},
         start_date: formData.start_date || null,
         end_date: formData.end_date || null,
         hours: parseHoursInput(formData.hours),
@@ -361,23 +364,19 @@ export const CreateTaskDialog = ({
           <div className="space-y-2">
             <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
               👥 Participantes
+              <span className="text-[11px] font-normal text-muted-foreground">— sem limite, com papel RACI individual</span>
             </Label>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {formData.participants.map((p) => (
-                <Badge key={p} variant="secondary" className="gap-1 text-xs">
-                  {p}
-                  <button type="button" onClick={() => setFormData({ ...formData, participants: formData.participants.filter(x => x !== p) })}>
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
             <select
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value=""
               onChange={(e) => {
-                if (e.target.value && !formData.participants.includes(e.target.value)) {
-                  setFormData({ ...formData, participants: [...formData.participants, e.target.value] });
+                const name = e.target.value;
+                if (name && !formData.participants.includes(name)) {
+                  setFormData({
+                    ...formData,
+                    participants: [...formData.participants, name],
+                    participant_roles: { ...formData.participant_roles, [name]: formData.participant_roles[name] || "" },
+                  });
                 }
               }}
             >
@@ -386,6 +385,46 @@ export const CreateTaskDialog = ({
                 <option key={m.full_name} value={m.full_name}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
               ))}
             </select>
+            {formData.participants.length > 0 && (
+              <div className="space-y-1.5 mt-2">
+                {formData.participants.map((p) => (
+                  <div key={p} className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
+                    <span className="flex-1 min-w-0 truncate text-xs font-medium text-foreground">{p}</span>
+                    <select
+                      className="h-7 rounded-md border border-input bg-background px-2 text-[11px]"
+                      value={formData.participant_roles[p] || ""}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          participant_roles: { ...formData.participant_roles, [p]: e.target.value },
+                        })
+                      }
+                      title="Papel RACI deste participante"
+                    >
+                      {RACI_OPTIONS.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                      onClick={() => {
+                        const nextRoles = { ...formData.participant_roles };
+                        delete nextRoles[p];
+                        setFormData({
+                          ...formData,
+                          participants: formData.participants.filter((x) => x !== p),
+                          participant_roles: nextRoles,
+                        });
+                      }}
+                      title="Remover participante"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Fase + Coluna inicial */}
