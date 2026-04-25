@@ -848,7 +848,6 @@ export const EditActivityDialog = ({
             <div className="flex items-center justify-between gap-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 👥 Participantes
-                <span className="text-[11px] font-normal text-muted-foreground">— Líder do projeto é o Accountable (A) automaticamente</span>
               </Label>
               <Button
                 type="button"
