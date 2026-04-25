@@ -765,9 +765,28 @@ function SortableColumn({
                 {stage.title}
               </h3>
             )}
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0">
-              {stageActivities.length}
-            </Badge>
+            {(() => {
+              const visibleCount = sortedActivities.length;        // pais exibidos como cards
+              const subCount = stageActivities.length - visibleCount; // subtarefas desta coluna cujo pai está em outra
+              return (
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0"
+                  title={
+                    subCount > 0
+                      ? `${visibleCount} card(s) nesta coluna + ${subCount} subtarefa(s) cujo pai está em outra coluna`
+                      : `${visibleCount} card(s) nesta coluna`
+                  }
+                >
+                  {visibleCount}
+                  {subCount > 0 && (
+                    <span className="ml-1 text-muted-foreground font-normal">
+                      +{subCount}
+                    </span>
+                  )}
+                </Badge>
+              );
+            })()}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {canCreate && (
