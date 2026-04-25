@@ -887,6 +887,108 @@ export const EditActivityDialog = ({
 
             </TabsContent>
 
+            {/* ===== ABA EQUIPE DO PROJETO ===== */}
+            <TabsContent value="team" className="pt-4 mt-0">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Users className="w-4 h-4 text-primary" /> Equipe do Projeto
+                  </Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1"
+                    onClick={() => {
+                      if (formData.participants.includes("")) return;
+                      setFormData({
+                        ...formData,
+                        participants: [...formData.participants, ""],
+                        participant_roles: { ...formData.participant_roles, "": "" },
+                      });
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Incluir participante
+                  </Button>
+                </div>
+
+                <div className="rounded-md border border-border overflow-hidden">
+                  <div className="grid grid-cols-[1fr_180px_36px] items-center bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                    <span>Participante</span>
+                    <span>Papel RACI</span>
+                    <span className="sr-only">Ações</span>
+                  </div>
+                  {formData.participants.length === 0 ? (
+                    <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                      Nenhum participante adicionado. Clique em <strong>+ Incluir participante</strong> para começar.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {formData.participants.map((p, idx) => (
+                        <div key={`${p}-${idx}`} className="grid grid-cols-[1fr_180px_36px] items-center gap-2 px-3 py-2 bg-background">
+                          <select
+                            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                            value={p}
+                            onChange={(e) => {
+                              const newName = e.target.value;
+                              if (newName !== p && formData.participants.includes(newName)) return;
+                              const nextParticipants = [...formData.participants];
+                              nextParticipants[idx] = newName;
+                              const nextRoles = { ...formData.participant_roles };
+                              const role = nextRoles[p] || "";
+                              delete nextRoles[p];
+                              nextRoles[newName] = role;
+                              setFormData({ ...formData, participants: nextParticipants, participant_roles: nextRoles });
+                            }}
+                          >
+                            <option value="">Selecionar pessoa...</option>
+                            {allProfiles
+                              .filter((m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name!)))
+                              .map((m) => (
+                                <option key={m.full_name} value={m.full_name!}>
+                                  {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
+                                </option>
+                              ))}
+                          </select>
+                          <select
+                            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                            value={formData.participant_roles[p] || ""}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                participant_roles: { ...formData.participant_roles, [p]: e.target.value },
+                              })
+                            }
+                            title="Papel RACI deste participante"
+                          >
+                            {RACI_OPTIONS.map((r) => (
+                              <option key={r.value} value={r.value}>{r.label}</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            onClick={() => {
+                              const nextRoles = { ...formData.participant_roles };
+                              delete nextRoles[p];
+                              setFormData({
+                                ...formData,
+                                participants: formData.participants.filter((_, i) => i !== idx),
+                                participant_roles: nextRoles,
+                              });
+                            }}
+                            title="Remover participante"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
             {/* ===== ABA SUBATIVIDADES ===== */}
             <TabsContent value="subtasks" className="pt-4 mt-0">
           {act && projectId && (
