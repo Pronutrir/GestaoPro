@@ -18,6 +18,7 @@ import { ActivityComments } from "@/components/ActivityComments";
 import { TaskRelations } from "@/components/TaskRelations";
 import { useTaskBlockers } from "@/hooks/useTaskBlockers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { GutPrioritySelector } from "@/components/GutPrioritySelector";
 import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon } from "lucide-react";
 import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
