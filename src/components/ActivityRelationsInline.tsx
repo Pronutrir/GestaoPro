@@ -127,7 +127,7 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
               </span>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-72">
+          <DropdownMenuContent align="start" className="w-72 p-1">
             {TYPE_OPTIONS.map(({ kind, label, Icon, desc }) => (
               <DropdownMenuItem
                 key={kind}
@@ -135,11 +135,13 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
                   setAutoOpenAdd(true);
                   setCreateDialogOpen(true);
                 }}
-                className="gap-2 cursor-pointer items-start py-2"
+                className="gap-2 cursor-pointer items-start py-2 rounded-md
+                           focus:bg-muted focus:text-foreground
+                           data-[highlighted]:bg-muted data-[highlighted]:text-foreground"
               >
-                <Icon className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <Icon className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium leading-tight">{label}</div>
+                  <div className="text-xs font-semibold leading-tight text-foreground">{label}</div>
                   <div className="text-[11px] text-muted-foreground leading-snug mt-0.5 whitespace-normal">
                     {desc}
                   </div>
