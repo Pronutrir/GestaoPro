@@ -795,6 +795,12 @@ export const EditActivityDialog = ({
               <TabsTrigger value="details" className="text-xs gap-1.5 data-[state=active]:bg-background">
                 <FileText className="w-3.5 h-3.5" /> Detalhes
               </TabsTrigger>
+              <TabsTrigger value="team" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                <Users className="w-3.5 h-3.5" /> Equipe
+                {formData.participants.filter(Boolean).length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{formData.participants.filter(Boolean).length}</span>
+                )}
+              </TabsTrigger>
               {act && projectId && (
                 <TabsTrigger value="subtasks" className="text-xs gap-1.5 data-[state=active]:bg-background">
                   <ListTree className="w-3.5 h-3.5" /> Subatividades
