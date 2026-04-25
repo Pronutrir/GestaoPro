@@ -1403,6 +1403,45 @@ export type Database = {
           },
         ]
       }
+      project_pages: {
+        Row: {
+          content: Json
+          created_at: string
+          created_by: string | null
+          created_by_email: string | null
+          id: string
+          is_trashed: boolean
+          project_id: string
+          title: string
+          trashed_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          id?: string
+          is_trashed?: boolean
+          project_id: string
+          title?: string
+          trashed_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          id?: string
+          is_trashed?: boolean
+          project_id?: string
+          title?: string
+          trashed_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       projects: {
         Row: {
           assignees: string[] | null
