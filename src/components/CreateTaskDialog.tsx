@@ -314,23 +314,18 @@ export const CreateTaskDialog = ({
             />
           </div>
 
-          {/* Priority */}
+          {/* Priority — método GUT */}
           <div className="space-y-2">
             <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Flag className="w-4 h-4" /> Prioridade
+              <Flag className="w-4 h-4" /> Prioridade (GUT)
             </Label>
-            <div className="flex gap-2">
-              {[
-                { value: "low", label: "Baixa", color: "bg-muted text-muted-foreground" },
-                { value: "medium", label: "Média", color: "bg-warning/20 text-warning" },
-                { value: "high", label: "Alta", color: "bg-destructive/20 text-destructive" },
-              ].map((p) => (
-                <button key={p.value} type="button"
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-all ${formData.priority === p.value ? `${p.color} border-current ring-2 ring-current/20` : "border-border text-muted-foreground hover:border-foreground/30"}`}
-                  onClick={() => setFormData({ ...formData, priority: p.value })}
-                >{p.label}</button>
-              ))}
-            </div>
+            <GutPrioritySelector
+              gravity={formData.gravity}
+              urgency={formData.urgency}
+              tendency={formData.tendency}
+              onChange={(v) => setFormData({ ...formData, ...v })}
+              compact
+            />
           </div>
 
           {/* Responsável + RACI */}
