@@ -21,6 +21,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { GutPrioritySelector } from "@/components/GutPrioritySelector";
 
 interface Project {
   id: string;
@@ -76,7 +77,10 @@ export const EditProjectDialog = ({
     title: "",
     description: "",
     status: "ideacao",
-    priority: "medium",
+    priority: "pendente",
+    gravity: null as number | null,
+    urgency: null as number | null,
+    tendency: null as number | null,
     due_date: "",
     assignees: "",
     budget_planned: "",
@@ -100,6 +104,9 @@ export const EditProjectDialog = ({
         description: project.description || "",
         status: project.status,
         priority: project.priority,
+        gravity: (project as any).gravity ?? null,
+        urgency: (project as any).urgency ?? null,
+        tendency: (project as any).tendency ?? null,
         due_date: project.due_date || "",
         assignees: project.assignees.join(", "),
         budget_planned: project.budget_planned?.toString() || "0",
@@ -136,7 +143,9 @@ export const EditProjectDialog = ({
           title: formData.title,
           description: formData.description,
           status: formData.status,
-          priority: formData.priority,
+          gravity: formData.gravity,
+          urgency: formData.urgency,
+          tendency: formData.tendency,
           due_date: formData.due_date || null,
           assignees: assigneesArray,
           budget_planned: parseFloat(formData.budget_planned) || 0,
@@ -289,22 +298,14 @@ export const EditProjectDialog = ({
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="edit-priority">Prioridade</Label>
-                <Select
-                  value={formData.priority}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, priority: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Baixa</SelectItem>
-                    <SelectItem value="medium">Média</SelectItem>
-                    <SelectItem value="high">Alta</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Prioridade (GUT)</Label>
+                <GutPrioritySelector
+                  gravity={formData.gravity}
+                  urgency={formData.urgency}
+                  tendency={formData.tendency}
+                  onChange={(v) => setFormData({ ...formData, ...v })}
+                  compact
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
