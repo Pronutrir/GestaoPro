@@ -268,22 +268,14 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="priority">Prioridade</Label>
-                <Select
-                  value={formData.priority}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, priority: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Baixa</SelectItem>
-                    <SelectItem value="medium">Média</SelectItem>
-                    <SelectItem value="high">Alta</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Prioridade (GUT)</Label>
+                <GutPrioritySelector
+                  gravity={formData.gravity}
+                  urgency={formData.urgency}
+                  tendency={formData.tendency}
+                  onChange={(v) => setFormData({ ...formData, ...v })}
+                  compact
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
