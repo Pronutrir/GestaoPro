@@ -834,22 +834,8 @@ export const EditActivityDialog = ({
             <Textarea id="description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={3} autoResize placeholder="Descreva a atividade..." className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
           </div>
 
-          {/* RACI + Participantes lado a lado (Fase já está no painel superior) */}
+          {/* Participantes (esq) + RACI (dir) — Fase já está no painel superior */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                🏷️ Papel RACI
-              </Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={formData.raci_role}
-                onChange={(e) => setFormData({ ...formData, raci_role: e.target.value })}
-              >
-                {RACI_OPTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
-            </div>
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 👥 Participantes
@@ -880,6 +866,20 @@ export const EditActivityDialog = ({
                   ))}
                 </div>
               )}
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                🏷️ Papel RACI
+              </Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={formData.raci_role}
+                onChange={(e) => setFormData({ ...formData, raci_role: e.target.value })}
+              >
+                {RACI_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
             </div>
           </div>
 
