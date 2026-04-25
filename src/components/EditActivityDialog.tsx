@@ -353,8 +353,10 @@ export const EditActivityDialog = ({
   
 
   const fetchSubActivities = async (parentId: string) => {
-    const { data } = await supabase.from("activities").select("*")
-      .eq("parent_id", parentId).order("display_order");
+    const { data } = await (supabase.from("activities").select("*") as any)
+      .eq("parent_id", parentId)
+      .eq("is_trashed", false)
+      .order("display_order");
     if (data) setSubActivities(data as Activity[]);
   };
 
