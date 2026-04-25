@@ -847,7 +847,7 @@ export const EditActivityDialog = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                👥 Participantes
+                👥 Equipe do Projeto
               </Label>
               <Button
                 type="button"
