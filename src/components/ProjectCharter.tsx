@@ -371,9 +371,6 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
 
       {/* 3. OBJETIVO SMART */}
       <SectionBlock n={3} title="Objetivo SMART">
-        <Field label="Objetivo geral">
-          <TextField editing={editing} value={form.objective} onChange={(v) => setForm({ ...form, objective: v })} placeholder="Objetivo geral do projeto..." rows={2} aiContext="tap_objective" />
-        </Field>
         <div className="overflow-x-auto -mx-1 px-1">
           <table className="w-full text-sm border border-border rounded-md overflow-hidden">
             <tbody>
