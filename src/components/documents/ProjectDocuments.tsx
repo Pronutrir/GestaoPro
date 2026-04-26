@@ -101,6 +101,8 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   /** Mantém referência sempre atual para flush no unmount sem stale-closure */
   const flushRef = useRef<() => Promise<void>>(async () => {});
   const dirtyRef = useRef(false);
+  const titleDraftRef = useRef("");
+  const hydratingRef = useRef(false);
 
   /* ---------- Load pages + stages ---------- */
   const loadAll = useCallback(async () => {
@@ -133,10 +135,6 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     [pages, activePageId]
   );
 
-  useEffect(() => {
-    setTitleDraft(activePage?.title ?? "");
-  }, [activePageId]);
-
   /* ---------- Editor ---------- */
   const editor = useEditor({
     extensions: [
@@ -158,25 +156,44 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
       TableCell,
       TaskReferenceNode,
     ],
-    content: (() => {
-      // Se houver rascunho local mais novo que o servidor, usa o rascunho.
-      if (activePage) {
-        const draft = readDraft(activePage.id);
-        const serverTs = new Date(activePage.updated_at).getTime();
-        if (draft && draft.ts > serverTs) {
-          // Restaura também o título local
-          setTimeout(() => setTitleDraft(draft.title), 0);
-          return draft.content;
-        }
-      }
-      return activePage?.content ?? { type: "doc", content: [{ type: "paragraph" }] };
-    })(),
+    content: { type: "doc", content: [{ type: "paragraph" }] },
     editorProps: {
       attributes: {
         class: "prose prose-sm sm:prose-base max-w-none min-h-[60vh] focus:outline-none px-1 py-4 text-foreground",
       },
     },
   }, [activePageId]);
+
+  useEffect(() => {
+    titleDraftRef.current = titleDraft;
+  }, [titleDraft]);
+
+  /* ---------- Hydrate current page from local draft (preferred) or server ---------- */
+  useEffect(() => {
+    if (!editor) return;
+    if (!activePage) {
+      hydratingRef.current = true;
+      setTitleDraft("");
+      editor.commands.setContent({ type: "doc", content: [{ type: "paragraph" }] }, false);
+      queueMicrotask(() => {
+        hydratingRef.current = false;
+      });
+      return;
+    }
+
+    const draft = readDraft(activePage.id);
+    const nextTitle = draft?.title ?? activePage.title ?? "";
+    const nextContent = draft?.content ?? activePage.content ?? { type: "doc", content: [{ type: "paragraph" }] };
+
+    hydratingRef.current = true;
+    setTitleDraft(nextTitle);
+    titleDraftRef.current = nextTitle;
+    editor.commands.setContent(nextContent, false);
+    queueMicrotask(() => {
+      hydratingRef.current = false;
+      dirtyRef.current = !!draft;
+    });
+  }, [editor, activePage?.id, activePage?.updated_at]);
 
   /* ---------- Slash detection ---------- */
   useEffect(() => {
