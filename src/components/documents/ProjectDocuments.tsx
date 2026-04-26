@@ -615,7 +615,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                 </div>
               </div>
             ) : (
-              <div className="max-w-4xl mx-auto px-8 py-6 relative" ref={editorWrapperRef}>
+              <div className="w-full px-6 lg:px-10 py-6 relative" ref={editorWrapperRef}>
                 <div className="flex items-center gap-2 mb-2">
                   <Input
                     value={titleDraft}
