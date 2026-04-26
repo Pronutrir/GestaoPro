@@ -301,7 +301,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
               <label className="text-sm font-medium text-right pt-2">Causa Raiz</label>
               <div className="space-y-1">
                 <div className="flex justify-end">
-                  <AIAssistButton value={rootCause} onChange={setRootCause} context="risk_root_cause" />
+                  <AIAssistButton value={rootCause} onChange={setRootCause} context="tap_root_cause" />
                 </div>
                 <Textarea value={rootCause} onChange={e => setRootCause(e.target.value)} rows={2} placeholder="Origem fundamental do risco" />
               </div>
