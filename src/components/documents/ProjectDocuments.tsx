@@ -13,6 +13,7 @@ import {
   Type, ListChecks, ArrowRight, Table as TableIcon, Minus,
   AlignLeft, AlignCenter, AlignRight, Link as LinkIcon,
   Highlighter, Code, Undo2, Redo2, Trash, Plus as PlusIcon,
+  ZoomIn, ZoomOut, RotateCcw,
 } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -91,6 +92,18 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  // Zoom do editor (persistido localmente). 100% = padrão.
+  const [zoom, setZoom] = useState<number>(() => {
+    if (typeof window === "undefined") return 100;
+    const v = Number(window.localStorage.getItem("pp_editor_zoom"));
+    return Number.isFinite(v) && v >= 60 && v <= 200 ? v : 100;
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("pp_editor_zoom", String(zoom)); } catch {}
+  }, [zoom]);
+  const zoomIn = () => setZoom((z) => Math.min(200, z + 10));
+  const zoomOut = () => setZoom((z) => Math.max(60, z - 10));
+  const zoomReset = () => setZoom(100);
 
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashPos, setSlashPos] = useState<{ top: number; left: number } | null>(null);
@@ -689,6 +702,17 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                     <ToolbarBtn icon={Minus} label="Divisor"
                       onClick={() => editor.chain().focus().setHorizontalRule().run()} />
                     <Sep />
+                    <ToolbarBtn icon={ZoomOut} label="Diminuir zoom" onClick={zoomOut} />
+                    <button
+                      type="button"
+                      onClick={zoomReset}
+                      title="Restaurar zoom (100%)"
+                      className="h-7 px-2 text-[11px] font-medium tabular-nums rounded hover:bg-muted text-muted-foreground"
+                    >
+                      {zoom}%
+                    </button>
+                    <ToolbarBtn icon={ZoomIn} label="Aumentar zoom" onClick={zoomIn} />
+                    <Sep />
                     <Button
                       size="sm"
                       className="h-7 px-2.5 text-xs gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
@@ -742,7 +766,15 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                   </div>
                 )}
 
-                <EditorContent editor={editor} />
+                <div
+                  style={{
+                    transform: `scale(${zoom / 100})`,
+                    transformOrigin: "top left",
+                    width: `${10000 / zoom}%`,
+                  }}
+                >
+                  <EditorContent editor={editor} />
+                </div>
 
                 {/* Slash menu */}
                 {slashOpen && slashPos && filteredSlash.length > 0 && (
