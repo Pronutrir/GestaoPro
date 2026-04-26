@@ -92,6 +92,18 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  // Zoom do editor (persistido localmente). 100% = padrão.
+  const [zoom, setZoom] = useState<number>(() => {
+    if (typeof window === "undefined") return 100;
+    const v = Number(window.localStorage.getItem("pp_editor_zoom"));
+    return Number.isFinite(v) && v >= 60 && v <= 200 ? v : 100;
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("pp_editor_zoom", String(zoom)); } catch {}
+  }, [zoom]);
+  const zoomIn = () => setZoom((z) => Math.min(200, z + 10));
+  const zoomOut = () => setZoom((z) => Math.max(60, z - 10));
+  const zoomReset = () => setZoom(100);
 
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashPos, setSlashPos] = useState<{ top: number; left: number } | null>(null);
