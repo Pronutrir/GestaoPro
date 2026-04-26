@@ -13,6 +13,7 @@ import {
   Type, ListChecks, ArrowRight, Table as TableIcon, Minus,
   AlignLeft, AlignCenter, AlignRight, Link as LinkIcon,
   Highlighter, Code, Undo2, Redo2, Trash, Plus as PlusIcon,
+  ZoomIn, ZoomOut, RotateCcw,
 } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
