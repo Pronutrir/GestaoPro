@@ -21,6 +21,8 @@ interface Risk {
   contingency: string | null;  // (legado, não usado no formulário)
   responsible: string | null;
   category: string;
+  root_cause: string | null;
+  response_strategy: string | null;
   created_at: string;
 }
 
@@ -69,6 +71,29 @@ const STATUS_MAP: Record<string, { label: string; class: string }> = {
   ocorreu:    { label: "Ocorreu",    class: "bg-destructive/20 text-destructive border-destructive/30" },
 };
 
+const CATEGORIES = [
+  "Técnico",
+  "Externo",
+  "Organizacional",
+  "Gerenciamento de Projeto",
+  "Financeiro",
+  "Operacional",
+  "Regulatório",
+  "Recursos Humanos",
+];
+
+const RESPONSE_STRATEGIES = [
+  { value: "evitar", label: "Evitar" },
+  { value: "mitigar", label: "Mitigar" },
+  { value: "transferir", label: "Transferir" },
+  { value: "aceitar", label: "Aceitar" },
+  { value: "explorar", label: "Explorar" },
+  { value: "compartilhar", label: "Compartilhar" },
+  { value: "melhorar", label: "Melhorar" },
+];
+
+const formatRiskId = (idx: number) => `R-${String(idx + 1).padStart(3, "0")}`;
+
 export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const { toast } = useToast();
   const { canManage: isAdmin } = useAuth();
@@ -82,11 +107,14 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const [impact, setImpact] = useState("medium");
   const [occurred, setOccurred] = useState<"sim" | "nao">("nao");
   const [contramedida, setContramedida] = useState("");
+  const [category, setCategory] = useState<string>("Técnico");
+  const [rootCause, setRootCause] = useState("");
+  const [responseStrategy, setResponseStrategy] = useState<string>("mitigar");
   const [showMatrix, setShowMatrix] = useState(false);
   const [matrixFilter, setMatrixFilter] = useState<{ prob: string; imp: string } | null>(null);
 
   const fetchData = async () => {
-    const { data } = await supabase.from("risks").select("*").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false });
+    const { data } = await supabase.from("risks").select("*").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: true });
     if (data) setItems(data as Risk[]);
   };
 
@@ -96,6 +124,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     setDescription(""); setResponsible(""); setStatus("monitorar");
     setProbability("medium"); setImpact("medium");
     setOccurred("nao"); setContramedida("");
+    setCategory("Técnico"); setRootCause(""); setResponseStrategy("mitigar");
     setEditingId(null); setShowForm(false);
   };
 
@@ -111,6 +140,9 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
       status: finalStatus,
       mitigation: contramedida || null,
       responsible: responsible || null,
+      category: category || null,
+      root_cause: rootCause || null,
+      response_strategy: responseStrategy || null,
     };
 
     if (editingId) {
@@ -132,6 +164,9 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     setProbability(item.probability);
     setImpact(item.impact);
     setContramedida(item.mitigation || "");
+    setCategory(item.category || "Técnico");
+    setRootCause(item.root_cause || "");
+    setResponseStrategy(item.response_strategy || "mitigar");
     if (item.status === "ocorreu") {
       setOccurred("sim");
       setStatus("monitorar");
