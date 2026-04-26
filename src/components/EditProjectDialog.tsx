@@ -21,7 +21,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { AIAssistButton } from "@/components/AIAssistButton";
-import { GutPrioritySelector } from "@/components/GutPrioritySelector";
+import { GutPriorityField } from "@/components/GutPriorityField";
 
 interface Project {
   id: string;
@@ -299,12 +299,11 @@ export const EditProjectDialog = ({
               </div>
               <div className="grid gap-2">
                 <Label>Prioridade (GUT)</Label>
-                <GutPrioritySelector
+                <GutPriorityField
                   gravity={formData.gravity}
                   urgency={formData.urgency}
                   tendency={formData.tendency}
                   onChange={(v) => setFormData({ ...formData, ...v })}
-                  compact
                 />
               </div>
             </div>
