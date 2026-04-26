@@ -573,16 +573,16 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                       <span className="whitespace-pre-line">{b.indicator || "—"}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 align-top text-center bg-success/5">
+                  <td className="px-3 py-2 align-top text-center bg-success/5 whitespace-nowrap">
                     {editing ? (
-                      <Input value={b.goal} onChange={(e) => updateBenefit(idx, "goal", e.target.value)} placeholder="≥ 80%" className="h-8 text-sm text-center font-semibold" />
+                      <Input value={b.goal} onChange={(e) => updateBenefit(idx, "goal", e.target.value)} placeholder="≥ 80%" className="h-8 text-sm text-center font-semibold min-w-[5rem]" />
                     ) : (
                       <span className="font-semibold text-success">{b.goal || "—"}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 align-top text-center">
+                  <td className="px-3 py-2 align-top text-center whitespace-nowrap">
                     {editing ? (
-                      <Input value={b.deadline} onChange={(e) => updateBenefit(idx, "deadline", e.target.value)} placeholder="Mês 4" className="h-8 text-sm text-center" />
+                      <Input value={b.deadline} onChange={(e) => updateBenefit(idx, "deadline", e.target.value)} placeholder="Mês 4" className="h-8 text-sm text-center min-w-[5rem]" />
                     ) : (
                       <span>{b.deadline || "—"}</span>
                     )}
