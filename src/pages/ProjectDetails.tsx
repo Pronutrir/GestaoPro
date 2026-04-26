@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -339,6 +339,33 @@ const ProjectDetails = () => {
     if (!id || !currentUser?.id) return;
     const key = `project-visible-tabs-${currentUser.id}-${id}`;
     localStorage.setItem(key, JSON.stringify(next));
+  }, [id, currentUser?.id]);
+
+  // Safety net: sempre persiste visibleTabs no localStorage quando muda.
+  // Evita perda silenciosa caso algum caller esqueça de chamar persistVisibleTabs.
+  // Também usa uma chave fallback (sem userId) para o caso raro de auth ainda não estar pronta.
+  const visibleTabsHydratedRef = useRef(false);
+  useEffect(() => {
+    if (!id) return;
+    // Pula a primeira execução (estado inicial default = ["kanban"]),
+    // para não sobrescrever um valor salvo antes que o load termine.
+    if (!visibleTabsHydratedRef.current) {
+      visibleTabsHydratedRef.current = true;
+      return;
+    }
+    try {
+      const userKey = currentUser?.id
+        ? `project-visible-tabs-${currentUser.id}-${id}`
+        : `project-visible-tabs-anon-${id}`;
+      localStorage.setItem(userKey, JSON.stringify(visibleTabs));
+    } catch {
+      // quota / privado — ignora
+    }
+  }, [visibleTabs, id, currentUser?.id]);
+
+  // Reseta o flag de hidratação ao trocar de projeto/usuário
+  useEffect(() => {
+    visibleTabsHydratedRef.current = false;
   }, [id, currentUser?.id]);
 
   useEffect(() => {
