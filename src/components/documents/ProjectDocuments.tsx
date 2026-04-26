@@ -766,7 +766,15 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                   </div>
                 )}
 
-                <EditorContent editor={editor} />
+                <div
+                  style={{
+                    transform: `scale(${zoom / 100})`,
+                    transformOrigin: "top left",
+                    width: `${10000 / zoom}%`,
+                  }}
+                >
+                  <EditorContent editor={editor} />
+                </div>
 
                 {/* Slash menu */}
                 {slashOpen && slashPos && filteredSlash.length > 0 && (
