@@ -272,6 +272,16 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     const list = [...(data.approvals || [])]; list.splice(idx, 1); setData({ ...data, approvals: list });
   };
 
+  // --- Benefits table editor helpers ---
+  const addBenefit = () => setData({ ...data, benefits_table: [...(data.benefits_table || []), { benefit: "", indicator: "", goal: "", deadline: "" }] });
+  const updateBenefit = (idx: number, field: "benefit" | "indicator" | "goal" | "deadline", val: string) => {
+    const list = [...(data.benefits_table || [])]; list[idx] = { ...list[idx], [field]: val };
+    setData({ ...data, benefits_table: list });
+  };
+  const removeBenefit = (idx: number) => {
+    const list = [...(data.benefits_table || [])]; list.splice(idx, 1); setData({ ...data, benefits_table: list });
+  };
+
   const handlePrint = () => window.print();
 
   return (
