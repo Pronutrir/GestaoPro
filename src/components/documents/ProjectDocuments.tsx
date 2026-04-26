@@ -448,6 +448,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     let timer: number | null = null;
 
     const onChange = () => {
+      if (hydratingRef.current) return;
       const json = editor.getJSON();
       const titleNow = titleDraft || "Documento sem título";
       // 1) Rascunho local instantâneo (rede de segurança contra desmontagem)
@@ -470,6 +471,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   /* ---------- Salva também quando o título muda ---------- */
   useEffect(() => {
     if (!editor || !activePage) return;
+    if (hydratingRef.current) return;
     if (titleDraft === activePage.title) return;
     writeDraft(activePage.id, titleDraft || "Documento sem título", editor.getJSON());
     dirtyRef.current = true;
