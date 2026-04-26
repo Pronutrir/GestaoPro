@@ -538,11 +538,11 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           <table className="w-full text-sm border border-border rounded-md overflow-hidden">
             <thead>
               <tr className="bg-primary/10">
-                <th className="px-3 py-2 text-left font-semibold border-b-2 border-primary/30 w-[38%]">Benefício</th>
-                <th className="px-3 py-2 text-left font-semibold border-b-2 border-primary/30 w-[38%]">Indicador de Sucesso</th>
-                <th className="px-3 py-2 text-center font-semibold border-b-2 border-primary/30 w-24">Meta</th>
-                <th className="px-3 py-2 text-center font-semibold border-b-2 border-primary/30 w-28">Prazo para Verificar</th>
-                {editing && <th className="w-10 border-b-2 border-primary/30"></th>}
+                <th className="px-3 py-2 text-left font-semibold border-b-2 border-primary/30">Benefício</th>
+                <th className="px-3 py-2 text-left font-semibold border-b-2 border-primary/30">Indicador de Sucesso</th>
+                <th className="px-3 py-2 text-center font-semibold border-b-2 border-primary/30 whitespace-nowrap">Meta</th>
+                <th className="px-3 py-2 text-center font-semibold border-b-2 border-primary/30 whitespace-nowrap">Prazo para Verificar</th>
+                {editing && <th className="w-8 border-b-2 border-primary/30"></th>}
               </tr>
             </thead>
             <tbody>
@@ -573,16 +573,16 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                       <span className="whitespace-pre-line">{b.indicator || "—"}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 align-top text-center bg-success/5">
+                  <td className="px-3 py-2 align-top text-center bg-success/5 whitespace-nowrap">
                     {editing ? (
-                      <Input value={b.goal} onChange={(e) => updateBenefit(idx, "goal", e.target.value)} placeholder="≥ 80%" className="h-8 text-sm text-center font-semibold" />
+                      <Input value={b.goal} onChange={(e) => updateBenefit(idx, "goal", e.target.value)} placeholder="≥ 80%" className="h-8 text-sm text-center font-semibold min-w-[5rem]" />
                     ) : (
                       <span className="font-semibold text-success">{b.goal || "—"}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 align-top text-center">
+                  <td className="px-3 py-2 align-top text-center whitespace-nowrap">
                     {editing ? (
-                      <Input value={b.deadline} onChange={(e) => updateBenefit(idx, "deadline", e.target.value)} placeholder="Mês 4" className="h-8 text-sm text-center" />
+                      <Input value={b.deadline} onChange={(e) => updateBenefit(idx, "deadline", e.target.value)} placeholder="Mês 4" className="h-8 text-sm text-center min-w-[5rem]" />
                     ) : (
                       <span>{b.deadline || "—"}</span>
                     )}
