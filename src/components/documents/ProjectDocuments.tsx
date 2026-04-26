@@ -412,10 +412,11 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     if (!editor || !activePage) return;
     setSaving(true);
     const json = editor.getJSON();
+    const nextTitle = titleDraftRef.current || "Documento sem título";
     const { error } = await supabase
       .from("project_pages" as any)
       .update({
-        title: titleDraft || "Documento sem título",
+        title: nextTitle,
         content: json as any,
       })
       .eq("id", activePage.id);
@@ -424,14 +425,14 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     setPages((prev) =>
       prev.map((p) =>
         p.id === activePage.id
-          ? { ...p, title: titleDraft || "Documento sem título", content: json, updated_at: new Date().toISOString() }
+          ? { ...p, title: nextTitle, content: json, updated_at: new Date().toISOString() }
           : p
       )
     );
     // Sucesso → limpa rascunho local
     clearDraft(activePage.id);
     dirtyRef.current = false;
-  }, [editor, activePage, titleDraft]);
+  }, [editor, activePage]);
 
   /* ---------- Mantém flushRef sempre atualizado ---------- */
   useEffect(() => {
