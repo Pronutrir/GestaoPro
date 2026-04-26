@@ -538,10 +538,10 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           <table className="w-full text-sm border border-border rounded-md overflow-hidden">
             <thead>
               <tr className="bg-primary/10">
-                <th className="px-3 py-2 text-left font-semibold border-b-2 border-primary/30 w-1/4">Benefício</th>
-                <th className="px-3 py-2 text-left font-semibold border-b-2 border-primary/30">Indicador de Sucesso</th>
-                <th className="px-3 py-2 text-center font-semibold border-b-2 border-primary/30 w-32">Meta</th>
-                <th className="px-3 py-2 text-center font-semibold border-b-2 border-primary/30 w-36">Prazo para Verificar</th>
+                <th className="px-3 py-2 text-left font-semibold border-b-2 border-primary/30 w-[38%]">Benefício</th>
+                <th className="px-3 py-2 text-left font-semibold border-b-2 border-primary/30 w-[38%]">Indicador de Sucesso</th>
+                <th className="px-3 py-2 text-center font-semibold border-b-2 border-primary/30 w-24">Meta</th>
+                <th className="px-3 py-2 text-center font-semibold border-b-2 border-primary/30 w-28">Prazo para Verificar</th>
                 {editing && <th className="w-10 border-b-2 border-primary/30"></th>}
               </tr>
             </thead>
