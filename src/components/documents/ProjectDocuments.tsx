@@ -730,41 +730,49 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                   </div>
                 )}
 
-                {/* Table contextual toolbar */}
-                {editor && inTable && (
-                  <div className="mb-3 flex items-center gap-1 p-1 rounded-md border border-dashed bg-muted/40 text-xs">
+                {/* Table contextual toolbar — slot fixo para evitar "pulo" do conteúdo */}
+                <div
+                  className="mb-3 transition-opacity"
+                  style={{
+                    visibility: editor && inTable ? "visible" : "hidden",
+                    opacity: editor && inTable ? 1 : 0,
+                    pointerEvents: editor && inTable ? "auto" : "none",
+                  }}
+                  aria-hidden={!(editor && inTable)}
+                >
+                  <div className="flex items-center gap-1 p-1 rounded-md border border-dashed bg-muted/40 text-xs">
                     <span className="px-2 text-muted-foreground font-medium">Tabela:</span>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs"
-                      onClick={() => editor.chain().focus().addColumnBefore().run()}>
+                      onClick={() => editor?.chain().focus().addColumnBefore().run()}>
                       <PlusIcon className="h-3 w-3 mr-0.5" /> Coluna ←
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs"
-                      onClick={() => editor.chain().focus().addColumnAfter().run()}>
+                      onClick={() => editor?.chain().focus().addColumnAfter().run()}>
                       Coluna → <PlusIcon className="h-3 w-3 ml-0.5" />
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs"
-                      onClick={() => editor.chain().focus().addRowBefore().run()}>
+                      onClick={() => editor?.chain().focus().addRowBefore().run()}>
                       <PlusIcon className="h-3 w-3 mr-0.5" /> Linha ↑
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs"
-                      onClick={() => editor.chain().focus().addRowAfter().run()}>
+                      onClick={() => editor?.chain().focus().addRowAfter().run()}>
                       Linha ↓ <PlusIcon className="h-3 w-3 ml-0.5" />
                     </Button>
                     <div className="w-px h-4 bg-border mx-1" />
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                      onClick={() => editor.chain().focus().deleteColumn().run()}>
+                      onClick={() => editor?.chain().focus().deleteColumn().run()}>
                       <Trash className="h-3 w-3 mr-0.5" /> Coluna
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                      onClick={() => editor.chain().focus().deleteRow().run()}>
+                      onClick={() => editor?.chain().focus().deleteRow().run()}>
                       <Trash className="h-3 w-3 mr-0.5" /> Linha
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                      onClick={() => editor.chain().focus().deleteTable().run()}>
+                      onClick={() => editor?.chain().focus().deleteTable().run()}>
                       <Trash className="h-3 w-3 mr-0.5" /> Tabela
                     </Button>
                   </div>
-                )}
+                </div>
 
                 <div
                   style={{
