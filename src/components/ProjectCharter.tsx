@@ -173,7 +173,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             success_criteria: parsed.success_criteria || "",
             approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
             code: parsed.code || "",
-            priority: parsed.priority || "",
+            benefits_table: Array.isArray(parsed.benefits_table) ? parsed.benefits_table : [],
           }));
         }
       }
