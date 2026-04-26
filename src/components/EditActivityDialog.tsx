@@ -18,7 +18,7 @@ import { ActivityComments } from "@/components/ActivityComments";
 import { TaskRelations } from "@/components/TaskRelations";
 import { useTaskBlockers } from "@/hooks/useTaskBlockers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { GutPrioritySelector } from "@/components/GutPrioritySelector";
+import { GutPriorityField } from "@/components/GutPriorityField";
 import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon } from "lucide-react";
 import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -731,12 +731,11 @@ export const EditActivityDialog = ({
                 {/* Prioridade — método GUT */}
                 <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
                   <div className="w-full">
-                    <GutPrioritySelector
+                    <GutPriorityField
                       gravity={formData.gravity}
                       urgency={formData.urgency}
                       tendency={formData.tendency}
                       onChange={(v) => setFormData({ ...formData, ...v })}
-                      compact
                     />
                   </div>
                 </PropertyRow>
