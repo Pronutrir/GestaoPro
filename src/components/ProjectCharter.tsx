@@ -462,8 +462,8 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                 </td>
               </tr>
               <tr className="border-b border-border">
-                <td className="px-3 py-2 align-top bg-orange-500/10">
-                  <Badge className="bg-orange-500/20 text-orange-700 dark:text-orange-300 border-orange-500/40 hover:bg-orange-500/20">Restrição</Badge>
+                <td className="px-3 py-2 align-top bg-destructive/5">
+                  <Badge className="bg-destructive/15 text-destructive border-destructive/40 hover:bg-destructive/15">Restrição</Badge>
                 </td>
                 <td className="px-3 py-2 align-top">
                   <TextField editing={editing} value={form.restrictions} onChange={(v) => setForm({ ...form, restrictions: v })} placeholder="Limitações de tempo, custo, recursos, regulatórias..." rows={3} aiContext="tap_restrictions" />
