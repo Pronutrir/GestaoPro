@@ -101,6 +101,8 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   /** Mantém referência sempre atual para flush no unmount sem stale-closure */
   const flushRef = useRef<() => Promise<void>>(async () => {});
   const dirtyRef = useRef(false);
+  const titleDraftRef = useRef("");
+  const hydratingRef = useRef(false);
 
   /* ---------- Load pages + stages ---------- */
   const loadAll = useCallback(async () => {
@@ -133,10 +135,6 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     [pages, activePageId]
   );
 
-  useEffect(() => {
-    setTitleDraft(activePage?.title ?? "");
-  }, [activePageId]);
-
   /* ---------- Editor ---------- */
   const editor = useEditor({
     extensions: [
@@ -158,25 +156,44 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
       TableCell,
       TaskReferenceNode,
     ],
-    content: (() => {
-      // Se houver rascunho local mais novo que o servidor, usa o rascunho.
-      if (activePage) {
-        const draft = readDraft(activePage.id);
-        const serverTs = new Date(activePage.updated_at).getTime();
-        if (draft && draft.ts > serverTs) {
-          // Restaura também o título local
-          setTimeout(() => setTitleDraft(draft.title), 0);
-          return draft.content;
-        }
-      }
-      return activePage?.content ?? { type: "doc", content: [{ type: "paragraph" }] };
-    })(),
+    content: { type: "doc", content: [{ type: "paragraph" }] },
     editorProps: {
       attributes: {
         class: "prose prose-sm sm:prose-base max-w-none min-h-[60vh] focus:outline-none px-1 py-4 text-foreground",
       },
     },
   }, [activePageId]);
+
+  useEffect(() => {
+    titleDraftRef.current = titleDraft;
+  }, [titleDraft]);
+
+  /* ---------- Hydrate current page from local draft (preferred) or server ---------- */
+  useEffect(() => {
+    if (!editor) return;
+    if (!activePage) {
+      hydratingRef.current = true;
+      setTitleDraft("");
+      editor.commands.setContent({ type: "doc", content: [{ type: "paragraph" }] });
+      queueMicrotask(() => {
+        hydratingRef.current = false;
+      });
+      return;
+    }
+
+    const draft = readDraft(activePage.id);
+    const nextTitle = draft?.title ?? activePage.title ?? "";
+    const nextContent = draft?.content ?? activePage.content ?? { type: "doc", content: [{ type: "paragraph" }] };
+
+    hydratingRef.current = true;
+    setTitleDraft(nextTitle);
+    titleDraftRef.current = nextTitle;
+    editor.commands.setContent(nextContent);
+    queueMicrotask(() => {
+      hydratingRef.current = false;
+      dirtyRef.current = !!draft;
+    });
+  }, [editor, activePage?.id, activePage?.updated_at]);
 
   /* ---------- Slash detection ---------- */
   useEffect(() => {
@@ -395,10 +412,11 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     if (!editor || !activePage) return;
     setSaving(true);
     const json = editor.getJSON();
+    const nextTitle = titleDraftRef.current || "Documento sem título";
     const { error } = await supabase
       .from("project_pages" as any)
       .update({
-        title: titleDraft || "Documento sem título",
+        title: nextTitle,
         content: json as any,
       })
       .eq("id", activePage.id);
@@ -407,14 +425,14 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     setPages((prev) =>
       prev.map((p) =>
         p.id === activePage.id
-          ? { ...p, title: titleDraft || "Documento sem título", content: json, updated_at: new Date().toISOString() }
+          ? { ...p, title: nextTitle, content: json, updated_at: new Date().toISOString() }
           : p
       )
     );
     // Sucesso → limpa rascunho local
     clearDraft(activePage.id);
     dirtyRef.current = false;
-  }, [editor, activePage, titleDraft]);
+  }, [editor, activePage]);
 
   /* ---------- Mantém flushRef sempre atualizado ---------- */
   useEffect(() => {
@@ -431,6 +449,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     let timer: number | null = null;
 
     const onChange = () => {
+      if (hydratingRef.current) return;
       const json = editor.getJSON();
       const titleNow = titleDraft || "Documento sem título";
       // 1) Rascunho local instantâneo (rede de segurança contra desmontagem)
@@ -453,6 +472,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   /* ---------- Salva também quando o título muda ---------- */
   useEffect(() => {
     if (!editor || !activePage) return;
+    if (hydratingRef.current) return;
     if (titleDraft === activePage.title) return;
     writeDraft(activePage.id, titleDraft || "Documento sem título", editor.getJSON());
     dirtyRef.current = true;
