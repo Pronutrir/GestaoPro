@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,37 @@ import { ptBR } from "date-fns/locale";
 import { AIAssistButton, AIContext } from "@/components/AIAssistButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PriorityBadge } from "@/components/PriorityBadge";
+
+/* -------- AutoTextarea: cresce conforme conteúdo -------- */
+const AutoTextarea = ({
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) => {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <Textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={1}
+      className={`text-sm resize-none min-h-[2rem] py-1.5 leading-snug overflow-hidden ${className || ""}`}
+    />
+  );
+};
 
 interface Phase { id: string; title: string }
 interface Risk { id: string; description: string; probability: string; impact: string; status: string }
@@ -522,17 +553,10 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                 <tr key={idx} className="border-b border-border last:border-0 hover:bg-muted/30">
                   <td className="px-3 py-2 align-top">
                     {editing ? (
-                      <Textarea
+                      <AutoTextarea
                         value={b.benefit}
-                        onChange={(e) => updateBenefit(idx, "benefit", e.target.value)}
-                        onInput={(e) => {
-                          const el = e.currentTarget;
-                          el.style.height = "auto";
-                          el.style.height = `${el.scrollHeight}px`;
-                        }}
+                        onChange={(v) => updateBenefit(idx, "benefit", v)}
                         placeholder="Ex: Visibilidade do portfólio para liderança"
-                        rows={1}
-                        className="text-sm resize-none min-h-[2rem] py-1.5 leading-snug overflow-hidden"
                       />
                     ) : (
                       <span className="whitespace-pre-line">{b.benefit || "—"}</span>
@@ -540,17 +564,10 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                   </td>
                   <td className="px-3 py-2 align-top">
                     {editing ? (
-                      <Textarea
+                      <AutoTextarea
                         value={b.indicator}
-                        onChange={(e) => updateBenefit(idx, "indicator", e.target.value)}
-                        onInput={(e) => {
-                          const el = e.currentTarget;
-                          el.style.height = "auto";
-                          el.style.height = `${el.scrollHeight}px`;
-                        }}
+                        onChange={(v) => updateBenefit(idx, "indicator", v)}
                         placeholder="Ex: % projetos com painel atualizado"
-                        rows={1}
-                        className="text-sm resize-none min-h-[2rem] py-1.5 leading-snug overflow-hidden"
                       />
                     ) : (
                       <span className="whitespace-pre-line">{b.indicator || "—"}</span>
