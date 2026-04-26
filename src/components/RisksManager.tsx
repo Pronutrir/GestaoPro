@@ -203,16 +203,24 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     const lvlKey = MATRIX_KEY(item.impact, item.probability);
     const lvl = LEVELS[lvlKey];
     const occ = item.status === "ocorreu";
+    const idx = items.findIndex(r => r.id === item.id);
+    const riskId = idx >= 0 ? formatRiskId(idx) : "R-???";
+    const strategyLabel = RESPONSE_STRATEGIES.find(s => s.value === item.response_strategy)?.label;
     return (
       <Card key={item.id} className="p-4 space-y-2">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-1">
-            <p className="text-sm font-medium text-foreground">{item.description}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className="font-mono text-[11px]">{riskId}</Badge>
+              {item.category && <Badge variant="secondary" className="text-[11px]">{item.category}</Badge>}
+              <p className="text-sm font-medium text-foreground">{item.description}</p>
+            </div>
             <div className="flex flex-wrap gap-2">
               <Badge className={lvl.badgeClass}>{lvl.label}</Badge>
               <Badge variant="outline">Prob: {PCT_LABEL[item.probability]}</Badge>
               <Badge variant="outline">Impacto: {PCT_LABEL[item.impact]}</Badge>
               <Badge className={STATUS_MAP[item.status]?.class || "bg-muted"}>{STATUS_MAP[item.status]?.label || item.status}</Badge>
+              {strategyLabel && <Badge variant="outline" className="border-primary/40 text-primary">Estratégia: {strategyLabel}</Badge>}
               {occ && <Badge className="bg-destructive/15 text-destructive border-destructive/40">Ocorreu: Sim</Badge>}
             </div>
           </div>
@@ -223,6 +231,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
             </div>
           )}
         </div>
+        {item.root_cause && <p className="text-xs text-muted-foreground"><strong>Causa Raiz:</strong> {item.root_cause}</p>}
         {item.mitigation && <p className="text-xs text-muted-foreground"><strong>Contramedida:</strong> {item.mitigation}</p>}
         {item.responsible && <p className="text-xs text-muted-foreground"><strong>Responsável:</strong> {item.responsible}</p>}
       </Card>
