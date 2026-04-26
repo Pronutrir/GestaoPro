@@ -328,7 +328,11 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             <TextField editing={editing} value={data.code || ""} onChange={(v) => setData({ ...data, code: v })} placeholder="Ex: PRJ-2025-001" multiline={false} />
           </Field>
           <Field label="Prioridade">
-            <TextField editing={editing} value={data.priority || ""} onChange={(v) => setData({ ...data, priority: v })} placeholder="Alta / Média / Baixa" multiline={false} />
+            {project.priority ? (
+              <PriorityBadge priority={project.priority} size="md" />
+            ) : (
+              <span className="text-sm text-muted-foreground italic">—</span>
+            )}
           </Field>
           <Field label="Patrocinador (Sponsor)">
             <TextField editing={editing} value={data.sponsor} onChange={(v) => setData({ ...data, sponsor: v })} placeholder="Nome do patrocinador" multiline={false} />
