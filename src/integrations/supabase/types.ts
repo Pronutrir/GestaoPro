@@ -1587,7 +1587,9 @@ export type Database = {
           mitigation: string | null
           probability: string
           project_id: string
+          response_strategy: string | null
           responsible: string | null
+          root_cause: string | null
           severity_score: number | null
           status: string
           tendency: number | null
@@ -1607,7 +1609,9 @@ export type Database = {
           mitigation?: string | null
           probability?: string
           project_id: string
+          response_strategy?: string | null
           responsible?: string | null
+          root_cause?: string | null
           severity_score?: number | null
           status?: string
           tendency?: number | null
@@ -1627,7 +1631,9 @@ export type Database = {
           mitigation?: string | null
           probability?: string
           project_id?: string
+          response_strategy?: string | null
           responsible?: string | null
+          root_cause?: string | null
           severity_score?: number | null
           status?: string
           tendency?: number | null
