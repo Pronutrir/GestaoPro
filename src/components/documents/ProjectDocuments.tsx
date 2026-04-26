@@ -868,18 +868,20 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
             overflow: hidden;
             table-layout: fixed;
             width: 100%;
+            border: 1px solid hsl(var(--foreground) / 0.25);
           }
           .ProseMirror th, .ProseMirror td {
-            border: 1px solid hsl(var(--border));
+            border: 1px solid hsl(var(--foreground) / 0.25);
             padding: 0.5rem 0.625rem;
             vertical-align: top;
             position: relative;
             min-width: 80px;
           }
           .ProseMirror th {
-            background: hsl(var(--muted) / 0.6);
+            background: hsl(var(--muted));
             font-weight: 600;
             text-align: left;
+            border-bottom: 2px solid hsl(var(--foreground) / 0.35);
           }
           .ProseMirror .selectedCell:after {
             content: "";
