@@ -66,6 +66,23 @@ const SLASH_ITEMS = [
 ] as const;
 type SlashKey = typeof SLASH_ITEMS[number]["key"];
 
+/* ---------- Local draft helpers (rascunho automático) ---------- */
+const draftKey = (pageId: string) => `pp_draft:${pageId}`;
+function readDraft(pageId: string): { title: string; content: any; ts: number } | null {
+  try {
+    const raw = localStorage.getItem(draftKey(pageId));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function writeDraft(pageId: string, title: string, content: any) {
+  try {
+    localStorage.setItem(draftKey(pageId), JSON.stringify({ title, content, ts: Date.now() }));
+  } catch { /* quota / private mode — ignore */ }
+}
+function clearDraft(pageId: string) {
+  try { localStorage.removeItem(draftKey(pageId)); } catch { /* noop */ }
+}
+
 export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocumentsProps) {
   const { user } = useAuth();
   const [pages, setPages] = useState<PageDoc[]>([]);
@@ -81,6 +98,9 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   const [slashIndex, setSlashIndex] = useState(0);
 
   const editorWrapperRef = useRef<HTMLDivElement>(null);
+  /** Mantém referência sempre atual para flush no unmount sem stale-closure */
+  const flushRef = useRef<() => Promise<void>>(async () => {});
+  const dirtyRef = useRef(false);
 
   /* ---------- Load pages + stages ---------- */
   const loadAll = useCallback(async () => {
