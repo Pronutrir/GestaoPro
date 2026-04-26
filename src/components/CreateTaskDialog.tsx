@@ -15,7 +15,7 @@ import {
   User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Paperclip, ChevronDown, Loader2,
 } from "lucide-react";
 import { AIAssistButton } from "@/components/AIAssistButton";
-import { GutPrioritySelector } from "@/components/GutPrioritySelector";
+import { GutPriorityField } from "@/components/GutPriorityField";
 
 export interface Phase { id: string; title: string }
 export interface WorkflowStage { id: string; title: string; color: string; is_final?: boolean }
@@ -320,12 +320,11 @@ export const CreateTaskDialog = ({
             <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Flag className="w-4 h-4" /> Prioridade (GUT)
             </Label>
-            <GutPrioritySelector
+            <GutPriorityField
               gravity={formData.gravity}
               urgency={formData.urgency}
               tendency={formData.tendency}
               onChange={(v) => setFormData({ ...formData, ...v })}
-              compact
             />
           </div>
 
