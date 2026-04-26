@@ -78,13 +78,19 @@ const TextField = ({
 }: TextFieldProps) => {
   if (editing) {
     return multiline ? (
-      <div className="space-y-1.5">
+      <div className="relative">
+        <Textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={rows}
+          className={`text-sm resize-none ${aiContext ? "pr-10" : ""} ${className || ""}`}
+        />
         {aiContext && (
-          <div className="flex justify-end">
-            <AIAssistButton value={value} onChange={onChange} context={aiContext} />
+          <div className="absolute top-1 right-1">
+            <AIAssistButton value={value} onChange={onChange} context={aiContext} size="icon" />
           </div>
         )}
-        <Textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} className={`text-sm resize-none ${className || ""}`} />
       </div>
     ) : (
       <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`text-sm ${className || ""}`} />
