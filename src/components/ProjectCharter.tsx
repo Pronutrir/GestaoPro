@@ -522,14 +522,36 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                 <tr key={idx} className="border-b border-border last:border-0 hover:bg-muted/30">
                   <td className="px-3 py-2 align-top">
                     {editing ? (
-                      <Textarea value={b.benefit} onChange={(e) => updateBenefit(idx, "benefit", e.target.value)} placeholder="Ex: Visibilidade do portfólio para liderança" rows={2} className="text-sm resize-none" />
+                      <Textarea
+                        value={b.benefit}
+                        onChange={(e) => updateBenefit(idx, "benefit", e.target.value)}
+                        onInput={(e) => {
+                          const el = e.currentTarget;
+                          el.style.height = "auto";
+                          el.style.height = `${el.scrollHeight}px`;
+                        }}
+                        placeholder="Ex: Visibilidade do portfólio para liderança"
+                        rows={1}
+                        className="text-sm resize-none min-h-[2rem] py-1.5 leading-snug overflow-hidden"
+                      />
                     ) : (
                       <span className="whitespace-pre-line">{b.benefit || "—"}</span>
                     )}
                   </td>
                   <td className="px-3 py-2 align-top">
                     {editing ? (
-                      <Textarea value={b.indicator} onChange={(e) => updateBenefit(idx, "indicator", e.target.value)} placeholder="Ex: % projetos com painel atualizado" rows={2} className="text-sm resize-none" />
+                      <Textarea
+                        value={b.indicator}
+                        onChange={(e) => updateBenefit(idx, "indicator", e.target.value)}
+                        onInput={(e) => {
+                          const el = e.currentTarget;
+                          el.style.height = "auto";
+                          el.style.height = `${el.scrollHeight}px`;
+                        }}
+                        placeholder="Ex: % projetos com painel atualizado"
+                        rows={1}
+                        className="text-sm resize-none min-h-[2rem] py-1.5 leading-snug overflow-hidden"
+                      />
                     ) : (
                       <span className="whitespace-pre-line">{b.indicator || "—"}</span>
                     )}
