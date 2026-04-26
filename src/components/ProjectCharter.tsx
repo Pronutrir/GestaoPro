@@ -558,11 +558,6 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           </Button>
         )}
 
-        {/* Requisitos de aprovação (mantido como complemento) */}
-        <Field label="Requisitos de aprovação">
-          <TextField editing={editing} value={data.approval_requirements} onChange={(v) => setData({ ...data, approval_requirements: v })} placeholder="Critérios formais de aceitação dos entregáveis..." rows={2} aiContext="tap_regulatory" />
-        </Field>
-
         {/* Stakeholders */}
         <div className="pt-2 border-t border-border">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Stakeholders Principais</p>
