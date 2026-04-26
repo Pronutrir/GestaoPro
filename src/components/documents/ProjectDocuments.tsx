@@ -411,19 +411,77 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
           : p
       )
     );
+    // Sucesso → limpa rascunho local
+    clearDraft(activePage.id);
+    dirtyRef.current = false;
   }, [editor, activePage, titleDraft]);
 
-  /* ---------- Auto-save ---------- */
+  /* ---------- Mantém flushRef sempre atualizado ---------- */
+  useEffect(() => {
+    flushRef.current = async () => {
+      if (!editor || !activePage || !dirtyRef.current) return;
+      await savePage();
+    };
+  }, [editor, activePage, savePage]);
+
+  /* ---------- Auto-save: rascunho local imediato + debounce no servidor ---------- */
   useEffect(() => {
     if (!editor || !activePage) return;
-    const t = setInterval(() => {
+    const pageId = activePage.id;
+    let timer: number | null = null;
+
+    const onChange = () => {
       const json = editor.getJSON();
-      if (JSON.stringify(json) !== JSON.stringify(activePage.content) || titleDraft !== activePage.title) {
+      const titleNow = titleDraft || "Documento sem título";
+      // 1) Rascunho local instantâneo (rede de segurança contra desmontagem)
+      writeDraft(pageId, titleNow, json);
+      dirtyRef.current = true;
+      // 2) Debounce 2.5s para gravar no banco
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
         savePage();
-      }
-    }, 20000);
-    return () => clearInterval(t);
-  }, [editor, activePage, savePage, titleDraft]);
+      }, 2500);
+    };
+
+    editor.on("update", onChange);
+    return () => {
+      editor.off("update", onChange);
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [editor, activePage, titleDraft, savePage]);
+
+  /* ---------- Salva também quando o título muda ---------- */
+  useEffect(() => {
+    if (!editor || !activePage) return;
+    if (titleDraft === activePage.title) return;
+    writeDraft(activePage.id, titleDraft || "Documento sem título", editor.getJSON());
+    dirtyRef.current = true;
+    const t = window.setTimeout(() => savePage(), 2500);
+    return () => window.clearTimeout(t);
+  }, [titleDraft, editor, activePage, savePage]);
+
+  /* ---------- Flush ao trocar de página, desmontar, perder foco ou fechar aba ---------- */
+  useEffect(() => {
+    const flush = () => { void flushRef.current(); };
+    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("blur", flush);
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      // troca de página ativa → grava antes
+      flush();
+      window.removeEventListener("blur", flush);
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [activePageId]);
+
+  /* ---------- Flush no unmount completo do componente (troca de aba do projeto) ---------- */
+  useEffect(() => {
+    return () => { void flushRef.current(); };
+  }, []);
 
   /* ---------- Create / Delete page ---------- */
   const createPage = async () => {
