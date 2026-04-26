@@ -702,6 +702,17 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                     <ToolbarBtn icon={Minus} label="Divisor"
                       onClick={() => editor.chain().focus().setHorizontalRule().run()} />
                     <Sep />
+                    <ToolbarBtn icon={ZoomOut} label="Diminuir zoom" onClick={zoomOut} />
+                    <button
+                      type="button"
+                      onClick={zoomReset}
+                      title="Restaurar zoom (100%)"
+                      className="h-7 px-2 text-[11px] font-medium tabular-nums rounded hover:bg-muted text-muted-foreground"
+                    >
+                      {zoom}%
+                    </button>
+                    <ToolbarBtn icon={ZoomIn} label="Aumentar zoom" onClick={zoomIn} />
+                    <Sep />
                     <Button
                       size="sm"
                       className="h-7 px-2.5 text-xs gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
