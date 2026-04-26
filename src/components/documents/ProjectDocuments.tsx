@@ -66,6 +66,23 @@ const SLASH_ITEMS = [
 ] as const;
 type SlashKey = typeof SLASH_ITEMS[number]["key"];
 
+/* ---------- Local draft helpers (rascunho automático) ---------- */
+const draftKey = (pageId: string) => `pp_draft:${pageId}`;
+function readDraft(pageId: string): { title: string; content: any; ts: number } | null {
+  try {
+    const raw = localStorage.getItem(draftKey(pageId));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function writeDraft(pageId: string, title: string, content: any) {
+  try {
+    localStorage.setItem(draftKey(pageId), JSON.stringify({ title, content, ts: Date.now() }));
+  } catch { /* quota / private mode — ignore */ }
+}
+function clearDraft(pageId: string) {
+  try { localStorage.removeItem(draftKey(pageId)); } catch { /* noop */ }
+}
+
 export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocumentsProps) {
   const { user } = useAuth();
   const [pages, setPages] = useState<PageDoc[]>([]);
@@ -81,6 +98,9 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   const [slashIndex, setSlashIndex] = useState(0);
 
   const editorWrapperRef = useRef<HTMLDivElement>(null);
+  /** Mantém referência sempre atual para flush no unmount sem stale-closure */
+  const flushRef = useRef<() => Promise<void>>(async () => {});
+  const dirtyRef = useRef(false);
 
   /* ---------- Load pages + stages ---------- */
   const loadAll = useCallback(async () => {
@@ -138,7 +158,19 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
       TableCell,
       TaskReferenceNode,
     ],
-    content: activePage?.content ?? { type: "doc", content: [{ type: "paragraph" }] },
+    content: (() => {
+      // Se houver rascunho local mais novo que o servidor, usa o rascunho.
+      if (activePage) {
+        const draft = readDraft(activePage.id);
+        const serverTs = new Date(activePage.updated_at).getTime();
+        if (draft && draft.ts > serverTs) {
+          // Restaura também o título local
+          setTimeout(() => setTitleDraft(draft.title), 0);
+          return draft.content;
+        }
+      }
+      return activePage?.content ?? { type: "doc", content: [{ type: "paragraph" }] };
+    })(),
     editorProps: {
       attributes: {
         class: "prose prose-sm sm:prose-base max-w-none min-h-[60vh] focus:outline-none px-1 py-4 text-foreground",
@@ -379,19 +411,77 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
           : p
       )
     );
+    // Sucesso → limpa rascunho local
+    clearDraft(activePage.id);
+    dirtyRef.current = false;
   }, [editor, activePage, titleDraft]);
 
-  /* ---------- Auto-save ---------- */
+  /* ---------- Mantém flushRef sempre atualizado ---------- */
+  useEffect(() => {
+    flushRef.current = async () => {
+      if (!editor || !activePage || !dirtyRef.current) return;
+      await savePage();
+    };
+  }, [editor, activePage, savePage]);
+
+  /* ---------- Auto-save: rascunho local imediato + debounce no servidor ---------- */
   useEffect(() => {
     if (!editor || !activePage) return;
-    const t = setInterval(() => {
+    const pageId = activePage.id;
+    let timer: number | null = null;
+
+    const onChange = () => {
       const json = editor.getJSON();
-      if (JSON.stringify(json) !== JSON.stringify(activePage.content) || titleDraft !== activePage.title) {
+      const titleNow = titleDraft || "Documento sem título";
+      // 1) Rascunho local instantâneo (rede de segurança contra desmontagem)
+      writeDraft(pageId, titleNow, json);
+      dirtyRef.current = true;
+      // 2) Debounce 2.5s para gravar no banco
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
         savePage();
-      }
-    }, 20000);
-    return () => clearInterval(t);
-  }, [editor, activePage, savePage, titleDraft]);
+      }, 2500);
+    };
+
+    editor.on("update", onChange);
+    return () => {
+      editor.off("update", onChange);
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [editor, activePage, titleDraft, savePage]);
+
+  /* ---------- Salva também quando o título muda ---------- */
+  useEffect(() => {
+    if (!editor || !activePage) return;
+    if (titleDraft === activePage.title) return;
+    writeDraft(activePage.id, titleDraft || "Documento sem título", editor.getJSON());
+    dirtyRef.current = true;
+    const t = window.setTimeout(() => savePage(), 2500);
+    return () => window.clearTimeout(t);
+  }, [titleDraft, editor, activePage, savePage]);
+
+  /* ---------- Flush ao trocar de página, desmontar, perder foco ou fechar aba ---------- */
+  useEffect(() => {
+    const flush = () => { void flushRef.current(); };
+    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("blur", flush);
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      // troca de página ativa → grava antes
+      flush();
+      window.removeEventListener("blur", flush);
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [activePageId]);
+
+  /* ---------- Flush no unmount completo do componente (troca de aba do projeto) ---------- */
+  useEffect(() => {
+    return () => { void flushRef.current(); };
+  }, []);
 
   /* ---------- Create / Delete page ---------- */
   const createPage = async () => {
