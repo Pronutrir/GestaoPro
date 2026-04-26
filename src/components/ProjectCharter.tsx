@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AIAssistButton, AIContext } from "@/components/AIAssistButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PriorityBadge } from "@/components/PriorityBadge";
 
 interface Phase { id: string; title: string }
 interface Risk { id: string; description: string; probability: string; impact: string; status: string }
@@ -28,6 +29,7 @@ interface ProjectCharterProps {
     due_date: string | null;
     start_date?: string | null;
     status: string;
+    priority?: string | null;
     objective?: string | null;
     problem_statement?: string | null;
     scope?: string | null;
@@ -57,7 +59,7 @@ interface CharterData {
   success_criteria?: string;
   approvals?: { role: string; name: string; date: string }[];
   code?: string;
-  priority?: string;
+  benefits_table?: { benefit: string; indicator: string; goal: string; deadline: string }[];
 }
 
 /* -------- TextField -------- */
@@ -130,7 +132,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     assumptions: "", approval_requirements: "",
     smart_specific: "", smart_measurable: "", smart_achievable: "",
     smart_relevant: "", smart_temporal: "", success_criteria: "",
-    approvals: [], code: "", priority: "",
+    approvals: [], code: "", benefits_table: [],
   });
 
   const [form, setForm] = useState({
