@@ -158,7 +158,19 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
       TableCell,
       TaskReferenceNode,
     ],
-    content: activePage?.content ?? { type: "doc", content: [{ type: "paragraph" }] },
+    content: (() => {
+      // Se houver rascunho local mais novo que o servidor, usa o rascunho.
+      if (activePage) {
+        const draft = readDraft(activePage.id);
+        const serverTs = new Date(activePage.updated_at).getTime();
+        if (draft && draft.ts > serverTs) {
+          // Restaura também o título local
+          setTimeout(() => setTitleDraft(draft.title), 0);
+          return draft.content;
+        }
+      }
+      return activePage?.content ?? { type: "doc", content: [{ type: "paragraph" }] };
+    })(),
     editorProps: {
       attributes: {
         class: "prose prose-sm sm:prose-base max-w-none min-h-[60vh] focus:outline-none px-1 py-4 text-foreground",
