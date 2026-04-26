@@ -174,7 +174,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     if (!activePage) {
       hydratingRef.current = true;
       setTitleDraft("");
-      editor.commands.setContent({ type: "doc", content: [{ type: "paragraph" }] }, false);
+      editor.commands.setContent({ type: "doc", content: [{ type: "paragraph" }] });
       queueMicrotask(() => {
         hydratingRef.current = false;
       });
@@ -188,7 +188,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     hydratingRef.current = true;
     setTitleDraft(nextTitle);
     titleDraftRef.current = nextTitle;
-    editor.commands.setContent(nextContent, false);
+    editor.commands.setContent(nextContent);
     queueMicrotask(() => {
       hydratingRef.current = false;
       dirtyRef.current = !!draft;
