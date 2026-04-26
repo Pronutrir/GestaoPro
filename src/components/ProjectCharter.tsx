@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AIAssistButton, AIContext } from "@/components/AIAssistButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PriorityBadge } from "@/components/PriorityBadge";
 
 interface Phase { id: string; title: string }
 interface Risk { id: string; description: string; probability: string; impact: string; status: string }
@@ -28,6 +29,7 @@ interface ProjectCharterProps {
     due_date: string | null;
     start_date?: string | null;
     status: string;
+    priority?: string | null;
     objective?: string | null;
     problem_statement?: string | null;
     scope?: string | null;
@@ -57,7 +59,7 @@ interface CharterData {
   success_criteria?: string;
   approvals?: { role: string; name: string; date: string }[];
   code?: string;
-  priority?: string;
+  benefits_table?: { benefit: string; indicator: string; goal: string; deadline: string }[];
 }
 
 /* -------- TextField -------- */
@@ -130,7 +132,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     assumptions: "", approval_requirements: "",
     smart_specific: "", smart_measurable: "", smart_achievable: "",
     smart_relevant: "", smart_temporal: "", success_criteria: "",
-    approvals: [], code: "", priority: "",
+    approvals: [], code: "", benefits_table: [],
   });
 
   const [form, setForm] = useState({
@@ -171,7 +173,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             success_criteria: parsed.success_criteria || "",
             approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
             code: parsed.code || "",
-            priority: parsed.priority || "",
+            benefits_table: Array.isArray(parsed.benefits_table) ? parsed.benefits_table : [],
           }));
         }
       }
@@ -270,6 +272,16 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     const list = [...(data.approvals || [])]; list.splice(idx, 1); setData({ ...data, approvals: list });
   };
 
+  // --- Benefits table editor helpers ---
+  const addBenefit = () => setData({ ...data, benefits_table: [...(data.benefits_table || []), { benefit: "", indicator: "", goal: "", deadline: "" }] });
+  const updateBenefit = (idx: number, field: "benefit" | "indicator" | "goal" | "deadline", val: string) => {
+    const list = [...(data.benefits_table || [])]; list[idx] = { ...list[idx], [field]: val };
+    setData({ ...data, benefits_table: list });
+  };
+  const removeBenefit = (idx: number) => {
+    const list = [...(data.benefits_table || [])]; list.splice(idx, 1); setData({ ...data, benefits_table: list });
+  };
+
   const handlePrint = () => window.print();
 
   return (
@@ -326,7 +338,11 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             <TextField editing={editing} value={data.code || ""} onChange={(v) => setData({ ...data, code: v })} placeholder="Ex: PRJ-2025-001" multiline={false} />
           </Field>
           <Field label="Prioridade">
-            <TextField editing={editing} value={data.priority || ""} onChange={(v) => setData({ ...data, priority: v })} placeholder="Alta / Média / Baixa" multiline={false} />
+            {project.priority ? (
+              <PriorityBadge priority={project.priority} size="md" />
+            ) : (
+              <span className="text-sm text-muted-foreground italic">—</span>
+            )}
           </Field>
           <Field label="Patrocinador (Sponsor)">
             <TextField editing={editing} value={data.sponsor} onChange={(v) => setData({ ...data, sponsor: v })} placeholder="Nome do patrocinador" multiline={false} />
@@ -365,9 +381,6 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
 
       {/* 3. OBJETIVO SMART */}
       <SectionBlock n={3} title="Objetivo SMART">
-        <Field label="Objetivo geral">
-          <TextField editing={editing} value={form.objective} onChange={(v) => setForm({ ...form, objective: v })} placeholder="Objetivo geral do projeto..." rows={2} aiContext="tap_objective" />
-        </Field>
         <div className="overflow-x-auto -mx-1 px-1">
           <table className="w-full text-sm border border-border rounded-md overflow-hidden">
             <tbody>
@@ -484,12 +497,68 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
 
       {/* 6. BENEFÍCIOS E CRITÉRIOS DE SUCESSO */}
       <SectionBlock n={6} title="Benefícios Esperados e Critérios de Sucesso">
-        <Field label="Benefícios esperados">
-          <TextField editing={editing} value={form.expected_benefits} onChange={(v) => setForm({ ...form, expected_benefits: v })} placeholder="Benefícios tangíveis e intangíveis esperados..." rows={3} aiContext="tap_benefits" />
-        </Field>
-        <Field label="Critérios de sucesso / Indicadores">
-          <TextField editing={editing} value={data.success_criteria || ""} onChange={(v) => setData({ ...data, success_criteria: v })} placeholder="Como medir o sucesso do projeto? KPIs e metas..." rows={3} />
-        </Field>
+        <div className="overflow-x-auto -mx-1 px-1">
+          <table className="w-full text-sm border border-border rounded-md overflow-hidden">
+            <thead>
+              <tr className="bg-primary/10">
+                <th className="px-3 py-2 text-left font-semibold border-b-2 border-primary/30 w-1/4">Benefício</th>
+                <th className="px-3 py-2 text-left font-semibold border-b-2 border-primary/30">Indicador de Sucesso</th>
+                <th className="px-3 py-2 text-center font-semibold border-b-2 border-primary/30 w-32">Meta</th>
+                <th className="px-3 py-2 text-center font-semibold border-b-2 border-primary/30 w-36">Prazo para Verificar</th>
+                {editing && <th className="w-10 border-b-2 border-primary/30"></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {(data.benefits_table || []).length === 0 && !editing && (
+                <tr><td colSpan={4} className="px-3 py-3 text-center text-muted-foreground italic">Nenhum benefício registrado</td></tr>
+              )}
+              {(data.benefits_table || []).map((b, idx) => (
+                <tr key={idx} className="border-b border-border last:border-0 hover:bg-muted/30">
+                  <td className="px-3 py-2 align-top">
+                    {editing ? (
+                      <Textarea value={b.benefit} onChange={(e) => updateBenefit(idx, "benefit", e.target.value)} placeholder="Ex: Visibilidade do portfólio para liderança" rows={2} className="text-sm resize-none" />
+                    ) : (
+                      <span className="whitespace-pre-line">{b.benefit || "—"}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    {editing ? (
+                      <Textarea value={b.indicator} onChange={(e) => updateBenefit(idx, "indicator", e.target.value)} placeholder="Ex: % projetos com painel atualizado" rows={2} className="text-sm resize-none" />
+                    ) : (
+                      <span className="whitespace-pre-line">{b.indicator || "—"}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 align-top text-center bg-success/5">
+                    {editing ? (
+                      <Input value={b.goal} onChange={(e) => updateBenefit(idx, "goal", e.target.value)} placeholder="≥ 80%" className="h-8 text-sm text-center font-semibold" />
+                    ) : (
+                      <span className="font-semibold text-success">{b.goal || "—"}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 align-top text-center">
+                    {editing ? (
+                      <Input value={b.deadline} onChange={(e) => updateBenefit(idx, "deadline", e.target.value)} placeholder="Mês 4" className="h-8 text-sm text-center" />
+                    ) : (
+                      <span>{b.deadline || "—"}</span>
+                    )}
+                  </td>
+                  {editing && (
+                    <td className="px-2 py-2 align-top">
+                      <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => removeBenefit(idx)}>×</Button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {editing && (
+          <Button type="button" size="sm" variant="outline" onClick={addBenefit} className="gap-1">
+            + Adicionar benefício
+          </Button>
+        )}
+
+        {/* Requisitos de aprovação (mantido como complemento) */}
         <Field label="Requisitos de aprovação">
           <TextField editing={editing} value={data.approval_requirements} onChange={(v) => setData({ ...data, approval_requirements: v })} placeholder="Critérios formais de aceitação dos entregáveis..." rows={2} aiContext="tap_regulatory" />
         </Field>
