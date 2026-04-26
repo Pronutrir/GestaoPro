@@ -258,11 +258,35 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
 
       {showForm && (
         <Card className="p-5 space-y-4 border-warning/20 bg-warning/5">
-          <h4 className="text-base font-semibold flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-warning" /> Itens do Risco
-          </h4>
+          <div className="flex items-center justify-between">
+            <h4 className="text-base font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-warning" /> Itens do Risco
+            </h4>
+            {editingId ? (
+              <Badge variant="outline" className="font-mono">
+                {(() => {
+                  const idx = items.findIndex(r => r.id === editingId);
+                  return idx >= 0 ? formatRiskId(idx) : "R-???";
+                })()}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="font-mono text-muted-foreground">
+                Próximo: {formatRiskId(items.length)}
+              </Badge>
+            )}
+          </div>
 
           <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
+              <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Categoria</label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
               <label className="text-sm font-medium text-right md:text-right"><span className="text-destructive">*</span> Descrição</label>
               <div className="space-y-1">
@@ -273,9 +297,29 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-start gap-3">
+              <label className="text-sm font-medium text-right pt-2">Causa Raiz</label>
+              <div className="space-y-1">
+                <div className="flex justify-end">
+                  <AIAssistButton value={rootCause} onChange={setRootCause} context="risk_root_cause" />
+                </div>
+                <Textarea value={rootCause} onChange={e => setRootCause(e.target.value)} rows={2} placeholder="Origem fundamental do risco" />
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
               <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Responsável</label>
               <Input value={responsible} onChange={e => setResponsible(e.target.value)} placeholder="Nome do responsável" />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
+              <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Estratégia</label>
+              <Select value={responseStrategy} onValueChange={setResponseStrategy}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {RESPONSE_STRATEGIES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
