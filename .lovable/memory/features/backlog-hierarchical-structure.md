@@ -1,20 +1,15 @@
 ---
 name: Backlog Hierárquico
-description: Backlog organizado em árvore Fase → Pacote (atividade-pai) → Subatividades. Fases sempre visíveis, mesmo vazias.
+description: Backlog moderno (estilo Jira/Linear). Tudo é tarefa. Hierarquia livre via parent_id. Quick-add inline em fases e em qualquer tarefa-pai. Edição inline de título por duplo-clique.
 type: feature
 ---
 
-O Backlog do projeto exibe a estrutura hierárquica:
-- **Fase**: cabeçalho colapsável, sempre visível (mesmo vazia), com botões "+ Pacote" e "+ Atividade".
-- **Pacote de Atividades**: é uma activity com `parent_id = null` que tem subatividades (filhas). Renderizado com ícone Package e contador de filhas. Colapsável.
-- **Subatividades**: activities com `parent_id` apontando para o pacote. Indentadas (margin-left 24px por nível).
-- **Atividades soltas**: activities com phase_id mas sem parent_id e sem filhas — aparecem direto na fase.
-- **Sem fase**: grupo "Sem fase" para atividades órfãs (phase_id null).
+Princípios:
+- **Tudo é tarefa.** Não existe mais o conceito visual de "Pacote de Atividades". Qualquer tarefa que tenha filhas via `parent_id` é tratada como tarefa-pai (mostra contador, é colapsável). O gestor decide a hierarquia livremente, sem rótulos especiais.
+- **Lista hierárquica única**: Fase → Tarefas (com filhas indentadas 24px por nível). Fases sempre visíveis, mesmo vazias. Grupo "Sem fase" só aparece se houver órfãs.
+- **Quick-add inline**: o botão "+ Tarefa" no cabeçalho da fase abre um Input inline (sem dialog) que cria a tarefa direto no Enter. Hover de qualquer tarefa expõe um "+" que abre input inline para criar subtarefa filha. Esc fecha; blur sem texto fecha; com texto submete.
+- **Edição inline de título**: duplo-clique no título converte para Input; Enter/blur salvam, Esc cancela. Edição completa continua via `EditActivityDialog` ao clicar no card.
+- **Multi-seleção** com checkboxes para mover lote ao Kanban (workflow_stage_id).
+- **Lixeira** (soft-delete) ao final do Backlog com restaurar/esvaziar.
 
-O conceito antigo de "Pacote de Entregas" (tabela `delivery_packages`) foi inibido — removido das abas (`projectTabs.ts`), mas a tabela permanece no banco. Toda criação de pacote agora cria uma activity-pai.
-
-No `CreateTaskDialog`, `defaultParentId` permite pré-selecionar a atividade-pai ao criar subatividade.
-
-Botão "+ Pacote" abre dialog simples (só título) que cria uma activity com `parent_id=null`, `phase_id` da fase clicada e `workflow_stage_id=Backlog`.
-
-Lixeira mantida ao final do Backlog.
+O dialog "Novo Pacote" foi removido. A criação completa via `CreateTaskDialog` (com todos os campos) ainda é acessível via prop `onCreateActivityInPhase` do consumidor, mas o fluxo padrão dentro do Backlog é o quick-add inline.
