@@ -352,6 +352,7 @@ export const EditActivityDialog = ({
         last_update_date: (act as any).last_update_date || "",
         ui_color_tag: (act as any).ui_color_tag || "",
         is_milestone: !!(act as any).is_milestone,
+        item_type: ((act as any).item_type as any) || "atividade",
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       fetchSubActivities(act.id);
