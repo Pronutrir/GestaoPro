@@ -417,7 +417,7 @@ export const EditActivityDialog = ({
         description: formData.description || null,
         assigned_to: formData.assigned_to || null,
         start_date: formData.start_date || null,
-        end_date: formData.end_date || null,
+        end_date: formData.is_milestone ? null : (formData.end_date || null),
         cost: parseFloat(formData.cost) || 0,
         hours: parseHoursInput(formData.hours),
         phase_id: formData.phase_id || null,
