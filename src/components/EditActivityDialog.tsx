@@ -701,37 +701,6 @@ export const EditActivityDialog = ({
                     <ActivityRelationsInline activityId={act.id} projectId={projectId} />
                   </PropertyRow>
                 )}
-              </div>
-
-              {/* Coluna direita */}
-              <div className="space-y-1.5">
-                {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
-                <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
-                  <select
-                    className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[220px] truncate"
-                    value={formData.assigned_to}
-                    onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-                  >
-                    <option value="">Sem líder</option>
-                    {allProfiles.map((m) => (
-                      <option key={m.full_name} value={m.full_name!}>
-                        {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </PropertyRow>
-
-                {/* Prioridade — método GUT */}
-                <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
-                  <div className="w-full">
-                    <GutPriorityField
-                      gravity={formData.gravity}
-                      urgency={formData.urgency}
-                      tendency={formData.tendency}
-                      onChange={(v) => setFormData({ ...formData, ...v })}
-                    />
-                  </div>
-                </PropertyRow>
 
                 {/* Tempo */}
                 {!formData.is_milestone && (
@@ -769,6 +738,37 @@ export const EditActivityDialog = ({
                     />
                   </PropertyRow>
                 )}
+              </div>
+
+              {/* Coluna direita */}
+              <div className="space-y-1.5">
+                {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
+                <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
+                  <select
+                    className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[220px] truncate"
+                    value={formData.assigned_to}
+                    onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+                  >
+                    <option value="">Sem líder</option>
+                    {allProfiles.map((m) => (
+                      <option key={m.full_name} value={m.full_name!}>
+                        {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </PropertyRow>
+
+                {/* Prioridade — método GUT */}
+                <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
+                  <div className="w-full">
+                    <GutPriorityField
+                      gravity={formData.gravity}
+                      urgency={formData.urgency}
+                      tendency={formData.tendency}
+                      onChange={(v) => setFormData({ ...formData, ...v })}
+                    />
+                  </div>
+                </PropertyRow>
 
                 {/* Marco */}
                 <PropertyRow icon={<Diamond className={`w-3.5 h-3.5 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : ""}`} />} label="Marco">
