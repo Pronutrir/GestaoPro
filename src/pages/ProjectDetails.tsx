@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -21,21 +21,24 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { ProjectListView } from "@/components/project-views/ProjectListView";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
-import { CreateTaskDialog } from "@/components/CreateTaskDialog";
-import { WorkflowStageManager } from "@/components/WorkflowStageManager";
+import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 import { MeetingsManager } from "@/components/MeetingsManager";
 import { AssumptionsManager } from "@/components/AssumptionsManager";
 import { RisksManager } from "@/components/RisksManager";
+import { ChangeRequestsManager } from "@/components/ChangeRequestsManager";
+import { ProjectDependenciesView } from "@/components/ProjectDependenciesView";
 import { BacklogSection } from "@/components/BacklogSection";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
+import { ProjectDocuments } from "@/components/documents/ProjectDocuments";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, ListTodo, GanttChart, BookOpen, FileText, Flag,
   ChevronRight, Settings2, Kanban, Users, ShieldCheck, AlertTriangle,
-  Package, Inbox, DollarSign, ClipboardList, LayoutDashboard,
+  Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
+  NotebookPen,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -53,6 +56,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { getProjectDeadlineInfo, formatProjectDueDate } from "@/lib/projectDeadline";
 import { normalizeProjectTabs } from "@/lib/projectTabs";
+import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 
 interface Project {
   id: string;
@@ -100,7 +104,8 @@ const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { canManage: isAdmin, user: currentUser, loading: authLoading } = useAuth();
+  const { isAdmin: isRealAdmin, canManage: isAdmin, user: currentUser, profile, loading: authLoading } = useAuth();
+  const [accessDenied, setAccessDenied] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -124,8 +129,6 @@ const ProjectDetails = () => {
   const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
   const [createTaskParentId, setCreateTaskParentId] = useState<string | null>(null);
   const [showAddPhase, setShowAddPhase] = useState(false);
-  const [newPhaseTitle, setNewPhaseTitle] = useState("");
-  const [newPhaseDescription, setNewPhaseDescription] = useState("");
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
@@ -134,16 +137,69 @@ const ProjectDetails = () => {
   const [activeSprintId, setActiveSprintId] = useState<string | null>(null);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
+  const [pendingChangeRequests, setPendingChangeRequests] = useState(0);
 
-  const canCreate = !permissionsLoading && (isAdmin || (userPerms?.can_create ?? false));
-  const canEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
-  const canDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
-  const canMove = !permissionsLoading && (isAdmin || (userPerms?.can_move ?? false));
+  // Bloqueio escopado: o hook lê RFCs pendentes E suas RFCs rejeitadas (não arquivadas)
+  // que tenham itens de escopo cadastrados.
+  const {
+    hasGlobalBlock,
+    blockedActivityIds,
+    blockedPhaseIds,
+    isActivityBlocked,
+    isPhaseBlocked,
+    refresh: refreshBlocks,
+  } = useChangeRequestBlocks(id);
+
+  const hasScopedBlocks = blockedActivityIds.size > 0 || blockedPhaseIds.size > 0;
+  const isChangeBlocked = hasGlobalBlock; // bloqueio amplo = sem escopo selecionado
+  const baseCanCreate = !permissionsLoading && (isAdmin || (userPerms?.can_create ?? false));
+  const baseCanEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
+  const baseCanDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
+  const baseCanMove = !permissionsLoading && (isAdmin || (userPerms?.can_move ?? false));
+  const canCreate = baseCanCreate && !isChangeBlocked;
+  const canEdit = baseCanEdit && !isChangeBlocked;
+  const canDelete = baseCanDelete && !isChangeBlocked;
+  const canMove = baseCanMove && !isChangeBlocked;
   const isQualityProject = project?.category === "qualidade";
+
+  // Helper que abre o EditActivityDialog respeitando bloqueios escopados
+  const openEditActivity = useCallback((activity: any) => {
+    if (activity && isActivityBlocked(activity.id, activity.phase_id)) {
+      toast({
+        title: "Atividade bloqueada",
+        description: "Esta atividade só pode ser editada após a aprovação (ou arquivamento) da solicitação de mudança que a afeta.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setEditingActivity(activity);
+    setEditActivityDialogOpen(true);
+  }, [isActivityBlocked, toast]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  const fetchPendingChangeRequests = useCallback(async () => {
+    if (!id) return;
+    const { count } = await supabase
+      .from("change_requests" as any)
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", id)
+      .eq("is_trashed", false)
+      .eq("status", "pending");
+    setPendingChangeRequests(count ?? 0);
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    fetchPendingChangeRequests();
+    const channel = supabase
+      .channel(`pending-changes-${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "change_requests", filter: `project_id=eq.${id}` }, () => fetchPendingChangeRequests())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [id, fetchPendingChangeRequests]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -175,10 +231,11 @@ const ProjectDetails = () => {
   const loadAccess = useCallback(async (silent = false) => {
     if (!id) return;
 
-    if (isAdmin) {
+    if (isRealAdmin) {
       setUserPerms({ can_create: true, can_edit: true, can_delete: true, can_move: true });
       setAllowedTabs(null);
       setPermissionsLoading(false);
+      setAccessDenied(false);
       return;
     }
 
@@ -194,7 +251,7 @@ const ProjectDetails = () => {
     }
 
     try {
-      const [{ data: perms }, { data: tabPerms, error: tabError }] = await Promise.all([
+      const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }] = await Promise.all([
         supabase
           .from("project_members")
           .select("can_create, can_edit, can_delete, can_move")
@@ -206,9 +263,40 @@ const ProjectDetails = () => {
           .select("allowed_tabs")
           .eq("user_id", currentUser.id)
           .maybeSingle(),
+        supabase
+          .from("projects")
+          .select("owner, assignees")
+          .eq("id", id)
+          .maybeSingle(),
       ]);
 
-      setUserPerms(perms ?? { can_create: false, can_edit: false, can_delete: false, can_move: false });
+      // Compute access from three sources: explicit member, project Líder (owner),
+      // or listed Participante (assignees). Robust to whitespace/casing differences.
+      const fullNameLower = (profile?.full_name || "").trim().toLowerCase();
+      const ownerMatch =
+        !!fullNameLower &&
+        typeof projectRow?.owner === "string" &&
+        projectRow.owner.trim().toLowerCase() === fullNameLower;
+      const assigneeMatch =
+        !!fullNameLower &&
+        Array.isArray(projectRow?.assignees) &&
+        projectRow!.assignees!.some(
+          (a: any) => typeof a === "string" && a.trim().toLowerCase() === fullNameLower
+        );
+      const hasImplicitAccess = ownerMatch || assigneeMatch;
+
+      if (!perms && !hasImplicitAccess) {
+        setAccessDenied(true);
+        setUserPerms({ can_create: false, can_edit: false, can_delete: false, can_move: false });
+        setAllowedTabs(normalizeProjectTabs());
+        return;
+      }
+      setAccessDenied(false);
+      // If member exists, use those granular permissions. Otherwise (Líder/Participante),
+      // grant full operational permissions by default.
+      setUserPerms(
+        perms ?? { can_create: true, can_edit: true, can_delete: true, can_move: true }
+      );
 
       if (tabError) {
         console.error("Tab permissions fetch error:", tabError);
@@ -220,7 +308,7 @@ const ProjectDetails = () => {
     } finally {
       setPermissionsLoading(false);
     }
-  }, [id, currentUser?.id, isAdmin]);
+  }, [id, currentUser?.id, isRealAdmin, profile?.full_name]);
 
   useEffect(() => {
     if (authLoading || !id) return;
@@ -237,20 +325,47 @@ const ProjectDetails = () => {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          next = parsed.includes("kanban") ? parsed : ["kanban", ...parsed];
+          next = parsed.length > 0 ? parsed : ["kanban"];
         }
       } catch {
         // ignore
       }
     }
     setVisibleTabs(next);
-    setActiveTab((current) => (next.includes(current) ? current : "kanban"));
+    setActiveTab((current) => (next.includes(current) ? current : next[0] ?? "kanban"));
   }, [id, currentUser?.id]);
 
   const persistVisibleTabs = useCallback((next: string[]) => {
     if (!id || !currentUser?.id) return;
     const key = `project-visible-tabs-${currentUser.id}-${id}`;
     localStorage.setItem(key, JSON.stringify(next));
+  }, [id, currentUser?.id]);
+
+  // Safety net: sempre persiste visibleTabs no localStorage quando muda.
+  // Evita perda silenciosa caso algum caller esqueça de chamar persistVisibleTabs.
+  // Também usa uma chave fallback (sem userId) para o caso raro de auth ainda não estar pronta.
+  const visibleTabsHydratedRef = useRef(false);
+  useEffect(() => {
+    if (!id) return;
+    // Pula a primeira execução (estado inicial default = ["kanban"]),
+    // para não sobrescrever um valor salvo antes que o load termine.
+    if (!visibleTabsHydratedRef.current) {
+      visibleTabsHydratedRef.current = true;
+      return;
+    }
+    try {
+      const userKey = currentUser?.id
+        ? `project-visible-tabs-${currentUser.id}-${id}`
+        : `project-visible-tabs-anon-${id}`;
+      localStorage.setItem(userKey, JSON.stringify(visibleTabs));
+    } catch {
+      // quota / privado — ignora
+    }
+  }, [visibleTabs, id, currentUser?.id]);
+
+  // Reseta o flag de hidratação ao trocar de projeto/usuário
+  useEffect(() => {
+    visibleTabsHydratedRef.current = false;
   }, [id, currentUser?.id]);
 
   useEffect(() => {
@@ -298,6 +413,18 @@ const ProjectDetails = () => {
           schema: "public",
           table: "user_tab_permissions",
           filter: `user_id=eq.${currentUser.id}`,
+        },
+        () => {
+          void loadAccess(true);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "projects",
+          filter: `id=eq.${id}`,
         },
         () => {
           void loadAccess(true);
@@ -355,7 +482,7 @@ const ProjectDetails = () => {
       setProject(projectData);
 
       const { data: phasesData } = await supabase
-        .from("phases").select("*").eq("project_id", id).order("display_order", { ascending: true });
+        .from("phases").select("*").eq("project_id", id).eq("is_trashed", false).order("display_order", { ascending: true });
       setPhases(phasesData || []);
 
       const { data: activitiesData } = await (supabase
@@ -370,16 +497,6 @@ const ProjectDetails = () => {
     }
   };
 
-  const handleAddPhase = async () => {
-    if (!newPhaseTitle.trim() || !id) return;
-    try {
-      const maxOrder = phases.reduce((max, p) => Math.max(max, p.display_order), 0);
-      await supabase.from("phases").insert({ project_id: id, title: newPhaseTitle, description: newPhaseDescription || null, display_order: maxOrder + 1 });
-      toast({ title: "Fase criada!" });
-      setNewPhaseTitle(""); setNewPhaseDescription(""); setShowAddPhase(false);
-      fetchProjectData();
-    } catch { toast({ title: "Erro ao criar fase", variant: "destructive" }); }
-  };
 
   const handleAddActivity = async () => {
     if (!newActivity.trim() || !id) return;
@@ -400,6 +517,11 @@ const ProjectDetails = () => {
   };
 
   const handleToggleActivity = async (activityId: string, currentStatus: string) => {
+    const act = activities.find(a => a.id === activityId);
+    if (act && isActivityBlocked(activityId, act.phase_id)) {
+      toast({ title: "Atividade bloqueada", description: "Resolva a solicitação de mudança que afeta esta atividade.", variant: "destructive" });
+      return;
+    }
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
     const updatePayload: any = { status: newStatus, completed_at: completedAt };
@@ -436,8 +558,24 @@ const ProjectDetails = () => {
   };
 
   const handleDeleteActivity = async (activityId: string) => {
+    const act = activities.find(a => a.id === activityId);
+    if (act && isActivityBlocked(activityId, act.phase_id)) {
+      toast({ title: "Atividade bloqueada", description: "Resolva a solicitação de mudança que afeta esta atividade.", variant: "destructive" });
+      return;
+    }
     if (!confirm("Tem certeza que deseja mover esta atividade para a lixeira?")) return;
-    await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any) as any).eq("id", activityId);
+    const trashedAt = new Date().toISOString();
+    // Coletar a atividade + todos os descendentes (subtarefas em qualquer nível)
+    const idsToTrash = new Set<string>([activityId]);
+    let frontier: string[] = [activityId];
+    while (frontier.length > 0) {
+      const children = activities.filter(a => a.parent_id && frontier.includes(a.parent_id));
+      const newIds = children.map(c => c.id).filter(cid => !idsToTrash.has(cid));
+      if (newIds.length === 0) break;
+      newIds.forEach(nid => idsToTrash.add(nid));
+      frontier = newIds;
+    }
+    await (supabase.from("activities").update({ is_trashed: true, trashed_at: trashedAt } as any) as any).in("id", Array.from(idsToTrash));
     toast({ title: "Atividade movida para a lixeira!" });
     fetchProjectData();
   };
@@ -460,6 +598,17 @@ const ProjectDetails = () => {
   if (isLoading || authLoading || permissionsLoading) {
     return (<div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Carregando projeto...</p></div>);
   }
+  if (accessDenied) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center max-w-md px-6">
+          <p className="text-lg font-semibold text-foreground mb-2">Acesso restrito</p>
+          <p className="text-sm text-muted-foreground mb-4">Você não tem autorização para visualizar este projeto. Solicite ao administrador para ser adicionado como membro.</p>
+          <Button onClick={() => navigate("/projects")}>Voltar</Button>
+        </div>
+      </div>
+    );
+  }
   if (!project) {
     return (<div className="min-h-screen bg-background flex items-center justify-center"><div className="text-center"><p className="text-muted-foreground mb-4">Projeto não encontrado</p><Button onClick={() => navigate("/projects")}>Voltar</Button></div></div>);
   }
@@ -470,7 +619,7 @@ const ProjectDetails = () => {
 
   return (
     <AppLayout title={project.title}>
-      <main className="px-4 py-4">
+      <main className="px-4 py-4 bg-muted/40 dark:bg-background min-h-[calc(100vh-3.5rem)]">
         <div className="space-y-6">
           {/* Project Info Card */}
           <Card className="px-5 py-3">
@@ -532,41 +681,71 @@ const ProjectDetails = () => {
               activities={activities}
               phases={phases}
               project={project}
-              onNavigateToActivity={(activity) => { setEditingActivity(activity as any); setEditActivityDialogOpen(true); }}
+              onNavigateToActivity={(activity) => openEditActivity(activity as any)}
             />
           )}
 
-
-
+          {(isChangeBlocked || hasScopedBlocks) && (
+            <Card className="px-4 py-3 border-2 border-amber-500/60 bg-amber-500/10">
+              <div className="flex items-start gap-3">
+                <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1 text-sm">
+                  {isChangeBlocked ? (
+                    <>
+                      <p className="font-semibold text-amber-900 dark:text-amber-200">
+                        Projeto bloqueado: {pendingChangeRequests} solicitação{pendingChangeRequests > 1 ? "ões" : ""} de mudança aguardando aprovação
+                      </p>
+                      <p className="text-amber-800/80 dark:text-amber-300/80 text-xs mt-0.5">
+                        Nenhuma alteração pode ser feita até que as solicitações sejam aprovadas ou rejeitadas.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold text-amber-900 dark:text-amber-200">
+                        {blockedActivityIds.size} atividade{blockedActivityIds.size !== 1 ? "s" : ""} bloqueada{blockedActivityIds.size !== 1 ? "s" : ""}{blockedPhaseIds.size > 0 ? ` e ${blockedPhaseIds.size} fase${blockedPhaseIds.size !== 1 ? "s" : ""}` : ""} por solicitação de mudança
+                      </p>
+                      <p className="text-amber-800/80 dark:text-amber-300/80 text-xs mt-0.5">
+                        Os itens marcados com cadeado só serão liberados quando a solicitação for aprovada (ou arquivada se rejeitada).
+                      </p>
+                    </>
+                  )}
+                </div>
+                <Button size="sm" variant="outline" className="border-amber-500/60" onClick={() => setActiveTab("changes")}>
+                  Ver solicitações
+                </Button>
+              </div>
+            </Card>
+          )}
 
           {/* Tabs — Phases tab REMOVED */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {(() => {
               const allDefinitions = [
-                { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" /> },
+                { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-violet-500" },
                 ...(isQualityProject ? [] : [
-                  { value: "list", label: "Lista", icon: <ListTodo className="w-4 h-4" /> },
+                  { value: "list", label: "Pendências", icon: <ListTodo className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-sky-500" },
                 ]),
-                { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" /> },
-                { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" /> },
+                { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-amber-500" },
+                { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-emerald-500" },
                 ...(isQualityProject ? [] : [
-                  { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" /> },
+                  { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-rose-500" },
                 ]),
-                { value: "deliveries", label: "Pacote de Entregas", icon: <Package className="w-4 h-4" /> },
-                { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" /> },
-                { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" /> },
-                { value: "tap", label: "TAP", icon: <ClipboardList className="w-4 h-4" /> },
-                { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" /> },
-                { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" /> },
-                { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" /> },
-                { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
-                { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" /> },
-                { value: "workflow", label: "Workflow", icon: <Settings2 className="w-4 h-4" /> },
+                { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-blue-500" },
+                { value: "docpages", label: "Páginas", icon: <NotebookPen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-pink-500" },
+                { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-fuchsia-500" },
+                { value: "tap", label: "TAP", icon: <ClipboardList className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-indigo-500" },
+                { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-teal-500" },
+                { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-lime-600" },
+                { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-red-500" },
+                { value: "changes", label: "Mudanças", icon: <GitPullRequest className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-orange-500" },
+                { value: "dependencies", label: "Dependências", icon: <GitPullRequest className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-cyan-500" },
+                { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-green-600" },
+                { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-yellow-500" },
               ];
               const permittedDefs = allDefinitions.filter(t => !allowedTabs || allowedTabs.includes(t.value));
               const activeTabsSet = new Set(visibleTabs);
               const renderedTabs = permittedDefs.filter(t => activeTabsSet.has(t.value));
-              const availableToAdd = permittedDefs.filter(t => !activeTabsSet.has(t.value) && t.value !== "kanban");
+              const availableToAdd = permittedDefs.filter(t => !activeTabsSet.has(t.value));
 
               const handleAddTab = (val: string) => {
                 const next = [...visibleTabs, val];
@@ -576,11 +755,10 @@ const ProjectDetails = () => {
                 setTabPickerOpen(false);
               };
               const handleRemoveTab = (val: string) => {
-                if (val === "kanban") return;
                 const next = visibleTabs.filter(v => v !== val);
                 setVisibleTabs(next);
                 persistVisibleTabs(next);
-                if (activeTab === val) setActiveTab("kanban");
+                if (activeTab === val) setActiveTab(next[0] ?? "kanban");
               };
 
               return (
@@ -590,19 +768,20 @@ const ProjectDetails = () => {
                   onTabChange={setActiveTab}
                   tabs={renderedTabs}
                   onRemoveTab={handleRemoveTab}
-                  removableValues={renderedTabs.map(t => t.value).filter(v => v !== "kanban")}
+                  removableValues={renderedTabs.map(t => t.value)}
+                  extraSlotPosition="left"
                   extraSlot={
                     <Popover open={tabPickerOpen} onOpenChange={setTabPickerOpen}>
                       <PopoverTrigger asChild>
                         <button
-                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-dashed border-border/60 transition-colors"
+                          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors"
                           aria-label="Adicionar visualização"
                         >
                           <Plus className="w-4 h-4" />
                           Visualização
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent align="end" className="w-64 p-2">
+                      <PopoverContent align="start" className="w-64 p-2">
                         <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5">
                           Adicionar visualização
                         </div>
@@ -618,7 +797,7 @@ const ProjectDetails = () => {
                                 onClick={() => handleAddTab(t.value)}
                                 className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-foreground hover:bg-accent transition-colors text-left"
                               >
-                                {t.icon}
+                                <span className={t.iconColor ?? ""}>{t.icon}</span>
                                 <span>{t.label}</span>
                               </button>
                             ))}
@@ -635,7 +814,7 @@ const ProjectDetails = () => {
               <ActivityKanban
                 projectId={id!} activities={activities} phases={phases}
                 onDataChanged={fetchProjectData}
-                onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+                onEditActivity={(activity) => openEditActivity(activity)}
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 isAdmin={canDelete}
@@ -659,10 +838,15 @@ const ProjectDetails = () => {
                 <ProjectListView
                   activities={activities as any}
                   phases={phases}
-                  onEditActivity={(a) => { setEditingActivity(a as any); setEditActivityDialogOpen(true); }}
+                  onEditActivity={(a) => openEditActivity(a as any)}
                   onToggleActivity={handleToggleActivity}
                   canCreate={canCreate}
-                  onAddActivity={() => { setActiveTab("backlog"); setShowAddActivity(true); }}
+                  onAddActivity={() => {
+                    setCreateTaskStageId(null);
+                    setCreateTaskPhaseId(null);
+                    setCreateTaskParentId(null);
+                    setShowAddActivity(true);
+                  }}
                 />
               </TabsContent>
             )}
@@ -685,12 +869,16 @@ const ProjectDetails = () => {
               <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
             </TabsContent>
 
+            <TabsContent value="docpages" className="mt-0">
+              <ProjectDocuments projectId={id!} onActivityCreated={fetchProjectData} />
+            </TabsContent>
+
             <TabsContent value="stories" className="mt-0">
               <UserStoriesBoard projectId={id!} />
             </TabsContent>
 
             <TabsContent value="tap" className="mt-0">
-              <ProjectCharter projectId={id!} project={project} phases={phases} members={members} />
+              <ProjectCharter projectId={id!} project={project} phases={phases} members={members} onMembersChanged={fetchMembers} />
             </TabsContent>
 
             <TabsContent value="meetings" className="mt-0">
@@ -721,13 +909,36 @@ const ProjectDetails = () => {
               <RisksManager projectId={id!} />
             </TabsContent>
 
+            <TabsContent value="changes" className="mt-0">
+              <ChangeRequestsManager
+                projectId={id!}
+                projectOwner={project.owner}
+                onChanged={fetchPendingChangeRequests}
+              />
+            </TabsContent>
+
+            <TabsContent value="dependencies" className="mt-0">
+              <ProjectDependenciesView
+                projectId={id!}
+                onEditActivity={(actId) => {
+                  const act = activities.find((a) => a.id === actId);
+                  if (act) { setEditingActivity(act); setEditActivityDialogOpen(true); }
+                }}
+              />
+            </TabsContent>
+
             <TabsContent value="backlog" className="mt-3 space-y-4">
               {canCreate && (
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant={showAddPhase ? "secondary" : "default"} onClick={() => { setShowAddPhase(!showAddPhase); setShowAddActivity(false); }} className="gap-2">
+                  <Button size="sm" variant="default" onClick={() => setShowAddPhase(true)} className="gap-2">
                     <Layers className="w-4 h-4" /> Nova Fase
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => { setShowAddActivity(true); setShowAddPhase(false); }} className="gap-2">
+                  <Button size="sm" variant="outline" onClick={() => {
+                    setCreateTaskStageId(null);
+                    setCreateTaskPhaseId(null);
+                    setCreateTaskParentId(null);
+                    setShowAddActivity(true);
+                  }} className="gap-2">
                     <Plus className="w-4 h-4" /> Nova Atividade
                   </Button>
                   <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
@@ -740,20 +951,20 @@ const ProjectDetails = () => {
                     <DropdownMenuContent align="end">
                       {phases.length > 0 && (
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          if (!confirm(`Excluir TODAS as ${phases.length} fases? Esta ação é irreversível.`)) return;
-                          await supabase.from("phases").delete().eq("project_id", id);
-                          toast({ title: `${phases.length} fases excluídas!` }); fetchProjectData();
+                          if (!confirm(`Arquivar TODAS as ${phases.length} fases? Elas podem ser restauradas no Arquivo.`)) return;
+                          await (supabase.from("phases").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id));
+                          toast({ title: `${phases.length} fases arquivadas!` }); fetchProjectData();
                         }}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Excluir todas as fases
+                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as fases
                         </DropdownMenuItem>
                       )}
                       {activities.length > 0 && (
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          if (!confirm(`Excluir TODAS as ${activities.length} atividades? Elas serão movidas para a lixeira.`)) return;
+                          if (!confirm(`Arquivar TODAS as ${activities.length} atividades? Elas podem ser restauradas no Arquivo.`)) return;
                           await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id) as any).eq("is_trashed", false);
-                          toast({ title: `${activities.length} atividades movidas para a lixeira!` }); fetchProjectData();
+                          toast({ title: `${activities.length} atividades arquivadas!` }); fetchProjectData();
                         }}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Excluir todas as atividades
+                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as atividades
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuContent>
@@ -761,49 +972,9 @@ const ProjectDetails = () => {
                 </div>
               )}
 
-              {showAddPhase && (
-                <Card className="p-4 border-primary/20 bg-primary/5 space-y-3">
-                  <Input placeholder="Nome da fase *" value={newPhaseTitle} onChange={(e) => setNewPhaseTitle(e.target.value)} />
-                  <Input placeholder="Descrição (opcional)" value={newPhaseDescription} onChange={(e) => setNewPhaseDescription(e.target.value)} />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleAddPhase}>Criar Fase</Button>
-                    <Button size="sm" variant="outline" onClick={() => { setShowAddPhase(false); setNewPhaseTitle(""); setNewPhaseDescription(""); }}>Cancelar</Button>
-                  </div>
-                </Card>
-              )}
-
-              <CreateTaskDialog
-                open={showAddActivity}
-                onOpenChange={(o) => {
-                  setShowAddActivity(o);
-                  if (!o) {
-                    setCreateTaskStageId(null);
-                    setCreateTaskPhaseId(null);
-                    setCreateTaskParentId(null);
-                  }
-                }}
-                projectId={id!}
-                projectTitle={project.title}
-                phases={phases}
-                members={members}
-                defaultStageId={createTaskStageId}
-                defaultPhaseId={createTaskPhaseId}
-                defaultParentId={createTaskParentId}
-                onCreated={() => fetchProjectData()}
-                onOpenDetails={(activityId) => {
-                  const created = activities.find((a) => a.id === activityId);
-                  if (created) {
-                    setEditingActivity(created);
-                    setEditActivityDialogOpen(true);
-                  } else {
-                    fetchProjectData();
-                  }
-                }}
-              />
-
               <BacklogSection
                 projectId={id!} activities={activities} phases={phases}
-                onEditActivity={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }}
+                onEditActivity={(activity) => openEditActivity(activity)}
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
@@ -825,10 +996,6 @@ const ProjectDetails = () => {
                 onProjectUpdated={fetchProjectData}
               />
             </TabsContent>
-
-            <TabsContent value="workflow" className="mt-0">
-              <WorkflowStageManager projectId={id!} />
-            </TabsContent>
           </Tabs>
         </div>
 
@@ -837,6 +1004,36 @@ const ProjectDetails = () => {
           activity={editingActivity} open={editActivityDialogOpen} onOpenChange={setEditActivityDialogOpen}
           onActivityUpdated={fetchProjectData} phases={phases} allActivities={activities}
           projectId={id!} isQualityProject={isQualityProject}
+        />
+        {project && (
+          <EditActivityDialog
+            activity={null}
+            open={showAddActivity}
+            onOpenChange={(o) => {
+              setShowAddActivity(o);
+              if (!o) {
+                setCreateTaskStageId(null);
+                setCreateTaskPhaseId(null);
+                setCreateTaskParentId(null);
+              }
+            }}
+            onActivityUpdated={fetchProjectData}
+            phases={phases}
+            allActivities={activities}
+            projectId={id!}
+            isQualityProject={isQualityProject}
+            createMode
+            defaultStageId={createTaskStageId}
+            defaultPhaseId={createTaskPhaseId}
+            defaultParentId={createTaskParentId}
+          />
+        )}
+        <CreatePhaseDialog
+          open={showAddPhase}
+          onOpenChange={setShowAddPhase}
+          projectId={id!}
+          existingPhasesCount={phases.length}
+          onCreated={() => fetchProjectData()}
         />
       </main>
     </AppLayout>

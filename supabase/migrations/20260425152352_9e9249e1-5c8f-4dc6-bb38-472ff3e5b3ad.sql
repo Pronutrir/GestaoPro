@@ -1,0 +1,1 @@
+UPDATE public.projects SET project_type = 'operacional' WHERE project_type = 'melhoria_processo';

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AIAssistButton } from "@/components/AIAssistButton";
 import { Plus, Pencil, Trash2, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +49,7 @@ export const AssumptionsManager = ({ projectId }: AssumptionsManagerProps) => {
       .from("assumptions")
       .select("*")
       .eq("project_id", projectId)
+      .eq("is_trashed", false)
       .order("created_at", { ascending: false });
     if (data) setItems(data);
   };
@@ -82,8 +84,8 @@ export const AssumptionsManager = ({ projectId }: AssumptionsManagerProps) => {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta premissa?")) return;
-    await supabase.from("assumptions").delete().eq("id", id);
-    toast({ title: "Premissa excluída!" }); fetchData();
+    await supabase.from("assumptions").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
+    toast({ title: "Premissa movida para a lixeira" }); fetchData();
   };
 
   return (
@@ -101,7 +103,12 @@ export const AssumptionsManager = ({ projectId }: AssumptionsManagerProps) => {
 
       {showForm && (
         <Card className="p-4 space-y-3 border-primary/20 bg-primary/5">
-          <Textarea placeholder="Descrição da premissa *" value={description} onChange={e => setDescription(e.target.value)} />
+          <div className="space-y-1">
+            <div className="flex justify-end">
+              <AIAssistButton value={description} onChange={setDescription} context="assumption_description" />
+            </div>
+            <Textarea placeholder="Descrição da premissa *" value={description} onChange={e => setDescription(e.target.value)} />
+          </div>
           <div className="grid grid-cols-3 gap-3">
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger><SelectValue /></SelectTrigger>

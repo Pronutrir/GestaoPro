@@ -4,17 +4,19 @@ import { useAuth } from "@/contexts/AuthContext";
 
 /**
  * Returns filtered project IDs for the current user.
- * Admins and Gestors see all projects; regular users see only projects they're assigned to.
+ * Only Admins see all projects. Gestors and regular users see projects where
+ * they are: (a) explicitly added as members, (b) the project Líder (owner),
+ * or (c) listed as participants (assignees) by full name.
  */
 export const useProjectAccess = () => {
-  const { user, isAdmin, isGestor, canManage, loading } = useAuth();
+  const { user, isAdmin, isGestor, canManage, profile, loading } = useAuth();
   const [memberProjectIds, setMemberProjectIds] = useState<Set<string>>(new Set());
   const [membershipsLoading, setMembershipsLoading] = useState(true);
 
   const loadMemberships = useCallback(async () => {
     if (loading) return;
 
-    if (canManage || !user?.id) {
+    if (isAdmin || !user?.id) {
       setMemberProjectIds(new Set());
       setMembershipsLoading(false);
       return;
@@ -22,21 +24,52 @@ export const useProjectAccess = () => {
 
     setMembershipsLoading(true);
 
-    const { data: memberships } = await supabase
-      .from("project_members")
-      .select("project_id")
-      .eq("user_id", user.id);
+    const fullName = (profile?.full_name || "").trim();
+    const fullNameLower = fullName.toLowerCase();
 
-    setMemberProjectIds(new Set((memberships || []).map((m: any) => m.project_id)));
+    // Fetch project_members + ALL non-trashed projects so we can do robust
+    // case/whitespace-insensitive matching for owner/assignees in JS.
+    const [membersRes, projectsRes] = await Promise.all([
+      supabase
+        .from("project_members")
+        .select("project_id")
+        .eq("user_id", user.id),
+      fullName
+        ? supabase
+            .from("projects")
+            .select("id, owner, assignees")
+            .eq("is_trashed", false)
+        : Promise.resolve({ data: [] as any[] } as any),
+    ]);
+
+    const ids = new Set<string>();
+    (membersRes.data || []).forEach((m: any) => ids.add(m.project_id));
+
+    if (fullNameLower) {
+      (projectsRes.data || []).forEach((p: any) => {
+        const ownerMatch =
+          typeof p.owner === "string" &&
+          p.owner.trim().toLowerCase() === fullNameLower;
+        const assigneeMatch =
+          Array.isArray(p.assignees) &&
+          p.assignees.some(
+            (a: any) =>
+              typeof a === "string" && a.trim().toLowerCase() === fullNameLower
+          );
+        if (ownerMatch || assigneeMatch) ids.add(p.id);
+      });
+    }
+
+    setMemberProjectIds(ids);
     setMembershipsLoading(false);
-  }, [canManage, loading, user?.id]);
+  }, [isAdmin, loading, user?.id, profile?.full_name]);
 
   useEffect(() => {
     loadMemberships();
   }, [loadMemberships]);
 
   useEffect(() => {
-    if (loading || canManage || !user?.id) return;
+    if (loading || isAdmin || !user?.id) return;
 
     const refresh = () => {
       loadMemberships();
@@ -57,6 +90,11 @@ export const useProjectAccess = () => {
         { event: "*", schema: "public", table: "project_members", filter: `user_id=eq.${user.id}` },
         refresh
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "projects" },
+        refresh
+      )
       .subscribe();
 
     window.addEventListener("focus", handleFocus);
@@ -68,10 +106,10 @@ export const useProjectAccess = () => {
       window.clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
-  }, [canManage, loadMemberships, loading, user?.id]);
+  }, [isAdmin, loadMemberships, loading, user?.id]);
 
   const filterProjects = async <T extends { id: string }>(projects: T[]): Promise<T[]> => {
-    if (canManage || !user) return projects;
+    if (isAdmin || !user) return projects;
 
     return projects.filter((p) => memberProjectIds.has(p.id));
   };

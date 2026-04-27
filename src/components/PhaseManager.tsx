@@ -27,6 +27,7 @@ import { SortableActivityCard } from "@/components/SortableActivityCard";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 
 interface Phase {
   id: string;
@@ -216,17 +217,20 @@ export const PhaseManager = ({
   };
 
   const handleDeletePhase = async (phaseId: string) => {
-    if (!confirm("Excluir esta fase? As tarefas serão desvinculadas.")) return;
+    if (!confirm("Arquivar esta fase? Ela ficará oculta mas pode ser restaurada no Arquivo.")) return;
 
     try {
-      const { error } = await supabase.from("phases").delete().eq("id", phaseId);
+      const { error } = await supabase
+        .from("phases")
+        .update({ is_trashed: true, trashed_at: new Date().toISOString() } as any)
+        .eq("id", phaseId);
       if (error) throw error;
 
-      toast({ title: "Fase excluída!" });
+      toast({ title: "Fase arquivada!", description: "Você pode restaurá-la no Arquivo." });
       onDataChanged();
     } catch (error) {
-      console.error("Erro ao excluir fase:", error);
-      toast({ title: "Erro ao excluir", variant: "destructive" });
+      console.error("Erro ao arquivar fase:", error);
+      toast({ title: "Erro ao arquivar", variant: "destructive" });
     }
   };
 
@@ -293,23 +297,29 @@ export const PhaseManager = ({
   };
 
   const handleDeleteAllPhases = async () => {
-    if (!confirm(`Excluir TODAS as ${phases.length} fases? As atividades vinculadas ficarão sem fase.`)) return;
+    if (!confirm(`Arquivar TODAS as ${phases.length} fases? Elas ficarão ocultas mas podem ser restauradas no Arquivo.`)) return;
     try {
-      const { error } = await supabase.from("phases").delete().eq("project_id", projectId);
+      const { error } = await supabase
+        .from("phases")
+        .update({ is_trashed: true, trashed_at: new Date().toISOString() } as any)
+        .eq("project_id", projectId);
       if (error) throw error;
-      toast({ title: `${phases.length} fases excluídas!` });
+      toast({ title: `${phases.length} fases arquivadas!` });
       onDataChanged();
-    } catch { toast({ title: "Erro ao excluir fases", variant: "destructive" }); }
+    } catch { toast({ title: "Erro ao arquivar fases", variant: "destructive" }); }
   };
 
   const handleDeleteAllActivities = async () => {
-    if (!confirm(`Excluir TODAS as ${activities.length} atividades do projeto?`)) return;
+    if (!confirm(`Arquivar TODAS as ${activities.length} atividades do projeto? Elas podem ser restauradas no Arquivo.`)) return;
     try {
-      const { error } = await supabase.from("activities").delete().eq("project_id", projectId);
+      const { error } = await supabase
+        .from("activities")
+        .update({ is_trashed: true, trashed_at: new Date().toISOString() } as any)
+        .eq("project_id", projectId);
       if (error) throw error;
-      toast({ title: `${activities.length} atividades excluídas!` });
+      toast({ title: `${activities.length} atividades arquivadas!` });
       onDataChanged();
-    } catch { toast({ title: "Erro ao excluir atividades", variant: "destructive" }); }
+    } catch { toast({ title: "Erro ao arquivar atividades", variant: "destructive" }); }
   };
 
   const unassignedActivities = getActivitiesForPhase(null);
@@ -318,36 +328,13 @@ export const PhaseManager = ({
     <div className="space-y-4">
 
       {/* Add Phase Form */}
-      {showAddPhase && (
-        <Card className="p-4 space-y-3 border-primary/20 bg-primary/5">
-          <Input
-            placeholder="Nome da fase *"
-            value={newPhaseTitle}
-            onChange={(e) => setNewPhaseTitle(e.target.value)}
-          />
-          <Input
-            placeholder="Descrição (opcional)"
-            value={newPhaseDescription}
-            onChange={(e) => setNewPhaseDescription(e.target.value)}
-          />
-          <div className="flex gap-2">
-            <Button size="sm" onClick={handleAddPhase}>
-              Criar Fase
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setShowAddPhase(false);
-                setNewPhaseTitle("");
-                setNewPhaseDescription("");
-              }}
-            >
-              Cancelar
-            </Button>
-          </div>
-        </Card>
-      )}
+      <CreatePhaseDialog
+        open={showAddPhase}
+        onOpenChange={setShowAddPhase}
+        projectId={projectId}
+        existingPhasesCount={phases.length}
+        onCreated={() => onDataChanged()}
+      />
 
       {/* Phases List */}
       <div className="space-y-3">

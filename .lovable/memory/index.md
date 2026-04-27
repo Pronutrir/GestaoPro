@@ -1,0 +1,4 @@
+- [TAP Three Pillars](mem://features/tap-three-pillars) — Ficha de Abertura em POR QUÊ / O QUÊ / PARA QUÊ, sincroniza Riscos/Premissas/Dependências
+- [Archive Instead of Delete](mem://features/archive-instead-of-delete) — Soft-delete (arquivamento) substitui exclusão; só Admin pode excluir definitivamente em /trash
+- [Relacionamentos estilo ClickUp](mem://features/task-relations-clickup) — Tabela task_relations + painel TaskRelations (related/blocking/waiting_on) + bloqueio de conclusão
+- [Participantes com RACI individual](mem://features/activity-participants-with-raci) — Participantes ilimitados por atividade, cada um com seu papel RACI próprio em activities.participant_roles (JSONB)

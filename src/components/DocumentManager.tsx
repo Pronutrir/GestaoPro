@@ -7,6 +7,7 @@ import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X } from "l
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { AIAssistButton } from "@/components/AIAssistButton";
 
 interface ProjectDocument {
   id: string;
@@ -66,6 +67,7 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
       .from("project_documents")
       .select("*")
       .eq("project_id", projectId)
+      .eq("is_trashed", false)
       .order("created_at", { ascending: false });
 
     if (!error && data) setDocuments(data);
@@ -129,7 +131,7 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir este documento?")) return;
-    await supabase.from("project_documents").delete().eq("id", id);
+    await supabase.from("project_documents").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     fetchDocuments();
   };
 
@@ -161,6 +163,11 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
             <Input placeholder="Adicionado por" value={form.uploaded_by} onChange={(e) => setForm({ ...form, uploaded_by: e.target.value })} />
           </div>
           <Input placeholder="Descrição (opcional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          {form.description.trim() && (
+            <div className="flex justify-end -mt-2">
+              <AIAssistButton value={form.description} onChange={(v) => setForm({ ...form, description: v })} context="document_description" />
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             {phases.length > 0 && (
               <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.phase_id} onChange={(e) => setForm({ ...form, phase_id: e.target.value })}>

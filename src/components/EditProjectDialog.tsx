@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { ProjectMembersManager } from "@/components/ProjectMembersManager";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,7 +11,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -22,7 +20,8 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
+import { AIAssistButton } from "@/components/AIAssistButton";
+import { GutPriorityField } from "@/components/GutPriorityField";
 
 interface Project {
   id: string;
@@ -37,6 +36,13 @@ interface Project {
   blockers: string | null;
   category?: string;
   program?: string | null;
+  project_type?: string | null;
+  start_date?: string | null;
+  sponsor?: string | null;
+  manager?: string | null;
+  objective?: string | null;
+  problem_statement?: string | null;
+  root_cause?: string | null;
 }
 
 interface EditProjectDialogProps {
@@ -53,7 +59,6 @@ export const EditProjectDialog = ({
   onProjectUpdated,
 }: EditProjectDialogProps) => {
   const { toast } = useToast();
-  const { canManage: isAdmin } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
 
@@ -72,7 +77,10 @@ export const EditProjectDialog = ({
     title: "",
     description: "",
     status: "ideacao",
-    priority: "medium",
+    priority: "pendente",
+    gravity: null as number | null,
+    urgency: null as number | null,
+    tendency: null as number | null,
     due_date: "",
     assignees: "",
     budget_planned: "",
@@ -80,6 +88,13 @@ export const EditProjectDialog = ({
     blockers: "",
     category: "",
     program: "",
+    project_type: "",
+    start_date: "",
+    sponsor: "",
+    manager: "",
+    objective: "",
+    problem_statement: "",
+    root_cause: "",
   });
 
   useEffect(() => {
@@ -89,6 +104,9 @@ export const EditProjectDialog = ({
         description: project.description || "",
         status: project.status,
         priority: project.priority,
+        gravity: (project as any).gravity ?? null,
+        urgency: (project as any).urgency ?? null,
+        tendency: (project as any).tendency ?? null,
         due_date: project.due_date || "",
         assignees: project.assignees.join(", "),
         budget_planned: project.budget_planned?.toString() || "0",
@@ -96,6 +114,13 @@ export const EditProjectDialog = ({
         blockers: project.blockers || "",
         category: (project as any).category || "general",
         program: (project as any).program || "",
+        project_type: (project as any).project_type || "",
+        start_date: (project as any).start_date || "",
+        sponsor: (project as any).sponsor || "",
+        manager: (project as any).manager || "",
+        objective: (project as any).objective || "",
+        problem_statement: (project as any).problem_statement || "",
+        root_cause: (project as any).root_cause || "",
       });
     }
   }, [project]);
@@ -118,7 +143,9 @@ export const EditProjectDialog = ({
           title: formData.title,
           description: formData.description,
           status: formData.status,
-          priority: formData.priority,
+          gravity: formData.gravity,
+          urgency: formData.urgency,
+          tendency: formData.tendency,
           due_date: formData.due_date || null,
           assignees: assigneesArray,
           budget_planned: parseFloat(formData.budget_planned) || 0,
@@ -126,6 +153,13 @@ export const EditProjectDialog = ({
           blockers: formData.blockers,
           category: formData.category || "general",
           program: formData.program || null,
+          project_type: formData.project_type || null,
+          start_date: formData.start_date || null,
+          sponsor: formData.sponsor || null,
+          manager: formData.manager || null,
+          objective: formData.objective || null,
+          problem_statement: formData.problem_statement || null,
+          root_cause: formData.root_cause || null,
         })
         .eq("id", project.id);
 
@@ -164,7 +198,14 @@ export const EditProjectDialog = ({
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="edit-title">Título *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit-title">Título *</Label>
+                <AIAssistButton
+                  value={formData.title}
+                  onChange={(next) => setFormData({ ...formData, title: next })}
+                  context="project_title"
+                />
+              </div>
               <Input
                 id="edit-title"
                 value={formData.title}
@@ -174,18 +215,28 @@ export const EditProjectDialog = ({
                 required
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-description">Descrição</Label>
-              <Textarea
-                id="edit-description"
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                rows={3}
-              />
-            </div>
             <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-project_type">Tipo do Projeto</Label>
+                <Select
+                  value={formData.project_type || "_none"}
+                  onValueChange={(v) =>
+                    setFormData({ ...formData, project_type: v === "_none" ? "" : v })
+                  }
+                >
+                  <SelectTrigger id="edit-project_type">
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Não definido</SelectItem>
+                    <SelectItem value="estrategico">Estratégico</SelectItem>
+                    <SelectItem value="operacional">Operacional Crítico</SelectItem>
+                    <SelectItem value="novos_negocios">Novos Negócios</SelectItem>
+                    <SelectItem value="parceria">Parceria</SelectItem>
+                    <SelectItem value="inovacao">Inovação</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-budget_planned">Orçamento Planejado (R$)</Label>
                 <CurrencyInput
@@ -196,6 +247,19 @@ export const EditProjectDialog = ({
                   value={formData.budget_planned}
                   onChange={(e) =>
                     setFormData({ ...formData, budget_planned: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-start_date">Data de Início</Label>
+                <Input
+                  id="edit-start_date"
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, start_date: e.target.value })
                   }
                 />
               </div>
@@ -234,22 +298,13 @@ export const EditProjectDialog = ({
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="edit-priority">Prioridade</Label>
-                <Select
-                  value={formData.priority}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, priority: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Baixa</SelectItem>
-                    <SelectItem value="medium">Média</SelectItem>
-                    <SelectItem value="high">Alta</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Prioridade (GUT)</Label>
+                <GutPriorityField
+                  gravity={formData.gravity}
+                  urgency={formData.urgency}
+                  tendency={formData.tendency}
+                  onChange={(v) => setFormData({ ...formData, ...v })}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -286,30 +341,6 @@ export const EditProjectDialog = ({
                 />
               </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-program">Programa</Label>
-              <Input
-                id="edit-program"
-                placeholder="Nome do programa (opcional)"
-                value={formData.program}
-                onChange={(e) => setFormData({ ...formData, program: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-blockers">Bloqueios/Impedimentos</Label>
-              <Textarea
-                id="edit-blockers"
-                placeholder="Descreva possíveis bloqueios ou impedimentos..."
-                value={formData.blockers}
-                onChange={(e) =>
-                  setFormData({ ...formData, blockers: e.target.value })
-                }
-                rows={2}
-              />
-            </div>
-            {project && isAdmin && (
-              <ProjectMembersManager projectId={project.id} />
-            )}
           </div>
           <DialogFooter>
             <Button

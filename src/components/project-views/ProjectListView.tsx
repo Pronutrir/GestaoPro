@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronRight, ChevronDown, Flag, Plus, User, Calendar } from "lucide-react";
+import { ChevronRight, ChevronDown, Flag, Plus, User, Calendar, ChevronsDownUp, ChevronsUpDown, Eye, EyeOff } from "lucide-react";
 import { format, parseISO, isBefore, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -30,17 +30,23 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   completed: { label: "CONCLUÍDA", color: "bg-success/15 text-success" },
 };
 
-const PRIORITY_FLAG: Record<string, { label: string; cls: string }> = {
-  high: { label: "Urgente", cls: "text-destructive" },
-  medium: { label: "Média", cls: "text-warning" },
-  low: { label: "Baixa", cls: "text-success" },
+const PRIORITY_FLAG: Record<string, { label: string; cls: string; dot: string }> = {
+  high: { label: "Urgente", cls: "text-destructive", dot: "bg-destructive" },
+  medium: { label: "Média", cls: "text-warning", dot: "bg-warning" },
+  low: { label: "Baixa", cls: "text-success", dot: "bg-success" },
 };
 
 export const ProjectListView = ({ activities, phases, onEditActivity, onToggleActivity, onAddActivity, canCreate }: Props) => {
   const [groupBy, setGroupBy] = useState<GroupBy>("status");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [showCompleted, setShowCompleted] = useState(false);
+  const expandAll = () => setCollapsed(new Set());
+  const collapseAll = () => setCollapsed(new Set(groups.map(g => g.key)));
 
-  const visibleActivities = useMemo(() => activities.filter(a => !a.parent_id), [activities]);
+  const visibleActivities = useMemo(
+    () => activities.filter(a => !a.parent_id && (showCompleted || a.status !== "completed")),
+    [activities, showCompleted]
+  );
 
   const groups = useMemo(() => {
     const map = new Map<string, { key: string; label: string; color?: string; items: Activity[] }>();
@@ -82,7 +88,7 @@ export const ProjectListView = ({ activities, phases, onEditActivity, onToggleAc
   return (
     <div className="space-y-3">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 text-xs">
+      <div className="flex items-center gap-2 text-xs flex-wrap mt-[10px]">
         <span className="text-muted-foreground">Agrupar por:</span>
         {(["status", "phase", "priority", "assignee"] as GroupBy[]).map(g => (
           <Button
@@ -95,6 +101,29 @@ export const ProjectListView = ({ activities, phases, onEditActivity, onToggleAc
             {g === "status" ? "Status" : g === "phase" ? "Fase" : g === "priority" ? "Prioridade" : "Responsável"}
           </Button>
         ))}
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            size="sm"
+            variant={showCompleted ? "default" : "outline"}
+            className="h-7 px-2 text-xs gap-1"
+            onClick={() => setShowCompleted(v => !v)}
+            title={showCompleted ? "Ocultar concluídas" : "Mostrar concluídas"}
+          >
+            {showCompleted ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            {showCompleted ? "Concluídas visíveis" : "Só pendências"}
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={expandAll} title="Expandir tudo">
+            <ChevronsUpDown className="w-3.5 h-3.5" /> Expandir
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={collapseAll} title="Recolher tudo">
+            <ChevronsDownUp className="w-3.5 h-3.5" /> Recolher
+          </Button>
+          {canCreate && onAddActivity && (
+            <Button size="sm" className="h-7 px-3 text-xs gap-1" onClick={onAddActivity}>
+              <Plus className="w-3.5 h-3.5" /> Nova atividade
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Groups */}
@@ -134,6 +163,11 @@ export const ProjectListView = ({ activities, phases, onEditActivity, onToggleAc
                     onClick={() => onEditActivity(a)}
                   >
                     <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${flag.dot}`}
+                        title={`Prioridade: ${flag.label}`}
+                        aria-hidden
+                      />
                       <Checkbox
                         checked={a.status === "completed"}
                         onClick={(e) => e.stopPropagation()}
@@ -173,7 +207,9 @@ export const ProjectListView = ({ activities, phases, onEditActivity, onToggleAc
         })}
 
         {visibleActivities.length === 0 && (
-          <div className="p-12 text-center text-sm text-muted-foreground">Nenhuma atividade neste projeto.</div>
+          <div className="p-12 text-center text-sm text-muted-foreground">
+            {showCompleted ? "Nenhuma atividade neste projeto." : "Nenhuma pendência! 🎉"}
+          </div>
         )}
       </Card>
     </div>

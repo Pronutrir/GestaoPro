@@ -10,6 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserManagement } from "@/components/UserManagement";
 import { ModulePermissions } from "@/components/ModulePermissions";
+import { HolidaysManager } from "@/components/HolidaysManager";
+import { UserVacationsManager } from "@/components/UserVacationsManager";
 
 interface Sector {
   id: string;
@@ -79,6 +81,12 @@ const Settings = () => {
 
         {/* Module Permissions (admin only) */}
         <ModulePermissions />
+
+        {/* Holidays (admin & gestor) */}
+        <HolidaysManager />
+
+        {/* User vacations (admin) */}
+        {isAdmin && <UserVacationsManager />}
 
         {/* Sectors */}
         <Card>

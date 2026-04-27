@@ -72,14 +72,35 @@ export const AuditLogPanel = ({ recordId, tableName }: Props) => {
                 {e.changed_by_email && <span className="text-xs text-muted-foreground">por {e.changed_by_email}</span>}
               </div>
               {e.operation === "UPDATE" && e.changed_fields && (
-                <div className="space-y-1 mt-2">
-                  {e.changed_fields.map(f => (
-                    <div key={f} className="text-xs flex gap-2">
-                      <span className="font-semibold text-foreground min-w-[100px]">{f}:</span>
-                      <span className="text-destructive line-through truncate max-w-[150px]">{String(e.old_data?.[f] ?? "—").slice(0,40)}</span>
-                      <span className="text-success truncate max-w-[150px]">→ {String(e.new_data?.[f] ?? "—").slice(0,40)}</span>
-                    </div>
-                  ))}
+                <div className="space-y-2 mt-2">
+                  {e.changed_fields.map(f => {
+                    const oldVal = e.old_data?.[f];
+                    const newVal = e.new_data?.[f];
+                    const fmt = (v: any) => {
+                      if (v === null || v === undefined || v === "") return "—";
+                      if (Array.isArray(v)) return v.length === 0 ? "—" : v.join(", ");
+                      if (typeof v === "object") return JSON.stringify(v);
+                      return String(v);
+                    };
+                    return (
+                      <div key={f} className="text-xs bg-muted/30 rounded p-2 space-y-1">
+                        <div className="font-semibold text-foreground">{f}</div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-[10px] uppercase font-bold text-destructive min-w-[40px]">antes</span>
+                          <span className="text-destructive line-through break-words flex-1">{fmt(oldVal)}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-[10px] uppercase font-bold text-success min-w-[40px]">depois</span>
+                          <span className="text-success break-words flex-1">{fmt(newVal)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {e.operation === "INSERT" && e.new_data?.title && (
+                <div className="text-xs text-muted-foreground mt-1">
+                  Atividade criada: <span className="font-medium text-foreground">"{e.new_data.title}"</span>
                 </div>
               )}
             </div>

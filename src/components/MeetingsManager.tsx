@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AIAssistButton } from "@/components/AIAssistButton";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -150,6 +151,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       .from("meetings")
       .select("*")
       .eq("project_id", projectId)
+      .eq("is_trashed", false)
       .order("meeting_date", { ascending: false });
     if (data) setMeetings(data);
   };
@@ -272,7 +274,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta reunião?")) return;
-    await supabase.from("meetings").delete().eq("id", id);
+    await supabase.from("meetings").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     fetchMeetings();
   };
 
@@ -378,6 +380,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
           />
+          {form.title.trim() && (
+            <div className="flex justify-end -mt-2">
+              <AIAssistButton value={form.title} onChange={(v) => setForm({ ...form, title: v })} context="meeting_title" />
+            </div>
+          )}
           <Input
             placeholder="Proponente / Responsável pela reunião"
             value={form.responsible}
@@ -498,6 +505,9 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
             <div className="p-3 bg-blue-500/5 rounded-lg border border-blue-500/20">
               <p className="text-xs font-semibold text-blue-700 mb-2">📋 Sprint Planning</p>
               <p className="text-xs text-muted-foreground">Use a aba "Backlog" para selecionar e mover atividades para o Kanban durante esta reunião.</p>
+              <div className="flex justify-end mt-1">
+                <AIAssistButton value={form.agenda} onChange={(v) => setForm({ ...form, agenda: v })} context="meeting_agenda" />
+              </div>
               <Textarea placeholder="Pauta / Objetivos da Sprint" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={3} />
             </div>
           )}
@@ -506,6 +516,9 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
             <div className="p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
               <p className="text-xs font-semibold text-emerald-700 mb-2">🎯 Sprint Review</p>
               <p className="text-xs text-muted-foreground mb-2">Registre o incremento do produto. Anexe links ou documentos pela aba "Entregas".</p>
+              <div className="flex justify-end mb-1">
+                <AIAssistButton value={form.minutes} onChange={(v) => setForm({ ...form, minutes: v })} context="meeting_minutes" />
+              </div>
               <Textarea placeholder="Ata da Review / Incremento entregue" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} rows={3} />
             </div>
           )}
@@ -522,8 +535,20 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
 
           {form.meeting_type === "general" && (
             <>
-              <Textarea placeholder="Pauta" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={2} />
-              <Textarea placeholder="Ata / Registro" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} rows={3} />
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Pauta</span>
+                  <AIAssistButton value={form.agenda} onChange={(v) => setForm({ ...form, agenda: v })} context="meeting_agenda" />
+                </div>
+                <Textarea placeholder="Pauta" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={2} />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Ata / Registro</span>
+                  <AIAssistButton value={form.minutes} onChange={(v) => setForm({ ...form, minutes: v })} context="meeting_minutes" />
+                </div>
+                <Textarea placeholder="Ata / Registro" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} rows={3} />
+              </div>
             </>
           )}
 
@@ -708,6 +733,9 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                             onKeyDown={(e) => e.key === "Enter" && handleAddDecision(meeting.id)}
                             className="text-sm h-8"
                           />
+                          {newDecision.trim() && (
+                            <AIAssistButton value={newDecision} onChange={setNewDecision} context="meeting_decision" size="icon" />
+                          )}
                           <Button size="sm" variant="outline" className="h-8" onClick={() => handleAddDecision(meeting.id)}>
                             <Plus className="w-3 h-3" />
                           </Button>
@@ -777,6 +805,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                               <Plus className="w-3 h-3" />
                             </Button>
                           </div>
+                        </div>
+                      )}
+                      {canEditMeeting && newAction.description.trim() && (
+                        <div className="flex justify-end mt-1">
+                          <AIAssistButton value={newAction.description} onChange={(v) => setNewAction({ ...newAction, description: v })} context="meeting_action" />
                         </div>
                       )}
                     </div>

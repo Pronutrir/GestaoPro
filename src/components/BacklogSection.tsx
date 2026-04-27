@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, Package, FolderOpen,
+  ChevronsUpDown, ChevronsDownUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AIAssistButton } from "@/components/AIAssistButton";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -62,6 +64,11 @@ const priorityColors: Record<string, string> = {
   medium: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   low: "bg-muted text-muted-foreground border-border",
 };
+const priorityDot: Record<string, string> = {
+  high: "bg-destructive",
+  medium: "bg-warning",
+  low: "bg-success",
+};
 
 export const BacklogSection = ({
   projectId, activities, phases,
@@ -85,6 +92,31 @@ export const BacklogSection = ({
   const [collapsedPackages, setCollapsedPackages] = useState<Set<string>>(new Set());
   const [packageDialogPhaseId, setPackageDialogPhaseId] = useState<string | null>(null);
   const [newPackageTitle, setNewPackageTitle] = useState("");
+  const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
+
+  useEffect(() => {
+    const ids = activities.map((a) => a.id);
+    if (ids.length === 0) {
+      setDependencyCounts(new Map());
+      return;
+    }
+    supabase
+      .from("task_dependencies")
+      .select("predecessor_id, successor_id")
+      .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`)
+      .then(({ data }) => {
+        const map = new Map<string, { pred: number; succ: number }>();
+        (data || []).forEach((d: any) => {
+          const p = map.get(d.successor_id) || { pred: 0, succ: 0 };
+          p.pred += 1;
+          map.set(d.successor_id, p);
+          const s = map.get(d.predecessor_id) || { pred: 0, succ: 0 };
+          s.succ += 1;
+          map.set(d.predecessor_id, s);
+        });
+        setDependencyCounts(map);
+      });
+  }, [activities]);
 
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -306,6 +338,13 @@ export const BacklogSection = ({
 
           {isPackage && <Package className="w-3.5 h-3.5 text-primary shrink-0" />}
 
+          {/* Color dot for priority */}
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${priorityDot[prio] || priorityDot.medium}`}
+            title={`Prioridade: ${priorityLabels[prio] || prio}`}
+            aria-hidden
+          />
+
           <div className="flex-1 min-w-0">
             <p className={`text-sm font-medium ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
               {activity.title}
@@ -323,6 +362,19 @@ export const BacklogSection = ({
             {activity.assigned_to && (
               <Badge variant="secondary" className="text-[10px]">👤 {activity.assigned_to}</Badge>
             )}
+            {(() => {
+              const dc = dependencyCounts.get(activity.id);
+              if (!dc || (dc.pred === 0 && dc.succ === 0)) return null;
+              return (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-primary/10 text-primary border-primary/30 font-semibold"
+                  title={`${dc.pred} predecessora(s) · ${dc.succ} sucessora(s)`}
+                >
+                  🔗 {dc.pred > 0 ? `←${dc.pred}` : ""}{dc.pred > 0 && dc.succ > 0 ? " " : ""}{dc.succ > 0 ? `→${dc.succ}` : ""}
+                </Badge>
+              );
+            })()}
             {onCreateActivityInPhase && depth === 0 && (
               <Button
                 size="icon"
@@ -420,7 +472,7 @@ export const BacklogSection = ({
     <div className="space-y-4">
       {/* Toolbar */}
       {backlogActs.length > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-3">
             <Checkbox
               checked={allSelected}
@@ -433,12 +485,37 @@ export const BacklogSection = ({
                 : `${backlogActs.length} atividade(s) no backlog`}
             </p>
           </div>
-          {selectedIds.size > 0 && (
-            <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => setMoveDialogOpen(true)}>
-              <ArrowRight className="w-3.5 h-3.5" />
-              Mover para Kanban ({selectedIds.size})
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs gap-1"
+              onClick={() => { setCollapsedPhases(new Set()); setCollapsedPackages(new Set()); }}
+              title="Expandir tudo"
+            >
+              <ChevronsUpDown className="w-3.5 h-3.5" /> Expandir
             </Button>
-          )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs gap-1"
+              onClick={() => {
+                const allPhaseIds = phases.map(p => p.id);
+                const packageIds = backlogActs.filter(a => (childrenByParent.get(a.id) || []).length > 0).map(a => a.id);
+                setCollapsedPhases(new Set(allPhaseIds));
+                setCollapsedPackages(new Set(packageIds));
+              }}
+              title="Recolher tudo"
+            >
+              <ChevronsDownUp className="w-3.5 h-3.5" /> Recolher
+            </Button>
+            {selectedIds.size > 0 && (
+              <Button size="sm" className="h-7 text-xs gap-1.5 ml-1" onClick={() => setMoveDialogOpen(true)}>
+                <ArrowRight className="w-3.5 h-3.5" />
+                Mover para Kanban ({selectedIds.size})
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -584,7 +661,10 @@ export const BacklogSection = ({
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-2">
-              <Label>Título do pacote *</Label>
+              <div className="flex items-center justify-between">
+                <Label>Título do pacote *</Label>
+                <AIAssistButton value={newPackageTitle} onChange={setNewPackageTitle} context="package_title" />
+              </div>
               <Input
                 placeholder="Ex: Implementação Backend"
                 value={newPackageTitle}

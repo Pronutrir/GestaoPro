@@ -1,55 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { Calendar } from "@/components/ui/calendar";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { Badge } from "@/components/ui/badge";
-import {
-  CalendarIcon,
-  Flag,
-  User,
-  Tag,
-  Layers,
-  Users as UsersIcon,
-  Clock,
-  DollarSign,
-  Hash,
-  Paperclip,
-  ChevronDown,
-  X,
-  Check,
-  ListChecks,
-  Loader2,
+  User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Paperclip, ChevronDown, Loader2,
 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { AIAssistButton } from "@/components/AIAssistButton";
+import { GutPriorityField } from "@/components/GutPriorityField";
 
 export interface Phase { id: string; title: string }
 export interface WorkflowStage { id: string; title: string; color: string; is_final?: boolean }
@@ -75,60 +41,33 @@ interface CreateTaskDialogProps {
   onCreated?: (activityId: string) => void;
   /** Optional: open edit drawer for newly created activity */
   onOpenDetails?: (activityId: string) => void;
+  /** Quality project: shows Flag de Prazo and Data de Atualização */
+  isQualityProject?: boolean;
 }
 
-const PRIORITIES = [
-  { value: "low", label: "Baixa", color: "bg-muted text-muted-foreground" },
-  { value: "medium", label: "Média", color: "bg-warning/20 text-warning" },
-  { value: "high", label: "Alta", color: "bg-destructive/20 text-destructive" },
+const RACI_OPTIONS = [
+  { value: "", label: "Nenhum" },
+  { value: "R", label: "R - Responsável" },
+  { value: "A", label: "A - Autoridade" },
+  { value: "C", label: "C - Consultado" },
+  { value: "I", label: "I - Informado" },
 ];
 
-function FieldChip({
-  icon: Icon,
-  active,
-  children,
-  onClick,
-  onClear,
-}: {
-  icon: any;
-  active?: boolean;
-  children: React.ReactNode;
-  onClick?: () => void;
-  onClear?: () => void;
-}) {
-  return (
-    <div
-      className={`group inline-flex items-center gap-1.5 h-7 pl-2 pr-2 rounded-md border text-xs cursor-pointer select-none transition-colors ${
-        active
-          ? "border-primary/40 bg-primary/10 text-foreground hover:bg-primary/15"
-          : "border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent"
-      }`}
-      onClick={onClick}
-    >
-      <Icon className="w-3.5 h-3.5 shrink-0" />
-      <span className="whitespace-nowrap">{children}</span>
-      {active && onClear && (
-        <button
-          type="button"
-          className="opacity-0 group-hover:opacity-100 ml-0.5 -mr-1 rounded p-0.5 hover:bg-background/40"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClear();
-          }}
-          aria-label="Limpar"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      )}
-    </div>
-  );
+/** Parse hours as decimal from "Xh Ym" or plain number */
+function parseHoursInput(val: string): number {
+  const hm = val.match(/(\d+)\s*h\s*(\d+)\s*m/i);
+  if (hm) return parseInt(hm[1]) + parseInt(hm[2]) / 60;
+  const hOnly = val.match(/^(\d+(?:\.\d+)?)\s*h?$/i);
+  if (hOnly) return parseFloat(hOnly[1]);
+  const mOnly = val.match(/^(\d+)\s*m$/i);
+  if (mOnly) return parseInt(mOnly[1]) / 60;
+  return parseFloat(val) || 0;
 }
 
 export const CreateTaskDialog = ({
   open,
   onOpenChange,
   projectId,
-  projectTitle,
   phases,
   stages: stagesProp,
   members,
@@ -138,105 +77,127 @@ export const CreateTaskDialog = ({
   defaultStatus,
   onCreated,
   onOpenDetails,
+  isQualityProject = false,
 }: CreateTaskDialogProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [fetchedStages, setFetchedStages] = useState<WorkflowStage[]>([]);
   const stages = stagesProp && stagesProp.length > 0 ? stagesProp : fetchedStages;
 
-  // Fetch stages internally if not provided
-  useEffect(() => {
-    if (!open) return;
-    if (stagesProp && stagesProp.length > 0) return;
-    (async () => {
-      const { data } = await supabase
-        .from("workflow_stages")
-        .select("id, title, color, is_final")
-        .eq("project_id", projectId)
-        .order("display_order", { ascending: true });
-      if (data) setFetchedStages(data as WorkflowStage[]);
-    })();
-  }, [open, projectId, stagesProp]);
+  const [allProfiles, setAllProfiles] = useState<{ full_name: string; sector: string | null }[]>([]);
 
-  // Form state
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [showDescription, setShowDescription] = useState(false);
+  // Form state - mirrors EditActivityDialog
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    assigned_to: "",
+    start_date: "",
+    end_date: "",
+    cost: "0",
+    hours: "",
+    phase_id: "",
+    priority: "pendente",
+    gravity: null as number | null,
+    urgency: null as number | null,
+    tendency: null as number | null,
+    tags: [] as string[],
+    story_points: "0",
+    raci_role: "",
+    participants: [] as string[],
+    participant_roles: {} as Record<string, string>,
+    deadline_flag: "",
+    last_update_date: "",
+  });
+  const [newTag, setNewTag] = useState("");
   const [stageId, setStageId] = useState<string | null>(null);
-  const [phaseId, setPhaseId] = useState<string | null>(null);
-  const [assignedTo, setAssignedTo] = useState<string>("");
-  const [participants, setParticipants] = useState<string[]>([]);
-  const [endDate, setEndDate] = useState<Date | null>(null);
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [priority, setPriority] = useState<string>("medium");
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState("");
-  const [hours, setHours] = useState<string>("");
-  const [cost, setCost] = useState<string>("");
-  const [storyPoints, setStoryPoints] = useState<string>("");
   const [attachment, setAttachment] = useState<File | null>(null);
 
-  const titleRef = useRef<HTMLInputElement>(null);
-  const descRef = useRef<HTMLTextAreaElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
 
-  // Reset form when opened
+  // Fetch stages and all profiles when opened
+  useEffect(() => {
+    if (!open) return;
+    if (!stagesProp || stagesProp.length === 0) {
+      supabase.from("workflow_stages")
+        .select("id, title, color, is_final")
+        .eq("project_id", projectId)
+        .order("display_order", { ascending: true })
+        .then(({ data }) => { if (data) setFetchedStages(data as WorkflowStage[]); });
+    }
+    supabase.from("profiles").select("full_name, sector").eq("is_active", true).then(({ data }) => {
+      if (data) setAllProfiles(data.filter(p => p.full_name) as any);
+    });
+  }, [open, projectId, stagesProp]);
+
+  // Reset on open
   useEffect(() => {
     if (open) {
-      setTitle("");
-      setDescription("");
-      setShowDescription(false);
+      setFormData({
+        title: "",
+        description: "",
+        assigned_to: "",
+        start_date: "",
+        end_date: "",
+        cost: "0",
+        hours: "",
+        phase_id: defaultPhaseId ?? "",
+        priority: "pendente",
+        gravity: null,
+        urgency: null,
+        tendency: null,
+        tags: [],
+        story_points: "0",
+        raci_role: "",
+        participants: [],
+        participant_roles: {},
+        deadline_flag: "",
+        last_update_date: "",
+      });
       setStageId(defaultStageId ?? null);
-      setPhaseId(defaultPhaseId ?? null);
-      setAssignedTo("");
-      setParticipants([]);
-      setEndDate(null);
-      setStartDate(null);
-      setPriority("medium");
-      setTags([]);
-      setTagInput("");
-      setHours("");
-      setCost("");
-      setStoryPoints("");
       setAttachment(null);
+      setNewTag("");
       setTimeout(() => titleRef.current?.focus(), 60);
     }
   }, [open, defaultStageId, defaultPhaseId]);
 
-  // Auto-resize description
-  useEffect(() => {
-    if (descRef.current) {
-      descRef.current.style.height = "auto";
-      descRef.current.style.height = descRef.current.scrollHeight + "px";
+  const handleAddTag = () => {
+    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
+      setFormData({ ...formData, tags: [...formData.tags, newTag.trim()] });
+      setNewTag("");
     }
-  }, [description, showDescription]);
+  };
 
-  const selectedStage = stages.find((s) => s.id === stageId);
-  const selectedPhase = phases.find((p) => p.id === phaseId);
-  const selectedPriority = PRIORITIES.find((p) => p.value === priority)!;
-
-  const memberLabel = (m: Member) => `${m.full_name}${m.sector ? ` — ${m.sector}` : ""}`;
+  const handleRemoveTag = (tag: string) => {
+    setFormData({ ...formData, tags: formData.tags.filter((t) => t !== tag) });
+  };
 
   const create = async (afterAction: "close" | "details" | "another") => {
-    if (!title.trim() || loading) return;
+    if (!formData.title.trim() || loading) return;
     setLoading(true);
     try {
       const payload: Record<string, unknown> = {
         project_id: projectId,
-        title: title.trim(),
-        description: description.trim() || null,
+        title: formData.title.trim(),
+        description: formData.description.trim() || null,
         status: defaultStatus || "pending",
-        priority,
+        gravity: formData.gravity,
+        urgency: formData.urgency,
+        tendency: formData.tendency,
         workflow_stage_id: stageId,
-        phase_id: phaseId,
+        phase_id: formData.phase_id || null,
         parent_id: defaultParentId ?? null,
-        assigned_to: assignedTo || null,
-        participants: participants.length ? participants : null,
-        start_date: startDate ? format(startDate, "yyyy-MM-dd") : null,
-        end_date: endDate ? format(endDate, "yyyy-MM-dd") : null,
-        hours: hours ? parseFloat(hours) : 0,
-        cost: cost ? parseFloat(cost) : 0,
-        story_points: storyPoints ? parseInt(storyPoints) : 0,
-        tags: tags.length ? tags : null,
+        assigned_to: formData.assigned_to || null,
+        participants: formData.participants.length ? formData.participants : null,
+        participant_roles: formData.participant_roles ?? {},
+        start_date: formData.start_date || null,
+        end_date: formData.end_date || null,
+        hours: parseHoursInput(formData.hours),
+        cost: parseFloat(formData.cost) || 0,
+        story_points: parseInt(formData.story_points) || 0,
+        raci_role: formData.raci_role || null,
+        tags: formData.tags.length ? formData.tags : null,
+        deadline_flag: formData.deadline_flag || null,
+        last_update_date: formData.last_update_date || null,
       };
 
       const { data: inserted, error } = await supabase
@@ -269,7 +230,7 @@ export const CreateTaskDialog = ({
         }
       }
 
-      toast({ title: "Tarefa criada!" });
+      toast({ title: "Atividade criada!" });
       onCreated?.(inserted!.id);
 
       if (afterAction === "close") {
@@ -278,483 +239,398 @@ export const CreateTaskDialog = ({
         onOpenChange(false);
         onOpenDetails?.(inserted!.id);
       } else {
-        // "another" — keep dialog, reset only title/description
-        setTitle("");
-        setDescription("");
-        setShowDescription(false);
+        // "another" — keep dialog, reset only title/description/attachment
+        setFormData((f) => ({ ...f, title: "", description: "" }));
         setAttachment(null);
         setTimeout(() => titleRef.current?.focus(), 30);
       }
     } catch (e) {
       console.error(e);
-      toast({ title: "Erro ao criar tarefa", variant: "destructive" });
+      toast({ title: "Erro ao criar atividade", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  const addTag = () => {
-    const v = tagInput.trim();
-    if (v && !tags.includes(v)) setTags([...tags, v]);
-    setTagInput("");
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    create("close");
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[750px] p-0 gap-0 overflow-hidden">
-        <DialogTitle className="sr-only">Criar tarefa</DialogTitle>
+      <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold">Nova Atividade</DialogTitle>
+        </DialogHeader>
 
-        {/* Header: Project / Phase context */}
-        <div className="flex items-center gap-2 px-5 pt-4 pb-2 border-b border-border/50">
-          <Badge variant="secondary" className="rounded-md gap-1 font-normal">
-            <Layers className="w-3 h-3" />
-            {projectTitle || "Projeto"}
-          </Badge>
-          {selectedPhase && (
-            <Badge variant="outline" className="rounded-md gap-1 font-normal">
-              {selectedPhase.title}
-            </Badge>
-          )}
-          {selectedStage && (
-            <Badge
-              variant="outline"
-              className="rounded-md gap-1 font-normal border-0"
-              style={{ backgroundColor: `${selectedStage.color}20`, color: selectedStage.color }}
-            >
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: selectedStage.color }} />
-              {selectedStage.title}
-            </Badge>
-          )}
-        </div>
-
-        {/* Body */}
-        <div className="px-5 pt-4 pb-3 space-y-3">
-          <Input
-            ref={titleRef}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Nome da tarefa..."
-            className="border-0 px-0 text-lg font-medium shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50 h-auto py-1"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                create("close");
-              }
-            }}
-          />
-
-          {showDescription ? (
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Title */}
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="title" className="text-sm font-semibold text-foreground">Título *</Label>
+              <AIAssistButton
+                value={formData.title}
+                onChange={(next) => setFormData({ ...formData, title: next })}
+                context="activity_title"
+              />
+            </div>
             <Textarea
-              ref={descRef}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Adicionar descrição..."
-              className="border-0 px-0 shadow-none focus-visible:ring-0 resize-none min-h-[40px] placeholder:text-muted-foreground/50"
-              autoFocus
+              id="title"
+              ref={titleRef}
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              required
+              rows={1}
+              autoResize
+              placeholder="O que precisa ser feito?"
+              className="min-h-[44px] w-full min-w-0 font-medium break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  create("close");
+                }
+              }}
             />
-          ) : (
-            <button
-              type="button"
-              className="text-sm text-muted-foreground/70 hover:text-foreground transition-colors"
-              onClick={() => setShowDescription(true)}
+          </div>
+
+          {/* Description */}
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="description" className="text-sm font-semibold text-foreground">Descrição</Label>
+              <AIAssistButton
+                value={formData.description}
+                onChange={(next) => setFormData({ ...formData, description: next })}
+                context="activity_description"
+              />
+            </div>
+            <Textarea
+              id="description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              rows={3}
+              autoResize
+              placeholder="Descreva a atividade..."
+              className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
+            />
+          </div>
+
+          {/* Priority — método GUT */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Flag className="w-4 h-4" /> Prioridade (GUT)
+            </Label>
+            <GutPriorityField
+              gravity={formData.gravity}
+              urgency={formData.urgency}
+              tendency={formData.tendency}
+              onChange={(v) => setFormData({ ...formData, ...v })}
+            />
+          </div>
+
+          {/* Responsável + RACI */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <User className="w-4 h-4" /> Responsável
+              </Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={formData.assigned_to}
+                onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+              >
+                <option value="">Sem responsável</option>
+                {members.map((m) => (
+                  <option key={m.full_name} value={m.full_name}>
+                    {m.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                🏷️ Papel RACI
+              </Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={formData.raci_role}
+                onChange={(e) => setFormData({ ...formData, raci_role: e.target.value })}
+              >
+                {RACI_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Participantes */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              👥 Participantes
+              <span className="text-[11px] font-normal text-muted-foreground">— sem limite, com papel RACI individual</span>
+            </Label>
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value=""
+              onChange={(e) => {
+                const name = e.target.value;
+                if (name && !formData.participants.includes(name)) {
+                  setFormData({
+                    ...formData,
+                    participants: [...formData.participants, name],
+                    participant_roles: { ...formData.participant_roles, [name]: formData.participant_roles[name] || "" },
+                  });
+                }
+              }}
             >
-              📄 Adicionar descrição
-            </button>
+              <option value="">Adicionar participante...</option>
+              {allProfiles.filter(m => m.full_name && !formData.participants.includes(m.full_name)).map((m) => (
+                <option key={m.full_name} value={m.full_name}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
+              ))}
+            </select>
+            {formData.participants.length > 0 && (
+              <div className="space-y-1.5 mt-2">
+                {formData.participants.map((p) => (
+                  <div key={p} className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
+                    <span className="flex-1 min-w-0 truncate text-xs font-medium text-foreground">{p}</span>
+                    <select
+                      className="h-7 rounded-md border border-input bg-background px-2 text-[11px]"
+                      value={formData.participant_roles[p] || ""}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          participant_roles: { ...formData.participant_roles, [p]: e.target.value },
+                        })
+                      }
+                      title="Papel RACI deste participante"
+                    >
+                      {RACI_OPTIONS.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                      onClick={() => {
+                        const nextRoles = { ...formData.participant_roles };
+                        delete nextRoles[p];
+                        setFormData({
+                          ...formData,
+                          participants: formData.participants.filter((x) => x !== p),
+                          participant_roles: nextRoles,
+                        });
+                      }}
+                      title="Remover participante"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Fase + Coluna inicial */}
+          <div className="grid grid-cols-2 gap-4">
+            {phases.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Layers className="w-4 h-4" /> Fase
+                </Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={formData.phase_id}
+                  onChange={(e) => setFormData({ ...formData, phase_id: e.target.value })}
+                >
+                  <option value="">Sem fase</option>
+                  {phases.map((phase) => (<option key={phase.id} value={phase.id}>{phase.title}</option>))}
+                </select>
+              </div>
+            )}
+            {stages.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  📋 Coluna Inicial
+                </Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={stageId ?? ""}
+                  onChange={(e) => setStageId(e.target.value || null)}
+                >
+                  <option value="">— Sem coluna —</option>
+                  {stages.map((s) => (
+                    <option key={s.id} value={s.id}>{s.title}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Datas */}
+          <div className={`grid ${isQualityProject ? "grid-cols-3" : "grid-cols-2"} gap-4`}>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Data de Início
+              </Label>
+              <Input type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Data de Fim
+              </Label>
+              <Input type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} />
+            </div>
+            {isQualityProject && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Calendar className="w-4 h-4" /> Data de Atualização
+                </Label>
+                <Input type="date" value={formData.last_update_date} onChange={(e) => setFormData({ ...formData, last_update_date: e.target.value })} />
+              </div>
+            )}
+          </div>
+
+          {/* Flag de Prazo - Apenas Qualidade */}
+          {isQualityProject && (
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Flag className="w-4 h-4" /> Flag de Prazo
+              </Label>
+              <div className="flex gap-2">
+                {[
+                  { value: "", label: "Nenhuma", color: "border-border text-muted-foreground" },
+                  { value: "green", label: "🟢 Em dia", color: "bg-emerald-500/20 text-emerald-600 border-emerald-500" },
+                  { value: "orange", label: "🟠 Atenção", color: "bg-orange-500/20 text-orange-600 border-orange-500" },
+                  { value: "red", label: "🔴 Vencido", color: "bg-destructive/20 text-destructive border-destructive" },
+                ].map((f) => (
+                  <button key={f.value} type="button"
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-all ${formData.deadline_flag === f.value ? `${f.color} ring-2 ring-current/20` : "border-border text-muted-foreground hover:border-foreground/30"}`}
+                    onClick={() => setFormData({ ...formData, deadline_flag: f.value })}
+                  >{f.label}</button>
+                ))}
+              </div>
+            </div>
           )}
 
-          {/* Chips row */}
-          <div className="flex flex-wrap gap-1.5 pt-2">
-            {/* Status / Stage */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <div>
-                  <FieldChip
-                    icon={ListChecks}
-                    active={!!stageId}
-                    onClear={() => setStageId(null)}
-                  >
-                    {selectedStage ? selectedStage.title : "Status"}
-                  </FieldChip>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-56 p-1" align="start">
-                {stages.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent"
-                    onClick={() => setStageId(s.id)}
-                  >
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} />
-                    {s.title}
-                    {stageId === s.id && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
-
-            {/* Phase */}
-            {phases.length > 0 && (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <div>
-                    <FieldChip
-                      icon={Layers}
-                      active={!!phaseId}
-                      onClear={() => setPhaseId(null)}
-                    >
-                      {selectedPhase ? selectedPhase.title : "Fase"}
-                    </FieldChip>
-                  </div>
-                </PopoverTrigger>
-                <PopoverContent className="w-56 p-1 max-h-64 overflow-y-auto" align="start">
-                  {phases.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      className="w-full text-left px-2 py-1.5 rounded-md text-sm hover:bg-accent flex items-center"
-                      onClick={() => setPhaseId(p.id)}
-                    >
-                      {p.title}
-                      {phaseId === p.id && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
-                    </button>
-                  ))}
-                </PopoverContent>
-              </Popover>
-            )}
-
-            {/* Assigned (Líder) */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <div>
-                  <FieldChip
-                    icon={User}
-                    active={!!assignedTo}
-                    onClear={() => setAssignedTo("")}
-                  >
-                    {assignedTo || "Líder"}
-                  </FieldChip>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Buscar pessoa..." />
-                  <CommandList>
-                    <CommandEmpty>Nenhuma pessoa</CommandEmpty>
-                    <CommandGroup>
-                      {members.map((m) => (
-                        <CommandItem
-                          key={m.full_name}
-                          value={memberLabel(m)}
-                          onSelect={() => setAssignedTo(m.full_name)}
-                        >
-                          <User className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
-                          {memberLabel(m)}
-                          {assignedTo === m.full_name && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-
-            {/* Participants */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <div>
-                  <FieldChip
-                    icon={UsersIcon}
-                    active={participants.length > 0}
-                    onClear={() => setParticipants([])}
-                  >
-                    {participants.length > 0 ? `${participants.length} participante(s)` : "Participantes"}
-                  </FieldChip>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Buscar participantes..." />
-                  <CommandList>
-                    <CommandEmpty>Nenhuma pessoa</CommandEmpty>
-                    <CommandGroup>
-                      {members.map((m) => {
-                        const checked = participants.includes(m.full_name);
-                        return (
-                          <CommandItem
-                            key={m.full_name}
-                            value={memberLabel(m)}
-                            onSelect={() => {
-                              setParticipants((prev) =>
-                                prev.includes(m.full_name)
-                                  ? prev.filter((p) => p !== m.full_name)
-                                  : [...prev, m.full_name]
-                              );
-                            }}
-                          >
-                            <div className={`w-3.5 h-3.5 mr-2 rounded border ${checked ? "bg-primary border-primary" : "border-border"} flex items-center justify-center`}>
-                              {checked && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
-                            </div>
-                            {memberLabel(m)}
-                          </CommandItem>
-                        );
-                      })}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-
-            {/* Due date */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <div>
-                  <FieldChip
-                    icon={CalendarIcon}
-                    active={!!endDate}
-                    onClear={() => setEndDate(null)}
-                  >
-                    {endDate ? format(endDate, "dd/MM/yyyy") : "Prazo"}
-                  </FieldChip>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={endDate ?? undefined}
-                  onSelect={(d) => setEndDate(d ?? null)}
-                  locale={ptBR}
-                  initialFocus
+          {/* Recursos */}
+          <div className="p-4 bg-accent/30 rounded-lg border border-border space-y-4">
+            <h3 className="text-sm font-bold text-foreground">Recursos da Atividade</h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-primary" /> Horas Estimadas
+                </Label>
+                <Input
+                  placeholder="Ex: 2h 30m"
+                  value={formData.hours}
+                  onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
+                  className="font-semibold text-lg"
                 />
-              </PopoverContent>
-            </Popover>
-
-            {/* Start date */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <div>
-                  <FieldChip
-                    icon={CalendarIcon}
-                    active={!!startDate}
-                    onClear={() => setStartDate(null)}
-                  >
-                    {startDate ? `Início ${format(startDate, "dd/MM")}` : "Início"}
-                  </FieldChip>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={startDate ?? undefined}
-                  onSelect={(d) => setStartDate(d ?? null)}
-                  locale={ptBR}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-
-            {/* Priority */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <div>
-                  <FieldChip icon={Flag} active={priority !== "medium"}>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${selectedPriority.color}`}>
-                      {selectedPriority.label}
-                    </span>
-                  </FieldChip>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-40 p-1" align="start">
-                {PRIORITIES.map((p) => (
-                  <button
-                    key={p.value}
-                    type="button"
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent"
-                    onClick={() => setPriority(p.value)}
-                  >
-                    <Flag className="w-3.5 h-3.5" />
-                    {p.label}
-                    {priority === p.value && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
-
-            {/* Tags */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <div>
-                  <FieldChip
-                    icon={Tag}
-                    active={tags.length > 0}
-                    onClear={() => setTags([])}
-                  >
-                    {tags.length > 0 ? `${tags.length} etiqueta(s)` : "Etiquetas"}
-                  </FieldChip>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-2 space-y-2" align="start">
-                <div className="flex gap-1">
-                  <Input
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    placeholder="Nova etiqueta..."
-                    className="h-7 text-xs"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addTag();
-                      }
-                    }}
-                  />
-                  <Button size="sm" type="button" className="h-7 px-2" onClick={addTag}>
-                    +
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {tags.map((t) => (
-                    <Badge key={t} variant="secondary" className="gap-1 text-[10px]">
-                      {t}
-                      <button onClick={() => setTags(tags.filter((x) => x !== t))}>
-                        <X className="w-2.5 h-2.5" />
-                      </button>
-                    </Badge>
+                <p className="text-[10px] text-muted-foreground">Formato: 2h 30m, 1.5h ou 90m</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-success" /> Custo
+                </Label>
+                <CurrencyInput step="0.01" min="0" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} className="font-semibold text-lg" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  🎯 Story Points
+                </Label>
+                <div className="flex gap-1 flex-wrap">
+                  {[0, 1, 2, 3, 5, 8, 13, 21].map((sp) => (
+                    <button key={sp} type="button"
+                      className={`w-9 h-9 rounded-md text-sm font-bold border transition-all ${parseInt(formData.story_points) === sp ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
+                      onClick={() => setFormData({ ...formData, story_points: sp.toString() })}
+                    >{sp}</button>
                   ))}
                 </div>
-              </PopoverContent>
-            </Popover>
-
-            {/* Hours */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <div>
-                  <FieldChip icon={Clock} active={!!hours} onClear={() => setHours("")}>
-                    {hours ? `${hours}h` : "Horas"}
-                  </FieldChip>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-44 p-2" align="start">
-                <Input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={hours}
-                  onChange={(e) => setHours(e.target.value)}
-                  placeholder="Horas estimadas"
-                  className="h-8 text-sm"
-                />
-              </PopoverContent>
-            </Popover>
-
-            {/* Cost */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <div>
-                  <FieldChip icon={DollarSign} active={!!cost} onClear={() => setCost("")}>
-                    {cost ? `R$ ${cost}` : "Custo"}
-                  </FieldChip>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-44 p-2" align="start">
-                <CurrencyInput
-                  value={cost}
-                  onChange={(e) => setCost(e.target.value)}
-                  placeholder="0,00"
-                  className="h-8 text-sm"
-                />
-              </PopoverContent>
-            </Popover>
-
-            {/* Story points */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <div>
-                  <FieldChip icon={Hash} active={!!storyPoints} onClear={() => setStoryPoints("")}>
-                    {storyPoints ? `${storyPoints} pts` : "Pontos"}
-                  </FieldChip>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-44 p-2" align="start">
-                <Input
-                  type="number"
-                  min="0"
-                  value={storyPoints}
-                  onChange={(e) => setStoryPoints(e.target.value)}
-                  placeholder="Story points (Fibonacci)"
-                  className="h-8 text-sm"
-                />
-              </PopoverContent>
-            </Popover>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-border/50 bg-muted/30">
-          <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer">
-            <Paperclip className="w-3.5 h-3.5" />
-            <span className="truncate max-w-[180px]">
-              {attachment ? attachment.name : "Anexar arquivo"}
-            </span>
-            <input
-              type="file"
-              className="hidden"
-              onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
-            />
-            {attachment && (
-              <button
-                type="button"
-                className="ml-1"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setAttachment(null);
-                }}
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </label>
+          {/* Etiquetas */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Tag className="w-4 h-4" /> Etiquetas
+            </Label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {formData.tags.map((t) => (
+                <Badge key={t} variant="secondary" className="gap-1 text-xs">
+                  {t}
+                  <button type="button" onClick={() => handleRemoveTag(t)}>
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={newTag}
+                onChange={(e) => setNewTag(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
+                placeholder="Nova etiqueta..."
+                className="h-9"
+              />
+              <Button type="button" size="sm" variant="outline" onClick={handleAddTag}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
 
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+          {/* Anexo */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Paperclip className="w-4 h-4" /> Anexo (opcional)
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="file"
+                onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
+                className="h-9"
+              />
+              {attachment && (
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => setAttachment(null)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar
             </Button>
-            <div className="flex items-stretch rounded-md overflow-hidden">
-              <Button
-                size="sm"
-                disabled={!title.trim() || loading}
-                onClick={() => create("close")}
-                className="rounded-r-none"
+            <div className="inline-flex items-center rounded-md border border-primary overflow-hidden">
+              <button
+                type="submit"
+                disabled={!formData.title.trim() || loading}
+                className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
               >
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-                Criar Tarefa
-              </Button>
+                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Criar
+              </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    size="sm"
-                    disabled={!title.trim() || loading}
-                    className="rounded-l-none border-l border-primary-foreground/20 px-2"
+                  <button
+                    type="button"
+                    disabled={!formData.title.trim() || loading}
+                    className="px-2 py-2 bg-primary text-primary-foreground hover:bg-primary/90 border-l border-primary-foreground/20 disabled:opacity-50"
+                    aria-label="Mais ações"
                   >
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </Button>
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => create("close")}>
-                    Criar e fechar
-                  </DropdownMenuItem>
-                  {onOpenDetails && (
-                    <DropdownMenuItem onClick={() => create("details")}>
-                      Criar e abrir detalhes
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={() => create("another")}>
-                    Criar e adicionar outra
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => create("close")}>Criar e fechar</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => create("details")}>Criar e abrir detalhes</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => create("another")}>Criar e adicionar outra</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-          </div>
-        </div>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

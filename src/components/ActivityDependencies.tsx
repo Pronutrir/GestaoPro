@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, Plus, X, ArrowRight, ArrowLeft } from "lucide-react";
+import { Link2, Plus, X, ArrowRight, ArrowLeft, Search, CheckCircle2, Info } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 interface ActivityDependenciesProps {
   activityId: string;
@@ -22,10 +23,10 @@ interface ActivityOpt {
 }
 
 const TYPE_LABEL: Record<string, string> = {
-  finish_to_start: "FS (após terminar)",
-  start_to_start: "SS (juntas)",
+  finish_to_start: "FS (começa após a predecessora terminar)",
+  start_to_start: "SS (começam juntas)",
   finish_to_finish: "FF (terminam juntas)",
-  start_to_finish: "SF",
+  start_to_finish: "SF (termina após a predecessora começar)",
 };
 
 export const ActivityDependencies = ({ activityId, projectId }: ActivityDependenciesProps) => {
@@ -35,6 +36,9 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
   const [adding, setAdding] = useState<"pred" | "succ" | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [type, setType] = useState("finish_to_start");
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [justSavedId, setJustSavedId] = useState<string | null>(null);
 
   const fetchAll = async () => {
     const [{ data: depData }, { data: actData }] = await Promise.all([
@@ -59,18 +63,41 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
   }, [activityId, projectId]);
 
   const handleAdd = async () => {
-    if (!selectedId) return;
+    if (!selectedId || saving) return;
+    setSaving(true);
     const payload =
       adding === "pred"
         ? { predecessor_id: selectedId, successor_id: activityId, dependency_type: type }
         : { predecessor_id: activityId, successor_id: selectedId, dependency_type: type };
-    const { error } = await supabase.from("task_dependencies").insert(payload);
+    const { data, error } = await supabase
+      .from("task_dependencies")
+      .insert(payload)
+      .select("id")
+      .single();
+    setSaving(false);
     if (error) {
-      toast({ title: "Erro ao vincular", variant: "destructive" });
+      toast({
+        title: "Erro ao vincular",
+        description: error.message,
+        variant: "destructive",
+      });
       return;
+    }
+    const otherTitle = activities.find((a) => a.id === selectedId)?.title || "Atividade";
+    toast({
+      title: "✅ Vínculo criado",
+      description:
+        adding === "pred"
+          ? `Esta atividade agora depende de "${otherTitle}".`
+          : `"${otherTitle}" agora depende desta atividade.`,
+    });
+    if (data?.id) {
+      setJustSavedId(data.id);
+      setTimeout(() => setJustSavedId(null), 2500);
     }
     setAdding(null);
     setSelectedId("");
+    setSearch("");
     setType("finish_to_start");
     fetchAll();
   };
@@ -88,7 +115,11 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
   const renderRow = (d: DepRow, otherId: string, isPred: boolean) => (
     <div
       key={d.id}
-      className="flex items-center gap-2 p-2 bg-muted/30 rounded-md border border-border/50 group"
+      className={`flex items-center gap-2 p-2 rounded-md border group transition-colors ${
+        justSavedId === d.id
+          ? "bg-emerald-500/10 border-emerald-500/40 animate-in fade-in"
+          : "bg-muted/30 border-border/50"
+      }`}
     >
       {isPred ? (
         <ArrowLeft className="w-3.5 h-3.5 text-primary shrink-0" />
@@ -99,6 +130,9 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
       <span className="text-[10px] text-muted-foreground">
         {TYPE_LABEL[d.dependency_type] || d.dependency_type}
       </span>
+      {justSavedId === d.id && (
+        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+      )}
       <Button
         size="icon"
         variant="ghost"
@@ -110,11 +144,28 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
     </div>
   );
 
+  const total = deps.length;
+
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-        <Link2 className="w-4 h-4 text-primary" /> Tarefas vinculadas
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+          <Link2 className="w-4 h-4 text-primary" /> Tarefas vinculadas
+          {total > 0 && (
+            <span className="text-[10px] font-normal px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+              {total} vínculo{total > 1 ? "s" : ""}
+            </span>
+          )}
+        </h3>
+      </div>
+      <p className="text-[11px] text-muted-foreground flex items-start gap-1.5 bg-muted/30 rounded-md p-2 border border-border/50">
+        <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary" />
+        <span>
+          <strong>Predecessora</strong> = atividade que precisa terminar antes desta começar.
+          <strong className="ml-1">Sucessora</strong> = atividade que só começa após esta terminar.
+          Após escolher, clique em <strong>Vincular</strong> para salvar.
+        </span>
+      </p>
 
       {/* Predecessoras */}
       <div className="space-y-1.5">
@@ -128,6 +179,7 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
             onClick={() => {
               setAdding(adding === "pred" ? null : "pred");
               setSelectedId("");
+              setSearch("");
             }}
           >
             <Plus className="w-3.5 h-3.5" /> Predecessora
@@ -151,6 +203,7 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
             onClick={() => {
               setAdding(adding === "succ" ? null : "succ");
               setSelectedId("");
+              setSearch("");
             }}
           >
             <Plus className="w-3.5 h-3.5" /> Sucessora
@@ -164,19 +217,56 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
 
       {/* Form de adicionar */}
       {adding && (
-        <div className="p-2 bg-accent/30 rounded-md border border-border space-y-2">
-          <select
-            className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
-            value={selectedId}
-            onChange={(e) => setSelectedId(e.target.value)}
-          >
-            <option value="">Selecione uma atividade...</option>
-            {activities.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.title}
-              </option>
-            ))}
-          </select>
+        <div className="p-3 bg-primary/5 rounded-md border-2 border-primary/40 space-y-2 animate-in fade-in">
+          <p className="text-[11px] font-semibold text-primary">
+            {adding === "pred"
+              ? "1️⃣ Escolha a atividade que esta DEPENDE  →  2️⃣ Escolha o tipo  →  3️⃣ Clique Vincular"
+              : "1️⃣ Escolha a atividade que DEPENDE desta  →  2️⃣ Escolha o tipo  →  3️⃣ Clique Vincular"}
+          </p>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por título ou ID..."
+              className="h-9 pl-7 text-xs"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto rounded-md border border-border bg-background">
+            {(() => {
+              const q = search.trim().toLowerCase();
+              const list = q
+                ? activities.filter(
+                    (a) =>
+                      a.title.toLowerCase().includes(q) ||
+                      a.id.toLowerCase().includes(q)
+                  )
+                : activities;
+              if (list.length === 0) {
+                return (
+                  <p className="text-[11px] text-muted-foreground italic p-2">
+                    Nenhuma atividade encontrada.
+                  </p>
+                );
+              }
+              return list.slice(0, 50).map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setSelectedId(a.id)}
+                  className={`w-full text-left px-2 py-1.5 text-xs hover:bg-muted/60 border-b border-border/50 last:border-0 flex items-center gap-2 ${
+                    selectedId === a.id ? "bg-primary/10 text-primary font-medium" : ""
+                  }`}
+                >
+                  <span className="flex-1 truncate">{a.title}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {a.id.slice(0, 8)}
+                  </span>
+                </button>
+              ));
+            })()}
+          </div>
           <div className="flex gap-2">
             <select
               className="flex h-9 flex-1 rounded-md border border-input bg-background px-2 text-xs"
@@ -189,19 +279,31 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
                 </option>
               ))}
             </select>
-            <Button type="button" size="sm" className="h-9" onClick={handleAdd} disabled={!selectedId}>
-              Vincular
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1"
+              onClick={handleAdd}
+              disabled={!selectedId || saving}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              {saving ? "Salvando..." : "Vincular"}
             </Button>
             <Button
               type="button"
               size="sm"
               variant="ghost"
               className="h-9"
-              onClick={() => setAdding(null)}
+              onClick={() => { setAdding(null); setSearch(""); setSelectedId(""); }}
             >
               Cancelar
             </Button>
           </div>
+          {!selectedId && (
+            <p className="text-[10px] text-amber-600 font-medium">
+              ⚠ Selecione uma atividade da lista acima para habilitar o botão Vincular.
+            </p>
+          )}
         </div>
       )}
     </div>

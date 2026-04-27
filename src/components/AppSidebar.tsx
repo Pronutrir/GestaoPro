@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Target,
   Calendar,
+  Trash2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -44,6 +45,7 @@ const allNavItems = [
   { path: "/calendario", label: "Calendário", icon: Calendar, minRole: "user" as const, moduleKey: "calendario" },
   { path: "/reports", label: "Relatórios", icon: BarChart3, minRole: "gestor" as const, moduleKey: "reports" },
   { path: "/csc", label: "CSC", icon: Layers, minRole: "gestor" as const, moduleKey: "csc" },
+  { path: "/trash", label: "Arquivo", icon: Trash2, minRole: "gestor" as const, moduleKey: "projects" },
   { path: "/settings", label: "Configurações", icon: Settings, minRole: "admin" as const, moduleKey: "settings" },
 ];
 
@@ -120,10 +122,10 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="offcanvas">
-      <div className="p-4 border-b border-border">
+    <Sidebar collapsible="icon">
+      <div className={`py-4 border-b border-border ${collapsed ? "px-2 flex justify-center" : "px-4"}`}>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shrink-0">
             <LayoutDashboard className="w-4 h-4 text-primary-foreground" />
           </div>
           {!collapsed && <span className="font-bold text-foreground text-sm">GestãoPro</span>}
@@ -136,15 +138,15 @@ export function AppSidebar() {
             <SidebarMenu>
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.path}>
-                  <SidebarMenuButton asChild>
+                  <SidebarMenuButton asChild tooltip={collapsed ? item.label : undefined}>
                     <NavLink
                       to={item.path}
                       end
                       className="hover:bg-muted/50"
                       activeClassName="bg-primary text-primary-foreground font-medium"
                     >
-                      <item.icon className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>{item.label}</span>}
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      {!collapsed && <span className="ml-2">{item.label}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -160,9 +162,13 @@ export function AppSidebar() {
             {profile.full_name || profile.email}
           </p>
         )}
-        <SidebarMenuButton onClick={handleSignOut} className="w-full hover:bg-destructive/10 hover:text-destructive">
-          <LogOut className="mr-2 h-4 w-4" />
-          {!collapsed && <span>Sair</span>}
+        <SidebarMenuButton
+          onClick={handleSignOut}
+          tooltip={collapsed ? "Sair" : undefined}
+          className="w-full hover:bg-destructive/10 hover:text-destructive"
+        >
+          <LogOut className="h-4 w-4 shrink-0" />
+          {!collapsed && <span className="ml-2">Sair</span>}
         </SidebarMenuButton>
       </div>
     </Sidebar>

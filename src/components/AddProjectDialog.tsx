@@ -23,6 +23,8 @@ import {
 import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { AIAssistButton } from "@/components/AIAssistButton";
+import { GutPriorityField } from "@/components/GutPriorityField";
 
 interface AddProjectDialogProps {
   onProjectAdded: () => void;
@@ -50,7 +52,10 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     title: "",
     description: "",
     status: "ideacao",
-    priority: "medium",
+    priority: "pendente",
+    gravity: null as number | null,
+    urgency: null as number | null,
+    tendency: null as number | null,
     due_date: "",
     assignees: "",
     budget_planned: "",
@@ -58,6 +63,13 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     blockers: "",
     category: defaultCategory || "",
     program: "",
+    project_type: "",
+    objective: "",
+    start_date: "",
+    sponsor: "",
+    manager: "",
+    problem_statement: "",
+    root_cause: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,7 +86,9 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         title: formData.title,
         description: formData.description,
         status: formData.status,
-        priority: formData.priority,
+        gravity: formData.gravity,
+        urgency: formData.urgency,
+        tendency: formData.tendency,
         due_date: formData.due_date || null,
         assignees: assigneesArray,
         budget_planned: parseFloat(formData.budget_planned) || 0,
@@ -83,6 +97,13 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         blockers: formData.blockers,
         category: formData.category || "general",
         program: formData.program || null,
+        project_type: formData.project_type || null,
+        objective: formData.objective || null,
+        start_date: formData.start_date || null,
+        sponsor: formData.sponsor || null,
+        manager: formData.manager || null,
+        problem_statement: formData.problem_statement || null,
+        root_cause: formData.root_cause || null,
       });
 
       if (error) throw error;
@@ -96,7 +117,10 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         title: "",
         description: "",
         status: "ideacao",
-        priority: "medium",
+        priority: "pendente",
+        gravity: null,
+        urgency: null,
+        tendency: null,
         due_date: "",
         assignees: "",
         budget_planned: "",
@@ -104,6 +128,13 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         blockers: "",
         category: defaultCategory || "general",
         program: "",
+        project_type: "",
+        objective: "",
+        start_date: "",
+        sponsor: "",
+        manager: "",
+        problem_statement: "",
+        root_cause: "",
       });
       setOpen(false);
       onProjectAdded();
@@ -137,7 +168,14 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="title">Título *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="title">Título *</Label>
+                <AIAssistButton
+                  value={formData.title}
+                  onChange={(next) => setFormData({ ...formData, title: next })}
+                  context="project_title"
+                />
+              </div>
               <Input
                 id="title"
                 value={formData.title}
@@ -147,18 +185,28 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 required
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="description">Descrição</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                rows={3}
-              />
-            </div>
             <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="project_type">Tipo do Projeto</Label>
+                <Select
+                  value={formData.project_type || "_none"}
+                  onValueChange={(v) =>
+                    setFormData({ ...formData, project_type: v === "_none" ? "" : v })
+                  }
+                >
+                  <SelectTrigger id="project_type">
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Não definido</SelectItem>
+                    <SelectItem value="estrategico">Estratégico</SelectItem>
+                    <SelectItem value="operacional">Operacional Crítico</SelectItem>
+                    <SelectItem value="novos_negocios">Novos Negócios</SelectItem>
+                    <SelectItem value="parceria">Parceria</SelectItem>
+                    <SelectItem value="inovacao">Inovação</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="budget_planned">Orçamento Planejado (R$)</Label>
                 <CurrencyInput
@@ -169,6 +217,19 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   value={formData.budget_planned}
                   onChange={(e) =>
                     setFormData({ ...formData, budget_planned: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="start_date">Data de Início</Label>
+                <Input
+                  id="start_date"
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, start_date: e.target.value })
                   }
                 />
               </div>
@@ -207,22 +268,13 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="priority">Prioridade</Label>
-                <Select
-                  value={formData.priority}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, priority: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Baixa</SelectItem>
-                    <SelectItem value="medium">Média</SelectItem>
-                    <SelectItem value="high">Alta</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Prioridade (GUT)</Label>
+                <GutPriorityField
+                  gravity={formData.gravity}
+                  urgency={formData.urgency}
+                  tendency={formData.tendency}
+                  onChange={(v) => setFormData({ ...formData, ...v })}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -238,15 +290,16 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   <SelectContent>
                     <SelectItem value="_none">Sem líder</SelectItem>
                     {profiles.map((p) => (
-                      <SelectItem key={p.full_name!} value={p.full_name!}>
+                      <SelectItem key={`ld-${p.id}`} value={p.full_name!}>
                         {p.full_name}
+                        {p.sector ? ` — ${p.sector}` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label>Setor</Label>
+                <Label>Setor (do Líder)</Label>
                 <Input
                   value={(() => {
                     const match = profiles.find(p => p.full_name === formData.owner);
@@ -254,31 +307,10 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   })()}
                   readOnly
                   disabled
-                  placeholder="Selecione um líder"
+                  placeholder="Preenchido ao escolher o líder"
                   className="bg-muted"
                 />
               </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="program">Programa</Label>
-              <Input
-                id="program"
-                placeholder="Nome do programa (opcional)"
-                value={formData.program}
-                onChange={(e) => setFormData({ ...formData, program: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="blockers">Bloqueios/Impedimentos</Label>
-              <Textarea
-                id="blockers"
-                placeholder="Descreva possíveis bloqueios ou impedimentos..."
-                value={formData.blockers}
-                onChange={(e) =>
-                  setFormData({ ...formData, blockers: e.target.value })
-                }
-                rows={2}
-              />
             </div>
           </div>
           <DialogFooter>

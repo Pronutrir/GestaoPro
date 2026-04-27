@@ -59,6 +59,7 @@ const QualityManagement = () => {
     try {
       const { data, error } = await supabase.from("projects").select("*")
         .eq("category", "qualidade")
+        .eq("is_trashed", false)
         .order("display_order", { ascending: true }).order("created_at", { ascending: false });
       if (error) throw error;
       const filtered = await filterProjects(data || []);
@@ -184,7 +185,7 @@ const QualityManagement = () => {
               {statusCards.filter(s => !statusFilter || statusFilter === s.key).map(s => (
                 <ProjectColumn key={s.key} title={s.label} status={s.key} color={s.color} projects={s.projects}
                   onEdit={handleEdit} onDelete={handleDelete} onStatusChange={handleStatusChange} isAdmin={isAdmin}
-                  onCardClick={(p: Project) => { setDrawerProject(p); setDrawerOpen(true); }} />
+                  onCardClick={(p: Project) => navigate(`/project/${p.id}`)} />
               ))}
             </div>
           </DndContext>

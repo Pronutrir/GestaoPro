@@ -47,21 +47,19 @@ export const ProjectCalendarView = ({ projectId, activities, onEditActivity, onD
   useEffect(() => {
     Promise.all([
       supabase.from("holidays").select("date,name").order("date"),
-      profile?.id ? supabase.from("user_work_schedules").select("*").eq("user_id", profile.id).maybeSingle() : Promise.resolve({ data: null }),
+      profile?.id ? supabase.from("user_work_schedules").select("*").eq("user_id", profile.id).maybeSingle() : Promise.resolve({ data: null } as any),
     ]).then(([hols, sched]) => {
       setHolidays((hols.data || []) as Holiday[]);
       if (sched && (sched as any).data) setSchedule((sched as any).data as WorkSchedule);
     });
-  }, [profile?.id]);
+  }, [profile?.id, projectId]);
 
   const events = useMemo<CalEvent[]>(() => {
     return activities
       .filter(a => a.start_date && a.end_date)
       .map(a => ({
-        id: a.id,
-        title: a.title,
-        start: parseISO(a.start_date!),
-        end: parseISO(a.end_date!),
+        id: a.id, title: a.title,
+        start: parseISO(a.start_date!), end: parseISO(a.end_date!),
         resource: { status: a.status, assigned_to: a.assigned_to },
       }));
   }, [activities]);
@@ -82,59 +80,46 @@ export const ProjectCalendarView = ({ projectId, activities, onEditActivity, onD
   const onEventDrop = async ({ event, start, end }: any) => {
     const startDate = new Date(start);
     const h = isHoliday(startDate, holidays);
-    if (h) {
-      toast({ title: "⚠️ Conflito", description: `${format(startDate, "dd/MM")} é feriado: ${h.name}`, variant: "destructive" });
-      return;
-    }
-    if (isOnVacation(startDate, schedule)) {
-      toast({ title: "⚠️ Conflito", description: "Período de férias do responsável", variant: "destructive" });
-      return;
-    }
-    const { error } = await supabase
-      .from("activities")
-      .update({ start_date: format(startDate, "yyyy-MM-dd"), end_date: format(new Date(end), "yyyy-MM-dd") })
-      .eq("id", event.id);
-    if (error) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
-      return;
-    }
+    if (h) { toast({ title: "⚠️ Conflito", description: `${format(startDate, "dd/MM")} é feriado: ${h.name}`, variant: "destructive" }); return; }
+    if (isOnVacation(startDate, schedule)) { toast({ title: "⚠️ Conflito", description: "Período de férias do responsável", variant: "destructive" }); return; }
+    const { error } = await supabase.from("activities").update({ start_date: format(startDate, "yyyy-MM-dd"), end_date: format(new Date(end), "yyyy-MM-dd") }).eq("id", event.id);
+    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
     toast({ title: "Reagendado", description: `${event.title} → ${format(startDate, "dd/MM")}` });
     onDataChanged();
   };
 
   return (
-    <Card className="p-4">
-      <div className="flex items-center gap-4 mb-3 text-xs">
-        <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-success" />Concluída</span>
-        <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-primary" />Em andamento</span>
-        <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-warning" />Pendente</span>
-        <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-destructive/20 border border-destructive/40" />Feriado</span>
-        <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-sky-500/20 border border-sky-500/40" />Férias</span>
-      </div>
-      <div style={{ height: "calc(100vh - 360px)", minHeight: 480 }}>
-        <DnDCalendar
-          localizer={localizer}
-          events={events}
-          startAccessor="start"
-          endAccessor="end"
-          view={view}
-          onView={setView as any}
-          date={date}
-          onNavigate={setDate as any}
-          views={["month", "week", "day", "agenda"]}
-          dayPropGetter={dayPropGetter}
-          eventPropGetter={eventPropGetter}
-          onEventDrop={onEventDrop}
-          onSelectEvent={(e: any) => onEditActivity(e.id)}
-          draggableAccessor={() => true}
-          messages={{
-            next: "Próximo", previous: "Anterior", today: "Hoje",
-            month: "Mês", week: "Semana", day: "Dia", agenda: "Agenda",
-            date: "Data", time: "Hora", event: "Atividade", noEventsInRange: "Nenhuma atividade neste período",
-          }}
-          culture="pt-BR"
-        />
-      </div>
-    </Card>
+    <div className="space-y-3">
+      <Card className="p-4">
+        <div className="flex items-center gap-4 mb-3 text-xs">
+          <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-success" />Concluída</span>
+          <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-primary" />Em andamento</span>
+          <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-warning" />Pendente</span>
+          <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-destructive/20 border border-destructive/40" />Feriado</span>
+          <span className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-sky-500/20 border border-sky-500/40" />Férias</span>
+        </div>
+        <div style={{ height: "calc(100vh - 340px)", minHeight: 480 }}>
+          <DnDCalendar
+            localizer={localizer}
+            events={events}
+            startAccessor="start" endAccessor="end"
+            view={view} onView={setView as any}
+            date={date} onNavigate={setDate as any}
+            views={["month", "week", "day", "agenda"]}
+            dayPropGetter={dayPropGetter}
+            eventPropGetter={eventPropGetter}
+            onEventDrop={onEventDrop}
+            onSelectEvent={(e: any) => onEditActivity(e.id)}
+            draggableAccessor={() => true}
+            messages={{
+              next: "Próximo", previous: "Anterior", today: "Hoje",
+              month: "Mês", week: "Semana", day: "Dia", agenda: "Agenda",
+              date: "Data", time: "Hora", event: "Atividade", noEventsInRange: "Nenhuma atividade neste período",
+            }}
+            culture="pt-BR"
+          />
+        </div>
+      </Card>
+    </div>
   );
 };

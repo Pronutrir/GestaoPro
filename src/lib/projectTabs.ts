@@ -1,18 +1,20 @@
 export const ALL_PROJECT_TABS = [
   { value: "kanban", label: "Kanban" },
-  { value: "list", label: "Lista" },
+  { value: "list", label: "Pendências" },
   { value: "backlog", label: "Backlog" },
   { value: "timeline", label: "Cronograma" },
   { value: "calendar", label: "Calendário" },
   { value: "documents", label: "Documentos" },
+  { value: "docpages", label: "Páginas" },
   { value: "stories", label: "Histórias" },
   { value: "tap", label: "TAP" },
   { value: "meetings", label: "Reuniões" },
   { value: "assumptions", label: "Premissas" },
   { value: "risks", label: "Riscos" },
+  { value: "changes", label: "Mudanças" },
+  { value: "dependencies", label: "Dependências" },
   { value: "financials", label: "Financeiro" },
   { value: "lessons", label: "Lições" },
-  { value: "workflow", label: "Workflow" },
 ] as const;
 
 export const ALL_TAB_VALUES = ALL_PROJECT_TABS.map(t => t.value);

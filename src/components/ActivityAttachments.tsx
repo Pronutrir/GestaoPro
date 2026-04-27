@@ -39,6 +39,7 @@ export const ActivityAttachments = ({ activityId, projectId }: ActivityAttachmen
       .from("project_documents")
       .select("id, file_name, file_url, file_type, file_size, uploaded_by, created_at")
       .eq("activity_id", activityId)
+      .eq("is_trashed", false)
       .order("created_at", { ascending: false });
     setDocs(data || []);
   };
@@ -80,7 +81,7 @@ export const ActivityAttachments = ({ activityId, projectId }: ActivityAttachmen
 
   const handleDelete = async (id: string) => {
     if (!confirm("Remover este anexo?")) return;
-    await supabase.from("project_documents").delete().eq("id", id);
+    await supabase.from("project_documents").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     fetchDocs();
   };
 

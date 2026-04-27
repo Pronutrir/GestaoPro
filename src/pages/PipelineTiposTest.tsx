@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { DashboardSkeleton } from "@/components/SkeletonScreens";
@@ -6,22 +6,27 @@ import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { NotificationBell } from "@/components/NotificationBell";
-import { Sparkline } from "@/components/Sparkline";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { PipelineByTypeLanes } from "@/components/PipelineByTypeLanes";
 import {
   LayoutDashboard, TrendingUp, DollarSign, CheckCircle2, Lightbulb,
   Beaker, Rocket, AlertTriangle, Archive, Clock, Flag, CalendarClock, ListTodo,
-  Users, BarChart3, ExternalLink,
+  ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area,
 } from "recharts";
+
+/**
+ * Visão Geral oficial — Dashboard Geral (KPIs + gráficos) +
+ * Pipeline por Tipo de Projeto (swim lanes).
+ * Rota: /
+ */
 
 interface Project {
   id: string;
@@ -32,6 +37,9 @@ interface Project {
   due_date: string | null;
   owner: string | null;
   blockers: string | null;
+  project_type: string | null;
+  priority: string;
+  completion_percentage: number | null;
 }
 
 interface Activity {
@@ -64,7 +72,7 @@ const COLORS = {
   "em-execucao": "hsl(142, 76%, 36%)",
 };
 
-const Overview = () => {
+const PipelineTiposTest = () => {
   const navigate = useNavigate();
   const { filterProjects, canManage: isAdmin, loading: authLoading } = useProjectAccess();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -80,17 +88,16 @@ const Overview = () => {
   const fetchAllData = async () => {
     try {
       const [projectsRes, activitiesRes, timeRes] = await Promise.all([
-        supabase.from("projects").select("*"),
+        supabase.from("projects").select("*").eq("is_trashed", false),
         supabase.from("activities").select("*"),
         supabase.from("time_entries").select("duration_minutes, project_id, created_at"),
       ]);
 
-      const allProjects = projectsRes.data || [];
+      const allProjects = (projectsRes.data || []) as Project[];
       const filtered = await filterProjects(allProjects);
-      setProjects(filtered);
+      setProjects(filtered as Project[]);
 
-      // Filter activities to only show those from accessible projects
-      const projectIds = new Set(filtered.map(p => p.id));
+      const projectIds = new Set(filtered.map((p: Project) => p.id));
       if (activitiesRes.data) setActivities(activitiesRes.data.filter(a => projectIds.has(a.project_id)));
       if (timeRes.data) setTimeEntries(timeRes.data.filter(t => projectIds.has(t.project_id)));
     } catch (error) {
@@ -133,7 +140,6 @@ const Overview = () => {
   const totalHoursEstimated = activities.reduce((s, a) => s + (a.hours || 0), 0);
   const totalHoursTracked = timeEntries.reduce((s, e) => s + (e.duration_minutes || 0), 0) / 60;
 
-  // ---- Chart Data ----
   const statusPieData = [
     { name: "Ideação", value: statusCounts.ideacao, color: COLORS.ideacao },
     { name: "POC", value: statusCounts.poc, color: COLORS.poc },
@@ -143,25 +149,20 @@ const Overview = () => {
     { name: "Em Execução", value: statusCounts["em-execucao"], color: COLORS["em-execucao"] },
   ].filter(d => d.value > 0);
 
-  // Burn-down: show completed tasks over the last 30 days
   const burndownData = (() => {
     const days: { date: string; remaining: number; completed: number }[] = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
-      const dateStr = d.toISOString().split("T")[0];
       const label = `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}`;
-
       const completedByDate = activities.filter(a => a.completed_at && new Date(a.completed_at) <= d).length;
       const remaining = totalActivities - completedByDate;
-
       days.push({ date: label, remaining, completed: completedByDate });
     }
     return days;
   })();
 
-  // Activities per project (top 10)
   const activitiesPerProject = (() => {
     const map = new Map<string, { name: string; total: number; done: number }>();
     activities.forEach(a => {
@@ -175,32 +176,6 @@ const Overview = () => {
     return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 10);
   })();
 
-  // Sparkline data: completion trend over last 14 days
-  const sparklineCompletion = (() => {
-    const data: number[] = [];
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      d.setHours(23, 59, 59);
-      const completed = activities.filter(a => a.completed_at && new Date(a.completed_at) <= d).length;
-      data.push(completed);
-    }
-    return data;
-  })();
-
-  // Sparkline: overdue trend
-  const sparklineOverdue = (() => {
-    const data: number[] = [];
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const overdue = activities.filter(a => a.status !== "completed" && a.end_date && new Date(a.end_date) < d).length;
-      data.push(overdue);
-    }
-    return data;
-  })();
-
   const statusCards = [
     { key: "ideacao", label: "Ideação", icon: Lightbulb, color: "warning", count: statusCounts.ideacao },
     { key: "poc", label: "POC", icon: Beaker, color: "info", count: statusCounts.poc },
@@ -211,11 +186,12 @@ const Overview = () => {
   ];
 
   return (
-    <AppLayout title="Pipeline de Gestão de Projetos">
+    <AppLayout title="Visão Geral">
       <main className="px-4 py-6 space-y-6">
-        <div>
-          <h2 className="text-3xl font-bold text-foreground mb-2">Dashboard Geral</h2>
-          <p className="text-muted-foreground">KPIs, indicadores de atraso e evolução do portfólio</p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-3xl font-bold text-foreground mb-2">Dashboard Geral</h2>
+          </div>
         </div>
 
         {isLoading ? (
@@ -243,7 +219,7 @@ const Overview = () => {
             </div>
 
             {/* KPI Row 2 - Key Metrics */}
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Card className="p-5 cursor-pointer hover:shadow-md transition-all h-full" onClick={() => setKpiDialog({ title: "Tarefas Concluídas", items: activities.filter(a => a.status === "completed") })}>
                 <div className="flex items-center gap-2 mb-3">
                   <ListTodo className="w-4 h-4 text-primary shrink-0" />
@@ -314,7 +290,6 @@ const Overview = () => {
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Burn-down Chart */}
               <Card className="p-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-primary" /> Burn-down (30 dias)
@@ -336,7 +311,6 @@ const Overview = () => {
                 </div>
               </Card>
 
-              {/* Status Pie Chart */}
               <Card className="p-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4">Distribuição de Projetos</h3>
                 <div className="h-[280px] flex items-center">
@@ -356,7 +330,6 @@ const Overview = () => {
 
             {/* Budget + Hours + Activities per Project */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Budget Card */}
               <Card className="p-6">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -382,7 +355,6 @@ const Overview = () => {
                 </div>
               </Card>
 
-              {/* Hours Card */}
               <Card className="p-6">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 bg-info/10 rounded-lg flex items-center justify-center">
@@ -413,7 +385,6 @@ const Overview = () => {
                 </div>
               </Card>
 
-              {/* Activities per Project Bar Chart */}
               <Card className="p-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4">Atividades por Projeto</h3>
                 {activitiesPerProject.length > 0 ? (
@@ -437,7 +408,6 @@ const Overview = () => {
 
             {/* Overdue & Upcoming Deadlines Lists */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Overdue */}
               <Card className="p-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 text-destructive" />
@@ -466,7 +436,6 @@ const Overview = () => {
                 )}
               </Card>
 
-              {/* Upcoming Deadlines */}
               <Card className="p-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                   <CalendarClock className="w-5 h-5 text-warning" />
@@ -496,79 +465,20 @@ const Overview = () => {
               </Card>
             </div>
 
-            {/* Completion Rate Donut */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-success" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Taxa de Execução</h3>
-                </div>
-                <div className="flex items-center justify-center py-4">
-                  <div className="relative w-48 h-48">
-                    <svg className="w-full h-full -rotate-90">
-                      <circle cx="96" cy="96" r="88" stroke="currentColor" strokeWidth="12" fill="none" className="text-muted" />
-                      <circle cx="96" cy="96" r="88" stroke="currentColor" strokeWidth="12" fill="none"
-                        strokeDasharray={`${(statusCounts["em-execucao"] / Math.max(totalProjects, 1)) * 553} 553`}
-                        className="text-success transition-all"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-4xl font-bold text-foreground">{totalProjects > 0 ? ((statusCounts["em-execucao"] / totalProjects) * 100).toFixed(0) : 0}%</span>
-                      <span className="text-sm text-muted-foreground mt-1">Em Execução</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-6 gap-2 pt-4 border-t border-border">
-                  {statusCards.map(sc => (
-                    <div key={sc.key} className="text-center">
-                      <p className={`text-xl font-bold text-${sc.color}`}>{sc.count}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{sc.label}</p>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-
-              {/* Task Completion Donut */}
-              <Card className="p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <CheckCircle2 className="w-5 h-5 text-primary" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Conclusão de Tarefas</h3>
-                </div>
-                <div className="flex items-center justify-center py-4">
-                  <div className="relative w-48 h-48">
-                    <svg className="w-full h-full -rotate-90">
-                      <circle cx="96" cy="96" r="88" stroke="currentColor" strokeWidth="12" fill="none" className="text-muted" />
-                      <circle cx="96" cy="96" r="88" stroke="currentColor" strokeWidth="12" fill="none"
-                        strokeDasharray={`${(taskCompletionRate / 100) * 553} 553`}
-                        className="text-primary transition-all"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-4xl font-bold text-foreground">{taskCompletionRate.toFixed(0)}%</span>
-                      <span className="text-sm text-muted-foreground mt-1">Concluídas</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-4 pt-4 border-t border-border">
-                  <div className="text-center">
-                    <p className="text-xl font-bold text-foreground">{totalActivities}</p>
-                    <p className="text-xs text-muted-foreground">Total</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xl font-bold text-success">{completedActivities}</p>
-                    <p className="text-xs text-muted-foreground">Feitas</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xl font-bold text-warning">{totalActivities - completedActivities}</p>
-                    <p className="text-xs text-muted-foreground">Pendentes</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
+            {/* SWIM LANES por Tipo de Projeto (novidade desta página) */}
+            <PipelineByTypeLanes
+              projects={projects.map((p) => ({
+                id: p.id,
+                title: p.title,
+                status: p.status,
+                project_type: p.project_type ?? null,
+                priority: p.priority ?? "medium",
+                owner: p.owner,
+                budget_planned: p.budget_planned ?? 0,
+                budget_used: p.budget_used ?? 0,
+                completion_percentage: p.completion_percentage ?? 0,
+              }))}
+            />
           </>
         )}
       </main>
@@ -613,4 +523,4 @@ const Overview = () => {
   );
 };
 
-export default Overview;
+export default PipelineTiposTest;

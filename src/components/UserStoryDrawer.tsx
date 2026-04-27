@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { AIAssistButton } from "@/components/AIAssistButton";
 import { useToast } from "@/hooks/use-toast";
 
 interface UserStory {
@@ -106,11 +107,11 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta história?")) return;
-    const { error } = await supabase.from("user_stories").delete().eq("id", id);
+    const { error } = await supabase.from("user_stories").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     if (error) {
       toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "História excluída!" });
+      toast({ title: "História movida para a lixeira" });
       setStories(prev => prev.filter(s => s.id !== id));
       onStoriesChanged?.();
     }
@@ -208,8 +209,27 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
                       <Input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className="h-8 text-sm" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Narrativa</Label>
-                      <Textarea value={editForm.narrative} onChange={e => setEditForm({ ...editForm, narrative: e.target.value })} rows={3} />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Narrativa</Label>
+                        <AIAssistButton value={editForm.narrative} onChange={(v) => setEditForm({ ...editForm, narrative: v })} context="story_narrative" />
+                      </div>
+                      <Textarea
+                        value={editForm.narrative}
+                        onChange={e => {
+                          setEditForm({ ...editForm, narrative: e.target.value });
+                          e.target.style.height = "auto";
+                          e.target.style.height = `${Math.min(e.target.scrollHeight, 600)}px`;
+                        }}
+                        ref={(el) => {
+                          if (el) {
+                            el.style.height = "auto";
+                            el.style.height = `${Math.min(el.scrollHeight, 600)}px`;
+                          }
+                        }}
+                        rows={6}
+                        className="min-h-[140px] max-h-[600px] text-sm leading-relaxed resize-y"
+                        placeholder="Descreva o contexto, motivações e detalhes da história..."
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Imagem</Label>

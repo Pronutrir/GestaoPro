@@ -28,15 +28,19 @@ export type Database = {
           description: string | null
           display_order: number | null
           end_date: string | null
+          gravity: number | null
           hours: number | null
           id: string
           is_critical: boolean
+          is_milestone: boolean
           is_trashed: boolean
           last_update_date: string | null
           parent_id: string | null
+          participant_roles: Json
           participants: string[] | null
           phase_id: string | null
           priority: string
+          priority_score: number | null
           project_id: string
           raci_role: string | null
           sprint_id: string | null
@@ -44,10 +48,12 @@ export type Database = {
           status: string
           story_points: number | null
           tags: string[] | null
+          tendency: number | null
           title: string
           trashed_at: string | null
           ui_color_tag: string | null
           updated_at: string
+          urgency: number | null
           workflow_stage_id: string | null
         }
         Insert: {
@@ -63,15 +69,19 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           end_date?: string | null
+          gravity?: number | null
           hours?: number | null
           id?: string
           is_critical?: boolean
+          is_milestone?: boolean
           is_trashed?: boolean
           last_update_date?: string | null
           parent_id?: string | null
+          participant_roles?: Json
           participants?: string[] | null
           phase_id?: string | null
           priority?: string
+          priority_score?: number | null
           project_id: string
           raci_role?: string | null
           sprint_id?: string | null
@@ -79,10 +89,12 @@ export type Database = {
           status?: string
           story_points?: number | null
           tags?: string[] | null
+          tendency?: number | null
           title: string
           trashed_at?: string | null
           ui_color_tag?: string | null
           updated_at?: string
+          urgency?: number | null
           workflow_stage_id?: string | null
         }
         Update: {
@@ -98,15 +110,19 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           end_date?: string | null
+          gravity?: number | null
           hours?: number | null
           id?: string
           is_critical?: boolean
+          is_milestone?: boolean
           is_trashed?: boolean
           last_update_date?: string | null
           parent_id?: string | null
+          participant_roles?: Json
           participants?: string[] | null
           phase_id?: string | null
           priority?: string
+          priority_score?: number | null
           project_id?: string
           raci_role?: string | null
           sprint_id?: string | null
@@ -114,10 +130,12 @@ export type Database = {
           status?: string
           story_points?: number | null
           tags?: string[] | null
+          tendency?: number | null
           title?: string
           trashed_at?: string | null
           ui_color_tag?: string | null
           updated_at?: string
+          urgency?: number | null
           workflow_stage_id?: string | null
         }
         Relationships: [
@@ -165,6 +183,8 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          is_trashed: boolean
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -173,6 +193,8 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          is_trashed?: boolean
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -181,6 +203,8 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          is_trashed?: boolean
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -283,8 +307,10 @@ export type Database = {
           description: string
           id: string
           impact: string | null
+          is_trashed: boolean
           project_id: string
           status: string
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -293,8 +319,10 @@ export type Database = {
           description: string
           id?: string
           impact?: string | null
+          is_trashed?: boolean
           project_id: string
           status?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -303,8 +331,10 @@ export type Database = {
           description?: string
           id?: string
           impact?: string | null
+          is_trashed?: boolean
           project_id?: string
           status?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -353,6 +383,159 @@ export type Database = {
           operation?: string
           record_id?: string
           table_name?: string
+        }
+        Relationships: []
+      }
+      change_request_approvers: {
+        Row: {
+          change_request_id: string
+          created_at: string
+          id: string
+          user_id: string
+          user_name: string | null
+        }
+        Insert: {
+          change_request_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+          user_name?: string | null
+        }
+        Update: {
+          change_request_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_request_approvers_change_request_id_fkey"
+            columns: ["change_request_id"]
+            isOneToOne: false
+            referencedRelation: "change_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      change_request_scope_items: {
+        Row: {
+          activity_id: string | null
+          change_request_id: string
+          created_at: string
+          id: string
+          item_type: string
+          phase_id: string | null
+        }
+        Insert: {
+          activity_id?: string | null
+          change_request_id: string
+          created_at?: string
+          id?: string
+          item_type: string
+          phase_id?: string | null
+        }
+        Update: {
+          activity_id?: string | null
+          change_request_id?: string
+          created_at?: string
+          id?: string
+          item_type?: string
+          phase_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_request_scope_items_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_request_scope_items_change_request_id_fkey"
+            columns: ["change_request_id"]
+            isOneToOne: false
+            referencedRelation: "change_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_request_scope_items_phase_id_fkey"
+            columns: ["phase_id"]
+            isOneToOne: false
+            referencedRelation: "phases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      change_requests: {
+        Row: {
+          approver: string | null
+          approver_id: string | null
+          created_at: string
+          decision_date: string | null
+          decision_notes: string | null
+          description: string | null
+          expected_benefits: string | null
+          id: string
+          impact_cost: string | null
+          impact_quality: string | null
+          impact_schedule: string | null
+          impact_scope: string | null
+          is_trashed: boolean
+          justification: string | null
+          project_id: string
+          requested_by: string | null
+          requested_by_id: string | null
+          status: string
+          title: string
+          trashed_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          approver?: string | null
+          approver_id?: string | null
+          created_at?: string
+          decision_date?: string | null
+          decision_notes?: string | null
+          description?: string | null
+          expected_benefits?: string | null
+          id?: string
+          impact_cost?: string | null
+          impact_quality?: string | null
+          impact_schedule?: string | null
+          impact_scope?: string | null
+          is_trashed?: boolean
+          justification?: string | null
+          project_id: string
+          requested_by?: string | null
+          requested_by_id?: string | null
+          status?: string
+          title: string
+          trashed_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approver?: string | null
+          approver_id?: string | null
+          created_at?: string
+          decision_date?: string | null
+          decision_notes?: string | null
+          description?: string | null
+          expected_benefits?: string | null
+          id?: string
+          impact_cost?: string | null
+          impact_quality?: string | null
+          impact_schedule?: string | null
+          impact_scope?: string | null
+          is_trashed?: boolean
+          justification?: string | null
+          project_id?: string
+          requested_by?: string | null
+          requested_by_id?: string | null
+          status?: string
+          title?: string
+          trashed_at?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -506,12 +689,14 @@ export type Database = {
           description: string | null
           end_date: string | null
           id: string
+          is_trashed: boolean
           project_id: string
           responsible: string | null
           sector: string | null
           start_date: string | null
           status: string
           title: string
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -519,12 +704,14 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          is_trashed?: boolean
           project_id: string
           responsible?: string | null
           sector?: string | null
           start_date?: string | null
           status?: string
           title: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -532,12 +719,14 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          is_trashed?: boolean
           project_id?: string
           responsible?: string | null
           sector?: string | null
           start_date?: string | null
           status?: string
           title?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -580,12 +769,14 @@ export type Database = {
           created_at: string
           id: string
           impact: string | null
+          is_trashed: boolean
           phase_id: string | null
           problem: string
           project_id: string
           reported_by: string | null
           solution: string | null
           suggestion: string | null
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -593,12 +784,14 @@ export type Database = {
           created_at?: string
           id?: string
           impact?: string | null
+          is_trashed?: boolean
           phase_id?: string | null
           problem: string
           project_id: string
           reported_by?: string | null
           solution?: string | null
           suggestion?: string | null
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -606,12 +799,14 @@ export type Database = {
           created_at?: string
           id?: string
           impact?: string | null
+          is_trashed?: boolean
           phase_id?: string | null
           problem?: string
           project_id?: string
           reported_by?: string | null
           solution?: string | null
           suggestion?: string | null
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -715,6 +910,7 @@ export type Database = {
           created_by: string | null
           end_time: string | null
           id: string
+          is_trashed: boolean
           location: string | null
           meeting_date: string | null
           meeting_type: string
@@ -726,6 +922,7 @@ export type Database = {
           sprint_id: string | null
           start_time: string | null
           title: string
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -734,6 +931,7 @@ export type Database = {
           created_by?: string | null
           end_time?: string | null
           id?: string
+          is_trashed?: boolean
           location?: string | null
           meeting_date?: string | null
           meeting_type?: string
@@ -745,6 +943,7 @@ export type Database = {
           sprint_id?: string | null
           start_time?: string | null
           title: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -753,6 +952,7 @@ export type Database = {
           created_by?: string | null
           end_time?: string | null
           id?: string
+          is_trashed?: boolean
           location?: string | null
           meeting_date?: string | null
           meeting_type?: string
@@ -764,6 +964,7 @@ export type Database = {
           sprint_id?: string | null
           start_time?: string | null
           title?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -969,8 +1170,10 @@ export type Database = {
           description: string | null
           display_order: number | null
           id: string
+          is_trashed: boolean
           project_id: string
           title: string
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -978,8 +1181,10 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           id?: string
+          is_trashed?: boolean
           project_id: string
           title: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -987,8 +1192,10 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           id?: string
+          is_trashed?: boolean
           project_id?: string
           title?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1037,6 +1244,60 @@ export type Database = {
         }
         Relationships: []
       }
+      project_dependencies: {
+        Row: {
+          created_at: string
+          depends_on: string | null
+          description: string
+          due_date: string | null
+          id: string
+          linked_project_id: string | null
+          project_id: string
+          responsible: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          depends_on?: string | null
+          description: string
+          due_date?: string | null
+          id?: string
+          linked_project_id?: string | null
+          project_id: string
+          responsible?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          depends_on?: string | null
+          description?: string
+          due_date?: string | null
+          id?: string
+          linked_project_id?: string | null
+          project_id?: string
+          responsible?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_dependencies_linked_project_id_fkey"
+            columns: ["linked_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_dependencies_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_documents: {
         Row: {
           activity_id: string | null
@@ -1047,8 +1308,10 @@ export type Database = {
           file_type: string | null
           file_url: string
           id: string
+          is_trashed: boolean
           phase_id: string | null
           project_id: string
+          trashed_at: string | null
           updated_at: string
           uploaded_by: string | null
           version: number
@@ -1062,8 +1325,10 @@ export type Database = {
           file_type?: string | null
           file_url: string
           id?: string
+          is_trashed?: boolean
           phase_id?: string | null
           project_id: string
+          trashed_at?: string | null
           updated_at?: string
           uploaded_by?: string | null
           version?: number
@@ -1077,8 +1342,10 @@ export type Database = {
           file_type?: string | null
           file_url?: string
           id?: string
+          is_trashed?: boolean
           phase_id?: string | null
           project_id?: string
+          trashed_at?: string | null
           updated_at?: string
           uploaded_by?: string | null
           version?: number
@@ -1151,6 +1418,45 @@ export type Database = {
           },
         ]
       }
+      project_pages: {
+        Row: {
+          content: Json
+          created_at: string
+          created_by: string | null
+          created_by_email: string | null
+          id: string
+          is_trashed: boolean
+          project_id: string
+          title: string
+          trashed_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          id?: string
+          is_trashed?: boolean
+          project_id: string
+          title?: string
+          trashed_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          id?: string
+          is_trashed?: boolean
+          project_id?: string
+          title?: string
+          trashed_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       projects: {
         Row: {
           assignees: string[] | null
@@ -1163,13 +1469,32 @@ export type Database = {
           description: string | null
           display_order: number | null
           due_date: string | null
+          expected_benefits: string | null
+          gravity: number | null
           id: string
+          is_trashed: boolean
+          manager: string | null
+          objective: string | null
+          out_of_scope: string | null
           owner: string | null
           priority: string
+          priority_score: number | null
+          problem_statement: string | null
           program: string | null
+          project_type: string | null
+          regulatory_requirements: string | null
+          restrictions: string | null
+          root_cause: string | null
+          scope: string | null
+          solved_problem: string | null
+          sponsor: string | null
+          start_date: string | null
           status: string
+          tendency: number | null
           title: string
+          trashed_at: string | null
           updated_at: string
+          urgency: number | null
         }
         Insert: {
           assignees?: string[] | null
@@ -1182,13 +1507,32 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           due_date?: string | null
+          expected_benefits?: string | null
+          gravity?: number | null
           id?: string
+          is_trashed?: boolean
+          manager?: string | null
+          objective?: string | null
+          out_of_scope?: string | null
           owner?: string | null
           priority?: string
+          priority_score?: number | null
+          problem_statement?: string | null
           program?: string | null
+          project_type?: string | null
+          regulatory_requirements?: string | null
+          restrictions?: string | null
+          root_cause?: string | null
+          scope?: string | null
+          solved_problem?: string | null
+          sponsor?: string | null
+          start_date?: string | null
           status?: string
+          tendency?: number | null
           title: string
+          trashed_at?: string | null
           updated_at?: string
+          urgency?: number | null
         }
         Update: {
           assignees?: string[] | null
@@ -1201,13 +1545,32 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           due_date?: string | null
+          expected_benefits?: string | null
+          gravity?: number | null
           id?: string
+          is_trashed?: boolean
+          manager?: string | null
+          objective?: string | null
+          out_of_scope?: string | null
           owner?: string | null
           priority?: string
+          priority_score?: number | null
+          problem_statement?: string | null
           program?: string | null
+          project_type?: string | null
+          regulatory_requirements?: string | null
+          restrictions?: string | null
+          root_cause?: string | null
+          scope?: string | null
+          solved_problem?: string | null
+          sponsor?: string | null
+          start_date?: string | null
           status?: string
+          tendency?: number | null
           title?: string
+          trashed_at?: string | null
           updated_at?: string
+          urgency?: number | null
         }
         Relationships: []
       }
@@ -1220,6 +1583,7 @@ export type Database = {
           gravity: number | null
           id: string
           impact: string
+          is_trashed: boolean
           mitigation: string | null
           probability: string
           project_id: string
@@ -1227,6 +1591,7 @@ export type Database = {
           severity_score: number | null
           status: string
           tendency: number | null
+          trashed_at: string | null
           updated_at: string
           urgency: number | null
         }
@@ -1238,6 +1603,7 @@ export type Database = {
           gravity?: number | null
           id?: string
           impact?: string
+          is_trashed?: boolean
           mitigation?: string | null
           probability?: string
           project_id: string
@@ -1245,6 +1611,7 @@ export type Database = {
           severity_score?: number | null
           status?: string
           tendency?: number | null
+          trashed_at?: string | null
           updated_at?: string
           urgency?: number | null
         }
@@ -1256,6 +1623,7 @@ export type Database = {
           gravity?: number | null
           id?: string
           impact?: string
+          is_trashed?: boolean
           mitigation?: string | null
           probability?: string
           project_id?: string
@@ -1263,6 +1631,7 @@ export type Database = {
           severity_score?: number | null
           status?: string
           tendency?: number | null
+          trashed_at?: string | null
           updated_at?: string
           urgency?: number | null
         }
@@ -1475,6 +1844,54 @@ export type Database = {
           },
         ]
       }
+      task_relations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          created_by_email: string | null
+          id: string
+          note: string | null
+          relation_type: string
+          source_activity_id: string
+          target_activity_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          id?: string
+          note?: string | null
+          relation_type: string
+          source_activity_id: string
+          target_activity_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          id?: string
+          note?: string | null
+          relation_type?: string
+          source_activity_id?: string
+          target_activity_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_relations_source_activity_id_fkey"
+            columns: ["source_activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_relations_target_activity_id_fkey"
+            columns: ["target_activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_entries: {
         Row: {
           activity_id: string
@@ -1577,6 +1994,7 @@ export type Database = {
           created_at: string
           id: string
           image_url: string | null
+          is_trashed: boolean
           narrative: string | null
           persona: string
           phase_id: string | null
@@ -1585,6 +2003,7 @@ export type Database = {
           stage_id: string | null
           status: string
           title: string
+          trashed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -1595,6 +2014,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          is_trashed?: boolean
           narrative?: string | null
           persona?: string
           phase_id?: string | null
@@ -1603,6 +2023,7 @@ export type Database = {
           stage_id?: string | null
           status?: string
           title?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -1613,6 +2034,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          is_trashed?: boolean
           narrative?: string | null
           persona?: string
           phase_id?: string | null
@@ -1621,6 +2043,7 @@ export type Database = {
           stage_id?: string | null
           status?: string
           title?: string
+          trashed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1819,6 +2242,7 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: undefined
       }
+      gut_label: { Args: { _score: number }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

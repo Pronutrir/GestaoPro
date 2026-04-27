@@ -20,6 +20,7 @@ interface TabItem {
   value: string;
   label: string;
   icon: React.ReactNode;
+  iconColor?: string;
 }
 
 interface DraggableTabBarProps {
@@ -30,6 +31,7 @@ interface DraggableTabBarProps {
   onRemoveTab?: (value: string) => void;
   removableValues?: string[];
   extraSlot?: React.ReactNode;
+  extraSlotPosition?: "left" | "right";
 }
 
 function SortableTab({
@@ -66,13 +68,13 @@ function SortableTab({
       ref={setNodeRef}
       style={style}
       className={`
-        group/tab relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer select-none
-        transition-all duration-150 whitespace-nowrap
-        ${isDragging ? "shadow-lg ring-2 ring-primary/30 scale-105" : ""}
+        group/tab relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium cursor-pointer select-none
+        transition-all duration-150 whitespace-nowrap border-b-2
+        ${isDragging ? "shadow-md scale-105 bg-muted/40" : ""}
         ${
           isActive
-            ? "bg-primary text-primary-foreground shadow-md"
-            : "bg-card text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-border/60"
+            ? "text-foreground border-foreground"
+            : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted-foreground/20"
         }
       `}
       onClick={onClick}
@@ -86,7 +88,7 @@ function SortableTab({
         <GripVertical className="w-3 h-3" />
       </button>
       <span className="flex items-center gap-1.5">
-        {tab.icon}
+        <span className={tab.iconColor ?? ""}>{tab.icon}</span>
         {tab.label}
       </span>
       {canRemove && onRemove && (
@@ -95,9 +97,7 @@ function SortableTab({
             e.stopPropagation();
             onRemove();
           }}
-          className={`opacity-0 group-hover/tab:opacity-100 transition-opacity ml-1 -mr-1 rounded p-0.5 hover:bg-background/30 ${
-            isActive ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
+          className="opacity-0 group-hover/tab:opacity-100 transition-opacity ml-1 -mr-1 rounded p-0.5 hover:bg-background/50 text-muted-foreground hover:text-foreground"
           aria-label="Remover visualização"
         >
           <X className="w-3 h-3" />
@@ -115,6 +115,7 @@ export const DraggableTabBar = ({
   onRemoveTab,
   removableValues,
   extraSlot,
+  extraSlotPosition = "right",
 }: DraggableTabBarProps) => {
   const [orderedTabs, setOrderedTabs] = useState<TabItem[]>(tabs);
 
@@ -166,7 +167,10 @@ export const DraggableTabBar = ({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={orderedTabs.map((t) => t.value)} strategy={horizontalListSortingStrategy}>
-        <div className="flex gap-1.5 p-1.5 bg-muted/40 rounded-xl border border-border/50 overflow-x-auto scrollbar-none">
+        <div className="flex gap-1 px-1 border-b border-border/70 overflow-x-auto scrollbar-none -mt-[10px]">
+          {extraSlot && extraSlotPosition === "left" && (
+            <div className="flex items-center">{extraSlot}</div>
+          )}
           {orderedTabs.map((tab) => (
             <SortableTab
               key={tab.value}
@@ -177,7 +181,9 @@ export const DraggableTabBar = ({
               onRemove={onRemoveTab ? () => onRemoveTab(tab.value) : undefined}
             />
           ))}
-          {extraSlot && <div className="flex items-center">{extraSlot}</div>}
+          {extraSlot && extraSlotPosition === "right" && (
+            <div className="flex items-center">{extraSlot}</div>
+          )}
         </div>
       </SortableContext>
     </DndContext>

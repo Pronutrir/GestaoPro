@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { AIAssistButton } from "@/components/AIAssistButton";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -83,13 +84,13 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const fetchStories = async () => {
-    const { data } = await supabase.from("user_stories").select("*").eq("project_id", projectId).order("created_at", { ascending: true });
+    const { data } = await supabase.from("user_stories").select("*").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: true });
     if (data) setStories(data as UserStory[]);
   };
 
   const fetchPhasesAndActivities = async () => {
     const [{ data: ph }, { data: act }] = await Promise.all([
-      supabase.from("phases").select("id, title, display_order").eq("project_id", projectId).order("display_order"),
+      supabase.from("phases").select("id, title, display_order").eq("project_id", projectId).eq("is_trashed", false).order("display_order"),
       supabase.from("activities").select("id, title, phase_id, workflow_stage_id").eq("project_id", projectId).order("title"),
     ]);
     if (ph) setPhases(ph);
@@ -168,8 +169,8 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir esta história?")) return;
-    await supabase.from("user_stories").delete().eq("id", id);
-    toast({ title: "História excluída!" });
+    await supabase.from("user_stories").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
+    toast({ title: "História movida para a lixeira" });
     fetchStories();
   };
 
@@ -302,13 +303,19 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">Título *</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Título *</Label>
+                <AIAssistButton value={form.title} onChange={(v) => setForm({ ...form, title: v })} context="story_title" />
+              </div>
               <Input placeholder="Título da história..." value={form.title}
                 onChange={e => setForm({ ...form, title: e.target.value })} autoFocus />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">Narrativa / Contexto</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Narrativa / Contexto</Label>
+                <AIAssistButton value={form.narrative} onChange={(v) => setForm({ ...form, narrative: v })} context="story_narrative" />
+              </div>
               <Textarea placeholder="Conte a história com mais detalhes..." value={form.narrative}
                 onChange={e => setForm({ ...form, narrative: e.target.value })} rows={4} autoResize
                 className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />

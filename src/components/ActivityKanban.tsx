@@ -31,6 +31,16 @@ import {
   ArrowUpDown,
   Plus,
   BookOpen,
+  GitFork,
+  MoreHorizontal,
+  Check,
+  X as XIcon,
+  Eye,
+  EyeOff,
+  Diamond,
+  ChevronRight,
+  ChevronDown,
+  Link2,
 } from "lucide-react";
 import {
   DndContext,
@@ -55,6 +65,37 @@ import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { UserStoryDrawer } from "@/components/UserStoryDrawer";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { WorkflowStageManager } from "@/components/WorkflowStageManager";
+
+const formatHours = (hours: number): string => {
+  if (!hours || hours <= 0) return "";
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h${m}m`;
+};
+
+const STAGE_PRESET_COLORS = [
+  "hsl(220, 15%, 50%)",
+  "hsl(38, 92%, 50%)",
+  "hsl(220, 90%, 56%)",
+  "hsl(199, 89%, 48%)",
+  "hsl(270, 70%, 55%)",
+  "hsl(142, 76%, 36%)",
+  "hsl(0, 84%, 60%)",
+  "hsl(340, 82%, 52%)",
+];
 
 interface WorkflowStage {
   id: string;
@@ -95,6 +136,7 @@ interface Activity {
   participants?: string[];
   deadline_flag?: string | null;
   last_update_date?: string | null;
+  is_milestone?: boolean;
 }
 
 interface ActivityKanbanProps {
@@ -125,6 +167,14 @@ function SortableKanbanCard({
   onStoryClick,
   onCreateStory,
   isQualityProject,
+  stageColor,
+  subActivityCount,
+  dependencyCount,
+  relationItems,
+  onOpenRelated,
+  onRemoveRelation,
+  isExpanded,
+  onToggleExpand,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -139,6 +189,14 @@ function SortableKanbanCard({
   onStoryClick?: () => void;
   onCreateStory?: () => void;
   isQualityProject?: boolean;
+  stageColor?: string;
+  subActivityCount?: number;
+  dependencyCount?: { pred: number; succ: number };
+  relationItems?: { id: string; title: string; relationId: string; relationType: string }[];
+  onOpenRelated?: (activityId: string) => void;
+  onRemoveRelation?: (relationId: string) => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -166,6 +224,14 @@ function SortableKanbanCard({
         onStoryClick={onStoryClick}
         onCreateStory={onCreateStory}
         isQualityProject={isQualityProject}
+        stageColor={stageColor}
+        subActivityCount={subActivityCount}
+        dependencyCount={dependencyCount}
+        relationItems={relationItems}
+        onOpenRelated={onOpenRelated}
+        onRemoveRelation={onRemoveRelation}
+        isExpanded={isExpanded}
+        onToggleExpand={onToggleExpand}
       />
     </div>
   );
@@ -186,6 +252,14 @@ function KanbanCard({
   onStoryClick,
   onCreateStory,
   isQualityProject,
+  stageColor,
+  subActivityCount,
+  dependencyCount,
+  relationItems,
+  onOpenRelated,
+  onRemoveRelation,
+  isExpanded,
+  onToggleExpand,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -201,6 +275,14 @@ function KanbanCard({
   onStoryClick?: () => void;
   onCreateStory?: () => void;
   isQualityProject?: boolean;
+  stageColor?: string;
+  subActivityCount?: number;
+  dependencyCount?: { pred: number; succ: number };
+  relationItems?: { id: string; title: string; relationId: string; relationType: string }[];
+  onOpenRelated?: (activityId: string) => void;
+  onRemoveRelation?: (relationId: string) => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -218,11 +300,14 @@ function KanbanCard({
   const parseDate = (d: string) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day); };
   const isOverdue = activity.end_date && parseDate(activity.end_date) < new Date() && activity.status !== "completed";
 
-  const cardBorderClass = isBlocked
-    ? "border-orange-500 border-l-[3px] border-l-orange-500 bg-orange-500/5"
-    : isOverdue
-      ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue"
-      : "border-border";
+  const isMilestone = !!(activity as any).is_milestone;
+  const cardBorderClass = isMilestone
+    ? "border-amber-500 border-l-[4px] border-l-amber-500 bg-amber-500/5"
+    : isBlocked
+      ? "border-orange-500 border-l-[3px] border-l-orange-500 bg-orange-500/5"
+      : isOverdue
+        ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue"
+        : "border-border";
 
   const tooltipLines = [
     activity.title,
@@ -233,7 +318,7 @@ function KanbanCard({
     activity.end_date ? `📅 Fim: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}` : null,
     isQualityProject && activity.last_update_date ? `🔄 Atualização: ${parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}` : null,
     isQualityProject && activity.deadline_flag ? `🚦 Flag: ${activity.deadline_flag === "green" ? "Em dia" : activity.deadline_flag === "orange" ? "Atenção" : activity.deadline_flag === "red" ? "Vencido" : ""}` : null,
-    activity.hours > 0 ? `⏱ Horas: ${activity.hours}h` : null,
+    activity.hours > 0 ? `⏱ Tempo: ${formatHours(activity.hours)}` : null,
     activity.status === "completed" ? "✅ Concluída" : null,
   ].filter(Boolean);
 
@@ -242,7 +327,7 @@ function KanbanCard({
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`bg-card border border-border/60 rounded-lg p-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group ${cardBorderClass}`}
+            className={`bg-card border border-border rounded-lg p-2.5 shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`}
             onClick={onEdit}
           >
             <div className="flex items-start gap-2">
@@ -256,6 +341,12 @@ function KanbanCard({
               <div className="flex-1 min-w-0 overflow-hidden">
                 <div className="flex items-center gap-1.5 mb-1">
                   {getPriorityIndicator(activity.priority)}
+                  {isMilestone && (
+                    <Diamond
+                      className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0"
+                      aria-label="Marco"
+                    />
+                  )}
                   <p
                     className={`text-xs font-medium leading-snug line-clamp-2 ${
                       activity.status === "completed"
@@ -334,10 +425,99 @@ function KanbanCard({
                   )}
                   {activity.hours > 0 && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                      {activity.hours}h
+                      {formatHours(activity.hours)}
                     </Badge>
                   )}
+                  {dependencyCount && (dependencyCount.pred > 0 || dependencyCount.succ > 0) && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30 font-semibold"
+                      title={`${dependencyCount.pred} predecessora(s) · ${dependencyCount.succ} sucessora(s)`}
+                    >
+                      🔗 {dependencyCount.pred > 0 && `←${dependencyCount.pred}`}
+                      {dependencyCount.pred > 0 && dependencyCount.succ > 0 && " "}
+                      {dependencyCount.succ > 0 && `→${dependencyCount.succ}`}
+                    </Badge>
+                  )}
+                  {relationItems && relationItems.length > 0 ? (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium bg-background text-muted-foreground border border-border/60 hover:bg-muted/40 hover:text-foreground transition-colors"
+                          title="Gerenciar vínculos"
+                        >
+                          <Link2 className="w-2.5 h-2.5" strokeWidth={2.25} />
+                          {relationItems.length}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="top"
+                        align="start"
+                        className="w-72 p-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-[11px] font-semibold text-foreground">
+                            {relationItems.length} {relationItems.length === 1 ? "vínculo" : "vínculos"}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                            className="text-[10px] text-primary hover:underline font-medium"
+                            title="Adicionar/editar vínculos na atividade"
+                          >
+                            + Adicionar
+                          </button>
+                        </div>
+                        <ul className="space-y-1 max-h-64 overflow-auto">
+                          {relationItems.map((r) => (
+                            <li
+                              key={r.relationId}
+                              className="group flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-muted/60"
+                            >
+                              <span className="font-mono text-[9px] text-muted-foreground/60 shrink-0">
+                                #{r.id.slice(0, 6)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onOpenRelated?.(r.id); }}
+                                className="flex-1 min-w-0 text-left text-[11px] text-foreground truncate hover:text-primary hover:underline"
+                                title="Abrir atividade vinculada"
+                              >
+                                {r.title || "(sem título)"}
+                              </button>
+                              <span className="text-[9px] text-muted-foreground/70 shrink-0 capitalize">
+                                {r.relationType.replace(/_/g, " ")}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onRemoveRelation?.(r.relationId); }}
+                                className="p-0.5 rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                                title="Remover vínculo"
+                              >
+                                <XIcon className="w-3 h-3" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </PopoverContent>
+                    </Popover>
+                  ) : null}
                 </div>
+                {subActivityCount && subActivityCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}
+                    className="flex items-center gap-1 mt-1.5 text-[10px] font-medium text-primary hover:text-primary/80 hover:underline transition-colors"
+                    title={isExpanded ? "Recolher subtarefas" : "Expandir subtarefas"}
+                  >
+                    {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    <GitFork className="w-3 h-3" />
+                    <span>{subActivityCount} {subActivityCount === 1 ? "subtarefa" : "subtarefas"}</span>
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -404,6 +584,18 @@ function SortableColumn({
   onCreateStory,
   isQualityProject,
   onOpenCreateTask,
+  subActivityCounts,
+  dependencyCounts,
+  relationCounts,
+  onOpenRelated,
+  onRemoveRelation,
+  isAdminOrGestor,
+  onRenameStage,
+  onDeleteStage,
+  onChangeStageColor,
+  onToggleStageFinal,
+  onToggleStageBlocked,
+  onToggleStageVisible,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -424,6 +616,18 @@ function SortableColumn({
   onCreateStory: (activity: Activity) => void;
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;
+  subActivityCounts: Map<string, number>;
+  dependencyCounts?: Map<string, { pred: number; succ: number }>;
+  relationCounts?: Map<string, { id: string; title: string; relationId: string; relationType: string }[]>;
+  onOpenRelated?: (activityId: string) => void;
+  onRemoveRelation?: (relationId: string) => void;
+  isAdminOrGestor?: boolean;
+  onRenameStage: (id: string, title: string) => Promise<void>;
+  onDeleteStage: (id: string) => Promise<void>;
+  onChangeStageColor: (id: string, color: string) => Promise<void>;
+  onToggleStageFinal: (id: string, current: boolean) => Promise<void>;
+  onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
+  onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -431,6 +635,31 @@ function SortableColumn({
   const [quickPhase, setQuickPhase] = useState("");
   const [quickOrder, setQuickOrder] = useState("");
   const [quickLoading, setQuickLoading] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(stage.title);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  // Map: parentId -> list of children, ordered by display_order
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, Activity[]>();
+    activities.forEach((a) => {
+      if (a.parent_id) {
+        if (!map.has(a.parent_id)) map.set(a.parent_id, []);
+        map.get(a.parent_id)!.push(a);
+      }
+    });
+    map.forEach((arr) =>
+      arr.sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999)),
+    );
+    return map;
+  }, [activities]);
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
 
@@ -440,14 +669,19 @@ function SortableColumn({
     opacity: isDragging ? 0.4 : 1,
     flex: `1 1 ${widthPct}%`,
     marginRight: isLast ? 0 : 6,
+    backgroundColor: stage.is_blocked ? undefined : `${stage.color}4D`,
+    borderColor: stage.is_blocked ? undefined : `${stage.color}80`,
   };
 
   const phaseOrderMap: Record<string, number> = {};
   phases.forEach((p, i) => { phaseOrderMap[p.id] = i; });
   const priorityWeight: Record<string, number> = { high: 0, medium: 1, low: 2 };
+  const stageActivityIds = useMemo(() => new Set(stageActivities.map((a) => a.id)), [stageActivities]);
 
   const sortedActivities = useMemo(() => {
-    const sorted = [...stageActivities];
+    // Exibe como card toda atividade desta coluna, exceto subtarefas cujo pai também está nesta mesma coluna.
+    // Essas continuam aparecendo inline apenas quando o pai é expandido.
+    const sorted = stageActivities.filter((a) => !a.parent_id || !stageActivityIds.has(a.parent_id));
     sorted.sort((a, b) => {
       switch (colSort) {
         case "wbs_asc": {
@@ -480,7 +714,14 @@ function SortableColumn({
       }
     });
     return sorted;
-  }, [stageActivities, colSort, phases]);
+  }, [stageActivities, stageActivityIds, colSort, phases]);
+
+  const visibleCardCount = useMemo(() => {
+    return sortedActivities.reduce((total, activity) => {
+      const inlineChildren = (childrenByParent.get(activity.id) || []).filter((child) => stageActivityIds.has(child.id));
+      return total + 1 + (expandedIds.has(activity.id) ? inlineChildren.length : 0);
+    }, 0);
+  }, [sortedActivities, childrenByParent, stageActivityIds, expandedIds]);
 
   return (
     <div
@@ -488,23 +729,60 @@ function SortableColumn({
       style={style}
       {...attributes}
       className={`relative min-w-0 rounded-xl border flex flex-col overflow-hidden ${
-        stage.is_blocked ? "bg-orange-500/10 border-orange-500/40" : "bg-muted/70 border-border/60"
+        stage.is_blocked ? "bg-orange-500/10 border-orange-500/40" : ""
       }`}
     >
       {/* Column Header - drag handle for column reordering */}
-      <div className="p-2 border-b border-border/50">
+      <div
+        className="p-2 border-b"
+        style={{ borderColor: stage.is_blocked ? undefined : `${stage.color}40` }}
+      >
         <div className="flex items-center justify-between cursor-grab active:cursor-grabbing" {...listeners}>
           <div className="flex items-center gap-2 min-w-0">
             <div
-              className="w-3 h-3 rounded-full shrink-0"
+              className="w-2.5 h-2.5 rounded-full shrink-0"
               style={{ backgroundColor: stage.color }}
             />
-            <h3 className="text-sm font-semibold text-foreground truncate">{stage.title}</h3>
+            {renaming ? (
+              <input
+                autoFocus
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onBlur={() => {
+                  if (renameValue.trim() && renameValue.trim() !== stage.title) {
+                    onRenameStage(stage.id, renameValue.trim());
+                  }
+                  setRenaming(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    if (renameValue.trim() && renameValue.trim() !== stage.title) {
+                      onRenameStage(stage.id, renameValue.trim());
+                    }
+                    setRenaming(false);
+                  } else if (e.key === "Escape") {
+                    setRenameValue(stage.title);
+                    setRenaming(false);
+                  }
+                }}
+                className="text-sm font-semibold text-foreground bg-transparent border-b border-border outline-none w-32"
+              />
+            ) : (
+              <h3 className="text-sm font-semibold text-foreground truncate">
+                {stage.title}
+              </h3>
+            )}
+            <Badge
+              variant="secondary"
+              className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0"
+              title={`${visibleCardCount} card(s) visível(is) nesta coluna`}
+            >
+              {visibleCardCount}
+            </Badge>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center">
-              {stageActivities.length}
-            </Badge>
             {canCreate && (
               <button
                 type="button"
@@ -522,10 +800,99 @@ function SortableColumn({
                 <Plus className="w-3.5 h-3.5" />
               </button>
             )}
+            {isAdminOrGestor && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    title="Opções da coluna"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-56"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <DropdownMenuLabel className="text-xs">Gerenciar coluna</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setRenameValue(stage.title);
+                      setRenaming(true);
+                    }}
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-2" /> Renomear
+                  </DropdownMenuItem>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                        <div className="w-3.5 h-3.5 mr-2 rounded-full" style={{ backgroundColor: stage.color }} />
+                        Alterar cor
+                      </DropdownMenuItem>
+                    </PopoverTrigger>
+                    <PopoverContent side="left" className="w-auto p-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {STAGE_PRESET_COLORS.map((c) => (
+                          <button
+                            key={c}
+                            className="w-6 h-6 rounded-full ring-1 ring-border hover:ring-primary"
+                            style={{ backgroundColor: c }}
+                            onClick={() => onChangeStageColor(stage.id, c)}
+                          />
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onToggleStageFinal(stage.id, stage.is_final);
+                    }}
+                  >
+                    <Check className="w-3.5 h-3.5 mr-2 text-success" />
+                    {stage.is_final ? "Remover marca de Final" : "Marcar como Final"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onToggleStageBlocked(stage.id, stage.is_blocked);
+                    }}
+                  >
+                    <AlertCircle className="w-3.5 h-3.5 mr-2 text-orange-500" />
+                    {stage.is_blocked ? "Remover Bloqueio" : "Marcar como Bloqueio"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onToggleStageVisible(stage.id, stage.is_visible);
+                    }}
+                  >
+                    {stage.is_visible ? <EyeOff className="w-3.5 h-3.5 mr-2" /> : <Eye className="w-3.5 h-3.5 mr-2" />}
+                    {stage.is_visible ? "Ocultar coluna" : "Mostrar coluna"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onDeleteStage(stage.id);
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir coluna
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
-        {stageActivities.length > 1 && (
-          <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+        <div className="-mt-[3.5px]" onClick={(e) => e.stopPropagation()}>
             <Select value={colSort} onValueChange={setColSort}>
               <SelectTrigger className="h-6 text-[10px] w-full border-border/40 bg-background/50">
                 <div className="flex items-center gap-1">
@@ -542,8 +909,7 @@ function SortableColumn({
                 
               </SelectContent>
             </Select>
-          </div>
-        )}
+        </div>
       </div>
 
       {/* Quick Add Form */}
@@ -611,28 +977,70 @@ function SortableColumn({
           strategy={verticalListSortingStrategy}
         >
           {sortedActivities.length === 0 ? (
-            <div className="flex items-center justify-center h-20 border-2 border-dashed border-border/40 rounded-lg">
-              <p className="text-xs text-muted-foreground/50">Arraste aqui</p>
+            <div className="flex items-center justify-center h-16 border-2 border-dashed border-border/30 rounded-lg">
+              <p className="text-[11px] text-muted-foreground/50">Arraste aqui</p>
             </div>
           ) : (
-            sortedActivities.map((activity) => (
-              <SortableKanbanCard
-                key={activity.id}
-                activity={activity}
-                phases={phases}
-                onEdit={() => onEditActivity(activity)}
-                onDelete={() => onDeleteActivity(activity.id)}
-                onToggle={() => onToggleActivity(activity.id, activity.status)}
-                onMoveToBacklog={() => onMoveToBacklog(activity.id)}
-                isAdmin={isAdmin}
-                isBlocked={stage.is_blocked}
-                hasStory={storyLinkedActivities.has(activity.id)}
-                storyCount={storyLinkedActivities.get(activity.id) || 0}
-                onStoryClick={() => onStoryClick(activity.id)}
-                onCreateStory={() => onCreateStory(activity)}
-                isQualityProject={isQualityProject}
-              />
-            ))
+            sortedActivities.map((activity) => {
+              const allChildren = childrenByParent.get(activity.id) || [];
+              const inlineChildren = allChildren.filter((child) => stageActivityIds.has(child.id));
+              const expanded = expandedIds.has(activity.id);
+              return (
+                <div key={activity.id} className="space-y-1.5">
+                  <SortableKanbanCard
+                    activity={activity}
+                    phases={phases}
+                    onEdit={() => onEditActivity(activity)}
+                    onDelete={() => onDeleteActivity(activity.id)}
+                    onToggle={() => onToggleActivity(activity.id, activity.status)}
+                    onMoveToBacklog={() => onMoveToBacklog(activity.id)}
+                    isAdmin={isAdmin}
+                    isBlocked={stage.is_blocked}
+                    hasStory={storyLinkedActivities.has(activity.id)}
+                    storyCount={storyLinkedActivities.get(activity.id) || 0}
+                    onStoryClick={() => onStoryClick(activity.id)}
+                    onCreateStory={() => onCreateStory(activity)}
+                    isQualityProject={isQualityProject}
+                    stageColor={stage.color}
+                    dependencyCount={dependencyCounts?.get(activity.id)}
+                    relationItems={relationCounts?.get(activity.id) || []}
+                    onOpenRelated={onOpenRelated}
+                    onRemoveRelation={onRemoveRelation}
+                    subActivityCount={allChildren.length}
+                    isExpanded={expanded}
+                    onToggleExpand={() => toggleExpanded(activity.id)}
+                  />
+                  {expanded && inlineChildren.length > 0 && (
+                    <div className="ml-4 pl-2 border-l-2 border-primary/30 space-y-1.5">
+                      {inlineChildren.map((child) => (
+                        <KanbanCard
+                          key={child.id}
+                          activity={child}
+                          phases={phases}
+                          onEdit={() => onEditActivity(child)}
+                          onDelete={() => onDeleteActivity(child.id)}
+                          onToggle={() => onToggleActivity(child.id, child.status)}
+                          onMoveToBacklog={() => onMoveToBacklog(child.id)}
+                          isAdmin={isAdmin}
+                          isBlocked={stage.is_blocked}
+                          hasStory={storyLinkedActivities.has(child.id)}
+                          storyCount={storyLinkedActivities.get(child.id) || 0}
+                          onStoryClick={() => onStoryClick(child.id)}
+                          onCreateStory={() => onCreateStory(child)}
+                          isQualityProject={isQualityProject}
+                          stageColor={stage.color}
+                          dependencyCount={dependencyCounts?.get(child.id)}
+                          relationItems={relationCounts?.get(child.id) || []}
+                          onOpenRelated={onOpenRelated}
+                          onRemoveRelation={onRemoveRelation}
+                          subActivityCount={0}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </SortableContext>
       </DroppableColumn>
@@ -672,6 +1080,35 @@ function DroppableColumn({
   );
 }
 
+function AddStageColumn({ projectId }: { projectId: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="shrink-0 self-start pt-3 pl-2">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="Criar grupo"
+        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors whitespace-nowrap"
+      >
+        <Plus className="w-3 h-3" />
+        Criar grupo
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-[750px] p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle>Configurar grupos do Kanban</DialogTitle>
+          </DialogHeader>
+          <div className="p-4">
+            <WorkflowStageManager projectId={projectId} />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 export const ActivityKanban = ({
   projectId,
   activities,
@@ -691,6 +1128,10 @@ export const ActivityKanban = ({
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Map<string, number>>(new Map());
+  const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
+  const [relationCounts, setRelationCounts] = useState<
+    Map<string, { id: string; title: string; relationId: string; relationType: string }[]>
+  >(new Map());
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
@@ -756,7 +1197,7 @@ export const ActivityKanban = ({
   useEffect(() => {
     fetchStages();
     // Fetch activities that have linked user stories
-    supabase.from("user_stories").select("activity_id").eq("project_id", projectId).not("activity_id", "is", null)
+    supabase.from("user_stories").select("activity_id").eq("project_id", projectId).eq("is_trashed", false).not("activity_id", "is", null)
       .then(({ data }) => {
         if (data) {
           const countMap = new Map<string, number>();
@@ -766,6 +1207,65 @@ export const ActivityKanban = ({
           setStoryLinkedActivities(countMap);
         }
       });
+    // Fetch task dependencies for badge counters
+    const ids = activities.map((a) => a.id);
+    if (ids.length > 0) {
+      supabase
+        .from("task_dependencies")
+        .select("predecessor_id, successor_id")
+        .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`)
+        .then(({ data }) => {
+          const map = new Map<string, { pred: number; succ: number }>();
+          (data || []).forEach((d: any) => {
+            const p = map.get(d.successor_id) || { pred: 0, succ: 0 };
+            p.pred += 1;
+            map.set(d.successor_id, p);
+            const s = map.get(d.predecessor_id) || { pred: 0, succ: 0 };
+            s.succ += 1;
+            map.set(d.predecessor_id, s);
+          });
+          setDependencyCounts(map);
+        });
+      supabase
+        .from("task_relations")
+        .select("id, source_activity_id, target_activity_id, relation_type")
+        .or(
+          `source_activity_id.in.(${ids.join(",")}),target_activity_id.in.(${ids.join(",")})`,
+        )
+        .then(({ data }) => {
+          const titleById = new Map<string, string>();
+          activities.forEach((a) => titleById.set(a.id, a.title));
+          const map = new Map<
+            string,
+            { id: string; title: string; relationId: string; relationType: string }[]
+          >();
+          const push = (
+            key: string,
+            otherId: string,
+            relationId: string,
+            relationType: string,
+          ) => {
+            const list = map.get(key) || [];
+            if (!list.find((x) => x.relationId === relationId)) {
+              list.push({
+                id: otherId,
+                title: titleById.get(otherId) || "",
+                relationId,
+                relationType,
+              });
+              map.set(key, list);
+            }
+          };
+          (data || []).forEach((r: any) => {
+            push(r.source_activity_id, r.target_activity_id, r.id, r.relation_type);
+            push(r.target_activity_id, r.source_activity_id, r.id, r.relation_type);
+          });
+          setRelationCounts(map);
+        });
+    } else {
+      setDependencyCounts(new Map());
+      setRelationCounts(new Map());
+    }
   }, [projectId, activities]);
 
   
@@ -802,6 +1302,16 @@ export const ActivityKanban = ({
   // Clear optimistic moves when activities prop changes (parent refetched)
   useEffect(() => {
     setOptimisticMoves({});
+  }, [activities]);
+
+  const subActivityCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    activities.forEach((a) => {
+      if (a.parent_id) {
+        counts.set(a.parent_id, (counts.get(a.parent_id) || 0) + 1);
+      }
+    });
+    return counts;
   }, [activities]);
 
   const activitiesByStage = useMemo(() => {
@@ -1026,6 +1536,64 @@ export const ActivityKanban = ({
 
 
   const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
+
+  // ===== Stage management handlers (admin/gestor only) =====
+  const handleCreateStage = useCallback(async (title: string) => {
+    const maxOrder = stages.reduce((max, s) => Math.max(max, s.display_order), -1);
+    const colorIdx = stages.length % STAGE_PRESET_COLORS.length;
+    const { error } = await supabase.from("workflow_stages").insert({
+      project_id: projectId,
+      title,
+      color: STAGE_PRESET_COLORS[colorIdx],
+      display_order: maxOrder + 1,
+      is_final: false,
+    });
+    if (error) {
+      toast({ title: "Erro ao criar grupo", variant: "destructive" });
+    } else {
+      toast({ title: "Grupo criado!" });
+      fetchStages();
+    }
+  }, [stages, projectId, toast]);
+
+  const handleRenameStage = useCallback(async (id: string, title: string) => {
+    const { error } = await supabase.from("workflow_stages").update({ title }).eq("id", id);
+    if (error) toast({ title: "Erro ao renomear", variant: "destructive" });
+    else fetchStages();
+  }, [toast]);
+
+  const handleDeleteStage = useCallback(async (id: string) => {
+    const stage = stages.find((s) => s.id === id);
+    if (stage && stage.display_order === 0) {
+      toast({ title: "A etapa Backlog não pode ser excluída", variant: "destructive" });
+      return;
+    }
+    if (!confirm("Atividades nesta coluna perderão a associação. Continuar?")) return;
+    const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
+    if (error) toast({ title: "Erro ao excluir", variant: "destructive" });
+    else { toast({ title: "Coluna excluída!" }); fetchStages(); }
+  }, [stages, toast]);
+
+  const handleChangeStageColor = useCallback(async (id: string, color: string) => {
+    await supabase.from("workflow_stages").update({ color }).eq("id", id);
+    fetchStages();
+  }, []);
+
+  const handleToggleStageFinal = useCallback(async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_final: !current, ...(current ? {} : { is_blocked: false }) }).eq("id", id);
+    fetchStages();
+  }, []);
+
+  const handleToggleStageBlocked = useCallback(async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_blocked: !current, ...(current ? {} : { is_final: false }) }).eq("id", id);
+    fetchStages();
+  }, []);
+
+  const handleToggleStageVisible = useCallback(async (id: string, current: boolean) => {
+    await supabase.from("workflow_stages").update({ is_visible: !current }).eq("id", id);
+    fetchStages();
+  }, []);
+
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
   const activeColumn = dragType === "column" && activeId ? visibleStages.find((s) => `col-${s.id}` === activeId) : null;
 
@@ -1051,7 +1619,7 @@ export const ActivityKanban = ({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 mt-[30px]">
       <DndContext
         sensors={sensors}
         collisionDetection={rectIntersection}
@@ -1101,6 +1669,7 @@ export const ActivityKanban = ({
                       onStoryClick={() => { setStoryDrawerActivityId(activity.id); setStoryDrawerOpen(true); }}
                       onCreateStory={() => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
                       isQualityProject={isQualityProject}
+                      subActivityCount={subActivityCounts.get(activity.id) || 0}
                     />
                   ))
                 )}
@@ -1132,9 +1701,58 @@ export const ActivityKanban = ({
                 onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
                 isQualityProject={isQualityProject}
                 onOpenCreateTask={onOpenCreateTask}
+                subActivityCounts={subActivityCounts}
+                dependencyCounts={dependencyCounts}
+                relationCounts={relationCounts}
+                onOpenRelated={(activityId) => {
+                  const target = activities.find((a) => a.id === activityId);
+                  if (target) {
+                    onEditActivity(target);
+                  } else {
+                    toast({
+                      title: "Atividade vinculada não encontrada",
+                      description: "A atividade pode estar em outro projeto ou foi removida.",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                onRemoveRelation={async (relationId) => {
+                  const { error } = await supabase
+                    .from("task_relations")
+                    .delete()
+                    .eq("id", relationId);
+                  if (error) {
+                    toast({
+                      title: "Erro ao remover vínculo",
+                      description: error.message,
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setRelationCounts((prev) => {
+                    const next = new Map(prev);
+                    next.forEach((list, key) => {
+                      const filtered = list.filter((r) => r.relationId !== relationId);
+                      if (filtered.length === 0) next.delete(key);
+                      else next.set(key, filtered);
+                    });
+                    return next;
+                  });
+                  toast({ title: "Vínculo removido" });
+                }}
+                isAdminOrGestor={isAdmin || canCreate}
+                onRenameStage={handleRenameStage}
+                onDeleteStage={handleDeleteStage}
+                onChangeStageColor={handleChangeStageColor}
+                onToggleStageFinal={handleToggleStageFinal}
+                onToggleStageBlocked={handleToggleStageBlocked}
+                onToggleStageVisible={handleToggleStageVisible}
               />
             );
           })}
+          {(isAdmin || canCreate) && (
+            <AddStageColumn projectId={projectId} />
+          )}
         </div>
       </SortableContext>
 
@@ -1167,7 +1785,7 @@ export const ActivityKanban = ({
         open={storyDrawerOpen}
         onOpenChange={setStoryDrawerOpen}
         onStoriesChanged={() => {
-          supabase.from("user_stories").select("activity_id").eq("project_id", projectId).not("activity_id", "is", null)
+          supabase.from("user_stories").select("activity_id").eq("project_id", projectId).eq("is_trashed", false).not("activity_id", "is", null)
             .then(({ data }) => {
               if (data) {
                 const countMap = new Map<string, number>();

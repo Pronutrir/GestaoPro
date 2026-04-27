@@ -76,7 +76,7 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: 
 
   const fetchData = async () => {
     const [{ data: pkgs }, { data: links }, { data: sects }, { data: stgs }] = await Promise.all([
-      supabase.from("delivery_packages").select("*").eq("project_id", projectId).order("start_date"),
+      supabase.from("delivery_packages").select("*").eq("project_id", projectId).eq("is_trashed", false).order("start_date"),
       supabase.from("delivery_package_activities").select("package_id, activity_id"),
       supabase.from("sectors").select("id, name").order("name"),
       supabase.from("workflow_stages").select("id, title, display_order, color").eq("project_id", projectId).order("display_order"),
@@ -137,8 +137,8 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: 
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir este pacote de entregas?")) return;
-    await supabase.from("delivery_packages").delete().eq("id", id);
-    toast({ title: "Pacote excluído!" }); fetchData();
+    await supabase.from("delivery_packages").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
+    toast({ title: "Pacote movido para a lixeira" }); fetchData();
   };
 
   const toggleActivity = (actId: string) => {

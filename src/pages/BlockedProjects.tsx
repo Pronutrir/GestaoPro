@@ -7,6 +7,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { AlertTriangle, Calendar, DollarSign, User, ArrowRight, LayoutDashboard } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -19,6 +20,7 @@ interface Project {
 const BlockedProjects = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { filterProjects } = useProjectAccess();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -26,14 +28,17 @@ const BlockedProjects = () => {
     const fetch = async () => {
       try {
         const { data, error } = await supabase.from("projects").select("*")
-          .not("blockers", "is", null).neq("blockers", "").neq("status", "done").order("created_at", { ascending: false });
+          .not("blockers", "is", null).neq("blockers", "").neq("status", "done")
+          .eq("is_trashed", false)
+          .order("created_at", { ascending: false });
         if (error) throw error;
-        setProjects(data || []);
+        const filtered = await filterProjects(data || []);
+        setProjects(filtered);
       } catch { toast({ title: "Erro ao carregar projetos bloqueados", variant: "destructive" }); }
       finally { setIsLoading(false); }
     };
     fetch();
-  }, []);
+  }, [filterProjects]);
 
   const priorityColors: Record<string, string> = {
     low: "bg-muted text-muted-foreground", medium: "bg-info text-info-foreground", high: "bg-destructive text-destructive-foreground",
