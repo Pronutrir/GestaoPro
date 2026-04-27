@@ -1,6 +1,6 @@
 ---
 name: Unified Task Model
-description: Modelo unificado onde Fase/Atividade/Subatividade são tipos (item_type) de uma única entidade activities, hierarquizadas via parent_id
+description: Tudo é tarefa. item_type só tem 'fase' ou 'tarefa'. Hierarquia via parent_id (subtarefas). Sem conceito separado de subatividade.
 type: feature
 ---
-A estrutura de Fase → Atividade → Subatividade foi unificada. Tudo é "tarefa" (tabela `activities`) com o campo `item_type` ('fase' | 'atividade' | 'subatividade') definindo a classificação. A hierarquia é determinada por `parent_id` (não mais por `phase_id`). A tabela `phases` foi descontinuada (mantida para histórico) e suas linhas foram migradas para `activities` com `item_type='fase'`. O EditActivityDialog possui um seletor "Tipo" para classificação manual.
+A estrutura foi simplificada: tudo na tabela `activities` é tarefa. O campo `item_type` aceita apenas `fase` ou `tarefa` (default `tarefa`). Não existe mais subatividade como classificação — qualquer tarefa com `parent_id` é naturalmente uma subtarefa. No EditActivityDialog há apenas um toggle "É uma fase" (sem dropdown de Tipo nem campo Fase legado). A quebra de trabalho é feita exclusivamente pela aba Subtarefas (parent_id).
