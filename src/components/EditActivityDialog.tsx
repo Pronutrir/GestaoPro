@@ -145,7 +145,7 @@ export const EditActivityDialog = ({
     last_update_date: "",
     ui_color_tag: "" as string,
     is_milestone: false,
-    item_type: "atividade" as "fase" | "atividade" | "subatividade",
+    item_type: "tarefa" as "fase" | "tarefa",
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -352,7 +352,7 @@ export const EditActivityDialog = ({
         last_update_date: (act as any).last_update_date || "",
         ui_color_tag: (act as any).ui_color_tag || "",
         is_milestone: !!(act as any).is_milestone,
-        item_type: ((act as any).item_type as any) || "atividade",
+        item_type: ((act as any).item_type === "fase" ? "fase" : "tarefa"),
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       fetchSubActivities(act.id);
@@ -695,20 +695,6 @@ export const EditActivityDialog = ({
                   </div>
                 </PropertyRow>
 
-                {/* Fase */}
-                {phases.length > 0 && (
-                  <PropertyRow icon={<Layers className="w-3.5 h-3.5" />} label="Fase">
-                    <select
-                      className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[260px] truncate"
-                      value={formData.phase_id}
-                      onChange={(e) => setFormData({ ...formData, phase_id: e.target.value })}
-                    >
-                      <option value="">Sem fase</option>
-                      {phases.map((phase) => (<option key={phase.id} value={phase.id}>{phase.title}</option>))}
-                    </select>
-                  </PropertyRow>
-                )}
-
                 {/* Relacionamentos inline */}
                 {projectId && (
                   <PropertyRow icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
@@ -805,19 +791,21 @@ export const EditActivityDialog = ({
                   </div>
                 </PropertyRow>
 
-                {/* Tipo (Fase / Atividade / Subatividade) */}
-                <PropertyRow icon={<Layers className="w-3.5 h-3.5" />} label="Tipo">
-                  <select
-                    className="h-7 rounded-md border border-input bg-background px-2 text-xs"
-                    value={formData.item_type}
-                    onChange={(e) =>
-                      setFormData({ ...formData, item_type: e.target.value as any })
-                    }
-                  >
-                    <option value="fase">Fase</option>
-                    <option value="atividade">Atividade</option>
-                    <option value="subatividade">Subatividade</option>
-                  </select>
+                {/* É uma fase? */}
+                <PropertyRow icon={<Layers className={`w-3.5 h-3.5 ${formData.item_type === "fase" ? "text-primary" : ""}`} />} label="É uma fase">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={formData.item_type === "fase"}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, item_type: checked ? "fase" : "tarefa" })
+                      }
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {formData.item_type === "fase"
+                        ? "Esta tarefa agrupa subtarefas como uma fase"
+                        : "Tarefa comum"}
+                    </span>
+                  </div>
                 </PropertyRow>
               </div>
             </div>
