@@ -804,6 +804,21 @@ export const EditActivityDialog = ({
                     </span>
                   </div>
                 </PropertyRow>
+
+                {/* Tipo (Fase / Atividade / Subatividade) */}
+                <PropertyRow icon={<Layers className="w-3.5 h-3.5" />} label="Tipo">
+                  <select
+                    className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+                    value={formData.item_type}
+                    onChange={(e) =>
+                      setFormData({ ...formData, item_type: e.target.value as any })
+                    }
+                  >
+                    <option value="fase">Fase</option>
+                    <option value="atividade">Atividade</option>
+                    <option value="subatividade">Subatividade</option>
+                  </select>
+                </PropertyRow>
               </div>
             </div>
           )}
