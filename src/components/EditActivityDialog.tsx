@@ -438,6 +438,7 @@ export const EditActivityDialog = ({
         last_update_date: formData.last_update_date || null,
         ui_color_tag: formData.ui_color_tag || null,
         is_milestone: formData.is_milestone,
+        item_type: formData.item_type,
       } as any).eq("id", act.id);
       if (error) throw error;
 
