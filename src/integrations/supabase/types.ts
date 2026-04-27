@@ -1464,6 +1464,7 @@ export type Database = {
           budget_planned: number | null
           budget_used: number | null
           category: string | null
+          charter_data: Json | null
           completion_percentage: number | null
           created_at: string
           description: string | null
@@ -1502,6 +1503,7 @@ export type Database = {
           budget_planned?: number | null
           budget_used?: number | null
           category?: string | null
+          charter_data?: Json | null
           completion_percentage?: number | null
           created_at?: string
           description?: string | null
@@ -1540,6 +1542,7 @@ export type Database = {
           budget_planned?: number | null
           budget_used?: number | null
           category?: string | null
+          charter_data?: Json | null
           completion_percentage?: number | null
           created_at?: string
           description?: string | null
