@@ -145,6 +145,7 @@ export const EditActivityDialog = ({
     last_update_date: "",
     ui_color_tag: "" as string,
     is_milestone: false,
+    item_type: "atividade" as "fase" | "atividade" | "subatividade",
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -351,6 +352,7 @@ export const EditActivityDialog = ({
         last_update_date: (act as any).last_update_date || "",
         ui_color_tag: (act as any).ui_color_tag || "",
         is_milestone: !!(act as any).is_milestone,
+        item_type: ((act as any).item_type as any) || "atividade",
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       fetchSubActivities(act.id);
@@ -436,6 +438,7 @@ export const EditActivityDialog = ({
         last_update_date: formData.last_update_date || null,
         ui_color_tag: formData.ui_color_tag || null,
         is_milestone: formData.is_milestone,
+        item_type: formData.item_type,
       } as any).eq("id", act.id);
       if (error) throw error;
 
@@ -800,6 +803,21 @@ export const EditActivityDialog = ({
                       {formData.is_milestone ? "É um marco" : "Não é marco"}
                     </span>
                   </div>
+                </PropertyRow>
+
+                {/* Tipo (Fase / Atividade / Subatividade) */}
+                <PropertyRow icon={<Layers className="w-3.5 h-3.5" />} label="Tipo">
+                  <select
+                    className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+                    value={formData.item_type}
+                    onChange={(e) =>
+                      setFormData({ ...formData, item_type: e.target.value as any })
+                    }
+                  >
+                    <option value="fase">Fase</option>
+                    <option value="atividade">Atividade</option>
+                    <option value="subatividade">Subatividade</option>
+                  </select>
                 </PropertyRow>
               </div>
             </div>
