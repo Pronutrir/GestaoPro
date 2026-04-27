@@ -67,7 +67,11 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
             <div className="flex-1">
               <h4 className="font-semibold text-foreground mb-1">{project.title}</h4>
               <p className="text-sm text-muted-foreground line-clamp-2">
-                {project.description || <span className="italic text-muted-foreground/60">Clique para adicionar uma descrição</span>}
+                {project.description && !project.description.startsWith("{") ? (
+                  project.description
+                ) : (
+                  <span className="italic text-muted-foreground/60">Clique para adicionar uma descrição</span>
+                )}
               </p>
             </div>
           </div>
