@@ -145,6 +145,7 @@ export const EditActivityDialog = ({
     last_update_date: "",
     ui_color_tag: "" as string,
     is_milestone: false,
+    item_type: "atividade" as "fase" | "atividade" | "subatividade",
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
