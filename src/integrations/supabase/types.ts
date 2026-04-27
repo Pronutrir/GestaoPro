@@ -34,6 +34,7 @@ export type Database = {
           is_critical: boolean
           is_milestone: boolean
           is_trashed: boolean
+          item_type: string
           last_update_date: string | null
           parent_id: string | null
           participant_roles: Json
@@ -75,6 +76,7 @@ export type Database = {
           is_critical?: boolean
           is_milestone?: boolean
           is_trashed?: boolean
+          item_type?: string
           last_update_date?: string | null
           parent_id?: string | null
           participant_roles?: Json
@@ -116,6 +118,7 @@ export type Database = {
           is_critical?: boolean
           is_milestone?: boolean
           is_trashed?: boolean
+          item_type?: string
           last_update_date?: string | null
           parent_id?: string | null
           participant_roles?: Json
