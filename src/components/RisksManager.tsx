@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { Plus, Pencil, Trash2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -109,7 +108,8 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const [contramedida, setContramedida] = useState("");
   const [category, setCategory] = useState<string>("Técnico");
   const [rootCause, setRootCause] = useState("");
-  const [responseStrategy, setResponseStrategy] = useState<string>("mitigar");
+  const [responseStrategy, setResponseStrategy] = useState<string>("Mitigar");
+  const [contingencyPlan, setContingencyPlan] = useState("");
   const [showMatrix, setShowMatrix] = useState(false);
   const [matrixFilter, setMatrixFilter] = useState<{ prob: string; imp: string } | null>(null);
 
@@ -124,7 +124,8 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     setDescription(""); setResponsible(""); setStatus("monitorar");
     setProbability("medium"); setImpact("medium");
     setOccurred("nao"); setContramedida("");
-    setCategory("Técnico"); setRootCause(""); setResponseStrategy("mitigar");
+    setCategory("Técnico"); setRootCause(""); setResponseStrategy("Mitigar");
+    setContingencyPlan("");
     setEditingId(null); setShowForm(false);
   };
 
@@ -143,6 +144,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
       category: category || null,
       root_cause: rootCause || null,
       response_strategy: responseStrategy || null,
+      contingency: contingencyPlan || null,
     };
 
     if (editingId) {
@@ -166,7 +168,8 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     setContramedida(item.mitigation || "");
     setCategory(item.category || "Técnico");
     setRootCause(item.root_cause || "");
-    setResponseStrategy(item.response_strategy || "mitigar");
+    setResponseStrategy(item.response_strategy || "Mitigar");
+    setContingencyPlan(item.contingency || "");
     if (item.status === "ocorreu") {
       setOccurred("sim");
       setStatus("monitorar");
@@ -279,12 +282,10 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
           <div className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
               <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Categoria</label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Input value={category} onChange={e => setCategory(e.target.value)} placeholder="Ex: Técnico, Externo, Financeiro..." list="risk-categories" />
+              <datalist id="risk-categories">
+                {CATEGORIES.map(c => <option key={c} value={c} />)}
+              </datalist>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
@@ -314,26 +315,32 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
 
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
               <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Estratégia</label>
-              <Select value={responseStrategy} onValueChange={setResponseStrategy}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {RESPONSE_STRATEGIES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Input value={responseStrategy} onChange={e => setResponseStrategy(e.target.value)} placeholder="Ex: Evitar, Mitigar, Transferir, Aceitar..." list="risk-strategies" />
+              <datalist id="risk-strategies">
+                {RESPONSE_STRATEGIES.map(s => <option key={s.value} value={s.label} />)}
+              </datalist>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-start gap-3">
+              <label className="text-sm font-medium text-right pt-2">Plano de Contingência</label>
+              <div className="space-y-1">
+                <div className="flex justify-end">
+                  <AIAssistButton value={contingencyPlan} onChange={setContingencyPlan} context="risk_mitigation" />
+                </div>
+                <Textarea value={contingencyPlan} onChange={e => setContingencyPlan(e.target.value)} rows={2} placeholder="Ações caso o risco se materialize" />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
               <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Status</label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monitorar">Monitorar</SelectItem>
-                  <SelectItem value="mitigar">Mitigar</SelectItem>
-                  <SelectItem value="aceitar">Aceitar</SelectItem>
-                  <SelectItem value="transferir">Transferir</SelectItem>
-                  <SelectItem value="eliminar">Eliminar</SelectItem>
-                </SelectContent>
-              </Select>
+              <Input value={status} onChange={e => setStatus(e.target.value)} placeholder="Ex: Monitorar, Mitigar, Aceitar..." list="risk-statuses" />
+              <datalist id="risk-statuses">
+                <option value="monitorar" />
+                <option value="mitigar" />
+                <option value="aceitar" />
+                <option value="transferir" />
+                <option value="eliminar" />
+              </datalist>
             </div>
           </div>
 
