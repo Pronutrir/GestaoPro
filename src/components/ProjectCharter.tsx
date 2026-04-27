@@ -191,9 +191,14 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       expected_benefits: project.expected_benefits || "",
     });
     try {
-      if (project.description?.startsWith("{")) {
-        const parsed = JSON.parse(project.description);
-        if (parsed.__charter) {
+      const charter: any = (project as any).charter_data;
+      const parsed =
+        charter && typeof charter === "object"
+          ? charter
+          : project.description?.startsWith("{")
+          ? JSON.parse(project.description)
+          : null;
+      if (parsed && (parsed.__charter || (project as any).charter_data)) {
           setData((prev) => ({
             ...prev,
             sponsor: parsed.sponsor || "",
@@ -212,7 +217,6 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             code: parsed.code || "",
             benefits_table: Array.isArray(parsed.benefits_table) ? parsed.benefits_table : [],
           }));
-        }
       }
     } catch {}
   }, [project]);
@@ -266,16 +270,21 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
 
   const handleSave = async () => {
     setSaving(true);
-    const charterJson = JSON.stringify({ __charter: true, ...data });
-    const { error } = await supabase.from("projects").update({
-      description: charterJson,
+    const charterPayload: any = { __charter: true, ...data };
+    const updatePayload: any = {
+      charter_data: charterPayload,
       objective: form.objective || null,
       problem_statement: form.problem_statement || null,
       scope: form.scope || null,
       out_of_scope: form.out_of_scope || null,
       restrictions: form.restrictions || null,
       expected_benefits: form.expected_benefits || null,
-    }).eq("id", projectId);
+    };
+    // Limpa qualquer JSON do TAP que ainda esteja em description (legado)
+    if (project.description?.startsWith("{")) {
+      updatePayload.description = null;
+    }
+    const { error } = await supabase.from("projects").update(updatePayload).eq("id", projectId);
     setSaving(false);
     if (error) { toast({ title: "Erro ao salvar TAP", description: error.message, variant: "destructive" }); return; }
     setEditing(false);
