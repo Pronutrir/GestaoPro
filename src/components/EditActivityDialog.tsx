@@ -670,7 +670,7 @@ export const EditActivityDialog = ({
                 )}
 
                 {/* Datas inline */}
-                <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label="Datas">
+                <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Datas"}>
                   <div className="flex items-center gap-1.5 text-xs">
                     <Input
                       type="date"
@@ -678,13 +678,17 @@ export const EditActivityDialog = ({
                       onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                       className="h-7 px-1.5 text-xs w-[130px]"
                     />
-                    <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                    <Input
-                      type="date"
-                      value={formData.end_date}
-                      onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                      className="h-7 px-1.5 text-xs w-[130px]"
-                    />
+                    {!formData.is_milestone && (
+                      <>
+                        <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                        <Input
+                          type="date"
+                          value={formData.end_date}
+                          onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                          className="h-7 px-1.5 text-xs w-[130px]"
+                        />
+                      </>
+                    )}
                   </div>
                 </PropertyRow>
 
@@ -782,7 +786,14 @@ export const EditActivityDialog = ({
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={formData.is_milestone}
-                      onCheckedChange={(checked) => setFormData({ ...formData, is_milestone: checked })}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          is_milestone: checked,
+                          // Marcos não têm data de fim — limpa ao ativar
+                          end_date: checked ? "" : formData.end_date,
+                        })
+                      }
                       className="data-[state=checked]:bg-amber-500"
                     />
                     <span className="text-xs text-muted-foreground">
