@@ -79,6 +79,8 @@ export const BacklogSection = ({
   const [backlogStageId, setBacklogStageId] = useState<string | null>(null);
   const [allStageIds, setAllStageIds] = useState<Set<string>>(new Set());
   const [stages, setStages] = useState<WorkflowStage[]>([]);
+  // Todos os stages, incluindo o "Backlog" (display_order=0), para mostrar badge de status
+  const [allStages, setAllStages] = useState<WorkflowStage[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [targetStageId, setTargetStageId] = useState<string>("");
@@ -148,6 +150,7 @@ export const BacklogSection = ({
         setBacklogStageId(backlog?.id ?? null);
         setAllStageIds(new Set(data.filter((s) => s.display_order > 0).map((s) => s.id)));
         setStages(data.filter((s) => s.display_order > 0));
+        setAllStages(data);
       }
     };
     fetchStages();
@@ -189,15 +192,13 @@ export const BacklogSection = ({
     fetchTrashedActivities();
   };
 
-  // Backlog filter: activities not yet in active workflow stages (or in 'Backlog' stage)
-  const isBacklogActivity = (a: Activity) => {
-    if (!a.workflow_stage_id) return true;
-    if (backlogStageId && a.workflow_stage_id === backlogStageId) return true;
-    if (!allStageIds.has(a.workflow_stage_id)) return true;
-    return false;
-  };
+  // Lista completa: TODAS as tarefas do projeto (modelo "uma coleção, várias visões").
+  // O status é exibido como atributo (badge), não como filtro de tela.
+  const backlogActs = activities;
 
-  const backlogActs = activities.filter(isBacklogActivity);
+  // Mapa de stage_id → {title, color} para badges
+  const stageById = new Map<string, WorkflowStage>();
+  allStages.forEach((s) => stageById.set(s.id, s));
 
   // Build hierarchy
   const childrenByParent = new Map<string, Activity[]>();
