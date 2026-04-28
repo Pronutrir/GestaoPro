@@ -697,7 +697,7 @@ export const BacklogSection = ({
             <p className="text-sm text-muted-foreground">
               {selectedIds.size > 0
                 ? `${selectedIds.size} de ${backlogActs.length} selecionada(s)`
-                : `${backlogActs.length} atividade(s) no backlog`}
+                : `${backlogActs.length} tarefa(s) no projeto`}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -727,7 +727,7 @@ export const BacklogSection = ({
             {selectedIds.size > 0 && (
               <Button size="sm" className="h-7 text-xs gap-1.5 ml-1" onClick={() => setMoveDialogOpen(true)}>
                 <ArrowRight className="w-3.5 h-3.5" />
-                Mover para Kanban ({selectedIds.size})
+                Mudar status ({selectedIds.size})
               </Button>
             )}
           </div>
