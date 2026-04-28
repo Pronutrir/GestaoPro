@@ -407,6 +407,24 @@ export const BacklogSection = ({
             <Badge variant="outline" className={`text-[10px] ${priorityColors[prio]}`}>
               {priorityLabels[prio] || prio}
             </Badge>
+            {(() => {
+              const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
+              if (!stg) return null;
+              return (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] font-medium"
+                  style={{
+                    borderColor: stg.color,
+                    color: stg.color,
+                    backgroundColor: `${stg.color}15`,
+                  }}
+                  title={`Status: ${stg.title}`}
+                >
+                  {stg.title}
+                </Badge>
+              );
+            })()}
             {activity.assigned_to && (
               <Badge variant="secondary" className="text-[10px]">👤 {activity.assigned_to}</Badge>
             )}
