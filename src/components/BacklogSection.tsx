@@ -220,6 +220,13 @@ export const BacklogSection = ({
   childrenByParent.forEach(sortByOrder);
   topLevelByPhase.forEach(sortByOrder);
 
+  // Helper: detecta se uma activity top-level deve ser tratada como "fase virtual"
+  // (containers criados via toggle "É uma fase" ou simplesmente que possuem filhas)
+  const isPhaseLikeActivity = (a: Activity) => {
+    if (a.item_type === "fase") return true;
+    return (childrenByParent.get(a.id) || []).length > 0;
+  };
+
   const togglePhase = (id: string) => {
     setCollapsedPhases((prev) => {
       const n = new Set(prev);
