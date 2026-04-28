@@ -29,16 +29,21 @@ import {
   X,
   Search,
   Check,
+  LayoutGrid,
+  Rows3,
+  Activity as ActivityIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type ViewMode = "list" | "kanban" | "calendar" | "gantt";
+type ViewMode = "list" | "kanban" | "calendar" | "gantt" | "timeline" | "board";
 
 const VIEWS: { id: ViewMode; label: string; icon: any }[] = [
   { id: "list", label: "Lista", icon: List },
   { id: "kanban", label: "Kanban", icon: KanbanSquare },
+  { id: "board", label: "Quadro (por fase)", icon: LayoutGrid },
   { id: "calendar", label: "Calendário", icon: CalendarIcon },
   { id: "gantt", label: "Gantt", icon: GanttChart },
+  { id: "timeline", label: "Cronograma", icon: Rows3 },
 ];
 
 export default function TarefasTest() {
@@ -46,6 +51,7 @@ export default function TarefasTest() {
   const [projectId, setProjectId] = useState<string>("");
   const [activities, setActivities] = useState<any[]>([]);
   const [stages, setStages] = useState<any[]>([]);
+  const [phases, setPhases] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Estado da visão (persistente entre trocas)
@@ -54,16 +60,24 @@ export default function TarefasTest() {
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
 
-  // Carrega projetos
+  // Carrega projetos (Onboard primeiro)
   useEffect(() => {
     supabase
       .from("projects")
       .select("id, title")
+      .eq("is_trashed", false)
       .order("created_at", { ascending: false })
-      .limit(50)
+      .limit(100)
       .then(({ data }) => {
-        setProjects(data || []);
-        if (data && data.length > 0 && !projectId) setProjectId(data[0].id);
+        const list = data || [];
+        setProjects(list);
+        if (!projectId && list.length > 0) {
+          // Pré-seleciona o projeto Onboard se existir
+          const onboard = list.find((p) =>
+            p.title?.toLowerCase().includes("onboard")
+          );
+          setProjectId(onboard?.id || list[0].id);
+        }
       });
   }, []);
 
@@ -76,16 +90,23 @@ export default function TarefasTest() {
         .from("activities")
         .select("*")
         .eq("project_id", projectId)
-        .is("deleted_at", null)
+        .eq("is_trashed", false)
         .order("display_order", { ascending: true }),
       supabase
         .from("workflow_stages")
         .select("*")
         .eq("project_id", projectId)
         .order("display_order", { ascending: true }),
-    ]).then(([acts, stgs]) => {
+      supabase
+        .from("phases")
+        .select("*")
+        .eq("project_id", projectId)
+        .eq("is_trashed", false)
+        .order("display_order", { ascending: true }),
+    ]).then(([acts, stgs, phs]) => {
       setActivities(acts.data || []);
       setStages(stgs.data || []);
+      setPhases(phs.data || []);
       setLoading(false);
     });
   }, [projectId]);
@@ -107,6 +128,11 @@ export default function TarefasTest() {
   const stageById = useMemo(
     () => new Map(stages.map((s) => [s.id, s])),
     [stages]
+  );
+
+  const phaseById = useMemo(
+    () => new Map(phases.map((p) => [p.id, p])),
+    [phases]
   );
 
   const activeView = VIEWS.find((v) => v.id === view)!;
@@ -265,6 +291,12 @@ export default function TarefasTest() {
               )}
               {view === "gantt" && (
                 <GanttView tasks={filtered} stageById={stageById} />
+              )}
+              {view === "timeline" && (
+                <TimelineView tasks={filtered} stageById={stageById} />
+              )}
+              {view === "board" && (
+                <BoardByPhaseView tasks={filtered} phases={phases} stageById={stageById} />
               )}
             </>
           )}
@@ -513,6 +545,113 @@ function GanttView({ tasks, stageById }: { tasks: any[]; stageById: Map<string, 
           );
         })}
       </div>
+    </div>
+  );
+}
+function TimelineView({ tasks, stageById }: { tasks: any[]; stageById: Map<string, any> }) {
+  // Agrupa por mês de due_date
+  const groups = new Map<string, any[]>();
+  tasks.forEach((t) => {
+    if (!t.due_date) return;
+    const d = new Date(t.due_date + "T12:00:00");
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(t);
+  });
+
+  const sortedKeys = Array.from(groups.keys()).sort();
+
+  if (sortedKeys.length === 0) {
+    return (
+      <div className="text-center text-muted-foreground py-20">
+        Nenhuma tarefa com prazo definido para exibir no cronograma.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {sortedKeys.map((key) => {
+        const [y, m] = key.split("-");
+        const monthLabel = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+        const items = groups.get(key)!.sort((a, b) => (a.due_date > b.due_date ? 1 : -1));
+        return (
+          <div key={key} className="bg-background border rounded-lg overflow-hidden">
+            <div className="px-4 py-2 bg-muted/40 border-b text-sm font-medium capitalize flex items-center justify-between">
+              <span>{monthLabel}</span>
+              <Badge variant="secondary" className="text-[10px]">{items.length}</Badge>
+            </div>
+            <div className="divide-y">
+              {items.map((t) => {
+                const stage = stageById.get(t.workflow_stage_id);
+                return (
+                  <div key={t.id} className="px-4 py-2 flex items-center gap-3 hover:bg-muted/30">
+                    <div className="w-16 text-xs text-muted-foreground tabular-nums">
+                      {new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                    </div>
+                    <div className="w-1 h-8 rounded-full" style={{ backgroundColor: stage?.color || "hsl(var(--primary))" }} />
+                    <div className="flex-1 text-sm">{t.title}</div>
+                    <StatusBadge stage={stage} />
+                    <PriorityBadge priority={t.priority} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function BoardByPhaseView({ tasks, phases, stageById }: { tasks: any[]; phases: any[]; stageById: Map<string, any> }) {
+  // Agrupa por fase (phase_id). Tarefas sem fase vão para "Sem fase".
+  const groups = new Map<string, any[]>();
+  groups.set("__no_phase__", []);
+  phases.forEach((p) => groups.set(p.id, []));
+  tasks.forEach((t) => {
+    const key = t.phase_id && groups.has(t.phase_id) ? t.phase_id : "__no_phase__";
+    groups.get(key)!.push(t);
+  });
+
+  const ordered = [
+    ...phases.map((p) => ({ id: p.id, title: p.title, items: groups.get(p.id) || [] })),
+    { id: "__no_phase__", title: "Sem fase", items: groups.get("__no_phase__") || [] },
+  ].filter((g) => g.items.length > 0 || g.id !== "__no_phase__");
+
+  return (
+    <div className="space-y-4">
+      {ordered.map((g) => (
+        <div key={g.id} className="bg-background border rounded-lg overflow-hidden">
+          <div className="px-4 py-2 bg-muted/40 border-b flex items-center justify-between">
+            <span className="font-medium text-sm">{g.title}</span>
+            <Badge variant="secondary" className="text-[10px]">{g.items.length}</Badge>
+          </div>
+          {g.items.length === 0 ? (
+            <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+              Nenhuma tarefa nesta fase.
+            </div>
+          ) : (
+            <div className="divide-y">
+              {g.items.map((t) => {
+                const stage = stageById.get(t.workflow_stage_id);
+                return (
+                  <div key={t.id} className="px-4 py-2 flex items-center gap-3 hover:bg-muted/30">
+                    <div className="flex-1 text-sm">{t.title}</div>
+                    <StatusBadge stage={stage} />
+                    <PriorityBadge priority={t.priority} />
+                    {t.due_date && (
+                      <span className="text-[10px] text-muted-foreground tabular-nums w-20 text-right">
+                        {new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR")}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
