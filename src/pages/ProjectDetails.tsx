@@ -930,10 +930,7 @@ const ProjectDetails = () => {
             <TabsContent value="backlog" className="mt-3 space-y-4">
               {canCreate && (
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="default" onClick={() => setShowAddPhase(true)} className="gap-2">
-                    <Layers className="w-4 h-4" /> Nova Fase
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => {
+                  <Button size="sm" variant="default" onClick={() => {
                     setCreateTaskStageId(null);
                     setCreateTaskPhaseId(null);
                     setCreateTaskParentId(null);
