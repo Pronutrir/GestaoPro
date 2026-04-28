@@ -43,6 +43,7 @@ interface Activity {
   tags?: string[];
   parent_id?: string | null;
   workflow_stage_id?: string | null;
+  item_type?: string | null;
 }
 
 interface BacklogSectionProps {
