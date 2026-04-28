@@ -553,6 +553,117 @@ export const BacklogSection = ({
     );
   };
 
+  // Renderiza uma activity-fase (item_type='fase' ou com filhas) como card de fase virtual
+  const renderVirtualPhase = (phaseAct: Activity) => {
+    const subs = childrenByParent.get(phaseAct.id) || [];
+    const isCollapsed = collapsedParents.has(phaseAct.id);
+    const totalCount = subs.length;
+    const quickAddPhaseKey = `parent:${phaseAct.id}`;
+    const quickAddOpen = quickAddKey === quickAddPhaseKey;
+    const isEditingTitle = editingTitleId === phaseAct.id;
+
+    return (
+      <Card key={phaseAct.id} className="p-3 bg-muted/40 border-border">
+        <div className="flex items-center gap-2 mb-2">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 shrink-0"
+            onClick={() => toggleParent(phaseAct.id)}
+          >
+            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+          <Layers className="w-4 h-4 text-primary shrink-0" />
+          <div className="flex-1 min-w-0">
+            {isEditingTitle ? (
+              <Input
+                autoFocus
+                value={editingTitleValue}
+                onChange={(e) => setEditingTitleValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={() => handleSaveTitle(phaseAct.id)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") handleSaveTitle(phaseAct.id);
+                  if (e.key === "Escape") setEditingTitleId(null);
+                }}
+                className="h-7 text-sm font-semibold"
+              />
+            ) : (
+              <h4
+                className="text-sm font-semibold text-foreground cursor-pointer"
+                onClick={() => onEditActivity(phaseAct)}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setEditingTitleId(phaseAct.id);
+                  setEditingTitleValue(phaseAct.title);
+                }}
+                title="Clique para editar · duplo-clique para renomear"
+              >
+                {phaseAct.title}
+                <span className="ml-2 text-xs text-muted-foreground font-normal">
+                  {totalCount} {totalCount === 1 ? "tarefa" : "tarefas"}
+                </span>
+              </h4>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs gap-1"
+            onClick={() => {
+              setQuickAddKey(quickAddPhaseKey);
+              setQuickAddTitle("");
+              setCollapsedParents((prev) => { const n = new Set(prev); n.delete(phaseAct.id); return n; });
+            }}
+          >
+            <Plus className="w-3.5 h-3.5" /> Tarefa
+          </Button>
+          {isAdmin && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 text-destructive"
+              title="Excluir fase"
+              onClick={(e) => { e.stopPropagation(); onDeleteActivity(phaseAct.id); }}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
+
+        {!isCollapsed && (
+          <div className="space-y-1">
+            {subs.length === 0 && !quickAddOpen ? (
+              <p className="text-xs text-muted-foreground/70 italic px-2 py-3 text-center">
+                Nenhuma tarefa nesta fase. Clique em "+ Tarefa" para começar.
+              </p>
+            ) : (
+              subs.map((s) => renderActivityRow(s, 0))
+            )}
+            {quickAddOpen && (
+              <div className="flex items-center gap-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+                <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                <Input
+                  autoFocus
+                  placeholder="Nova tarefa (Enter para salvar, Esc para fechar)"
+                  value={quickAddTitle}
+                  onChange={(e) => setQuickAddTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleQuickAddSubmit(phaseAct.phase_id, phaseAct.id);
+                    if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
+                  }}
+                  onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
+                  className="h-8 text-sm"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
