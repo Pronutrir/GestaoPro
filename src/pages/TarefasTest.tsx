@@ -29,16 +29,21 @@ import {
   X,
   Search,
   Check,
+  LayoutGrid,
+  Rows3,
+  Activity as ActivityIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type ViewMode = "list" | "kanban" | "calendar" | "gantt";
+type ViewMode = "list" | "kanban" | "calendar" | "gantt" | "timeline" | "board";
 
 const VIEWS: { id: ViewMode; label: string; icon: any }[] = [
   { id: "list", label: "Lista", icon: List },
   { id: "kanban", label: "Kanban", icon: KanbanSquare },
+  { id: "board", label: "Quadro (por fase)", icon: LayoutGrid },
   { id: "calendar", label: "Calendário", icon: CalendarIcon },
   { id: "gantt", label: "Gantt", icon: GanttChart },
+  { id: "timeline", label: "Cronograma", icon: Rows3 },
 ];
 
 export default function TarefasTest() {
@@ -46,6 +51,7 @@ export default function TarefasTest() {
   const [projectId, setProjectId] = useState<string>("");
   const [activities, setActivities] = useState<any[]>([]);
   const [stages, setStages] = useState<any[]>([]);
+  const [phases, setPhases] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Estado da visão (persistente entre trocas)
@@ -54,16 +60,24 @@ export default function TarefasTest() {
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
 
-  // Carrega projetos
+  // Carrega projetos (Onboard primeiro)
   useEffect(() => {
     supabase
       .from("projects")
       .select("id, title")
+      .eq("is_trashed", false)
       .order("created_at", { ascending: false })
-      .limit(50)
+      .limit(100)
       .then(({ data }) => {
-        setProjects(data || []);
-        if (data && data.length > 0 && !projectId) setProjectId(data[0].id);
+        const list = data || [];
+        setProjects(list);
+        if (!projectId && list.length > 0) {
+          // Pré-seleciona o projeto Onboard se existir
+          const onboard = list.find((p) =>
+            p.title?.toLowerCase().includes("onboard")
+          );
+          setProjectId(onboard?.id || list[0].id);
+        }
       });
   }, []);
 
@@ -76,16 +90,23 @@ export default function TarefasTest() {
         .from("activities")
         .select("*")
         .eq("project_id", projectId)
-        .is("deleted_at", null)
+        .eq("is_trashed", false)
         .order("display_order", { ascending: true }),
       supabase
         .from("workflow_stages")
         .select("*")
         .eq("project_id", projectId)
         .order("display_order", { ascending: true }),
-    ]).then(([acts, stgs]) => {
+      supabase
+        .from("phases")
+        .select("*")
+        .eq("project_id", projectId)
+        .eq("is_trashed", false)
+        .order("display_order", { ascending: true }),
+    ]).then(([acts, stgs, phs]) => {
       setActivities(acts.data || []);
       setStages(stgs.data || []);
+      setPhases(phs.data || []);
       setLoading(false);
     });
   }, [projectId]);
@@ -107,6 +128,11 @@ export default function TarefasTest() {
   const stageById = useMemo(
     () => new Map(stages.map((s) => [s.id, s])),
     [stages]
+  );
+
+  const phaseById = useMemo(
+    () => new Map(phases.map((p) => [p.id, p])),
+    [phases]
   );
 
   const activeView = VIEWS.find((v) => v.id === view)!;
@@ -265,6 +291,12 @@ export default function TarefasTest() {
               )}
               {view === "gantt" && (
                 <GanttView tasks={filtered} stageById={stageById} />
+              )}
+              {view === "timeline" && (
+                <TimelineView tasks={filtered} stageById={stageById} />
+              )}
+              {view === "board" && (
+                <BoardByPhaseView tasks={filtered} phases={phases} stageById={stageById} />
               )}
             </>
           )}
