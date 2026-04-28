@@ -1,7 +1,7 @@
 export const ALL_PROJECT_TABS = [
   { value: "kanban", label: "Kanban" },
   { value: "list", label: "Pendências" },
-  { value: "backlog", label: "Backlog" },
+  { value: "backlog", label: "Lista" },
   { value: "timeline", label: "Cronograma" },
   { value: "calendar", label: "Calendário" },
   { value: "documents", label: "Documentos" },

@@ -79,6 +79,8 @@ export const BacklogSection = ({
   const [backlogStageId, setBacklogStageId] = useState<string | null>(null);
   const [allStageIds, setAllStageIds] = useState<Set<string>>(new Set());
   const [stages, setStages] = useState<WorkflowStage[]>([]);
+  // Todos os stages, incluindo o "Backlog" (display_order=0), para mostrar badge de status
+  const [allStages, setAllStages] = useState<WorkflowStage[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [targetStageId, setTargetStageId] = useState<string>("");
@@ -148,6 +150,7 @@ export const BacklogSection = ({
         setBacklogStageId(backlog?.id ?? null);
         setAllStageIds(new Set(data.filter((s) => s.display_order > 0).map((s) => s.id)));
         setStages(data.filter((s) => s.display_order > 0));
+        setAllStages(data);
       }
     };
     fetchStages();
@@ -189,15 +192,13 @@ export const BacklogSection = ({
     fetchTrashedActivities();
   };
 
-  // Backlog filter: activities not yet in active workflow stages (or in 'Backlog' stage)
-  const isBacklogActivity = (a: Activity) => {
-    if (!a.workflow_stage_id) return true;
-    if (backlogStageId && a.workflow_stage_id === backlogStageId) return true;
-    if (!allStageIds.has(a.workflow_stage_id)) return true;
-    return false;
-  };
+  // Lista completa: TODAS as tarefas do projeto (modelo "uma coleção, várias visões").
+  // O status é exibido como atributo (badge), não como filtro de tela.
+  const backlogActs = activities;
 
-  const backlogActs = activities.filter(isBacklogActivity);
+  // Mapa de stage_id → {title, color} para badges
+  const stageById = new Map<string, WorkflowStage>();
+  allStages.forEach((s) => stageById.set(s.id, s));
 
   // Build hierarchy
   const childrenByParent = new Map<string, Activity[]>();
@@ -273,7 +274,7 @@ export const BacklogSection = ({
     setAssignee("");
     setIsMoving(false);
     onDataChanged();
-    toast({ title: `${ids.length} atividade(s) movida(s) para o quadro` });
+    toast({ title: `Status de ${ids.length} tarefa(s) atualizado` });
   };
 
   // Quick-add inline: cria tarefa direto na fase ou como filha de outra tarefa
@@ -406,6 +407,24 @@ export const BacklogSection = ({
             <Badge variant="outline" className={`text-[10px] ${priorityColors[prio]}`}>
               {priorityLabels[prio] || prio}
             </Badge>
+            {(() => {
+              const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
+              if (!stg) return null;
+              return (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] font-medium"
+                  style={{
+                    borderColor: stg.color,
+                    color: stg.color,
+                    backgroundColor: `${stg.color}15`,
+                  }}
+                  title={`Status: ${stg.title}`}
+                >
+                  {stg.title}
+                </Badge>
+              );
+            })()}
             {activity.assigned_to && (
               <Badge variant="secondary" className="text-[10px]">👤 {activity.assigned_to}</Badge>
             )}
@@ -678,7 +697,7 @@ export const BacklogSection = ({
             <p className="text-sm text-muted-foreground">
               {selectedIds.size > 0
                 ? `${selectedIds.size} de ${backlogActs.length} selecionada(s)`
-                : `${backlogActs.length} atividade(s) no backlog`}
+                : `${backlogActs.length} tarefa(s) no projeto`}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -708,7 +727,7 @@ export const BacklogSection = ({
             {selectedIds.size > 0 && (
               <Button size="sm" className="h-7 text-xs gap-1.5 ml-1" onClick={() => setMoveDialogOpen(true)}>
                 <ArrowRight className="w-3.5 h-3.5" />
-                Mover para Kanban ({selectedIds.size})
+                Mudar status ({selectedIds.size})
               </Button>
             )}
           </div>
@@ -863,15 +882,15 @@ export const BacklogSection = ({
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent className="sm:max-w-2xl w-[95vw]">
           <DialogHeader>
-            <DialogTitle>Mover {selectedIds.size} atividade(s) para o Kanban</DialogTitle>
+            <DialogTitle>Alterar status de {selectedIds.size} tarefa(s)</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Etapa de destino *</Label>
+              <Label>Novo status *</Label>
               <Select value={targetStageId} onValueChange={setTargetStageId}>
-                <SelectTrigger><SelectValue placeholder="Selecione a etapa" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger>
                 <SelectContent>
-                  {stages.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}
+                  {allStages.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
