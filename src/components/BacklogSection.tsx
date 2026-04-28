@@ -274,7 +274,7 @@ export const BacklogSection = ({
     setAssignee("");
     setIsMoving(false);
     onDataChanged();
-    toast({ title: `${ids.length} atividade(s) movida(s) para o quadro` });
+    toast({ title: `Status de ${ids.length} tarefa(s) atualizado` });
   };
 
   // Quick-add inline: cria tarefa direto na fase ou como filha de outra tarefa
