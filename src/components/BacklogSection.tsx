@@ -729,8 +729,58 @@ export const BacklogSection = ({
 
         {phases.map((p) => renderPhaseGroup(p.id, p.title))}
 
-        {(topLevelByPhase.get("none") || []).length > 0 &&
-          renderPhaseGroup(null, "Sem fase")}
+        {/* Activities top-level sem phase_id: separar em fases virtuais (item_type='fase' ou com filhas) e tarefas soltas */}
+        {(() => {
+          const orphanTop = topLevelByPhase.get("none") || [];
+          const virtualPhases = orphanTop.filter(isPhaseLikeActivity);
+          const looseTasks = orphanTop.filter((a) => !isPhaseLikeActivity(a));
+          return (
+            <>
+              {virtualPhases.map((vp) => renderVirtualPhase(vp))}
+              {looseTasks.length > 0 && (
+                <Card className="p-3 bg-muted/40 border-border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <h4 className="text-sm font-semibold text-foreground flex-1">
+                      Sem fase
+                      <span className="ml-2 text-xs text-muted-foreground font-normal">
+                        {looseTasks.length} {looseTasks.length === 1 ? "tarefa" : "tarefas"}
+                      </span>
+                    </h4>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => { setQuickAddKey(`phase:none`); setQuickAddTitle(""); }}
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Tarefa
+                    </Button>
+                  </div>
+                  <div className="space-y-1">
+                    {looseTasks.map((a) => renderActivityRow(a, 0))}
+                    {quickAddKey === "phase:none" && (
+                      <div className="flex items-center gap-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+                        <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <Input
+                          autoFocus
+                          placeholder="Nova tarefa (Enter para salvar, Esc para fechar)"
+                          value={quickAddTitle}
+                          onChange={(e) => setQuickAddTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleQuickAddSubmit(null, null);
+                            if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
+                          }}
+                          onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Trash Section */}
