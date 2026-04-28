@@ -65,10 +65,7 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
               <GripVertical className="w-4 h-4 text-muted-foreground" />
             </button>
             <div className="flex-1">
-              <h4 className="font-semibold text-foreground mb-1">{project.title}</h4>
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {project.description || <span className="italic text-muted-foreground/60">Clique para adicionar uma descrição</span>}
-              </p>
+              <h4 className="font-semibold text-foreground">{project.title}</h4>
             </div>
           </div>
           {isAdmin && (

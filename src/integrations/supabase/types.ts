@@ -34,6 +34,7 @@ export type Database = {
           is_critical: boolean
           is_milestone: boolean
           is_trashed: boolean
+          item_type: string
           last_update_date: string | null
           parent_id: string | null
           participant_roles: Json
@@ -75,6 +76,7 @@ export type Database = {
           is_critical?: boolean
           is_milestone?: boolean
           is_trashed?: boolean
+          item_type?: string
           last_update_date?: string | null
           parent_id?: string | null
           participant_roles?: Json
@@ -116,6 +118,7 @@ export type Database = {
           is_critical?: boolean
           is_milestone?: boolean
           is_trashed?: boolean
+          item_type?: string
           last_update_date?: string | null
           parent_id?: string | null
           participant_roles?: Json
@@ -1464,6 +1467,7 @@ export type Database = {
           budget_planned: number | null
           budget_used: number | null
           category: string | null
+          charter_data: Json | null
           completion_percentage: number | null
           created_at: string
           description: string | null
@@ -1502,6 +1506,7 @@ export type Database = {
           budget_planned?: number | null
           budget_used?: number | null
           category?: string | null
+          charter_data?: Json | null
           completion_percentage?: number | null
           created_at?: string
           description?: string | null
@@ -1540,6 +1545,7 @@ export type Database = {
           budget_planned?: number | null
           budget_used?: number | null
           category?: string | null
+          charter_data?: Json | null
           completion_percentage?: number | null
           created_at?: string
           description?: string | null
@@ -1587,7 +1593,9 @@ export type Database = {
           mitigation: string | null
           probability: string
           project_id: string
+          response_strategy: string | null
           responsible: string | null
+          root_cause: string | null
           severity_score: number | null
           status: string
           tendency: number | null
@@ -1607,7 +1615,9 @@ export type Database = {
           mitigation?: string | null
           probability?: string
           project_id: string
+          response_strategy?: string | null
           responsible?: string | null
+          root_cause?: string | null
           severity_score?: number | null
           status?: string
           tendency?: number | null
@@ -1627,7 +1637,9 @@ export type Database = {
           mitigation?: string | null
           probability?: string
           project_id?: string
+          response_strategy?: string | null
           responsible?: string | null
+          root_cause?: string | null
           severity_score?: number | null
           status?: string
           tendency?: number | null

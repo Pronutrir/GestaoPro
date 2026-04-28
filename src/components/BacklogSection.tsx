@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
-  ChevronDown, ChevronUp, ChevronRight, Plus, Layers, Package, FolderOpen,
+  ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AIAssistButton } from "@/components/AIAssistButton";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -44,6 +43,7 @@ interface Activity {
   tags?: string[];
   parent_id?: string | null;
   workflow_stage_id?: string | null;
+  item_type?: string | null;
 }
 
 interface BacklogSectionProps {
@@ -79,6 +79,8 @@ export const BacklogSection = ({
   const [backlogStageId, setBacklogStageId] = useState<string | null>(null);
   const [allStageIds, setAllStageIds] = useState<Set<string>>(new Set());
   const [stages, setStages] = useState<WorkflowStage[]>([]);
+  // Todos os stages, incluindo o "Backlog" (display_order=0), para mostrar badge de status
+  const [allStages, setAllStages] = useState<WorkflowStage[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [targetStageId, setTargetStageId] = useState<string>("");
@@ -89,10 +91,14 @@ export const BacklogSection = ({
   const [trashedActivities, setTrashedActivities] = useState<any[]>([]);
   const [permanentDeleteId, setPermanentDeleteId] = useState<string | null>(null);
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
-  const [collapsedPackages, setCollapsedPackages] = useState<Set<string>>(new Set());
-  const [packageDialogPhaseId, setPackageDialogPhaseId] = useState<string | null>(null);
-  const [newPackageTitle, setNewPackageTitle] = useState("");
+  const [collapsedParents, setCollapsedParents] = useState<Set<string>>(new Set());
   const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
+  // Inline quick-add: key = `phase:<id|none>` or `parent:<id>`
+  const [quickAddKey, setQuickAddKey] = useState<string | null>(null);
+  const [quickAddTitle, setQuickAddTitle] = useState("");
+  // Inline edit title
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [editingTitleValue, setEditingTitleValue] = useState("");
 
   useEffect(() => {
     const ids = activities.map((a) => a.id);
@@ -144,6 +150,7 @@ export const BacklogSection = ({
         setBacklogStageId(backlog?.id ?? null);
         setAllStageIds(new Set(data.filter((s) => s.display_order > 0).map((s) => s.id)));
         setStages(data.filter((s) => s.display_order > 0));
+        setAllStages(data);
       }
     };
     fetchStages();
@@ -185,15 +192,13 @@ export const BacklogSection = ({
     fetchTrashedActivities();
   };
 
-  // Backlog filter: activities not yet in active workflow stages (or in 'Backlog' stage)
-  const isBacklogActivity = (a: Activity) => {
-    if (!a.workflow_stage_id) return true;
-    if (backlogStageId && a.workflow_stage_id === backlogStageId) return true;
-    if (!allStageIds.has(a.workflow_stage_id)) return true;
-    return false;
-  };
+  // Lista completa: TODAS as tarefas do projeto (modelo "uma coleção, várias visões").
+  // O status é exibido como atributo (badge), não como filtro de tela.
+  const backlogActs = activities;
 
-  const backlogActs = activities.filter(isBacklogActivity);
+  // Mapa de stage_id → {title, color} para badges
+  const stageById = new Map<string, WorkflowStage>();
+  allStages.forEach((s) => stageById.set(s.id, s));
 
   // Build hierarchy
   const childrenByParent = new Map<string, Activity[]>();
@@ -216,6 +221,13 @@ export const BacklogSection = ({
   childrenByParent.forEach(sortByOrder);
   topLevelByPhase.forEach(sortByOrder);
 
+  // Helper: detecta se uma activity top-level deve ser tratada como "fase virtual"
+  // (containers criados via toggle "É uma fase" ou simplesmente que possuem filhas)
+  const isPhaseLikeActivity = (a: Activity) => {
+    if (a.item_type === "fase") return true;
+    return (childrenByParent.get(a.id) || []).length > 0;
+  };
+
   const togglePhase = (id: string) => {
     setCollapsedPhases((prev) => {
       const n = new Set(prev);
@@ -223,8 +235,8 @@ export const BacklogSection = ({
       return n;
     });
   };
-  const togglePackage = (id: string) => {
-    setCollapsedPackages((prev) => {
+  const toggleParent = (id: string) => {
+    setCollapsedParents((prev) => {
       const n = new Set(prev);
       if (n.has(id)) n.delete(id); else n.add(id);
       return n;
@@ -262,27 +274,40 @@ export const BacklogSection = ({
     setAssignee("");
     setIsMoving(false);
     onDataChanged();
-    toast({ title: `${ids.length} atividade(s) movida(s) para o quadro` });
+    toast({ title: `Status de ${ids.length} tarefa(s) atualizado` });
   };
 
-  const handleCreatePackage = async () => {
-    if (!newPackageTitle.trim()) return;
+  // Quick-add inline: cria tarefa direto na fase ou como filha de outra tarefa
+  const handleQuickAddSubmit = async (phaseId: string | null, parentId: string | null) => {
+    const title = quickAddTitle.trim();
+    if (!title) {
+      setQuickAddKey(null);
+      setQuickAddTitle("");
+      return;
+    }
     const { error } = await supabase.from("activities").insert({
       project_id: projectId,
-      title: newPackageTitle.trim(),
-      phase_id: packageDialogPhaseId,
-      parent_id: null,
+      title,
+      phase_id: phaseId,
+      parent_id: parentId,
       workflow_stage_id: backlogStageId,
       status: "pending",
       priority: "medium",
     });
     if (error) {
-      toast({ title: "Erro ao criar pacote", variant: "destructive" });
+      toast({ title: "Erro ao criar tarefa", variant: "destructive" });
       return;
     }
-    toast({ title: "Pacote de atividades criado!" });
-    setNewPackageTitle("");
-    setPackageDialogPhaseId(null);
+    setQuickAddTitle("");
+    // mantém o input aberto para criação contínua
+    onDataChanged();
+  };
+
+  const handleSaveTitle = async (activityId: string) => {
+    const newTitle = editingTitleValue.trim();
+    if (!newTitle) { setEditingTitleId(null); return; }
+    await supabase.from("activities").update({ title: newTitle }).eq("id", activityId);
+    setEditingTitleId(null);
     onDataChanged();
   };
 
@@ -291,8 +316,9 @@ export const BacklogSection = ({
     const prio = activity.priority || "medium";
     const subs = childrenByParent.get(activity.id) || [];
     const hasChildren = subs.length > 0;
-    const isPackage = hasChildren; // any activity with children = "pacote de atividades"
-    const isCollapsed = collapsedPackages.has(activity.id);
+    const isCollapsed = collapsedParents.has(activity.id);
+    const isEditingTitle = editingTitleId === activity.id;
+    const quickAddOpen = quickAddKey === `parent:${activity.id}`;
 
     return (
       <div key={activity.id} className="space-y-1">
@@ -301,14 +327,14 @@ export const BacklogSection = ({
             isSelected ? "border-primary/50 bg-primary/5" : "border-border"
           }`}
           style={{ marginLeft: depth * 24 }}
-          onClick={() => onEditActivity(activity)}
+          onClick={() => { if (!isEditingTitle) onEditActivity(activity); }}
         >
           {hasChildren ? (
             <Button
               size="icon"
               variant="ghost"
               className="h-5 w-5 shrink-0"
-              onClick={(e) => { e.stopPropagation(); togglePackage(activity.id); }}
+              onClick={(e) => { e.stopPropagation(); toggleParent(activity.id); }}
             >
               {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </Button>
@@ -336,8 +362,6 @@ export const BacklogSection = ({
             )}
           </Button>
 
-          {isPackage && <Package className="w-3.5 h-3.5 text-primary shrink-0" />}
-
           {/* Color dot for priority */}
           <span
             className={`w-2 h-2 rounded-full shrink-0 ${priorityDot[prio] || priorityDot.medium}`}
@@ -346,10 +370,34 @@ export const BacklogSection = ({
           />
 
           <div className="flex-1 min-w-0">
-            <p className={`text-sm font-medium ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
-              {activity.title}
-              {hasChildren && <span className="ml-2 text-xs text-muted-foreground font-normal">({subs.length})</span>}
-            </p>
+            {isEditingTitle ? (
+              <Input
+                autoFocus
+                value={editingTitleValue}
+                onChange={(e) => setEditingTitleValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={() => handleSaveTitle(activity.id)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") handleSaveTitle(activity.id);
+                  if (e.key === "Escape") setEditingTitleId(null);
+                }}
+                className="h-7 text-sm"
+              />
+            ) : (
+              <p
+                className={`text-sm font-medium truncate ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setEditingTitleId(activity.id);
+                  setEditingTitleValue(activity.title);
+                }}
+                title="Duplo-clique para editar"
+              >
+                {activity.title}
+                {hasChildren && <span className="ml-2 text-xs text-muted-foreground font-normal">({subs.length})</span>}
+              </p>
+            )}
             {activity.description && (
               <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{activity.description}</p>
             )}
@@ -359,6 +407,24 @@ export const BacklogSection = ({
             <Badge variant="outline" className={`text-[10px] ${priorityColors[prio]}`}>
               {priorityLabels[prio] || prio}
             </Badge>
+            {(() => {
+              const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
+              if (!stg) return null;
+              return (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] font-medium"
+                  style={{
+                    borderColor: stg.color,
+                    color: stg.color,
+                    backgroundColor: `${stg.color}15`,
+                  }}
+                  title={`Status: ${stg.title}`}
+                >
+                  {stg.title}
+                </Badge>
+              );
+            })()}
             {activity.assigned_to && (
               <Badge variant="secondary" className="text-[10px]">👤 {activity.assigned_to}</Badge>
             )}
@@ -375,17 +441,20 @@ export const BacklogSection = ({
                 </Badge>
               );
             })()}
-            {onCreateActivityInPhase && depth === 0 && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Adicionar subatividade"
-                onClick={(e) => { e.stopPropagation(); onCreateActivityInPhase(activity.phase_id, activity.id); }}
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </Button>
-            )}
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Adicionar subtarefa"
+              onClick={(e) => {
+                e.stopPropagation();
+                setQuickAddKey(`parent:${activity.id}`);
+                setQuickAddTitle("");
+                setCollapsedParents((prev) => { const n = new Set(prev); n.delete(activity.id); return n; });
+              }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
             {isAdmin && (
               <Button
                 size="icon"
@@ -404,6 +473,24 @@ export const BacklogSection = ({
             {subs.map((sub) => renderActivityRow(sub, depth + 1))}
           </div>
         )}
+
+        {quickAddOpen && (
+          <div style={{ marginLeft: (depth + 1) * 24 }} className="flex items-center gap-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+            <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+            <Input
+              autoFocus
+              placeholder="Nova subtarefa (Enter para salvar, Esc para fechar)"
+              value={quickAddTitle}
+              onChange={(e) => setQuickAddTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleQuickAddSubmit(activity.phase_id, activity.id);
+                if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
+              }}
+              onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
+              className="h-8 text-sm"
+            />
+          </div>
+        )}
       </div>
     );
   };
@@ -416,6 +503,8 @@ export const BacklogSection = ({
       (acc, a) => acc + 1 + (childrenByParent.get(a.id)?.length || 0),
       0
     );
+    const quickAddPhaseKey = `phase:${key}`;
+    const quickAddOpen = quickAddKey === quickAddPhaseKey;
 
     return (
       <Card key={key} className="p-3 bg-muted/40 border-border">
@@ -441,26 +530,152 @@ export const BacklogSection = ({
               {totalCount} {totalCount === 1 ? "item" : "itens"}
             </span>
           </h4>
-          {phaseId && onCreateActivityInPhase && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs gap-1"
+            onClick={() => { setQuickAddKey(quickAddPhaseKey); setQuickAddTitle(""); }}
+          >
+            <Plus className="w-3.5 h-3.5" /> Tarefa
+          </Button>
+        </div>
+
+        {!isCollapsed && (
+          <div className="space-y-1">
+            {acts.length === 0 && !quickAddOpen ? (
+              <p className="text-xs text-muted-foreground/70 italic px-2 py-3 text-center">
+                Nenhuma tarefa. Clique em "+ Tarefa" para começar.
+              </p>
+            ) : (
+              acts.map((a) => renderActivityRow(a, 0))
+            )}
+            {quickAddOpen && (
+              <div className="flex items-center gap-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+                <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                <Input
+                  autoFocus
+                  placeholder="Nova tarefa (Enter para salvar, Esc para fechar)"
+                  value={quickAddTitle}
+                  onChange={(e) => setQuickAddTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleQuickAddSubmit(phaseId, null);
+                    if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
+                  }}
+                  onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
+                  className="h-8 text-sm"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+    );
+  };
+
+  // Renderiza uma activity-fase (item_type='fase' ou com filhas) como card de fase virtual
+  const renderVirtualPhase = (phaseAct: Activity) => {
+    const subs = childrenByParent.get(phaseAct.id) || [];
+    const isCollapsed = collapsedParents.has(phaseAct.id);
+    const totalCount = subs.length;
+    const quickAddPhaseKey = `parent:${phaseAct.id}`;
+    const quickAddOpen = quickAddKey === quickAddPhaseKey;
+    const isEditingTitle = editingTitleId === phaseAct.id;
+
+    return (
+      <Card key={phaseAct.id} className="p-3 bg-muted/40 border-border">
+        <div className="flex items-center gap-2 mb-2">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 shrink-0"
+            onClick={() => toggleParent(phaseAct.id)}
+          >
+            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+          <Layers className="w-4 h-4 text-primary shrink-0" />
+          <div className="flex-1 min-w-0">
+            {isEditingTitle ? (
+              <Input
+                autoFocus
+                value={editingTitleValue}
+                onChange={(e) => setEditingTitleValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={() => handleSaveTitle(phaseAct.id)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") handleSaveTitle(phaseAct.id);
+                  if (e.key === "Escape") setEditingTitleId(null);
+                }}
+                className="h-7 text-sm font-semibold"
+              />
+            ) : (
+              <h4
+                className="text-sm font-semibold text-foreground cursor-pointer"
+                onClick={() => onEditActivity(phaseAct)}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setEditingTitleId(phaseAct.id);
+                  setEditingTitleValue(phaseAct.title);
+                }}
+                title="Clique para editar · duplo-clique para renomear"
+              >
+                {phaseAct.title}
+                <span className="ml-2 text-xs text-muted-foreground font-normal">
+                  {totalCount} {totalCount === 1 ? "tarefa" : "tarefas"}
+                </span>
+              </h4>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs gap-1"
+            onClick={() => {
+              setQuickAddKey(quickAddPhaseKey);
+              setQuickAddTitle("");
+              setCollapsedParents((prev) => { const n = new Set(prev); n.delete(phaseAct.id); return n; });
+            }}
+          >
+            <Plus className="w-3.5 h-3.5" /> Tarefa
+          </Button>
+          {isAdmin && (
             <Button
-              size="sm"
+              size="icon"
               variant="ghost"
-              className="h-7 text-xs gap-1"
-              onClick={() => onCreateActivityInPhase(phaseId, null)}
+              className="h-7 w-7 text-destructive"
+              title="Excluir fase"
+              onClick={(e) => { e.stopPropagation(); onDeleteActivity(phaseAct.id); }}
             >
-              <Plus className="w-3.5 h-3.5" /> Atividade
+              <Trash2 className="w-3.5 h-3.5" />
             </Button>
           )}
         </div>
 
         {!isCollapsed && (
           <div className="space-y-1">
-            {acts.length === 0 ? (
+            {subs.length === 0 && !quickAddOpen ? (
               <p className="text-xs text-muted-foreground/70 italic px-2 py-3 text-center">
-                Nenhuma atividade nesta fase. Clique em "+ Atividade" para começar.
+                Nenhuma tarefa nesta fase. Clique em "+ Tarefa" para começar.
               </p>
             ) : (
-              acts.map((a) => renderActivityRow(a, 0))
+              subs.map((s) => renderActivityRow(s, 0))
+            )}
+            {quickAddOpen && (
+              <div className="flex items-center gap-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+                <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                <Input
+                  autoFocus
+                  placeholder="Nova tarefa (Enter para salvar, Esc para fechar)"
+                  value={quickAddTitle}
+                  onChange={(e) => setQuickAddTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleQuickAddSubmit(phaseAct.phase_id, phaseAct.id);
+                    if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
+                  }}
+                  onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
+                  className="h-8 text-sm"
+                />
+              </div>
             )}
           </div>
         )}
@@ -482,7 +697,7 @@ export const BacklogSection = ({
             <p className="text-sm text-muted-foreground">
               {selectedIds.size > 0
                 ? `${selectedIds.size} de ${backlogActs.length} selecionada(s)`
-                : `${backlogActs.length} atividade(s) no backlog`}
+                : `${backlogActs.length} tarefa(s) no projeto`}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -490,7 +705,7 @@ export const BacklogSection = ({
               size="sm"
               variant="ghost"
               className="h-7 px-2 text-xs gap-1"
-              onClick={() => { setCollapsedPhases(new Set()); setCollapsedPackages(new Set()); }}
+              onClick={() => { setCollapsedPhases(new Set()); setCollapsedParents(new Set()); }}
               title="Expandir tudo"
             >
               <ChevronsUpDown className="w-3.5 h-3.5" /> Expandir
@@ -501,9 +716,9 @@ export const BacklogSection = ({
               className="h-7 px-2 text-xs gap-1"
               onClick={() => {
                 const allPhaseIds = phases.map(p => p.id);
-                const packageIds = backlogActs.filter(a => (childrenByParent.get(a.id) || []).length > 0).map(a => a.id);
+                const parentIds = backlogActs.filter(a => (childrenByParent.get(a.id) || []).length > 0).map(a => a.id);
                 setCollapsedPhases(new Set(allPhaseIds));
-                setCollapsedPackages(new Set(packageIds));
+                setCollapsedParents(new Set(parentIds));
               }}
               title="Recolher tudo"
             >
@@ -512,7 +727,7 @@ export const BacklogSection = ({
             {selectedIds.size > 0 && (
               <Button size="sm" className="h-7 text-xs gap-1.5 ml-1" onClick={() => setMoveDialogOpen(true)}>
                 <ArrowRight className="w-3.5 h-3.5" />
-                Mover para Kanban ({selectedIds.size})
+                Mudar status ({selectedIds.size})
               </Button>
             )}
           </div>
@@ -533,8 +748,58 @@ export const BacklogSection = ({
 
         {phases.map((p) => renderPhaseGroup(p.id, p.title))}
 
-        {(topLevelByPhase.get("none") || []).length > 0 &&
-          renderPhaseGroup(null, "Sem fase")}
+        {/* Activities top-level sem phase_id: separar em fases virtuais (item_type='fase' ou com filhas) e tarefas soltas */}
+        {(() => {
+          const orphanTop = topLevelByPhase.get("none") || [];
+          const virtualPhases = orphanTop.filter(isPhaseLikeActivity);
+          const looseTasks = orphanTop.filter((a) => !isPhaseLikeActivity(a));
+          return (
+            <>
+              {virtualPhases.map((vp) => renderVirtualPhase(vp))}
+              {looseTasks.length > 0 && (
+                <Card className="p-3 bg-muted/40 border-border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <h4 className="text-sm font-semibold text-foreground flex-1">
+                      Sem fase
+                      <span className="ml-2 text-xs text-muted-foreground font-normal">
+                        {looseTasks.length} {looseTasks.length === 1 ? "tarefa" : "tarefas"}
+                      </span>
+                    </h4>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => { setQuickAddKey(`phase:none`); setQuickAddTitle(""); }}
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Tarefa
+                    </Button>
+                  </div>
+                  <div className="space-y-1">
+                    {looseTasks.map((a) => renderActivityRow(a, 0))}
+                    {quickAddKey === "phase:none" && (
+                      <div className="flex items-center gap-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+                        <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <Input
+                          autoFocus
+                          placeholder="Nova tarefa (Enter para salvar, Esc para fechar)"
+                          value={quickAddTitle}
+                          onChange={(e) => setQuickAddTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleQuickAddSubmit(null, null);
+                            if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
+                          }}
+                          onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Trash Section */}
@@ -617,15 +882,15 @@ export const BacklogSection = ({
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent className="sm:max-w-2xl w-[95vw]">
           <DialogHeader>
-            <DialogTitle>Mover {selectedIds.size} atividade(s) para o Kanban</DialogTitle>
+            <DialogTitle>Alterar status de {selectedIds.size} tarefa(s)</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Etapa de destino *</Label>
+              <Label>Novo status *</Label>
               <Select value={targetStageId} onValueChange={setTargetStageId}>
-                <SelectTrigger><SelectValue placeholder="Selecione a etapa" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger>
                 <SelectContent>
-                  {stages.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}
+                  {allStages.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
@@ -647,39 +912,6 @@ export const BacklogSection = ({
             <Button onClick={handleMoveSelected} disabled={!targetStageId || isMoving}>
               {isMoving ? "Movendo..." : "Confirmar"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* New Package Dialog */}
-      <Dialog open={!!packageDialogPhaseId} onOpenChange={(o) => { if (!o) { setPackageDialogPhaseId(null); setNewPackageTitle(""); } }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Package className="w-5 h-5 text-primary" /> Novo Pacote de Atividades
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Título do pacote *</Label>
-                <AIAssistButton value={newPackageTitle} onChange={setNewPackageTitle} context="package_title" />
-              </div>
-              <Input
-                placeholder="Ex: Implementação Backend"
-                value={newPackageTitle}
-                onChange={(e) => setNewPackageTitle(e.target.value)}
-                autoFocus
-                onKeyDown={(e) => { if (e.key === "Enter") handleCreatePackage(); }}
-              />
-              <p className="text-xs text-muted-foreground">
-                Um pacote agrupa subatividades. Você poderá adicionar atividades dentro dele depois.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setPackageDialogPhaseId(null); setNewPackageTitle(""); }}>Cancelar</Button>
-            <Button onClick={handleCreatePackage} disabled={!newPackageTitle.trim()}>Criar Pacote</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

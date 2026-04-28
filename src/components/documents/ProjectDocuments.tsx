@@ -13,6 +13,7 @@ import {
   Type, ListChecks, ArrowRight, Table as TableIcon, Minus,
   AlignLeft, AlignCenter, AlignRight, Link as LinkIcon,
   Highlighter, Code, Undo2, Redo2, Trash, Plus as PlusIcon,
+  ZoomIn, ZoomOut, RotateCcw,
 } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -91,6 +92,18 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  // Zoom do editor (persistido localmente). 100% = padrão.
+  const [zoom, setZoom] = useState<number>(() => {
+    if (typeof window === "undefined") return 100;
+    const v = Number(window.localStorage.getItem("pp_editor_zoom"));
+    return Number.isFinite(v) && v >= 60 && v <= 200 ? v : 100;
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("pp_editor_zoom", String(zoom)); } catch {}
+  }, [zoom]);
+  const zoomIn = () => setZoom((z) => Math.min(200, z + 10));
+  const zoomOut = () => setZoom((z) => Math.max(60, z - 10));
+  const zoomReset = () => setZoom(100);
 
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashPos, setSlashPos] = useState<{ top: number; left: number } | null>(null);
@@ -615,7 +628,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                 </div>
               </div>
             ) : (
-              <div className="max-w-4xl mx-auto px-8 py-6 relative" ref={editorWrapperRef}>
+              <div className="w-full px-6 lg:px-10 py-6 relative" ref={editorWrapperRef}>
                 <div className="flex items-center gap-2 mb-2">
                   <Input
                     value={titleDraft}
@@ -689,6 +702,17 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                     <ToolbarBtn icon={Minus} label="Divisor"
                       onClick={() => editor.chain().focus().setHorizontalRule().run()} />
                     <Sep />
+                    <ToolbarBtn icon={ZoomOut} label="Diminuir zoom" onClick={zoomOut} />
+                    <button
+                      type="button"
+                      onClick={zoomReset}
+                      title="Restaurar zoom (100%)"
+                      className="h-7 px-2 text-[11px] font-medium tabular-nums rounded hover:bg-muted text-muted-foreground"
+                    >
+                      {zoom}%
+                    </button>
+                    <ToolbarBtn icon={ZoomIn} label="Aumentar zoom" onClick={zoomIn} />
+                    <Sep />
                     <Button
                       size="sm"
                       className="h-7 px-2.5 text-xs gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
@@ -706,43 +730,59 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                   </div>
                 )}
 
-                {/* Table contextual toolbar */}
-                {editor && inTable && (
-                  <div className="mb-3 flex items-center gap-1 p-1 rounded-md border border-dashed bg-muted/40 text-xs">
+                {/* Table contextual toolbar — slot fixo para evitar "pulo" do conteúdo */}
+                <div
+                  className="mb-3 transition-opacity"
+                  style={{
+                    visibility: editor && inTable ? "visible" : "hidden",
+                    opacity: editor && inTable ? 1 : 0,
+                    pointerEvents: editor && inTable ? "auto" : "none",
+                  }}
+                  aria-hidden={!(editor && inTable)}
+                >
+                  <div className="flex items-center gap-1 p-1 rounded-md border border-dashed bg-muted/40 text-xs">
                     <span className="px-2 text-muted-foreground font-medium">Tabela:</span>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs"
-                      onClick={() => editor.chain().focus().addColumnBefore().run()}>
+                      onClick={() => editor?.chain().focus().addColumnBefore().run()}>
                       <PlusIcon className="h-3 w-3 mr-0.5" /> Coluna ←
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs"
-                      onClick={() => editor.chain().focus().addColumnAfter().run()}>
+                      onClick={() => editor?.chain().focus().addColumnAfter().run()}>
                       Coluna → <PlusIcon className="h-3 w-3 ml-0.5" />
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs"
-                      onClick={() => editor.chain().focus().addRowBefore().run()}>
+                      onClick={() => editor?.chain().focus().addRowBefore().run()}>
                       <PlusIcon className="h-3 w-3 mr-0.5" /> Linha ↑
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs"
-                      onClick={() => editor.chain().focus().addRowAfter().run()}>
+                      onClick={() => editor?.chain().focus().addRowAfter().run()}>
                       Linha ↓ <PlusIcon className="h-3 w-3 ml-0.5" />
                     </Button>
                     <div className="w-px h-4 bg-border mx-1" />
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                      onClick={() => editor.chain().focus().deleteColumn().run()}>
+                      onClick={() => editor?.chain().focus().deleteColumn().run()}>
                       <Trash className="h-3 w-3 mr-0.5" /> Coluna
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                      onClick={() => editor.chain().focus().deleteRow().run()}>
+                      onClick={() => editor?.chain().focus().deleteRow().run()}>
                       <Trash className="h-3 w-3 mr-0.5" /> Linha
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                      onClick={() => editor.chain().focus().deleteTable().run()}>
+                      onClick={() => editor?.chain().focus().deleteTable().run()}>
                       <Trash className="h-3 w-3 mr-0.5" /> Tabela
                     </Button>
                   </div>
-                )}
+                </div>
 
-                <EditorContent editor={editor} />
+                <div
+                  style={{
+                    transform: `scale(${zoom / 100})`,
+                    transformOrigin: "top left",
+                    width: `${10000 / zoom}%`,
+                  }}
+                >
+                  <EditorContent editor={editor} />
+                </div>
 
                 {/* Slash menu */}
                 {slashOpen && slashPos && filteredSlash.length > 0 && (
@@ -828,18 +868,20 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
             overflow: hidden;
             table-layout: fixed;
             width: 100%;
+            border: 1px solid hsl(var(--foreground) / 0.25);
           }
           .ProseMirror th, .ProseMirror td {
-            border: 1px solid hsl(var(--border));
+            border: 1px solid hsl(var(--foreground) / 0.25);
             padding: 0.5rem 0.625rem;
             vertical-align: top;
             position: relative;
             min-width: 80px;
           }
           .ProseMirror th {
-            background: hsl(var(--muted) / 0.6);
+            background: hsl(var(--muted));
             font-weight: 600;
             text-align: left;
+            border-bottom: 2px solid hsl(var(--foreground) / 0.35);
           }
           .ProseMirror .selectedCell:after {
             content: "";

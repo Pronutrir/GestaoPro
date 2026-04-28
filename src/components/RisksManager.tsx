@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { Plus, Pencil, Trash2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +20,8 @@ interface Risk {
   contingency: string | null;  // (legado, não usado no formulário)
   responsible: string | null;
   category: string;
+  root_cause: string | null;
+  response_strategy: string | null;
   created_at: string;
 }
 
@@ -69,6 +70,29 @@ const STATUS_MAP: Record<string, { label: string; class: string }> = {
   ocorreu:    { label: "Ocorreu",    class: "bg-destructive/20 text-destructive border-destructive/30" },
 };
 
+const CATEGORIES = [
+  "Técnico",
+  "Externo",
+  "Organizacional",
+  "Gerenciamento de Projeto",
+  "Financeiro",
+  "Operacional",
+  "Regulatório",
+  "Recursos Humanos",
+];
+
+const RESPONSE_STRATEGIES = [
+  { value: "evitar", label: "Evitar" },
+  { value: "mitigar", label: "Mitigar" },
+  { value: "transferir", label: "Transferir" },
+  { value: "aceitar", label: "Aceitar" },
+  { value: "explorar", label: "Explorar" },
+  { value: "compartilhar", label: "Compartilhar" },
+  { value: "melhorar", label: "Melhorar" },
+];
+
+const formatRiskId = (idx: number) => `R-${String(idx + 1).padStart(3, "0")}`;
+
 export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const { toast } = useToast();
   const { canManage: isAdmin } = useAuth();
@@ -82,11 +106,15 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const [impact, setImpact] = useState("medium");
   const [occurred, setOccurred] = useState<"sim" | "nao">("nao");
   const [contramedida, setContramedida] = useState("");
+  const [category, setCategory] = useState<string>("Técnico");
+  const [rootCause, setRootCause] = useState("");
+  const [responseStrategy, setResponseStrategy] = useState<string>("Mitigar");
+  const [contingencyPlan, setContingencyPlan] = useState("");
   const [showMatrix, setShowMatrix] = useState(false);
   const [matrixFilter, setMatrixFilter] = useState<{ prob: string; imp: string } | null>(null);
 
   const fetchData = async () => {
-    const { data } = await supabase.from("risks").select("*").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false });
+    const { data } = await supabase.from("risks").select("*").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: true });
     if (data) setItems(data as Risk[]);
   };
 
@@ -96,6 +124,8 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     setDescription(""); setResponsible(""); setStatus("monitorar");
     setProbability("medium"); setImpact("medium");
     setOccurred("nao"); setContramedida("");
+    setCategory("Técnico"); setRootCause(""); setResponseStrategy("Mitigar");
+    setContingencyPlan("");
     setEditingId(null); setShowForm(false);
   };
 
@@ -111,6 +141,10 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
       status: finalStatus,
       mitigation: contramedida || null,
       responsible: responsible || null,
+      category: category || null,
+      root_cause: rootCause || null,
+      response_strategy: responseStrategy || null,
+      contingency: contingencyPlan || null,
     };
 
     if (editingId) {
@@ -132,6 +166,10 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     setProbability(item.probability);
     setImpact(item.impact);
     setContramedida(item.mitigation || "");
+    setCategory(item.category || "Técnico");
+    setRootCause(item.root_cause || "");
+    setResponseStrategy(item.response_strategy || "Mitigar");
+    setContingencyPlan(item.contingency || "");
     if (item.status === "ocorreu") {
       setOccurred("sim");
       setStatus("monitorar");
@@ -168,16 +206,24 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
     const lvlKey = MATRIX_KEY(item.impact, item.probability);
     const lvl = LEVELS[lvlKey];
     const occ = item.status === "ocorreu";
+    const idx = items.findIndex(r => r.id === item.id);
+    const riskId = idx >= 0 ? formatRiskId(idx) : "R-???";
+    const strategyLabel = RESPONSE_STRATEGIES.find(s => s.value === item.response_strategy)?.label;
     return (
       <Card key={item.id} className="p-4 space-y-2">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-1">
-            <p className="text-sm font-medium text-foreground">{item.description}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className="font-mono text-[11px]">{riskId}</Badge>
+              {item.category && <Badge variant="secondary" className="text-[11px]">{item.category}</Badge>}
+              <p className="text-sm font-medium text-foreground">{item.description}</p>
+            </div>
             <div className="flex flex-wrap gap-2">
               <Badge className={lvl.badgeClass}>{lvl.label}</Badge>
               <Badge variant="outline">Prob: {PCT_LABEL[item.probability]}</Badge>
               <Badge variant="outline">Impacto: {PCT_LABEL[item.impact]}</Badge>
               <Badge className={STATUS_MAP[item.status]?.class || "bg-muted"}>{STATUS_MAP[item.status]?.label || item.status}</Badge>
+              {strategyLabel && <Badge variant="outline" className="border-primary/40 text-primary">Estratégia: {strategyLabel}</Badge>}
               {occ && <Badge className="bg-destructive/15 text-destructive border-destructive/40">Ocorreu: Sim</Badge>}
             </div>
           </div>
@@ -188,6 +234,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
             </div>
           )}
         </div>
+        {item.root_cause && <p className="text-xs text-muted-foreground"><strong>Causa Raiz:</strong> {item.root_cause}</p>}
         {item.mitigation && <p className="text-xs text-muted-foreground"><strong>Contramedida:</strong> {item.mitigation}</p>}
         {item.responsible && <p className="text-xs text-muted-foreground"><strong>Responsável:</strong> {item.responsible}</p>}
       </Card>
@@ -214,11 +261,33 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
 
       {showForm && (
         <Card className="p-5 space-y-4 border-warning/20 bg-warning/5">
-          <h4 className="text-base font-semibold flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-warning" /> Itens do Risco
-          </h4>
+          <div className="flex items-center justify-between">
+            <h4 className="text-base font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-warning" /> Itens do Risco
+            </h4>
+            {editingId ? (
+              <Badge variant="outline" className="font-mono">
+                {(() => {
+                  const idx = items.findIndex(r => r.id === editingId);
+                  return idx >= 0 ? formatRiskId(idx) : "R-???";
+                })()}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="font-mono text-muted-foreground">
+                Próximo: {formatRiskId(items.length)}
+              </Badge>
+            )}
+          </div>
 
           <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
+              <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Categoria</label>
+              <Input value={category} onChange={e => setCategory(e.target.value)} placeholder="Ex: Técnico, Externo, Financeiro..." list="risk-categories" />
+              <datalist id="risk-categories">
+                {CATEGORIES.map(c => <option key={c} value={c} />)}
+              </datalist>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
               <label className="text-sm font-medium text-right md:text-right"><span className="text-destructive">*</span> Descrição</label>
               <div className="space-y-1">
@@ -229,23 +298,49 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-start gap-3">
+              <label className="text-sm font-medium text-right pt-2">Causa Raiz</label>
+              <div className="space-y-1">
+                <div className="flex justify-end">
+                  <AIAssistButton value={rootCause} onChange={setRootCause} context="tap_root_cause" />
+                </div>
+                <Textarea value={rootCause} onChange={e => setRootCause(e.target.value)} rows={2} placeholder="Origem fundamental do risco" />
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
               <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Responsável</label>
               <Input value={responsible} onChange={e => setResponsible(e.target.value)} placeholder="Nome do responsável" />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
+              <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Estratégia</label>
+              <Input value={responseStrategy} onChange={e => setResponseStrategy(e.target.value)} placeholder="Ex: Evitar, Mitigar, Transferir, Aceitar..." list="risk-strategies" />
+              <datalist id="risk-strategies">
+                {RESPONSE_STRATEGIES.map(s => <option key={s.value} value={s.label} />)}
+              </datalist>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-start gap-3">
+              <label className="text-sm font-medium text-right pt-2">Plano de Contingência</label>
+              <div className="space-y-1">
+                <div className="flex justify-end">
+                  <AIAssistButton value={contingencyPlan} onChange={setContingencyPlan} context="risk_mitigation" />
+                </div>
+                <Textarea value={contingencyPlan} onChange={e => setContingencyPlan(e.target.value)} rows={2} placeholder="Ações caso o risco se materialize" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
               <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Status</label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monitorar">Monitorar</SelectItem>
-                  <SelectItem value="mitigar">Mitigar</SelectItem>
-                  <SelectItem value="aceitar">Aceitar</SelectItem>
-                  <SelectItem value="transferir">Transferir</SelectItem>
-                  <SelectItem value="eliminar">Eliminar</SelectItem>
-                </SelectContent>
-              </Select>
+              <Input value={status} onChange={e => setStatus(e.target.value)} placeholder="Ex: Monitorar, Mitigar, Aceitar..." list="risk-statuses" />
+              <datalist id="risk-statuses">
+                <option value="monitorar" />
+                <option value="mitigar" />
+                <option value="aceitar" />
+                <option value="transferir" />
+                <option value="eliminar" />
+              </datalist>
             </div>
           </div>
 

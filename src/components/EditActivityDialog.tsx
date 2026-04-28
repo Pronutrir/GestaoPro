@@ -145,6 +145,7 @@ export const EditActivityDialog = ({
     last_update_date: "",
     ui_color_tag: "" as string,
     is_milestone: false,
+    item_type: "tarefa" as "fase" | "tarefa",
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -351,6 +352,7 @@ export const EditActivityDialog = ({
         last_update_date: (act as any).last_update_date || "",
         ui_color_tag: (act as any).ui_color_tag || "",
         is_milestone: !!(act as any).is_milestone,
+        item_type: ((act as any).item_type === "fase" ? "fase" : "tarefa"),
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       fetchSubActivities(act.id);
@@ -417,7 +419,7 @@ export const EditActivityDialog = ({
         description: formData.description || null,
         assigned_to: formData.assigned_to || null,
         start_date: formData.start_date || null,
-        end_date: formData.end_date || null,
+        end_date: formData.is_milestone ? null : (formData.end_date || null),
         cost: parseFloat(formData.cost) || 0,
         hours: parseHoursInput(formData.hours),
         phase_id: formData.phase_id || null,
@@ -436,6 +438,7 @@ export const EditActivityDialog = ({
         last_update_date: formData.last_update_date || null,
         ui_color_tag: formData.ui_color_tag || null,
         is_milestone: formData.is_milestone,
+        item_type: formData.item_type,
       } as any).eq("id", act.id);
       if (error) throw error;
 
@@ -670,7 +673,7 @@ export const EditActivityDialog = ({
                 )}
 
                 {/* Datas inline */}
-                <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label="Datas">
+                <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Datas"}>
                   <div className="flex items-center gap-1.5 text-xs">
                     <Input
                       type="date"
@@ -678,29 +681,19 @@ export const EditActivityDialog = ({
                       onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                       className="h-7 px-1.5 text-xs w-[130px]"
                     />
-                    <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                    <Input
-                      type="date"
-                      value={formData.end_date}
-                      onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                      className="h-7 px-1.5 text-xs w-[130px]"
-                    />
+                    {!formData.is_milestone && (
+                      <>
+                        <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                        <Input
+                          type="date"
+                          value={formData.end_date}
+                          onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                          className="h-7 px-1.5 text-xs w-[130px]"
+                        />
+                      </>
+                    )}
                   </div>
                 </PropertyRow>
-
-                {/* Fase */}
-                {phases.length > 0 && (
-                  <PropertyRow icon={<Layers className="w-3.5 h-3.5" />} label="Fase">
-                    <select
-                      className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[260px] truncate"
-                      value={formData.phase_id}
-                      onChange={(e) => setFormData({ ...formData, phase_id: e.target.value })}
-                    >
-                      <option value="">Sem fase</option>
-                      {phases.map((phase) => (<option key={phase.id} value={phase.id}>{phase.title}</option>))}
-                    </select>
-                  </PropertyRow>
-                )}
 
                 {/* Relacionamentos inline */}
                 {projectId && (
@@ -708,37 +701,6 @@ export const EditActivityDialog = ({
                     <ActivityRelationsInline activityId={act.id} projectId={projectId} />
                   </PropertyRow>
                 )}
-              </div>
-
-              {/* Coluna direita */}
-              <div className="space-y-1.5">
-                {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
-                <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
-                  <select
-                    className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[220px] truncate"
-                    value={formData.assigned_to}
-                    onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-                  >
-                    <option value="">Sem líder</option>
-                    {allProfiles.map((m) => (
-                      <option key={m.full_name} value={m.full_name!}>
-                        {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </PropertyRow>
-
-                {/* Prioridade — método GUT */}
-                <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
-                  <div className="w-full">
-                    <GutPriorityField
-                      gravity={formData.gravity}
-                      urgency={formData.urgency}
-                      tendency={formData.tendency}
-                      onChange={(v) => setFormData({ ...formData, ...v })}
-                    />
-                  </div>
-                </PropertyRow>
 
                 {/* Tempo */}
                 {!formData.is_milestone && (
@@ -776,17 +738,72 @@ export const EditActivityDialog = ({
                     />
                   </PropertyRow>
                 )}
+              </div>
+
+              {/* Coluna direita */}
+              <div className="space-y-1.5">
+                {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
+                <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
+                  <select
+                    className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[220px] truncate"
+                    value={formData.assigned_to}
+                    onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+                  >
+                    <option value="">Sem líder</option>
+                    {allProfiles.map((m) => (
+                      <option key={m.full_name} value={m.full_name!}>
+                        {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </PropertyRow>
+
+                {/* Prioridade — método GUT */}
+                <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
+                  <div className="w-full">
+                    <GutPriorityField
+                      gravity={formData.gravity}
+                      urgency={formData.urgency}
+                      tendency={formData.tendency}
+                      onChange={(v) => setFormData({ ...formData, ...v })}
+                    />
+                  </div>
+                </PropertyRow>
 
                 {/* Marco */}
                 <PropertyRow icon={<Diamond className={`w-3.5 h-3.5 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : ""}`} />} label="Marco">
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={formData.is_milestone}
-                      onCheckedChange={(checked) => setFormData({ ...formData, is_milestone: checked })}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          is_milestone: checked,
+                          // Marcos não têm data de fim — limpa ao ativar
+                          end_date: checked ? "" : formData.end_date,
+                        })
+                      }
                       className="data-[state=checked]:bg-amber-500"
                     />
                     <span className="text-xs text-muted-foreground">
                       {formData.is_milestone ? "É um marco" : "Não é marco"}
+                    </span>
+                  </div>
+                </PropertyRow>
+
+                {/* É uma fase? */}
+                <PropertyRow icon={<Layers className={`w-3.5 h-3.5 ${formData.item_type === "fase" ? "text-primary" : ""}`} />} label="É uma fase">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={formData.item_type === "fase"}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, item_type: checked ? "fase" : "tarefa" })
+                      }
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {formData.item_type === "fase"
+                        ? "Esta tarefa agrupa subtarefas como uma fase"
+                        : "Tarefa comum"}
                     </span>
                   </div>
                 </PropertyRow>
