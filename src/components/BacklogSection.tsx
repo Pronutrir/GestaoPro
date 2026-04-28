@@ -882,15 +882,15 @@ export const BacklogSection = ({
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent className="sm:max-w-2xl w-[95vw]">
           <DialogHeader>
-            <DialogTitle>Mover {selectedIds.size} atividade(s) para o Kanban</DialogTitle>
+            <DialogTitle>Alterar status de {selectedIds.size} tarefa(s)</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Etapa de destino *</Label>
+              <Label>Novo status *</Label>
               <Select value={targetStageId} onValueChange={setTargetStageId}>
-                <SelectTrigger><SelectValue placeholder="Selecione a etapa" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger>
                 <SelectContent>
-                  {stages.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}
+                  {allStages.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
