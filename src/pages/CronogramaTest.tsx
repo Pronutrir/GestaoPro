@@ -487,9 +487,9 @@ export default function CronogramaTest() {
               <h1 className="text-2xl font-semibold">Cronograma — Tabela detalhada + Gantt</h1>
             </div>
             <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-              Visualização opcional no estilo MS Project (tabela com EAP, predecessoras, folga,
-              esforço, etc.) que pode coexistir com o Gantt atual. Use o seletor para alternar
-              entre <strong>Tabela</strong>, <strong>Gantt</strong> ou ver os dois lado a lado.
+              Visualização no estilo MS Project. Alterne entre <strong>Tabela detalhada</strong> e
+              <strong> Gantt geral</strong> (todas as atividades, escala diária, role para o lado
+              para ver e mapear o caminho crítico).
             </p>
           </div>
           <div className="flex items-center gap-2">
