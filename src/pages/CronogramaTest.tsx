@@ -15,6 +15,7 @@ import { Table2, GanttChart, ExternalLink, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, parseISO, differenceInBusinessDays, addDays, eachDayOfInterval, startOfMonth, endOfMonth, isWeekend, isSameMonth, min as dateMin, max as dateMax } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { calculateCriticalPath } from "@/lib/criticalPath";
 
 type Mode = "table" | "gantt";
 
