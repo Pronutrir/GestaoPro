@@ -15,6 +15,7 @@ import { Table2, GanttChart, ExternalLink, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, parseISO, differenceInBusinessDays, addDays, eachDayOfInterval, startOfMonth, endOfMonth, isWeekend, isSameMonth, min as dateMin, max as dateMax } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { calculateCriticalPath } from "@/lib/criticalPath";
 
 type Mode = "table" | "gantt";
 
@@ -98,13 +99,26 @@ export default function CronogramaTest() {
     let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
     return {
       eap: `${Math.floor(idx / 5) + 1}.${(idx % 5) + 1}`,
-      slack: h % 8,                               // dias de folga
       effortHours: 4 + (h % 36),                  // esforço h
       compression: ["Baixa", "Média", "Alta", "Nenhuma"][h % 4],
       observation: ["", "Aguardando aprovação do PO", "Risco de overlap com sprint", "Depende de fornecedor externo"][h % 4],
       mainResource: profiles[activities[idx]?.assigned_to || ""]?.sector || "—",
     };
   };
+
+  // ===== Caminho crítico REAL via CPM =====
+  const criticalSet = useMemo(
+    () => calculateCriticalPath(
+      activities.map(a => ({ id: a.id, start_date: a.start_date, end_date: a.end_date })),
+      deps.map(d => ({
+        predecessor_id: d.predecessor_id,
+        successor_id: d.successor_id,
+        lag_days: d.lag_days,
+        dependency_type: d.dependency_type,
+      }))
+    ),
+    [activities, deps]
+  );
 
   // Sem filtros — exibir todas as atividades
   const rows = useMemo(
@@ -143,7 +157,7 @@ export default function CronogramaTest() {
             <th className="w-24">Início<br/>Real</th>
             <th className="w-24">Térm.<br/>Real</th>
             <th className="w-16">% C.</th>
-            <th className="w-16">Folga<br/>(d)</th>
+            <th className="w-20">Crítica?</th>
             <th className="w-32">Recurso<br/>Principal</th>
             <th className="w-16">Esf.<br/>(h)</th>
             <th className="w-28">Compressão<br/>Possível</th>
@@ -161,13 +175,10 @@ export default function CronogramaTest() {
             const progress = a.status === "completed" ? 100 : a.status === "in_progress" ? 50 : 0;
             const preds = predsOf(a.id);
             const responsible = profiles[a.assigned_to || ""]?.name || "—";
-            const isCritical = (mock.slack === 0);
+            const isCritical = criticalSet.has(a.id);
 
             return (
-              <tr key={a.id} className={cn(
-                "border-b hover:bg-muted/40 transition-colors",
-                isCritical && "bg-red-500/5"
-              )}>
+              <tr key={a.id} className="border-b hover:bg-muted/40 transition-colors">
                 <td className="px-2 py-1.5 text-center font-mono text-muted-foreground">{id}</td>
                 <td className="px-2 py-1.5 text-center font-mono">{mock.eap}</td>
                 <td className="px-2 py-1.5">
@@ -247,8 +258,14 @@ export default function CronogramaTest() {
                     <span className="text-[10px]">{progress}%</span>
                   </div>
                 </td>
-                <td className={cn("px-2 py-1.5 text-center font-mono", isCritical && "text-red-600 font-semibold")}>
-                  {mock.slack}
+                <td className="px-2 py-1.5 text-center">
+                  {isCritical ? (
+                    <Badge className="bg-red-500/10 text-red-600 border border-red-500/40 hover:bg-red-500/15 text-[10px] py-0 px-1.5 gap-1">
+                      <AlertTriangle className="h-3 w-3" /> Sim
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-[11px]">Não</span>
+                  )}
                 </td>
                 <td className="px-2 py-1.5 truncate max-w-[140px]" title={mock.mainResource}>{mock.mainResource}</td>
                 <td className="px-2 py-1.5 text-center font-mono">{mock.effortHours}</td>
@@ -270,8 +287,11 @@ export default function CronogramaTest() {
         </tbody>
       </table>
       <div className="px-3 py-2 text-[10px] text-muted-foreground border-t flex items-center gap-3 flex-wrap">
-        <span><span className="inline-block w-3 h-3 rounded bg-red-500/20 mr-1 align-middle" />Linha em vermelho claro = caminho crítico (Folga = 0)</span>
-        <span>EAP, Folga, Esforço, Compressão e Observações são <strong>mock</strong> nesta prova de conceito.</span>
+        <span className="inline-flex items-center gap-1">
+          <AlertTriangle className="h-3 w-3 text-red-500" />
+          Coluna <strong>Crítica?</strong> = atividade no caminho crítico (CPM real, folga 0).
+        </span>
+        <span>EAP, Esforço, Compressão e Observações são <strong>mock</strong> nesta prova de conceito.</span>
       </div>
     </div>
   );
@@ -329,17 +349,25 @@ export default function CronogramaTest() {
                   Atividade
                 </div>
               </div>
-              {ganttData.dated.map(({ a, mock }) => {
+              {ganttData.dated.map(({ a }) => {
                 const id = indexById.get(a.id);
-                const isCritical = mock.slack === 0;
+                const isCritical = criticalSet.has(a.id);
+                const responsible = profiles[a.assigned_to || ""]?.name || "—";
                 return (
                   <div
                     key={a.id}
-                    className={cn("border-b px-3 flex items-center gap-2", isCritical && "bg-red-500/5")}
+                    className="border-b px-3 flex items-center gap-2 hover:bg-muted/40"
                     style={{ height: ROW_H }}
                   >
                     <span className="text-[10px] font-mono text-muted-foreground w-8 shrink-0">#{id}</span>
-                    <span className="text-xs truncate" title={a.title}>{a.title}</span>
+                    {isCritical && (
+                      <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className={cn("text-xs truncate", isCritical && "font-semibold")}
+                        title={a.title}>{a.title}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{responsible}</div>
+                    </div>
                   </div>
                 );
               })}
@@ -418,18 +446,18 @@ export default function CronogramaTest() {
                 })()}
 
                 {/* linhas + barras */}
-                {ganttData.dated.map(({ a, s, e, mock }) => {
+                {ganttData.dated.map(({ a, s, e }) => {
                   const startIdx = ganttData.days.findIndex(d => d.toDateString() === s.toDateString());
                   const endIdx = ganttData.days.findIndex(d => d.toDateString() === e.toDateString());
                   const left = Math.max(0, startIdx) * DAY_W;
                   const width = Math.max(1, (endIdx - startIdx + 1)) * DAY_W - 4;
-                  const isCritical = mock.slack === 0;
+                  const isCritical = criticalSet.has(a.id);
                   const isCompleted = a.status === "completed";
                   const progress = isCompleted ? 100 : a.status === "in_progress" ? 50 : 0;
                   const responsible = profiles[a.assigned_to || ""]?.name || "—";
 
                   return (
-                    <div key={a.id} className={cn("relative border-b", isCritical && "bg-red-500/5")}
+                    <div key={a.id} className="relative border-b"
                       style={{ height: ROW_H }}>
                       <TooltipProvider delayDuration={150}>
                         <Tooltip>
@@ -458,7 +486,7 @@ export default function CronogramaTest() {
                               <div className="font-semibold">{a.title}</div>
                               <div>📅 {format(s, "dd/MM/yy")} → {format(e, "dd/MM/yy")} ({workDays(a.start_date, a.end_date)}d)</div>
                               <div>👤 {responsible}</div>
-                              <div>📊 {progress}% · Folga: <span className={cn(isCritical && "text-red-400 font-semibold")}>{mock.slack}d</span></div>
+                              <div>📊 {progress}% {isCritical && <span className="text-red-400 font-semibold ml-1">• Caminho crítico</span>}</div>
                               {a.is_milestone && <div>🎯 Marco</div>}
                             </div>
                           </TooltipContent>
