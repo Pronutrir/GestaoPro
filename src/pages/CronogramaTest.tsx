@@ -441,7 +441,6 @@ export default function CronogramaTest() {
 
         {mode === "table" && TableView}
         {mode === "gantt" && GanttBlock}
-        )}
 
         <div className="text-xs text-muted-foreground border-t pt-3">
           Após aprovação, a opção <strong>Tabela detalhada</strong> será adicionada como toggle
