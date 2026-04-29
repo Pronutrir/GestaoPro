@@ -99,13 +99,26 @@ export default function CronogramaTest() {
     let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
     return {
       eap: `${Math.floor(idx / 5) + 1}.${(idx % 5) + 1}`,
-      slack: h % 8,                               // dias de folga
       effortHours: 4 + (h % 36),                  // esforço h
       compression: ["Baixa", "Média", "Alta", "Nenhuma"][h % 4],
       observation: ["", "Aguardando aprovação do PO", "Risco de overlap com sprint", "Depende de fornecedor externo"][h % 4],
       mainResource: profiles[activities[idx]?.assigned_to || ""]?.sector || "—",
     };
   };
+
+  // ===== Caminho crítico REAL via CPM =====
+  const criticalSet = useMemo(
+    () => calculateCriticalPath(
+      activities.map(a => ({ id: a.id, start_date: a.start_date, end_date: a.end_date })),
+      deps.map(d => ({
+        predecessor_id: d.predecessor_id,
+        successor_id: d.successor_id,
+        lag_days: d.lag_days,
+        dependency_type: d.dependency_type,
+      }))
+    ),
+    [activities, deps]
+  );
 
   // Sem filtros — exibir todas as atividades
   const rows = useMemo(
