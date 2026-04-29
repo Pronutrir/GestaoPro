@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -12,80 +11,111 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  List,
-  KanbanSquare,
-  Calendar as CalendarIcon,
+  Kanban,
+  ListTodo,
   GanttChart,
+  Calendar as CalendarIcon,
+  FileText,
+  NotebookPen,
+  BookOpen,
+  ClipboardList,
+  Users,
+  ShieldCheck,
+  AlertTriangle,
+  GitPullRequest,
+  Layers,
+  DollarSign,
+  Flag,
   Plus,
-  Filter,
-  X,
-  Search,
-  Check,
-  LayoutGrid,
-  Rows3,
-  Activity as ActivityIcon,
+  Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
-type ViewMode = "list" | "kanban" | "calendar" | "gantt" | "timeline" | "board";
+// ----- Componentes reais do projeto -----
+import { ActivityKanban } from "@/components/ActivityKanban";
+import { BacklogSection } from "@/components/BacklogSection";
+import { TimelineView } from "@/components/TimelineView";
+import { ProjectListView } from "@/components/project-views/ProjectListView";
+import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
+import { DocumentManager } from "@/components/DocumentManager";
+import { ProjectDocuments } from "@/components/documents/ProjectDocuments";
+import { UserStoriesBoard } from "@/components/UserStoriesBoard";
+import { ProjectCharter } from "@/components/ProjectCharter";
+import { MeetingsManager } from "@/components/MeetingsManager";
+import { LessonsLearned } from "@/components/LessonsLearned";
+import { AssumptionsManager } from "@/components/AssumptionsManager";
+import { RisksManager } from "@/components/RisksManager";
+import { ChangeRequestsManager } from "@/components/ChangeRequestsManager";
+import { ProjectDependenciesView } from "@/components/ProjectDependenciesView";
+import { ProjectFinancials } from "@/components/ProjectFinancials";
+import { EditActivityDialog } from "@/components/EditActivityDialog";
 
-const VIEWS: { id: ViewMode; label: string; icon: any }[] = [
-  { id: "list", label: "Lista", icon: List },
-  { id: "kanban", label: "Kanban", icon: KanbanSquare },
-  { id: "board", label: "Quadro (por fase)", icon: LayoutGrid },
+type ViewId =
+  | "kanban"
+  | "list"
+  | "backlog"
+  | "timeline"
+  | "calendar"
+  | "documents"
+  | "docpages"
+  | "stories"
+  | "tap"
+  | "meetings"
+  | "assumptions"
+  | "risks"
+  | "changes"
+  | "dependencies"
+  | "financials"
+  | "lessons";
+
+const VIEWS: { id: ViewId; label: string; icon: any }[] = [
+  { id: "kanban", label: "Kanban", icon: Kanban },
+  { id: "list", label: "Pendências", icon: ListTodo },
+  { id: "backlog", label: "Lista", icon: Inbox },
+  { id: "timeline", label: "Cronograma", icon: GanttChart },
   { id: "calendar", label: "Calendário", icon: CalendarIcon },
-  { id: "gantt", label: "Gantt", icon: GanttChart },
-  { id: "timeline", label: "Cronograma", icon: Rows3 },
+  { id: "documents", label: "Documentos", icon: FileText },
+  { id: "docpages", label: "Páginas", icon: NotebookPen },
+  { id: "stories", label: "Histórias", icon: BookOpen },
+  { id: "tap", label: "TAP", icon: ClipboardList },
+  { id: "meetings", label: "Reuniões", icon: Users },
+  { id: "assumptions", label: "Premissas", icon: ShieldCheck },
+  { id: "risks", label: "Riscos", icon: AlertTriangle },
+  { id: "changes", label: "Mudanças", icon: GitPullRequest },
+  { id: "dependencies", label: "Dependências", icon: Layers },
+  { id: "financials", label: "Financeiro", icon: DollarSign },
+  { id: "lessons", label: "Lições", icon: Flag },
 ];
 
 export default function TarefasTest() {
+  const { toast } = useToast();
+
   const [projects, setProjects] = useState<any[]>([]);
   const [projectId, setProjectId] = useState<string>("");
+  const [project, setProject] = useState<any | null>(null);
+
   const [activities, setActivities] = useState<any[]>([]);
-  const [stages, setStages] = useState<any[]>([]);
   const [phases, setPhases] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
 
-  // Estado da visão (persistente entre trocas)
-  const [view, setView] = useState<ViewMode>("kanban");
-  const [search, setSearch] = useState("");
-  const [stageFilter, setStageFilter] = useState<string>("all");
-  const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [view, setView] = useState<ViewId>("kanban");
 
-  // Carrega projetos (Onboard primeiro)
-  useEffect(() => {
-    supabase
-      .from("projects")
-      .select("id, title")
-      .eq("is_trashed", false)
-      .order("created_at", { ascending: false })
-      .limit(100)
-      .then(({ data }) => {
-        const list = data || [];
-        setProjects(list);
-        if (!projectId && list.length > 0) {
-          // Pré-seleciona o projeto Onboard se existir
-          const onboard = list.find((p) =>
-            p.title?.toLowerCase().includes("onboard")
-          );
-          setProjectId(onboard?.id || list[0].id);
-        }
-      });
-  }, []);
+  // Edit/Create dialog (mesma mecânica do ProjectDetails)
+  const [editingActivity, setEditingActivity] = useState<any | null>(null);
+  const [editActivityDialogOpen, setEditActivityDialogOpen] = useState(false);
+  const [showAddActivity, setShowAddActivity] = useState(false);
+  const [createTaskStageId, setCreateTaskStageId] = useState<string | null>(null);
+  const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
+  const [createTaskParentId, setCreateTaskParentId] = useState<string | null>(null);
 
-  // Carrega tarefas e stages do projeto selecionado
-  useEffect(() => {
+  const isQualityProject = project?.category === "qualidade";
+
+  // ----- Fetchers -----
+  const fetchProjectData = useCallback(async () => {
     if (!projectId) return;
-    setLoading(true);
-    Promise.all([
+    const [{ data: proj }, { data: acts }, { data: phs }] = await Promise.all([
+      supabase.from("projects").select("*").eq("id", projectId).maybeSingle(),
       supabase
         .from("activities")
         .select("*")
@@ -93,74 +123,317 @@ export default function TarefasTest() {
         .eq("is_trashed", false)
         .order("display_order", { ascending: true }),
       supabase
-        .from("workflow_stages")
-        .select("*")
-        .eq("project_id", projectId)
-        .order("display_order", { ascending: true }),
-      supabase
         .from("phases")
         .select("*")
         .eq("project_id", projectId)
         .eq("is_trashed", false)
         .order("display_order", { ascending: true }),
-    ]).then(([acts, stgs, phs]) => {
-      setActivities(acts.data || []);
-      setStages(stgs.data || []);
-      setPhases(phs.data || []);
-      setLoading(false);
-    });
+    ]);
+    setProject(proj || null);
+    setActivities(acts || []);
+    setPhases(phs || []);
   }, [projectId]);
 
-  // Filtragem unificada (aplica em TODAS as visões)
-  const filtered = useMemo(() => {
-    return activities.filter((a) => {
-      if (a.item_type === "fase") return false;
-      if (search && !a.title?.toLowerCase().includes(search.toLowerCase()))
-        return false;
-      if (stageFilter !== "all" && a.workflow_stage_id !== stageFilter)
-        return false;
-      if (priorityFilter !== "all" && a.priority !== priorityFilter)
-        return false;
-      return true;
-    });
-  }, [activities, search, stageFilter, priorityFilter]);
+  const fetchMembers = useCallback(async () => {
+    if (!projectId) return;
+    const { data } = await supabase
+      .from("project_members")
+      .select("user_id")
+      .eq("project_id", projectId);
+    const ids = (data || []).map((m: any) => m.user_id);
+    if (ids.length === 0) {
+      setMembers([]);
+      return;
+    }
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("full_name, sector")
+      .in("id", ids);
+    setMembers((profs as any[]) || []);
+  }, [projectId]);
 
-  const stageById = useMemo(
-    () => new Map(stages.map((s) => [s.id, s])),
-    [stages]
+  // Lista de projetos (pré-seleciona Onboard)
+  useEffect(() => {
+    supabase
+      .from("projects")
+      .select("id, title, category")
+      .eq("is_trashed", false)
+      .order("created_at", { ascending: false })
+      .limit(100)
+      .then(({ data }) => {
+        const list = data || [];
+        setProjects(list);
+        if (!projectId && list.length > 0) {
+          const onboard = list.find((p: any) =>
+            p.title?.toLowerCase().includes("onboard")
+          );
+          setProjectId(onboard?.id || list[0].id);
+        }
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    fetchProjectData();
+    fetchMembers();
+  }, [fetchProjectData, fetchMembers]);
+
+  // Realtime: refetch ao mudar atividades/fases
+  useEffect(() => {
+    if (!projectId) return;
+    const ch = supabase
+      .channel(`tarefas-test-${projectId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "activities", filter: `project_id=eq.${projectId}` },
+        () => fetchProjectData()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "phases", filter: `project_id=eq.${projectId}` },
+        () => fetchProjectData()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [projectId, fetchProjectData]);
+
+  // ----- Handlers compartilhados (mesma assinatura do ProjectDetails) -----
+  const openEditActivity = useCallback((activity: any) => {
+    setEditingActivity(activity);
+    setEditActivityDialogOpen(true);
+  }, []);
+
+  const handleToggleActivity = useCallback(async (activityId: string, currentStatus: string) => {
+    const newStatus = currentStatus === "completed" ? "pending" : "completed";
+    await supabase
+      .from("activities")
+      .update({
+        status: newStatus,
+        completed_at: newStatus === "completed" ? new Date().toISOString() : null,
+      })
+      .eq("id", activityId);
+    fetchProjectData();
+  }, [fetchProjectData]);
+
+  const handleDeleteActivity = useCallback(async (activityId: string) => {
+    if (!confirm("Mover esta atividade para o arquivo?")) return;
+    await supabase
+      .from("activities")
+      .update({ is_trashed: true, trashed_at: new Date().toISOString() })
+      .eq("id", activityId);
+    toast({ title: "Atividade arquivada" });
+    fetchProjectData();
+  }, [fetchProjectData, toast]);
+
+  const openCreateActivity = useCallback(
+    (opts?: { stageId?: string | null; phaseId?: string | null; parentId?: string | null }) => {
+      setCreateTaskStageId(opts?.stageId ?? null);
+      setCreateTaskPhaseId(opts?.phaseId ?? null);
+      setCreateTaskParentId(opts?.parentId ?? null);
+      setShowAddActivity(true);
+    },
+    []
   );
 
-  const phaseById = useMemo(
-    () => new Map(phases.map((p) => [p.id, p])),
-    [phases]
-  );
+  // ----- Renderização condicional por visão -----
+  const renderView = () => {
+    if (!project || !projectId) {
+      return (
+        <div className="p-12 text-center text-muted-foreground">
+          {projectId ? "Carregando..." : "Selecione um projeto acima."}
+        </div>
+      );
+    }
 
-  const activeView = VIEWS.find((v) => v.id === view)!;
-  const ActiveIcon = activeView.icon;
-
-  const clearFilters = () => {
-    setSearch("");
-    setStageFilter("all");
-    setPriorityFilter("all");
+    switch (view) {
+      case "kanban":
+        return (
+          <ActivityKanban
+            projectId={projectId}
+            activities={activities}
+            phases={phases}
+            onDataChanged={fetchProjectData}
+            onEditActivity={openEditActivity}
+            onDeleteActivity={handleDeleteActivity}
+            onToggleActivity={handleToggleActivity}
+            isAdmin={true}
+            canCreate={true}
+            isQualityProject={isQualityProject}
+            onOpenCreateTask={(stageId: string) => openCreateActivity({ stageId })}
+          />
+        );
+      case "list":
+        return (
+          <ProjectListView
+            activities={activities as any}
+            phases={phases}
+            onEditActivity={(a: any) => openEditActivity(a)}
+            onToggleActivity={handleToggleActivity}
+            canCreate={true}
+            onAddActivity={() => openCreateActivity()}
+          />
+        );
+      case "backlog":
+        return (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => openCreateActivity()} className="gap-2">
+                <Plus className="w-4 h-4" /> Nova Atividade
+              </Button>
+            </div>
+            <BacklogSection
+              projectId={projectId}
+              activities={activities}
+              phases={phases}
+              onEditActivity={openEditActivity}
+              onDeleteActivity={handleDeleteActivity}
+              onToggleActivity={handleToggleActivity}
+              onDataChanged={fetchProjectData}
+              isAdmin={true}
+              onCreateActivityInPhase={(phaseId: string | null, parentId?: string | null) =>
+                openCreateActivity({ phaseId, parentId: parentId ?? null })
+              }
+            />
+          </div>
+        );
+      case "timeline":
+        return (
+          <TimelineView
+            phases={phases}
+            activities={activities}
+            projectDueDate={project.due_date}
+            onActivityClick={openEditActivity}
+          />
+        );
+      case "calendar":
+        return (
+          <ProjectCalendarView
+            projectId={projectId}
+            activities={activities as any}
+            onEditActivity={(actId: string) => {
+              const act = activities.find((a) => a.id === actId);
+              if (act) openEditActivity(act);
+            }}
+            onDataChanged={fetchProjectData}
+          />
+        );
+      case "documents":
+        return (
+          <DocumentManager
+            projectId={projectId}
+            phases={phases}
+            activities={activities.map((a) => ({ id: a.id, title: a.title }))}
+          />
+        );
+      case "docpages":
+        return <ProjectDocuments projectId={projectId} onActivityCreated={fetchProjectData} />;
+      case "stories":
+        return <UserStoriesBoard projectId={projectId} />;
+      case "tap":
+        return (
+          <ProjectCharter
+            projectId={projectId}
+            project={project}
+            phases={phases}
+            members={members}
+            onMembersChanged={fetchMembers}
+          />
+        );
+      case "meetings":
+        return (
+          <MeetingsManager
+            projectId={projectId}
+            phases={phases}
+            onCreateActivity={async (title: string, assignedTo?: string) => {
+              await supabase.from("activities").insert({
+                project_id: projectId,
+                title,
+                assigned_to: assignedTo || null,
+                status: "pending",
+                priority: "medium",
+              });
+              fetchProjectData();
+            }}
+            onCreateBlocker={async (description: string) => {
+              await supabase.from("risks").insert({
+                project_id: projectId,
+                description,
+                probability: "high",
+                impact: "high",
+                status: "identified",
+                category: "impediment",
+              });
+            }}
+            onCreateLesson={async (problem: string, suggestion?: string) => {
+              await supabase.from("lessons_learned").insert({
+                project_id: projectId,
+                problem,
+                suggestion: suggestion || null,
+                category: "process",
+              });
+            }}
+          />
+        );
+      case "assumptions":
+        return <AssumptionsManager projectId={projectId} />;
+      case "risks":
+        return <RisksManager projectId={projectId} />;
+      case "changes":
+        return (
+          <ChangeRequestsManager
+            projectId={projectId}
+            projectOwner={project.owner}
+            onChanged={fetchProjectData}
+          />
+        );
+      case "dependencies":
+        return (
+          <ProjectDependenciesView
+            projectId={projectId}
+            onEditActivity={(actId: string) => {
+              const act = activities.find((a) => a.id === actId);
+              if (act) openEditActivity(act);
+            }}
+          />
+        );
+      case "financials":
+        return (
+          <ProjectFinancials
+            projectId={projectId}
+            budgetPlanned={project.budget_planned}
+            budgetUsed={project.budget_used}
+            onProjectUpdated={fetchProjectData}
+          />
+        );
+      case "lessons":
+        return <LessonsLearned projectId={projectId} phases={phases} />;
+      default:
+        return null;
+    }
   };
-
-  const hasFilters =
-    search !== "" || stageFilter !== "all" || priorityFilter !== "all";
 
   return (
     <AppLayout>
-      <div className="flex flex-col h-full">
-        {/* Cabeçalho da página de teste */}
-        <div className="border-b bg-muted/30 px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-semibold">
-                Tarefas <Badge variant="outline" className="ml-2">PÁGINA DE TESTE</Badge>
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                Modelo "+Visualização" estilo ClickUp — uma única coleção, várias visões. Filtros persistem ao trocar de visão.
-              </p>
+      <main className="p-4 md:p-6 space-y-4">
+        {/* Cabeçalho de teste */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="border-amber-500/60 text-amber-600">
+                Página de teste
+              </Badge>
+              <h1 className="text-2xl font-semibold">Tarefas — Tudo em um só lugar</h1>
             </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              Modelo "uma coleção, várias visões". Todas as abas e configurações do projeto reunidas
+              com o seletor <span className="font-medium">+Visualização</span> abaixo.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Projeto:</span>
             <Select value={projectId} onValueChange={setProjectId}>
               <SelectTrigger className="w-[280px]">
                 <SelectValue placeholder="Selecione um projeto" />
@@ -173,485 +446,91 @@ export default function TarefasTest() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-        </div>
-
-        {/* Barra de visualização + filtros (persistentes) */}
-        <div className="border-b bg-background px-6 py-2 flex items-center gap-3 flex-wrap">
-          {/* Seletor de visão */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2">
-                <ActiveIcon className="h-4 w-4" />
-                {activeView.label}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuLabel>Visualizações</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {VIEWS.map((v) => {
-                const Icon = v.icon;
-                return (
-                  <DropdownMenuItem
-                    key={v.id}
-                    onClick={() => setView(v.id)}
-                    className="gap-2"
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span className="flex-1">{v.label}</span>
-                    {view === v.id && <Check className="h-4 w-4" />}
-                  </DropdownMenuItem>
-                );
-              })}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled className="gap-2 text-muted-foreground">
-                <Plus className="h-4 w-4" />
-                Nova visão (em breve)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <div className="h-5 w-px bg-border" />
-
-          {/* Filtros que PERSISTEM entre visões */}
-          <div className="relative">
-            <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar tarefa..."
-              className="h-8 pl-8 w-56"
-            />
-          </div>
-
-          <Select value={stageFilter} onValueChange={setStageFilter}>
-            <SelectTrigger className="h-8 w-40">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os status</SelectItem>
-              {stages.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="h-8 w-40">
-              <SelectValue placeholder="Prioridade" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas prioridades</SelectItem>
-              <SelectItem value="alta">Alta</SelectItem>
-              <SelectItem value="media">Média</SelectItem>
-              <SelectItem value="baixa">Baixa</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {hasFilters && (
             <Button
-              variant="ghost"
               size="sm"
-              onClick={clearFilters}
-              className="h-8 gap-1 text-muted-foreground"
+              onClick={() => openCreateActivity()}
+              disabled={!projectId}
+              className="gap-2"
             >
-              <X className="h-3.5 w-3.5" />
-              Limpar
+              <Plus className="w-4 h-4" /> Nova Atividade
             </Button>
-          )}
-
-          <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-            <Filter className="h-3.5 w-3.5" />
-            {filtered.length} de {activities.filter(a => a.item_type !== "fase").length} tarefas
           </div>
         </div>
 
-        {/* Área da visão ativa */}
-        <div className="flex-1 overflow-auto p-6 bg-muted/10">
-          {loading ? (
-            <div className="text-center text-muted-foreground py-20">
-              Carregando...
+        {/* Barra de chips horizontais (estilo ClickUp) */}
+        <div className="border-b border-border">
+          <div className="flex items-center gap-1 overflow-x-auto pb-2 scrollbar-thin">
+            {VIEWS.map((v) => {
+              const Icon = v.icon;
+              const active = view === v.id;
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => setView(v.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap transition-colors border",
+                    active
+                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                      : "bg-background text-muted-foreground border-transparent hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {v.label}
+                </button>
+              );
+            })}
+            <div className="ml-2 pl-2 border-l border-border">
+              <button
+                disabled
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-muted-foreground/60 border border-dashed border-border cursor-not-allowed"
+                title="Em breve"
+              >
+                <Plus className="w-3.5 h-3.5" /> Visualização
+              </button>
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center text-muted-foreground py-20">
-              Nenhuma tarefa corresponde aos filtros.
-            </div>
-          ) : (
-            <>
-              {view === "list" && (
-                <ListView tasks={filtered} stageById={stageById} />
-              )}
-              {view === "kanban" && (
-                <KanbanView tasks={filtered} stages={stages} />
-              )}
-              {view === "calendar" && (
-                <CalendarView tasks={filtered} stageById={stageById} />
-              )}
-              {view === "gantt" && (
-                <GanttView tasks={filtered} stageById={stageById} />
-              )}
-              {view === "timeline" && (
-                <TimelineView tasks={filtered} stageById={stageById} />
-              )}
-              {view === "board" && (
-                <BoardByPhaseView tasks={filtered} phases={phases} stageById={stageById} />
-              )}
-            </>
-          )}
+          </div>
         </div>
-      </div>
+
+        {/* Conteúdo da visão atual */}
+        <div className="min-h-[400px]">{renderView()}</div>
+
+        {/* Diálogos reais do projeto (mesma paridade do ProjectDetails) */}
+        {project && (
+          <>
+            <EditActivityDialog
+              activity={editingActivity}
+              open={editActivityDialogOpen}
+              onOpenChange={setEditActivityDialogOpen}
+              onActivityUpdated={fetchProjectData}
+              phases={phases}
+              allActivities={activities}
+              projectId={projectId}
+              isQualityProject={isQualityProject}
+            />
+            <EditActivityDialog
+              activity={null}
+              open={showAddActivity}
+              onOpenChange={(o: boolean) => {
+                setShowAddActivity(o);
+                if (!o) {
+                  setCreateTaskStageId(null);
+                  setCreateTaskPhaseId(null);
+                  setCreateTaskParentId(null);
+                }
+              }}
+              onActivityUpdated={fetchProjectData}
+              phases={phases}
+              allActivities={activities}
+              projectId={projectId}
+              isQualityProject={isQualityProject}
+              createMode
+              defaultStageId={createTaskStageId}
+              defaultPhaseId={createTaskPhaseId}
+              defaultParentId={createTaskParentId}
+            />
+          </>
+        )}
+      </main>
     </AppLayout>
-  );
-}
-
-/* ---------------- VISÕES ---------------- */
-
-function StatusBadge({ stage }: { stage: any }) {
-  if (!stage) return null;
-  return (
-    <Badge
-      variant="outline"
-      className="text-[10px] font-medium border-0"
-      style={{
-        backgroundColor: `${stage.color}20`,
-        color: stage.color,
-      }}
-    >
-      {stage.title}
-    </Badge>
-  );
-}
-
-function PriorityBadge({ priority }: { priority?: string }) {
-  if (!priority) return null;
-  const map: Record<string, string> = {
-    alta: "bg-red-100 text-red-700",
-    media: "bg-amber-100 text-amber-700",
-    baixa: "bg-blue-100 text-blue-700",
-  };
-  return (
-    <Badge variant="outline" className={cn("text-[10px] border-0", map[priority])}>
-      {priority}
-    </Badge>
-  );
-}
-
-function ListView({ tasks, stageById }: { tasks: any[]; stageById: Map<string, any> }) {
-  return (
-    <div className="bg-background border rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-xs text-muted-foreground">
-          <tr>
-            <th className="text-left px-4 py-2 font-medium">Tarefa</th>
-            <th className="text-left px-4 py-2 font-medium w-32">Status</th>
-            <th className="text-left px-4 py-2 font-medium w-28">Prioridade</th>
-            <th className="text-left px-4 py-2 font-medium w-32">Prazo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tasks.map((t) => (
-            <tr key={t.id} className="border-t hover:bg-muted/30">
-              <td className="px-4 py-2">{t.title}</td>
-              <td className="px-4 py-2">
-                <StatusBadge stage={stageById.get(t.workflow_stage_id)} />
-              </td>
-              <td className="px-4 py-2">
-                <PriorityBadge priority={t.priority} />
-              </td>
-              <td className="px-4 py-2 text-xs text-muted-foreground">
-                {t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function KanbanView({ tasks, stages }: { tasks: any[]; stages: any[] }) {
-  return (
-    <div className="flex gap-3 overflow-x-auto pb-2">
-      {stages.map((stage) => {
-        const colTasks = tasks.filter((t) => t.workflow_stage_id === stage.id);
-        return (
-          <div
-            key={stage.id}
-            className="flex-1 min-w-[260px] bg-background rounded-lg border"
-          >
-            <div
-              className="px-3 py-2 border-b flex items-center justify-between"
-              style={{ borderTop: `3px solid ${stage.color}` }}
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">{stage.title}</span>
-                <Badge variant="secondary" className="text-[10px]">
-                  {colTasks.length}
-                </Badge>
-              </div>
-            </div>
-            <div className="p-2 space-y-2 min-h-[200px]">
-              {colTasks.map((t) => (
-                <div
-                  key={t.id}
-                  className="bg-card border rounded-md p-2 text-xs space-y-1.5 hover:shadow-sm transition-shadow"
-                >
-                  <div className="font-medium line-clamp-2">{t.title}</div>
-                  <div className="flex items-center gap-1.5">
-                    <PriorityBadge priority={t.priority} />
-                    {t.due_date && (
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR")}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function CalendarView({ tasks, stageById }: { tasks: any[]; stageById: Map<string, any> }) {
-  // Calendário simples por semana atual + próximas 3
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const start = new Date(today);
-  start.setDate(today.getDate() - today.getDay());
-
-  const days: Date[] = [];
-  for (let i = 0; i < 28; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    days.push(d);
-  }
-
-  const tasksByDay = new Map<string, any[]>();
-  tasks.forEach((t) => {
-    if (!t.due_date) return;
-    const key = t.due_date;
-    if (!tasksByDay.has(key)) tasksByDay.set(key, []);
-    tasksByDay.get(key)!.push(t);
-  });
-
-  return (
-    <div className="bg-background border rounded-lg overflow-hidden">
-      <div className="grid grid-cols-7 text-xs font-medium text-muted-foreground bg-muted/50">
-        {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d) => (
-          <div key={d} className="px-2 py-1.5 text-center border-r last:border-r-0">
-            {d}
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7">
-        {days.map((d) => {
-          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-          const dayTasks = tasksByDay.get(key) || [];
-          const isToday = d.getTime() === today.getTime();
-          return (
-            <div
-              key={key}
-              className={cn(
-                "border-t border-r last:border-r-0 min-h-[100px] p-1.5 text-xs",
-                isToday && "bg-primary/5"
-              )}
-            >
-              <div className={cn("font-medium mb-1", isToday && "text-primary")}>
-                {d.getDate()}
-              </div>
-              <div className="space-y-1">
-                {dayTasks.slice(0, 3).map((t) => {
-                  const stage = stageById.get(t.workflow_stage_id);
-                  return (
-                    <div
-                      key={t.id}
-                      className="px-1.5 py-0.5 rounded text-[10px] truncate"
-                      style={{
-                        backgroundColor: stage ? `${stage.color}25` : undefined,
-                        color: stage?.color,
-                      }}
-                      title={t.title}
-                    >
-                      {t.title}
-                    </div>
-                  );
-                })}
-                {dayTasks.length > 3 && (
-                  <div className="text-[10px] text-muted-foreground">
-                    +{dayTasks.length - 3}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function GanttView({ tasks, stageById }: { tasks: any[]; stageById: Map<string, any> }) {
-  const withDates = tasks.filter((t) => t.start_date && t.due_date);
-  if (withDates.length === 0) {
-    return (
-      <div className="text-center text-muted-foreground py-20">
-        Nenhuma tarefa com data de início e prazo definidos para exibir no Gantt.
-      </div>
-    );
-  }
-
-  const allDates = withDates.flatMap((t) => [
-    new Date(t.start_date + "T12:00:00").getTime(),
-    new Date(t.due_date + "T12:00:00").getTime(),
-  ]);
-  const min = Math.min(...allDates);
-  const max = Math.max(...allDates);
-  const totalDays = Math.max(1, Math.ceil((max - min) / 86400000));
-
-  return (
-    <div className="bg-background border rounded-lg overflow-hidden">
-      <div className="px-4 py-2 border-b bg-muted/30 text-xs text-muted-foreground">
-        {new Date(min).toLocaleDateString("pt-BR")} → {new Date(max).toLocaleDateString("pt-BR")}
-      </div>
-      <div className="divide-y">
-        {withDates.map((t) => {
-          const start = new Date(t.start_date + "T12:00:00").getTime();
-          const end = new Date(t.due_date + "T12:00:00").getTime();
-          const left = ((start - min) / 86400000 / totalDays) * 100;
-          const width = Math.max(2, ((end - start) / 86400000 / totalDays) * 100);
-          const stage = stageById.get(t.workflow_stage_id);
-          return (
-            <div key={t.id} className="grid grid-cols-[240px_1fr] items-center gap-3 px-4 py-2 hover:bg-muted/30">
-              <div className="text-sm truncate">{t.title}</div>
-              <div className="relative h-6">
-                <div
-                  className="absolute h-6 rounded text-[10px] text-white px-2 flex items-center truncate"
-                  style={{
-                    left: `${left}%`,
-                    width: `${width}%`,
-                    backgroundColor: stage?.color || "hsl(var(--primary))",
-                  }}
-                  title={`${new Date(start).toLocaleDateString("pt-BR")} → ${new Date(end).toLocaleDateString("pt-BR")}`}
-                >
-                  {stage?.title}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-function TimelineView({ tasks, stageById }: { tasks: any[]; stageById: Map<string, any> }) {
-  // Agrupa por mês de due_date
-  const groups = new Map<string, any[]>();
-  tasks.forEach((t) => {
-    if (!t.due_date) return;
-    const d = new Date(t.due_date + "T12:00:00");
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(t);
-  });
-
-  const sortedKeys = Array.from(groups.keys()).sort();
-
-  if (sortedKeys.length === 0) {
-    return (
-      <div className="text-center text-muted-foreground py-20">
-        Nenhuma tarefa com prazo definido para exibir no cronograma.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {sortedKeys.map((key) => {
-        const [y, m] = key.split("-");
-        const monthLabel = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-        const items = groups.get(key)!.sort((a, b) => (a.due_date > b.due_date ? 1 : -1));
-        return (
-          <div key={key} className="bg-background border rounded-lg overflow-hidden">
-            <div className="px-4 py-2 bg-muted/40 border-b text-sm font-medium capitalize flex items-center justify-between">
-              <span>{monthLabel}</span>
-              <Badge variant="secondary" className="text-[10px]">{items.length}</Badge>
-            </div>
-            <div className="divide-y">
-              {items.map((t) => {
-                const stage = stageById.get(t.workflow_stage_id);
-                return (
-                  <div key={t.id} className="px-4 py-2 flex items-center gap-3 hover:bg-muted/30">
-                    <div className="w-16 text-xs text-muted-foreground tabular-nums">
-                      {new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
-                    </div>
-                    <div className="w-1 h-8 rounded-full" style={{ backgroundColor: stage?.color || "hsl(var(--primary))" }} />
-                    <div className="flex-1 text-sm">{t.title}</div>
-                    <StatusBadge stage={stage} />
-                    <PriorityBadge priority={t.priority} />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function BoardByPhaseView({ tasks, phases, stageById }: { tasks: any[]; phases: any[]; stageById: Map<string, any> }) {
-  // Agrupa por fase (phase_id). Tarefas sem fase vão para "Sem fase".
-  const groups = new Map<string, any[]>();
-  groups.set("__no_phase__", []);
-  phases.forEach((p) => groups.set(p.id, []));
-  tasks.forEach((t) => {
-    const key = t.phase_id && groups.has(t.phase_id) ? t.phase_id : "__no_phase__";
-    groups.get(key)!.push(t);
-  });
-
-  const ordered = [
-    ...phases.map((p) => ({ id: p.id, title: p.title, items: groups.get(p.id) || [] })),
-    { id: "__no_phase__", title: "Sem fase", items: groups.get("__no_phase__") || [] },
-  ].filter((g) => g.items.length > 0 || g.id !== "__no_phase__");
-
-  return (
-    <div className="space-y-4">
-      {ordered.map((g) => (
-        <div key={g.id} className="bg-background border rounded-lg overflow-hidden">
-          <div className="px-4 py-2 bg-muted/40 border-b flex items-center justify-between">
-            <span className="font-medium text-sm">{g.title}</span>
-            <Badge variant="secondary" className="text-[10px]">{g.items.length}</Badge>
-          </div>
-          {g.items.length === 0 ? (
-            <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-              Nenhuma tarefa nesta fase.
-            </div>
-          ) : (
-            <div className="divide-y">
-              {g.items.map((t) => {
-                const stage = stageById.get(t.workflow_stage_id);
-                return (
-                  <div key={t.id} className="px-4 py-2 flex items-center gap-3 hover:bg-muted/30">
-                    <div className="flex-1 text-sm">{t.title}</div>
-                    <StatusBadge stage={stage} />
-                    <PriorityBadge priority={t.priority} />
-                    {t.due_date && (
-                      <span className="text-[10px] text-muted-foreground tabular-nums w-20 text-right">
-                        {new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR")}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
   );
 }
