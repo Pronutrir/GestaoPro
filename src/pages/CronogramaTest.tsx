@@ -11,12 +11,10 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { TimelineView } from "@/components/TimelineView";
-import { Table2, GanttChart, ExternalLink } from "lucide-react";
+import { Table2, GanttChart, ExternalLink, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format, parseISO, differenceInBusinessDays } from "date-fns";
+import { format, parseISO, differenceInBusinessDays, addDays, eachDayOfInterval, startOfMonth, endOfMonth, isWeekend, isSameMonth, min as dateMin, max as dateMax } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CronogramaFilters, DEFAULT_FILTERS, type CronogramaFiltersState } from "@/components/cronograma/CronogramaFilters";
 
 type Mode = "table" | "gantt";
 
