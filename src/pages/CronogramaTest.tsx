@@ -106,96 +106,12 @@ export default function CronogramaTest() {
     };
   };
 
-  // Opções para filtros
-  const phaseOptions = useMemo(() => phases.map((p: any) => ({ value: p.id, label: p.title })), [phases]);
-  const responsibleOptions = useMemo(() => {
-    const set = new Set<string>();
-    activities.forEach(a => a.assigned_to && set.add(a.assigned_to));
-    return Array.from(set).map(id => ({
-      value: id,
-      label: profiles[id]?.name || id,
-    }));
-  }, [activities, profiles]);
-  const sectorOptions = useMemo(() => {
-    const set = new Set<string>();
-    activities.forEach(a => {
-      const s = profiles[a.assigned_to || ""]?.sector;
-      if (s && s !== "—") set.add(s);
-    });
-    return Array.from(set).map(s => ({ value: s, label: s }));
-  }, [activities, profiles]);
-  const tagOptions = useMemo(() => {
-    const set = new Set<string>();
-    activities.forEach(a => (a.tags || []).forEach((t: string) => set.add(t)));
-    return Array.from(set).map(t => ({ value: t, label: t }));
-  }, [activities]);
-  const workflowStageOptions = useMemo(
-    () => workflowStages.map((s: any) => ({ value: s.id, label: s.title })),
-    [workflowStages]
-  );
-
-  // Aplicar filtros
-  const rows = useMemo(() => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const startOfWeek = new Date(today); startOfWeek.setDate(today.getDate() - today.getDay());
-    const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6);
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    const next30 = new Date(today); next30.setDate(today.getDate() + 30);
-
-    return activities
-      .map((a, idx) => ({ a, idx, mock: mockFor(a.id, idx) }))
-      .filter(({ a, mock }) => {
-        // Fase
-        if (filters.phaseIds.length && !filters.phaseIds.includes(a.phase_id)) return false;
-        // Responsável
-        if (filters.responsibles.length && !filters.responsibles.includes(a.assigned_to)) return false;
-        // Setor
-        if (filters.sectors.length) {
-          const sec = profiles[a.assigned_to || ""]?.sector;
-          if (!sec || !filters.sectors.includes(sec)) return false;
-        }
-        // Status
-        if (filters.statuses.length && !filters.statuses.includes(a.status)) return false;
-        // Progresso
-        const progress = a.status === "completed" ? 100 : a.status === "in_progress" ? 50 : 0;
-        if (filters.progressBucket !== "all") {
-          if (filters.progressBucket === "0-25" && progress > 25) return false;
-          if (filters.progressBucket === "26-75" && (progress < 26 || progress > 75)) return false;
-          if (filters.progressBucket === "76-100" && progress < 76) return false;
-        }
-        // Prioridade
-        if (filters.priorities.length && !filters.priorities.includes(a.priority)) return false;
-        // GUT
-        if (filters.gutMin != null && (a.priority_score ?? 0) < filters.gutMin) return false;
-        if (filters.gutMax != null && (a.priority_score ?? 999) > filters.gutMax) return false;
-        // Datas
-        const start = a.start_date ? parseISO(a.start_date) : null;
-        const end = a.end_date ? parseISO(a.end_date) : null;
-        if (filters.datePreset === "week" && !(end && end >= startOfWeek && end <= endOfWeek)) return false;
-        if (filters.datePreset === "month" && !(end && end >= startOfMonth && end <= endOfMonth)) return false;
-        if (filters.datePreset === "next30" && !(end && end >= today && end <= next30)) return false;
-        if (filters.datePreset === "overdue" && !(end && end < today && a.status !== "completed")) return false;
-        if (filters.datePreset === "custom") {
-          if (filters.dateFrom && end && end < parseISO(filters.dateFrom)) return false;
-          if (filters.dateTo && start && start > parseISO(filters.dateTo)) return false;
-        }
-        // Crítico / Folga / Marcos
-        if (filters.criticalOnly && mock.slack !== 0) return false;
-        if (filters.slackMax != null && mock.slack > filters.slackMax) return false;
-        if (filters.milestonesOnly && !a.is_milestone) return false;
-        // Vínculos
-        const aDeps = deps.filter(d => d.successor_id === a.id);
-        if (filters.linkTypes.length && !aDeps.some(d => filters.linkTypes.includes(d.dependency_type || "finish_to_start"))) return false;
-        if (filters.hasLag && !aDeps.some(d => (d.lag_days ?? 0) !== 0)) return false;
-        // Tags
-        if (filters.tags.length && !(a.tags || []).some((t: string) => filters.tags.includes(t))) return false;
-        // Workflow stage
-        if (filters.workflowStageIds.length && !filters.workflowStageIds.includes(a.workflow_stage_id)) return false;
-        return true;
-      });
+  // Sem filtros — exibir todas as atividades
+  const rows = useMemo(
+    () => activities.map((a, idx) => ({ a, idx, mock: mockFor(a.id, idx) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activities, filters, profiles, deps]);
+    [activities, profiles]
+  );
 
   const indexById = useMemo(() => {
     const m = new Map<string, number>();
