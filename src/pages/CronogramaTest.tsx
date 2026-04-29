@@ -277,13 +277,201 @@ export default function CronogramaTest() {
   );
 
   const project = projects.find(p => p.id === projectId);
+
+  // ===== Gantt geral (todas as atividades, scroll horizontal, escala diária) =====
+  const ganttData = useMemo(() => {
+    const dated = rows
+      .map(r => {
+        const s = r.a.start_date ? parseISO(r.a.start_date) : null;
+        const e = r.a.end_date ? parseISO(r.a.end_date) : (s ? addDays(s, 1) : null);
+        return s && e ? { ...r, s, e } : null;
+      })
+      .filter(Boolean) as Array<{ a: any; idx: number; mock: any; s: Date; e: Date }>;
+
+    if (!dated.length) return null;
+
+    const minDate = addDays(dateMin(dated.map(d => d.s)), -3);
+    const maxDate = addDays(dateMax(dated.map(d => d.e)), 5);
+    const days = eachDayOfInterval({ start: minDate, end: maxDate });
+    return { dated, minDate, maxDate, days };
+  }, [rows]);
+
+  const DAY_W = 28; // px por dia
+  const ROW_H = 32;
+  const LABEL_W = 280;
+
   const GanttBlock = (
-    <div className="border rounded-lg bg-card p-3">
-      <TimelineView
-        phases={phases}
-        activities={activities as any}
-        projectDueDate={project?.due_date || null}
-      />
+    <div className="border rounded-lg bg-card overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-primary" /> Atividade</span>
+          <span className="inline-flex items-center gap-1 ml-3"><span className="w-3 h-3 rounded bg-red-500" /> Caminho crítico (folga 0)</span>
+          <span className="inline-flex items-center gap-1 ml-3"><span className="w-3 h-3 rounded bg-emerald-500/70" /> Concluída</span>
+          <span className="inline-flex items-center gap-1 ml-3"><AlertTriangle className="h-3 w-3 text-amber-500" /> Marco</span>
+        </div>
+        <div className="text-[11px] text-muted-foreground">
+          {ganttData ? `${rows.length} atividade(s) • ${format(ganttData.minDate, "dd/MM/yy")} → ${format(ganttData.maxDate, "dd/MM/yy")}` : "—"}
+        </div>
+      </div>
+
+      {!ganttData ? (
+        <div className="p-10 text-center text-sm text-muted-foreground">
+          Nenhuma atividade com datas para exibir no Gantt.
+        </div>
+      ) : (
+        <div className="overflow-auto max-h-[70vh]">
+          <div className="flex" style={{ width: LABEL_W + ganttData.days.length * DAY_W }}>
+            {/* Coluna fixa de rótulos */}
+            <div className="sticky left-0 z-20 bg-card border-r" style={{ width: LABEL_W }}>
+              {/* Header de rótulos (2 linhas para alinhar com escala) */}
+              <div className="border-b bg-muted/40" style={{ height: 44 }}>
+                <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase">
+                  Atividade
+                </div>
+              </div>
+              {ganttData.dated.map(({ a, mock }) => {
+                const id = indexById.get(a.id);
+                const isCritical = mock.slack === 0;
+                return (
+                  <div
+                    key={a.id}
+                    className={cn("border-b px-3 flex items-center gap-2", isCritical && "bg-red-500/5")}
+                    style={{ height: ROW_H }}
+                  >
+                    <span className="text-[10px] font-mono text-muted-foreground w-8 shrink-0">#{id}</span>
+                    <span className="text-xs truncate" title={a.title}>{a.title}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Área do gráfico */}
+            <div className="relative" style={{ width: ganttData.days.length * DAY_W }}>
+              {/* Cabeçalho meses + dias */}
+              <div className="border-b sticky top-0 z-10 bg-card">
+                {/* meses */}
+                <div className="flex" style={{ height: 22 }}>
+                  {(() => {
+                    const segments: { label: string; width: number }[] = [];
+                    let i = 0;
+                    while (i < ganttData.days.length) {
+                      const monthStart = ganttData.days[i];
+                      let j = i;
+                      while (j < ganttData.days.length && isSameMonth(ganttData.days[j], monthStart)) j++;
+                      segments.push({
+                        label: format(monthStart, "MMM yyyy", { locale: ptBR }),
+                        width: (j - i) * DAY_W,
+                      });
+                      i = j;
+                    }
+                    return segments.map((s, k) => (
+                      <div key={k} className="border-r text-[11px] font-semibold text-center bg-muted/40 capitalize"
+                        style={{ width: s.width, lineHeight: "22px" }}>
+                        {s.label}
+                      </div>
+                    ));
+                  })()}
+                </div>
+                {/* dias */}
+                <div className="flex" style={{ height: 22 }}>
+                  {ganttData.days.map((d, k) => (
+                    <div key={k}
+                      className={cn(
+                        "border-r text-[10px] text-center text-muted-foreground",
+                        isWeekend(d) && "bg-muted/40"
+                      )}
+                      style={{ width: DAY_W, lineHeight: "22px" }}
+                    >
+                      {format(d, "d")}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Grid de fundo + barras */}
+              <div className="relative">
+                {/* fundo: faixas de fim de semana */}
+                <div className="absolute inset-0 flex pointer-events-none">
+                  {ganttData.days.map((d, k) => (
+                    <div key={k}
+                      className={cn("border-r", isWeekend(d) && "bg-muted/30")}
+                      style={{ width: DAY_W }}
+                    />
+                  ))}
+                </div>
+
+                {/* linha de hoje */}
+                {(() => {
+                  const today = new Date(); today.setHours(0,0,0,0);
+                  if (today < ganttData.minDate || today > ganttData.maxDate) return null;
+                  const offset = differenceInBusinessDays(today, ganttData.minDate); // não importa se util
+                  const idxDay = ganttData.days.findIndex(d => d.toDateString() === today.toDateString());
+                  if (idxDay < 0) return null;
+                  return (
+                    <div className="absolute top-0 bottom-0 border-l-2 border-primary/70 pointer-events-none z-10"
+                      style={{ left: idxDay * DAY_W + DAY_W / 2 }}>
+                      <div className="absolute -top-0 -translate-x-1/2 bg-primary text-primary-foreground text-[9px] px-1 rounded">
+                        Hoje
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* linhas + barras */}
+                {ganttData.dated.map(({ a, s, e, mock }) => {
+                  const startIdx = ganttData.days.findIndex(d => d.toDateString() === s.toDateString());
+                  const endIdx = ganttData.days.findIndex(d => d.toDateString() === e.toDateString());
+                  const left = Math.max(0, startIdx) * DAY_W;
+                  const width = Math.max(1, (endIdx - startIdx + 1)) * DAY_W - 4;
+                  const isCritical = mock.slack === 0;
+                  const isCompleted = a.status === "completed";
+                  const progress = isCompleted ? 100 : a.status === "in_progress" ? 50 : 0;
+                  const responsible = profiles[a.assigned_to || ""]?.name || "—";
+
+                  return (
+                    <div key={a.id} className={cn("relative border-b", isCritical && "bg-red-500/5")}
+                      style={{ height: ROW_H }}>
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            {a.is_milestone ? (
+                              <div className="absolute top-1/2 -translate-y-1/2"
+                                style={{ left: left + DAY_W / 2 - 8 }}>
+                                <div className="w-4 h-4 rotate-45 bg-amber-500 border border-amber-700" />
+                              </div>
+                            ) : (
+                              <div className={cn(
+                                "absolute top-1.5 rounded-sm shadow-sm overflow-hidden cursor-pointer transition-opacity hover:opacity-90",
+                                isCritical ? "bg-red-500" : isCompleted ? "bg-emerald-500/70" : "bg-primary"
+                              )}
+                                style={{ left, width, height: ROW_H - 12 }}
+                              >
+                                <div className="h-full bg-white/30" style={{ width: `${100 - progress}%`, marginLeft: `${progress}%` }} />
+                                <div className="absolute inset-0 flex items-center px-1.5 text-[10px] text-white font-medium truncate">
+                                  {a.title}
+                                </div>
+                              </div>
+                            )}
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <div className="space-y-0.5 text-[11px]">
+                              <div className="font-semibold">{a.title}</div>
+                              <div>📅 {format(s, "dd/MM/yy")} → {format(e, "dd/MM/yy")} ({workDays(a.start_date, a.end_date)}d)</div>
+                              <div>👤 {responsible}</div>
+                              <div>📊 {progress}% · Folga: <span className={cn(isCritical && "text-red-400 font-semibold")}>{mock.slack}d</span></div>
+                              {a.is_milestone && <div>🎯 Marco</div>}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -341,16 +529,6 @@ export default function CronogramaTest() {
             })}
           </div>
         </div>
-
-        <CronogramaFilters
-          value={filters}
-          onChange={setFilters}
-          phaseOptions={phaseOptions}
-          responsibleOptions={responsibleOptions}
-          sectorOptions={sectorOptions}
-          tagOptions={tagOptions}
-          workflowStageOptions={workflowStageOptions}
-        />
 
         {mode === "table" && TableView}
         {mode === "gantt" && GanttBlock}
