@@ -49,7 +49,6 @@ export default function CronogramaTest() {
   const [workflowStages, setWorkflowStages] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string }>>({});
   const [mode, setMode] = useState<Mode>("table");
-  const [filters, setFilters] = useState<CronogramaFiltersState>(DEFAULT_FILTERS);
 
   // Carrega projetos (Onboard pré-selecionado)
   useEffect(() => {
