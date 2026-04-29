@@ -157,7 +157,7 @@ export default function CronogramaTest() {
             <th className="w-24">Início<br/>Real</th>
             <th className="w-24">Térm.<br/>Real</th>
             <th className="w-16">% C.</th>
-            <th className="w-16">Folga<br/>(d)</th>
+            <th className="w-20">Crítica?</th>
             <th className="w-32">Recurso<br/>Principal</th>
             <th className="w-16">Esf.<br/>(h)</th>
             <th className="w-28">Compressão<br/>Possível</th>
@@ -175,13 +175,10 @@ export default function CronogramaTest() {
             const progress = a.status === "completed" ? 100 : a.status === "in_progress" ? 50 : 0;
             const preds = predsOf(a.id);
             const responsible = profiles[a.assigned_to || ""]?.name || "—";
-            const isCritical = (mock.slack === 0);
+            const isCritical = criticalSet.has(a.id);
 
             return (
-              <tr key={a.id} className={cn(
-                "border-b hover:bg-muted/40 transition-colors",
-                isCritical && "bg-red-500/5"
-              )}>
+              <tr key={a.id} className="border-b hover:bg-muted/40 transition-colors">
                 <td className="px-2 py-1.5 text-center font-mono text-muted-foreground">{id}</td>
                 <td className="px-2 py-1.5 text-center font-mono">{mock.eap}</td>
                 <td className="px-2 py-1.5">
@@ -261,8 +258,14 @@ export default function CronogramaTest() {
                     <span className="text-[10px]">{progress}%</span>
                   </div>
                 </td>
-                <td className={cn("px-2 py-1.5 text-center font-mono", isCritical && "text-red-600 font-semibold")}>
-                  {mock.slack}
+                <td className="px-2 py-1.5 text-center">
+                  {isCritical ? (
+                    <Badge className="bg-red-500/10 text-red-600 border border-red-500/40 hover:bg-red-500/15 text-[10px] py-0 px-1.5 gap-1">
+                      <AlertTriangle className="h-3 w-3" /> Sim
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-[11px]">Não</span>
+                  )}
                 </td>
                 <td className="px-2 py-1.5 truncate max-w-[140px]" title={mock.mainResource}>{mock.mainResource}</td>
                 <td className="px-2 py-1.5 text-center font-mono">{mock.effortHours}</td>
