@@ -12,12 +12,13 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TimelineView } from "@/components/TimelineView";
-import { Table2, GanttChart, Columns2, ExternalLink, Search } from "lucide-react";
+import { Table2, GanttChart, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, parseISO, differenceInBusinessDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { CronogramaFilters, DEFAULT_FILTERS, type CronogramaFiltersState } from "@/components/cronograma/CronogramaFilters";
 
-type Mode = "table" | "gantt" | "split";
+type Mode = "table" | "gantt";
 
 // Tipos de vínculo MS Project
 const LINK_TYPES: Record<string, { short: string; label: string; desc: string }> = {
@@ -47,9 +48,10 @@ export default function CronogramaTest() {
   const [activities, setActivities] = useState<any[]>([]);
   const [phases, setPhases] = useState<any[]>([]);
   const [deps, setDeps] = useState<any[]>([]);
+  const [workflowStages, setWorkflowStages] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string }>>({});
   const [mode, setMode] = useState<Mode>("table");
-  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<CronogramaFiltersState>(DEFAULT_FILTERS);
 
   // Carrega projetos (Onboard pré-selecionado)
   useEffect(() => {
@@ -68,15 +70,17 @@ export default function CronogramaTest() {
 
   const fetchData = useCallback(async () => {
     if (!projectId) return;
-    const [{ data: acts }, { data: phs }, { data: profs }] = await Promise.all([
+    const [{ data: acts }, { data: phs }, { data: profs }, { data: stages }] = await Promise.all([
       supabase.from("activities").select("*").eq("project_id", projectId).eq("is_trashed", false)
         .order("display_order", { ascending: true }),
       supabase.from("phases").select("*").eq("project_id", projectId).eq("is_trashed", false)
         .order("display_order", { ascending: true }),
       supabase.from("profiles").select("id, full_name, sector"),
+      supabase.from("workflow_stages").select("id, title").eq("project_id", projectId).order("display_order", { ascending: true }),
     ]);
     setActivities(acts || []);
     setPhases(phs || []);
+    setWorkflowStages(stages || []);
     const map: Record<string, { name: string; sector: string }> = {};
     (profs || []).forEach((p: any) => { map[p.id] = { name: p.full_name, sector: p.sector || "—" }; });
     setProfiles(map);
@@ -105,15 +109,96 @@ export default function CronogramaTest() {
     };
   };
 
-  // Linhas finais com filtro
+  // Opções para filtros
+  const phaseOptions = useMemo(() => phases.map((p: any) => ({ value: p.id, label: p.title })), [phases]);
+  const responsibleOptions = useMemo(() => {
+    const set = new Set<string>();
+    activities.forEach(a => a.assigned_to && set.add(a.assigned_to));
+    return Array.from(set).map(id => ({
+      value: id,
+      label: profiles[id]?.name || id,
+    }));
+  }, [activities, profiles]);
+  const sectorOptions = useMemo(() => {
+    const set = new Set<string>();
+    activities.forEach(a => {
+      const s = profiles[a.assigned_to || ""]?.sector;
+      if (s && s !== "—") set.add(s);
+    });
+    return Array.from(set).map(s => ({ value: s, label: s }));
+  }, [activities, profiles]);
+  const tagOptions = useMemo(() => {
+    const set = new Set<string>();
+    activities.forEach(a => (a.tags || []).forEach((t: string) => set.add(t)));
+    return Array.from(set).map(t => ({ value: t, label: t }));
+  }, [activities]);
+  const workflowStageOptions = useMemo(
+    () => workflowStages.map((s: any) => ({ value: s.id, label: s.title })),
+    [workflowStages]
+  );
+
+  // Aplicar filtros
   const rows = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const startOfWeek = new Date(today); startOfWeek.setDate(today.getDate() - today.getDay());
+    const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6);
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const next30 = new Date(today); next30.setDate(today.getDate() + 30);
+
     return activities
       .map((a, idx) => ({ a, idx, mock: mockFor(a.id, idx) }))
-      .filter(({ a }) =>
-        !search || a.title?.toLowerCase().includes(search.toLowerCase())
-      );
+      .filter(({ a, mock }) => {
+        // Fase
+        if (filters.phaseIds.length && !filters.phaseIds.includes(a.phase_id)) return false;
+        // Responsável
+        if (filters.responsibles.length && !filters.responsibles.includes(a.assigned_to)) return false;
+        // Setor
+        if (filters.sectors.length) {
+          const sec = profiles[a.assigned_to || ""]?.sector;
+          if (!sec || !filters.sectors.includes(sec)) return false;
+        }
+        // Status
+        if (filters.statuses.length && !filters.statuses.includes(a.status)) return false;
+        // Progresso
+        const progress = a.status === "completed" ? 100 : a.status === "in_progress" ? 50 : 0;
+        if (filters.progressBucket !== "all") {
+          if (filters.progressBucket === "0-25" && progress > 25) return false;
+          if (filters.progressBucket === "26-75" && (progress < 26 || progress > 75)) return false;
+          if (filters.progressBucket === "76-100" && progress < 76) return false;
+        }
+        // Prioridade
+        if (filters.priorities.length && !filters.priorities.includes(a.priority)) return false;
+        // GUT
+        if (filters.gutMin != null && (a.priority_score ?? 0) < filters.gutMin) return false;
+        if (filters.gutMax != null && (a.priority_score ?? 999) > filters.gutMax) return false;
+        // Datas
+        const start = a.start_date ? parseISO(a.start_date) : null;
+        const end = a.end_date ? parseISO(a.end_date) : null;
+        if (filters.datePreset === "week" && !(end && end >= startOfWeek && end <= endOfWeek)) return false;
+        if (filters.datePreset === "month" && !(end && end >= startOfMonth && end <= endOfMonth)) return false;
+        if (filters.datePreset === "next30" && !(end && end >= today && end <= next30)) return false;
+        if (filters.datePreset === "overdue" && !(end && end < today && a.status !== "completed")) return false;
+        if (filters.datePreset === "custom") {
+          if (filters.dateFrom && end && end < parseISO(filters.dateFrom)) return false;
+          if (filters.dateTo && start && start > parseISO(filters.dateTo)) return false;
+        }
+        // Crítico / Folga / Marcos
+        if (filters.criticalOnly && mock.slack !== 0) return false;
+        if (filters.slackMax != null && mock.slack > filters.slackMax) return false;
+        if (filters.milestonesOnly && !a.is_milestone) return false;
+        // Vínculos
+        const aDeps = deps.filter(d => d.successor_id === a.id);
+        if (filters.linkTypes.length && !aDeps.some(d => filters.linkTypes.includes(d.dependency_type || "finish_to_start"))) return false;
+        if (filters.hasLag && !aDeps.some(d => (d.lag_days ?? 0) !== 0)) return false;
+        // Tags
+        if (filters.tags.length && !(a.tags || []).some((t: string) => filters.tags.includes(t))) return false;
+        // Workflow stage
+        if (filters.workflowStageIds.length && !filters.workflowStageIds.includes(a.workflow_stage_id)) return false;
+        return true;
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activities, search, profiles]);
+  }, [activities, filters, profiles, deps]);
 
   const indexById = useMemo(() => {
     const m = new Map<string, number>();
@@ -131,11 +216,6 @@ export default function CronogramaTest() {
 
   const TableView = (
     <div className="border rounded-lg overflow-auto bg-card">
-      {/* Banner explicativo */}
-      <div className="px-3 py-2 text-xs bg-muted/40 border-b text-muted-foreground">
-        Tabela detalhada estilo MS Project. Passe o mouse na coluna <strong>Pred.</strong> para
-        entender o tipo de vínculo (TI/II/TT/IT) — clique para abrir a aba <strong>Dependências</strong>.
-      </div>
       <table className="w-full text-xs">
         <thead className="bg-primary/95 text-primary-foreground sticky top-0 z-10">
           <tr className="[&>th]:px-2 [&>th]:py-2 [&>th]:font-semibold [&>th]:text-center [&>th]:border-r [&>th]:border-primary-foreground/20 [&>th:last-child]:border-r-0">
@@ -322,13 +402,12 @@ export default function CronogramaTest() {
           </div>
         </div>
 
-        {/* Toggle e busca */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* Toggle Tabela / Gantt */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex border rounded-lg overflow-hidden bg-card">
             {([
-              { id: "table", label: "Tabela", icon: Table2 },
+              { id: "table", label: "Tabela detalhada", icon: Table2 },
               { id: "gantt", label: "Gantt", icon: GanttChart },
-              { id: "split", label: "Lado a lado", icon: Columns2 },
             ] as const).map(opt => {
               const Icon = opt.icon;
               const active = mode === opt.id;
@@ -348,26 +427,20 @@ export default function CronogramaTest() {
               );
             })}
           </div>
-
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar atividade..."
-              className="pl-8 h-9"
-            />
-          </div>
         </div>
+
+        <CronogramaFilters
+          value={filters}
+          onChange={setFilters}
+          phaseOptions={phaseOptions}
+          responsibleOptions={responsibleOptions}
+          sectorOptions={sectorOptions}
+          tagOptions={tagOptions}
+          workflowStageOptions={workflowStageOptions}
+        />
 
         {mode === "table" && TableView}
         {mode === "gantt" && GanttBlock}
-        {mode === "split" && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div className="min-w-0">{TableView}</div>
-            <div className="min-w-0">{GanttBlock}</div>
-          </div>
-        )}
 
         <div className="text-xs text-muted-foreground border-t pt-3">
           Após aprovação, a opção <strong>Tabela detalhada</strong> será adicionada como toggle
