@@ -25,6 +25,7 @@ import Trash from "./pages/Trash";
 import NotFound from "./pages/NotFound";
 import DocumentoTest from "./pages/DocumentoTest";
 import TarefasTest from "./pages/TarefasTest";
+import CronogramaTest from "./pages/CronogramaTest";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +56,7 @@ const App = () => (
             <Route path="/settings" element={<ProtectedRoute adminOnly><Settings /></ProtectedRoute>} />
             <Route path="/documento-test" element={<ProtectedRoute><DocumentoTest /></ProtectedRoute>} />
             <Route path="/tarefas-test" element={<ProtectedRoute><TarefasTest /></ProtectedRoute>} />
+            <Route path="/cronograma-test" element={<ProtectedRoute><CronogramaTest /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
