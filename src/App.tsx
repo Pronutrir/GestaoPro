@@ -26,6 +26,8 @@ import NotFound from "./pages/NotFound";
 import DocumentoTest from "./pages/DocumentoTest";
 import TarefasTest from "./pages/TarefasTest";
 import CronogramaTest from "./pages/CronogramaTest";
+import ProjectCronogramaTest from "./pages/ProjectCronogramaTest";
+import CronogramaGeralTest from "./pages/CronogramaGeralTest";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +59,8 @@ const App = () => (
             <Route path="/documento-test" element={<ProtectedRoute><DocumentoTest /></ProtectedRoute>} />
             <Route path="/tarefas-test" element={<ProtectedRoute><TarefasTest /></ProtectedRoute>} />
             <Route path="/cronograma-test" element={<ProtectedRoute><CronogramaTest /></ProtectedRoute>} />
+            <Route path="/cronograma-geral-test" element={<ProtectedRoute><CronogramaGeralTest /></ProtectedRoute>} />
+            <Route path="/project/:id/cronograma-test" element={<ProtectedRoute><ProjectCronogramaTest /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
