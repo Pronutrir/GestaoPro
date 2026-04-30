@@ -398,7 +398,7 @@ export default function CronogramaTest() {
 
   // ===== Gantt geral (todas as atividades, scroll horizontal, escala diária) =====
   const ganttData = useMemo(() => {
-    const dated = rows
+    const withDates = rows
       .map(r => {
         const s = r.a.start_date ? parseISO(r.a.start_date) : null;
         const e = r.a.end_date ? parseISO(r.a.end_date) : (s ? addDays(s, 1) : null);
@@ -406,12 +406,27 @@ export default function CronogramaTest() {
       })
       .filter(Boolean) as Array<{ a: any; idx: number; mock: any; s: Date; e: Date }>;
 
-    if (!dated.length) return null;
+    const undated = rows
+      .filter(r => !(r.a.start_date && r.a.end_date))
+      .map(r => ({ ...r, s: null as Date | null, e: null as Date | null }));
 
-    const minDate = addDays(dateMin(dated.map(d => d.s)), -3);
-    const maxDate = addDays(dateMax(dated.map(d => d.e)), 5);
+    if (!withDates.length && !undated.length) return null;
+
+    // Se não há nenhuma com data, usa um range padrão em torno de hoje
+    const today = new Date();
+    const minDate = withDates.length
+      ? addDays(dateMin(withDates.map(d => d.s)), -3)
+      : addDays(today, -7);
+    const maxDate = withDates.length
+      ? addDays(dateMax(withDates.map(d => d.e)), 5)
+      : addDays(today, 21);
     const days = eachDayOfInterval({ start: minDate, end: maxDate });
-    return { dated, minDate, maxDate, days };
+    // Lista combinada: primeiro com datas (na ordem original), depois sem datas
+    const all = [
+      ...withDates,
+      ...undated,
+    ];
+    return { dated: withDates, undated, all, minDate, maxDate, days };
   }, [rows]);
 
   const DAY_W = 28; // px por dia
@@ -426,9 +441,12 @@ export default function CronogramaTest() {
           <span className="inline-flex items-center gap-1 ml-3"><span className="w-3 h-3 rounded bg-red-500" /> Caminho crítico (folga 0)</span>
           <span className="inline-flex items-center gap-1 ml-3"><span className="w-3 h-3 rounded bg-emerald-500/70" /> Concluída</span>
           <span className="inline-flex items-center gap-1 ml-3"><AlertTriangle className="h-3 w-3 text-amber-500" /> Marco</span>
+          <span className="inline-flex items-center gap-1 ml-3"><CalendarOff className="h-3 w-3 text-muted-foreground" /> Sem datas</span>
         </div>
         <div className="text-[11px] text-muted-foreground">
-          {ganttData ? `${rows.length} atividade(s) • ${format(ganttData.minDate, "dd/MM/yy")} → ${format(ganttData.maxDate, "dd/MM/yy")}` : "—"}
+          {ganttData
+            ? `${ganttData.all.length} atividade(s) • ${ganttData.dated.length} com datas • ${ganttData.undated.length} sem datas • ${format(ganttData.minDate, "dd/MM/yy")} → ${format(ganttData.maxDate, "dd/MM/yy")}`
+            : "—"}
         </div>
       </div>
 
@@ -447,9 +465,10 @@ export default function CronogramaTest() {
                   Atividade
                 </div>
               </div>
-              {ganttData.dated.map(({ a }) => {
+              {ganttData.all.map(({ a }) => {
                 const id = indexById.get(a.id);
                 const isCritical = criticalSet.has(a.id);
+                const noDates = !a.start_date || !a.end_date;
                 const responsible = profiles[a.assigned_to || ""]?.name || "—";
                 return (
                   <div
@@ -460,6 +479,9 @@ export default function CronogramaTest() {
                     <span className="text-[10px] font-mono text-muted-foreground w-8 shrink-0">#{id}</span>
                     {isCritical && (
                       <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
+                    )}
+                    {noDates && (
+                      <CalendarOff className="h-3 w-3 text-muted-foreground shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className={cn("text-xs truncate", isCritical && "font-semibold")}
@@ -544,7 +566,25 @@ export default function CronogramaTest() {
                 })()}
 
                 {/* linhas + barras */}
-                {ganttData.dated.map(({ a, s, e }) => {
+                {ganttData.all.map(({ a, s, e }) => {
+                  // Atividade sem datas: linha vazia com aviso ancorado em "hoje"
+                  if (!s || !e) {
+                    const todayIdx = ganttData.days.findIndex(
+                      d => d.toDateString() === new Date(new Date().setHours(0,0,0,0)).toDateString()
+                    );
+                    const left = (todayIdx >= 0 ? todayIdx : 0) * DAY_W;
+                    return (
+                      <div key={a.id} className="relative border-b bg-muted/10" style={{ height: ROW_H }}>
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 inline-flex items-center gap-1 px-2 py-0.5 rounded border border-dashed border-muted-foreground/40 bg-card text-[10px] text-muted-foreground"
+                          style={{ left: Math.max(0, left - 60) }}
+                        >
+                          <CalendarOff className="h-3 w-3" />
+                          Sem datas — agendar no Backlog
+                        </div>
+                      </div>
+                    );
+                  }
                   const startIdx = ganttData.days.findIndex(d => d.toDateString() === s.toDateString());
                   const endIdx = ganttData.days.findIndex(d => d.toDateString() === e.toDateString());
                   const left = Math.max(0, startIdx) * DAY_W;
