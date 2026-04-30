@@ -19,7 +19,6 @@ import { cn } from "@/lib/utils";
 import {
   format, parseISO, differenceInBusinessDays, addDays, eachDayOfInterval,
   isWeekend, isSameMonth, min as dateMin, max as dateMax, differenceInDays,
-  startOfMonth,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calculateCriticalPath } from "@/lib/criticalPath";
