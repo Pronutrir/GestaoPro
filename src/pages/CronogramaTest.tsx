@@ -11,11 +11,12 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Table2, GanttChart, ExternalLink, AlertTriangle } from "lucide-react";
+import { Table2, GanttChart, ExternalLink, AlertTriangle, CalendarOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, parseISO, differenceInBusinessDays, addDays, eachDayOfInterval, startOfMonth, endOfMonth, isWeekend, isSameMonth, min as dateMin, max as dateMax } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calculateCriticalPath } from "@/lib/criticalPath";
+import { differenceInDays } from "date-fns";
 
 type Mode = "table" | "gantt";
 
@@ -120,6 +121,81 @@ export default function CronogramaTest() {
     [activities, deps]
   );
 
+  // ===== Folga (slack) por atividade — mesmo cálculo do CPM, expondo o número =====
+  const slackMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const valid = activities.filter(a => a.start_date && a.end_date);
+    if (valid.length === 0) return map;
+
+    const byId = new Map(valid.map(a => [a.id, a]));
+    const succ = new Map<string, { id: string; lag: number }[]>();
+    const pred = new Map<string, { id: string; lag: number }[]>();
+    valid.forEach(a => { succ.set(a.id, []); pred.set(a.id, []); });
+    deps.forEach(d => {
+      if (byId.has(d.predecessor_id) && byId.has(d.successor_id)) {
+        succ.get(d.predecessor_id)!.push({ id: d.successor_id, lag: d.lag_days ?? 0 });
+        pred.get(d.successor_id)!.push({ id: d.predecessor_id, lag: d.lag_days ?? 0 });
+      }
+    });
+
+    const dur = new Map<string, number>();
+    valid.forEach(a => {
+      const days = Math.max(differenceInDays(parseISO(a.end_date!), parseISO(a.start_date!)), 1);
+      dur.set(a.id, days);
+    });
+
+    const minDate = valid.reduce((m, a) => {
+      const d = parseISO(a.start_date!);
+      return d < m ? d : m;
+    }, parseISO(valid[0].start_date!));
+
+    const inDeg = new Map<string, number>();
+    valid.forEach(a => inDeg.set(a.id, pred.get(a.id)!.length));
+    const queue = valid.filter(a => inDeg.get(a.id) === 0).map(a => a.id);
+    const order: string[] = [];
+    while (queue.length) {
+      const id = queue.shift()!;
+      order.push(id);
+      succ.get(id)!.forEach(s => {
+        inDeg.set(s.id, (inDeg.get(s.id) ?? 0) - 1);
+        if (inDeg.get(s.id) === 0) queue.push(s.id);
+      });
+    }
+
+    const ef = new Map<string, number>();
+    const es = new Map<string, number>();
+    order.forEach(id => {
+      const a = byId.get(id)!;
+      const baseEs = differenceInDays(parseISO(a.start_date!), minDate);
+      let earliest = baseEs;
+      pred.get(id)!.forEach(p => {
+        const pEf = ef.get(p.id);
+        if (pEf !== undefined) earliest = Math.max(earliest, pEf + p.lag);
+      });
+      es.set(id, earliest);
+      ef.set(id, earliest + dur.get(id)!);
+    });
+
+    const projectEnd = ef.size ? Math.max(...Array.from(ef.values())) : 0;
+    const lf = new Map<string, number>();
+    const ls = new Map<string, number>();
+    [...order].reverse().forEach(id => {
+      const succs = succ.get(id)!;
+      let latest = projectEnd;
+      if (succs.length > 0) {
+        latest = Math.min(...succs.map(s => (ls.get(s.id) ?? projectEnd) - s.lag));
+      }
+      lf.set(id, latest);
+      ls.set(id, latest - dur.get(id)!);
+    });
+
+    valid.forEach(a => {
+      const slack = (ls.get(a.id) ?? 0) - (es.get(a.id) ?? 0);
+      map.set(a.id, Math.max(0, slack));
+    });
+    return map;
+  }, [activities, deps]);
+
   // Sem filtros — exibir todas as atividades
   const rows = useMemo(
     () => activities.map((a, idx) => ({ a, idx, mock: mockFor(a.id, idx) })),
@@ -157,7 +233,7 @@ export default function CronogramaTest() {
             <th className="w-24">Início<br/>Real</th>
             <th className="w-24">Térm.<br/>Real</th>
             <th className="w-16">% C.</th>
-            <th className="w-20">Crítica?</th>
+            <th className="w-20">Folga<br/>(d)</th>
             <th className="w-32">Recurso<br/>Principal</th>
             <th className="w-16">Esf.<br/>(h)</th>
             <th className="w-28">Compressão<br/>Possível</th>
@@ -259,13 +335,27 @@ export default function CronogramaTest() {
                   </div>
                 </td>
                 <td className="px-2 py-1.5 text-center">
-                  {isCritical ? (
-                    <Badge className="bg-red-500/10 text-red-600 border border-red-500/40 hover:bg-red-500/15 text-[10px] py-0 px-1.5 gap-1">
-                      <AlertTriangle className="h-3 w-3" /> Sim
-                    </Badge>
-                  ) : (
-                    <span className="text-muted-foreground text-[11px]">Não</span>
-                  )}
+                  {(() => {
+                    if (!a.start_date || !a.end_date) {
+                      return <span className="text-muted-foreground text-[11px]">—</span>;
+                    }
+                    const slack = slackMap.get(a.id);
+                    if (slack === undefined) {
+                      return <span className="text-muted-foreground text-[11px]">—</span>;
+                    }
+                    const cls =
+                      slack === 0
+                        ? "bg-red-500/10 text-red-600 border-red-500/40"
+                        : slack <= 3
+                        ? "bg-amber-500/10 text-amber-700 border-amber-500/40"
+                        : "bg-emerald-500/10 text-emerald-700 border-emerald-500/40";
+                    return (
+                      <Badge variant="outline" className={cn("text-[10px] py-0 px-1.5 gap-1 font-mono", cls)}>
+                        {slack === 0 && <AlertTriangle className="h-3 w-3" />}
+                        {slack}d
+                      </Badge>
+                    );
+                  })()}
                 </td>
                 <td className="px-2 py-1.5 truncate max-w-[140px]" title={mock.mainResource}>{mock.mainResource}</td>
                 <td className="px-2 py-1.5 text-center font-mono">{mock.effortHours}</td>
@@ -288,10 +378,18 @@ export default function CronogramaTest() {
       </table>
       <div className="px-3 py-2 text-[10px] text-muted-foreground border-t flex items-center gap-3 flex-wrap">
         <span className="inline-flex items-center gap-1">
-          <AlertTriangle className="h-3 w-3 text-red-500" />
-          Coluna <strong>Crítica?</strong> = atividade no caminho crítico (CPM real, folga 0).
+          <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/40 text-[10px] py-0 px-1.5 font-mono">0d</Badge>
+          crítica
         </span>
-        <span>EAP, Esforço, Compressão e Observações são <strong>mock</strong> nesta prova de conceito.</span>
+        <span className="inline-flex items-center gap-1">
+          <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/40 text-[10px] py-0 px-1.5 font-mono">1-3d</Badge>
+          atenção
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/40 text-[10px] py-0 px-1.5 font-mono">≥4d</Badge>
+          folga confortável
+        </span>
+        <span className="ml-auto">EAP, Esforço, Compressão e Observações são <strong>mock</strong> nesta prova de conceito.</span>
       </div>
     </div>
   );
