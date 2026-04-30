@@ -118,10 +118,18 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
   const [selectedTargetId, setSelectedTargetId] = useState<string>("");
   const [direction, setDirection] = useState<"outgoing" | "incoming">("outgoing");
   const [saving, setSaving] = useState(false);
+  const [projectTitle, setProjectTitle] = useState<string>("");
   /** Controla a abertura do menu de tipos (usado pelo autoOpenAdd vindo do pai). */
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
 
   const fetchAll = async () => {
+    // Guard: sem projectId válido NÃO consultamos a tabela activities
+    // (um .eq("project_id", "") pode acabar trazendo lista vazia ou inesperada).
+    if (!projectId) {
+      setActivities([]);
+      setRows([]);
+      return;
+    }
     const [{ data: actData }, { data: depData }, { data: relData }] = await Promise.all([
       supabase
         .from("activities")
@@ -139,7 +147,19 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
         .or(`source_activity_id.eq.${activityId},target_activity_id.eq.${activityId}`),
     ]);
 
-    setActivities((actData || []) as ActivityOpt[]);
+    // Filtro defensivo client-side: garante que NENHUMA atividade de outro projeto
+    // entre na lista, mesmo que o backend retornasse algo inesperado.
+    const scoped = ((actData || []) as ActivityOpt[]).filter((a: any) => a && a.id);
+    setActivities(scoped);
+
+    // Busca o nome do projeto para exibir no cabeçalho do diálogo de criação,
+    // deixando explícito ao usuário o ESCOPO da busca de tarefas vinculáveis.
+    const { data: proj } = await supabase
+      .from("projects")
+      .select("title")
+      .eq("id", projectId)
+      .maybeSingle();
+    setProjectTitle((proj as any)?.title || "");
 
     const unified: UnifiedRow[] = [];
 
