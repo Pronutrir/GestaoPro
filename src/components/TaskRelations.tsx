@@ -474,6 +474,15 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
                 {META[dialogKind].description}
               </p>
 
+              {/* Escopo da busca: deixa claro que SOMENTE tarefas do projeto atual são listadas */}
+              <div className="text-[11px] flex items-center gap-1.5 bg-primary/5 text-primary border border-primary/20 px-2 py-1.5 rounded">
+                <Link2 className="w-3 h-3 shrink-0" />
+                <span className="truncate">
+                  Buscando tarefas apenas do projeto:{" "}
+                  <strong className="font-semibold">{projectTitle || "—"}</strong>
+                </span>
+              </div>
+
               {/* Direção apenas para blocking/waiting_on (related é simétrico; pred/succ são fixos) */}
               {(dialogKind === "blocking" || dialogKind === "waiting_on") && (
                 <div>
