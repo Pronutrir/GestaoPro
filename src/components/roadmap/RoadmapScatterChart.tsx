@@ -10,7 +10,7 @@ import {
   ReferenceLine,
   Label,
 } from "recharts";
-import type { RoadmapItem } from "@/legacy/pages/Roadmap";
+import type { RoadmapItem } from "@/components/roadmap/types";
 
 interface Props {
   items: RoadmapItem[];

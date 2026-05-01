@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import type { RoadmapItem } from "@/legacy/pages/Roadmap";
+import type { RoadmapItem } from "@/components/roadmap/types";
 
 interface Props {
   items: RoadmapItem[];

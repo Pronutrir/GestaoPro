@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pencil, Rocket } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { RoadmapItem } from "@/legacy/pages/Roadmap";
+import type { RoadmapItem } from "@/components/roadmap/types";
 
 const themeLabels: Record<string, string> = {
   produto: "Produto",

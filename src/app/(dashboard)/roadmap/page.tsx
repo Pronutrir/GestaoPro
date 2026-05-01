@@ -11,21 +11,9 @@ import { RoadmapTimeline } from "@/components/roadmap/RoadmapTimeline";
 import { RoadmapDrawer } from "@/components/roadmap/RoadmapDrawer";
 import { toast } from 'sonner';
 
-export interface RoadmapItem {
-  id: string;
-  title: string;
-  description: string | null;
-  theme: string;
-  status: string;
-  reach: number;
-  impact: number;
-  confidence: number;
-  effort: number;
-  score: number | null;
-  target_quarter: string | null;
-  project_id: string | null;
-  created_at: string;
-}
+import type { RoadmapItem } from "@/components/roadmap/types";
+
+
 
 const Roadmap = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);

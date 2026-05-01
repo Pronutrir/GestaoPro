@@ -7,7 +7,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { Objective } from "@/legacy/pages/OKRs";
+
+export interface Objective {
+  id: string;
+  title: string;
+  description?: string | null;
+  owner?: string | null;
+  cycle: string;
+  year: number;
+  status: string;
+  progress?: number | null;
+}
 
 interface Props {
   open: boolean;
