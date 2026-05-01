@@ -1,5 +1,6 @@
+'use client';
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -79,7 +80,7 @@ interface Props {
 }
 
 export const PipelineByTypeLanes = ({ projects }: Props) => {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -299,7 +300,7 @@ export const PipelineByTypeLanes = ({ projects }: Props) => {
                         return (
                           <button
                             key={p.id}
-                            onClick={() => navigate(`/project/${p.id}`)}
+                            onClick={() => router.push(`/project/${p.id}`)}
                             className="text-left p-3 rounded-lg border border-border/60 bg-background hover:border-primary/40 hover:shadow-sm hover:-translate-y-0.5 transition-all group"
                           >
                             <div className="flex items-start justify-between gap-2 mb-2">
