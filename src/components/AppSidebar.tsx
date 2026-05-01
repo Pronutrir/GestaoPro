@@ -1,3 +1,4 @@
+'use client';
 import {
   LayoutDashboard,
   Home,
@@ -17,7 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,8 +55,7 @@ const DEFAULT_MODULES = ["overview", "projects", "team", "timeline", "blocked"];
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const location = useLocation();
-  const navigate = useNavigate();
+  const router = useRouter();
   const { signOut, profile, isAdmin, canManage, user } = useAuth();
   const userSector = profile?.sector?.toLowerCase() || "";
   const isQualidade = userSector === "qualidade";
@@ -118,7 +118,7 @@ export function AppSidebar() {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/login");
+    router.push("/login");
   };
 
   return (
@@ -140,7 +140,7 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.path}>
                   <SidebarMenuButton asChild tooltip={collapsed ? item.label : undefined}>
                     <NavLink
-                      to={item.path}
+                      href={item.path}
                       end
                       className="hover:bg-muted/50"
                       activeClassName="bg-primary text-primary-foreground font-medium"

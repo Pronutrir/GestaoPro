@@ -1,5 +1,6 @@
+'use client';
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
@@ -56,7 +57,7 @@ const pageIcons: Record<string, React.ElementType> = {
 export function CommandSearch() {
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<SearchResult[]>([]);
-  const navigate = useNavigate();
+  const router = useRouter();
   const { isAdmin, canManage } = useAuth();
   const { filterProjects } = useProjectAccess();
 
@@ -104,9 +105,9 @@ export function CommandSearch() {
   const handleSelect = useCallback(
     (url: string) => {
       setOpen(false);
-      navigate(url);
+      router.push(url);
     },
-    [navigate]
+    [router]
   );
 
   return (

@@ -1,9 +1,10 @@
+'use client';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Calendar, DollarSign, ExternalLink, Users } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { useHealthScore } from "@/hooks/useHealthScore";
 import { HealthBadge } from "@/components/HealthBadge";
 import { Progress } from "@/components/ui/progress";
@@ -53,7 +54,7 @@ const priorityColors: Record<string, string> = {
 };
 
 export function ProjectDrawer({ project, open, onOpenChange }: ProjectDrawerProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { health } = useHealthScore(project?.id);
 
   if (!project) return null;
@@ -172,8 +173,7 @@ export function ProjectDrawer({ project, open, onOpenChange }: ProjectDrawerProp
             className="w-full"
             onClick={() => {
               onOpenChange(false);
-              navigate(`/project/${project.id}`);
-            }}
+              router.push(`/project/${project.id}`);            }}
           >
             <ExternalLink className="w-4 h-4 mr-2" />
             Abrir Projeto Completo

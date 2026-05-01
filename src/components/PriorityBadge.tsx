@@ -1,3 +1,4 @@
+'use client';
 import { GUT_META, normalizeGut } from "@/lib/gutPriority";
 
 interface Props {

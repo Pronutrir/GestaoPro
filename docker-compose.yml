@@ -1,0 +1,29 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
+        APP_VERSION: ${APP_VERSION:-2026-04-28-00}
+    image: pronutrir/gestaopro:${APP_VERSION:-2026-04-28-03}
+    container_name: gestaopro
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 256M
+        reservations:
+          cpus: "0.50"
+          memory: 128M
+    labels:
+      - "com.pronutrir.description=GestãoPro frontend"

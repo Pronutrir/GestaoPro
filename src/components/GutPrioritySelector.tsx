@@ -1,3 +1,4 @@
+'use client';
 import { useMemo } from "react";
 import { GUT_HINTS, GUT_META, gutLabel, gutScore } from "@/lib/gutPriority";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
