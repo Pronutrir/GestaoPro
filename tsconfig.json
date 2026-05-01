@@ -10,6 +10,7 @@
     "noEmit": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": [
@@ -35,5 +36,5 @@
     "**/*.tsx",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "supabase"]
+  "exclude": ["node_modules", "supabase", "src/legacy"]
 }
