@@ -6,6 +6,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Card } from '@/components/ui/card';
+import { LayoutDashboard } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
@@ -21,53 +23,59 @@ export default function LoginPage() {
     if (error) {
       toast.error(
         error.message === 'Invalid login credentials'
-          ? 'E-mail ou senha inválidos.'
+          ? 'Email ou senha incorretos.'
           : error.message
       );
       setLoading(false);
       return;
     }
+    toast.success('Login realizado com sucesso!');
     router.push('/');
     router.refresh();
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-6 py-16">
-      <div className="w-full max-w-md rounded-2xl border bg-card p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-foreground">Entrar</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Acesse sua conta para continuar.
-        </p>
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="email">E-mail</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              placeholder="seu@email.com"
-            />
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <Card className="w-full max-w-md p-8 shadow-lg border-border">
+        <div className="flex flex-col items-center space-y-6">
+          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-md">
+            <LayoutDashboard className="w-8 h-8 text-primary-foreground" />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="password">Senha</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-              placeholder="••••••••"
-            />
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl font-bold text-foreground">Pipeline de Gestão de Projetos</h1>
+            <p className="text-sm text-muted-foreground">Por favor, faça login para continuar</p>
           </div>
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Entrando…' : 'Entrar'}
-          </Button>
-        </form>
-      </div>
-    </main>
+          <form onSubmit={handleSubmit} className="w-full space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? 'Entrando...' : 'Entrar'}
+            </Button>
+          </form>
+        </div>
+      </Card>
+    </div>
   );
 }
