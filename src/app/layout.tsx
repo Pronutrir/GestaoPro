@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
-
+import { Providers } from './providers'
 import '../index.css'
 
 export const metadata: Metadata = {
   title: 'Insight Finder Pal',
-  description: 'Base Next.js para a migracao gradual do projeto de gestao.',
+  description: 'Plataforma de gestao de projetos.',
 }
 
 export default function RootLayout({
@@ -14,7 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   )
 }
