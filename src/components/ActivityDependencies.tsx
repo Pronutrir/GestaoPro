@@ -41,11 +41,6 @@ export const ActivityDependencies = ({ activityId, projectId }: ActivityDependen
   const [justSavedId, setJustSavedId] = useState<string | null>(null);
 
   const fetchAll = async () => {
-    if (!projectId || !activityId) {
-      setDeps([]);
-      setActivities([]);
-      return;
-    }
     const [{ data: depData }, { data: actData }] = await Promise.all([
       supabase
         .from("task_dependencies")

@@ -118,18 +118,10 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
   const [selectedTargetId, setSelectedTargetId] = useState<string>("");
   const [direction, setDirection] = useState<"outgoing" | "incoming">("outgoing");
   const [saving, setSaving] = useState(false);
-  const [projectTitle, setProjectTitle] = useState<string>("");
   /** Controla a abertura do menu de tipos (usado pelo autoOpenAdd vindo do pai). */
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
 
   const fetchAll = async () => {
-    // Guard: sem projectId válido NÃO consultamos a tabela activities
-    // (um .eq("project_id", "") pode acabar trazendo lista vazia ou inesperada).
-    if (!projectId) {
-      setActivities([]);
-      setRows([]);
-      return;
-    }
     const [{ data: actData }, { data: depData }, { data: relData }] = await Promise.all([
       supabase
         .from("activities")
@@ -147,19 +139,7 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
         .or(`source_activity_id.eq.${activityId},target_activity_id.eq.${activityId}`),
     ]);
 
-    // Filtro defensivo client-side: garante que NENHUMA atividade de outro projeto
-    // entre na lista, mesmo que o backend retornasse algo inesperado.
-    const scoped = ((actData || []) as ActivityOpt[]).filter((a: any) => a && a.id);
-    setActivities(scoped);
-
-    // Busca o nome do projeto para exibir no cabeçalho do diálogo de criação,
-    // deixando explícito ao usuário o ESCOPO da busca de tarefas vinculáveis.
-    const { data: proj } = await supabase
-      .from("projects")
-      .select("title")
-      .eq("id", projectId)
-      .maybeSingle();
-    setProjectTitle((proj as any)?.title || "");
+    setActivities((actData || []) as ActivityOpt[]);
 
     const unified: UnifiedRow[] = [];
 
@@ -473,15 +453,6 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
               <p className="text-xs text-muted-foreground bg-muted/40 p-2 rounded border border-border/50">
                 {META[dialogKind].description}
               </p>
-
-              {/* Escopo da busca: deixa claro que SOMENTE tarefas do projeto atual são listadas */}
-              <div className="text-[11px] flex items-center gap-1.5 bg-primary/5 text-primary border border-primary/20 px-2 py-1.5 rounded">
-                <Link2 className="w-3 h-3 shrink-0" />
-                <span className="truncate">
-                  Buscando tarefas apenas do projeto:{" "}
-                  <strong className="font-semibold">{projectTitle || "—"}</strong>
-                </span>
-              </div>
 
               {/* Direção apenas para blocking/waiting_on (related é simétrico; pred/succ são fixos) */}
               {(dialogKind === "blocking" || dialogKind === "waiting_on") && (
