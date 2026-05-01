@@ -1,3 +1,4 @@
+'use client';
 import { useEffect, useMemo, useState } from "react";
 import { Calendar as BigCalendar, dateFnsLocalizer, View } from "react-big-calendar";
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";

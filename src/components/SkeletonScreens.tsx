@@ -66,7 +66,7 @@ export function PipelineSkeleton() {
               <Skeleton className="h-5 w-20" />
               <Skeleton className="h-5 w-6 rounded-full" />
             </div>
-            {Array.from({ length: Math.floor(Math.random() * 3) + 1 }).map((_, j) => (
+            {Array.from({ length: (i % 3) + 1 }).map((_, j) => (
               <Card key={j} className="p-4 space-y-3">
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-3 w-full" />

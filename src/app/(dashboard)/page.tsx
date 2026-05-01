@@ -1,4 +1,4 @@
-import { redirect } from 'next/server'
+import { redirect } from 'next/navigation'
 
 export default function DashboardHomePage() {
   redirect('/projects')
