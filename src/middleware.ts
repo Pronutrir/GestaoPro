@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
+  const initialSetupEnabled = process.env.NEXT_PUBLIC_ENABLE_INITIAL_SETUP === 'true';
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,7 +30,11 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isPublicPath = pathname === '/login' || pathname === '/setup';
+  if (pathname === '/setup' && !initialSetupEnabled) {
+    return NextResponse.redirect(new URL(user ? '/' : '/login', request.url));
+  }
+
+  const isPublicPath = pathname === '/login' || (pathname === '/setup' && initialSetupEnabled);
 
   if (!user && !isPublicPath) {
     return NextResponse.redirect(new URL('/login', request.url));

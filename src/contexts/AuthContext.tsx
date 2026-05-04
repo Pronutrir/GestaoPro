@@ -38,16 +38,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchUserData = useCallback(async (userId: string) => {
     try {
-      const [{ data: profileData }, { data: rolesData }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", userId).single(),
+      const [{ data: profileData, error: profileError }, { data: rolesData, error: rolesError }] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", userId),
       ]);
+
+      if (profileError?.code) throw profileError;
+      if (rolesError?.code) throw rolesError;
+
       setProfile(profileData);
       const roles = (rolesData || []).map((r: any) => r.role);
       setIsAdmin(roles.includes("admin"));
       setIsGestor(roles.includes("gestor"));
-    } catch (error) {
-      console.error("Error fetching user data:", error);
+    } catch (error: any) {
+      const serialized = error == null
+        ? String(error)
+        : Object.getOwnPropertyNames(error).reduce<Record<string, unknown>>((acc, k) => {
+            acc[k] = error[k];
+            return acc;
+          }, {});
+      console.error("Error fetching user data:", serialized);
       setProfile(null);
       setIsAdmin(false);
       setIsGestor(false);
