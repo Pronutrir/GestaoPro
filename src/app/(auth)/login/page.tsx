@@ -19,19 +19,26 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      toast.error(
-        error.message === 'Invalid login credentials'
-          ? 'Email ou senha incorretos.'
-          : error.message
-      );
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        toast.error(
+          error.message === 'Invalid login credentials'
+            ? 'Email ou senha incorretos.'
+            : error.message
+        );
+        return;
+      }
+
+      toast.success('Login realizado com sucesso!');
+      router.push('/');
+      router.refresh();
+    } catch (err) {
+      console.error('Erro de rede no login:', err);
+      toast.error('Falha de conexão com o servidor de autenticação (CORS/rede).');
+    } finally {
       setLoading(false);
-      return;
     }
-    toast.success('Login realizado com sucesso!');
-    router.push('/');
-    router.refresh();
   }
 
   return (

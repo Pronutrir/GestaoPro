@@ -94,7 +94,7 @@ export const UserManagement = () => {
   };
 
   const handleCreate = async () => {
-    if (!form.email || !form.password || !form.full_name) {
+    if (!form.email || !form.full_name) {
       toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
       return;
     }
@@ -103,7 +103,13 @@ export const UserManagement = () => {
       const { data, error } = await supabase.functions.invoke("admin-create-user", { body: form });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast({ title: "Usuário criado!", description: `${form.full_name} foi adicionado.` });
+      const temporaryPassword = typeof data?.temporary_password === "string" ? data.temporary_password : null;
+      toast({
+        title: "Usuário criado!",
+        description: temporaryPassword
+          ? `${form.full_name} foi adicionado. Senha temporária: ${temporaryPassword}`
+          : `${form.full_name} foi adicionado.`,
+      });
       setForm({ email: "", password: "", full_name: "", sector: "", role_title: "", role: "user" });
       setCreateOpen(false);
       fetchData();
@@ -291,8 +297,8 @@ export const UserManagement = () => {
                     <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="joao@empresa.com" />
                   </div>
                   <div className="grid gap-2">
-                    <Label>Senha *</Label>
-                    <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 6 caracteres" />
+                    <Label>Senha <span className="text-muted-foreground text-xs">(opcional — gerada automaticamente se vazio)</span></Label>
+                    <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Deixe vazio para gerar automaticamente" />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">

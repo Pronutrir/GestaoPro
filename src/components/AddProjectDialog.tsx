@@ -33,6 +33,54 @@ interface AddProjectDialogProps {
 }
 
 export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProjectDialogProps) => {
+  const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+
+    if (typeof error === "object" && error !== null) {
+      const maybeError = error as {
+        message?: string;
+        details?: string;
+        hint?: string;
+        code?: string;
+      };
+
+      const parts = [
+        maybeError.message,
+        maybeError.details,
+        maybeError.hint,
+        maybeError.code ? `code=${maybeError.code}` : undefined,
+      ].filter(Boolean);
+
+      if (parts.length > 0) return parts.join(" | ");
+    }
+
+    return "Erro desconhecido ao criar projeto.";
+  };
+
+  const serializeError = (error: unknown): Record<string, unknown> => {
+    if (error instanceof Error) {
+      return {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      };
+    }
+
+    if (typeof error === "object" && error !== null) {
+      const ownProps = Object.getOwnPropertyNames(error).reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = (error as Record<string, unknown>)[key];
+        return acc;
+      }, {});
+
+      return {
+        ...ownProps,
+        toString: String(error),
+      };
+    }
+
+    return { value: error };
+  };
+
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
 
   useEffect(() => {
@@ -83,7 +131,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         .map((a) => a.trim())
         .filter((a) => a);
 
-      const { error } = await supabase.from("projects").insert({
+      const { error, status, statusText } = await supabase.from("projects").insert({
         title: formData.title,
         description: formData.description,
         status: formData.status,
@@ -107,7 +155,12 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         root_cause: formData.root_cause || null,
       });
 
-      if (error) throw error;
+      if (error) {
+        throw {
+          ...error,
+          message: [error.message, `HTTP ${status} ${statusText}`].filter(Boolean).join(" | "),
+        };
+      }
 
       toast({
         title: "Projeto criado!",
@@ -138,12 +191,20 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         root_cause: "",
       });
       setOpen(false);
-      onProjectAdded();
+      try {
+        onProjectAdded();
+      } catch (refreshError) {
+        console.error("Projeto criado, mas falhou ao atualizar a lista:", serializeError(refreshError));
+      }
     } catch (error) {
-      console.error("Erro ao criar projeto:", error);
+      const message = getErrorMessage(error);
+      console.error("Erro ao criar projeto:", {
+        message,
+        raw: serializeError(error),
+      });
       toast({
         title: "Erro ao criar projeto",
-        description: "Não foi possível criar o projeto. Tente novamente.",
+        description: message,
         variant: "destructive",
       });
     } finally {

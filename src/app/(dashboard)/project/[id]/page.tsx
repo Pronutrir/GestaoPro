@@ -470,24 +470,50 @@ export default function ProjectDetailsPage() {
     }
   };
 
+  const toErrorMessage = (error: unknown, source: string) => {
+    if (error instanceof Error) {
+      return `${source}: ${error.message}`;
+    }
+
+    if (typeof error === "object" && error !== null) {
+      const maybeError = error as {
+        message?: string;
+        details?: string;
+        hint?: string;
+        code?: string;
+      };
+
+      const parts = [maybeError.message, maybeError.details, maybeError.hint, maybeError.code]
+        .filter(Boolean)
+        .join(" | ");
+
+      return `${source}: ${parts || "erro desconhecido"}`;
+    }
+
+    return `${source}: erro desconhecido`;
+  };
+
   const fetchProjectData = async () => {
     try {
       const { data: projectData, error: projectError } = await supabase
         .from("projects").select("*").eq("id", id).single();
-      if (projectError) throw projectError;
+      if (projectError) throw new Error(toErrorMessage(projectError, "projects"));
       setProject(projectData);
 
-      const { data: phasesData } = await supabase
+      const { data: phasesData, error: phasesError } = await supabase
         .from("phases").select("*").eq("project_id", id).eq("is_trashed", false).order("display_order", { ascending: true });
+      if (phasesError) throw new Error(toErrorMessage(phasesError, "phases"));
       setPhases(phasesData || []);
 
-      const { data: activitiesData } = await (supabase
+      const { data: activitiesData, error: activitiesError } = await (supabase
         .from("activities").select("*").eq("project_id", id) as any).eq("is_trashed", false)
         .order("display_order", { ascending: true }).order("created_at", { ascending: true });
+      if (activitiesError) throw new Error(toErrorMessage(activitiesError, "activities"));
       setActivities(activitiesData || []);
     } catch (error) {
-      console.error("Erro ao buscar dados do projeto:", error);
-      toast.error("Erro ao carregar projeto");
+      const message = toErrorMessage(error, "fetchProjectData");
+      console.error("Erro ao buscar dados do projeto:", { message, error });
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }

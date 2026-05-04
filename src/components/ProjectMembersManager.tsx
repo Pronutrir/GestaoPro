@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, UserPlus, User, Building2, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 
 interface Profile {
@@ -100,7 +101,7 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
   };
 
   const handleTogglePermission = async (memberId: string, field: string, value: boolean) => {
-    await supabase.from("project_members").update({ [field]: value }).eq("id", memberId);
+    await supabase.from("project_members").update({ [field]: value } as Database['public']['Tables']['project_members']['Update']).eq("id", memberId);
     fetchData();
   };
 
@@ -114,7 +115,6 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
       const { data, error } = await supabase.functions.invoke("admin-create-user", {
         body: {
           email: newMemberEmail.trim(),
-          password: "Temp@1234",
           full_name: newMemberName.trim(),
           sector: newMemberSector || null,
           role_title: null,
@@ -140,7 +140,16 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
         if (memberError) throw memberError;
       }
 
-      toast({ title: "Membro cadastrado e vinculado ao projeto!", description: `Senha temporária: Temp@1234` });
+      const temporaryPassword = typeof data?.temporary_password === "string"
+        ? data.temporary_password
+        : null;
+
+      toast({
+        title: "Membro cadastrado e vinculado ao projeto!",
+        description: temporaryPassword
+          ? `Senha temporária: ${temporaryPassword}`
+          : "Usuário criado com sucesso.",
+      });
       setNewMemberName("");
       setNewMemberEmail("");
       setNewMemberSector("");

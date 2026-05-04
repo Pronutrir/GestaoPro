@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from 'sonner';
 import {
@@ -231,7 +232,7 @@ const CSC = () => {
 
   // ── Update status ──────────────────────────────
   const updateTicketStatus = async (ticketId: string, newStatus: string) => {
-    const updates: any = { status: newStatus };
+    const updates: Database['public']['Tables']['csc_tickets']['Update'] = { status: newStatus };
     if (newStatus === "concluido") updates.resolved_at = new Date().toISOString();
     const { error } = await supabase.from("csc_tickets").update(updates).eq("id", ticketId);
     if (error) {
@@ -242,7 +243,7 @@ const CSC = () => {
   };
 
   // ── Update ticket fields ───────────────────────
-  const updateTicket = async (ticketId: string, updates: Record<string, any>) => {
+  const updateTicket = async (ticketId: string, updates: Database['public']['Tables']['csc_tickets']['Update']) => {
     const { error } = await supabase.from("csc_tickets").update(updates).eq("id", ticketId);
     if (error) {
       toast.error("Erro");

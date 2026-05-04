@@ -5,6 +5,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const generateTemporaryPassword = (length = 20) => {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*";
+  const randomBytes = crypto.getRandomValues(new Uint8Array(length));
+  return Array.from(randomBytes, (byte) => alphabet[byte % alphabet.length]).join("");
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -44,11 +50,14 @@ Deno.serve(async (req) => {
     }
 
     const { email, password, full_name, sector, role_title, role } = await req.json();
+    const temporaryPassword = typeof password === "string" && password.trim().length >= 8
+      ? password.trim()
+      : generateTemporaryPassword();
 
     // Create user
     const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
       email,
-      password,
+      password: temporaryPassword,
       email_confirm: true,
       user_metadata: { full_name },
     });
@@ -74,7 +83,7 @@ Deno.serve(async (req) => {
       role: role || "user",
     });
 
-    return new Response(JSON.stringify({ user: newUser.user }), {
+    return new Response(JSON.stringify({ user: newUser.user, temporary_password: temporaryPassword }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

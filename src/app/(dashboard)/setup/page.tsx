@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 import { Shield } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
+const initialSetupEnabled = process.env.NEXT_PUBLIC_ENABLE_INITIAL_SETUP === "true";
+
 const Setup = () => {
   const router = useRouter();
   const [hasAdmin, setHasAdmin] = useState<boolean | null>(null);
@@ -16,10 +18,15 @@ const Setup = () => {
   const [form, setForm] = useState({ email: "", password: "", full_name: "" });
 
   useEffect(() => {
+    if (!initialSetupEnabled) {
+      router.replace("/login");
+      return;
+    }
+
     supabase.from("user_roles").select("id").eq("role", "admin").limit(1).then(({ data }) => {
       setHasAdmin(data && data.length > 0);
     });
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (hasAdmin === true) router.push("/login");
@@ -27,6 +34,7 @@ const Setup = () => {
 
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!initialSetupEnabled) return;
     if (!form.email || !form.password || !form.full_name) return;
     setIsLoading(true);
 
@@ -45,7 +53,7 @@ const Setup = () => {
     setIsLoading(false);
   };
 
-  if (hasAdmin === null) return null;
+  if (!initialSetupEnabled || hasAdmin === null) return null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">

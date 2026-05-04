@@ -10,6 +10,7 @@ import {
   ChevronsUpDown, ChevronsDownUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -266,7 +267,7 @@ export const BacklogSection = ({
     }
     setIsMoving(true);
     const ids = Array.from(selectedIds);
-    const updateData: Record<string, unknown> = { workflow_stage_id: targetStageId };
+    const updateData: Database['public']['Tables']['activities']['Update'] = { workflow_stage_id: targetStageId };
     if (assignee && assignee !== "__none__") updateData.assigned_to = assignee;
     await supabase.from("activities").update(updateData).in("id", ids);
     setSelectedIds(new Set());
