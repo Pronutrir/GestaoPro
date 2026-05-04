@@ -110,11 +110,13 @@ export const AIAssistButton = ({
     }
     setLoading(action);
     try {
-      const { data, error } = await supabase.functions.invoke("ai-text-assist", {
-        body: { action, text, context },
+      const res = await fetch("/api/ai/text-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, text, context }),
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Erro na IA");
       const result = (data as { result?: string })?.result?.trim();
       if (!result) throw new Error("IA não retornou texto.");
       onChange(result);

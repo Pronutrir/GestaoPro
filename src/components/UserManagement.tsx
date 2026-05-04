@@ -100,8 +100,17 @@ export const UserManagement = () => {
     }
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("admin-create-user", { body: form });
-      if (error) throw error;
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/create-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Erro ao criar usuário");
       if (data?.error) throw new Error(data.error);
       const temporaryPassword = typeof data?.temporary_password === "string" ? data.temporary_password : null;
       toast({
@@ -132,8 +141,17 @@ export const UserManagement = () => {
       };
       if (editForm.email.trim() && editForm.email !== selectedUser.email) body.new_email = editForm.email;
       if (editForm.new_password.trim()) body.new_password = editForm.new_password;
-      const { data, error } = await supabase.functions.invoke("admin-update-user", { body });
-      if (error) throw error;
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/update-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Erro ao atualizar usuário");
       if (data?.error) throw new Error(data.error);
       await handleSaveTabPermissions(selectedUser.id, userAllowedTabs);
       toast({ title: "Usuário atualizado!" });
@@ -159,10 +177,16 @@ export const UserManagement = () => {
       const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
       const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
-      const { error } = await supabase.functions.invoke("admin-update-user", {
-        body: { target_user_id: selectedUser.id, avatar_url: avatarUrl },
+      const { data: { session } } = await supabase.auth.getSession();
+      const avatarRes = await fetch("/api/admin/update-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ target_user_id: selectedUser.id, avatar_url: avatarUrl }),
       });
-      if (error) throw error;
+      if (!avatarRes.ok) { const d = await avatarRes.json(); throw new Error(d.error ?? "Erro ao atualizar avatar"); }
 
       toast({ title: "Foto atualizada!" });
       fetchData();
@@ -176,10 +200,17 @@ export const UserManagement = () => {
   const handleAction = async (userId: string, action: "ban" | "unban" | "delete") => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("admin-update-user", {
-        body: { target_user_id: userId, action },
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/update-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ target_user_id: userId, action }),
       });
-      if (error) throw error;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Erro ao executar ação");
       if (data?.error) throw new Error(data.error);
       const messages = {
         ban: "Usuário inativado!",

@@ -39,10 +39,13 @@ const Setup = () => {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("initial-setup", {
-        body: form,
+      const res = await fetch("/api/admin/initial-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
       });
-      if (error) throw error;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Erro ao criar admin");
       if (data?.error) throw new Error(data.error);
 
       toast.success("Admin criado com sucesso!");

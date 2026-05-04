@@ -112,16 +112,23 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
     }
     setCreatingMember(true);
     try {
-      const { data, error } = await supabase.functions.invoke("admin-create-user", {
-        body: {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/create-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
           email: newMemberEmail.trim(),
           full_name: newMemberName.trim(),
           sector: newMemberSector || null,
           role_title: null,
           role: "user",
-        },
+        }),
       });
-      if (error) throw error;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Erro ao criar membro");
       if (data?.error) throw new Error(data.error);
 
       const createdUserId = data?.user?.id;
