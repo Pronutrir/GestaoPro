@@ -52,6 +52,7 @@ interface Activity {
   created_at: string;
   updated_at?: string;
   closed_at?: string | null;
+  created_by?: string | null;
   created_by_email?: string | null;
   assigned_to: string | null;
   start_date: string | null;
@@ -238,10 +239,10 @@ export const EditActivityDialog = ({
       if (data) setAllProfiles(data.filter(p => p.full_name));
     });
 
-    // Resolve creator's full name from email
+    // Resolve creator's full name from UUID
     const act = createMode ? draftActivity : activity;
-    if (act?.created_by_email) {
-      supabase.from("profiles").select("full_name").eq("email", act.created_by_email).maybeSingle().then(({ data }) => {
+    if (act?.created_by) {
+      supabase.from("profiles").select("full_name").eq("id", act.created_by).maybeSingle().then(({ data }) => {
         setCreatorName(data?.full_name || null);
       });
       setCreatorEmail(act.created_by_email);
