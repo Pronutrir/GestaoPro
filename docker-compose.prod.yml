@@ -1,0 +1,43 @@
+# Compose para produção — usa imagem pré-buildada, sem build local.
+# Uso:
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Variáveis obrigatórias no .env do servidor (ou via secrets do orquestrador):
+#   NEXT_PUBLIC_SUPABASE_URL
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY   ← embutida no bundle — deve ser a mesma usada no build
+#   SUPABASE_SERVICE_ROLE_KEY
+#   NEXT_PUBLIC_APP_URL             ← ex: https://gestaopro.pronutrir.com.br
+#   APP_VERSION                     ← ex: 2026-05-04-00
+
+services:
+  app:
+    image: pronutrir/gestaopro:${APP_VERSION:-2026-05-04-00}
+    container_name: gestaopro
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "com.pronutrir.description=GestãoPro frontend"
+      - "com.pronutrir.version=${APP_VERSION:-2026-05-04-00}"
