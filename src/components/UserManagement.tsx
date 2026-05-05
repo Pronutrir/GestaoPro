@@ -36,6 +36,8 @@ interface Profile {
   avatar_url: string | null;
   created_at: string;
   is_active?: boolean;
+  provider?: string | null;
+  last_login_at?: string | null;
 }
 
 interface UserRole {
@@ -92,6 +94,10 @@ export const UserManagement = () => {
     if (!name) return "?";
     return name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
   };
+
+  // Usuário Azure (OAuth) que nunca foi aprovado por um admin.
+  const isOAuthPending = (p: Profile) =>
+    p.is_active === false && !!p.provider && p.provider !== "email" && !p.last_login_at;
 
   const handleCreate = async () => {
     if (!form.email || !form.full_name) {
@@ -409,9 +415,15 @@ export const UserManagement = () => {
                         </span>
                         {isSelf && <Badge variant="outline" className="text-[9px] h-4">Você</Badge>}
                         {p.is_active === false && (
-                          <Badge variant="destructive" className="text-[9px] h-4 gap-0.5">
-                            <Ban className="w-2.5 h-2.5" /> Inativo
-                          </Badge>
+                          isOAuthPending(p) ? (
+                            <Badge variant="outline" className="text-[9px] h-4 gap-0.5 border-amber-300 bg-amber-50 text-amber-700">
+                              <CheckCircle2 className="w-2.5 h-2.5" /> Pendente
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive" className="text-[9px] h-4 gap-0.5">
+                              <Ban className="w-2.5 h-2.5" /> Inativo
+                            </Badge>
+                          )
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{p.email}</p>
@@ -442,7 +454,7 @@ export const UserManagement = () => {
                               <DropdownMenuSeparator />
                               {p.is_active === false ? (
                                 <DropdownMenuItem onClick={() => setBanConfirm({ profile: p, action: "unban" })}>
-                                  <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Reativar
+                                  <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> {isOAuthPending(p) ? "Aprovar" : "Reativar"}
                                 </DropdownMenuItem>
                               ) : (
                                 <DropdownMenuItem onClick={() => setBanConfirm({ profile: p, action: "ban" })}>

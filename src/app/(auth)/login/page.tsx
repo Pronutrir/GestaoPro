@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,9 +12,16 @@ import { toast } from 'sonner';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [azureLoading, setAzureLoading] = useState(false);
+
+  useEffect(() => {
+    const err = searchParams.get('error');
+    if (err) toast.error(decodeURIComponent(err));
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,6 +48,28 @@ export default function LoginPage() {
     }
   }
 
+  async function handleAzureLogin() {
+    setAzureLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'azure',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: 'openid profile email',
+        },
+      });
+      if (error) {
+        toast.error(error.message);
+        setAzureLoading(false);
+      }
+      // Em sucesso, o navegador é redirecionado para o Microsoft.
+    } catch (err) {
+      console.error('Erro ao iniciar login Azure:', err);
+      toast.error('Falha ao iniciar login com Microsoft.');
+      setAzureLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md p-8 shadow-lg border-border">
@@ -52,6 +81,29 @@ export default function LoginPage() {
             <h1 className="text-2xl font-bold text-foreground">Pipeline de Gestão de Projetos</h1>
             <p className="text-sm text-muted-foreground">Por favor, faça login para continuar</p>
           </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={handleAzureLogin}
+            disabled={azureLoading || loading}
+          >
+            <svg className="w-4 h-4 mr-2" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1"  y="1"  width="9" height="9" fill="#f25022" />
+              <rect x="11" y="1"  width="9" height="9" fill="#7fba00" />
+              <rect x="1"  y="11" width="9" height="9" fill="#00a4ef" />
+              <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+            </svg>
+            {azureLoading ? 'Redirecionando...' : 'Entrar com Microsoft'}
+          </Button>
+
+          <div className="w-full flex items-center gap-3">
+            <div className="h-px bg-border flex-1" />
+            <span className="text-xs uppercase text-muted-foreground">ou</span>
+            <div className="h-px bg-border flex-1" />
+          </div>
+
           <form onSubmit={handleSubmit} className="w-full space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -77,7 +129,7 @@ export default function LoginPage() {
                 autoComplete="current-password"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || azureLoading}>
               {loading ? 'Entrando...' : 'Entrar'}
             </Button>
           </form>

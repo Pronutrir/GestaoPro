@@ -30,18 +30,42 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+
+  // Callback OAuth precisa gravar cookies sem interferência
+  if (pathname.startsWith('/auth/callback')) {
+    return supabaseResponse;
+  }
+
   if (pathname === '/setup' && !initialSetupEnabled) {
     return NextResponse.redirect(new URL(user ? '/' : '/login', request.url));
   }
 
-  const isPublicPath = pathname === '/login' || (pathname === '/setup' && initialSetupEnabled);
+  const isPublicPath =
+    pathname === '/login' ||
+    pathname === '/pending-approval' ||
+    (pathname === '/setup' && initialSetupEnabled);
 
   if (!user && !isPublicPath) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (user && isPublicPath) {
-    return NextResponse.redirect(new URL('/', request.url));
+  if (user) {
+    // Bloqueia usuários inativos (ex.: novo cadastro Azure aguardando aprovação)
+    if (pathname !== '/pending-approval') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_active')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profile && profile.is_active === false) {
+        return NextResponse.redirect(new URL('/pending-approval', request.url));
+      }
+    }
+
+    if (isPublicPath && pathname !== '/pending-approval') {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
   }
 
   return supabaseResponse;
