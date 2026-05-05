@@ -124,7 +124,10 @@ export async function POST(req: NextRequest) {
       const { error: insRoleError } = await adminClient
         .from("user_roles")
         .insert({ user_id: target_user_id, role });
-      if (insRoleError) return NextResponse.json({ error: insRoleError.message }, { status: 400, headers: corsHeaders });
+      if (insRoleError) {
+        console.error("[update-user] insert user_roles failed:", { target_user_id, role, error: insRoleError });
+        return NextResponse.json({ error: insRoleError.message }, { status: 400, headers: corsHeaders });
+      }
     }
 
     if (new_password) {
