@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -68,11 +68,19 @@ export const useProjectAccess = () => {
     loadMemberships();
   }, [loadMemberships]);
 
+  // Mantemos a referência mais recente de loadMemberships sem refazer o effect
+  // de subscribe (que recriaria o canal Realtime e quebraria com
+  // "cannot add postgres_changes callbacks after subscribe()").
+  const loadMembershipsRef = useRef(loadMemberships);
+  useEffect(() => {
+    loadMembershipsRef.current = loadMemberships;
+  }, [loadMemberships]);
+
   useEffect(() => {
     if (loading || isAdmin || !user?.id) return;
 
     const refresh = () => {
-      loadMemberships();
+      loadMembershipsRef.current();
     };
 
     const handleFocus = () => refresh();
@@ -83,8 +91,12 @@ export const useProjectAccess = () => {
     };
     const intervalId = window.setInterval(refresh, 10000);
 
+    // Nome único por mount: evita o singleton interno do supabase-js
+    // (mesmo nome após remountagem rapida retorna o canal antigo já "joined"
+    // e .on() lança "cannot add postgres_changes callbacks after subscribe()").
+    const channelName = `project-memberships-${user.id}-${Math.random().toString(36).slice(2, 10)}`;
     const channel = supabase
-      .channel(`project-memberships-${user.id}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "project_members", filter: `user_id=eq.${user.id}` },
@@ -106,7 +118,7 @@ export const useProjectAccess = () => {
       window.clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
-  }, [isAdmin, loadMemberships, loading, user?.id]);
+  }, [isAdmin, loading, user?.id]);
 
   const filterProjects = async <T extends { id: string }>(projects: T[]): Promise<T[]> => {
     if (isAdmin || !user) return projects;
