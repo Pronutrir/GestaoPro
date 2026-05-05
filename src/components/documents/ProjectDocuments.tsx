@@ -14,7 +14,7 @@ import {
   Type, ListChecks, ArrowRight, Table as TableIcon, Minus,
   AlignLeft, AlignCenter, AlignRight, Link as LinkIcon,
   Highlighter, Code, Undo2, Redo2, Trash, Plus as PlusIcon,
-  ZoomIn, ZoomOut, RotateCcw,
+  ZoomIn, ZoomOut, RotateCcw, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -29,10 +29,12 @@ import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
+import Image from "@tiptap/extension-image";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TaskReferenceNode } from "./TaskReferenceCard";
 import { AIAssistButton, type AIAction } from "@/components/AIAssistButton";
+import { ImageEditorDialog } from "./ImageEditorDialog";
 
 interface PageDoc {
   id: string;
@@ -112,6 +114,56 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   const [slashIndex, setSlashIndex] = useState(0);
 
   const editorWrapperRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<any>(null);
+
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [pendingImageSrc, setPendingImageSrc] = useState<string | null>(null);
+  const [pendingImageWidthPct, setPendingImageWidthPct] = useState<number>(100);
+  const [imageEditorOpen, setImageEditorOpen] = useState(false);
+  const editingImagePosRef = useRef<number | null>(null);
+
+  const parseImageWidthPct = useCallback((width: unknown) => {
+    if (typeof width === "string") {
+      const match = width.match(/(\d+(?:\.\d+)?)%/);
+      if (match) return Math.max(20, Math.min(100, Math.round(Number(match[1]))));
+    }
+    return 100;
+  }, []);
+
+  const uploadAndInsertImage = useCallback((file: File) => {
+    editingImagePosRef.current = null;
+    setPendingImageSrc(null);
+    setPendingImageWidthPct(100);
+    setPendingImageFile(file);
+    setImageEditorOpen(true);
+  }, []);
+
+  const handleImageEditorConfirm = useCallback(async (blob: Blob, widthPct: number) => {
+    try {
+      const path = `${projectId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+      const { error } = await supabase.storage.from("page-images").upload(path, blob, { contentType: "image/png" });
+      if (error) throw error;
+      const { data } = supabase.storage.from("page-images").getPublicUrl(path);
+      const ed = editorRef.current;
+      if (!ed) return;
+      const replacePos = editingImagePosRef.current;
+      if (replacePos != null) {
+        const node = ed.state.doc.nodeAt(replacePos);
+        if (node) {
+          ed.chain().focus()
+            .setNodeSelection(replacePos)
+            .updateAttributes("image", { src: data.publicUrl, width: `${widthPct}%` })
+            .run();
+        }
+        editingImagePosRef.current = null;
+      } else {
+        ed.chain().focus().setImage({ src: data.publicUrl, width: `${widthPct}%` } as any).run();
+      }
+    } catch (err: any) {
+      toast.error("Erro ao enviar imagem: " + (err?.message || ""));
+    }
+  }, [projectId]);
+
   /** Mantém referência sempre atual para flush no unmount sem stale-closure */
   const flushRef = useRef<() => Promise<void>>(async () => {});
   const dirtyRef = useRef(false);
@@ -168,6 +220,18 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
       TableRow,
       TableHeader,
       TableCell,
+      Image.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            width: {
+              default: null,
+              parseHTML: (el) => (el as HTMLElement).style.width || el.getAttribute("width"),
+              renderHTML: (attrs: any) => attrs.width ? { style: `width: ${attrs.width}` } : {},
+            },
+          };
+        },
+      }).configure({ inline: false, allowBase64: false, HTMLAttributes: { class: "rounded-lg border border-border max-w-full h-auto my-2 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all" } }),
       TaskReferenceNode,
     ],
     content: { type: "doc", content: [{ type: "paragraph" }] },
@@ -175,12 +239,71 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
       attributes: {
         class: "prose prose-sm sm:prose-base max-w-none min-h-[60vh] focus:outline-none px-1 py-4 text-foreground",
       },
+      handlePaste: (view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        for (const item of Array.from(items)) {
+          if (item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) {
+              event.preventDefault();
+              uploadAndInsertImage(file);
+              return true;
+            }
+          }
+        }
+        return false;
+      },
+      handleDrop: (view, event) => {
+        const files = event.dataTransfer?.files;
+        if (!files || files.length === 0) return false;
+        const imgs = Array.from(files).filter((f) => f.type.startsWith("image/"));
+        if (imgs.length === 0) return false;
+        event.preventDefault();
+        imgs.forEach(uploadAndInsertImage);
+        return true;
+      },
     },
   }, [activePageId]);
 
   useEffect(() => {
     titleDraftRef.current = titleDraft;
   }, [titleDraft]);
+
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
+  // Click em <img> dentro do editor → abre o editor de imagem
+  useEffect(() => {
+    const wrapper = editorWrapperRef.current;
+    if (!wrapper || !editor) return;
+    const onClick = async (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target || target.tagName !== "IMG") return;
+      if (!wrapper.contains(target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const src = (target as HTMLImageElement).src;
+      // Localiza posição do node correspondente
+      let foundPos: number | null = null;
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === "image" && node.attrs.src === src && foundPos === null) {
+          foundPos = pos;
+          return false;
+        }
+        return true;
+      });
+      editingImagePosRef.current = foundPos;
+      const node = foundPos != null ? editor.state.doc.nodeAt(foundPos) : null;
+      setPendingImageFile(null);
+      setPendingImageSrc(src);
+      setPendingImageWidthPct(parseImageWidthPct(node?.attrs?.width));
+      setImageEditorOpen(true);
+    };
+    wrapper.addEventListener("click", onClick, true);
+    return () => wrapper.removeEventListener("click", onClick, true);
+  }, [editor, parseImageWidthPct]);
 
   /* ---------- Hydrate current page from local draft (preferred) or server ---------- */
   useEffect(() => {
@@ -549,16 +672,57 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
 
   const inTable = editor?.isActive("table") ?? false;
 
+  // Auto-hide da sidebar de Documentos
+  const [sidebarHidden, setSidebarHidden] = useState(false);
+  const sidebarPinnedRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    // Ocultar quando o editor recebe foco (usuário começou a digitar)
+    const editorEl = el.querySelector(".ProseMirror") as HTMLElement | null;
+    const onFocus = () => {
+      if (!sidebarPinnedRef.current) setSidebarHidden(true);
+    };
+    editorEl?.addEventListener("focus", onFocus);
+    return () => {
+      editorEl?.removeEventListener("focus", onFocus);
+    };
+  }, [editor]);
+
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex flex-col h-[calc(100vh-12rem)] min-h-[600px] bg-background border rounded-lg overflow-hidden">
+      <div ref={containerRef} className="relative flex flex-col h-[calc(100vh-12rem)] min-h-[600px] bg-background border rounded-lg overflow-hidden">
+        {/* Botão flutuante para reabrir a sidebar */}
+        {sidebarHidden && (
+          <Button
+            onClick={() => setSidebarHidden(false)}
+            size="icon"
+            variant="outline"
+            className="absolute top-2 left-2 z-20 h-8 w-8 shadow-md"
+            title="Mostrar Documentos"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        )}
         {/* Body */}
-        <div className="flex-1 grid grid-cols-[240px_1fr] overflow-hidden">
+        <div className={cn("flex-1 grid overflow-hidden transition-[grid-template-columns] duration-200", sidebarHidden ? "grid-cols-[0px_1fr]" : "grid-cols-[240px_1fr]")}>
           {/* Sidebar */}
-          <aside className="border-r bg-muted/20 flex flex-col">
+          <aside
+            className={cn("border-r bg-muted/20 flex flex-col overflow-hidden transition-opacity duration-200", sidebarHidden && "opacity-0 pointer-events-none")}
+            onMouseEnter={() => { sidebarPinnedRef.current = true; }}
+            onMouseLeave={() => { sidebarPinnedRef.current = false; }}
+          >
             <div className="p-3 border-b flex items-center gap-2">
               <FileText className="h-4 w-4 text-primary" />
               <span className="text-sm font-semibold flex-1">Documentos</span>
+              <Button
+                onClick={() => { sidebarPinnedRef.current = false; setSidebarHidden(true); }}
+                size="icon" variant="ghost" className="h-7 w-7" title="Ocultar (passe o mouse na borda esquerda para reabrir)"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
               <Button onClick={createPage} size="icon" variant="ghost" className="h-7 w-7" title="Novo documento">
                 <Plus className="h-4 w-4" />
               </Button>
@@ -903,6 +1067,21 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
           .ProseMirror.resize-cursor { cursor: col-resize; }
         `}</style>
       </div>
+      <ImageEditorDialog
+        file={pendingImageFile}
+        imageSrc={pendingImageSrc}
+        open={imageEditorOpen}
+        initialWidthPercent={pendingImageWidthPct}
+        onOpenChange={(v) => {
+          setImageEditorOpen(v);
+          if (!v) {
+            setPendingImageFile(null);
+            setPendingImageSrc(null);
+            editingImagePosRef.current = null;
+          }
+        }}
+        onConfirm={handleImageEditorConfirm}
+      />
     </TooltipProvider>
   );
 }
