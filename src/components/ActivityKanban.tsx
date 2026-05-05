@@ -76,6 +76,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
+import {
+  computeActivityProgress,
+  PROGRESS_FLAG_COLORS,
+  type ActivityProgress,
+} from "@/lib/activityProgress";
 
 const formatHours = (hours: number): string => {
   if (!hours || hours <= 0) return "";
@@ -138,6 +143,7 @@ interface Activity {
   deadline_flag?: string | null;
   last_update_date?: string | null;
   is_milestone?: boolean;
+  progress_flag?: number | null;
 }
 
 interface ActivityKanbanProps {
@@ -176,6 +182,7 @@ function SortableKanbanCard({
   onRemoveRelation,
   isExpanded,
   onToggleExpand,
+  progress,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -198,6 +205,7 @@ function SortableKanbanCard({
   onRemoveRelation?: (relationId: string) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  progress?: ActivityProgress;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -233,6 +241,7 @@ function SortableKanbanCard({
         onRemoveRelation={onRemoveRelation}
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
+        progress={progress}
       />
     </div>
   );
@@ -261,6 +270,7 @@ function KanbanCard({
   onRemoveRelation,
   isExpanded,
   onToggleExpand,
+  progress,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -284,6 +294,7 @@ function KanbanCard({
   onRemoveRelation?: (relationId: string) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  progress?: ActivityProgress;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -322,6 +333,20 @@ function KanbanCard({
     activity.hours > 0 ? `⏱ Tempo: ${formatHours(activity.hours)}` : null,
     activity.status === "completed" ? "✅ Concluída" : null,
   ].filter(Boolean);
+
+  // Andamento calculado automaticamente pela posição no Kanban
+  const progressInfo: ActivityProgress = progress
+    ?? { percent: 0, paused: false, label: "Não iniciada" };
+  const progressPaused = progressInfo.paused;
+  const progressPercent = progressInfo.percent ?? 0;
+  const progressBarColor = progressPaused
+    ? "bg-muted-foreground/30"
+    : (PROGRESS_FLAG_COLORS[progressPercent] ?? PROGRESS_FLAG_COLORS[0]);
+  const progressBarWidth = progressPaused ? 100 : progressPercent;
+  const progressTooltip = progressPaused
+    ? "Pausada (coluna de bloqueio)"
+    : `${progressPercent}% — ${progressInfo.label}`;
+  const progressBadge = progressPaused ? "⏸" : `${progressPercent}%`;
 
   return (
     <TooltipProvider delayDuration={400}>
@@ -364,6 +389,22 @@ function KanbanCard({
                     {activity.description}
                   </p>
                 )}
+
+                {/* Barra de andamento (calculada pelo Kanban) */}
+                <div
+                  className="mb-1.5 flex items-center gap-1.5"
+                  title={progressTooltip}
+                >
+                  <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
+                      style={{ width: `${progressBarWidth}%` }}
+                    />
+                  </div>
+                  <span className="text-[9px] font-mono text-muted-foreground tabular-nums shrink-0">
+                    {progressBadge}
+                  </span>
+                </div>
 
                 <div className="flex flex-wrap gap-1">
                   {isBlocked && (
@@ -597,6 +638,7 @@ function SortableColumn({
   onToggleStageFinal,
   onToggleStageBlocked,
   onToggleStageVisible,
+  allStages,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -629,6 +671,7 @@ function SortableColumn({
   onToggleStageFinal: (id: string, current: boolean) => Promise<void>;
   onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
   onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
+  allStages: WorkflowStage[];
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -664,14 +707,14 @@ function SortableColumn({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
 
+  // Visual ClickUp-like: colunas com fundo claro neutro e uma fina faixa colorida no topo
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
     flex: `1 1 ${widthPct}%`,
-    marginRight: isLast ? 0 : 6,
-    backgroundColor: stage.is_blocked ? undefined : `${stage.color}4D`,
-    borderColor: stage.is_blocked ? undefined : `${stage.color}80`,
+    marginRight: isLast ? 0 : 8,
+    borderTop: stage.is_blocked ? undefined : `3px solid ${stage.color}`,
   };
 
   const phaseOrderMap: Record<string, number> = {};
@@ -729,15 +772,14 @@ function SortableColumn({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className={`relative min-w-0 rounded-xl border flex flex-col overflow-hidden ${
-        stage.is_blocked ? "bg-orange-500/10 border-orange-500/40" : ""
+      className={`relative min-w-0 rounded-lg border flex flex-col overflow-hidden shadow-sm ${
+        stage.is_blocked
+          ? "bg-orange-500/10 border-orange-500/40"
+          : "bg-card border-border"
       }`}
     >
       {/* Column Header - drag handle for column reordering */}
-      <div
-        className="p-2 border-b"
-        style={{ borderColor: stage.is_blocked ? undefined : `${stage.color}40` }}
-      >
+      <div className="px-2.5 py-2 border-b border-border/60 bg-muted/30">
         <div className="flex items-center justify-between cursor-grab active:cursor-grabbing" {...listeners}>
           <div className="flex items-center gap-2 min-w-0">
             <div
@@ -1010,6 +1052,7 @@ function SortableColumn({
                     subActivityCount={allChildren.length}
                     isExpanded={expanded}
                     onToggleExpand={() => toggleExpanded(activity.id)}
+                    progress={computeActivityProgress(activity.workflow_stage_id, allStages)}
                   />
                   {expanded && inlineChildren.length > 0 && (
                     <div className="ml-4 pl-2 border-l-2 border-primary/30 space-y-1.5">
@@ -1035,6 +1078,7 @@ function SortableColumn({
                           onOpenRelated={onOpenRelated}
                           onRemoveRelation={onRemoveRelation}
                           subActivityCount={0}
+                          progress={computeActivityProgress(child.workflow_stage_id, allStages)}
                         />
                       ))}
                     </div>
@@ -1600,11 +1644,18 @@ export const ActivityKanban = ({
   };
 
   const handleCreateActivity = async (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => {
+    // Regra: toda atividade nova nasce no Backlog (display_order 0).
+    // O usuário moverá manualmente para a coluna desejada do Kanban.
+    const backlogStage =
+      stages.find(s => /backlog/i.test(s.title)) ||
+      stages.find(s => s.display_order === 0) ||
+      stages[0];
+    const targetStageId = backlogStage?.id ?? stageId;
     const { error } = await supabase.from("activities").insert({
       project_id: projectId,
       title,
       phase_id: phaseId,
-      workflow_stage_id: stageId,
+      workflow_stage_id: targetStageId,
       display_order: displayOrder,
       status: "pending",
     });
@@ -1745,7 +1796,7 @@ export const ActivityKanban = ({
           items={visibleStages.map((s) => `col-${s.id}`)}
           strategy={horizontalListSortingStrategy}
         >
-          <div ref={containerRef} className="flex pb-4 w-full" style={{ minHeight: 400 }}>
+          <div ref={containerRef} className="flex pb-4 pt-2 px-2 w-full rounded-lg bg-muted/40" style={{ minHeight: 400 }}>
           {/* Tarefas do Dia - Quality Only */}
           {isQualityProject && (
             <div
@@ -1785,6 +1836,7 @@ export const ActivityKanban = ({
                       onCreateStory={() => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
+                      progress={computeActivityProgress(activity.workflow_stage_id, stages)}
                     />
                   ))
                 )}
@@ -1862,6 +1914,7 @@ export const ActivityKanban = ({
                 onToggleStageFinal={handleToggleStageFinal}
                 onToggleStageBlocked={handleToggleStageBlocked}
                 onToggleStageVisible={handleToggleStageVisible}
+                allStages={stages}
               />
             );
           })}
@@ -1882,6 +1935,7 @@ export const ActivityKanban = ({
               onToggle={() => {}}
               onMoveToBacklog={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
+              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages)}
             />
           </div>
         ) : activeColumn ? (
