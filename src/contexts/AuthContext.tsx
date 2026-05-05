@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -129,11 +129,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [fetchUserData, loading]);
 
+  // Mantém a refer\u00eancia mais recente de fetchUserData sem refazer o effect
+  // de subscribe (que recriaria o canal Realtime e quebraria com
+  // "cannot add postgres_changes callbacks after subscribe()").
+  const fetchUserDataRef = useRef(fetchUserData);
+  useEffect(() => {
+    fetchUserDataRef.current = fetchUserData;
+  }, [fetchUserData]);
+
   useEffect(() => {
     if (!user?.id) return;
 
     const refreshUserData = () => {
-      fetchUserData(user.id).catch((error) => {
+      fetchUserDataRef.current(user.id).catch((error) => {
         console.error("Error refreshing user data:", error);
       });
     };
@@ -146,8 +154,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
     const intervalId = window.setInterval(refreshUserData, 10000);
 
+    // Nome único por mount: evita o singleton interno do supabase-js
+    // (mesmo nome após remountagem rapida retorna o canal antigo já "joined"
+    // e .on() lança "cannot add postgres_changes callbacks after subscribe()").
+    const channelName = `auth-user-${user.id}-${Math.random().toString(36).slice(2, 10)}`;
     const channel = supabase
-      .channel(`auth-user-${user.id}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "profiles", filter: `id=eq.${user.id}` },
@@ -169,7 +181,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       window.clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
-  }, [fetchUserData, user?.id]);
+  }, [user?.id]);
 
   const signOut = useCallback(async () => {
     setSession(null);
