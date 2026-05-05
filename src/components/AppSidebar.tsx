@@ -37,13 +37,15 @@ import {
 const allNavItems = [
   { path: "/", label: "Visão Geral", icon: Home, minRole: "user" as const, moduleKey: "overview" },
   { path: "/projects", label: "Projetos", icon: FolderKanban, minRole: "user" as const, moduleKey: "projects" },
-  { path: "/quality", label: "Gestão da Qualidade", icon: ShieldCheck, minRole: "qualidade" as const, moduleKey: "qualidade" },
+  // Módulo Portfólio em standby — mantido no código mas oculto da navegação
+  // { path: "/portfolio", label: "Portfólio", icon: Briefcase, minRole: "gestor" as const, moduleKey: "portfolio" },
+  { path: "/qualidade", label: "Gestão da Qualidade", icon: ShieldCheck, minRole: "qualidade" as const, moduleKey: "qualidade" },
   { path: "/team", label: "Equipe", icon: Users, minRole: "user" as const, moduleKey: "team" },
   { path: "/timeline", label: "Cronograma", icon: GanttChart, minRole: "user" as const, moduleKey: "timeline" },
-  { path: "/blocked", label: "Bloqueios", icon: AlertTriangle, minRole: "user" as const, moduleKey: "blocked" },
+  { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, minRole: "user" as const, moduleKey: "blocked" },
   { path: "/investments", label: "Gestão Financeira", icon: DollarSign, minRole: "gestor" as const, moduleKey: "investments" },
   { path: "/roadmap", label: "Roadmap", icon: Map, minRole: "gestor" as const, moduleKey: "roadmap" },
-  { path: "/calendar", label: "Calendário", icon: Calendar, minRole: "user" as const, moduleKey: "calendario" },
+  { path: "/calendario", label: "Calendário", icon: Calendar, minRole: "user" as const, moduleKey: "calendario" },
   { path: "/reports", label: "Relatórios", icon: BarChart3, minRole: "gestor" as const, moduleKey: "reports" },
   { path: "/csc", label: "CSC", icon: Layers, minRole: "gestor" as const, moduleKey: "csc" },
   { path: "/trash", label: "Arquivo", icon: Trash2, minRole: "gestor" as const, moduleKey: "projects" },
