@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from 'next/navigation';
 import { supabase } from "@/integrations/supabase/client";
+import { computeActivityProgress } from "@/lib/activityProgress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,12 +15,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
   Table2, GanttChart, ExternalLink, AlertTriangle, CalendarOff,
-  CalendarDays, Settings2,
+  CalendarDays, Settings2, Filter, FolderKanban, Search, X,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   format, parseISO, differenceInBusinessDays, addDays, eachDayOfInterval,
   isWeekend, isSameMonth, min as dateMin, max as dateMax, differenceInDays,
+  startOfMonth, endOfMonth, startOfQuarter, endOfQuarter,
+  startOfYear, endOfYear, addMonths,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calculateCriticalPath } from "@/lib/criticalPath";
@@ -53,8 +57,8 @@ const ZOOM_PX_PER_DAY: Record<GanttZoom, number> = {
   day: 36,
   week: 14,
   month: 6,
-  quarter: 2.5,
-  year: 0.9,
+  quarter: 4,
+  year: 2.2,
 };
 
 const ZOOM_LABEL: Record<GanttZoom, string> = {
@@ -113,6 +117,12 @@ export function ProjectCronogramaPanel({
   const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string }>>({});
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [mode, setMode] = useState<CronogramaMode>(defaultMode);
+  const [stages, setStages] = useState<Array<{ id: string; title: string; color: string; is_final: boolean; is_blocked: boolean; display_order: number; project_id: string }>>([]);
+  const [stageFilter, setStageFilter] = useState<Set<string> | null>(null); // null = todas
+  // Filtro interno de projetos (usado principalmente no Cronograma Geral).
+  // null = todos os projetos carregados
+  const [projectFilter, setProjectFilter] = useState<Set<string> | null>(null);
+  const [projectSearch, setProjectSearch] = useState("");
 
   // ===== Toolbar Gantt =====
   const [zoom, setZoom] = useState<GanttZoom>(() => {
@@ -147,20 +157,26 @@ export function ProjectCronogramaPanel({
     if (projectIds && projectIds.length > 0) {
       actsQ = actsQ.in("project_id", projectIds);
     } else if (projectIds && projectIds.length === 0) {
-      setActivities([]); setDeps([]); setPhases([]);
+      setActivities([]); setDeps([]); setPhases([]); setStages([]);
       return;
     }
 
-    const [{ data: acts }, { data: phs }, { data: profs }, { data: projs }] = await Promise.all([
+    const stagesQ = projectIds && projectIds.length
+      ? supabase.from("workflow_stages").select("id, title, color, is_final, is_blocked, display_order, project_id").in("project_id", projectIds)
+      : supabase.from("workflow_stages").select("id, title, color, is_final, is_blocked, display_order, project_id");
+
+    const [{ data: acts }, { data: phs }, { data: profs }, { data: projs }, { data: stgs }] = await Promise.all([
       actsQ,
       projectIds && projectIds.length
         ? supabase.from("phases").select("*").in("project_id", projectIds).eq("is_trashed", false).order("display_order", { ascending: true })
         : supabase.from("phases").select("*").eq("is_trashed", false).order("display_order", { ascending: true }),
       supabase.from("profiles").select("id, full_name, sector"),
       supabase.from("projects").select("id, title").eq("is_trashed", false),
+      stagesQ,
     ]);
     setActivities(acts || []);
     setPhases(phs || []);
+    setStages((stgs as any) || []);
     const map: Record<string, { name: string; sector: string }> = {};
     (profs || []).forEach((p: any) => { map[p.id] = { name: p.full_name, sector: p.sector || "—" }; });
     setProfiles(map);
@@ -274,10 +290,69 @@ export function ProjectCronogramaPanel({
   }, [activities, deps]);
 
   const rows = useMemo(
-    () => activities.map((a, idx) => ({ a, idx, mock: mockFor(a.id, idx) })),
+    () => {
+      let filtered = activities;
+      if (projectFilter !== null) {
+        filtered = filtered.filter(a => a.project_id && projectFilter.has(a.project_id));
+      }
+      if (stageFilter !== null) {
+        filtered = filtered.filter(a => a.workflow_stage_id && stageFilter.has(a.workflow_stage_id));
+      }
+      return filtered.map((a, idx) => ({ a, idx, mock: mockFor(a.id, idx) }));
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activities, profiles]
+    [activities, profiles, stageFilter, projectFilter]
   );
+
+  const stageById = useMemo(() => {
+    const m = new Map<string, { title: string; color: string; is_final: boolean }>();
+    stages.forEach(s => m.set(s.id, { title: s.title, color: s.color, is_final: s.is_final }));
+    return m;
+  }, [stages]);
+
+  /** Stages agrupadas por projeto, para cálculo de andamento por contexto. */
+  const stagesByProject = useMemo(() => {
+    const m = new Map<string, typeof stages>();
+    stages.forEach((s) => {
+      if (!m.has(s.project_id)) m.set(s.project_id, [] as any);
+      (m.get(s.project_id) as any).push(s);
+    });
+    return m;
+  }, [stages]);
+
+  const progressFor = useCallback((a: any): number => {
+    const projStages = stagesByProject.get(a.project_id) || [];
+    const info = computeActivityProgress(a.workflow_stage_id, projStages as any);
+    if (info.paused) return 0;
+    return info.percent ?? 0;
+  }, [stagesByProject]);
+
+  /** Para multi-projeto: agrupar status com mesmo título (Backlog, Em Andamento, etc.). */
+  const uniqueStageTitles = useMemo(() => {
+    const map = new Map<string, { title: string; color: string; ids: string[]; is_final: boolean }>();
+    stages.forEach(s => {
+      const key = s.title.trim().toLowerCase();
+      const ex = map.get(key);
+      if (ex) ex.ids.push(s.id);
+      else map.set(key, { title: s.title, color: s.color, ids: [s.id], is_final: s.is_final });
+    });
+    return Array.from(map.values()).sort((a, b) => a.title.localeCompare(b.title));
+  }, [stages]);
+
+  /** Lista ordenada de projetos com pelo menos uma atividade carregada (alimenta o filtro de projetos). */
+  const projectOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { id: string; title: string }[] = [];
+    activities.forEach(a => {
+      if (a.project_id && !seen.has(a.project_id)) {
+        seen.add(a.project_id);
+        out.push({ id: a.project_id, title: projectsMap[a.project_id] || "(sem nome)" });
+      }
+    });
+    return out.sort((a, b) => a.title.localeCompare(b.title));
+  }, [activities, projectsMap]);
+
+  const showProjectFilter = projectOptions.length > 1;
 
   const indexById = useMemo(() => {
     const m = new Map<string, number>();
@@ -314,16 +389,59 @@ export function ProjectCronogramaPanel({
     if (!withDates.length && !undated.length) return null;
 
     const today = new Date();
-    const minDate = withDates.length
+    let minDate = withDates.length
       ? addDays(dateMin(withDates.map(d => d.s)), -3)
       : addDays(today, -7);
-    const maxDate = withDates.length
+    let maxDate = withDates.length
       ? addDays(dateMax(withDates.map(d => d.e)), 5)
       : addDays(today, 21);
+
+    // Garante uma janela mínima coerente com o zoom selecionado, para que
+    // a régua e as barras tenham densidade visual adequada (sem "achatar"
+    // quando há poucas atividades datadas em um intervalo curto).
+    const includeToday = (a: Date, b: Date) => {
+      if (today < a) a = today;
+      if (today > b) b = today;
+      return [a, b] as const;
+    };
+    if (zoom === "week") {
+      // Semana → mostra ao menos ~6 semanas
+      const span = differenceInDays(maxDate, minDate);
+      if (span < 42) {
+        const pad = Math.ceil((42 - span) / 2);
+        minDate = addDays(minDate, -pad);
+        maxDate = addDays(maxDate, pad);
+      }
+    } else if (zoom === "month") {
+      // Mês → arredonda para meses cheios e garante ao menos 3 meses
+      minDate = startOfMonth(minDate);
+      maxDate = endOfMonth(maxDate);
+      while (differenceInDays(maxDate, minDate) < 90) {
+        maxDate = endOfMonth(addMonths(maxDate, 1));
+      }
+      [minDate, maxDate] = includeToday(minDate, maxDate);
+    } else if (zoom === "quarter") {
+      // Trimestre → arredonda para trimestres cheios e garante ao menos 2 trimestres
+      minDate = startOfQuarter(minDate);
+      maxDate = endOfQuarter(maxDate);
+      while (differenceInDays(maxDate, minDate) < 180) {
+        maxDate = endOfQuarter(addMonths(maxDate, 3));
+      }
+      [minDate, maxDate] = includeToday(minDate, maxDate);
+    } else if (zoom === "year") {
+      // Ano → arredonda para anos cheios (mín. 1 ano) e inclui hoje
+      minDate = startOfYear(minDate);
+      maxDate = endOfYear(maxDate);
+      if (differenceInDays(maxDate, minDate) < 365) {
+        maxDate = endOfYear(addMonths(maxDate, 12));
+      }
+      [minDate, maxDate] = includeToday(minDate, maxDate);
+    }
+
     const days = eachDayOfInterval({ start: minDate, end: maxDate });
     const all = [...withDates, ...undated];
     return { dated: withDates, undated, all, minDate, maxDate, days };
-  }, [rows]);
+  }, [rows, zoom]);
 
   /** Botão "Hoje" — rola o Gantt até a coluna de hoje. */
   const handleScrollToToday = () => {
@@ -478,12 +596,22 @@ export function ProjectCronogramaPanel({
           {rows.map(({ a, idx, mock }) => {
             const id = indexById.get(a.id) ?? idx + 1;
             const dur = workDays(a.start_date, a.end_date);
-            const progress = a.status === "completed" ? 100 : a.status === "in_progress" ? 50 : 0;
+            const progress = progressFor(a);
             const preds = predsOf(a.id);
             const responsible = profiles[a.assigned_to || ""]?.name || "—";
             const ctx = { a, idx, mock, id, dur, progress, preds, responsible };
+            const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
+            const stageColor = stageInfo?.color;
+            const isStageFinal = stageInfo?.is_final;
             return (
-              <tr key={a.id} className="border-b hover:bg-muted/40 transition-colors">
+              <tr
+                key={a.id}
+                className={cn(
+                  "border-b hover:bg-muted/40 transition-colors",
+                  isStageFinal && "opacity-90"
+                )}
+                style={stageColor ? { borderLeft: `3px solid ${stageColor}` } : undefined}
+              >
                 {visibleCols.map(k => <span key={k} style={{ display: "contents" }}>{renderCell(k, ctx)}</span>)}
               </tr>
             );
@@ -515,9 +643,8 @@ export function ProjectCronogramaPanel({
     <div className="border rounded-lg bg-card overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30 flex-wrap gap-2">
         <div className="flex items-center gap-2 text-xs flex-wrap">
-          <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-primary" /> Atividade</span>
-          <span className="inline-flex items-center gap-1 ml-3"><span className="w-3 h-3 rounded bg-red-500" /> Caminho crítico (folga 0)</span>
-          <span className="inline-flex items-center gap-1 ml-3"><span className="w-3 h-3 rounded bg-emerald-500/70" /> Concluída</span>
+          <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-primary" /> Cor da coluna do Kanban</span>
+          <span className="inline-flex items-center gap-1 ml-3"><span className="w-3 h-3 rounded ring-2 ring-red-500" /> Caminho crítico (folga 0)</span>
           <span className="inline-flex items-center gap-1 ml-3"><AlertTriangle className="h-3 w-3 text-amber-500" /> Marco</span>
           <span className="inline-flex items-center gap-1 ml-3"><CalendarOff className="h-3 w-3 text-muted-foreground" /> Sem datas</span>
         </div>
@@ -534,7 +661,7 @@ export function ProjectCronogramaPanel({
         </div>
       ) : (
         <div id="gantt-scroll-container" className="overflow-auto max-h-[70vh]">
-          <div className="flex" style={{ width: LABEL_W + ganttData.days.length * DAY_W }}>
+          <div className="flex" style={{ width: LABEL_W + ganttData.days.length * DAY_W, minWidth: "100%" }}>
             {/* Coluna fixa de rótulos */}
             <div className="sticky left-0 z-20 bg-card border-r" style={{ width: LABEL_W }}>
               <div className="border-b bg-muted/40" style={{ height: 44 }}>
@@ -567,7 +694,10 @@ export function ProjectCronogramaPanel({
             </div>
 
             {/* Área do gráfico */}
-            <div className="relative" style={{ width: ganttData.days.length * DAY_W }}>
+            <div
+              className="relative flex-1"
+              style={{ minWidth: ganttData.days.length * DAY_W }}
+            >
               {/* Cabeçalho meses + dias */}
               <div className="border-b sticky top-0 z-10 bg-card">
                 <div className="flex" style={{ height: 22 }}>
@@ -657,8 +787,9 @@ export function ProjectCronogramaPanel({
                   const left = Math.max(0, startIdx) * DAY_W;
                   const width = Math.max(2, (endIdx - startIdx + 1)) * DAY_W - 2;
                   const isCritical = criticalSet.has(a.id);
-                  const isCompleted = a.status === "completed";
-                  const progress = isCompleted ? 100 : a.status === "in_progress" ? 50 : 0;
+                  const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
+                  const isCompleted = stageInfo?.is_final || a.status === "completed";
+                  const progress = progressFor(a);
                   const responsible = profiles[a.assigned_to || ""]?.name || "—";
 
                   return (
@@ -674,9 +805,17 @@ export function ProjectCronogramaPanel({
                             ) : (
                               <div className={cn(
                                 "absolute top-1.5 rounded-sm shadow-sm overflow-hidden cursor-pointer transition-opacity hover:opacity-90",
-                                isCritical ? "bg-red-500" : isCompleted ? "bg-emerald-500/70" : "bg-primary"
+                                !stageInfo && (isCritical ? "bg-red-500" : isCompleted ? "bg-emerald-500/70" : "bg-primary")
                               )}
-                                style={{ left, width, height: ROW_H - 12 }}>
+                                style={{
+                                  left,
+                                  width,
+                                  height: ROW_H - 12,
+                                  backgroundColor: stageInfo
+                                    ? (isCritical ? undefined : stageInfo.color)
+                                    : undefined,
+                                  outline: isCritical ? "2px solid hsl(0 84% 55%)" : undefined,
+                                }}>
                                 <div className="h-full bg-white/30" style={{ width: `${100 - progress}%`, marginLeft: `${progress}%` }} />
                                 {DAY_W >= 6 && (
                                   <div className="absolute inset-0 flex items-center px-1.5 text-[10px] text-white font-medium truncate">
@@ -784,6 +923,144 @@ export function ProjectCronogramaPanel({
               <Button variant="ghost" size="sm" className="text-xs h-7"
                 onClick={() => setVisibleCols(Object.keys(COL_LABELS) as ColKey[])}>
                 Mostrar todas
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+
+      {/* Filtro por Projeto (apenas no Cronograma Geral / quando há mais de 1 projeto) */}
+      {showProjectFilter && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5">
+              <FolderKanban className="h-4 w-4" /> Projetos
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
+                {projectFilter === null ? `Todos (${projectOptions.length})` : `${projectFilter.size}/${projectOptions.length}`}
+              </Badge>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-80 p-3">
+            <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase">
+              Filtrar por projeto
+            </div>
+            <div className="relative mb-2">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={projectSearch}
+                onChange={(e) => setProjectSearch(e.target.value)}
+                placeholder="Buscar projeto..."
+                className="h-8 pl-7 pr-7 text-xs"
+              />
+              {projectSearch && (
+                <button
+                  onClick={() => setProjectSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="Limpar busca"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="space-y-1 max-h-[50vh] overflow-y-auto pr-1">
+              {projectOptions
+                .filter(p => p.title.toLowerCase().includes(projectSearch.toLowerCase()))
+                .map(p => {
+                  const checked = projectFilter === null ? true : projectFilter.has(p.id);
+                  return (
+                    <label key={p.id}
+                      className="flex items-center gap-2 px-1 py-1 rounded hover:bg-muted/50 cursor-pointer">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => {
+                          setProjectFilter(prev => {
+                            const base = prev === null
+                              ? new Set(projectOptions.map(x => x.id))
+                              : new Set(prev);
+                            if (base.has(p.id)) base.delete(p.id);
+                            else base.add(p.id);
+                            return base;
+                          });
+                        }}
+                      />
+                      <Label className="text-xs cursor-pointer flex-1 truncate" title={p.title}>
+                        {p.title}
+                      </Label>
+                    </label>
+                  );
+                })}
+            </div>
+            <div className="mt-3 pt-2 border-t flex items-center justify-between gap-2">
+              <Button variant="ghost" size="sm" className="text-xs h-7"
+                onClick={() => setProjectFilter(null)}>
+                Selecionar todos
+              </Button>
+              <Button variant="ghost" size="sm" className="text-xs h-7"
+                onClick={() => setProjectFilter(new Set())}>
+                Limpar seleção
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+
+      {/* Filtro por status do Kanban (workflow_stages) */}
+      {uniqueStageTitles.length > 0 && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5">
+              <Filter className="h-4 w-4" /> Status
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
+                {stageFilter === null ? "Todas" : stageFilter.size}
+              </Badge>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-72 p-3">
+            <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase">Filtrar por coluna do Kanban</div>
+            <div className="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
+              {uniqueStageTitles.map(s => {
+                const allActive = stageFilter === null;
+                const checked = allActive ? true : s.ids.some(id => stageFilter!.has(id));
+                return (
+                  <label key={s.title}
+                    className="flex items-center gap-2 px-1 py-1 rounded hover:bg-muted/50 cursor-pointer">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => {
+                        setStageFilter(prev => {
+                          const base = prev === null
+                            ? new Set(stages.map(x => x.id)) // partir de todas
+                            : new Set(prev);
+                          const isOn = s.ids.some(id => base.has(id));
+                          if (isOn) s.ids.forEach(id => base.delete(id));
+                          else s.ids.forEach(id => base.add(id));
+                          return base;
+                        });
+                      }}
+                    />
+                    <span
+                      className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+                      style={{ backgroundColor: s.color }}
+                    />
+                    <Label className="text-xs cursor-pointer flex-1 truncate" title={s.title}>
+                      {s.title}{s.is_final ? " ✓" : ""}
+                    </Label>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-3 pt-2 border-t flex items-center justify-between gap-2">
+              <Button variant="ghost" size="sm" className="text-xs h-7"
+                onClick={() => setStageFilter(null)}>
+                Mostrar todas
+              </Button>
+              <Button variant="ghost" size="sm" className="text-xs h-7"
+                onClick={() => {
+                  // Apenas não-concluídas (oculta is_final)
+                  const ids = stages.filter(s => !s.is_final).map(s => s.id);
+                  setStageFilter(new Set(ids));
+                }}>
+                Ocultar concluídas
               </Button>
             </div>
           </PopoverContent>
