@@ -2,6 +2,13 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
+  // O callback OAuth precisa rodar sem nenhuma chamada do middleware ao Supabase.
+  // Cookies parciais do PKCE (vindos do redirect cross-site da Microsoft) podem
+  // fazer `auth.getUser()` lançar e o NPM reportar como 502 Bad Gateway.
+  if (request.nextUrl.pathname.startsWith('/auth/callback')) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
   const initialSetupEnabled = process.env.NEXT_PUBLIC_ENABLE_INITIAL_SETUP === 'true';
 
@@ -30,11 +37,6 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-
-  // Callback OAuth precisa gravar cookies sem interferência
-  if (pathname.startsWith('/auth/callback')) {
-    return supabaseResponse;
-  }
 
   if (pathname === '/setup' && !initialSetupEnabled) {
     return NextResponse.redirect(new URL(user ? '/' : '/login', request.url));
