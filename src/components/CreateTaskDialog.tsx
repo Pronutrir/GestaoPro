@@ -175,15 +175,22 @@ export const CreateTaskDialog = ({
     if (!formData.title.trim() || loading) return;
     setLoading(true);
     try {
+      // Regra: toda atividade nova deve nascer no Backlog. O usuário move
+      // manualmente para a coluna correta do Kanban depois.
+      const backlogStage =
+        stages.find(s => /backlog/i.test(s.title)) ||
+        stages[0]; // fallback: primeira coluna (display_order 0)
+      const newStageId = backlogStage?.id ?? stageId;
+
       const payload: Record<string, unknown> = {
         project_id: projectId,
         title: formData.title.trim(),
         description: formData.description.trim() || null,
-        status: defaultStatus || "pending",
+        status: "pending",
         gravity: formData.gravity,
         urgency: formData.urgency,
         tendency: formData.tendency,
-        workflow_stage_id: stageId,
+        workflow_stage_id: newStageId,
         phase_id: formData.phase_id || null,
         parent_id: defaultParentId ?? null,
         assigned_to: formData.assigned_to || null,

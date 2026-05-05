@@ -33,7 +33,7 @@ export const GutPriorityField = ({ gravity, urgency, tendency, onChange, buttonC
         <Button
           type="button"
           variant="outline"
-          className={`h-10 justify-between font-normal ${buttonClassName ?? "w-full"}`}
+          className={`h-10 justify-between font-normal bg-background hover:bg-muted/40 hover:text-foreground data-[state=open]:bg-background data-[state=open]:text-foreground ${buttonClassName ?? "w-full"}`}
         >
           <span className="flex items-center gap-2 min-w-0">
             <span className={`h-2 w-2 rounded-full shrink-0 ${meta.dotClass} ${meta.pulse ? "animate-pulse" : ""}`} />
