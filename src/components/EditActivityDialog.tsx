@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2 } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -34,12 +33,12 @@ import { ActivityStoriesPanel } from "@/components/ActivityStoriesPanel";
 
 /** Linha de propriedade densa (ícone + label cinza + valor) usada no painel ClickUp-like. */
 const PropertyRow = ({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) => (
-  <div className="flex items-center gap-2 min-h-[28px]">
-    <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 w-[88px]">
+  <div className="flex items-start gap-3 min-h-[32px] py-1">
+    <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 w-[110px] pt-1">
       <span className="text-muted-foreground/70">{icon}</span>
       {label}
     </span>
-    <div className="flex-1 min-w-0">{children}</div>
+    <div className="flex-1 min-w-0 flex items-center flex-wrap gap-1.5">{children}</div>
   </div>
 );
 
@@ -149,6 +148,7 @@ export const EditActivityDialog = ({
     ui_color_tag: "" as string,
     is_milestone: false,
     item_type: "tarefa" as "fase" | "tarefa",
+    progress_flag: 0 as number,
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -239,10 +239,10 @@ export const EditActivityDialog = ({
       if (data) setAllProfiles(data.filter(p => p.full_name));
     });
 
-    // Resolve creator's full name from UUID
+    // Resolve creator's full name from email
     const act = createMode ? draftActivity : activity;
-    if (act?.created_by) {
-      supabase.from("profiles").select("full_name").eq("id", act.created_by).maybeSingle().then(({ data }) => {
+    if (act?.created_by_email) {
+      supabase.from("profiles").select("full_name").eq("email", act.created_by_email).maybeSingle().then(({ data }) => {
         setCreatorName(data?.full_name || null);
       });
       setCreatorEmail(act.created_by_email);
@@ -356,6 +356,7 @@ export const EditActivityDialog = ({
         ui_color_tag: (act as any).ui_color_tag || "",
         is_milestone: !!(act as any).is_milestone,
         item_type: ((act as any).item_type === "fase" ? "fase" : "tarefa"),
+        progress_flag: typeof (act as any).progress_flag === "number" ? (act as any).progress_flag : 0,
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       fetchSubActivities(act.id);
@@ -442,6 +443,7 @@ export const EditActivityDialog = ({
         ui_color_tag: formData.ui_color_tag || null,
         is_milestone: formData.is_milestone,
         item_type: formData.item_type,
+        progress_flag: formData.progress_flag,
       } as any).eq("id", act.id);
       if (error) throw error;
 
@@ -586,7 +588,9 @@ export const EditActivityDialog = ({
             </div>
           )}
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-5">
+          {/* ========= COLUNA PRINCIPAL (esquerda) ========= */}
+          <div className="space-y-5 min-w-0">
           {/* ============= CABEÇALHO COMPACTO (estilo ClickUp) ============= */}
           {/* Título grande inline */}
           <div className="space-y-1 min-w-0">
@@ -611,11 +615,10 @@ export const EditActivityDialog = ({
             </div>
           </div>
 
-          {/* Painel de propriedades — 2 colunas, linhas densas (label + valor) */}
+          {/* Painel de propriedades — lista vertical única (evita sobreposição entre campos largos e estreitos) */}
           {act && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5 p-3 rounded-lg border border-border bg-muted/10">
-              {/* Coluna esquerda */}
-              <div className="space-y-1.5">
+            <div className="flex flex-col divide-y divide-border/60 p-3 rounded-lg border border-border bg-muted/10">
+              <div className="flex flex-col">
                 {/* Status / Etapa */}
                 {workflowStages.length > 0 && (
                   <PropertyRow icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
@@ -741,14 +744,10 @@ export const EditActivityDialog = ({
                     />
                   </PropertyRow>
                 )}
-              </div>
-
-              {/* Coluna direita */}
-              <div className="space-y-1.5">
                 {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
                 <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
                   <select
-                    className="h-7 rounded-md border border-input bg-background px-2 text-xs max-w-[220px] truncate"
+                    className="h-7 rounded-md border border-input bg-background px-2 text-xs w-full max-w-[280px] truncate"
                     value={formData.assigned_to}
                     onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
                   >
@@ -839,11 +838,7 @@ export const EditActivityDialog = ({
                   <Paperclip className="w-3.5 h-3.5" /> Anexos
                 </TabsTrigger>
               )}
-              {act && (
-                <TabsTrigger value="comments" className="text-xs gap-1.5 data-[state=active]:bg-background">
-                  <MessageSquare className="w-3.5 h-3.5" /> Comentários
-                </TabsTrigger>
-              )}
+              {/* Comentários e Histórico foram movidos para o painel lateral à direita */}
               {act && projectId && (
                 <TabsTrigger value="stories" className="text-xs gap-1.5 data-[state=active]:bg-background">
                   <BookOpen className="w-3.5 h-3.5" /> Histórias
@@ -852,11 +847,7 @@ export const EditActivityDialog = ({
                   )}
                 </TabsTrigger>
               )}
-              {act && !createMode && (
-                <TabsTrigger value="history" className="text-xs gap-1.5 data-[state=active]:bg-background">
-                  <History className="w-3.5 h-3.5" /> Histórico
-                </TabsTrigger>
-              )}
+              {/* Histórico vive no painel lateral */}
             </TabsList>
 
             {/* ===== ABA DETALHES ===== */}
@@ -1130,7 +1121,7 @@ export const EditActivityDialog = ({
                         {/* Colunas dinâmicas (na ordem de ALL_COLS, apenas as visíveis) */}
                         {ALL_COLS.filter((c) => visibleCols.includes(c.id)).map(({ id: colId }) => {
                           const updateField = async (value: any) => {
-                            await supabase.from("activities").update({ [colId]: value } as Database['public']['Tables']['activities']['Update']).eq("id", sub.id);
+                            await supabase.from("activities").update({ [colId]: value } as any).eq("id", sub.id);
                             if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
                             onActivityUpdated();
                           };
@@ -1427,24 +1418,10 @@ export const EditActivityDialog = ({
           )}
             </TabsContent>
 
-            {/* ===== ABA COMENTÁRIOS ===== */}
-            <TabsContent value="comments" className="pt-4 mt-0">
-          {act && (
-            <ActivityComments activityId={act.id} />
-          )}
-            </TabsContent>
-
             {/* ===== ABA HISTÓRIAS ===== */}
             <TabsContent value="stories" className="pt-4 mt-0">
           {act && projectId && (
             <ActivityStoriesPanel activityId={act.id} projectId={projectId} />
-          )}
-            </TabsContent>
-
-            {/* ===== ABA HISTÓRICO ===== */}
-            <TabsContent value="history" className="pt-4 mt-0">
-          {act && !createMode && (
-            <AuditLogPanel recordId={act.id} tableName="activities" />
           )}
             </TabsContent>
           </Tabs>
@@ -1465,7 +1442,43 @@ export const EditActivityDialog = ({
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          </div>
+
+          {/* ========= PAINEL LATERAL (direita) ========= */}
+          {act && (
+            <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-4 lg:max-h-[calc(95vh-180px)] lg:overflow-y-auto">
+              <div className="rounded-lg border border-border bg-card p-3">
+                <Tabs defaultValue="comments" className="w-full">
+                  <TabsList className="w-full justify-start h-9 bg-muted/40 border border-border/60 rounded-md p-0.5 gap-0.5">
+                    <TabsTrigger
+                      value="comments"
+                      className="text-xs gap-1.5 flex-1 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" /> Comentários
+                    </TabsTrigger>
+                    {!createMode && (
+                      <TabsTrigger
+                        value="history"
+                        className="text-xs gap-1.5 flex-1 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                      >
+                        <History className="w-3.5 h-3.5" /> Histórico
+                      </TabsTrigger>
+                    )}
+                  </TabsList>
+                  <TabsContent value="comments" className="mt-3">
+                    <ActivityComments activityId={act.id} />
+                  </TabsContent>
+                  {!createMode && (
+                    <TabsContent value="history" className="mt-3">
+                      <AuditLogPanel recordId={act.id} tableName="activities" />
+                    </TabsContent>
+                  )}
+                </Tabs>
+              </div>
+            </aside>
+          )}
+
+          <DialogFooter className="gap-2 lg:col-span-2">
             {act && !createMode && act.status !== "completed" && (
               <Button
                 type="button"
