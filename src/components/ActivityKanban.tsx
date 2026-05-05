@@ -1125,6 +1125,8 @@ export const ActivityKanban = ({
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
+  const [stagesLoading, setStagesLoading] = useState(true);
+  const [stagesError, setStagesError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
@@ -1272,13 +1274,92 @@ export const ActivityKanban = ({
   
 
   const fetchStages = async () => {
+    if (!projectId) {
+      setStagesLoading(false);
+      return;
+    }
+    setStagesError(null);
     const { data, error } = await supabase
       .from("workflow_stages")
       .select("*")
       .eq("project_id", projectId)
       .order("display_order");
     console.log("[Kanban] fetchStages:", { data, error, projectId });
-    if (data) setStages(data);
+    if (error) {
+      setStagesError(error.message);
+      setStagesLoading(false);
+      return;
+    }
+    if (data && data.length > 0) {
+      // Normalize: some self-hosted DBs use `name` instead of `title`.
+      const normalized = data.map((s: any) => ({
+        ...s,
+        title: s.title ?? s.name ?? "",
+        color: s.color ?? "hsl(220, 15%, 50%)",
+      }));
+      setStages(normalized);
+      setStagesLoading(false);
+      return;
+    }
+    // No stages found — try to create defaults (covers projects created before
+    // the trigger existed, or whenever the trigger didn't fire).
+    // Note: omit `color` so the DB DEFAULT applies — avoids PostgREST schema
+    // cache mismatches in self-hosted Supabase. Stage colors can be edited
+    // afterwards via the Kanban UI.
+    const baseDefaults = [
+      { display_order: 0, is_final: false, _label: "Backlog" },
+      { display_order: 1, is_final: false, _label: "A Fazer" },
+      { display_order: 2, is_final: false, _label: "Em Andamento" },
+      { display_order: 3, is_final: false, _label: "Em Teste" },
+      { display_order: 4, is_final: false, _label: "Aprovada" },
+      { display_order: 5, is_final: true, _label: "Concluída" },
+    ];
+    const buildPayload = (key: "title" | "name") =>
+      baseDefaults.map(({ _label, ...rest }) => ({
+        ...rest,
+        project_id: projectId,
+        [key]: _label,
+      })) as any[];
+
+    const tryInsert = async (key: "title" | "name") =>
+      (supabase.from("workflow_stages") as any)
+        .insert(buildPayload(key))
+        .select("*")
+        .order("display_order");
+
+    let { data: inserted, error: insertError } = await tryInsert("title");
+    if (insertError) {
+      const msg = `${insertError.message || ""} ${(insertError as any).hint || ""} ${(insertError as any).details || ""}`.toLowerCase();
+      // Fallback: schema uses `name` instead of `title`.
+      if (msg.includes("title") || msg.includes("name")) {
+        const retry = await tryInsert("name");
+        inserted = retry.data;
+        insertError = retry.error;
+      }
+    }
+    if (insertError) {
+      const fullMsg =
+        insertError.message ||
+        (insertError as any).hint ||
+        (insertError as any).details ||
+        JSON.stringify(insertError);
+      console.error("[Kanban] create default stages failed:", {
+        message: insertError.message,
+        details: (insertError as any).details,
+        hint: (insertError as any).hint,
+        code: (insertError as any).code,
+      });
+      setStagesError(fullMsg);
+      setStagesLoading(false);
+      return;
+    }
+    const normalizedNew = (inserted || []).map((s: any) => ({
+      ...s,
+      title: s.title ?? s.name ?? "",
+      color: s.color ?? "hsl(220, 15%, 50%)",
+    }));
+    setStages(normalizedNew);
+    setStagesLoading(false);
   };
 
   const handleMoveToBacklog = async (activityId: string) => {
@@ -1613,8 +1694,41 @@ export const ActivityKanban = ({
 
   if (stages.length === 0) {
     return (
-      <Card className="p-8 text-center">
-        <p className="text-muted-foreground">Carregando etapas do workflow...</p>
+      <Card className="p-8 text-center space-y-3">
+        {stagesLoading ? (
+          <p className="text-muted-foreground">Carregando etapas do workflow...</p>
+        ) : stagesError ? (
+          <>
+            <p className="text-destructive font-medium">
+              Erro ao carregar etapas do workflow
+            </p>
+            <p className="text-sm text-muted-foreground">{stagesError}</p>
+            <button
+              onClick={() => {
+                setStagesLoading(true);
+                fetchStages();
+              }}
+              className="text-sm underline text-primary"
+            >
+              Tentar novamente
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-muted-foreground">
+              Nenhuma etapa de workflow encontrada para este projeto.
+            </p>
+            <button
+              onClick={() => {
+                setStagesLoading(true);
+                fetchStages();
+              }}
+              className="text-sm underline text-primary"
+            >
+              Criar etapas padrão
+            </button>
+          </>
+        )}
       </Card>
     );
   }
