@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -10,18 +10,21 @@ import { Card } from '@/components/ui/card';
 import { LayoutDashboard } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function LoginPage() {
-  const router = useRouter();
+function LoginErrorToast() {
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [azureLoading, setAzureLoading] = useState(false);
-
   useEffect(() => {
     const err = searchParams.get('error');
     if (err) toast.error(decodeURIComponent(err));
   }, [searchParams]);
+  return null;
+}
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [azureLoading, setAzureLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -72,6 +75,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <Suspense fallback={null}>
+        <LoginErrorToast />
+      </Suspense>
       <Card className="w-full max-w-md p-8 shadow-lg border-border">
         <div className="flex flex-col items-center space-y-6">
           <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-md">
