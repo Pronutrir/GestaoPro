@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useMemo, useState, useCallback } from "react";
+
+import { Fragment, useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from 'next/navigation';
 import { supabase } from "@/integrations/supabase/client";
 import { computeActivityProgress } from "@/lib/activityProgress";
@@ -176,7 +177,7 @@ export function ProjectCronogramaPanel({
     ]);
     setActivities(acts || []);
     setPhases(phs || []);
-    setStages((stgs as any) || []);
+    setStages(stgs || []);
     const map: Record<string, { name: string; sector: string }> = {};
     (profs || []).forEach((p: any) => { map[p.id] = { name: p.full_name, sector: p.sector || "—" }; });
     setProfiles(map);
@@ -612,7 +613,9 @@ export function ProjectCronogramaPanel({
                 )}
                 style={stageColor ? { borderLeft: `3px solid ${stageColor}` } : undefined}
               >
-                {visibleCols.map(k => <span key={k} style={{ display: "contents" }}>{renderCell(k, ctx)}</span>)}
+                {visibleCols.map((k) => (
+                  <Fragment key={k}>{renderCell(k, ctx)}</Fragment>
+                ))}
               </tr>
             );
           })}

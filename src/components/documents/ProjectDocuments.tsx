@@ -214,6 +214,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
 
   /* ---------- Editor ---------- */
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },

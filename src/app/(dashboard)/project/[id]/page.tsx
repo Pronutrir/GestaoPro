@@ -7,19 +7,20 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { ActivityComments } from "@/components/ActivityComments";
 import { EditActivityDialog } from "@/components/EditActivityDialog";
 import { ImportWBSDialog } from "@/components/ImportWBSDialog";
-import { TimelineView } from "@/components/TimelineView";
+import { ProjectCronogramaPanel } from "@/components/cronograma/ProjectCronogramaPanel";
 import { LessonsLearned } from "@/components/LessonsLearned";
 import { DocumentManager } from "@/components/DocumentManager";
 import { ProjectCharter } from "@/components/ProjectCharter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
-import { ProjectListView } from "@/components/project-views/ProjectListView";
+import { ProjectFlatList } from "@/components/ProjectFlatList";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 import { MeetingsManager } from "@/components/MeetingsManager";
@@ -27,7 +28,6 @@ import { AssumptionsManager } from "@/components/AssumptionsManager";
 import { RisksManager } from "@/components/RisksManager";
 import { ChangeRequestsManager } from "@/components/ChangeRequestsManager";
 import { ProjectDependenciesView } from "@/components/ProjectDependenciesView";
-import { BacklogSection } from "@/components/BacklogSection";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
@@ -35,10 +35,10 @@ import { DraggableTabBar } from "@/components/DraggableTabBar";
 import { ProjectDocuments } from "@/components/documents/ProjectDocuments";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
-  Layers, ListTodo, GanttChart, BookOpen, FileText, Flag,
+  Layers, GanttChart, BookOpen, FileText, Flag,
   ChevronRight, Settings2, Kanban, Users, ShieldCheck, AlertTriangle,
   Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
-  NotebookPen,
+  NotebookPen, Search, X,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -126,6 +126,9 @@ export default function ProjectDetailsPage() {
   const [newActivityHours, setNewActivityHours] = useState("");
   const [newActivityPhaseId, setNewActivityPhaseId] = useState("");
   const [newActivityPriority, setNewActivityPriority] = useState("medium");
+  const [listSearch, setListSearch] = useState("");
+  const [listStatusFilter, setListStatusFilter] = useState("all");
+  const [listPriorityFilter, setListPriorityFilter] = useState("all");
   const [showAddActivity, setShowAddActivity] = useState(false);
   const [createTaskStageId, setCreateTaskStageId] = useState<string | null>(null);
   const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
@@ -765,10 +768,7 @@ export default function ProjectDetailsPage() {
             {(() => {
               const allDefinitions = [
                 { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-violet-500" },
-                ...(isQualityProject ? [] : [
-                  { value: "list", label: "Pendências", icon: <ListTodo className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-sky-500" },
-                ]),
-                { value: "backlog", label: "Lista", icon: <Inbox className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-amber-500" },
+                { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-amber-500" },
                 { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-emerald-500" },
                 ...(isQualityProject ? [] : [
                   { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-rose-500" },
@@ -873,26 +873,8 @@ export default function ProjectDetailsPage() {
 
 
             <TabsContent value="timeline" className="mt-0">
-              <TimelineView phases={phases} activities={activities} projectDueDate={project.due_date} onActivityClick={(activity) => { setEditingActivity(activity); setEditActivityDialogOpen(true); }} />
+              <ProjectCronogramaPanel projectIds={[id!]} defaultMode="table" />
             </TabsContent>
-
-            {!isQualityProject && (
-              <TabsContent value="list" className="mt-0">
-                <ProjectListView
-                  activities={activities as any}
-                  phases={phases}
-                  onEditActivity={(a) => openEditActivity(a as any)}
-                  onToggleActivity={handleToggleActivity}
-                  canCreate={canCreate}
-                  onAddActivity={() => {
-                    setCreateTaskStageId(null);
-                    setCreateTaskPhaseId(null);
-                    setCreateTaskParentId(null);
-                    setShowAddActivity(true);
-                  }}
-                />
-              </TabsContent>
-            )}
 
             {!isQualityProject && (
               <TabsContent value="calendar" className="mt-0">
@@ -1024,19 +1006,75 @@ export default function ProjectDetailsPage() {
                 </div>
               )}
 
-              <BacklogSection
-                projectId={id!} activities={activities} phases={phases}
+              <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/30 rounded-lg border border-border">
+                <div className="relative flex-1 min-w-[220px] max-w-[320px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    value={listSearch}
+                    onChange={(e) => setListSearch(e.target.value)}
+                    placeholder="Buscar tarefa..."
+                    className="pl-8 h-9 bg-background"
+                  />
+                </div>
+                <Select value={listStatusFilter} onValueChange={setListStatusFilter}>
+                  <SelectTrigger className="w-[180px] h-9 bg-background"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os status</SelectItem>
+                    <SelectItem value="pending">Pendente</SelectItem>
+                    <SelectItem value="in_progress">Em andamento</SelectItem>
+                    <SelectItem value="completed">Concluída</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={listPriorityFilter} onValueChange={setListPriorityFilter}>
+                  <SelectTrigger className="w-[200px] h-9 bg-background"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as prioridades</SelectItem>
+                    <SelectItem value="urgente">Urgente</SelectItem>
+                    <SelectItem value="critica">Crítica</SelectItem>
+                    <SelectItem value="alta">Alta</SelectItem>
+                    <SelectItem value="media">Média</SelectItem>
+                    <SelectItem value="baixa">Baixa</SelectItem>
+                  </SelectContent>
+                </Select>
+                {(listSearch || listStatusFilter !== "all" || listPriorityFilter !== "all") && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => { setListSearch(""); setListStatusFilter("all"); setListPriorityFilter("all"); }}
+                    className="gap-1 h-9"
+                  >
+                    <X className="w-3.5 h-3.5" /> Limpar
+                  </Button>
+                )}
+                <div className="ml-auto">
+                  <Badge variant="outline" className="text-xs">
+                    {(() => {
+                      const total = activities.length;
+                      const filteredCount = activities.filter((a: any) => {
+                        if (listSearch && !a.title?.toLowerCase().includes(listSearch.toLowerCase())) return false;
+                        if (listStatusFilter !== "all" && a.status !== listStatusFilter) return false;
+                        if (listPriorityFilter !== "all" && a.priority !== listPriorityFilter) return false;
+                        return true;
+                      }).length;
+                      return `${filteredCount} de ${total} tarefas`;
+                    })()}
+                  </Badge>
+                </div>
+              </div>
+
+              <ProjectFlatList
+                projectId={id!}
+                activities={activities.filter((a: any) => {
+                  if (listSearch && !a.title?.toLowerCase().includes(listSearch.toLowerCase())) return false;
+                  if (listStatusFilter !== "all" && a.status !== listStatusFilter) return false;
+                  if (listPriorityFilter !== "all" && a.priority !== listPriorityFilter) return false;
+                  return true;
+                })}
+                phases={phases}
                 onEditActivity={(activity) => openEditActivity(activity)}
-                onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
                 isAdmin={canDelete}
-                onCreateActivityInPhase={(phaseId, parentId) => {
-                  setCreateTaskPhaseId(phaseId);
-                  setCreateTaskParentId(parentId ?? null);
-                  setCreateTaskStageId(null);
-                  setShowAddActivity(true);
-                }}
               />
             </TabsContent>
 
