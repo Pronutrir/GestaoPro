@@ -88,6 +88,8 @@ interface EditActivityDialogProps {
   parentActivityTitle?: string;
   /** Called when user clicks the "Back" arrow — used to close only the nested dialog and return to parent. */
   onBackToParent?: () => void;
+  /** Aba inicial ao abrir o diálogo. */
+  initialTab?: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history";
 }
 
 const RACI_OPTIONS = [
@@ -126,6 +128,7 @@ export const EditActivityDialog = ({
   createMode = false, defaultStageId = null, defaultPhaseId = null, defaultParentId = null,
   onActivityCreated,
   parentActivityTitle, onBackToParent,
+  initialTab = "details",
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
@@ -165,6 +168,12 @@ export const EditActivityDialog = ({
   const [lastEditorName, setLastEditorName] = useState<string | null>(null);
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "stories" | "history">("details");
+
+  useEffect(() => {
+    if (open) {
+      setActiveTab(initialTab);
+    }
+  }, [open, initialTab]);
 
   // Colunas opcionais na tabela de sub-atividades (todas selecionáveis; persistido por usuário no localStorage)
   const SUB_COLS_KEY = "subActivityCols.v2";
@@ -328,6 +337,7 @@ export const EditActivityDialog = ({
   }, [projectId, open, activity?.id, createMode]);
 
   useEffect(() => {
+    if (!open) return;
     const act = createMode ? draftActivity : activity;
     if (act) {
       setFormData({
@@ -360,17 +370,38 @@ export const EditActivityDialog = ({
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       fetchSubActivities(act.id);
+    } else {
+      setSubActivities([]);
     }
-  }, [activity, draftActivity, createMode]);
+  }, [activity, draftActivity, createMode, open]);
 
   
 
   const fetchSubActivities = async (parentId: string) => {
-    const { data } = await (supabase.from("activities").select("*") as any)
+    const query = () => (supabase.from("activities").select("*") as any)
       .eq("parent_id", parentId)
-      .eq("is_trashed", false)
       .order("display_order");
-    if (data) setSubActivities(data as Activity[]);
+
+    let { data, error } = await query().eq("is_trashed", false);
+
+    // Fallback defensivo para ambientes com cache/schema desatualizado no PostgREST.
+    if (error && error.code === "PGRST204" && String(error.message || "").includes("is_trashed")) {
+      const fallback = await query();
+      data = fallback.data;
+      error = fallback.error;
+      if (!error && data) {
+        setSubActivities((data as any[]).filter((row) => row?.is_trashed !== true) as Activity[]);
+        return;
+      }
+    }
+
+    if (error) {
+      console.error("Erro ao buscar sub-atividades:", error);
+      setSubActivities([]);
+      return;
+    }
+
+    setSubActivities((data || []) as Activity[]);
   };
 
   const handleAddSubActivity = async () => {
