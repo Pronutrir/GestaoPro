@@ -42,6 +42,7 @@ import {
   ChevronRight,
   ChevronDown,
   Link2,
+  LayoutGrid,
 } from "lucide-react";
 import {
   DndContext,
@@ -102,6 +103,50 @@ const STAGE_PRESET_COLORS = [
   "hsl(0, 84%, 60%)",
   "hsl(340, 82%, 52%)",
 ];
+
+type KanbanDensity = "sm" | "md" | "lg";
+
+const DENSITY_CLASSES: Record<KanbanDensity, {
+  card: string;
+  title: string;
+  desc: string;
+  showDesc: boolean;
+  showProgress: boolean;
+  showBadges: boolean;
+  descClamp: string;
+  gap: string;
+}> = {
+  sm: {
+    card: "p-1.5",
+    title: "text-[11px] leading-tight",
+    desc: "text-[10px]",
+    showDesc: false,
+    showProgress: false,
+    showBadges: false,
+    descClamp: "line-clamp-1",
+    gap: "gap-1",
+  },
+  md: {
+    card: "p-2.5",
+    title: "text-xs leading-snug",
+    desc: "text-[11px]",
+    showDesc: true,
+    showProgress: true,
+    showBadges: true,
+    descClamp: "line-clamp-1",
+    gap: "gap-1.5",
+  },
+  lg: {
+    card: "p-3.5",
+    title: "text-sm leading-snug",
+    desc: "text-xs",
+    showDesc: true,
+    showProgress: true,
+    showBadges: true,
+    descClamp: "line-clamp-3",
+    gap: "gap-2",
+  },
+};
 
 interface WorkflowStage {
   id: string;
@@ -183,6 +228,7 @@ function SortableKanbanCard({
   isExpanded,
   onToggleExpand,
   progress,
+  density,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -206,6 +252,7 @@ function SortableKanbanCard({
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
+  density?: KanbanDensity;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -242,6 +289,7 @@ function SortableKanbanCard({
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
         progress={progress}
+        density={density}
       />
     </div>
   );
@@ -271,6 +319,7 @@ function KanbanCard({
   isExpanded,
   onToggleExpand,
   progress,
+  density = "md",
 }: {
   activity: Activity;
   phases: Phase[];
@@ -295,6 +344,7 @@ function KanbanCard({
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
+  density?: KanbanDensity;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -347,16 +397,17 @@ function KanbanCard({
     ? "Pausada (coluna de bloqueio)"
     : `${progressPercent}% — ${progressInfo.label}`;
   const progressBadge = progressPaused ? "⏸" : `${progressPercent}%`;
+  const d = DENSITY_CLASSES[density];
 
   return (
     <TooltipProvider delayDuration={400}>
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`bg-card border border-border rounded-lg p-2.5 shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`}
+            className={`bg-card border border-border rounded-lg ${d.card} shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`}
             onClick={onEdit}
           >
-            <div className="flex items-start gap-2">
+            <div className={`flex items-start ${d.gap}`}>
               <button
                 className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
                 onClick={(e) => e.stopPropagation()}
@@ -374,7 +425,7 @@ function KanbanCard({
                     />
                   )}
                   <p
-                    className={`text-xs font-medium leading-snug line-clamp-2 ${
+                    className={`${d.title} font-medium line-clamp-2 ${
                       activity.status === "completed"
                         ? "line-through text-muted-foreground"
                         : "text-foreground"
@@ -384,28 +435,31 @@ function KanbanCard({
                   </p>
                 </div>
 
-                {activity.description && (
-                  <p className="text-[11px] text-muted-foreground line-clamp-1 mb-1.5 leading-relaxed truncate">
+                {d.showDesc && activity.description && (
+                  <p className={`${d.desc} text-muted-foreground ${d.descClamp} mb-1.5 leading-relaxed`}>
                     {activity.description}
                   </p>
                 )}
 
                 {/* Barra de andamento (calculada pelo Kanban) */}
-                <div
-                  className="mb-1.5 flex items-center gap-1.5"
-                  title={progressTooltip}
-                >
-                  <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
-                      style={{ width: `${progressBarWidth}%` }}
-                    />
+                {d.showProgress && (
+                  <div
+                    className="mb-1.5 flex items-center gap-1.5"
+                    title={progressTooltip}
+                  >
+                    <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
+                        style={{ width: `${progressBarWidth}%` }}
+                      />
+                    </div>
+                    <span className="text-[9px] font-mono text-muted-foreground tabular-nums shrink-0">
+                      {progressBadge}
+                    </span>
                   </div>
-                  <span className="text-[9px] font-mono text-muted-foreground tabular-nums shrink-0">
-                    {progressBadge}
-                  </span>
-                </div>
+                )}
 
+                {d.showBadges && (
                 <div className="flex flex-wrap gap-1">
                   {isBlocked && (
                     <Badge className="bg-orange-500/20 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0">
@@ -548,6 +602,7 @@ function KanbanCard({
                     </Popover>
                   ) : null}
                 </div>
+                )}
                 {subActivityCount && subActivityCount > 0 ? (
                   <button
                     type="button"
@@ -639,6 +694,7 @@ function SortableColumn({
   onToggleStageBlocked,
   onToggleStageVisible,
   allStages,
+  density,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -672,6 +728,7 @@ function SortableColumn({
   onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
   onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
   allStages: WorkflowStage[];
+  density: KanbanDensity;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -1053,6 +1110,7 @@ function SortableColumn({
                     isExpanded={expanded}
                     onToggleExpand={() => toggleExpanded(activity.id)}
                     progress={computeActivityProgress(activity.workflow_stage_id, allStages)}
+                    density={density}
                   />
                   {expanded && inlineChildren.length > 0 && (
                     <div className="ml-4 pl-2 border-l-2 border-primary/30 space-y-1.5">
@@ -1079,6 +1137,7 @@ function SortableColumn({
                           onRemoveRelation={onRemoveRelation}
                           subActivityCount={0}
                           progress={computeActivityProgress(child.workflow_stage_id, allStages)}
+                          density={density}
                         />
                       ))}
                     </div>
@@ -1179,6 +1238,7 @@ export const ActivityKanban = ({
   const [relationCounts, setRelationCounts] = useState<
     Map<string, { id: string; title: string; relationId: string; relationType: string }[]>
   >(new Map());
+  const [density, setDensity] = useState<KanbanDensity>("md");
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
@@ -1786,6 +1846,38 @@ export const ActivityKanban = ({
 
   return (
     <div className="space-y-3 mt-[30px]">
+      <div className="flex items-center justify-end gap-1">
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground mr-1">
+          <LayoutGrid className="w-3.5 h-3.5" /> Densidade
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant={density === "sm" ? "default" : "outline"}
+          className="h-7 px-2 text-[11px]"
+          onClick={() => setDensity("sm")}
+        >
+          Compacta
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={density === "md" ? "default" : "outline"}
+          className="h-7 px-2 text-[11px]"
+          onClick={() => setDensity("md")}
+        >
+          Padrão
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={density === "lg" ? "default" : "outline"}
+          className="h-7 px-2 text-[11px]"
+          onClick={() => setDensity("lg")}
+        >
+          Conforto
+        </Button>
+      </div>
       <DndContext
         sensors={sensors}
         collisionDetection={rectIntersection}
@@ -1837,6 +1929,7 @@ export const ActivityKanban = ({
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
                       progress={computeActivityProgress(activity.workflow_stage_id, stages)}
+                      density={density}
                     />
                   ))
                 )}
@@ -1915,6 +2008,7 @@ export const ActivityKanban = ({
                 onToggleStageBlocked={handleToggleStageBlocked}
                 onToggleStageVisible={handleToggleStageVisible}
                 allStages={stages}
+                density={density}
               />
             );
           })}
@@ -1936,6 +2030,7 @@ export const ActivityKanban = ({
               onMoveToBacklog={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
               progress={computeActivityProgress(activeActivity.workflow_stage_id, stages)}
+              density={density}
             />
           </div>
         ) : activeColumn ? (
