@@ -1238,7 +1238,12 @@ export const ActivityKanban = ({
   const [relationCounts, setRelationCounts] = useState<
     Map<string, { id: string; title: string; relationId: string; relationType: string }[]>
   >(new Map());
-  const [density, setDensity] = useState<KanbanDensity>("md");
+  const densityKey = `kanban-density:${projectId}`;
+  const [density, setDensity] = useState<KanbanDensity>(() => {
+    if (typeof window === "undefined") return "md";
+    const stored = window.localStorage.getItem(densityKey);
+    return stored === "sm" || stored === "lg" ? stored : "md";
+  });
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
@@ -1251,6 +1256,12 @@ export const ActivityKanban = ({
   
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(densityKey, density);
+    }
+  }, [density, densityKey]);
 
   // Initialize equal column widths when stages change
   useEffect(() => {
