@@ -16,6 +16,7 @@ import {
   Target,
   Calendar,
   Trash2,
+  Briefcase,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useRouter } from "next/navigation";
@@ -37,8 +38,7 @@ import {
 const allNavItems = [
   { path: "/", label: "Visão Geral", icon: Home, minRole: "user" as const, moduleKey: "overview" },
   { path: "/projects", label: "Projetos", icon: FolderKanban, minRole: "user" as const, moduleKey: "projects" },
-  // Módulo Portfólio em standby — mantido no código mas oculto da navegação
-  // { path: "/portfolio", label: "Portfólio", icon: Briefcase, minRole: "gestor" as const, moduleKey: "portfolio" },
+  { path: "/portfolio", label: "Portfólio", icon: Briefcase, minRole: "gestor" as const, moduleKey: "portfolio" },
   { path: "/qualidade", label: "Gestão da Qualidade", icon: ShieldCheck, minRole: "qualidade" as const, moduleKey: "qualidade" },
   { path: "/team", label: "Equipe", icon: Users, minRole: "user" as const, moduleKey: "team" },
   { path: "/timeline", label: "Cronograma", icon: GanttChart, minRole: "user" as const, moduleKey: "timeline" },
