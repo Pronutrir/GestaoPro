@@ -26,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { GutPriorityField } from "@/components/GutPriorityField";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface AddProjectDialogProps {
   onProjectAdded: () => void;
@@ -33,6 +34,7 @@ interface AddProjectDialogProps {
 }
 
 export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProjectDialogProps) => {
+  const { profile, user } = useAuth();
   const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) return error.message;
 
@@ -121,6 +123,17 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     root_cause: "",
   });
 
+  useEffect(() => {
+    if (!open) return;
+    if (formData.owner) return;
+    if (!profile?.full_name) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      owner: prev.owner || profile.full_name,
+    }));
+  }, [formData.owner, open, profile?.full_name]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -131,7 +144,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         .map((a) => a.trim())
         .filter((a) => a);
 
-      const { error, status, statusText } = await supabase.from("projects").insert({
+      const { data: insertedProject, error, status, statusText } = await supabase.from("projects").insert({
         title: formData.title,
         description: formData.description,
         status: formData.status,
@@ -153,13 +166,32 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         manager: formData.manager || null,
         problem_statement: formData.problem_statement || null,
         root_cause: formData.root_cause || null,
-      });
+      }).select("id").single();
 
       if (error) {
         throw {
           ...error,
           message: [error.message, `HTTP ${status} ${statusText}`].filter(Boolean).join(" | "),
         };
+      }
+
+      // Garante vínculo estável por user_id para o criador do projeto.
+      if (insertedProject?.id && user?.id) {
+        const { error: memberError } = await supabase
+          .from("project_members")
+          .insert({
+            project_id: insertedProject.id,
+            user_id: user.id,
+            sector: profile?.sector || null,
+            can_create: true,
+            can_edit: true,
+            can_delete: false,
+            can_move: true,
+          });
+
+        if (memberError) {
+          console.warn("Projeto criado, mas falhou ao criar vínculo do criador em project_members:", serializeError(memberError));
+        }
       }
 
       toast({

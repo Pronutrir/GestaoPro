@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
 
 /**
  * Returns filtered project IDs for the current user.
  * Only Admins see all projects. Gestors and regular users see projects where
- * they are: (a) explicitly added as members, (b) the project Líder (owner),
- * or (c) listed as participants (assignees) by full name.
+ * they are: (a) explicitly added as members, (b) the project creator, (c) the
+ * project Líder (owner) or Gerente (manager), or (d) listed as a participant
+ * (assignees) — using tolerant identity matching (NFD + tokens) so short and
+ * long forms of the same name still bind to the right user.
  */
 export const useProjectAccess = () => {
   const { user, isAdmin, isGestor, canManage, profile, loading } = useAuth();
@@ -24,45 +27,59 @@ export const useProjectAccess = () => {
 
     setMembershipsLoading(true);
 
-    const fullName = (profile?.full_name || "").trim();
-    const fullNameLower = fullName.toLowerCase();
+    const candidates = buildUserCandidates([
+      profile?.full_name,
+      profile?.email,
+      user?.email,
+    ]);
 
-    // Fetch project_members + ALL non-trashed projects so we can do robust
-    // case/whitespace-insensitive matching for owner/assignees in JS.
-    const [membersRes, projectsRes] = await Promise.all([
-      supabase
-        .from("project_members")
-        .select("project_id")
-        .eq("user_id", user.id),
-      fullName
-        ? supabase
+    // Fetch project_members + ALL non-trashed projects. Keep backward-compat
+    // with databases that still don't have created_by/manager columns.
+    const membersPromise = supabase
+      .from("project_members")
+      .select("project_id")
+      .eq("user_id", user.id);
+
+    const projectsPromise = candidates.length > 0
+      ? (async () => {
+          const primary = await supabase
+            .from("projects")
+            .select("id, created_by, owner, assignees, manager")
+            .eq("is_trashed", false);
+
+          if (!primary.error) {
+            return primary as { data: any[] | null; error: any };
+          }
+
+          const fallback = await supabase
             .from("projects")
             .select("id, owner, assignees")
-            .eq("is_trashed", false)
-        : Promise.resolve({ data: [] as any[] } as any),
-    ]);
+            .eq("is_trashed", false);
+
+          return fallback as { data: any[] | null; error: any };
+        })()
+      : Promise.resolve({ data: [] as any[], error: null });
+
+    const [membersRes, projectsRes] = await Promise.all([membersPromise, projectsPromise]);
 
     const ids = new Set<string>();
     (membersRes.data || []).forEach((m: any) => ids.add(m.project_id));
 
-    if (fullNameLower) {
+    if (candidates.length > 0) {
       (projectsRes.data || []).forEach((p: any) => {
-        const ownerMatch =
-          typeof p.owner === "string" &&
-          p.owner.trim().toLowerCase() === fullNameLower;
+        const creatorMatch =
+          typeof p.created_by === "string" && p.created_by === user.id;
+        const ownerMatch = matchesIdentity(p.owner, candidates);
+        const managerMatch = matchesIdentity(p.manager, candidates);
         const assigneeMatch =
-          Array.isArray(p.assignees) &&
-          p.assignees.some(
-            (a: any) =>
-              typeof a === "string" && a.trim().toLowerCase() === fullNameLower
-          );
-        if (ownerMatch || assigneeMatch) ids.add(p.id);
+          Array.isArray(p.assignees) && anyMatchesIdentity(p.assignees, candidates);
+        if (creatorMatch || ownerMatch || managerMatch || assigneeMatch) ids.add(p.id);
       });
     }
 
     setMemberProjectIds(ids);
     setMembershipsLoading(false);
-  }, [isAdmin, loading, user?.id, profile?.full_name]);
+  }, [isAdmin, loading, user?.email, user?.id, profile?.email, profile?.full_name]);
 
   useEffect(() => {
     loadMemberships();
