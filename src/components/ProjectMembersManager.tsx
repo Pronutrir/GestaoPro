@@ -83,7 +83,10 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
       project_id: projectId,
       user_id: selectedUser,
       sector: selectedSector || null,
-      ...permissions,
+      can_create: permissions.can_create || permissions.can_edit || permissions.can_move ? permissions.can_create : true,
+      can_edit: permissions.can_create || permissions.can_edit || permissions.can_move ? permissions.can_edit : true,
+      can_delete: permissions.can_delete,
+      can_move: permissions.can_create || permissions.can_edit || permissions.can_move ? permissions.can_move : true,
     });
     if (error) {
       toast({ title: "Erro ao adicionar", description: error.message, variant: "destructive" });
