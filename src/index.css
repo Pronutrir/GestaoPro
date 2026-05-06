@@ -185,3 +185,48 @@
 .rbc-today {
   background-color: transparent !important;
 }
+
+/* ============================================================
+   Tema escopado: Página de Projeto (neutro + accent sutil)
+   Reduz o excesso de azul mantendo Cobalt apenas em CTAs
+   primários (botões .default). Ícones, abas, chips, anéis e
+   bordas passam a usar tons neutros (slate).
+   ============================================================ */
+.theme-project-neutral {
+  /* Accent neutro (usado por hovers de menu, abas, etc.) */
+  --accent: 215 20% 92%;
+  --accent-foreground: 215 25% 20%;
+
+  /* Anel de foco neutro em vez de azul */
+  --ring: 215 16% 55%;
+
+  /* Secondary mais cinza para chips/badges */
+  --secondary: 215 20% 94%;
+  --secondary-foreground: 215 25% 25%;
+}
+
+.dark .theme-project-neutral {
+  --accent: 217 20% 22%;
+  --accent-foreground: 210 40% 95%;
+  --ring: 215 16% 55%;
+  --secondary: 217 20% 20%;
+  --secondary-foreground: 210 40% 95%;
+}
+
+/* Neutraliza usos diretos de text-primary dentro do escopo,
+   exceto em botões primários (que devem manter o Cobalt). */
+.theme-project-neutral :where(svg).text-primary,
+.theme-project-neutral :where(.text-primary):not(button):not(.btn-primary) {
+  color: hsl(215 16% 47%);
+}
+
+/* Sublinhado da aba ativa (border-primary) em tom grafite */
+.theme-project-neutral .border-primary {
+  border-color: hsl(215 25% 25%) !important;
+}
+
+/* Ícones text-blue-500 dentro do escopo viram neutros */
+.theme-project-neutral .text-blue-500,
+.theme-project-neutral .text-blue-600 {
+  color: hsl(215 16% 47%);
+}

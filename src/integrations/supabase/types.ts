@@ -42,6 +42,7 @@ export type Database = {
           phase_id: string | null
           priority: string
           priority_score: number | null
+          progress_flag: number
           project_id: string
           raci_role: string | null
           sprint_id: string | null
@@ -84,6 +85,7 @@ export type Database = {
           phase_id?: string | null
           priority?: string
           priority_score?: number | null
+          progress_flag?: number
           project_id: string
           raci_role?: string | null
           sprint_id?: string | null
@@ -126,6 +128,7 @@ export type Database = {
           phase_id?: string | null
           priority?: string
           priority_score?: number | null
+          progress_flag?: number
           project_id?: string
           raci_role?: string | null
           sprint_id?: string | null
