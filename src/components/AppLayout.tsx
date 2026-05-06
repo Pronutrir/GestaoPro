@@ -5,6 +5,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { CommandSearch } from "@/components/CommandSearch";
 import { StickyNotes } from "@/components/StickyNotes";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export const AppLayout = ({ children, title }: { children: ReactNode; title?: string }) => {
   return (
@@ -21,6 +22,7 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
               </div>
               <div className="flex items-center gap-3">
                 <CommandSearch />
+                <ThemeToggle />
                 <NotificationBell />
               </div>
             </div>
