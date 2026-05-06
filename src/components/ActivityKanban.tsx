@@ -762,7 +762,7 @@ function SortableColumn({
 
   const visibleCardCount = useMemo(() => {
     return sortedActivities.reduce((total, activity) => {
-      const inlineChildren = (childrenByParent.get(activity.id) || []).filter((child) => stageActivityIds.has(child.id));
+      const inlineChildren = childrenByParent.get(activity.id) || [];
       return total + 1 + (expandedIds.has(activity.id) ? inlineChildren.length : 0);
     }, 0);
   }, [sortedActivities, childrenByParent, stageActivityIds, expandedIds]);
@@ -1026,7 +1026,7 @@ function SortableColumn({
           ) : (
             sortedActivities.map((activity) => {
               const allChildren = childrenByParent.get(activity.id) || [];
-              const inlineChildren = allChildren.filter((child) => stageActivityIds.has(child.id));
+              const inlineChildren = allChildren;
               const expanded = expandedIds.has(activity.id);
               return (
                 <div key={activity.id} className="space-y-1.5">
