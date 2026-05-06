@@ -820,7 +820,7 @@ function SortableColumn({
 
   const visibleCardCount = useMemo(() => {
     return sortedActivities.reduce((total, activity) => {
-      const inlineChildren = childrenByParent.get(activity.id) || [];
+      const inlineChildren = (childrenByParent.get(activity.id) || []).filter((child) => stageActivityIds.has(child.id));
       return total + 1 + (expandedIds.has(activity.id) ? inlineChildren.length : 0);
     }, 0);
   }, [sortedActivities, childrenByParent, stageActivityIds, expandedIds]);
@@ -1084,7 +1084,7 @@ function SortableColumn({
           ) : (
             sortedActivities.map((activity) => {
               const allChildren = childrenByParent.get(activity.id) || [];
-              const inlineChildren = allChildren;
+              const inlineChildren = allChildren.filter((child) => stageActivityIds.has(child.id));
               const expanded = expandedIds.has(activity.id);
               return (
                 <div key={activity.id} className="space-y-1.5">
@@ -1871,37 +1871,31 @@ export const ActivityKanban = ({
 
   return (
     <div className="space-y-3 mt-[30px]">
-      <div className="flex items-center justify-end gap-1">
-        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground mr-1">
-          <LayoutGrid className="w-3.5 h-3.5" /> Densidade
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          variant={density === "sm" ? "default" : "outline"}
-          className="h-7 px-2 text-[11px]"
-          onClick={() => setDensity("sm")}
-        >
-          Compacta
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={density === "md" ? "default" : "outline"}
-          className="h-7 px-2 text-[11px]"
-          onClick={() => setDensity("md")}
-        >
-          Padrão
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={density === "lg" ? "default" : "outline"}
-          className="h-7 px-2 text-[11px]"
-          onClick={() => setDensity("lg")}
-        >
-          Conforto
-        </Button>
+      <div className="flex items-center justify-end">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="outline" size="sm" className="h-8 px-2 gap-1.5">
+              <LayoutGrid className="w-3.5 h-3.5" />
+              {density === "sm" ? "Pequeno" : density === "lg" ? "Grande" : "Médio"}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuLabel>Tamanho dos cards</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => setDensity("sm")}>
+              {density === "sm" && <Check className="w-3.5 h-3.5 mr-2" />}
+              <span className={density === "sm" ? "font-medium" : "ml-[22px]"}>Pequeno</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setDensity("md")}>
+              {density === "md" && <Check className="w-3.5 h-3.5 mr-2" />}
+              <span className={density === "md" ? "font-medium" : "ml-[22px]"}>Médio</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setDensity("lg")}>
+              {density === "lg" && <Check className="w-3.5 h-3.5 mr-2" />}
+              <span className={density === "lg" ? "font-medium" : "ml-[22px]"}>Grande</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <DndContext
         sensors={sensors}

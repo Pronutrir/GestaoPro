@@ -785,8 +785,8 @@ export const EditActivityDialog = ({
                     onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
                   >
                     <option value="">Sem líder</option>
-                    {allProfiles.map((m) => (
-                      <option key={m.full_name} value={m.full_name!}>
+                    {allProfiles.map((m, index) => (
+                      <option key={`${m.full_name}-${m.sector ?? "sem-setor"}-${index}`} value={m.full_name!}>
                         {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
                       </option>
                     ))}
@@ -993,8 +993,8 @@ export const EditActivityDialog = ({
                             <option value="">Selecionar pessoa...</option>
                             {allProfiles
                               .filter((m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name!)))
-                              .map((m) => (
-                                <option key={m.full_name} value={m.full_name!}>
+                              .map((m, index) => (
+                                <option key={`${m.full_name}-${m.sector ?? "sem-setor"}-${index}`} value={m.full_name!}>
                                   {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
                                 </option>
                               ))}
