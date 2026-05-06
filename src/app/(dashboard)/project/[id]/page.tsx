@@ -133,6 +133,7 @@ export default function ProjectDetailsPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [editActivityDialogOpen, setEditActivityDialogOpen] = useState(false);
+  const [editActivityInitialTab, setEditActivityInitialTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "stories" | "history">("details");
   const [sprintGoal, setSprintGoal] = useState("");
   const [activeSprintId, setActiveSprintId] = useState<string | null>(null);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
@@ -163,11 +164,15 @@ export default function ProjectDetailsPage() {
   const isQualityProject = project?.category === "qualidade";
 
   // Helper que abre o EditActivityDialog respeitando bloqueios escopados
-  const openEditActivity = useCallback((activity: any) => {
+  const openEditActivity = useCallback((
+    activity: any,
+    initialTab: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history" = "details",
+  ) => {
     if (activity && isActivityBlocked(activity.id, activity.phase_id)) {
       toast.error("Atividade bloqueada: só pode ser editada após aprovação da solicitação de mudança.");
       return;
     }
+    setEditActivityInitialTab(initialTab);
     setEditingActivity(activity);
     setEditActivityDialogOpen(true);
   }, [isActivityBlocked, toast]);
@@ -203,7 +208,16 @@ export default function ProjectDetailsPage() {
       fetchProjectData();
       fetchActiveSprint();
       fetchMembers();
-      supabase.rpc("generate_overdue_notifications", { p_project_id: id }).then();
+      void supabase
+        .rpc("generate_overdue_notifications", { p_project_id: id })
+        .then(({ error }) => {
+          if (error) {
+            console.error("[project-page] generate_overdue_notifications failed", {
+              projectId: id,
+              error,
+            });
+          }
+        });
     }
 
     if (!id) return;
@@ -1019,9 +1033,15 @@ export default function ProjectDetailsPage() {
 
         <EditProjectDialog project={editingProject} open={editDialogOpen} onOpenChange={setEditDialogOpen} onProjectUpdated={fetchProjectData} />
         <EditActivityDialog
-          activity={editingActivity} open={editActivityDialogOpen} onOpenChange={setEditActivityDialogOpen}
+          activity={editingActivity}
+          open={editActivityDialogOpen}
+          onOpenChange={(o) => {
+            setEditActivityDialogOpen(o);
+            if (!o) setEditActivityInitialTab("details");
+          }}
           onActivityUpdated={fetchProjectData} phases={phases} allActivities={activities}
           projectId={id!} isQualityProject={isQualityProject}
+          initialTab={editActivityInitialTab}
         />
         {project && (
           <EditActivityDialog
