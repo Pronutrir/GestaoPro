@@ -33,6 +33,49 @@ const priorityColors: Record<string, string> = {
   low: "bg-muted text-muted-foreground border-border",
 };
 
+export const ProjectCardPreview = ({ project }: { project: Project }) => {
+  return (
+    <Card className="p-4 shadow-lg ring-2 ring-primary bg-card">
+      <div className="space-y-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2 flex-1">
+            <div className="p-1 rounded bg-muted/60">
+              <GripVertical className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-foreground">{project.title}</h4>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge className={`${priorityColors[project.priority]} text-xs`}>
+              {project.priority === "high" && "Alta"}
+              {project.priority === "medium" && "Média"}
+              {project.priority === "low" && "Baixa"}
+            </Badge>
+            {project.due_date && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Calendar className="w-3 h-3" />
+                {formatProjectDueDate(project.due_date)}
+              </div>
+            )}
+          </div>
+
+          <div className="flex -space-x-2">
+            {project.assignees.map((assignee, index) => (
+              <Avatar key={index} className="w-6 h-6 border-2 border-background">
+                <AvatarFallback className="text-xs bg-primary text-primary-foreground">{assignee}</AvatarFallback>
+              </Avatar>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
 export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClick, isAdmin = false }: SortableProjectCardProps) => {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging, setActivatorNodeRef,
