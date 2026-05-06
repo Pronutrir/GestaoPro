@@ -248,7 +248,6 @@ export default function ProjectDetailsPage() {
   useEffect(() => {
     if (authLoading) return;
     if (id) {
-      fetchProjectData();
       fetchActiveSprint();
       fetchMembers();
       void supabase
@@ -282,9 +281,9 @@ export default function ProjectDetailsPage() {
   }, [id, authLoading]);
 
   useEffect(() => {
-    if (authLoading || !id) return;
+    if (authLoading || permissionsLoading || !id) return;
     fetchProjectData();
-  }, [activityScopedAccess, authLoading, id]);
+  }, [activityScopedAccess, authLoading, permissionsLoading, id]);
 
   const loadAccess = useCallback(async (silent = false) => {
     if (!id) return;
@@ -654,18 +653,23 @@ export default function ProjectDetailsPage() {
 
   const fetchProjectData = async () => {
     try {
-      const { data: projectData, error: projectError } = await supabase
-        .from("projects").select("*").eq("id", id).single();
+      const [
+        { data: projectData, error: projectError },
+        { data: phasesData, error: phasesError },
+        { data: activitiesData, error: activitiesError },
+      ] = await Promise.all([
+        supabase.from("projects").select("*").eq("id", id).single(),
+        supabase
+          .from("phases").select("*").eq("project_id", id).eq("is_trashed", false)
+          .order("display_order", { ascending: true }),
+        (supabase
+          .from("activities").select("*").eq("project_id", id) as any).eq("is_trashed", false)
+          .order("display_order", { ascending: true }).order("created_at", { ascending: true }),
+      ]);
+
       if (projectError) throw new Error(toErrorMessage(projectError, "projects"));
       setProject(projectData);
-
-      const { data: phasesData, error: phasesError } = await supabase
-        .from("phases").select("*").eq("project_id", id).eq("is_trashed", false).order("display_order", { ascending: true });
       if (phasesError) throw new Error(toErrorMessage(phasesError, "phases"));
-
-      const { data: activitiesData, error: activitiesError } = await (supabase
-        .from("activities").select("*").eq("project_id", id) as any).eq("is_trashed", false)
-        .order("display_order", { ascending: true }).order("created_at", { ascending: true });
       if (activitiesError) throw new Error(toErrorMessage(activitiesError, "activities"));
 
       const candidateUsers = buildUserCandidates([
