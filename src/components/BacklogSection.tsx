@@ -24,6 +24,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Phase { id: string; title: string; }
 interface WorkflowStage { id: string; title: string; display_order: number; color: string; }
@@ -78,6 +79,7 @@ export const BacklogSection = ({
   onDataChanged, isAdmin = false, onCreateActivityInPhase,
 }: BacklogSectionProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [backlogStageId, setBacklogStageId] = useState<string | null>(null);
   const [allStageIds, setAllStageIds] = useState<Set<string>>(new Set());
   const [stages, setStages] = useState<WorkflowStage[]>([]);
@@ -181,14 +183,25 @@ export const BacklogSection = ({
     fetchTrashedActivities();
   };
   const handleRestoreAll = async () => {
-    if (!confirm(`Restaurar todas as ${trashedActivities.length} atividades da lixeira?`)) return;
+    const ok = await appConfirm({
+      title: "Restaurar atividades",
+      description: `Restaurar todas as ${trashedActivities.length} atividades da lixeira?`,
+      confirmText: "Restaurar",
+    });
+    if (!ok) return;
     await (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any).eq("project_id", projectId) as any).eq("is_trashed", true);
     toast({ title: "Todas as atividades restauradas!" });
     fetchTrashedActivities();
     onDataChanged();
   };
   const handleEmptyTrash = async () => {
-    if (!confirm(`Excluir PERMANENTEMENTE todas as ${trashedActivities.length} atividades? Esta ação é irreversível.`)) return;
+    const ok = await appConfirm({
+      title: "Esvaziar lixeira",
+      description: `Excluir PERMANENTEMENTE todas as ${trashedActivities.length} atividades? Esta ação é irreversível.`,
+      confirmText: "Excluir tudo",
+      destructive: true,
+    });
+    if (!ok) return;
     await (supabase.from("activities").delete().eq("project_id", projectId) as any).eq("is_trashed", true);
     toast({ title: "Lixeira esvaziada!" });
     fetchTrashedActivities();

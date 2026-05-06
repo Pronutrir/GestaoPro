@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Paperclip, Upload, FileText, ExternalLink, Trash2, Loader2 } from "lucide-react";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface ActivityAttachmentsProps {
   activityId: string;
@@ -29,6 +30,7 @@ function formatBytes(bytes: number | null) {
 
 export const ActivityAttachments = ({ activityId, projectId }: ActivityAttachmentsProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const { profile } = useAuth();
   const [docs, setDocs] = useState<DocumentRow[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -80,7 +82,13 @@ export const ActivityAttachments = ({ activityId, projectId }: ActivityAttachmen
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Remover este anexo?")) return;
+    const ok = await appConfirm({
+      title: "Remover anexo",
+      description: "Remover este anexo?",
+      confirmText: "Remover",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("project_documents").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     fetchDocs();
   };

@@ -9,6 +9,7 @@ import { AIAssistButton } from "@/components/AIAssistButton";
 import { BookOpen, Plus, Pencil, Trash2, Lightbulb, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Lesson {
   id: string;
@@ -44,6 +45,7 @@ const CATEGORIES = [
 
 export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [globalLessons, setGlobalLessons] = useState<(Lesson & { project_title?: string })[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -154,7 +156,13 @@ export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir esta lição?")) return;
+    const ok = await appConfirm({
+      title: "Excluir lição",
+      description: "Excluir esta lição?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("lessons_learned").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     fetchLessons();
   };

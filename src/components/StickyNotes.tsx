@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 const NOTE_COLORS = [
   { name: "yellow", bg: "bg-yellow-100 dark:bg-yellow-900/40", border: "border-yellow-300 dark:border-yellow-700", header: "bg-yellow-200/80 dark:bg-yellow-800/60" },
@@ -205,6 +206,7 @@ const DraggableNote = ({
 export const StickyNotes = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [panelOpen, setPanelOpen] = useState(false);
   const [freeNotes, setFreeNotes] = useState<Note[]>([]);
   const [showFree, setShowFree] = useState(false);
@@ -257,7 +259,13 @@ export const StickyNotes = () => {
   };
 
   const deleteNote = async (id: string) => {
-    if (!confirm("Excluir esta nota?")) return;
+    const ok = await appConfirm({
+      title: "Excluir nota",
+      description: "Excluir esta nota?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("sticky_notes").delete().eq("id", id);
     fetchNotes();
   };

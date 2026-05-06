@@ -10,6 +10,7 @@ import { Plus, Pencil, Trash2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Risk {
   id: string;
@@ -96,6 +97,7 @@ const formatRiskId = (idx: number) => `R-${String(idx + 1).padStart(3, "0")}`;
 
 export const RisksManager = ({ projectId }: RisksManagerProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const { canManage: isAdmin } = useAuth();
   const [items, setItems] = useState<Risk[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -182,7 +184,13 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir este risco?")) return;
+    const ok = await appConfirm({
+      title: "Excluir risco",
+      description: "Excluir este risco?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("risks").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     toast({ title: "Risco movido para a lixeira" }); fetchData();
   };

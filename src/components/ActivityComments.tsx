@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Comment {
   id: string;
@@ -22,6 +23,7 @@ interface ActivityCommentsProps {
 
 export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const { user, profile } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -92,7 +94,13 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
   };
 
   const handleDeleteComment = async (commentId: string) => {
-    if (!confirm("Excluir este comentário?")) return;
+    const ok = await appConfirm({
+      title: "Excluir comentário",
+      description: "Excluir este comentário?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
       const { error } = await supabase

@@ -27,6 +27,7 @@ import { SortableActivityCard } from "@/components/SortableActivityCard";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 
 interface Phase {
@@ -76,6 +77,7 @@ export const PhaseManager = ({
   isAdmin = false,
 }: PhaseManagerProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -217,7 +219,13 @@ export const PhaseManager = ({
   };
 
   const handleDeletePhase = async (phaseId: string) => {
-    if (!confirm("Arquivar esta fase? Ela ficará oculta mas pode ser restaurada no Arquivo.")) return;
+    const ok = await appConfirm({
+      title: "Arquivar fase",
+      description: "Arquivar esta fase? Ela ficará oculta mas pode ser restaurada no Arquivo.",
+      confirmText: "Arquivar",
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
       const { error } = await supabase
@@ -297,7 +305,13 @@ export const PhaseManager = ({
   };
 
   const handleDeleteAllPhases = async () => {
-    if (!confirm(`Arquivar TODAS as ${phases.length} fases? Elas ficarão ocultas mas podem ser restauradas no Arquivo.`)) return;
+    const ok = await appConfirm({
+      title: "Arquivar todas as fases",
+      description: `Arquivar TODAS as ${phases.length} fases? Elas ficarão ocultas mas podem ser restauradas no Arquivo.`,
+      confirmText: "Arquivar",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       const { error } = await supabase
         .from("phases")
@@ -310,7 +324,13 @@ export const PhaseManager = ({
   };
 
   const handleDeleteAllActivities = async () => {
-    if (!confirm(`Arquivar TODAS as ${activities.length} atividades do projeto? Elas podem ser restauradas no Arquivo.`)) return;
+    const ok = await appConfirm({
+      title: "Arquivar todas as atividades",
+      description: `Arquivar TODAS as ${activities.length} atividades do projeto? Elas podem ser restauradas no Arquivo.`,
+      confirmText: "Arquivar",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       const { error } = await supabase
         .from("activities")

@@ -13,11 +13,13 @@ import { Calendar as CalendarIcon, Plus, Pencil, Trash2, CalendarDays } from "lu
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Holiday { id: string; date: string; name: string; is_national: boolean; }
 
 export const HolidaysManager = () => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [list, setList] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -52,7 +54,13 @@ export const HolidaysManager = () => {
   };
 
   const remove = async (h: Holiday) => {
-    if (!confirm(`Excluir feriado "${h.name}"?`)) return;
+    const ok = await appConfirm({
+      title: "Excluir feriado",
+      description: `Excluir feriado "${h.name}"?`,
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("holidays").delete().eq("id", h.id);
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
     toast({ title: "Feriado excluído" }); load();

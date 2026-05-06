@@ -28,6 +28,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Meeting {
   id: string;
@@ -102,6 +103,7 @@ const MEETING_TYPE_COLORS: Record<string, string> = {
 
 export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateBlocker, onCreateLesson }: MeetingsManagerProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const { canManage: isAdmin, user } = useAuth();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -274,7 +276,13 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir esta reunião?")) return;
+    const ok = await appConfirm({
+      title: "Excluir reunião",
+      description: "Excluir esta reunião?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("meetings").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     fetchMeetings();
   };

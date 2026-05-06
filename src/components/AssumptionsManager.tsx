@@ -11,6 +11,7 @@ import { Plus, Pencil, Trash2, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Assumption {
   id: string;
@@ -36,6 +37,7 @@ const CAT_LABELS: Record<string, string> = { general: "Geral", technical: "Técn
 
 export const AssumptionsManager = ({ projectId }: AssumptionsManagerProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const { canManage: isAdmin } = useAuth();
   const [items, setItems] = useState<Assumption[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -84,7 +86,13 @@ export const AssumptionsManager = ({ projectId }: AssumptionsManagerProps) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir esta premissa?")) return;
+    const ok = await appConfirm({
+      title: "Excluir premissa",
+      description: "Excluir esta premissa?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("assumptions").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     toast({ title: "Premissa movida para a lixeira" }); fetchData();
   };

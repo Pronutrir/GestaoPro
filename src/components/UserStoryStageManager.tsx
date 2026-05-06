@@ -15,6 +15,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 export interface UserStoryStage {
   id: string;
@@ -82,6 +83,7 @@ function SortableStageItem({ stage, editingId, editingTitle, setEditingTitle, on
 
 export const UserStoryStageManager = ({ projectId, stages, onStagesChange }: Props) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [newTitle, setNewTitle] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -129,7 +131,13 @@ export const UserStoryStageManager = ({ projectId, stages, onStagesChange }: Pro
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Histórias nesta etapa perderão a associação. Continuar?")) return;
+    const ok = await appConfirm({
+      title: "Excluir etapa",
+      description: "Histórias nesta etapa perderão a associação. Continuar?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("user_story_stages").delete().eq("id", id);
     onStagesChange();
     toast({ title: "Etapa excluída!" });

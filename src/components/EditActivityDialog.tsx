@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2 } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
@@ -131,6 +132,7 @@ export const EditActivityDialog = ({
   initialTab = "details",
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
   const [creatingDraft, setCreatingDraft] = useState(false);
   const effectiveActivity = createMode ? draftActivity : activity;
@@ -1565,7 +1567,13 @@ export const EditActivityDialog = ({
                 className="gap-2 text-primary border-primary/30 hover:bg-primary/10"
                 onClick={async () => {
                   if (!act) return;
-                  if (!confirm("Arquivar esta atividade? Ela ficará marcada como arquivada e poderá ser consultada no histórico.")) return;
+                  const ok = await appConfirm({
+                    title: "Arquivar atividade",
+                    description: "Arquivar esta atividade? Ela ficará marcada como arquivada e poderá ser consultada no histórico.",
+                    confirmText: "Arquivar",
+                    destructive: true,
+                  });
+                  if (!ok) return;
                   try {
                     const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", act.id);
                     if (error) throw error;

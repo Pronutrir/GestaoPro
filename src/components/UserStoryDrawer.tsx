@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { useToast } from "@/hooks/use-toast";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface UserStory {
   id: string;
@@ -38,6 +39,7 @@ interface Props {
 
 export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onStoriesChanged }: Props) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [stories, setStories] = useState<UserStory[]>([]);
   const [phaseName, setPhaseName] = useState("");
   const [activityName, setActivityName] = useState("");
@@ -106,7 +108,13 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir esta história?")) return;
+    const ok = await appConfirm({
+      title: "Excluir história",
+      description: "Excluir esta história?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("user_stories").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     if (error) {
       toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
