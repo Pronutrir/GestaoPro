@@ -101,6 +101,41 @@ interface Activity {
   parent_id?: string | null;
 }
 
+const SUPPORTED_PROJECT_TABS = [
+  "kanban",
+  "backlog",
+  "timeline",
+  "calendar",
+  "documents",
+  "docpages",
+  "stories",
+  "tap",
+  "meetings",
+  "assumptions",
+  "risks",
+  "changes",
+  "dependencies",
+  "financials",
+  "lessons",
+] as const;
+
+const LEGACY_PROJECT_TAB_ALIASES: Record<string, typeof SUPPORTED_PROJECT_TABS[number]> = {
+  list: "backlog",
+};
+
+const sanitizeVisibleProjectTabs = (tabs: string[] | null | undefined) => {
+  const normalized = (tabs || [])
+    .map((tab) => LEGACY_PROJECT_TAB_ALIASES[tab] || tab)
+    .filter((tab): tab is typeof SUPPORTED_PROJECT_TABS[number] =>
+      (SUPPORTED_PROJECT_TABS as readonly string[]).includes(tab),
+    );
+
+  return Array.from(new Set(normalized.length > 0 ? normalized : ["kanban"]));
+};
+
+const arraysEqual = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
 export default function ProjectDetailsPage() {
   const params = useParams();
   const id = params?.id as string | undefined;
@@ -340,12 +375,13 @@ export default function ProjectDetailsPage() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          next = parsed.length > 0 ? parsed : ["kanban"];
+          next = sanitizeVisibleProjectTabs(parsed);
         }
       } catch {
         // ignore
       }
     }
+    next = sanitizeVisibleProjectTabs(next);
     setVisibleTabs(next);
     setActiveTab((current) => (next.includes(current) ? current : next[0] ?? "kanban"));
   }, [id, currentUser?.id]);
@@ -355,6 +391,30 @@ export default function ProjectDetailsPage() {
     const key = `project-visible-tabs-${currentUser.id}-${id}`;
     localStorage.setItem(key, JSON.stringify(next));
   }, [id, currentUser?.id]);
+
+  useEffect(() => {
+    if (!allowedTabs) return;
+
+    const availableTabs = new Set(
+      allowedTabs.filter((tab) => !isQualityProject || tab !== "calendar"),
+    );
+
+    const fallbackTab = availableTabs.has("kanban")
+      ? "kanban"
+      : Array.from(availableTabs)[0] ?? "kanban";
+
+    const nextVisibleTabs = visibleTabs.filter((tab) => availableTabs.has(tab));
+    const sanitizedVisibleTabs = nextVisibleTabs.length > 0 ? nextVisibleTabs : [fallbackTab];
+
+    if (!arraysEqual(visibleTabs, sanitizedVisibleTabs)) {
+      setVisibleTabs(sanitizedVisibleTabs);
+      persistVisibleTabs(sanitizedVisibleTabs);
+    }
+
+    if (!sanitizedVisibleTabs.includes(activeTab)) {
+      setActiveTab(sanitizedVisibleTabs[0] ?? fallbackTab);
+    }
+  }, [activeTab, allowedTabs, isQualityProject, persistVisibleTabs, visibleTabs]);
 
   // Safety net: sempre persiste visibleTabs no localStorage quando muda.
   // Evita perda silenciosa caso algum caller esqueça de chamar persistVisibleTabs.
