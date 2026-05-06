@@ -4,6 +4,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { useDroppable } from "@dnd-kit/core";
 import { SortableProjectCard } from "./SortableProjectCard";
 import {
   AlertDialog,
@@ -51,6 +52,7 @@ export const ProjectColumn = ({
 }: ProjectColumnProps) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+  const { setNodeRef, isOver } = useDroppable({ id: `column-${status}` });
 
   const handleDeleteClick = (projectId: string) => {
     setProjectToDelete(projectId);
@@ -79,17 +81,26 @@ export const ProjectColumn = ({
       </div>
 
       <SortableContext items={projectIds} strategy={verticalListSortingStrategy}>
-        <div className="space-y-3 min-h-[100px]">
-          {projects.map((project) => (
-            <SortableProjectCard
-              key={project.id}
-              project={project}
-              onEdit={onEdit}
-              onDeleteClick={handleDeleteClick}
-              onCardClick={onCardClick}
-              isAdmin={isAdmin}
-            />
-          ))}
+        <div
+          ref={setNodeRef}
+          className={`space-y-3 min-h-[100px] rounded-lg transition-colors ${isOver ? "bg-primary/5 ring-2 ring-primary/20 ring-inset" : ""}`}
+        >
+          {projects.length === 0 ? (
+            <div className="flex items-center justify-center h-24 border-2 border-dashed border-border/30 rounded-lg">
+              <p className="text-[11px] text-muted-foreground/50">Arraste aqui</p>
+            </div>
+          ) : (
+            projects.map((project) => (
+              <SortableProjectCard
+                key={project.id}
+                project={project}
+                onEdit={onEdit}
+                onDeleteClick={handleDeleteClick}
+                onCardClick={onCardClick}
+                isAdmin={isAdmin}
+              />
+            ))
+          )}
         </div>
       </SortableContext>
 

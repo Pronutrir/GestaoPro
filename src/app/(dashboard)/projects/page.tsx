@@ -11,13 +11,14 @@ import { ProjectColumn } from '@/components/ProjectColumn';
 import { ProjectDrawer } from '@/components/ProjectDrawer';
 import { AddProjectDialog } from '@/components/AddProjectDialog';
 import { EditProjectDialog } from '@/components/EditProjectDialog';
+import { ProjectCardPreview } from '@/components/SortableProjectCard';
 import { PipelineSkeleton } from '@/components/SkeletonScreens';
 import { useProjectAccess } from '@/hooks/useProjectAccess';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
-  type DragEndEvent,
+  DragOverlay, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 
@@ -39,6 +40,7 @@ function ProjectsContent() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [drawerProject, setDrawerProject] = useState<Project | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const statusFilter = searchParams.get('status');
 
   const handleStatusFilter = (status: string | null) => {
@@ -73,33 +75,111 @@ function ProjectsContent() {
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
+    setActiveProjectId(null);
     if (!over || active.id === over.id) return;
+
     const activeProject = projects.find((p) => p.id === active.id);
+    if (!activeProject) return;
+
     const overProject = projects.find((p) => p.id === over.id);
-    if (!activeProject || !overProject || activeProject.status !== overProject.status) return;
-    const statusProjects = projects
+
+    const targetStatus = String(over.id).startsWith('column-')
+      ? String(over.id).replace('column-', '')
+      : overProject?.status;
+
+    if (!targetStatus) return;
+
+    const sourceProjects = projects
       .filter((p) => p.status === activeProject.status)
       .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
-    const oldIndex = statusProjects.findIndex((p) => p.id === active.id);
-    const newIndex = statusProjects.findIndex((p) => p.id === over.id);
-    if (oldIndex === newIndex) return;
-    const reordered = arrayMove(statusProjects, oldIndex, newIndex);
-    setProjects((prev) =>
-      prev.map((p) => {
-        if (p.status !== activeProject.status) return p;
-        const newOrder = reordered.findIndex((rp) => rp.id === p.id);
-        return { ...p, display_order: newOrder };
+    const oldIndex = sourceProjects.findIndex((p) => p.id === activeProject.id);
+    if (oldIndex === -1) return;
+
+    const nextProjects = [...projects];
+
+    if (activeProject.status === targetStatus) {
+      const newIndex = sourceProjects.findIndex((p) => p.id === over.id);
+      if (newIndex === -1 || oldIndex === newIndex) return;
+
+      const reordered = arrayMove(sourceProjects, oldIndex, newIndex);
+      setProjects((prev) =>
+        prev.map((p) => {
+          if (p.status !== activeProject.status) return p;
+          const newOrder = reordered.findIndex((rp) => rp.id === p.id);
+          return { ...p, display_order: newOrder };
+        }),
+      );
+
+      try {
+        for (let i = 0; i < reordered.length; i++) {
+          await supabase.from('projects').update({ display_order: i }).eq('id', reordered[i].id);
+        }
+      } catch {
+        toast.error('Erro ao reordenar');
+        fetchProjects();
+      }
+      return;
+    }
+
+    const targetProjects = projects
+      .filter((p) => p.status === targetStatus && p.id !== activeProject.id)
+      .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+
+    const movedProject = { ...activeProject, status: targetStatus };
+    const insertIndex = overProject && overProject.status === targetStatus
+      ? targetProjects.findIndex((p) => p.id === overProject.id)
+      : targetProjects.length;
+    const safeInsertIndex = insertIndex >= 0 ? insertIndex : targetProjects.length;
+    const reorderedTarget = [...targetProjects];
+    reorderedTarget.splice(safeInsertIndex, 0, movedProject);
+    const reorderedSource = sourceProjects.filter((p) => p.id !== activeProject.id);
+
+    setProjects(
+      nextProjects.map((project) => {
+        if (project.id === activeProject.id) {
+          return { ...project, status: targetStatus, display_order: safeInsertIndex };
+        }
+        if (project.status === activeProject.status) {
+          const idx = reorderedSource.findIndex((p) => p.id === project.id);
+          return idx >= 0 ? { ...project, display_order: idx } : project;
+        }
+        if (project.status === targetStatus) {
+          const idx = reorderedTarget.findIndex((p) => p.id === project.id);
+          return idx >= 0 ? { ...project, display_order: idx } : project;
+        }
+        return project;
       }),
     );
+
     try {
-      for (let i = 0; i < reordered.length; i++) {
-        await supabase.from('projects').update({ display_order: i }).eq('id', reordered[i].id);
+      await supabase
+        .from('projects')
+        .update({ status: targetStatus, display_order: safeInsertIndex })
+        .eq('id', activeProject.id);
+
+      for (let i = 0; i < reorderedSource.length; i++) {
+        await supabase.from('projects').update({ display_order: i }).eq('id', reorderedSource[i].id);
+      }
+
+      for (let i = 0; i < reorderedTarget.length; i++) {
+        await supabase
+          .from('projects')
+          .update({ display_order: i, status: targetStatus })
+          .eq('id', reorderedTarget[i].id);
       }
     } catch {
-      toast.error('Erro ao reordenar');
+      toast.error('Erro ao mover projeto');
       fetchProjects();
     }
   };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveProjectId(String(event.active.id));
+  };
+
+  const activeProject = activeProjectId
+    ? projects.find((project) => project.id === activeProjectId) || null
+    : null;
 
   const handleDelete = async (projectId: string) => {
     try {
@@ -204,7 +284,13 @@ function ProjectsContent() {
       {isLoading ? (
         <PipelineSkeleton />
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveProjectId(null)}
+        >
           <div
             className={`grid gap-6 ${statusFilter ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-6'}`}
           >
@@ -225,6 +311,13 @@ function ProjectsContent() {
                 />
               ))}
           </div>
+          <DragOverlay>
+            {activeProject ? (
+              <div className="rotate-2 opacity-90 w-[280px]">
+                <ProjectCardPreview project={activeProject} />
+              </div>
+            ) : null}
+          </DragOverlay>
         </DndContext>
       )}
 
