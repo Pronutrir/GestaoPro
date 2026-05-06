@@ -37,6 +37,17 @@ const PRIORITY_FLAG: Record<string, { label: string; cls: string; dot: string }>
   low: { label: "Baixa", cls: "text-success", dot: "bg-success" },
 };
 
+const normalizePriority = (priority?: string | null): keyof typeof PRIORITY_FLAG => {
+  const raw = (priority || "").toString().trim().toLowerCase();
+  if (raw === "high" || raw === "alta" || raw === "urgent" || raw === "urgente" || raw === "critical" || raw === "crítica" || raw === "critica") {
+    return "high";
+  }
+  if (raw === "low" || raw === "baixa") {
+    return "low";
+  }
+  return "medium";
+};
+
 export const ProjectListView = ({ activities, phases, onEditActivity, onToggleActivity, onAddActivity, canCreate }: Props) => {
   const [groupBy, setGroupBy] = useState<GroupBy>("status");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -156,7 +167,7 @@ export const ProjectListView = ({ activities, phases, onEditActivity, onToggleAc
               {/* Rows */}
               {!isCollapsed && g.items.map(a => {
                 const overdue = a.end_date && a.status !== "completed" && isBefore(parseISO(a.end_date), today);
-                const flag = PRIORITY_FLAG[a.priority || "medium"];
+                const flag = PRIORITY_FLAG[normalizePriority(a.priority)];
                 return (
                   <div
                     key={a.id}
