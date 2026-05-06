@@ -77,6 +77,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 import {
   computeActivityProgress,
   PROGRESS_FLAG_COLORS,
@@ -1184,7 +1185,13 @@ function DroppableColumn({
   );
 }
 
-function AddStageColumn({ projectId }: { projectId: string }) {
+function AddStageColumn({
+  projectId,
+  onStagesChanged,
+}: {
+  projectId: string;
+  onStagesChanged: () => void;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -1205,7 +1212,7 @@ function AddStageColumn({ projectId }: { projectId: string }) {
             <DialogTitle>Configurar grupos do Kanban</DialogTitle>
           </DialogHeader>
           <div className="p-4">
-            <WorkflowStageManager projectId={projectId} />
+            <WorkflowStageManager projectId={projectId} onChanged={onStagesChanged} />
           </div>
         </DialogContent>
       </Dialog>
@@ -1227,6 +1234,7 @@ export const ActivityKanban = ({
   onOpenCreateTask,
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [stagesLoading, setStagesLoading] = useState(true);
   const [stagesError, setStagesError] = useState<string | null>(null);
@@ -1772,11 +1780,17 @@ export const ActivityKanban = ({
       toast({ title: "A etapa Backlog não pode ser excluída", variant: "destructive" });
       return;
     }
-    if (!confirm("Atividades nesta coluna perderão a associação. Continuar?")) return;
+    const ok = await appConfirm({
+      title: "Excluir coluna",
+      description: "Atividades nesta coluna perderão a associação. Continuar?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
     if (error) toast({ title: "Erro ao excluir", variant: "destructive" });
     else { toast({ title: "Coluna excluída!" }); fetchStages(); }
-  }, [stages, toast]);
+  }, [appConfirm, stages, toast]);
 
   const handleChangeStageColor = useCallback(async (id: string, color: string) => {
     await supabase.from("workflow_stages").update({ color }).eq("id", id);
@@ -2024,7 +2038,7 @@ export const ActivityKanban = ({
             );
           })}
           {(isAdmin || canCreate) && (
-            <AddStageColumn projectId={projectId} />
+            <AddStageColumn projectId={projectId} onStagesChanged={fetchStages} />
           )}
         </div>
       </SortableContext>
