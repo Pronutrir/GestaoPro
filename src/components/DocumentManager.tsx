@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface ProjectDocument {
   id: string;
@@ -53,6 +54,7 @@ const emptyForm = {
 
 export const DocumentManager = ({ projectId, phases, activities }: DocumentManagerProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const { canManage: isAdmin } = useAuth();
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -131,7 +133,13 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir este documento?")) return;
+    const ok = await appConfirm({
+      title: "Excluir documento",
+      description: "Excluir este documento?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("project_documents").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     fetchDocuments();
   };

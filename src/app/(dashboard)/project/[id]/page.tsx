@@ -57,6 +57,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getProjectDeadlineInfo, formatProjectDueDate } from "@/lib/projectDeadline";
 import { normalizeProjectTabs } from "@/lib/projectTabs";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Project {
   id: string;
@@ -104,6 +105,7 @@ export default function ProjectDetailsPage() {
   const params = useParams();
   const id = params?.id as string | undefined;
   const router = useRouter();
+  const appConfirm = useAppConfirm();
   const { isAdmin: isRealAdmin, canManage: isAdmin, user: currentUser, profile, loading: authLoading } = useAuth();
   const [accessDenied, setAccessDenied] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
@@ -599,7 +601,13 @@ export default function ProjectDetailsPage() {
       toast.error("Atividade bloqueada: resolva a solicitação de mudança");
       return;
     }
-    if (!confirm("Tem certeza que deseja mover esta atividade para a lixeira?")) return;
+    const ok = await appConfirm({
+      title: "Arquivar atividade",
+      description: "Tem certeza que deseja mover esta atividade para a lixeira?",
+      confirmText: "Arquivar",
+      destructive: true,
+    });
+    if (!ok) return;
     const trashedAt = new Date().toISOString();
     // Coletar a atividade + todos os descendentes (subtarefas em qualquer nível)
     const idsToTrash = new Set<string>([activityId]);
@@ -983,7 +991,13 @@ export default function ProjectDetailsPage() {
                     <DropdownMenuContent align="end">
                       {phases.length > 0 && (
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          if (!confirm(`Arquivar TODAS as ${phases.length} fases? Elas podem ser restauradas no Arquivo.`)) return;
+                          const ok = await appConfirm({
+                            title: "Arquivar fases",
+                            description: `Arquivar TODAS as ${phases.length} fases? Elas podem ser restauradas no Arquivo.`,
+                            confirmText: "Arquivar",
+                            destructive: true,
+                          });
+                          if (!ok) return;
                           await (supabase.from("phases").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id));
                           toast.success(`${phases.length} fases arquivadas!`); fetchProjectData();
                         }}>
@@ -992,7 +1006,13 @@ export default function ProjectDetailsPage() {
                       )}
                       {activities.length > 0 && (
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          if (!confirm(`Arquivar TODAS as ${activities.length} atividades? Elas podem ser restauradas no Arquivo.`)) return;
+                          const ok = await appConfirm({
+                            title: "Arquivar atividades",
+                            description: `Arquivar TODAS as ${activities.length} atividades? Elas podem ser restauradas no Arquivo.`,
+                            confirmText: "Arquivar",
+                            destructive: true,
+                          });
+                          if (!ok) return;
                           await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id) as any).eq("is_trashed", false);
                           toast.success(`${activities.length} atividades arquivadas!`); fetchProjectData();
                         }}>

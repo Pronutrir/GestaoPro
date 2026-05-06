@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 import {
   DndContext, DragEndEvent, DragStartEvent, DragOverlay,
   PointerSensor, useSensor, useSensors, useDroppable, rectIntersection,
@@ -58,6 +59,7 @@ interface Props { projectId: string; }
 
 export const UserStoriesBoard = ({ projectId }: Props) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [stories, setStories] = useState<UserStory[]>([]);
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -169,7 +171,13 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir esta história?")) return;
+    const ok = await appConfirm({
+      title: "Excluir história",
+      description: "Excluir esta história?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("user_stories").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     toast({ title: "História movida para a lixeira" });
     fetchStories();

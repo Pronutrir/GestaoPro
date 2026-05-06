@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { DeliveryPackageDrawer } from "@/components/DeliveryPackageDrawer";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface DeliveryPackage {
   id: string;
@@ -55,6 +56,7 @@ interface DeliveryPackagesManagerProps {
 
 export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: DeliveryPackagesManagerProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const { canManage: isAdmin } = useAuth();
   const [packages, setPackages] = useState<DeliveryPackage[]>([]);
   const [packageActivities, setPackageActivities] = useState<Record<string, string[]>>({});
@@ -136,7 +138,13 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: 
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir este pacote de entregas?")) return;
+    const ok = await appConfirm({
+      title: "Excluir pacote",
+      description: "Excluir este pacote de entregas?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("delivery_packages").update({ is_trashed: true, trashed_at: new Date().toISOString() }).eq("id", id);
     toast({ title: "Pacote movido para a lixeira" }); fetchData();
   };

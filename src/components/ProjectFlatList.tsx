@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Phase { id: string; title: string; display_order?: number | null; }
 interface WorkflowStage { id: string; title: string; color?: string | null; display_order?: number; }
@@ -65,6 +66,7 @@ export function ProjectFlatList({
   projectId, activities, phases, onEditActivity, onToggleActivity, onDataChanged, isAdmin,
 }: Props) {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [showTrash, setShowTrash] = useState(false);
   const [trashed, setTrashed] = useState<Activity[]>([]);
@@ -129,19 +131,36 @@ export function ProjectFlatList({
     fetchTrash(); onDataChanged();
   };
   const handlePermanentDelete = async (id: string) => {
-    if (!confirm("Excluir permanentemente esta atividade?")) return;
+    const ok = await appConfirm({
+      title: "Excluir atividade",
+      description: "Excluir permanentemente esta atividade?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("activities").delete().eq("id", id);
     toast({ title: "Atividade excluída!" });
     fetchTrash();
   };
   const handleEmptyTrash = async () => {
-    if (!confirm(`Excluir PERMANENTEMENTE ${trashed.length} atividades?`)) return;
+    const ok = await appConfirm({
+      title: "Esvaziar lixeira",
+      description: `Excluir PERMANENTEMENTE ${trashed.length} atividades?`,
+      confirmText: "Excluir tudo",
+      destructive: true,
+    });
+    if (!ok) return;
     await (supabase.from("activities").delete().eq("project_id", projectId) as any).eq("is_trashed", true);
     toast({ title: "Lixeira esvaziada!" });
     fetchTrash();
   };
   const handleRestoreAll = async () => {
-    if (!confirm(`Restaurar ${trashed.length} atividades?`)) return;
+    const ok = await appConfirm({
+      title: "Restaurar atividades",
+      description: `Restaurar ${trashed.length} atividades?`,
+      confirmText: "Restaurar",
+    });
+    if (!ok) return;
     await (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any)
       .eq("project_id", projectId) as any).eq("is_trashed", true);
     toast({ title: "Todas restauradas!" });

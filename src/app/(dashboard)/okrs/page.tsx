@@ -9,6 +9,7 @@ import { Plus, Target, Trash2, Pencil, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { ObjectiveDialog } from "@/components/okr/ObjectiveDialog";
 import { KeyResultsPanel } from "@/components/okr/KeyResultsPanel";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 export interface Objective {
   id: string;
@@ -42,6 +43,7 @@ const OKRs = () => {
   const [editing, setEditing] = useState<Objective | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filterCycle, setFilterCycle] = useState<string>("all");
+  const appConfirm = useAppConfirm();
 
   const fetchData = async () => {
     const { data, error } = await supabase
@@ -57,7 +59,13 @@ const OKRs = () => {
   useEffect(() => { fetchData(); }, []);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir este objetivo e todos os seus resultados-chave?")) return;
+    const ok = await appConfirm({
+      title: "Excluir objetivo",
+      description: "Excluir este objetivo e todos os seus resultados-chave?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("okr_objectives").delete().eq("id", id);
     if (error) return toast.error("Erro ao excluir");
     toast.success("Objetivo excluído");

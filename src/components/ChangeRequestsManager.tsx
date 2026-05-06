@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface ChangeRequest {
   id: string;
@@ -58,6 +59,7 @@ interface ProfileLite { id: string; full_name: string | null; email: string | nu
 
 export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Props) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const { canManage, profile, user } = useAuth();
   const userName = (profile?.full_name || "").trim();
   const isOwner = !!userName && !!projectOwner && userName.toLowerCase() === projectOwner.trim().toLowerCase();
@@ -259,7 +261,13 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
   };
 
   const handleArchive = async (id: string) => {
-    if (!confirm("Arquivar esta solicitação de mudança?")) return;
+    const ok = await appConfirm({
+      title: "Arquivar solicitação",
+      description: "Arquivar esta solicitação de mudança?",
+      confirmText: "Arquivar",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("change_requests" as any)
       .update({ is_trashed: true, trashed_at: new Date().toISOString() })
       .eq("id", id);

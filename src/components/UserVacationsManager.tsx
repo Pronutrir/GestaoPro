@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface VacationPeriod { start: string; end: string; }
 interface Profile { id: string; full_name: string | null; email: string | null; sector: string | null; }
@@ -19,6 +20,7 @@ interface Schedule { user_id: string; weekly_hours: any; vacation_periods: Vacat
 
 export const UserVacationsManager = () => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [users, setUsers] = useState<Profile[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [schedule, setSchedule] = useState<Schedule | null>(null);
@@ -77,7 +79,13 @@ export const UserVacationsManager = () => {
     setDialogOpen(false);
   };
   const remove = async (i: number) => {
-    if (!confirm("Excluir este período de férias?")) return;
+    const ok = await appConfirm({
+      title: "Excluir período",
+      description: "Excluir este período de férias?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     const list = [...(schedule?.vacation_periods || [])];
     list.splice(i, 1);
     await persist(list);

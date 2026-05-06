@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { BookMarked, Plus, Trash2, ArrowUpRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface LogEntry {
   id: string;
@@ -23,6 +24,7 @@ interface ActivityLogbookProps {
 
 export const ActivityLogbook = ({ activityId, projectId }: ActivityLogbookProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [description, setDescription] = useState("");
@@ -60,7 +62,13 @@ export const ActivityLogbook = ({ activityId, projectId }: ActivityLogbookProps)
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir este registro?")) return;
+    const ok = await appConfirm({
+      title: "Excluir registro",
+      description: "Excluir este registro?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("activity_log_entries").delete().eq("id", id);
     fetchEntries();
   };

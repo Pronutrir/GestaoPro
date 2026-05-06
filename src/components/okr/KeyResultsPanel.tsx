@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2, Link2, X } from "lucide-react";
 import { toast } from "sonner";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface KeyResult {
   id: string;
@@ -32,6 +33,7 @@ interface Props {
 }
 
 export const KeyResultsPanel = ({ objectiveId, onProgressUpdated }: Props) => {
+  const appConfirm = useAppConfirm();
   const [krs, setKrs] = useState<KeyResult[]>([]);
   const [links, setLinks] = useState<ProjectLink[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -97,7 +99,13 @@ export const KeyResultsPanel = ({ objectiveId, onProgressUpdated }: Props) => {
   };
 
   const deleteKr = async (id: string) => {
-    if (!confirm("Excluir este resultado-chave?")) return;
+    const ok = await appConfirm({
+      title: "Excluir resultado-chave",
+      description: "Excluir este resultado-chave?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     await supabase.from("okr_key_results").delete().eq("id", id);
     const updated = krs.filter(k => k.id !== id);
     setKrs(updated);

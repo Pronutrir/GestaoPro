@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { BookOpen, Pencil, Trash2, Send, Plus } from "lucide-react";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface UserStory {
   id: string;
@@ -30,6 +31,7 @@ interface Props {
  */
 export const ActivityStoriesPanel = ({ activityId, projectId }: Props) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [stories, setStories] = useState<UserStory[]>([]);
   const [loading, setLoading] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -100,7 +102,13 @@ export const ActivityStoriesPanel = ({ activityId, projectId }: Props) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir esta história?")) return;
+    const ok = await appConfirm({
+      title: "Excluir história",
+      description: "Excluir esta história?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase
       .from("user_stories")
       .update({ is_trashed: true, trashed_at: new Date().toISOString() })
