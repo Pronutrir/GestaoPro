@@ -58,6 +58,7 @@ import { getProjectDeadlineInfo, formatProjectDueDate } from "@/lib/projectDeadl
 import { normalizeProjectTabs } from "@/lib/projectTabs";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
+import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
 
 interface Project {
   id: string;
@@ -291,6 +292,7 @@ export default function ProjectDetailsPage() {
 
     if (!currentUser?.id) {
       setUserPerms(null);
+      setAccessDenied(false);
       setAllowedTabs(normalizeProjectTabs());
       setPermissionsLoading(false);
       return;
@@ -301,10 +303,30 @@ export default function ProjectDetailsPage() {
     }
 
     try {
+      const projectPromise = (async () => {
+        const primary = await supabase
+          .from("projects")
+          .select("created_by, owner, assignees, manager")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (!primary.error) {
+          return primary as { data: any; error: any };
+        }
+
+        const fallback = await supabase
+          .from("projects")
+          .select("owner, assignees")
+          .eq("id", id)
+          .maybeSingle();
+
+        return fallback as { data: any; error: any };
+      })();
+
       const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }] = await Promise.all([
         supabase
           .from("project_members")
-          .select("can_create, can_edit, can_delete, can_move")
+          .select("id, can_create, can_edit, can_delete, can_move")
           .eq("project_id", id)
           .eq("user_id", currentUser.id)
           .maybeSingle(),
@@ -313,29 +335,35 @@ export default function ProjectDetailsPage() {
           .select("allowed_tabs")
           .eq("user_id", currentUser.id)
           .maybeSingle(),
-        supabase
-          .from("projects")
-          .select("owner, assignees")
-          .eq("id", id)
-          .maybeSingle(),
+        projectPromise,
       ]);
 
-      // Compute access from three sources: explicit member, project Líder (owner),
-      // or listed Participante (assignees). Robust to whitespace/casing differences.
-      const fullNameLower = (profile?.full_name || "").trim().toLowerCase();
-      const ownerMatch =
-        !!fullNameLower &&
-        typeof projectRow?.owner === "string" &&
-        projectRow.owner.trim().toLowerCase() === fullNameLower;
-      const assigneeMatch =
-        !!fullNameLower &&
-        Array.isArray(projectRow?.assignees) &&
-        projectRow!.assignees!.some(
-          (a: any) => typeof a === "string" && a.trim().toLowerCase() === fullNameLower
-        );
-      const hasImplicitAccess = ownerMatch || assigneeMatch;
+      // Compute access from four sources: explicit member, project creator,
+      // project Líder (owner)/Gerente (manager), or listed Participante
+      // (assignees). Uses tolerant identity matching so short and long forms
+      // of the same name still resolve to the right user.
+      const candidates = buildUserCandidates([
+        profile?.full_name,
+        profile?.email,
+        currentUser.email,
+      ]);
 
-      if (!perms && !hasImplicitAccess) {
+      const ownerMatch = matchesIdentity(projectRow?.owner, candidates);
+
+      const creatorMatch =
+        typeof projectRow?.created_by === "string" &&
+        projectRow.created_by === currentUser.id;
+
+      const managerMatch = matchesIdentity(projectRow?.manager, candidates);
+
+      const assigneeMatch =
+        Array.isArray(projectRow?.assignees) &&
+        anyMatchesIdentity(projectRow!.assignees!, candidates);
+      const hasImplicitAccess = creatorMatch || ownerMatch || managerMatch || assigneeMatch;
+      const hasExplicitMembership = !!perms?.id;
+
+      if (!hasExplicitMembership && !hasImplicitAccess) {
+        // Regra estrita: somente criador, membro ou equipe.
         setAccessDenied(true);
         setUserPerms({ can_create: false, can_edit: false, can_delete: false, can_move: false });
         setAllowedTabs(normalizeProjectTabs());
@@ -345,7 +373,14 @@ export default function ProjectDetailsPage() {
       // If member exists, use those granular permissions. Otherwise (Líder/Participante),
       // grant full operational permissions by default.
       setUserPerms(
-        perms ?? { can_create: true, can_edit: true, can_delete: true, can_move: true }
+        hasExplicitMembership
+          ? {
+              can_create: !!perms.can_create,
+              can_edit: !!perms.can_edit,
+              can_delete: !!perms.can_delete,
+              can_move: !!perms.can_move,
+            }
+          : { can_create: true, can_edit: true, can_delete: true, can_move: true }
       );
 
       if (tabError) {
@@ -355,10 +390,15 @@ export default function ProjectDetailsPage() {
       const normalizedTabs = normalizeProjectTabs(tabPerms?.allowed_tabs);
       setAllowedTabs(normalizedTabs);
       setActiveTab((currentTab) => (normalizedTabs.includes(currentTab) ? currentTab : normalizedTabs[0]));
+    } catch (error) {
+      console.error("[project-page] loadAccess failed", error);
+      setAccessDenied(true);
+      setUserPerms({ can_create: false, can_edit: false, can_delete: false, can_move: false });
+      setAllowedTabs(normalizeProjectTabs());
     } finally {
       setPermissionsLoading(false);
     }
-  }, [id, currentUser?.id, isRealAdmin, profile?.full_name]);
+  }, [id, currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name]);
 
   useEffect(() => {
     if (authLoading || !id) return;
