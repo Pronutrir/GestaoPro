@@ -100,6 +100,7 @@ interface Activity {
   priority?: string;
   tags?: string[];
   parent_id?: string | null;
+  participants?: string[] | null;
 }
 
 const SUPPORTED_PROJECT_TABS = [
@@ -144,6 +145,7 @@ export default function ProjectDetailsPage() {
   const appConfirm = useAppConfirm();
   const { isAdmin: isRealAdmin, canManage: isAdmin, user: currentUser, profile, loading: authLoading } = useAuth();
   const [accessDenied, setAccessDenied] = useState(false);
+  const [activityScopedAccess, setActivityScopedAccess] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -279,6 +281,11 @@ export default function ProjectDetailsPage() {
     };
   }, [id, authLoading]);
 
+  useEffect(() => {
+    if (authLoading || !id) return;
+    fetchProjectData();
+  }, [activityScopedAccess, authLoading, id]);
+
   const loadAccess = useCallback(async (silent = false) => {
     if (!id) return;
 
@@ -323,7 +330,13 @@ export default function ProjectDetailsPage() {
         return fallback as { data: any; error: any };
       })();
 
-      const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }] = await Promise.all([
+      const activitiesPromise = supabase
+        .from("activities")
+        .select("id, assigned_to, participants")
+        .eq("project_id", id)
+        .eq("is_trashed", false);
+
+      const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }, { data: projectActivities }] = await Promise.all([
         supabase
           .from("project_members")
           .select("id, can_create, can_edit, can_delete, can_move")
@@ -336,6 +349,7 @@ export default function ProjectDetailsPage() {
           .eq("user_id", currentUser.id)
           .maybeSingle(),
         projectPromise,
+        activitiesPromise,
       ]);
 
       // Compute access from four sources: explicit member, project creator,
@@ -359,17 +373,27 @@ export default function ProjectDetailsPage() {
       const assigneeMatch =
         Array.isArray(projectRow?.assignees) &&
         anyMatchesIdentity(projectRow!.assignees!, candidates);
-      const hasImplicitAccess = creatorMatch || ownerMatch || managerMatch || assigneeMatch;
+      const activityAssignmentMatch =
+        Array.isArray(projectActivities) &&
+        projectActivities.some((activity: any) => (
+          matchesIdentity(activity.assigned_to, candidates) ||
+          (Array.isArray(activity.participants) && anyMatchesIdentity(activity.participants, candidates))
+        ));
+      const hasImplicitAccess = creatorMatch || ownerMatch || managerMatch || assigneeMatch || activityAssignmentMatch;
       const hasExplicitMembership = !!perms?.id;
+      const hasProjectWideAccess = creatorMatch || ownerMatch || managerMatch || assigneeMatch;
+      const isActivityScoped = !hasExplicitMembership && !hasProjectWideAccess && activityAssignmentMatch;
 
       if (!hasExplicitMembership && !hasImplicitAccess) {
         // Regra estrita: somente criador, membro ou equipe.
         setAccessDenied(true);
+        setActivityScopedAccess(false);
         setUserPerms({ can_create: false, can_edit: false, can_delete: false, can_move: false });
         setAllowedTabs(normalizeProjectTabs());
         return;
       }
       setAccessDenied(false);
+      setActivityScopedAccess(isActivityScoped);
       // If member exists, use those granular permissions. Otherwise (Líder/Participante),
       // grant full operational permissions by default.
       setUserPerms(
@@ -380,7 +404,9 @@ export default function ProjectDetailsPage() {
               can_delete: !!perms.can_delete,
               can_move: !!perms.can_move,
             }
-          : { can_create: true, can_edit: true, can_delete: true, can_move: true }
+          : isActivityScoped
+            ? { can_create: false, can_edit: false, can_delete: false, can_move: false }
+            : { can_create: true, can_edit: true, can_delete: true, can_move: true }
       );
 
       if (tabError) {
@@ -393,6 +419,7 @@ export default function ProjectDetailsPage() {
     } catch (error) {
       console.error("[project-page] loadAccess failed", error);
       setAccessDenied(true);
+      setActivityScopedAccess(false);
       setUserPerms({ can_create: false, can_edit: false, can_delete: false, can_move: false });
       setAllowedTabs(normalizeProjectTabs());
     } finally {
@@ -545,6 +572,19 @@ export default function ProjectDetailsPage() {
           void loadAccess(true);
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "activities",
+          filter: `project_id=eq.${id}`,
+        },
+        () => {
+          void loadAccess(true);
+          fetchProjectData();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -622,13 +662,37 @@ export default function ProjectDetailsPage() {
       const { data: phasesData, error: phasesError } = await supabase
         .from("phases").select("*").eq("project_id", id).eq("is_trashed", false).order("display_order", { ascending: true });
       if (phasesError) throw new Error(toErrorMessage(phasesError, "phases"));
-      setPhases(phasesData || []);
 
       const { data: activitiesData, error: activitiesError } = await (supabase
         .from("activities").select("*").eq("project_id", id) as any).eq("is_trashed", false)
         .order("display_order", { ascending: true }).order("created_at", { ascending: true });
       if (activitiesError) throw new Error(toErrorMessage(activitiesError, "activities"));
-      setActivities(activitiesData || []);
+
+      const candidateUsers = buildUserCandidates([
+        profile?.full_name,
+        profile?.email,
+        currentUser?.email,
+      ]);
+
+      const visibleActivities = activityScopedAccess
+        ? (activitiesData || []).filter((activity: any) => (
+            matchesIdentity(activity.assigned_to, candidateUsers) ||
+            (Array.isArray(activity.participants) && anyMatchesIdentity(activity.participants, candidateUsers))
+          ))
+        : (activitiesData || []);
+
+      const visiblePhaseIds = new Set(
+        visibleActivities
+          .map((activity: any) => activity.phase_id)
+          .filter((phaseId: string | null | undefined): phaseId is string => Boolean(phaseId)),
+      );
+
+      setPhases(
+        activityScopedAccess
+          ? (phasesData || []).filter((phase) => visiblePhaseIds.has(phase.id))
+          : (phasesData || []),
+      );
+      setActivities(visibleActivities);
     } catch (error) {
       const message = toErrorMessage(error, "fetchProjectData");
       console.error("Erro ao buscar dados do projeto:", { message, error });

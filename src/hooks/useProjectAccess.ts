@@ -7,9 +7,10 @@ import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/
  * Returns filtered project IDs for the current user.
  * Only Admins see all projects. Gestors and regular users see projects where
  * they are: (a) explicitly added as members, (b) the project creator, (c) the
- * project Líder (owner) or Gerente (manager), or (d) listed as a participant
- * (assignees) — using tolerant identity matching (NFD + tokens) so short and
- * long forms of the same name still bind to the right user.
+ * project Líder (owner) or Gerente (manager), (d) listed as a participant
+ * (assignees), or (e) assigned to at least one activity inside the project —
+ * using tolerant identity matching (NFD + tokens) so short and long forms of
+ * the same name still bind to the right user.
  */
 export const useProjectAccess = () => {
   const { user, isAdmin, isGestor, canManage, profile, loading } = useAuth();
@@ -40,6 +41,13 @@ export const useProjectAccess = () => {
       .select("project_id")
       .eq("user_id", user.id);
 
+    const activitiesPromise = candidates.length > 0
+      ? supabase
+          .from("activities")
+          .select("project_id, assigned_to, participants")
+          .eq("is_trashed", false)
+      : Promise.resolve({ data: [] as any[], error: null });
+
     const projectsPromise = candidates.length > 0
       ? (async () => {
           const primary = await supabase
@@ -60,10 +68,25 @@ export const useProjectAccess = () => {
         })()
       : Promise.resolve({ data: [] as any[], error: null });
 
-    const [membersRes, projectsRes] = await Promise.all([membersPromise, projectsPromise]);
+    const [membersRes, activitiesRes, projectsRes] = await Promise.all([
+      membersPromise,
+      activitiesPromise,
+      projectsPromise,
+    ]);
 
     const ids = new Set<string>();
     (membersRes.data || []).forEach((m: any) => ids.add(m.project_id));
+
+    (activitiesRes.data || []).forEach((activity: any) => {
+      const assignedMatch = matchesIdentity(activity.assigned_to, candidates);
+      const participantMatch =
+        Array.isArray(activity.participants) &&
+        anyMatchesIdentity(activity.participants, candidates);
+
+      if ((assignedMatch || participantMatch) && typeof activity.project_id === "string") {
+        ids.add(activity.project_id);
+      }
+    });
 
     if (candidates.length > 0) {
       (projectsRes.data || []).forEach((p: any) => {
@@ -122,6 +145,11 @@ export const useProjectAccess = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "projects" },
+        refresh
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "activities" },
         refresh
       )
       .subscribe();
