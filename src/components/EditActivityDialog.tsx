@@ -333,10 +333,20 @@ export const EditActivityDialog = ({
           supabase.from("profiles").select("full_name, sector").in("id", userIds).then(({ data: profiles }) => {
             if (profiles) setMembers(profiles.filter(p => p.full_name));
           });
+        } else {
+          setMembers([]);
         }
       });
     }
   }, [projectId, open, activity?.id, createMode]);
+
+  // In create mode, each new opening must start from a fresh draft record.
+  // Without this reset, subsequent creations may keep updating the previous task.
+  useEffect(() => {
+    if (open || !createMode) return;
+    setDraftActivity(null);
+    setCreatingDraft(false);
+  }, [open, createMode]);
 
   useEffect(() => {
     if (!open) return;
@@ -511,6 +521,7 @@ export const EditActivityDialog = ({
 
       toast({ title: createMode ? "Atividade criada!" : "Atividade atualizada!" });
       onActivityUpdated();
+      if (createMode) setDraftActivity(null);
       onOpenChange(false);
     } catch (error) {
       console.error("Erro ao atualizar atividade:", error);
@@ -1098,7 +1109,8 @@ export const EditActivityDialog = ({
                       </Popover>
                     </span>
                   </div>
-                  {subActivities.map((sub) => {
+                    {subActivities.map((sub) => {
+                    const assigneeOptions = members.length > 0 ? members : allProfiles;
                     const initials = (sub.assigned_to || "")
                       .split(" ")
                       .filter(Boolean)
@@ -1187,9 +1199,9 @@ export const EditActivityDialog = ({
                                     >
                                       Sem responsável
                                     </button>
-                                    {members.map((m) => (
+                                    {assigneeOptions.map((m, idx) => (
                                       <button
-                                        key={m.full_name}
+                                        key={`${m.full_name}-${m.sector ?? "sem-setor"}-${idx}`}
                                         type="button"
                                         className={`w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted ${
                                           sub.assigned_to === m.full_name ? "bg-primary/10 text-primary font-medium" : ""
@@ -1241,15 +1253,14 @@ export const EditActivityDialog = ({
                           }
                           if (colId === "end_date") {
                             return (
-                              <label key={colId} className="relative cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                                <span>{dateShort}</span>
+                              <div key={colId} className="flex items-center gap-1">
                                 <input
                                   type="date"
                                   value={sub.end_date || ""}
                                   onChange={(e) => updateField(e.target.value || null)}
-                                  className="absolute inset-0 opacity-0 cursor-pointer"
+                                  className="h-6 w-full text-[10px] px-1 rounded border border-input bg-background"
                                 />
-                              </label>
+                              </div>
                             );
                           }
                           if (colId === "start_date") {
