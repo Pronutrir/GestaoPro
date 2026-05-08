@@ -1140,6 +1140,7 @@ export const EditActivityDialog = ({
                         style={{ gridTemplateColumns: subGridTemplate }}
                       >
                         <Button
+                          type="button"
                           size="icon"
                           variant="ghost"
                           className="h-5 w-5 shrink-0"
@@ -1413,6 +1414,7 @@ export const EditActivityDialog = ({
                         })}
 
                         <Button
+                          type="button"
                           size="icon"
                           variant="ghost"
                           className="h-5 w-5 opacity-0 group-hover:opacity-100 text-destructive"

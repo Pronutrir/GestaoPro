@@ -59,7 +59,7 @@ function ProjectsContent() {
       const { data, error } = await supabase
         .from('projects')
         .select('*')
-        .neq('category', 'qualidade')
+        .or('category.neq.qualidade,category.is.null')
         .eq('is_trashed', false)
         .order('display_order', { ascending: true })
         .order('created_at', { ascending: false });

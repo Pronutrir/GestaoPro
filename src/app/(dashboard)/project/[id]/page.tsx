@@ -676,6 +676,8 @@ export default function ProjectDetailsPage() {
         profile?.full_name,
         profile?.email,
         currentUser?.email,
+        profile?.id,
+        currentUser?.id,
       ]);
 
       const visibleActivities = activityScopedAccess

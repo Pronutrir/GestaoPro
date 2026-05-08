@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { GutPriorityField } from "@/components/GutPriorityField";
+import { format, parse, isValid } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export interface Phase { id: string; title: string }
 export interface WorkflowStage { id: string; title: string; color: string; is_final?: boolean }
@@ -62,6 +64,20 @@ function parseHoursInput(val: string): number {
   const mOnly = val.match(/^(\d+)\s*m$/i);
   if (mOnly) return parseInt(mOnly[1]) / 60;
   return parseFloat(val) || 0;
+}
+
+/** Format date string to show day of week (PT-BR) */
+function formatDateWithDayOfWeek(dateStr: string): string | null {
+  if (!dateStr) return null;
+  const parsed = parse(dateStr, "yyyy-MM-dd", new Date());
+  if (!isValid(parsed)) return null;
+  return format(parsed, "EEEE, dd 'de' MMMM", { locale: ptBR });
+}
+
+/** Get today's date formatted as YYYY-MM-DD */
+function getTodayString(): string {
+  const today = new Date();
+  return format(today, "yyyy-MM-dd");
 }
 
 export const CreateTaskDialog = ({

@@ -168,6 +168,7 @@ interface Phase {
 interface Activity {
   id: string;
   title: string;
+  item_type?: string | null;
   description: string | null;
   status: string;
   completed_at: string | null;
@@ -779,11 +780,40 @@ function SortableColumn({
   phases.forEach((p, i) => { phaseOrderMap[p.id] = i; });
   const priorityWeight: Record<string, number> = { high: 0, medium: 1, low: 2 };
   const stageActivityIds = useMemo(() => new Set(stageActivities.map((a) => a.id)), [stageActivities]);
+  const stageActivitiesById = useMemo(
+    () => new Map(stageActivities.map((activity) => [activity.id, activity])),
+    [stageActivities],
+  );
+
+  const shouldRenderInlineChild = useCallback((child: Activity) => {
+    if (!child.parent_id || !stageActivityIds.has(child.parent_id)) return false;
+
+    const parent = stageActivitiesById.get(child.parent_id);
+    // Tarefas filhas de história do usuário devem aparecer como cards próprios.
+    if (child.item_type === "tarefa" && parent?.item_type === "historia_usuario") {
+      return false;
+    }
+
+    return true;
+  }, [stageActivityIds, stageActivitiesById]);
 
   const sortedActivities = useMemo(() => {
     // Exibe como card toda atividade desta coluna, exceto subtarefas cujo pai também está nesta mesma coluna.
     // Essas continuam aparecendo inline apenas quando o pai é expandido.
-    const sorted = stageActivities.filter((a) => !a.parent_id || !stageActivityIds.has(a.parent_id));
+    // Quando houver história -> tarefa na mesma coluna, prioriza exibir a tarefa para focar na execução.
+    const sorted = stageActivities.filter((a) => {
+      if (shouldRenderInlineChild(a)) return false;
+
+      if (a.item_type === "historia_usuario") {
+        const children = childrenByParent.get(a.id) || [];
+        const hasTaskChildInStage = children.some(
+          (child) => stageActivityIds.has(child.id) && child.item_type === "tarefa",
+        );
+        if (hasTaskChildInStage) return false;
+      }
+
+      return true;
+    });
     sorted.sort((a, b) => {
       switch (colSort) {
         case "wbs_asc": {
@@ -816,14 +846,34 @@ function SortableColumn({
       }
     });
     return sorted;
-  }, [stageActivities, stageActivityIds, colSort, phases]);
+  }, [stageActivities, shouldRenderInlineChild, childrenByParent, stageActivityIds, colSort, phases]);
+
+  useEffect(() => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+
+      stageActivities.forEach((activity) => {
+        if (activity.item_type !== "tarefa") return;
+        const hasInlineChildren = (childrenByParent.get(activity.id) || []).some((child) =>
+          shouldRenderInlineChild(child),
+        );
+        if (hasInlineChildren && !next.has(activity.id)) {
+          next.add(activity.id);
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [stageActivities, childrenByParent, shouldRenderInlineChild]);
 
   const visibleCardCount = useMemo(() => {
     return sortedActivities.reduce((total, activity) => {
-      const inlineChildren = (childrenByParent.get(activity.id) || []).filter((child) => stageActivityIds.has(child.id));
+      const inlineChildren = (childrenByParent.get(activity.id) || []).filter((child) => shouldRenderInlineChild(child));
       return total + 1 + (expandedIds.has(activity.id) ? inlineChildren.length : 0);
     }, 0);
-  }, [sortedActivities, childrenByParent, stageActivityIds, expandedIds]);
+  }, [sortedActivities, childrenByParent, shouldRenderInlineChild, expandedIds]);
 
   return (
     <div
@@ -1084,7 +1134,7 @@ function SortableColumn({
           ) : (
             sortedActivities.map((activity) => {
               const allChildren = childrenByParent.get(activity.id) || [];
-              const inlineChildren = allChildren.filter((child) => stageActivityIds.has(child.id));
+              const inlineChildren = allChildren.filter((child) => shouldRenderInlineChild(child));
               const expanded = expandedIds.has(activity.id);
               return (
                 <div key={activity.id} className="space-y-1.5">
@@ -1107,7 +1157,7 @@ function SortableColumn({
                     relationItems={relationCounts?.get(activity.id) || []}
                     onOpenRelated={onOpenRelated}
                     onRemoveRelation={onRemoveRelation}
-                    subActivityCount={allChildren.length}
+                    subActivityCount={inlineChildren.length}
                     isExpanded={expanded}
                     onToggleExpand={() => toggleExpanded(activity.id)}
                     progress={computeActivityProgress(activity.workflow_stage_id, allStages)}
@@ -1523,11 +1573,29 @@ export const ActivityKanban = ({
     const map: Record<string, Activity[]> = {};
     stages.forEach((s) => (map[s.id] = []));
 
+    const visibleStagesLocal = stages.filter((s) => s.display_order > 0 && s.is_visible !== false);
+    const fallbackBacklogVisibleStage =
+      visibleStagesLocal.find((s) => /backlog/i.test(s.title)) ||
+      visibleStagesLocal[0] ||
+      null;
+    const stageById = new Map(stages.map((stage) => [stage.id, stage]));
+
     activities.forEach((a) => {
       // Use optimistic override if available
       const stageId = optimisticMoves[a.id] || a.workflow_stage_id;
+
       if (stageId && map[stageId]) {
-        map[stageId].push(a);
+        const stage = stageById.get(stageId);
+        const isHiddenBacklog =
+          !!stage &&
+          (/backlog/i.test(stage.title) || stage.display_order === 0) &&
+          (stage.display_order <= 0 || stage.is_visible === false);
+
+        if (isHiddenBacklog && fallbackBacklogVisibleStage) {
+          map[fallbackBacklogVisibleStage.id].push(a);
+        } else {
+          map[stageId].push(a);
+        }
       } else if (stages.length > 0) {
         map[stages[0].id].push(a);
       }
