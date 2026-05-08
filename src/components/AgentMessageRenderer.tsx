@@ -34,6 +34,12 @@ type DataCardItem = {
   assigned_to?: unknown;
 };
 
+function toDisplayText(value: unknown, fallback = ''): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return fallback;
+}
+
 /** Remove as opções em colchetes do texto para renderização */
 function cleanText(text: string): string {
   // Remove linhas que contêm APENAS opções em colchetes
@@ -54,23 +60,29 @@ function renderDataItem(item: Record<string, unknown>, itemType?: string, onOpen
 
   const { id, title, name, status, priority, description, due_date, assigned_to } = item as DataCardItem;
   const canOpenProject = itemType === 'project' && typeof id === 'string' && !!onOpenProject;
+  const heading = toDisplayText(title) || toDisplayText(name) || 'Item';
+  const statusText = toDisplayText(status);
+  const priorityText = toDisplayText(priority);
+  const descriptionText = toDisplayText(description);
+  const assignedToText = toDisplayText(assigned_to);
+  const dueDateText = toDisplayText(due_date);
 
   return (
     <div className="p-3 rounded-lg border border-border bg-card hover:bg-accent/30 transition-colors">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
-          <h4 className="font-semibold text-sm truncate">{title || name || 'Item'}</h4>
+          <h4 className="font-semibold text-sm truncate">{heading}</h4>
           {id && <p className="text-xs text-muted-foreground font-mono">{String(id).slice(0, 12)}…</p>}
         </div>
         <div className="flex gap-1 shrink-0">
-          {status && <Badge variant="outline" className="text-xs">{status}</Badge>}
-          {priority && <Badge className={getPriorityColor(priority)} variant="secondary">{priority}</Badge>}
+          {statusText && <Badge variant="outline" className="text-xs">{statusText}</Badge>}
+          {priorityText && <Badge className={getPriorityColor(priorityText)} variant="secondary">{priorityText}</Badge>}
         </div>
       </div>
-      {description && <p className="text-xs text-foreground/70 mb-2 line-clamp-2">{description}</p>}
+      {descriptionText && <p className="text-xs text-foreground/70 mb-2 line-clamp-2">{descriptionText}</p>}
       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-        {assigned_to && <span className="flex items-center gap-1"><User className="w-3 h-3" />{assigned_to}</span>}
-        {due_date && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{due_date}</span>}
+        {assignedToText && <span className="flex items-center gap-1"><User className="w-3 h-3" />{assignedToText}</span>}
+        {dueDateText && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{dueDateText}</span>}
       </div>
       {canOpenProject && (
         <div className="mt-3">
@@ -261,8 +273,8 @@ export function AgentMessageRenderer({ parts, role, onOpenProject }: AgentMessag
                                 <div key={key} className="space-y-1">
                                   <p className="text-xs font-medium text-foreground">{formatOutputLabel(key)}:</p>
                                   <div className="space-y-2 pl-2 border-l-2 border-primary">
-                                    {(value as Array<any>).map((item, idx) => (
-                                      <div key={idx}>{renderDataItem(item, key, onOpenProject)}</div>
+                                    {(value as unknown[]).map((item, idx) => (
+                                      <div key={idx}>{isRenderableDataItem(item) ? renderDataItem(item, key, onOpenProject) : null}</div>
                                     ))}
                                   </div>
                                 </div>
