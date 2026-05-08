@@ -26,6 +26,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+*.tsbuildinfo
+
+# Agent/local tooling
+.claude/
 
 # Local VPS dumps (contém secrets)
 scripts/vps-supabase.env
