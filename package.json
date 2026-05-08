@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "cross-env NODE_OPTIONS=--max-http-header-size=32768 next dev",
+    "build": "cross-env NODE_OPTIONS=--max-http-header-size=32768 next build",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "cross-env NODE_OPTIONS=--max-http-header-size=32768 next start"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.177",
@@ -82,6 +82,7 @@
     "react-dom": "^18.3.1",
     "react-easy-crop": "^5.5.7",
     "react-hook-form": "^7.61.1",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.9",
     "recharts": "2.12.7",
     "sonner": "^1.7.4",
@@ -97,6 +98,7 @@
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "autoprefixer": "^10.4.21",
+    "cross-env": "^10.1.0",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
