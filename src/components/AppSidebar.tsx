@@ -17,6 +17,7 @@ import {
   Calendar,
   Trash2,
   Briefcase,
+  Bot,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useRouter } from "next/navigation";
@@ -88,6 +89,8 @@ export function AppSidebar() {
     return () => { supabase.removeChannel(channel); };
   }, [user?.id, canManage]);
 
+  const showAgent = user?.email === "williame.correia@pronutrir.com.br";
+
   const navItems = allNavItems.filter(item => {
     // Settings is always admin-only
     if (item.minRole === "admin") return isAdmin;
@@ -153,6 +156,21 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {showAgent && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip={collapsed ? "Agente IA" : undefined}>
+                    <NavLink
+                      href="/agent"
+                      end
+                      className="hover:bg-muted/50"
+                      activeClassName="bg-primary text-primary-foreground font-medium"
+                    >
+                      <Bot className="h-4 w-4 shrink-0" />
+                      {!collapsed && <span className="ml-2">Agente IA</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
