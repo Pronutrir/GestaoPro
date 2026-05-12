@@ -1,6 +1,68 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/integrations/supabase/server";
 
+type RateLimitEntry = {
+  count: number;
+  resetAt: number;
+};
+
+type RateLimitResult = {
+  allowed: boolean;
+  remaining: number;
+  retryAfterSeconds: number;
+};
+
+const rateLimitStore =
+  (globalThis as typeof globalThis & { __textAssistRateLimitStore?: Map<string, RateLimitEntry> })
+    .__textAssistRateLimitStore ?? new Map<string, RateLimitEntry>();
+
+(globalThis as typeof globalThis & { __textAssistRateLimitStore?: Map<string, RateLimitEntry> })
+  .__textAssistRateLimitStore = rateLimitStore;
+
+function parsePositiveInt(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function enforceRateLimit(key: string, limit: number, windowMs: number): RateLimitResult {
+  const now = Date.now();
+  const current = rateLimitStore.get(key);
+
+  if (!current || current.resetAt <= now) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+    return {
+      allowed: true,
+      remaining: Math.max(0, limit - 1),
+      retryAfterSeconds: 0,
+    };
+  }
+
+  if (current.count >= limit) {
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfterSeconds: Math.max(1, Math.ceil((current.resetAt - now) / 1000)),
+    };
+  }
+
+  current.count += 1;
+  rateLimitStore.set(key, current);
+  return {
+    allowed: true,
+    remaining: Math.max(0, limit - current.count),
+    retryAfterSeconds: 0,
+  };
+}
+
+function getClientIp(req: NextRequest): string {
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const firstIp = xff.split(",")[0]?.trim();
+    if (firstIp) return firstIp;
+  }
+  return req.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
 type Action = "correct" | "improve" | "summarize" | "expand";
 
 const SYSTEM_PROMPTS: Record<Action, string> = {
@@ -56,6 +118,25 @@ export async function POST(req: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  }
+
+  const limit = parsePositiveInt(process.env.OPENROUTER_TEXT_ASSIST_RATE_LIMIT, 12);
+  const windowMs = parsePositiveInt(process.env.OPENROUTER_TEXT_ASSIST_RATE_WINDOW_MS, 60_000);
+  const rateLimitKey = `${user.id}:${getClientIp(req)}`;
+  const rate = enforceRateLimit(rateLimitKey, limit, windowMs);
+
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Limite de requisições atingido. Tente novamente em instantes." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(rate.retryAfterSeconds),
+          "X-RateLimit-Limit": String(limit),
+          "X-RateLimit-Remaining": "0",
+        },
+      }
+    );
   }
 
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
@@ -134,7 +215,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "IA não retornou texto." }, { status: 500 });
     }
 
-    return NextResponse.json({ result });
+    return NextResponse.json(
+      { result },
+      {
+        headers: {
+          "X-RateLimit-Limit": String(limit),
+          "X-RateLimit-Remaining": String(rate.remaining),
+        },
+      }
+    );
   } catch (e: unknown) {
     console.error("ai-text-assist error:", e);
     return NextResponse.json(
