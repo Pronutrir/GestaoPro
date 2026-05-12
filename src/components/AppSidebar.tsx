@@ -35,6 +35,10 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 const allNavItems = [
   { path: "/", label: "Visão Geral", icon: Home, minRole: "user" as const, moduleKey: "overview" },
@@ -176,21 +180,121 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <div className="mt-auto p-4 border-t border-border">
-        {!collapsed && profile && (
-          <p className="text-xs text-muted-foreground mb-2 truncate">
-            {profile.full_name || profile.email}
-          </p>
-        )}
-        <SidebarMenuButton
-          onClick={handleSignOut}
-          tooltip={collapsed ? "Sair" : undefined}
-          className="w-full hover:bg-destructive/10 hover:text-destructive"
-        >
-          <LogOut className="h-4 w-4 shrink-0" />
-          {!collapsed && <span className="ml-2">Sair</span>}
-        </SidebarMenuButton>
+      <div className="mt-auto p-3 border-t border-border">
+        <UserMenu
+          collapsed={collapsed}
+          profile={profile}
+          isAdmin={isAdmin}
+          isGestor={canManage && !isAdmin}
+          onSignOut={handleSignOut}
+        />
       </div>
     </Sidebar>
+  );
+}
+
+function getInitials(name?: string | null, email?: string | null) {
+  const source = (name || email || "?").trim();
+  if (!source) return "?";
+  const parts = source.split(/[\s@._-]+/).filter(Boolean);
+  const first = parts[0]?.[0] || "";
+  const second = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + second).toUpperCase().slice(0, 2) || "?";
+}
+
+function UserMenu({
+  collapsed,
+  profile,
+  isAdmin,
+  isGestor,
+  onSignOut,
+}: {
+  collapsed: boolean;
+  profile: any;
+  isAdmin: boolean;
+  isGestor: boolean;
+  onSignOut: () => void;
+}) {
+  const name = profile?.full_name || profile?.email || "Usuário";
+  const email = profile?.email || "";
+  const sector = profile?.sector || profile?.setor || null;
+  const initials = getInitials(profile?.full_name, profile?.email);
+  const avatarUrl = profile?.avatar_url || undefined;
+
+  const roleLabel = isAdmin ? "Master" : isGestor ? "Gestor" : "Usuário";
+  const roleClass = isAdmin
+    ? "bg-primary/10 text-primary border-primary/20"
+    : isGestor
+      ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+      : "bg-muted text-muted-foreground border-border";
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`w-full flex items-center gap-2 rounded-md p-2 hover:bg-muted/60 transition-colors ${
+            collapsed ? "justify-center" : ""
+          }`}
+          aria-label="Abrir menu do usuário"
+        >
+          <Avatar className="h-8 w-8 ring-2 ring-primary/20">
+            {avatarUrl && <AvatarImage src={avatarUrl} alt={name} />}
+            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          {!collapsed && (
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-xs font-medium truncate">{name}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{roleLabel}</p>
+            </div>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="right" align="end" className="w-64 p-0">
+        <div className="p-3 border-b border-border flex items-center gap-3">
+          <Avatar className="h-10 w-10">
+            {avatarUrl && <AvatarImage src={avatarUrl} alt={name} />}
+            <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{name}</p>
+            {email && (
+              <p className="text-xs text-muted-foreground truncate">{email}</p>
+            )}
+          </div>
+        </div>
+        <div className="p-3 space-y-2 border-b border-border">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Papel</span>
+            <Badge variant="outline" className={`text-[10px] ${roleClass}`}>
+              {roleLabel}
+            </Badge>
+          </div>
+          {sector && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Setor</span>
+              <span className="text-xs font-medium truncate max-w-[140px]">
+                {sector}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="p-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onSignOut}
+            className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Sair
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

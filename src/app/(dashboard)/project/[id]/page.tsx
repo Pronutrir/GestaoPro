@@ -32,6 +32,7 @@ import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
+import { ProjectAuditTimeline } from "@/components/ProjectAuditTimeline";
 import { ProjectDocuments } from "@/components/documents/ProjectDocuments";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
@@ -119,6 +120,7 @@ const SUPPORTED_PROJECT_TABS = [
   "dependencies",
   "financials",
   "lessons",
+  "audit",
 ] as const;
 
 const LEGACY_PROJECT_TAB_ALIASES: Record<string, typeof SUPPORTED_PROJECT_TABS[number]> = {
@@ -954,6 +956,7 @@ export default function ProjectDetailsPage() {
                 { value: "dependencies", label: "Dependências", icon: <GitPullRequest className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-cyan-500" },
                 { value: "financials", label: "Financeiro", icon: <DollarSign className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-green-600" },
                 { value: "lessons", label: "Lições", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-yellow-500" },
+                { value: "audit", label: "Auditoria", icon: <ShieldCheck className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-sky-500" },
               ];
               const permittedDefs = allDefinitions.filter(t => !allowedTabs || allowedTabs.includes(t.value));
               const activeTabsSet = new Set(visibleTabs);
@@ -1255,6 +1258,10 @@ export default function ProjectDetailsPage() {
                 budgetUsed={project.budget_used}
                 onProjectUpdated={fetchProjectData}
               />
+            </TabsContent>
+
+            <TabsContent value="audit" className="mt-0">
+              <ProjectAuditTimeline projectId={id!} />
             </TabsContent>
           </Tabs>
         </div>
