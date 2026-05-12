@@ -1,10 +1,11 @@
+'use client';
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2, GripVertical, Pencil, Check, X, Eye, EyeOff, Users } from "lucide-react";
+import { Plus, Trash2, GripVertical, Pencil, Check, X, Eye, EyeOff, Users, MoreHorizontal } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -24,12 +25,18 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAppConfirm } from "@/components/AppConfirmProvider";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface WorkflowStage {
   id: string;
@@ -40,6 +47,7 @@ interface WorkflowStage {
   is_final: boolean;
   is_blocked: boolean;
   is_visible: boolean;
+  is_exception?: boolean;
 }
 
 interface Profile {
@@ -50,7 +58,6 @@ interface Profile {
 
 interface WorkflowStageManagerProps {
   projectId: string;
-  onChanged?: () => void;
 }
 
 const PRESET_COLORS = [
@@ -75,6 +82,7 @@ function SortableStageItem({
   onDelete,
   onToggleFinal,
   onToggleBlocked,
+  onToggleException,
   onToggleVisible,
   onColorChange,
   projectMembers,
@@ -91,6 +99,7 @@ function SortableStageItem({
   onDelete: (id: string) => void;
   onToggleFinal: (id: string, current: boolean) => void;
   onToggleBlocked: (id: string, current: boolean) => void;
+  onToggleException: (id: string, current: boolean) => void;
   onToggleVisible: (id: string, current: boolean) => void;
   onColorChange: (id: string, color: string) => void;
   projectMembers: Profile[];
@@ -156,24 +165,29 @@ function SortableStageItem({
         </div>
       ) : (
         <>
-          <span className="flex-1 text-sm font-medium text-foreground">{stage.title}</span>
-          {stage.is_final && (
-            <Badge className="bg-success/20 text-success text-[10px]">Final</Badge>
-          )}
-          {stage.is_blocked && (
-            <Badge className="bg-destructive/20 text-destructive text-[10px]">Bloqueio</Badge>
-          )}
-          {stageMembers.length > 0 && (
-            <Badge variant="outline" className="text-[10px]">
-              <Users className="w-2.5 h-2.5 mr-1" />{stageMembers.length}
-            </Badge>
-          )}
+          <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium text-foreground truncate">{stage.title}</span>
+            {stage.is_final && (
+              <Badge className="bg-success/20 text-success text-[10px]">Final</Badge>
+            )}
+            {stage.is_blocked && (
+              <Badge className="bg-destructive/20 text-destructive text-[10px]">Bloqueio</Badge>
+            )}
+            {stage.is_exception && (
+              <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[10px]">Exceção</Badge>
+            )}
+            {stageMembers.length > 0 && (
+              <Badge variant="outline" className="text-[10px]">
+                <Users className="w-2.5 h-2.5 mr-1" />{stageMembers.length}
+              </Badge>
+            )}
+          </div>
 
           {/* Visibility toggle */}
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7"
+            className="h-7 w-7 shrink-0"
             title={stage.is_visible ? "Ocultar do Kanban" : "Mostrar no Kanban"}
             onClick={() => onToggleVisible(stage.id, stage.is_visible)}
           >
@@ -183,7 +197,7 @@ function SortableStageItem({
           {/* Members popover */}
           <Popover>
             <PopoverTrigger asChild>
-              <Button size="icon" variant="ghost" className="h-7 w-7" title="Membros da etapa">
+              <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Membros da etapa">
                 <Users className="w-3.5 h-3.5" />
               </Button>
             </PopoverTrigger>
@@ -216,46 +230,52 @@ function SortableStageItem({
           </Popover>
 
           <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs text-muted-foreground"
-            onClick={() => onToggleFinal(stage.id, stage.is_final)}
-          >
-            {stage.is_final ? "Remover final" : "Marcar final"}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs text-muted-foreground"
-            onClick={() => onToggleBlocked(stage.id, stage.is_blocked)}
-          >
-            {stage.is_blocked ? "Remover bloqueio" : "Marcar bloqueio"}
-          </Button>
-          <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7"
+            className="h-7 w-7 shrink-0"
+            title="Renomear"
             onClick={() => onStartEdit(stage.id, stage.title)}
           >
             <Pencil className="w-3.5 h-3.5" />
           </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 text-destructive hover:text-destructive"
-            onClick={() => onDelete(stage.id)}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
+
+          {/* Consolidated actions menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Mais ações">
+                <MoreHorizontal className="w-3.5 h-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => onToggleFinal(stage.id, stage.is_final)}>
+                {stage.is_final ? "Remover final" : "Marcar como final"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onToggleBlocked(stage.id, stage.is_blocked)}>
+                {stage.is_blocked ? "Remover bloqueio" : "Marcar como bloqueio"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onToggleException(stage.id, !!stage.is_exception)}
+                title="Colunas de exceção (ex.: Atrasado) não contam como avanço."
+              >
+                {stage.is_exception ? "Remover exceção" : "Marcar como exceção"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => onDelete(stage.id)}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir etapa
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </>
       )}
     </div>
   );
 }
 
-export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageManagerProps) => {
+export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) => {
   const { toast } = useToast();
-  const appConfirm = useAppConfirm();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -350,7 +370,6 @@ export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageMana
       for (let i = 0; i < reordered.length; i++) {
         await supabase.from("workflow_stages").update({ display_order: i }).eq("id", reordered[i].id);
       }
-      onChanged?.();
       toast({ title: "Ordem atualizada!" });
     } catch {
       toast({ title: "Erro ao reordenar", variant: "destructive" });
@@ -373,8 +392,7 @@ export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageMana
       toast({ title: "Erro ao criar etapa", variant: "destructive" });
     } else {
       setNewTitle("");
-      await fetchStages();
-      onChanged?.();
+      fetchStages();
       toast({ title: "Etapa criada!" });
     }
   };
@@ -389,8 +407,7 @@ export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageMana
       toast({ title: "Erro ao renomear", variant: "destructive" });
     } else {
       setEditingId(null);
-      await fetchStages();
-      onChanged?.();
+      fetchStages();
     }
   };
 
@@ -400,45 +417,42 @@ export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageMana
       toast({ title: "A etapa Backlog não pode ser excluída", description: "Ela é reservada para atividades ainda não iniciadas.", variant: "destructive" });
       return;
     }
-    const ok = await appConfirm({
-      title: "Excluir etapa",
-      description: "Atividades nesta etapa perderão a associação. Continuar?",
-      confirmText: "Excluir",
-      destructive: true,
-    });
-    if (!ok) return;
+    if (!confirm("Atividades nesta etapa perderão a associação. Continuar?")) return;
     const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
     if (error) {
       toast({ title: "Erro ao excluir etapa", variant: "destructive" });
     } else {
-      await fetchStages();
-      onChanged?.();
+      fetchStages();
       toast({ title: "Etapa excluída!" });
     }
   };
 
   const handleToggleFinal = async (id: string, current: boolean) => {
     await supabase.from("workflow_stages").update({ is_final: !current, ...(current ? {} : { is_blocked: false }) }).eq("id", id);
-    await fetchStages();
-    onChanged?.();
+    fetchStages();
   };
 
   const handleToggleBlocked = async (id: string, current: boolean) => {
     await supabase.from("workflow_stages").update({ is_blocked: !current, ...(current ? {} : { is_final: false }) }).eq("id", id);
-    await fetchStages();
-    onChanged?.();
+    fetchStages();
+  };
+
+  const handleToggleException = async (id: string, current: boolean) => {
+    await supabase
+      .from("workflow_stages")
+      .update({ is_exception: !current, ...(current ? {} : { is_final: false }) })
+      .eq("id", id);
+    fetchStages();
   };
 
   const handleToggleVisible = async (id: string, current: boolean) => {
     await supabase.from("workflow_stages").update({ is_visible: !current }).eq("id", id);
-    await fetchStages();
-    onChanged?.();
+    fetchStages();
   };
 
   const handleColorChange = async (id: string, color: string) => {
     await supabase.from("workflow_stages").update({ color }).eq("id", id);
-    await fetchStages();
-    onChanged?.();
+    fetchStages();
   };
 
   return (
@@ -466,6 +480,7 @@ export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageMana
                 onDelete={handleDelete}
                 onToggleFinal={handleToggleFinal}
                 onToggleBlocked={handleToggleBlocked}
+                onToggleException={handleToggleException}
                 onToggleVisible={handleToggleVisible}
                 onColorChange={handleColorChange}
                 projectMembers={projectMembers}

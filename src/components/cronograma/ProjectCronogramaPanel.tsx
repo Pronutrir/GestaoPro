@@ -1,9 +1,9 @@
 'use client';
-
-import { Fragment, useEffect, useMemo, useState, useCallback } from "react";
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { computeActivityProgress } from "@/lib/activityProgress";
+import { endVariance, varianceTone, varianceClasses, formatVariance } from "@/lib/dateVariance";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import {
   Table2, GanttChart, ExternalLink, AlertTriangle, CalendarOff,
   CalendarDays, Settings2, Filter, FolderKanban, Search, X,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -74,18 +75,19 @@ const ZOOM_LABEL: Record<GanttZoom, string> = {
 type ColKey =
   | "id" | "eap" | "title" | "preds" | "responsible" | "duration"
   | "plannedStart" | "plannedEnd" | "actualStart" | "actualEnd"
-  | "progress" | "slack" | "mainResource" | "effort" | "compression"
-  | "observation" | "project";
+  | "variance" | "progress" | "slack" | "mainResource" | "effort" | "compression"
+  | "observation" | "project" | "blockedDays";
 
 const COL_LABELS: Record<ColKey, string> = {
   id: "ID", eap: "EAP", title: "Atividade", preds: "Predecessoras",
   responsible: "Responsável", duration: "Duração (d)",
-  plannedStart: "Início Plan.", plannedEnd: "Térm. Plan.",
+  plannedStart: "Início Previsto", plannedEnd: "Térm. Previsto",
   actualStart: "Início Real", actualEnd: "Térm. Real",
+  variance: "Desvio (d)",
   progress: "% Concluído", slack: "Folga (d)",
   mainResource: "Recurso Principal", effort: "Esforço (h)",
   compression: "Compressão", observation: "Observações",
-  project: "Projeto",
+  project: "Projeto", blockedDays: "Dias Bloqueada",
 };
 
 const DEFAULT_VISIBLE: ColKey[] = [
@@ -95,7 +97,7 @@ const DEFAULT_VISIBLE: ColKey[] = [
 
 function formatDateBR(iso: string | null) {
   if (!iso) return "—";
-  try { return format(parseISO(iso), "dd/MM/yyyy", { locale: ptBR }); } catch { return "—"; }
+  try { return format(parseISO(iso.slice(0, 10) + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR }); } catch { return "—"; }
 }
 
 function workDays(startISO: string | null, endISO: string | null) {
@@ -117,6 +119,7 @@ export function ProjectCronogramaPanel({
   const [deps, setDeps] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string }>>({});
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
+  const [projectDeadlines, setProjectDeadlines] = useState<Record<string, string | null>>({});
   const [mode, setMode] = useState<CronogramaMode>(defaultMode);
   const [stages, setStages] = useState<Array<{ id: string; title: string; color: string; is_final: boolean; is_blocked: boolean; display_order: number; project_id: string }>>([]);
   const [stageFilter, setStageFilter] = useState<Set<string> | null>(null); // null = todas
@@ -145,6 +148,64 @@ export function ProjectCronogramaPanel({
     localStorage.setItem("cronograma:cols", JSON.stringify(visibleCols));
   }, [visibleCols]);
 
+  // ===== Ordenação por coluna =====
+  type SortDir = "asc" | "desc";
+  type SortState = { col: ColKey; dir: SortDir } | null;
+  const sortStorageKey = useMemo(() => {
+    if (projectIds && projectIds.length === 1) return `cronograma:sort:${projectIds[0]}`;
+    return "cronograma:sort:geral";
+  }, [projectIds]);
+  const [sort, setSort] = useState<SortState>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(sortStorageKey);
+      return raw ? (JSON.parse(raw) as SortState) : null;
+    } catch { return null; }
+  });
+  useEffect(() => {
+    if (sort) localStorage.setItem(sortStorageKey, JSON.stringify(sort));
+    else localStorage.removeItem(sortStorageKey);
+  }, [sort, sortStorageKey]);
+
+  /** Colunas que podem ser ordenadas via clique no cabeçalho. */
+  const SORTABLE_COLS = new Set<ColKey>([
+    "id", "eap", "title", "plannedStart", "plannedEnd",
+    "actualStart", "actualEnd", "variance", "duration", "progress", "slack",
+    "mainResource", "responsible", "blockedDays",
+  ]);
+
+  const cycleSort = (col: ColKey) => {
+    if (!SORTABLE_COLS.has(col)) return;
+    setSort(prev => {
+      if (!prev || prev.col !== col) return { col, dir: "asc" };
+      if (prev.dir === "asc") return { col, dir: "desc" };
+      return null;
+    });
+  };
+
+  /** Compara EAP segmento a segmento (1.2 antes de 1.10). */
+  const compareWbs = (a: string, b: string) => {
+    const pa = a.split(".").map(n => parseInt(n, 10));
+    const pb = b.split(".").map(n => parseInt(n, 10));
+    const len = Math.max(pa.length, pb.length);
+    for (let i = 0; i < len; i++) {
+      const x = pa[i] ?? 0;
+      const y = pb[i] ?? 0;
+      if (x !== y) return x - y;
+    }
+    return 0;
+  };
+
+  /** Vazios sempre no fim, independente da direção. Devolve diferença. */
+  const nullsLast = (av: any, bv: any): number | null => {
+    const ae = av === null || av === undefined || av === "";
+    const be = bv === null || bv === undefined || bv === "";
+    if (ae && be) return 0;
+    if (ae) return 1;   // a vai pro fim
+    if (be) return -1;  // b vai pro fim
+    return null;
+  };
+
   const colVisible = (k: ColKey) => visibleCols.includes(k);
   const toggleCol = (k: ColKey) => {
     setVisibleCols(v => v.includes(k) ? v.filter(x => x !== k) : [...v, k]);
@@ -172,7 +233,7 @@ export function ProjectCronogramaPanel({
         ? supabase.from("phases").select("*").in("project_id", projectIds).eq("is_trashed", false).order("display_order", { ascending: true })
         : supabase.from("phases").select("*").eq("is_trashed", false).order("display_order", { ascending: true }),
       supabase.from("profiles").select("id, full_name, sector"),
-      supabase.from("projects").select("id, title").eq("is_trashed", false),
+      supabase.from("projects").select("id, title, due_date").eq("is_trashed", false),
       stagesQ,
     ]);
     setActivities(acts || []);
@@ -182,8 +243,13 @@ export function ProjectCronogramaPanel({
     (profs || []).forEach((p: any) => { map[p.id] = { name: p.full_name, sector: p.sector || "—" }; });
     setProfiles(map);
     const pm: Record<string, string> = {};
-    (projs || []).forEach((p: any) => { pm[p.id] = p.title; });
+    const pdl: Record<string, string | null> = {};
+    (projs || []).forEach((p: any) => {
+      pm[p.id] = p.title;
+      pdl[p.id] = p.due_date || null;
+    });
     setProjectsMap(pm);
+    setProjectDeadlines(pdl);
 
     const ids = (acts || []).map((a: any) => a.id);
     if (ids.length) {
@@ -199,7 +265,6 @@ export function ProjectCronogramaPanel({
   const mockFor = (id: string, idx: number) => {
     let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
     return {
-      eap: `${Math.floor(idx / 5) + 1}.${(idx % 5) + 1}`,
       effortHours: 4 + (h % 36),
       compression: ["Baixa", "Média", "Alta", "Nenhuma"][h % 4],
       observation: ["", "Aguardando aprovação do PO", "Risco de overlap com sprint", "Depende de fornecedor externo"][h % 4],
@@ -284,13 +349,32 @@ export function ProjectCronogramaPanel({
       ls.set(id, latest - dur.get(id)!);
     });
     valid.forEach(a => {
-      const slack = (ls.get(a.id) ?? 0) - (es.get(a.id) ?? 0);
-      map.set(a.id, Math.max(0, slack));
+      const hasDeps = (pred.get(a.id)!.length + succ.get(a.id)!.length) > 0;
+      if (hasDeps) {
+        // Folga CPM clássica
+        const slack = (ls.get(a.id) ?? 0) - (es.get(a.id) ?? 0);
+        map.set(a.id, Math.max(0, slack));
+      } else {
+        // Sem dependências: folga = dias restantes até o fim, considerando hoje.
+        // Se concluída, folga zera. Se hoje > fim, folga = 0 (atrasada).
+        if (a.status === "completed") {
+          map.set(a.id, 0);
+        } else {
+          // Normaliza tudo ao meio-dia local para evitar shift de UTC-3
+          const today = new Date();
+          today.setHours(12, 0, 0, 0);
+          const start = parseISO(a.start_date!.slice(0, 10) + "T12:00:00");
+          const end = parseISO(a.end_date!.slice(0, 10) + "T12:00:00");
+          const ref = today > start ? today : start;
+          const slack = differenceInDays(end, ref);
+          map.set(a.id, Math.max(0, slack));
+        }
+      }
     });
     return map;
-  }, [activities, deps]);
+  }, [activities, deps, projectDeadlines]);
 
-  const rows = useMemo(
+  const baseRows = useMemo(
     () => {
       let filtered = activities;
       if (projectFilter !== null) {
@@ -323,11 +407,16 @@ export function ProjectCronogramaPanel({
 
   const progressFor = useCallback((a: any): number => {
     const projStages = stagesByProject.get(a.project_id) || [];
-    const info = computeActivityProgress(a.workflow_stage_id, projStages as any);
+    const info = computeActivityProgress(a.workflow_stage_id, projStages as any, a.last_progress_stage_id);
     if (info.paused) return 0;
     return info.percent ?? 0;
   }, [stagesByProject]);
 
+  /**
+   * Linhas finais aplicadas ao Cronograma (tabela e Gantt).
+   * Mantém a ordem original quando `sort` é nulo; senão aplica o
+   * comparador da coluna selecionada e usa `idx` como desempate estável.
+   */
   /** Para multi-projeto: agrupar status com mesmo título (Backlog, Em Andamento, etc.). */
   const uniqueStageTitles = useMemo(() => {
     const map = new Map<string, { title: string; color: string; ids: string[]; is_final: boolean }>();
@@ -355,11 +444,91 @@ export function ProjectCronogramaPanel({
 
   const showProjectFilter = projectOptions.length > 1;
 
-  const indexById = useMemo(() => {
-    const m = new Map<string, number>();
-    activities.forEach((a, i) => m.set(a.id, i + 1));
+  /**
+   * EAP/WBS por atividade — vem do campo `wbs_code` editado pelo usuário
+   * (formatos suportados: X.0, X.Y, X.Y.Z, X.Y.Z.W). Estável e independente
+   * de ordem/filtro.
+   */
+  const wbsById = useMemo(() => {
+    const m = new Map<string, string>();
+    activities.forEach(a => {
+      if (a.wbs_code) m.set(a.id, String(a.wbs_code));
+    });
     return m;
   }, [activities]);
+
+  /**
+   * ID curto da atividade — primeiros 7 caracteres do UUID (estável,
+   * funciona como "máscara" única). Exibido na coluna ID e nas referências
+   * de predecessoras.
+   */
+  const shortIdOf = (uuid: string) => (uuid || "").replace(/-/g, "").slice(0, 7);
+  const indexById = useMemo(() => {
+    const m = new Map<string, string>();
+    activities.forEach(a => m.set(a.id, shortIdOf(a.id)));
+    return m;
+  }, [activities]);
+
+  /**
+   * Linhas finais aplicadas ao Cronograma (tabela e Gantt).
+   * Mantém a ordem original quando `sort` é nulo; senão aplica o
+   * comparador da coluna selecionada e usa `idx` como desempate estável.
+   */
+  const rows = useMemo(() => {
+    if (!sort) return baseRows;
+    const dir = sort.dir === "asc" ? 1 : -1;
+
+    const valueOf = (a: any): any => {
+      switch (sort.col) {
+        case "id": return shortIdOf(a.id);
+        case "eap": return wbsById.get(a.id) || "";
+        case "title": return (a.title || "").toString();
+        case "plannedStart": return a.start_date || null;
+        case "plannedEnd": return a.end_date || null;
+        case "actualStart": return a.actual_start_date || null;
+        case "actualEnd": return a.actual_end_date || null;
+        case "variance": {
+          const ref = a.baseline_end_date || a.end_date;
+          const real = a.actual_end_date || a.completed_at;
+          if (!ref || !real) return null;
+          return endVariance(real, a.baseline_end_date, a.end_date);
+        }
+        case "duration": return workDays(a.start_date, a.end_date);
+        case "progress": return progressFor(a);
+        case "slack": {
+          const s = slackMap.get(a.id);
+          return s === undefined ? null : s;
+        }
+        case "mainResource":
+        case "responsible":
+          return profiles[a.assigned_to || ""]?.name || "";
+        case "blockedDays": return Number(a.blocked_days_total || 0);
+        default: return "";
+      }
+    };
+
+    return [...baseRows].sort((x, y) => {
+      const av = valueOf(x.a);
+      const bv = valueOf(y.a);
+      const ne = nullsLast(av, bv);
+      let r = 0;
+      if (ne !== null) {
+        r = ne;
+      } else if (sort.col === "eap") {
+        r = compareWbs(String(av), String(bv));
+      } else if (typeof av === "number" && typeof bv === "number") {
+        r = av - bv;
+      } else if (sort.col === "plannedStart" || sort.col === "plannedEnd"
+              || sort.col === "actualStart" || sort.col === "actualEnd") {
+        r = String(av).localeCompare(String(bv));
+      } else {
+        r = String(av).localeCompare(String(bv), "pt-BR", { numeric: true });
+      }
+      if (ne === null) r = r * dir;
+      if (r !== 0) return r;
+      return x.idx - y.idx;
+    });
+  }, [baseRows, sort, slackMap, profiles, wbsById, progressFor]);
 
   const predsOf = (actId: string) => deps.filter((d) => d.successor_id === actId);
 
@@ -459,8 +628,17 @@ export function ProjectCronogramaPanel({
   const renderCell = (k: ColKey, ctx: any) => {
     const { a, idx, mock, id, dur, progress, preds, responsible } = ctx;
     switch (k) {
-      case "id": return <td className="px-2 py-1.5 text-center font-mono text-muted-foreground">{id}</td>;
-      case "eap": return <td className="px-2 py-1.5 text-center font-mono">{mock.eap}</td>;
+      case "id": return (
+        <td className="px-2 py-1.5 text-center">
+          <span
+            title={a.id}
+            className="inline-block px-1.5 py-0.5 rounded bg-muted/60 border border-border font-mono text-[10px] text-muted-foreground"
+          >
+            {id}
+          </span>
+        </td>
+      );
+      case "eap": return <td className="px-2 py-1.5 text-center font-mono">{wbsById.get(a.id) ?? "—"}</td>;
       case "project": return <td className="px-2 py-1.5 truncate max-w-[180px] text-muted-foreground" title={projectsMap[a.project_id] || "—"}>{projectsMap[a.project_id] || "—"}</td>;
       case "title": return (
         <td className="px-2 py-1.5">
@@ -527,6 +705,48 @@ export function ProjectCronogramaPanel({
       case "plannedEnd": return <td className="px-2 py-1.5 text-center">{formatDateBR(a.end_date)}</td>;
       case "actualStart": return <td className="px-2 py-1.5 text-center text-muted-foreground">{formatDateBR(a.actual_start_date || null)}</td>;
       case "actualEnd": return <td className="px-2 py-1.5 text-center text-muted-foreground">{formatDateBR(a.actual_end_date || a.completed_at || null)}</td>;
+      case "variance": {
+        const real = a.actual_end_date || a.completed_at;
+        const v = endVariance(real, a.baseline_end_date, a.end_date);
+        if (v === null) return <td className="px-2 py-1.5 text-center text-muted-foreground">—</td>;
+        const tone = varianceTone(v);
+        return (
+          <td className="px-2 py-1.5 text-center">
+            <Badge
+              variant="outline"
+              className={cn("text-[10px] py-0 px-1.5 font-mono", varianceClasses(tone))}
+              title={a.baseline_end_date ? "Real − Linha de Base" : "Real − Previsto (sem linha de base congelada)"}
+            >
+              {formatVariance(v)}
+            </Badge>
+          </td>
+        );
+      }
+      case "blockedDays": return (() => {
+        const accumulated = Number((a as any).blocked_days_total || 0);
+        const since = (a as any).blocked_since as string | null | undefined;
+        let days = accumulated;
+        if (since) {
+          const t = new Date(since).getTime();
+          if (!Number.isNaN(t)) days += Math.max(0, (Date.now() - t) / 86400000);
+        }
+        const whole = Math.floor(days);
+        if (days <= 0) return <td className="px-2 py-1.5 text-center text-muted-foreground">—</td>;
+        const cls = since
+          ? "bg-orange-500/15 text-orange-700 border-orange-500/40"
+          : "bg-muted text-muted-foreground border-border";
+        return (
+          <td className="px-2 py-1.5 text-center">
+            <Badge
+              variant="outline"
+              className={cn("text-[10px] py-0 px-1.5 font-mono", cls)}
+              title={since ? `Bloqueada agora desde ${new Date(since).toLocaleString("pt-BR")}` : "Tempo total acumulado em colunas de bloqueio"}
+            >
+              {whole}d{since ? " (em curso)" : ""}
+            </Badge>
+          </td>
+        );
+      })();
       case "progress": return (
         <td className="px-2 py-1.5 text-center">
           <div className="flex items-center justify-center gap-1">
@@ -582,12 +802,42 @@ export function ProjectCronogramaPanel({
       <table className="w-full text-xs">
         <thead className="bg-primary/95 text-primary-foreground sticky top-0 z-10">
           <tr className="[&>th]:px-2 [&>th]:py-2 [&>th]:font-semibold [&>th]:text-center [&>th]:border-r [&>th]:border-primary-foreground/20 [&>th:last-child]:border-r-0">
-            {visibleCols.map(k => (
-              <th key={k} className={cn(
-                k === "title" && "text-left min-w-[260px]",
-                k === "observation" && "text-left min-w-[180px]",
-              )}>{COL_LABELS[k]}</th>
-            ))}
+            {visibleCols.map(k => {
+              const sortable = SORTABLE_COLS.has(k);
+              const active = sort?.col === k;
+              return (
+                <th key={k} className={cn(
+                  k === "title" && "text-left min-w-[260px]",
+                  k === "observation" && "text-left min-w-[180px]",
+                )}>
+                  {sortable ? (
+                    <button
+                      type="button"
+                      onClick={() => cycleSort(k)}
+                      className={cn(
+                        "inline-flex items-center gap-1 hover:text-primary-foreground/90 transition-colors",
+                        active && "text-amber-300"
+                      )}
+                      title={
+                        active
+                          ? `Ordenando por ${COL_LABELS[k]} (${sort?.dir === "asc" ? "crescente" : "decrescente"}). Clique para ${sort?.dir === "asc" ? "inverter" : "limpar"}.`
+                          : `Ordenar por ${COL_LABELS[k]}`
+                      }
+                    >
+                      <span>{COL_LABELS[k]}</span>
+                      {active
+                        ? (sort?.dir === "asc"
+                            ? <ArrowUp className="h-3 w-3" />
+                            : <ArrowDown className="h-3 w-3" />)
+                        : <ArrowUpDown className="h-3 w-3 opacity-40" />
+                      }
+                    </button>
+                  ) : (
+                    COL_LABELS[k]
+                  )}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -595,7 +845,7 @@ export function ProjectCronogramaPanel({
             <tr><td colSpan={visibleCols.length} className="text-center py-10 text-muted-foreground">Nenhuma atividade encontrada.</td></tr>
           )}
           {rows.map(({ a, idx, mock }) => {
-            const id = indexById.get(a.id) ?? idx + 1;
+            const id = indexById.get(a.id) ?? shortIdOf(a.id);
             const dur = workDays(a.start_date, a.end_date);
             const progress = progressFor(a);
             const preds = predsOf(a.id);
@@ -613,9 +863,7 @@ export function ProjectCronogramaPanel({
                 )}
                 style={stageColor ? { borderLeft: `3px solid ${stageColor}` } : undefined}
               >
-                {visibleCols.map((k) => (
-                  <Fragment key={k}>{renderCell(k, ctx)}</Fragment>
-                ))}
+                {visibleCols.map(k => <span key={k} style={{ display: "contents" }}>{renderCell(k, ctx)}</span>)}
               </tr>
             );
           })}
@@ -634,7 +882,7 @@ export function ProjectCronogramaPanel({
           <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/40 text-[10px] py-0 px-1.5 font-mono">≥4d</Badge>
           folga confortável
         </span>
-        <span className="ml-auto">EAP, Esforço, Compressão e Observações são <strong>mock</strong> nesta prova de conceito.</span>
+        <span className="ml-auto">Esforço, Compressão e Observações são <strong>mock</strong> nesta prova de conceito.</span>
       </div>
     </div>
   );

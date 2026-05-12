@@ -120,6 +120,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
             project_id: projectId,
             title: `${phase.code} ${phase.title}`,
             display_order: phaseOrder++,
+            wbs_code: phase.code,
           })
           .select("id")
           .single();
@@ -157,6 +158,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           phase_id: phaseId,
           parent_id: parentId,
           display_order: phaseOrderCounter[phaseKey]++,
+          wbs_code: item.code,
         }).select("id").single();
 
         if (error) throw error;

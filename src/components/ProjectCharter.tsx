@@ -16,6 +16,7 @@ import { ptBR } from "date-fns/locale";
 import { AIAssistButton, AIContext } from "@/components/AIAssistButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PriorityBadge } from "@/components/PriorityBadge";
+import { BaselineBlock } from "@/components/BaselineBlock";
 
 /* -------- AutoTextarea: cresce conforme conteúdo -------- */
 const AutoTextarea = ({
@@ -50,7 +51,29 @@ const AutoTextarea = ({
 
 interface Phase { id: string; title: string }
 interface Risk { id: string; description: string; probability: string; impact: string; status: string }
-interface MemberRow { id: string; user_id: string; full_name: string; sector: string | null }
+type RaciRole = "R" | "A" | "C" | "I";
+interface MemberRow {
+  id: string;
+  user_id: string;
+  full_name: string;
+  sector: string | null;
+  raci: RaciRole | null;
+  invitation_status: "pending" | "accepted" | "declined";
+  decline_reason: string | null;
+}
+const raciOptions: { v: RaciRole; label: string; cls: string }[] = [
+  { v: "R", label: "R - Responsável", cls: "bg-blue-500/15 text-blue-600 border-blue-500/40" },
+  { v: "A", label: "A - Autoridade", cls: "bg-amber-500/15 text-amber-600 border-amber-500/40" },
+  { v: "C", label: "C - Consultado", cls: "bg-purple-500/15 text-purple-600 border-purple-500/40" },
+  { v: "I", label: "I - Informado", cls: "bg-muted text-muted-foreground border-border" },
+];
+const raciClass = (r: RaciRole | null) =>
+  raciOptions.find((o) => o.v === r)?.cls || "bg-muted text-muted-foreground border-border";
+const inviteBadge = (s: MemberRow["invitation_status"]) => {
+  if (s === "accepted") return { label: "Aceito", cls: "bg-success/15 text-success border-success/40" };
+  if (s === "declined") return { label: "Recusado", cls: "bg-destructive/15 text-destructive border-destructive/40" };
+  return { label: "Aguardando", cls: "bg-warning/15 text-warning border-warning/40 animate-pulse" };
+};
 
 interface ProjectCharterProps {
   projectId: string;
@@ -153,7 +176,7 @@ const SectionBlock = ({ n, title, children }: { n: number; title: string; childr
 /* ============================================================ */
 export const ProjectCharter = ({ projectId, project, phases, members, onMembersChanged }: ProjectCharterProps) => {
   const { toast } = useToast();
-  const { canManage: isAdmin } = useAuth();
+  const { canManage: isAdmin, user } = useAuth();
 
   const [editing, setEditing] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
@@ -230,7 +253,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       supabase.from("assumptions").select("id, description, category, impact").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
       supabase.from("user_roles").select("user_id").eq("role", "admin"),
-      supabase.from("project_members").select("id, user_id").eq("project_id", projectId),
+      supabase.from("project_members").select("id, user_id, raci, invitation_status, decline_reason").eq("project_id", projectId),
     ]);
     if (r.data) setRisks(r.data);
     if (a.data) setAssumptionsList(a.data);
@@ -240,7 +263,15 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     if (mem.data) {
       const rows = mem.data.map((m: any) => {
         const p = profiles.find((pp) => pp.id === m.user_id);
-        return { id: m.id, user_id: m.user_id, full_name: p?.full_name || "—", sector: p?.sector || null };
+        return {
+          id: m.id,
+          user_id: m.user_id,
+          full_name: p?.full_name || "—",
+          sector: p?.sector || null,
+          raci: (m.raci as RaciRole) || "I",
+          invitation_status: (m.invitation_status as MemberRow["invitation_status"]) || "pending",
+          decline_reason: m.decline_reason || null,
+        };
       });
       setMemberRows(rows);
     }
@@ -252,14 +283,25 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     const profile = allProfiles.find((p) => p.id === selectedProfileId);
     const { error } = await supabase.from("project_members").insert({
       project_id: projectId, user_id: selectedProfileId, sector: profile?.sector || null,
+      raci: "I",
+      invitation_status: "pending",
+      invited_by: user?.id ?? null,
       can_create: false, can_edit: false, can_delete: false, can_move: false,
     });
     setAddingMember(false);
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+    // dispara convite direcionado
+    await supabase.from("notifications").insert({
+      project_id: projectId,
+      target_user_id: selectedProfileId,
+      type: "project_invite",
+      title: `Convite para o projeto: ${project.title}`,
+      message: `Você foi convidado(a) a participar do projeto "${project.title}". Aceita?`,
+    });
     setSelectedProfileId("");
     await fetchRelations();
     onMembersChanged?.();
-    toast({ title: "Stakeholder adicionado" });
+    toast({ title: "Convite enviado!" });
   };
 
   const handleRemoveStakeholder = async (memberId: string) => {
@@ -267,6 +309,36 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
     await fetchRelations();
     onMembersChanged?.();
+  };
+
+  const handleRaciChange = async (memberId: string, r: RaciRole | null) => {
+    // garante apenas um "A" por projeto
+    if (r === "A" && memberRows.some((m) => m.id !== memberId && m.raci === "A")) {
+      toast({ title: "Apenas uma Autoridade (A)", description: "Já existe uma Autoridade definida neste projeto.", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("project_members").update({ raci: r }).eq("id", memberId);
+    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+    await fetchRelations();
+  };
+
+  const handleResendInvite = async (m: MemberRow) => {
+    await supabase.from("notifications").insert({
+      project_id: projectId,
+      target_user_id: m.user_id,
+      type: "project_invite",
+      title: `Convite reenviado: ${project.title}`,
+      message: `Reenvio do convite para participar do projeto "${project.title}".`,
+    });
+    await supabase.from("project_members").update({ invitation_status: "pending", responded_at: null, decline_reason: null }).eq("id", m.id);
+    await fetchRelations();
+    toast({ title: "Convite reenviado" });
+  };
+
+  const handleManualAccept = async (m: MemberRow) => {
+    await supabase.from("project_members").update({ invitation_status: "accepted", responded_at: new Date().toISOString() }).eq("id", m.id);
+    await fetchRelations();
+    toast({ title: "Aceite manual registrado" });
   };
 
   const handleSave = async () => {
@@ -413,6 +485,10 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           <Field label="Status Atual">
             <Badge variant="outline" className="text-xs">{project.status}</Badge>
           </Field>
+        </div>
+        <div className="mt-4 pt-3 border-t">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Cronograma — Previsto x Real</p>
+          <BaselineBlock project={project as any} canManage={!!isAdmin} />
         </div>
       </SectionBlock>
 
@@ -613,34 +689,68 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           </Button>
         )}
 
-        {/* Stakeholders */}
+        {/* Equipe do Projeto / RACI */}
         <div className="pt-2 border-t border-border">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Stakeholders Principais</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+            Equipe do Projeto (RACI)
+          </p>
           {memberRows.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {memberRows.map((m) => (
-                <div key={m.id} className="flex items-center gap-2 p-2 rounded-md border border-border bg-muted/30">
-                  <div className="w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold flex-shrink-0">
-                    {m.full_name.charAt(0).toUpperCase()}
+            <div className="space-y-1.5">
+              {memberRows.map((m) => {
+                const ib = inviteBadge(m.invitation_status);
+                return (
+                  <div key={m.id} className="flex flex-wrap items-center gap-2 p-2 rounded-md border border-border bg-muted/30">
+                    <div className="w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                      {m.full_name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{m.full_name}</p>
+                      {m.sector && <p className="text-xs text-muted-foreground truncate">{m.sector}</p>}
+                      {m.invitation_status === "declined" && m.decline_reason && (
+                        <p className="text-[11px] text-destructive truncate">Motivo: {m.decline_reason}</p>
+                      )}
+                    </div>
+                    {editing && isAdmin ? (
+                      <Select value={m.raci || "_none"} onValueChange={(v) => handleRaciChange(m.id, v === "_none" ? null : (v as RaciRole))}>
+                        <SelectTrigger className="h-7 w-[140px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none">Nenhum</SelectItem>
+                          {raciOptions.map((o) => (
+                            <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Badge className={`text-[10px] ${raciClass(m.raci)}`}>{m.raci || "I"}</Badge>
+                    )}
+                    <Badge className={`text-[10px] ${ib.cls}`}>{ib.label}</Badge>
+                    {editing && isAdmin && m.invitation_status !== "accepted" && (
+                      <>
+                        <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => handleResendInvite(m)}>
+                          Reenviar
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-success" onClick={() => handleManualAccept(m)}>
+                          Aceitar manual
+                        </Button>
+                      </>
+                    )}
+                    {editing && isAdmin && (
+                      <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive" onClick={() => handleRemoveStakeholder(m.id)}>×</Button>
+                    )}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{m.full_name}</p>
-                    {m.sector && <p className="text-xs text-muted-foreground truncate">{m.sector}</p>}
-                  </div>
-                  {editing && isAdmin && (
-                    <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive" onClick={() => handleRemoveStakeholder(m.id)}>×</Button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground italic">Nenhum stakeholder cadastrado</p>
+            <p className="text-sm text-muted-foreground italic">Nenhum membro cadastrado</p>
           )}
           {editing && isAdmin && (
             <div className="pt-2 mt-2 flex flex-col sm:flex-row gap-2">
               <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
                 <SelectTrigger className="text-sm flex-1 h-9">
-                  <SelectValue placeholder="Adicionar stakeholder..." />
+                  <SelectValue placeholder="Convidar membro..." />
                 </SelectTrigger>
                 <SelectContent>
                   {allProfiles.filter((p) => !memberRows.some((m) => m.user_id === p.id)).map((p) => (
@@ -649,7 +759,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                 </SelectContent>
               </Select>
               <Button type="button" size="sm" onClick={handleAddStakeholder} disabled={!selectedProfileId || addingMember}>
-                {addingMember ? "Adicionando..." : "Adicionar"}
+                {addingMember ? "Enviando..." : "Convidar"}
               </Button>
             </div>
           )}

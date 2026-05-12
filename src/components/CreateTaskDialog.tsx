@@ -1,3 +1,4 @@
+'use client';
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -12,12 +13,10 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Paperclip, ChevronDown, Loader2,
+  User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Paperclip, ChevronDown, Loader2, AlertTriangle,
 } from "lucide-react";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { GutPriorityField } from "@/components/GutPriorityField";
-import { format, parse, isValid } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 export interface Phase { id: string; title: string }
 export interface WorkflowStage { id: string; title: string; color: string; is_final?: boolean }
@@ -66,20 +65,6 @@ function parseHoursInput(val: string): number {
   return parseFloat(val) || 0;
 }
 
-/** Format date string to show day of week (PT-BR) */
-function formatDateWithDayOfWeek(dateStr: string): string | null {
-  if (!dateStr) return null;
-  const parsed = parse(dateStr, "yyyy-MM-dd", new Date());
-  if (!isValid(parsed)) return null;
-  return format(parsed, "EEEE, dd 'de' MMMM", { locale: ptBR });
-}
-
-/** Get today's date formatted as YYYY-MM-DD */
-function getTodayString(): string {
-  const today = new Date();
-  return format(today, "yyyy-MM-dd");
-}
-
 export const CreateTaskDialog = ({
   open,
   onOpenChange,
@@ -123,6 +108,7 @@ export const CreateTaskDialog = ({
     participant_roles: {} as Record<string, string>,
     deadline_flag: "",
     last_update_date: "",
+    wbs_code: "",
   });
   const [newTag, setNewTag] = useState("");
   const [stageId, setStageId] = useState<string | null>(null);
@@ -168,6 +154,7 @@ export const CreateTaskDialog = ({
         participant_roles: {},
         deadline_flag: "",
         last_update_date: "",
+        wbs_code: "",
       });
       setStageId(defaultStageId ?? null);
       setAttachment(null);
@@ -187,8 +174,21 @@ export const CreateTaskDialog = ({
     setFormData({ ...formData, tags: formData.tags.filter((t) => t !== tag) });
   };
 
+  const dateRangeInvalid =
+    !!formData.start_date &&
+    !!formData.end_date &&
+    formData.start_date > formData.end_date;
+
   const create = async (afterAction: "close" | "details" | "another") => {
     if (!formData.title.trim() || loading) return;
+    if (dateRangeInvalid) {
+      toast({
+        title: "Datas inconsistentes",
+        description: "A data de início é posterior à data de término.",
+        variant: "destructive",
+      });
+      return;
+    }
     setLoading(true);
     try {
       // Regra: toda atividade nova deve nascer no Backlog. O usuário move
@@ -197,6 +197,24 @@ export const CreateTaskDialog = ({
         stages.find(s => /backlog/i.test(s.title)) ||
         stages[0]; // fallback: primeira coluna (display_order 0)
       const newStageId = backlogStage?.id ?? stageId;
+
+      // EAP automática para subatividades (parent_id definido).
+      let autoWbs: string | null = formData.wbs_code.trim() || null;
+      if (!autoWbs && defaultParentId) {
+        try {
+          const { getNextSubWbs } = await import("@/lib/wbsAuto");
+          const { data: parent } = await supabase
+            .from("activities").select("wbs_code").eq("id", defaultParentId).maybeSingle();
+          const parentWbs = (parent as any)?.wbs_code as string | null | undefined;
+          if (parentWbs) {
+            const { data: siblings } = await supabase
+              .from("activities").select("wbs_code")
+              .eq("project_id", projectId)
+              .eq("parent_id", defaultParentId);
+            autoWbs = getNextSubWbs(parentWbs, (siblings || []).map((s: any) => s.wbs_code));
+          }
+        } catch { /* ignora — segue sem EAP */ }
+      }
 
       const payload: Record<string, unknown> = {
         project_id: projectId,
@@ -221,6 +239,7 @@ export const CreateTaskDialog = ({
         tags: formData.tags.length ? formData.tags : null,
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
+        wbs_code: autoWbs,
       };
 
       const { data: inserted, error } = await supabase
@@ -339,6 +358,22 @@ export const CreateTaskDialog = ({
           </div>
 
           {/* Priority — método GUT */}
+          {/* Código EAP */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-foreground">Código EAP (opcional)</Label>
+            <Input
+              value={formData.wbs_code}
+              onChange={(e) => setFormData({ ...formData, wbs_code: e.target.value })}
+              placeholder={defaultParentId ? "Deixe em branco — gerada automaticamente a partir da atividade pai" : ""}
+              className="font-mono"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {defaultParentId
+                ? <>Subatividade: a EAP é <strong>preenchida automaticamente</strong> (próximo número disponível abaixo do pai). Você pode sobrescrever se quiser.</>
+                : <>Padrões: <strong>X.0</strong> Fase • <strong>X.Y</strong> Subentrega • <strong>X.Y.Z</strong> Pacote • <strong>X.Y.Z.W</strong> Atividade</>}
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Flag className="w-4 h-4" /> Prioridade (GUT)
@@ -490,18 +525,29 @@ export const CreateTaskDialog = ({
           </div>
 
           {/* Datas */}
+          <div className="space-y-2">
           <div className={`grid ${isQualityProject ? "grid-cols-3" : "grid-cols-2"} gap-4`}>
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Calendar className="w-4 h-4" /> Data de Início
               </Label>
-              <Input type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} />
+              <Input
+                type="date"
+                value={formData.start_date}
+                onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                className={dateRangeInvalid ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Calendar className="w-4 h-4" /> Data de Fim
               </Label>
-              <Input type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} />
+              <Input
+                type="date"
+                value={formData.end_date}
+                onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                className={dateRangeInvalid ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
             </div>
             {isQualityProject && (
               <div className="space-y-2">
@@ -511,6 +557,13 @@ export const CreateTaskDialog = ({
                 <Input type="date" value={formData.last_update_date} onChange={(e) => setFormData({ ...formData, last_update_date: e.target.value })} />
               </div>
             )}
+          </div>
+          {dateRangeInvalid && (
+            <p className="text-xs text-destructive flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              A data de início é posterior à data de término.
+            </p>
+          )}
           </div>
 
           {/* Flag de Prazo - Apenas Qualidade */}
