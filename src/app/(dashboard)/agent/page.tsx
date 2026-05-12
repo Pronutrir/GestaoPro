@@ -72,10 +72,38 @@ function looksLikeMutatingIntent(text: string): boolean {
 }
 
 const SUGGESTIONS = [
-  'Liste meus projetos',
-  'Crie um projeto de aplicativo com tarefas e subtarefas',
-  'Liste as tarefas do projeto [cole o ID aqui]',
-  'Crie uma tarefa no projeto [ID]: implementar login',
+  {
+    label: 'Quero criar um projeto de aplicativo com tarefas e subtarefas',
+    helper: 'Criação estruturada completa com confirmação',
+  },
+  {
+    label: 'Liste meus projetos e me diga qual está mais atrasado',
+    helper: 'Visão rápida para priorização',
+  },
+  {
+    label: 'No projeto [ID], busque tarefas relacionadas a login e autenticação',
+    helper: 'Busca focada por texto dentro do projeto',
+  },
+  {
+    label: 'Mostre os detalhes da tarefa [ID] e me sugira próximos passos',
+    helper: 'Diagnóstico e plano de execução',
+  },
+  {
+    label: 'Atualize a tarefa [ID] para prioridade alta e responsável [NOME]',
+    helper: 'Edição guiada com confirmação',
+  },
+  {
+    label: 'Mova a tarefa [ID] para a coluna Em Execução',
+    helper: 'Movimentação de coluna no kanban',
+  },
+  {
+    label: 'Vou colar um chamado GLPI para você analisar e montar a estrutura',
+    helper: 'Gera história, GUT, tarefa principal e subtarefas',
+  },
+  {
+    label: 'Quero vincular histórias em tarefas GLPI antigas deste projeto [ID]',
+    helper: 'Backfill para tarefas legadas sem história vinculada',
+  },
 ];
 
 export default function AgentPage() {
@@ -271,17 +299,20 @@ export default function AgentPage() {
               </div>
               <div>
                 <p className="text-lg font-semibold text-foreground mb-2">Bem-vindo ao Agente de Projetos!</p>
-                <p className="text-sm text-muted-foreground">Posso criar projetos e tarefas para você. Clique em uma sugestão ou digite seu comando.</p>
+                <p className="text-sm text-muted-foreground">Posso criar, buscar, atualizar e mover tarefas, além de estruturar chamados GLPI. Clique em uma sugestão ou digite seu comando.</p>
               </div>
               <div className="flex flex-col gap-2 w-full max-w-md">
                 {SUGGESTIONS.map((s, idx) => (
                   <button
-                    key={s}
-                    onClick={() => setInput(s)}
+                    key={s.label}
+                    onClick={() => setInput(s.label)}
                     className="flex items-center gap-3 text-left px-4 py-3 rounded-lg border border-border bg-card hover:bg-accent hover:border-primary/50 transition-all duration-200"
                   >
                     <span className="text-sm font-medium text-muted-foreground w-6">{idx + 1}</span>
-                    <span className="font-medium text-sm">{s}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="font-medium text-sm block">{s.label}</span>
+                      <span className="text-xs text-muted-foreground block mt-0.5">{s.helper}</span>
+                    </span>
                   </button>
                 ))}
               </div>
