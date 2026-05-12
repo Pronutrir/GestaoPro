@@ -48,9 +48,9 @@ const CONTEXT_HINTS: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  const LOVABLE_API_KEY = process.env.LOVABLE_API_KEY;
-  if (!LOVABLE_API_KEY) {
-    return NextResponse.json({ error: "LOVABLE_API_KEY não configurada" }, { status: 500 });
+  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+  if (!OPENROUTER_API_KEY) {
+    return NextResponse.json({ error: "OPENROUTER_API_KEY não configurada" }, { status: 500 });
   }
 
   let body: Record<string, unknown>;
@@ -79,15 +79,19 @@ export async function POST(req: NextRequest) {
     "\n\nContexto: " +
     (CONTEXT_HINTS[context] ?? CONTEXT_HINTS.generic);
 
+  const model = process.env.OPENROUTER_TEXT_ASSIST_MODEL
+    ?? process.env.OPENROUTER_MODEL
+    ?? "openai/gpt-4o-mini";
+
   try {
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: text },
