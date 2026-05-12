@@ -10,10 +10,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2 } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
+import { endVariance, varianceTone, varianceClasses, formatVariance } from "@/lib/dateVariance";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
 import { ActivityAttachments } from "@/components/ActivityAttachments";
 import { ActivityComments } from "@/components/ActivityComments";
@@ -21,9 +21,11 @@ import { TaskRelations } from "@/components/TaskRelations";
 import { useTaskBlockers } from "@/hooks/useTaskBlockers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { GutPriorityField } from "@/components/GutPriorityField";
+import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon } from "lucide-react";
 import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { UserPlus2 } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
 import { AIAssistButton } from "@/components/AIAssistButton";
@@ -31,6 +33,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ActivityRelationsInline } from "@/components/ActivityRelationsInline";
 import { MessageSquare, Paperclip, ListTree, FileText, Users } from "lucide-react";
 import { ActivityStoriesPanel } from "@/components/ActivityStoriesPanel";
+import { AlertTriangle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /** Linha de propriedade densa (ícone + label cinza + valor) usada no painel ClickUp-like. */
 const PropertyRow = ({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) => (
@@ -52,11 +56,14 @@ interface Activity {
   created_at: string;
   updated_at?: string;
   closed_at?: string | null;
-  created_by?: string | null;
   created_by_email?: string | null;
   assigned_to: string | null;
   start_date: string | null;
   end_date: string | null;
+  actual_start_date?: string | null;
+  actual_end_date?: string | null;
+  baseline_start_date?: string | null;
+  baseline_end_date?: string | null;
   cost: number;
   hours: number;
   phase_id: string | null;
@@ -89,8 +96,6 @@ interface EditActivityDialogProps {
   parentActivityTitle?: string;
   /** Called when user clicks the "Back" arrow — used to close only the nested dialog and return to parent. */
   onBackToParent?: () => void;
-  /** Aba inicial ao abrir o diálogo. */
-  initialTab?: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history";
 }
 
 const RACI_OPTIONS = [
@@ -129,10 +134,8 @@ export const EditActivityDialog = ({
   createMode = false, defaultStageId = null, defaultPhaseId = null, defaultParentId = null,
   onActivityCreated,
   parentActivityTitle, onBackToParent,
-  initialTab = "details",
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
-  const appConfirm = useAppConfirm();
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
   const [creatingDraft, setCreatingDraft] = useState(false);
   const effectiveActivity = createMode ? draftActivity : activity;
@@ -154,6 +157,7 @@ export const EditActivityDialog = ({
     is_milestone: false,
     item_type: "tarefa" as "fase" | "tarefa",
     progress_flag: 0 as number,
+    wbs_code: "" as string,
   });
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -164,6 +168,7 @@ export const EditActivityDialog = ({
   const [allProfiles, setAllProfiles] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean }[]>([]);
   const [currentStageId, setCurrentStageId] = useState("");
+  const [statusPopoverOpen, setStatusPopoverOpen] = useState(false);
   const [creatorName, setCreatorName] = useState<string | null>(null);
   const [storiesCount, setStoriesCount] = useState<number>(0);
   const [creatorEmail, setCreatorEmail] = useState<string | null>(null);
@@ -171,11 +176,22 @@ export const EditActivityDialog = ({
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "stories" | "history">("details");
 
-  useEffect(() => {
-    if (open) {
-      setActiveTab(initialTab);
-    }
-  }, [open, initialTab]);
+  // Divergências pai vs subatividades (alerta apenas, sem bloqueio)
+  const subHoursTotal = subActivities.reduce((sum, s) => sum + (Number((s as any).hours) || 0), 0);
+  const parentHoursNum = parseHoursInput(formData.hours);
+  const hoursDivergence =
+    subActivities.length > 0 &&
+    parentHoursNum > 0 &&
+    Math.abs(parentHoursNum - subHoursTotal) > 0.01;
+
+  const subStartDates = subActivities.map((s) => s.start_date).filter(Boolean) as string[];
+  const subEndDates = subActivities.map((s) => s.end_date).filter(Boolean) as string[];
+  const minSubStart = subStartDates.length ? subStartDates.slice().sort()[0] : null;
+  const maxSubEnd = subEndDates.length ? subEndDates.slice().sort().pop()! : null;
+  const startDivergence =
+    !!minSubStart && !!formData.start_date && minSubStart < formData.start_date;
+  const endDivergence =
+    !!maxSubEnd && !!formData.end_date && maxSubEnd > formData.end_date;
 
   // Colunas opcionais na tabela de sub-atividades (todas selecionáveis; persistido por usuário no localStorage)
   const SUB_COLS_KEY = "subActivityCols.v2";
@@ -197,7 +213,10 @@ export const EditActivityDialog = ({
     if (typeof window === "undefined") return DEFAULT_COLS;
     try {
       const stored = localStorage.getItem(SUB_COLS_KEY);
-      return stored ? JSON.parse(stored) : DEFAULT_COLS;
+      if (!stored) return DEFAULT_COLS;
+      const parsed = JSON.parse(stored);
+      if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_COLS;
+      return parsed;
     } catch {
       return DEFAULT_COLS;
     }
@@ -333,23 +352,12 @@ export const EditActivityDialog = ({
           supabase.from("profiles").select("full_name, sector").in("id", userIds).then(({ data: profiles }) => {
             if (profiles) setMembers(profiles.filter(p => p.full_name));
           });
-        } else {
-          setMembers([]);
         }
       });
     }
   }, [projectId, open, activity?.id, createMode]);
 
-  // In create mode, each new opening must start from a fresh draft record.
-  // Without this reset, subsequent creations may keep updating the previous task.
   useEffect(() => {
-    if (open || !createMode) return;
-    setDraftActivity(null);
-    setCreatingDraft(false);
-  }, [open, createMode]);
-
-  useEffect(() => {
-    if (!open) return;
     const act = createMode ? draftActivity : activity;
     if (act) {
       setFormData({
@@ -379,41 +387,21 @@ export const EditActivityDialog = ({
         is_milestone: !!(act as any).is_milestone,
         item_type: ((act as any).item_type === "fase" ? "fase" : "tarefa"),
         progress_flag: typeof (act as any).progress_flag === "number" ? (act as any).progress_flag : 0,
+        wbs_code: (act as any).wbs_code || "",
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       fetchSubActivities(act.id);
-    } else {
-      setSubActivities([]);
     }
-  }, [activity, draftActivity, createMode, open]);
+  }, [activity, draftActivity, createMode]);
 
   
 
   const fetchSubActivities = async (parentId: string) => {
-    const query = () => (supabase.from("activities").select("*") as any)
+    const { data } = await (supabase.from("activities").select("*") as any)
       .eq("parent_id", parentId)
+      .eq("is_trashed", false)
       .order("display_order");
-
-    let { data, error } = await query().eq("is_trashed", false);
-
-    // Fallback defensivo para ambientes com cache/schema desatualizado no PostgREST.
-    if (error && error.code === "PGRST204" && String(error.message || "").includes("is_trashed")) {
-      const fallback = await query();
-      data = fallback.data;
-      error = fallback.error;
-      if (!error && data) {
-        setSubActivities((data as any[]).filter((row) => row?.is_trashed !== true) as Activity[]);
-        return;
-      }
-    }
-
-    if (error) {
-      console.error("Erro ao buscar sub-atividades:", error);
-      setSubActivities([]);
-      return;
-    }
-
-    setSubActivities((data || []) as Activity[]);
+    if (data) setSubActivities(data as Activity[]);
   };
 
   const handleAddSubActivity = async () => {
@@ -422,6 +410,7 @@ export const EditActivityDialog = ({
     await supabase.from("activities").insert({
       project_id: projectId, title: newSubTitle.trim(),
       phase_id: act.phase_id, parent_id: act.id,
+      workflow_stage_id: (act as any).workflow_stage_id || null,
       display_order: subActivities.length,
     });
     setNewSubTitle("");
@@ -437,9 +426,53 @@ export const EditActivityDialog = ({
 
   const handleToggleSubActivity = async (sub: Activity) => {
     const newStatus = sub.status === "completed" ? "pending" : "completed";
-    await supabase.from("activities").update({
-      status: newStatus, completed_at: newStatus === "completed" ? new Date().toISOString() : null,
-    }).eq("id", sub.id);
+    const updateData: any = {
+      status: newStatus,
+      completed_at: newStatus === "completed" ? new Date().toISOString() : null,
+    };
+    // Regra B+C: NÃO move a subatividade de coluna ao concluir.
+    // Apenas marca status/completed_at, mantendo workflow_stage_id intacto.
+    await supabase.from("activities").update(updateData).eq("id", sub.id);
+
+    // Propagação para a atividade-pai (regra B):
+    const parent = effectiveActivity;
+    if (parent && projectId) {
+      // Busca todas as subs ATUAIS do pai (já com a alteração aplicada acima)
+      const { data: siblings } = await (supabase.from("activities").select("id, status") as any)
+        .eq("parent_id", parent.id)
+        .eq("is_trashed", false);
+      const subs = (siblings || []) as Array<{ id: string; status: string }>;
+
+      if (subs.length > 0) {
+        const allDone = subs.every((s) => s.status === "completed");
+
+        if (newStatus === "completed" && allDone && parent.status !== "completed") {
+          // Todas concluídas → move o pai para "Final" e marca completed
+          const { data: finalStage } = await supabase
+            .from("workflow_stages")
+            .select("id")
+            .eq("project_id", projectId)
+            .eq("is_final", true)
+            .limit(1)
+            .maybeSingle();
+          const parentUpdate: any = {
+            status: "completed",
+            completed_at: new Date().toISOString(),
+          };
+          if (finalStage) parentUpdate.workflow_stage_id = finalStage.id;
+          await supabase.from("activities").update(parentUpdate).eq("id", parent.id);
+          toast({ title: "Atividade concluída", description: "Todas as subatividades foram concluídas — a atividade-pai foi movida para Final." });
+        } else if (newStatus === "pending" && parent.status === "completed") {
+          // Reabriu uma sub e o pai estava concluído → reabre o pai
+          await supabase.from("activities").update({
+            status: "pending",
+            completed_at: null,
+          }).eq("id", parent.id);
+          toast({ title: "Atividade reaberta", description: "Uma subatividade foi reaberta — a atividade-pai voltou para pendente." });
+        }
+      }
+    }
+
     if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
     onActivityUpdated();
   };
@@ -455,12 +488,45 @@ export const EditActivityDialog = ({
     setFormData({ ...formData, tags: formData.tags.filter((t) => t !== tag) });
   };
 
+  const dateRangeInvalid =
+    !!formData.start_date &&
+    !!formData.end_date &&
+    !formData.is_milestone &&
+    formData.start_date > formData.end_date;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const act = createMode ? draftActivity : activity;
     if (!act) return;
+    if (dateRangeInvalid) {
+      toast({
+        title: "Datas inconsistentes",
+        description: "A data de início é posterior à data de término.",
+        variant: "destructive",
+      });
+      return;
+    }
     const previousEndDate = act.end_date;
     try {
+      // EAP automática para subatividades sem código manual
+      let wbsToSave: string | null = (formData.wbs_code || "").trim() || null;
+      const parentId = formData.parent_id || (act as any).parent_id;
+      if (!wbsToSave && parentId && projectId) {
+        try {
+          const { getNextSubWbs } = await import("@/lib/wbsAuto");
+          const { data: parent } = await supabase
+            .from("activities").select("wbs_code").eq("id", parentId).maybeSingle();
+          const parentWbs = (parent as any)?.wbs_code as string | null | undefined;
+          if (parentWbs) {
+            const { data: siblings } = await supabase
+              .from("activities").select("id, wbs_code")
+              .eq("project_id", projectId).eq("parent_id", parentId);
+            const others = (siblings || []).filter((s: any) => s.id !== act.id).map((s: any) => s.wbs_code);
+            wbsToSave = getNextSubWbs(parentWbs, others);
+          }
+        } catch { /* ignora */ }
+      }
+
       const { error } = await supabase.from("activities").update({
         title: formData.title,
         description: formData.description || null,
@@ -486,7 +552,8 @@ export const EditActivityDialog = ({
         ui_color_tag: formData.ui_color_tag || null,
         is_milestone: formData.is_milestone,
         item_type: formData.item_type,
-        progress_flag: formData.progress_flag,
+        progress_flag: formData.progress_flag ?? 0,
+        wbs_code: wbsToSave,
       } as any).eq("id", act.id);
       if (error) throw error;
 
@@ -521,7 +588,6 @@ export const EditActivityDialog = ({
 
       toast({ title: createMode ? "Atividade criada!" : "Atividade atualizada!" });
       onActivityUpdated();
-      if (createMode) setDraftActivity(null);
       onOpenChange(false);
     } catch (error) {
       console.error("Erro ao atualizar atividade:", error);
@@ -659,14 +725,15 @@ export const EditActivityDialog = ({
             </div>
           </div>
 
-          {/* Painel de propriedades — lista vertical única (evita sobreposição entre campos largos e estreitos) */}
+          {/* Painel de propriedades — 2 colunas, linhas densas (label + valor) */}
           {act && (
             <div className="flex flex-col divide-y divide-border/60 p-3 rounded-lg border border-border bg-muted/10">
+              {/* Lista vertical única — evita sobreposição entre campos largos (GUT, Marco) e estreitos (Status) */}
               <div className="flex flex-col">
                 {/* Status / Etapa */}
                 {workflowStages.length > 0 && (
-                  <PropertyRow icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
-                    <Popover>
+                   <PropertyRow icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
+                     <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
                       <PopoverTrigger asChild>
                         <button
                           type="button"
@@ -689,6 +756,7 @@ export const EditActivityDialog = ({
                             className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted ${currentStageId === stage.id ? "bg-primary/10 text-primary font-medium" : ""}`}
                             onClick={async () => {
                               if (currentStageId === stage.id) return;
+                              setStatusPopoverOpen(false);
                               if (stage.is_final && isBlockedByOthers) {
                                 toast({ title: "Tarefa bloqueada", description: `Há ${blockers.length} bloqueio(s) pendente(s).`, variant: "destructive" });
                                 return;
@@ -729,7 +797,7 @@ export const EditActivityDialog = ({
                       type="date"
                       value={formData.start_date}
                       onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                      className="h-7 px-1.5 text-xs w-[130px]"
+                      className={`h-7 px-1.5 text-xs w-[130px] ${dateRangeInvalid ? "border-destructive focus-visible:ring-destructive" : ""}`}
                     />
                     {!formData.is_milestone && (
                       <>
@@ -738,12 +806,73 @@ export const EditActivityDialog = ({
                           type="date"
                           value={formData.end_date}
                           onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                          className="h-7 px-1.5 text-xs w-[130px]"
+                          className={`h-7 px-1.5 text-xs w-[130px] ${dateRangeInvalid ? "border-destructive focus-visible:ring-destructive" : ""}`}
                         />
                       </>
                     )}
+                    {dateRangeInvalid && (
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center justify-center text-destructive">
+                              <AlertTriangle className="w-4 h-4" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-[260px] text-xs">
+                            Datas inconsistentes: a data de início é posterior à data de término.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    {(startDivergence || endDivergence) && (
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button type="button" className="inline-flex items-center justify-center text-amber-600 dark:text-amber-400 hover:opacity-80">
+                              <AlertTriangle className="w-4 h-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-[260px] text-xs">
+                            Divergência com subatividades:
+                            {startDivergence && minSubStart && (
+                              <div>• sub começa em <strong>{minSubStart.split("-").reverse().join("/")}</strong> (antes do pai)</div>
+                            )}
+                            {endDivergence && maxSubEnd && (
+                              <div>• sub termina em <strong>{maxSubEnd.split("-").reverse().join("/")}</strong> (depois do pai)</div>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </div>
                 </PropertyRow>
+
+                {/* Datas Reais (somente leitura) + chip de Desvio — não se aplica a Qualidade */}
+                {!isQualityProject && (act?.actual_start_date || act?.actual_end_date || act?.completed_at) && !formData.is_milestone && (
+                  <PropertyRow icon={<Calendar className="w-3.5 h-3.5 text-muted-foreground" />} label="Real">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="font-mono">
+                        {(act?.actual_start_date || "—").split("-").reverse().join("/")}
+                      </span>
+                      <ArrowRight className="w-3 h-3" />
+                      <span className="font-mono">
+                        {((act?.actual_end_date || act?.completed_at?.slice?.(0,10) || "—") + "").split("-").reverse().join("/")}
+                      </span>
+                      {(() => {
+                        const real = act?.actual_end_date || (act?.completed_at ? String(act.completed_at).slice(0,10) : null);
+                        const v = endVariance(real, (act as any)?.baseline_end_date, act?.end_date);
+                        if (v === null) return null;
+                        const tone = varianceTone(v);
+                        return (
+                          <span className={cn("ml-1 px-1.5 py-0 rounded border text-[10px] font-mono", varianceClasses(tone))}
+                                title={(act as any)?.baseline_end_date ? "Real − Linha de Base" : "Real − Previsto"}>
+                            Desvio {formatVariance(v)}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </PropertyRow>
+                )}
 
                 {/* Relacionamentos inline */}
                 {projectId && (
@@ -772,6 +901,20 @@ export const EditActivityDialog = ({
                           <option key={h} value={`${h}h`} label={h === 1 ? "1 hora" : `${h} horas`} />
                         ))}
                       </datalist>
+                      {hoursDivergence && (
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button type="button" className="inline-flex items-center justify-center text-amber-600 dark:text-amber-400 hover:opacity-80">
+                                <AlertTriangle className="w-4 h-4" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="max-w-[260px] text-xs">
+                              Horas do pai (<strong>{formatHoursDisplay(parentHoursNum)}</strong>) diferem da soma das subatividades (<strong>{formatHoursDisplay(subHoursTotal)}</strong>). Evite duplicidade — registre no pai <em>ou</em> nas subs.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                     </div>
                   </PropertyRow>
                 )}
@@ -796,8 +939,8 @@ export const EditActivityDialog = ({
                     onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
                   >
                     <option value="">Sem líder</option>
-                    {allProfiles.map((m, index) => (
-                      <option key={`${m.full_name}-${m.sector ?? "sem-setor"}-${index}`} value={m.full_name!}>
+                    {allProfiles.map((m) => (
+                      <option key={m.full_name} value={m.full_name!}>
                         {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
                       </option>
                     ))}
@@ -806,7 +949,7 @@ export const EditActivityDialog = ({
 
                 {/* Prioridade — método GUT */}
                 <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
-                  <div className="w-full">
+                  <div className="w-full min-w-0">
                     <GutPriorityField
                       gravity={formData.gravity}
                       urgency={formData.urgency}
@@ -850,6 +993,26 @@ export const EditActivityDialog = ({
                       {formData.item_type === "fase"
                         ? "Esta tarefa agrupa subtarefas como uma fase"
                         : "Tarefa comum"}
+                    </span>
+                  </div>
+                </PropertyRow>
+
+                {/* Código EAP/WBS */}
+                <PropertyRow icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
+                  <div className="flex flex-col gap-1 w-full">
+                    <Input
+                      value={formData.wbs_code}
+                      onChange={(e) => setFormData({ ...formData, wbs_code: e.target.value })}
+                      placeholder={(formData.parent_id || (act as any)?.parent_id) ? "Em branco = gerado automaticamente ao salvar" : ""}
+                      className={cn(
+                        "h-7 text-xs font-mono",
+                        formData.wbs_code && !/^\d+(\.\d+){0,3}$/.test(formData.wbs_code.trim()) && "border-destructive"
+                      )}
+                    />
+                    <span className="text-[10px] text-muted-foreground leading-tight">
+                      {(formData.parent_id || (act as any)?.parent_id)
+                        ? <>Subatividade: a EAP é <strong>preenchida automaticamente</strong> a partir da atividade pai. Você pode sobrescrever.</>
+                        : <>Padrões: <strong>X.0</strong> Fase/Entregável • <strong>X.Y</strong> Subentrega • <strong>X.Y.Z</strong> Pacote • <strong>X.Y.Z.W</strong> Atividade</>}
                     </span>
                   </div>
                 </PropertyRow>
@@ -1004,8 +1167,8 @@ export const EditActivityDialog = ({
                             <option value="">Selecionar pessoa...</option>
                             {allProfiles
                               .filter((m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name!)))
-                              .map((m, index) => (
-                                <option key={`${m.full_name}-${m.sector ?? "sem-setor"}-${index}`} value={m.full_name!}>
+                              .map((m) => (
+                                <option key={m.full_name} value={m.full_name!}>
                                   {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
                                 </option>
                               ))}
@@ -1057,6 +1220,61 @@ export const EditActivityDialog = ({
                 <Layers className="w-4 h-4 text-primary" />
                 Sub-atividades ({subActivities.length})
               </h3>
+
+              {/* Resumo de horas: consumido (subs concluídas) vs planejado (pai) */}
+              {(() => {
+                const planned = parentHoursNum;
+                const consumed = subActivities
+                  .filter((s) => s.status === "completed")
+                  .reduce((sum, s) => sum + (Number((s as any).hours) || 0), 0);
+                const planejadoSubs = subHoursTotal;
+                const pct = planned > 0 ? Math.min(100, (consumed / planned) * 100) : 0;
+                const excedeu = planned > 0 && consumed > planned;
+                if (planned === 0 && planejadoSubs === 0) return null;
+                return (
+                  <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        Horas consumidas (subs concluídas):{" "}
+                        <strong className={excedeu ? "text-destructive" : "text-foreground"}>
+                          {formatHoursDisplay(consumed) || "0h"}
+                        </strong>
+                        {planned > 0 && (
+                          <> de <strong className="text-foreground">{formatHoursDisplay(planned)}</strong> planejadas no pai</>
+                        )}
+                      </span>
+                      {planned > 0 && (
+                        <span className={`text-[11px] font-semibold ${excedeu ? "text-destructive" : "text-muted-foreground"}`}>
+                          {pct.toFixed(0)}%
+                        </span>
+                      )}
+                    </div>
+                    {planned > 0 && (
+                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${excedeu ? "bg-destructive" : "bg-primary"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    )}
+                    {planejadoSubs > 0 && (
+                      <div className="text-[11px] text-muted-foreground">
+                        Soma planejada das subatividades: <strong>{formatHoursDisplay(planejadoSubs)}</strong>
+                        {planned > 0 && Math.abs(planejadoSubs - planned) > 0.01 && (
+                          <span className="text-amber-600 dark:text-amber-400"> · diverge do pai</span>
+                        )}
+                      </div>
+                    )}
+                    {excedeu && (
+                      <div className="text-[11px] text-destructive flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        Consumo já ultrapassou as horas planejadas no pai.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {subActivities.length > 0 && (
                 <div className="rounded-md border border-border overflow-x-auto">
                   <div
@@ -1109,24 +1327,17 @@ export const EditActivityDialog = ({
                       </Popover>
                     </span>
                   </div>
-                    {subActivities.map((sub) => {
-                    const assigneeOptions = members.length > 0 ? members : allProfiles;
+                  {subActivities.map((sub) => {
                     const initials = (sub.assigned_to || "")
                       .split(" ")
                       .filter(Boolean)
                       .slice(0, 2)
                       .map((n) => n[0]?.toUpperCase())
                       .join("");
-                    const prio = sub.priority || "medium";
-                    const prioClass =
-                      prio === "critical" ? "text-red-600"
-                      : prio === "high" ? "text-orange-500"
-                      : prio === "low" ? "text-muted-foreground"
-                      : "text-amber-500";
-                    const prioLabel =
-                      prio === "critical" ? "Crítica"
-                      : prio === "high" ? "Alta"
-                      : prio === "low" ? "Baixa" : "Média";
+                    const gutLevel = normalizeGut(sub.priority);
+                    const gutMeta = GUT_META[gutLevel];
+                    const prioLabel = gutMeta.label;
+                    const prioScore = (sub as any).priority_score as number | null | undefined;
                     const dateShort = sub.end_date
                       ? (() => {
                           const [y, m, d] = sub.end_date.split("-").map(Number);
@@ -1140,9 +1351,9 @@ export const EditActivityDialog = ({
                         style={{ gridTemplateColumns: subGridTemplate }}
                       >
                         <Button
-                          type="button"
                           size="icon"
                           variant="ghost"
+                          type="button"
                           className="h-5 w-5 shrink-0"
                           onClick={() => handleToggleSubActivity(sub)}
                           title={sub.status === "completed" ? "Reabrir" : "Concluir"}
@@ -1161,13 +1372,27 @@ export const EditActivityDialog = ({
                           }`}
                           title={sub.title}
                         >
-                          {sub.title}
+                          {(() => {
+                            const subStage = workflowStages.find((s) => s.id === (sub as any).workflow_stage_id);
+                            const stageColor = subStage?.color || "hsl(var(--muted-foreground))";
+                            const stageLabel = subStage?.title || "Sem coluna";
+                            return (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span
+                                  className="inline-block w-2 h-2 rounded-full shrink-0 ring-1 ring-border"
+                                  style={{ background: stageColor }}
+                                  title={`Coluna: ${stageLabel}`}
+                                />
+                                <span className="truncate">{sub.title}</span>
+                              </span>
+                            );
+                          })()}
                         </button>
 
                         {/* Colunas dinâmicas (na ordem de ALL_COLS, apenas as visíveis) */}
                         {ALL_COLS.filter((c) => visibleCols.includes(c.id)).map(({ id: colId }) => {
                           const updateField = async (value: any) => {
-                            await supabase.from("activities").update({ [colId]: value } as any).eq("id", sub.id);
+                            await (supabase.from("activities").update({ [colId]: value } as any) as any).eq("id", sub.id);
                             if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
                             onActivityUpdated();
                           };
@@ -1200,9 +1425,9 @@ export const EditActivityDialog = ({
                                     >
                                       Sem responsável
                                     </button>
-                                    {assigneeOptions.map((m, idx) => (
+                                    {members.map((m) => (
                                       <button
-                                        key={`${m.full_name}-${m.sector ?? "sem-setor"}-${idx}`}
+                                        key={m.full_name}
                                         type="button"
                                         className={`w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted ${
                                           sub.assigned_to === m.full_name ? "bg-primary/10 text-primary font-medium" : ""
@@ -1225,27 +1450,28 @@ export const EditActivityDialog = ({
                                   <button
                                     type="button"
                                     className="mx-auto h-6 w-6 rounded flex items-center justify-center hover:bg-muted"
-                                    title={`Prioridade: ${prioLabel}`}
+                                    title={`Prioridade: ${prioLabel}${prioScore != null ? ` (${prioScore})` : ""}`}
                                   >
-                                    <Flag className={`w-3.5 h-3.5 ${prioClass}`} />
+                                    <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full ${gutMeta.dotClass} ${gutMeta.pulse ? "animate-pulse" : ""}`} />
                                   </button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-40 p-1" align="center">
                                   {[
-                                    { v: "low", l: "Baixa", c: "text-muted-foreground" },
-                                    { v: "medium", l: "Média", c: "text-amber-500" },
-                                    { v: "high", l: "Alta", c: "text-orange-500" },
-                                    { v: "critical", l: "Crítica", c: "text-red-600" },
+                                    { v: "baixa" as GutLevel, l: "Baixa" },
+                                    { v: "media" as GutLevel, l: "Média" },
+                                    { v: "alta" as GutLevel, l: "Alta" },
+                                    { v: "critica" as GutLevel, l: "Crítica" },
+                                    { v: "urgente" as GutLevel, l: "Urgente" },
                                   ].map((opt) => (
                                     <button
                                       key={opt.v}
                                       type="button"
                                       className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted ${
-                                        prio === opt.v ? "bg-primary/10 text-primary font-medium" : ""
+                                        gutLevel === opt.v ? "bg-primary/10 text-primary font-medium" : ""
                                       }`}
                                       onClick={() => updateField(opt.v)}
                                     >
-                                      <Flag className={`w-3.5 h-3.5 ${opt.c}`} /> {opt.l}
+                                      <span className={`inline-block w-2.5 h-2.5 rounded-full ${GUT_META[opt.v].dotClass}`} /> {opt.l}
                                     </button>
                                   ))}
                                 </PopoverContent>
@@ -1253,18 +1479,21 @@ export const EditActivityDialog = ({
                             );
                           }
                           if (colId === "end_date") {
+                            const subInvalid = !!sub.start_date && !!sub.end_date && sub.start_date > sub.end_date;
                             return (
-                              <div key={colId} className="flex items-center gap-1">
+                              <label key={colId} className={`relative cursor-pointer text-xs hover:text-foreground ${subInvalid ? "text-destructive font-medium" : "text-muted-foreground"}`} title={subInvalid ? "Datas inconsistentes" : undefined}>
+                                <span>{dateShort}</span>
                                 <input
                                   type="date"
                                   value={sub.end_date || ""}
                                   onChange={(e) => updateField(e.target.value || null)}
-                                  className="h-6 w-full text-[10px] px-1 rounded border border-input bg-background"
+                                  className="absolute inset-0 opacity-0 cursor-pointer"
                                 />
-                              </div>
+                              </label>
                             );
                           }
                           if (colId === "start_date") {
+                            const subInvalid = !!sub.start_date && !!sub.end_date && sub.start_date > sub.end_date;
                             const ds = sub.start_date
                               ? (() => {
                                   const [y, m, d] = sub.start_date!.split("-").map(Number);
@@ -1272,7 +1501,7 @@ export const EditActivityDialog = ({
                                 })()
                               : "—";
                             return (
-                              <label key={colId} className="relative cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                              <label key={colId} className={`relative cursor-pointer text-xs hover:text-foreground ${subInvalid ? "text-destructive font-medium" : "text-muted-foreground"}`} title={subInvalid ? "Datas inconsistentes" : undefined}>
                                 <span>{ds}</span>
                                 <input
                                   type="date"
@@ -1414,7 +1643,6 @@ export const EditActivityDialog = ({
                         })}
 
                         <Button
-                          type="button"
                           size="icon"
                           variant="ghost"
                           className="h-5 w-5 opacity-0 group-hover:opacity-100 text-destructive"
@@ -1580,13 +1808,7 @@ export const EditActivityDialog = ({
                 className="gap-2 text-primary border-primary/30 hover:bg-primary/10"
                 onClick={async () => {
                   if (!act) return;
-                  const ok = await appConfirm({
-                    title: "Arquivar atividade",
-                    description: "Arquivar esta atividade? Ela ficará marcada como arquivada e poderá ser consultada no histórico.",
-                    confirmText: "Arquivar",
-                    destructive: true,
-                  });
-                  if (!ok) return;
+                  if (!confirm("Arquivar esta atividade? Ela ficará marcada como arquivada e poderá ser consultada no histórico.")) return;
                   try {
                     const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", act.id);
                     if (error) throw error;

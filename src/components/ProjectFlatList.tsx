@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -10,12 +10,11 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import {
-  ChevronDown, ChevronRight, Columns3, Trash2, RotateCcw, Archive,
+  ChevronDown, ChevronRight, Columns3, Trash2, RotateCcw, Archive, CheckCheck, CircleDot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
-import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Phase { id: string; title: string; display_order?: number | null; }
 interface WorkflowStage { id: string; title: string; color?: string | null; display_order?: number; }
@@ -66,10 +65,10 @@ export function ProjectFlatList({
   projectId, activities, phases, onEditActivity, onToggleActivity, onDataChanged, isAdmin,
 }: Props) {
   const { toast } = useToast();
-  const appConfirm = useAppConfirm();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [showTrash, setShowTrash] = useState(false);
   const [trashed, setTrashed] = useState<Activity[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
@@ -131,36 +130,19 @@ export function ProjectFlatList({
     fetchTrash(); onDataChanged();
   };
   const handlePermanentDelete = async (id: string) => {
-    const ok = await appConfirm({
-      title: "Excluir atividade",
-      description: "Excluir permanentemente esta atividade?",
-      confirmText: "Excluir",
-      destructive: true,
-    });
-    if (!ok) return;
+    if (!confirm("Excluir permanentemente esta atividade?")) return;
     await supabase.from("activities").delete().eq("id", id);
     toast({ title: "Atividade excluída!" });
     fetchTrash();
   };
   const handleEmptyTrash = async () => {
-    const ok = await appConfirm({
-      title: "Esvaziar lixeira",
-      description: `Excluir PERMANENTEMENTE ${trashed.length} atividades?`,
-      confirmText: "Excluir tudo",
-      destructive: true,
-    });
-    if (!ok) return;
+    if (!confirm(`Excluir PERMANENTEMENTE ${trashed.length} atividades?`)) return;
     await (supabase.from("activities").delete().eq("project_id", projectId) as any).eq("is_trashed", true);
     toast({ title: "Lixeira esvaziada!" });
     fetchTrash();
   };
   const handleRestoreAll = async () => {
-    const ok = await appConfirm({
-      title: "Restaurar atividades",
-      description: `Restaurar ${trashed.length} atividades?`,
-      confirmText: "Restaurar",
-    });
-    if (!ok) return;
+    if (!confirm(`Restaurar ${trashed.length} atividades?`)) return;
     await (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any)
       .eq("project_id", projectId) as any).eq("is_trashed", true);
     toast({ title: "Todas restauradas!" });
@@ -183,6 +165,47 @@ export function ProjectFlatList({
   };
 
   const isVisible = (k: ColKey) => visibleCols.has(k);
+
+  // ========= Seleção múltipla =========
+  const visibleIds = useMemo(() => sortedActivities.map((a) => a.id), [sortedActivities]);
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someSelected = visibleIds.some((id) => selectedIds.has(id));
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) visibleIds.forEach((id) => next.delete(id));
+      else visibleIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const bulkComplete = async (newStatus: "completed" | "pending") => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const completed_at = newStatus === "completed" ? new Date().toISOString() : null;
+    await (supabase.from("activities").update({ status: newStatus, completed_at } as any) as any).in("id", ids);
+    toast({ title: `${ids.length} tarefa(s) atualizada(s)` });
+    clearSelection();
+    onDataChanged();
+  };
+  const bulkArchive = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!confirm(`Arquivar ${ids.length} tarefa(s)?`)) return;
+    await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any) as any).in("id", ids);
+    toast({ title: `${ids.length} tarefa(s) arquivada(s)` });
+    clearSelection();
+    onDataChanged();
+  };
 
   const renderCell = (a: Activity, key: ColKey) => {
     switch (key) {
@@ -211,7 +234,7 @@ export function ProjectFlatList({
       case "assigned_to":
         return <span className="text-muted-foreground truncate text-xs">{a.assigned_to || "—"}</span>;
       case "hours":
-        return <span className="text-muted-foreground text-xs">{a.hours ? `${a.hours}h` : "—"}</span>;
+        return <span className="text-muted-foreground text-xs">{a.hours != null ? `${a.hours}h` : "—"}</span>;
       case "status":
         return <span className="text-muted-foreground capitalize text-xs">{a.status?.replace("_", " ") || "—"}</span>;
     }
@@ -232,10 +255,47 @@ export function ProjectFlatList({
 
   const visibleList = ALL_COLUMNS.filter(c => isVisible(c.key));
 
+  // Contagem de preenchimento por coluna (com base nas tarefas exibidas)
+  const fillCounts = useMemo(() => {
+    const total = sortedActivities.length;
+    const isFilled = (a: Activity, key: ColKey) => {
+      switch (key) {
+        case "phase":       return !!a.phase_id;
+        case "stage":       return !!a.workflow_stage_id;
+        case "priority":    return !!a.priority && a.priority !== "pendente";
+        case "end_date":    return !!a.end_date;
+        case "start_date":  return !!a.start_date;
+        case "assigned_to": return !!a.assigned_to;
+        case "hours":       return a.hours != null;
+        case "status":      return !!a.status;
+      }
+    };
+    const counts = {} as Record<ColKey, number>;
+    for (const c of ALL_COLUMNS) {
+      counts[c.key] = sortedActivities.reduce((n, a) => n + (isFilled(a, c.key) ? 1 : 0), 0);
+    }
+    return { total, counts };
+  }, [sortedActivities]);
+
   return (
     <div className="space-y-4">
-      {/* Toolbar do seletor de colunas */}
-      <div className="flex items-center justify-end">
+      {/* Toolbar: ações em lote (à esquerda) + seletor de colunas (à direita) */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {selectedIds.size > 0 ? (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/30">
+            <span className="text-xs font-medium text-primary">{selectedIds.size} selecionada(s)</span>
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => bulkComplete("completed")}>
+              <CheckCheck className="w-3.5 h-3.5" /> Concluir
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => bulkComplete("pending")}>
+              <CircleDot className="w-3.5 h-3.5" /> Reabrir
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-destructive hover:bg-destructive/10" onClick={bulkArchive}>
+              <Archive className="w-3.5 h-3.5" /> Arquivar
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={clearSelection}>Limpar</Button>
+          </div>
+        ) : <div />}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-8 gap-1.5">
@@ -263,8 +323,25 @@ export function ProjectFlatList({
       <div className="border border-border rounded-lg overflow-hidden bg-background">
         <div className="grid gap-3 px-4 py-2 bg-muted/40 text-xs font-medium text-muted-foreground border-b border-border"
              style={{ gridTemplateColumns: `minmax(240px, ${Math.max(2, 4 - visibleList.length)}fr) ${visibleList.map(c => `minmax(${colSpec[c.key].min}px, ${colSpec[c.key].fr}fr)`).join(" ")}` }}>
-          <div>Tarefa</div>
-          {visibleList.map(c => <div key={c.key}>{c.label}</div>)}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={allSelected ? true : someSelected ? "indeterminate" : false}
+              onCheckedChange={toggleSelectAll}
+              aria-label="Selecionar todas"
+            />
+            <span>Tarefa</span>
+          </div>
+          {visibleList.map(c => (
+            <div key={c.key} className="flex items-baseline gap-1.5">
+              <span>{c.label}</span>
+              <span
+                className="text-[10px] font-normal text-muted-foreground/70"
+                title={`${fillCounts.counts[c.key]} de ${fillCounts.total} preenchidos`}
+              >
+                {fillCounts.counts[c.key]}/{fillCounts.total}
+              </span>
+            </div>
+          ))}
         </div>
 
         {sortedActivities.length === 0 ? (
@@ -273,16 +350,27 @@ export function ProjectFlatList({
           sortedActivities.map((a) => (
             <div
               key={a.id}
-              className="group grid gap-3 px-4 py-2.5 text-sm border-b border-border hover:bg-muted/30 transition-colors items-center cursor-pointer"
+              className={cn(
+                "group grid gap-3 px-4 py-2.5 text-sm border-b border-border hover:bg-muted/30 transition-colors items-center cursor-pointer",
+                selectedIds.has(a.id) && "bg-primary/5"
+              )}
               style={{ gridTemplateColumns: `minmax(240px, ${Math.max(2, 4 - visibleList.length)}fr) ${visibleList.map(c => `minmax(${colSpec[c.key].min}px, ${colSpec[c.key].fr}fr)`).join(" ")}` }}
               onClick={() => onEditActivity(a)}
             >
               <div className="flex items-center gap-2 min-w-0">
                 <div onClick={(e) => e.stopPropagation()}>
                   <Checkbox
+                    checked={selectedIds.has(a.id)}
+                    onCheckedChange={() => toggleSelectOne(a.id)}
+                    aria-label="Selecionar tarefa"
+                  />
+                </div>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
                     checked={a.status === "completed"}
                     onCheckedChange={() => onToggleActivity(a.id, a.status)}
-                    className="shrink-0"
+                    className="shrink-0 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                    title="Marcar como concluída"
                   />
                 </div>
                 <span className={cn("truncate flex-1", a.status === "completed" && "line-through text-muted-foreground")}>

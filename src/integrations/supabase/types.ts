@@ -16,7 +16,13 @@ export type Database = {
     Tables: {
       activities: {
         Row: {
+          actual_end_date: string | null
+          actual_start_date: string | null
           assigned_to: string | null
+          baseline_end_date: string | null
+          baseline_start_date: string | null
+          blocked_days_total: number
+          blocked_since: string | null
           closed_at: string | null
           completed_at: string | null
           context_metadata: Json
@@ -35,6 +41,7 @@ export type Database = {
           is_milestone: boolean
           is_trashed: boolean
           item_type: string
+          last_progress_stage_id: string | null
           last_update_date: string | null
           parent_id: string | null
           participant_roles: Json
@@ -56,10 +63,17 @@ export type Database = {
           ui_color_tag: string | null
           updated_at: string
           urgency: number | null
+          wbs_code: string | null
           workflow_stage_id: string | null
         }
         Insert: {
+          actual_end_date?: string | null
+          actual_start_date?: string | null
           assigned_to?: string | null
+          baseline_end_date?: string | null
+          baseline_start_date?: string | null
+          blocked_days_total?: number
+          blocked_since?: string | null
           closed_at?: string | null
           completed_at?: string | null
           context_metadata?: Json
@@ -78,6 +92,7 @@ export type Database = {
           is_milestone?: boolean
           is_trashed?: boolean
           item_type?: string
+          last_progress_stage_id?: string | null
           last_update_date?: string | null
           parent_id?: string | null
           participant_roles?: Json
@@ -99,10 +114,17 @@ export type Database = {
           ui_color_tag?: string | null
           updated_at?: string
           urgency?: number | null
+          wbs_code?: string | null
           workflow_stage_id?: string | null
         }
         Update: {
+          actual_end_date?: string | null
+          actual_start_date?: string | null
           assigned_to?: string | null
+          baseline_end_date?: string | null
+          baseline_start_date?: string | null
+          blocked_days_total?: number
+          blocked_since?: string | null
           closed_at?: string | null
           completed_at?: string | null
           context_metadata?: Json
@@ -121,6 +143,7 @@ export type Database = {
           is_milestone?: boolean
           is_trashed?: boolean
           item_type?: string
+          last_progress_stage_id?: string | null
           last_update_date?: string | null
           parent_id?: string | null
           participant_roles?: Json
@@ -142,9 +165,17 @@ export type Database = {
           ui_color_tag?: string | null
           updated_at?: string
           urgency?: number | null
+          wbs_code?: string | null
           workflow_stage_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "activities_last_progress_stage_id_fkey"
+            columns: ["last_progress_stage_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_stages"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "activities_parent_id_fkey"
             columns: ["parent_id"]
@@ -1005,6 +1036,7 @@ export type Database = {
           is_read: boolean
           message: string | null
           project_id: string | null
+          target_user_id: string | null
           title: string
           type: string
         }
@@ -1015,6 +1047,7 @@ export type Database = {
           is_read?: boolean
           message?: string | null
           project_id?: string | null
+          target_user_id?: string | null
           title: string
           type: string
         }
@@ -1025,6 +1058,7 @@ export type Database = {
           is_read?: boolean
           message?: string | null
           project_id?: string | null
+          target_user_id?: string | null
           title?: string
           type?: string
         }
@@ -1181,6 +1215,7 @@ export type Database = {
           title: string
           trashed_at: string | null
           updated_at: string
+          wbs_code: string | null
         }
         Insert: {
           created_at?: string
@@ -1192,6 +1227,7 @@ export type Database = {
           title: string
           trashed_at?: string | null
           updated_at?: string
+          wbs_code?: string | null
         }
         Update: {
           created_at?: string
@@ -1203,6 +1239,7 @@ export type Database = {
           title?: string
           trashed_at?: string | null
           updated_at?: string
+          wbs_code?: string | null
         }
         Relationships: [
           {
@@ -1387,8 +1424,15 @@ export type Database = {
           can_edit: boolean
           can_move: boolean
           created_at: string
+          decline_reason: string | null
           id: string
+          invitation_status: string
+          invited_at: string
+          invited_by: string | null
           project_id: string
+          project_role: Database["public"]["Enums"]["project_role"]
+          raci: string | null
+          responded_at: string | null
           sector: string | null
           user_id: string
         }
@@ -1398,8 +1442,15 @@ export type Database = {
           can_edit?: boolean
           can_move?: boolean
           created_at?: string
+          decline_reason?: string | null
           id?: string
+          invitation_status?: string
+          invited_at?: string
+          invited_by?: string | null
           project_id: string
+          project_role?: Database["public"]["Enums"]["project_role"]
+          raci?: string | null
+          responded_at?: string | null
           sector?: string | null
           user_id: string
         }
@@ -1409,8 +1460,15 @@ export type Database = {
           can_edit?: boolean
           can_move?: boolean
           created_at?: string
+          decline_reason?: string | null
           id?: string
+          invitation_status?: string
+          invited_at?: string
+          invited_by?: string | null
           project_id?: string
+          project_role?: Database["public"]["Enums"]["project_role"]
+          raci?: string | null
+          responded_at?: string | null
           sector?: string | null
           user_id?: string
         }
@@ -1465,7 +1523,12 @@ export type Database = {
       }
       projects: {
         Row: {
+          actual_end_date: string | null
+          actual_start_date: string | null
           assignees: string[] | null
+          baseline_end_date: string | null
+          baseline_frozen_at: string | null
+          baseline_start_date: string | null
           blockers: string | null
           budget_planned: number | null
           budget_used: number | null
@@ -1504,7 +1567,12 @@ export type Database = {
           urgency: number | null
         }
         Insert: {
+          actual_end_date?: string | null
+          actual_start_date?: string | null
           assignees?: string[] | null
+          baseline_end_date?: string | null
+          baseline_frozen_at?: string | null
+          baseline_start_date?: string | null
           blockers?: string | null
           budget_planned?: number | null
           budget_used?: number | null
@@ -1543,7 +1611,12 @@ export type Database = {
           urgency?: number | null
         }
         Update: {
+          actual_end_date?: string | null
+          actual_start_date?: string | null
           assignees?: string[] | null
+          baseline_end_date?: string | null
+          baseline_frozen_at?: string | null
+          baseline_start_date?: string | null
           blockers?: string | null
           budget_planned?: number | null
           budget_used?: number | null
@@ -2211,6 +2284,7 @@ export type Database = {
           display_order: number
           id: string
           is_blocked: boolean
+          is_exception: boolean
           is_final: boolean
           is_visible: boolean
           project_id: string
@@ -2222,6 +2296,7 @@ export type Database = {
           display_order?: number
           id?: string
           is_blocked?: boolean
+          is_exception?: boolean
           is_final?: boolean
           is_visible?: boolean
           project_id: string
@@ -2233,6 +2308,7 @@ export type Database = {
           display_order?: number
           id?: string
           is_blocked?: boolean
+          is_exception?: boolean
           is_final?: boolean
           is_visible?: boolean
           project_id?: string
@@ -2253,6 +2329,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_member_action: {
+        Args: { _action: string; _project_id: string; _user_id: string }
+        Returns: boolean
+      }
       generate_overdue_notifications: {
         Args: { p_project_id: string }
         Returns: undefined
@@ -2265,9 +2345,18 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_project_leader: {
+        Args: { _project_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_project_member: {
+        Args: { _project_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "user" | "gestor"
+      project_role: "leader" | "manager" | "contributor" | "viewer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2396,6 +2485,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user", "gestor"],
+      project_role: ["leader", "manager", "contributor", "viewer"],
     },
   },
 } as const

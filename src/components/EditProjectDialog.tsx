@@ -23,6 +23,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { GutPriorityField } from "@/components/GutPriorityField";
+import { UserPlus, X } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+
+type RaciRole = "R" | "A" | "C" | "I";
+const raciLabel = (r: RaciRole) =>
+  ({ R: "Responsável", A: "Autoridade", C: "Consultado", I: "Informado" }[r]);
+interface MemberRow {
+  id: string; // project_members.id (existing) or temp uuid for pending add
+  user_id: string;
+  full_name: string;
+  sector: string | null;
+  raci: RaciRole | null;
+  access: "viewer" | "editor";
+  invitation_status: "pending" | "accepted" | "declined";
+  persisted: boolean;
+}
 
 interface Project {
   id: string;
@@ -60,8 +76,13 @@ export const EditProjectDialog = ({
   onProjectUpdated,
 }: EditProjectDialogProps) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
+  const [team, setTeam] = useState<MemberRow[]>([]);
+  const [pickedUserId, setPickedUserId] = useState<string>("");
+  const [pickedRaci, setPickedRaci] = useState<RaciRole | "_none">("_none");
+  const [pickedAccess, setPickedAccess] = useState<"viewer" | "editor">("viewer");
 
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -74,6 +95,42 @@ export const EditProjectDialog = ({
     };
     if (open) fetchProfiles();
   }, [open]);
+
+  // Carrega equipe atual do projeto ao abrir
+  useEffect(() => {
+    const loadTeam = async () => {
+      if (!project?.id || !open) return;
+      const { data: members } = await supabase
+        .from("project_members")
+        .select("id, user_id, raci, invitation_status, can_edit, can_create, can_move")
+        .eq("project_id", project.id);
+      if (!members) { setTeam([]); return; }
+      const ids = members.map((m: any) => m.user_id);
+      const { data: profs } = ids.length
+        ? await supabase.from("profiles").select("id, full_name, sector").in("id", ids)
+        : { data: [] as any[] };
+      const profMap = new Map((profs || []).map((p: any) => [p.id, p]));
+      setTeam(
+        members.map((m: any) => {
+          const p: any = profMap.get(m.user_id);
+          return {
+            id: m.id,
+            user_id: m.user_id,
+            full_name: p?.full_name || "—",
+            sector: p?.sector || null,
+            raci: (m.raci as RaciRole) || null,
+            access: (m.can_edit || m.can_create || m.can_move) ? "editor" : "viewer",
+            invitation_status: (m.invitation_status as MemberRow["invitation_status"]) || "pending",
+            persisted: true,
+          };
+        })
+      );
+      setPickedUserId("");
+      setPickedRaci("_none");
+      setPickedAccess("viewer");
+    };
+    loadTeam();
+  }, [project?.id, open]);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -99,7 +156,7 @@ export const EditProjectDialog = ({
   });
 
   useEffect(() => {
-    if (project) {
+    if (project && open) {
       setFormData({
         title: project.title,
         description: project.description || "",
@@ -124,7 +181,7 @@ export const EditProjectDialog = ({
         root_cause: (project as any).root_cause || "",
       });
     }
-  }, [project]);
+  }, [project, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,6 +222,59 @@ export const EditProjectDialog = ({
         .eq("id", project.id);
 
       if (error) throw error;
+
+      // Sincroniza equipe (project_members)
+      const { data: existingMembers } = await supabase
+        .from("project_members")
+        .select("id, user_id")
+        .eq("project_id", project.id);
+      const existingIds = new Set((existingMembers || []).map((m: any) => m.id));
+      const keptIds = new Set(team.filter((m) => m.persisted).map((m) => m.id));
+      // Remove os que foram retirados na UI
+      const toRemove = (existingMembers || []).filter((m: any) => !keptIds.has(m.id));
+      if (toRemove.length > 0) {
+        await supabase.from("project_members").delete().in("id", toRemove.map((m: any) => m.id));
+      }
+      // Atualiza RACI dos persistidos (caso tenha mudado)
+      for (const m of team.filter((t) => t.persisted)) {
+        await supabase
+          .from("project_members")
+          .update({
+            raci: m.raci,
+            can_create: m.access === "editor",
+            can_edit: m.access === "editor",
+            can_move: m.access === "editor",
+          })
+          .eq("id", m.id);
+      }
+      // Insere novos
+      const newOnes = team.filter((m) => !m.persisted);
+      if (newOnes.length > 0) {
+        const rows = newOnes.map((m) => ({
+          project_id: project.id,
+          user_id: m.user_id,
+          sector: m.sector,
+          raci: m.raci,
+          invitation_status: "pending" as const,
+          invited_by: user?.id ?? null,
+          can_create: m.access === "editor",
+          can_edit: m.access === "editor",
+          can_delete: false,
+          can_move: m.access === "editor",
+        }));
+        const { error: memErr } = await supabase.from("project_members").insert(rows);
+        if (!memErr) {
+          await supabase.from("notifications").insert(
+            newOnes.map((m) => ({
+              project_id: project.id,
+              target_user_id: m.user_id,
+              type: "project_invite",
+              title: `Convite para o projeto: ${formData.title}`,
+              message: `Você foi convidado(a)${m.raci ? ` como ${raciLabel(m.raci)}` : ""} no projeto "${formData.title}". Aceita participar?`,
+            }))
+          );
+        }
+      }
 
       toast({
         title: "Projeto atualizado!",
@@ -320,6 +430,9 @@ export const EditProjectDialog = ({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_none">Sem líder</SelectItem>
+                    {formData.owner && !profiles.some((p) => p.full_name === formData.owner) && (
+                      <SelectItem value={formData.owner}>{formData.owner}</SelectItem>
+                    )}
                     {profiles.map((p) => (
                       <SelectItem key={p.full_name!} value={p.full_name!}>
                         {p.full_name}
@@ -340,6 +453,168 @@ export const EditProjectDialog = ({
                   placeholder="Selecione um líder"
                   className="bg-muted"
                 />
+              </div>
+            </div>
+
+            {/* Equipe do Projeto (RACI) */}
+            <div className="grid gap-2 rounded-lg border border-dashed border-border p-3">
+              <Label className="text-sm font-semibold">Equipe do Projeto (RACI)</Label>
+              <p className="text-[11px] text-muted-foreground -mt-1">
+                Adicione ou remova membros. Novos membros recebem um convite ao salvar.
+              </p>
+
+              {team.length > 0 && (
+                <div className="space-y-2">
+                  {team.map((m) => {
+                    const initials = (m.full_name || "?")
+                      .split(" ")
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((n) => n[0]?.toUpperCase())
+                      .join("");
+                    return (
+                    <div
+                      key={m.id}
+                      className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-border/80 hover:bg-muted/40 transition-colors group"
+                    >
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm shrink-0">
+                        {initials || "?"}
+                      </div>
+                      <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-foreground truncate">{m.full_name}</span>
+                        {m.sector && (
+                          <span className="px-2 py-0.5 rounded-full bg-muted text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
+                            {m.sector}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                      <Select
+                        value={m.raci ?? "_none"}
+                        onValueChange={(v) =>
+                          setTeam((prev) => prev.map((x) => (x.id === m.id ? { ...x, raci: v === "_none" ? null : (v as RaciRole) } : x)))
+                        }
+                      >
+                        <SelectTrigger className="h-8 w-[150px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none">Nenhum</SelectItem>
+                          <SelectItem value="R">R - Responsável</SelectItem>
+                          <SelectItem
+                            value="A"
+                            disabled={team.some((t) => t.id !== m.id && t.raci === "A")}
+                          >
+                            A - Autoridade
+                          </SelectItem>
+                          <SelectItem value="C">C - Consultado</SelectItem>
+                          <SelectItem value="I">I - Informado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={m.access}
+                        onValueChange={(v) =>
+                          setTeam((prev) =>
+                            prev.map((x) =>
+                              x.id === m.id ? { ...x, access: v as "viewer" | "editor" } : x
+                            )
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-8 w-[110px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="viewer">👁 Leitor</SelectItem>
+                          <SelectItem value="editor">✏️ Editor</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setTeam((prev) => prev.filter((x) => x.id !== m.id))}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                      </div>
+                    </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-border/60">
+                <Select value={pickedUserId} onValueChange={setPickedUserId}>
+                  <SelectTrigger className="h-9 text-sm flex-1">
+                    <SelectValue placeholder="Selecionar membro..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {profiles
+                      .filter((p) => !team.some((t) => t.user_id === p.id))
+                      .map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.full_name}{p.sector ? ` — ${p.sector}` : ""}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Select value={pickedRaci} onValueChange={(v) => setPickedRaci(v as RaciRole | "_none")}>
+                  <SelectTrigger className="h-9 text-sm w-full sm:w-[150px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Nenhum</SelectItem>
+                    <SelectItem value="R">R - Responsável</SelectItem>
+                    <SelectItem value="A" disabled={team.some((t) => t.raci === "A")}>A - Autoridade</SelectItem>
+                    <SelectItem value="C">C - Consultado</SelectItem>
+                    <SelectItem value="I">I - Informado</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={pickedAccess} onValueChange={(v) => setPickedAccess(v as "viewer" | "editor")}>
+                  <SelectTrigger className="h-9 text-sm w-full sm:w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="viewer">👁 Leitor</SelectItem>
+                    <SelectItem value="editor">✏️ Editor</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                  disabled={!pickedUserId}
+                  onClick={() => {
+                    if (!pickedUserId) return;
+                    const p = profiles.find((x) => x.id === pickedUserId);
+                    if (!p) return;
+                    const raciVal: RaciRole | null = pickedRaci === "_none" ? null : pickedRaci;
+                    if (raciVal === "A" && team.some((t) => t.raci === "A")) {
+                      toast({ title: "Apenas uma Autoridade (A) por projeto", variant: "destructive" });
+                      return;
+                    }
+                    setTeam((prev) => [
+                      ...prev,
+                      {
+                        id: `tmp-${p.id}-${Date.now()}`,
+                        user_id: p.id,
+                        full_name: p.full_name,
+                        sector: p.sector,
+                        raci: raciVal,
+                        access: pickedAccess,
+                        invitation_status: "pending",
+                        persisted: false,
+                      },
+                    ]);
+                    setPickedUserId("");
+                    setPickedRaci("_none");
+                    setPickedAccess("viewer");
+                  }}
+                >
+                  <UserPlus className="w-4 h-4" /> Adicionar
+                </Button>
               </div>
             </div>
           </div>

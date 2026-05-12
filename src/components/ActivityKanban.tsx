@@ -77,7 +77,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
-import { useAppConfirm } from "@/components/AppConfirmProvider";
+import { getBlockedDays, formatBlockedDays } from "@/lib/blockedTime";
 import {
   computeActivityProgress,
   PROGRESS_FLAG_COLORS,
@@ -105,7 +105,7 @@ const STAGE_PRESET_COLORS = [
   "hsl(340, 82%, 52%)",
 ];
 
-type KanbanDensity = "sm" | "md" | "lg";
+export type KanbanDensity = "sm" | "md" | "lg";
 
 const DENSITY_CLASSES: Record<KanbanDensity, {
   card: string;
@@ -116,6 +116,10 @@ const DENSITY_CLASSES: Record<KanbanDensity, {
   showBadges: boolean;
   descClamp: string;
   gap: string;
+  colHeaderPad: string;
+  colBodyPad: string;
+  colBodyGap: string;
+  colHeaderTitle: string;
 }> = {
   sm: {
     card: "p-1.5",
@@ -126,6 +130,10 @@ const DENSITY_CLASSES: Record<KanbanDensity, {
     showBadges: false,
     descClamp: "line-clamp-1",
     gap: "gap-1",
+    colHeaderPad: "px-2 py-1",
+    colBodyPad: "p-1 space-y-1",
+    colBodyGap: "space-y-1",
+    colHeaderTitle: "text-xs",
   },
   md: {
     card: "p-2.5",
@@ -136,6 +144,10 @@ const DENSITY_CLASSES: Record<KanbanDensity, {
     showBadges: true,
     descClamp: "line-clamp-1",
     gap: "gap-1.5",
+    colHeaderPad: "px-2.5 py-2",
+    colBodyPad: "p-2 space-y-2",
+    colBodyGap: "space-y-1.5",
+    colHeaderTitle: "text-sm",
   },
   lg: {
     card: "p-3.5",
@@ -146,6 +158,10 @@ const DENSITY_CLASSES: Record<KanbanDensity, {
     showBadges: true,
     descClamp: "line-clamp-3",
     gap: "gap-2",
+    colHeaderPad: "px-3 py-2.5",
+    colBodyPad: "p-3 space-y-2.5",
+    colBodyGap: "space-y-2",
+    colHeaderTitle: "text-sm",
   },
 };
 
@@ -168,7 +184,6 @@ interface Phase {
 interface Activity {
   id: string;
   title: string;
-  item_type?: string | null;
   description: string | null;
   status: string;
   completed_at: string | null;
@@ -185,12 +200,15 @@ interface Activity {
   tags?: string[];
   parent_id?: string | null;
   workflow_stage_id?: string | null;
+  last_progress_stage_id?: string | null;
   story_points?: number;
   participants?: string[];
   deadline_flag?: string | null;
   last_update_date?: string | null;
   is_milestone?: boolean;
   progress_flag?: number | null;
+  blocked_since?: string | null;
+  blocked_days_total?: number | null;
 }
 
 interface ActivityKanbanProps {
@@ -231,6 +249,8 @@ function SortableKanbanCard({
   onToggleExpand,
   progress,
   density,
+  parentBreadcrumb,
+  blockedSubsCount,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -255,6 +275,8 @@ function SortableKanbanCard({
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
   density?: KanbanDensity;
+  parentBreadcrumb?: { id: string; title: string } | null;
+  blockedSubsCount?: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -292,6 +314,8 @@ function SortableKanbanCard({
         onToggleExpand={onToggleExpand}
         progress={progress}
         density={density}
+        parentBreadcrumb={parentBreadcrumb}
+        blockedSubsCount={blockedSubsCount}
       />
     </div>
   );
@@ -322,6 +346,8 @@ function KanbanCard({
   onToggleExpand,
   progress,
   density = "md",
+  parentBreadcrumb,
+  blockedSubsCount,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -347,6 +373,8 @@ function KanbanCard({
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
   density?: KanbanDensity;
+  parentBreadcrumb?: { id: string; title: string } | null;
+  blockedSubsCount?: number;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -399,6 +427,7 @@ function KanbanCard({
     ? "Pausada (coluna de bloqueio)"
     : `${progressPercent}% — ${progressInfo.label}`;
   const progressBadge = progressPaused ? "⏸" : `${progressPercent}%`;
+
   const d = DENSITY_CLASSES[density];
 
   return (
@@ -418,6 +447,21 @@ function KanbanCard({
                 <GripVertical className="w-3.5 h-3.5" />
               </button>
               <div className="flex-1 min-w-0 overflow-hidden">
+                {parentBreadcrumb && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Reaproveita onOpenRelated para abrir o pai (já existe handler de abrir atividade por id)
+                      onOpenRelated?.(parentBreadcrumb.id);
+                    }}
+                    className="flex items-center gap-1 mb-1 px-1.5 py-0.5 rounded bg-muted/60 hover:bg-muted text-[10px] text-muted-foreground hover:text-foreground max-w-full"
+                    title={`Subtarefa de: ${parentBreadcrumb.title}`}
+                  >
+                    <span className="shrink-0">↳</span>
+                    <span className="truncate">{parentBreadcrumb.title}</span>
+                  </button>
+                )}
                 <div className="flex items-center gap-1.5 mb-1">
                   {getPriorityIndicator(activity.priority)}
                   {isMilestone && (
@@ -444,28 +488,47 @@ function KanbanCard({
                 )}
 
                 {/* Barra de andamento (calculada pelo Kanban) */}
-                {d.showProgress && (
-                  <div
-                    className="mb-1.5 flex items-center gap-1.5"
-                    title={progressTooltip}
-                  >
-                    <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={`h-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
-                        style={{ width: `${progressBarWidth}%` }}
-                      />
-                    </div>
-                    <span className="text-[9px] font-mono text-muted-foreground tabular-nums shrink-0">
-                      {progressBadge}
-                    </span>
+                {d.showProgress && !isQualityProject && (
+                <div
+                  className="mb-1.5 flex items-center gap-1.5"
+                  title={progressTooltip}
+                >
+                  <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
+                      style={{ width: `${progressBarWidth}%` }}
+                    />
                   </div>
+                  <span className="text-[9px] font-mono text-muted-foreground tabular-nums shrink-0">
+                    {progressBadge}
+                  </span>
+                </div>
                 )}
 
                 {d.showBadges && (
                 <div className="flex flex-wrap gap-1">
+                  {!!blockedSubsCount && blockedSubsCount > 0 && (
+                    <Badge
+                      className="bg-destructive/15 text-destructive border-destructive/30 text-[10px] px-1.5 py-0 animate-pulse"
+                      title={`${blockedSubsCount} subtarefa(s) impedida(s)`}
+                    >
+                      ⚠ {blockedSubsCount} sub{blockedSubsCount > 1 ? "s" : ""} impedida{blockedSubsCount > 1 ? "s" : ""}
+                    </Badge>
+                  )}
                   {isBlocked && (
-                    <Badge className="bg-orange-500/20 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0">
-                      🚫 Bloqueada
+                    <Badge
+                      className="bg-orange-500/20 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0"
+                      title={
+                        activity.blocked_since
+                          ? `Bloqueada desde ${new Date(activity.blocked_since).toLocaleString("pt-BR")}`
+                          : undefined
+                      }
+                    >
+                      🚫 {(() => {
+                        const days = getBlockedDays(activity);
+                        const label = formatBlockedDays(days);
+                        return label ? label : "Bloqueada";
+                      })()}
                     </Badge>
                   )}
                   {isQualityProject && activity.deadline_flag && activity.deadline_flag !== "" && (
@@ -505,11 +568,6 @@ function KanbanCard({
                   {isQualityProject && activity.last_update_date && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/5 text-primary/80">
                       🔄 {parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}
-                    </Badge>
-                  )}
-                  {(activity as any).story_points > 0 && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-bold">
-                      🎯 {(activity as any).story_points} SP
                     </Badge>
                   )}
                   {hasStory && (
@@ -780,40 +838,11 @@ function SortableColumn({
   phases.forEach((p, i) => { phaseOrderMap[p.id] = i; });
   const priorityWeight: Record<string, number> = { high: 0, medium: 1, low: 2 };
   const stageActivityIds = useMemo(() => new Set(stageActivities.map((a) => a.id)), [stageActivities]);
-  const stageActivitiesById = useMemo(
-    () => new Map(stageActivities.map((activity) => [activity.id, activity])),
-    [stageActivities],
-  );
-
-  const shouldRenderInlineChild = useCallback((child: Activity) => {
-    if (!child.parent_id || !stageActivityIds.has(child.parent_id)) return false;
-
-    const parent = stageActivitiesById.get(child.parent_id);
-    // Tarefas filhas de história do usuário devem aparecer como cards próprios.
-    if (child.item_type === "tarefa" && parent?.item_type === "historia_usuario") {
-      return false;
-    }
-
-    return true;
-  }, [stageActivityIds, stageActivitiesById]);
 
   const sortedActivities = useMemo(() => {
     // Exibe como card toda atividade desta coluna, exceto subtarefas cujo pai também está nesta mesma coluna.
     // Essas continuam aparecendo inline apenas quando o pai é expandido.
-    // Quando houver história -> tarefa na mesma coluna, prioriza exibir a tarefa para focar na execução.
-    const sorted = stageActivities.filter((a) => {
-      if (shouldRenderInlineChild(a)) return false;
-
-      if (a.item_type === "historia_usuario") {
-        const children = childrenByParent.get(a.id) || [];
-        const hasTaskChildInStage = children.some(
-          (child) => stageActivityIds.has(child.id) && child.item_type === "tarefa",
-        );
-        if (hasTaskChildInStage) return false;
-      }
-
-      return true;
-    });
+    const sorted = stageActivities.filter((a) => !a.parent_id || !stageActivityIds.has(a.parent_id));
     sorted.sort((a, b) => {
       switch (colSort) {
         case "wbs_asc": {
@@ -846,34 +875,16 @@ function SortableColumn({
       }
     });
     return sorted;
-  }, [stageActivities, shouldRenderInlineChild, childrenByParent, stageActivityIds, colSort, phases]);
-
-  useEffect(() => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-
-      stageActivities.forEach((activity) => {
-        if (activity.item_type !== "tarefa") return;
-        const hasInlineChildren = (childrenByParent.get(activity.id) || []).some((child) =>
-          shouldRenderInlineChild(child),
-        );
-        if (hasInlineChildren && !next.has(activity.id)) {
-          next.add(activity.id);
-          changed = true;
-        }
-      });
-
-      return changed ? next : prev;
-    });
-  }, [stageActivities, childrenByParent, shouldRenderInlineChild]);
+  }, [stageActivities, stageActivityIds, colSort, phases]);
 
   const visibleCardCount = useMemo(() => {
     return sortedActivities.reduce((total, activity) => {
-      const inlineChildren = (childrenByParent.get(activity.id) || []).filter((child) => shouldRenderInlineChild(child));
+      const inlineChildren = (childrenByParent.get(activity.id) || []).filter((child) => stageActivityIds.has(child.id));
       return total + 1 + (expandedIds.has(activity.id) ? inlineChildren.length : 0);
     }, 0);
-  }, [sortedActivities, childrenByParent, shouldRenderInlineChild, expandedIds]);
+  }, [sortedActivities, childrenByParent, stageActivityIds, expandedIds]);
+
+  const dCol = DENSITY_CLASSES[density];
 
   return (
     <div
@@ -887,7 +898,7 @@ function SortableColumn({
       }`}
     >
       {/* Column Header - drag handle for column reordering */}
-      <div className="px-2.5 py-2 border-b border-border/60 bg-muted/30">
+      <div className={`${dCol.colHeaderPad} border-b border-border/60 bg-muted/30`}>
         <div className="flex items-center justify-between cursor-grab active:cursor-grabbing" {...listeners}>
           <div className="flex items-center gap-2 min-w-0">
             <div
@@ -918,10 +929,10 @@ function SortableColumn({
                     setRenaming(false);
                   }
                 }}
-                className="text-sm font-semibold text-foreground bg-transparent border-b border-border outline-none w-32"
+                className={`${dCol.colHeaderTitle} font-semibold text-foreground bg-transparent border-b border-border outline-none w-32`}
               />
             ) : (
-              <h3 className="text-sm font-semibold text-foreground truncate">
+              <h3 className={`${dCol.colHeaderTitle} font-semibold text-foreground truncate`}>
                 {stage.title}
               </h3>
             )}
@@ -1122,7 +1133,7 @@ function SortableColumn({
       )}
 
       {/* Droppable Column Body */}
-      <DroppableColumn stage={stage}>
+      <DroppableColumn stage={stage} density={density}>
         <SortableContext
           items={sortedActivities.map((a) => a.id)}
           strategy={verticalListSortingStrategy}
@@ -1134,10 +1145,18 @@ function SortableColumn({
           ) : (
             sortedActivities.map((activity) => {
               const allChildren = childrenByParent.get(activity.id) || [];
-              const inlineChildren = allChildren.filter((child) => shouldRenderInlineChild(child));
+              const inlineChildren = allChildren.filter((child) => stageActivityIds.has(child.id));
               const expanded = expandedIds.has(activity.id);
+              // Breadcrumb do pai quando esta atividade é uma subtarefa "solta" (pai em outra coluna)
+              const parentAct = activity.parent_id ? activities.find((p) => p.id === activity.parent_id) : null;
+              const parentBreadcrumb = parentAct && parentAct.workflow_stage_id !== activity.workflow_stage_id
+                ? { id: parentAct.id, title: parentAct.title }
+                : null;
+              // Contagem de subs em colunas de bloqueio
+              const blockedStageIds = new Set(allStages.filter((s) => s.is_blocked).map((s) => s.id));
+              const blockedSubsCount = allChildren.filter((c) => c.workflow_stage_id && blockedStageIds.has(c.workflow_stage_id)).length;
               return (
-                <div key={activity.id} className="space-y-1.5">
+                <div key={activity.id} className={dCol.colBodyGap}>
                   <SortableKanbanCard
                     activity={activity}
                     phases={phases}
@@ -1157,11 +1176,13 @@ function SortableColumn({
                     relationItems={relationCounts?.get(activity.id) || []}
                     onOpenRelated={onOpenRelated}
                     onRemoveRelation={onRemoveRelation}
-                    subActivityCount={inlineChildren.length}
+                    subActivityCount={allChildren.length}
                     isExpanded={expanded}
                     onToggleExpand={() => toggleExpanded(activity.id)}
-                    progress={computeActivityProgress(activity.workflow_stage_id, allStages)}
+                    progress={computeActivityProgress(activity.workflow_stage_id, allStages, activity.last_progress_stage_id)}
                     density={density}
+                    parentBreadcrumb={parentBreadcrumb}
+                    blockedSubsCount={blockedSubsCount}
                   />
                   {expanded && inlineChildren.length > 0 && (
                     <div className="ml-4 pl-2 border-l-2 border-primary/30 space-y-1.5">
@@ -1187,7 +1208,7 @@ function SortableColumn({
                           onOpenRelated={onOpenRelated}
                           onRemoveRelation={onRemoveRelation}
                           subActivityCount={0}
-                          progress={computeActivityProgress(child.workflow_stage_id, allStages)}
+                          progress={computeActivityProgress(child.workflow_stage_id, allStages, child.last_progress_stage_id)}
                           density={density}
                         />
                       ))}
@@ -1217,16 +1238,18 @@ function SortableColumn({
 function DroppableColumn({
   stage,
   children,
+  density = "md",
 }: {
   stage: WorkflowStage;
   children: React.ReactNode;
+  density?: KanbanDensity;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `stage-${stage.id}` });
-
+  const d = DENSITY_CLASSES[density];
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 p-2 space-y-2 min-h-[120px] rounded-b-xl transition-colors ${
+      className={`flex-1 ${d.colBodyPad} min-h-[120px] rounded-b-xl transition-colors ${
         isOver ? "bg-primary/5 ring-2 ring-primary/20 ring-inset" : ""
       }`}
     >
@@ -1235,13 +1258,7 @@ function DroppableColumn({
   );
 }
 
-function AddStageColumn({
-  projectId,
-  onStagesChanged,
-}: {
-  projectId: string;
-  onStagesChanged: () => void;
-}) {
+function AddStageColumn({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -1262,7 +1279,7 @@ function AddStageColumn({
             <DialogTitle>Configurar grupos do Kanban</DialogTitle>
           </DialogHeader>
           <div className="p-4">
-            <WorkflowStageManager projectId={projectId} onChanged={onStagesChanged} />
+            <WorkflowStageManager projectId={projectId} />
           </div>
         </DialogContent>
       </Dialog>
@@ -1284,10 +1301,7 @@ export const ActivityKanban = ({
   onOpenCreateTask,
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
-  const appConfirm = useAppConfirm();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
-  const [stagesLoading, setStagesLoading] = useState(true);
-  const [stagesError, setStagesError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
@@ -1296,12 +1310,6 @@ export const ActivityKanban = ({
   const [relationCounts, setRelationCounts] = useState<
     Map<string, { id: string; title: string; relationId: string; relationType: string }[]>
   >(new Map());
-  const densityKey = `kanban-density:${projectId}`;
-  const [density, setDensity] = useState<KanbanDensity>(() => {
-    if (typeof window === "undefined") return "md";
-    const stored = window.localStorage.getItem(densityKey);
-    return stored === "sm" || stored === "lg" ? stored : "md";
-  });
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
@@ -1311,15 +1319,22 @@ export const ActivityKanban = ({
   
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
-  
-  const containerRef = useRef<HTMLDivElement>(null);
-  const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
 
+  // Densidade dos cards (S / M / G), persistida por projeto
+  const densityKey = `kanban-density:${projectId}`;
+  const [density, setDensity] = useState<KanbanDensity>(() => {
+    if (typeof window === "undefined") return "md";
+    const stored = window.localStorage.getItem(densityKey);
+    return stored === "sm" || stored === "lg" ? stored : "md";
+  });
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(densityKey, density);
     }
   }, [density, densityKey]);
+  
+  const containerRef = useRef<HTMLDivElement>(null);
+  const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
 
   // Initialize equal column widths when stages change
   useEffect(() => {
@@ -1444,95 +1459,34 @@ export const ActivityKanban = ({
     }
   }, [projectId, activities]);
 
+  // Realtime sync for workflow_stages so newly created columns appear immediately
+  useEffect(() => {
+    if (!projectId) return;
+    const channel = supabase
+      .channel(`workflow_stages_${projectId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "workflow_stages", filter: `project_id=eq.${projectId}` },
+        () => {
+          fetchStages();
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [projectId]);
+
   
 
   const fetchStages = async () => {
-    if (!projectId) {
-      setStagesLoading(false);
-      return;
-    }
-    setStagesError(null);
     const { data, error } = await supabase
       .from("workflow_stages")
       .select("*")
       .eq("project_id", projectId)
       .order("display_order");
     console.log("[Kanban] fetchStages:", { data, error, projectId });
-    if (error) {
-      setStagesError(error.message);
-      setStagesLoading(false);
-      return;
-    }
-    if (data && data.length > 0) {
-      // Normalize: some self-hosted DBs use `name` instead of `title`.
-      const normalized = data.map((s: any) => ({
-        ...s,
-        title: s.title ?? s.name ?? "",
-        color: s.color ?? "hsl(220, 15%, 50%)",
-      }));
-      setStages(normalized);
-      setStagesLoading(false);
-      return;
-    }
-    // No stages found — try to create defaults (covers projects created before
-    // the trigger existed, or whenever the trigger didn't fire).
-    // Note: omit `color` so the DB DEFAULT applies — avoids PostgREST schema
-    // cache mismatches in self-hosted Supabase. Stage colors can be edited
-    // afterwards via the Kanban UI.
-    const baseDefaults = [
-      { display_order: 0, is_final: false, _label: "Backlog" },
-      { display_order: 1, is_final: false, _label: "A Fazer" },
-      { display_order: 2, is_final: false, _label: "Em Andamento" },
-      { display_order: 3, is_final: false, _label: "Em Teste" },
-      { display_order: 4, is_final: false, _label: "Aprovada" },
-      { display_order: 5, is_final: true, _label: "Concluída" },
-    ];
-    const buildPayload = (key: "title" | "name") =>
-      baseDefaults.map(({ _label, ...rest }) => ({
-        ...rest,
-        project_id: projectId,
-        [key]: _label,
-      })) as any[];
-
-    const tryInsert = async (key: "title" | "name") =>
-      (supabase.from("workflow_stages") as any)
-        .insert(buildPayload(key))
-        .select("*")
-        .order("display_order");
-
-    let { data: inserted, error: insertError } = await tryInsert("title");
-    if (insertError) {
-      const msg = `${insertError.message || ""} ${(insertError as any).hint || ""} ${(insertError as any).details || ""}`.toLowerCase();
-      // Fallback: schema uses `name` instead of `title`.
-      if (msg.includes("title") || msg.includes("name")) {
-        const retry = await tryInsert("name");
-        inserted = retry.data;
-        insertError = retry.error;
-      }
-    }
-    if (insertError) {
-      const fullMsg =
-        insertError.message ||
-        (insertError as any).hint ||
-        (insertError as any).details ||
-        JSON.stringify(insertError);
-      console.error("[Kanban] create default stages failed:", {
-        message: insertError.message,
-        details: (insertError as any).details,
-        hint: (insertError as any).hint,
-        code: (insertError as any).code,
-      });
-      setStagesError(fullMsg);
-      setStagesLoading(false);
-      return;
-    }
-    const normalizedNew = (inserted || []).map((s: any) => ({
-      ...s,
-      title: s.title ?? s.name ?? "",
-      color: s.color ?? "hsl(220, 15%, 50%)",
-    }));
-    setStages(normalizedNew);
-    setStagesLoading(false);
+    if (data) setStages(data);
   };
 
   const handleMoveToBacklog = async (activityId: string) => {
@@ -1560,10 +1514,28 @@ export const ActivityKanban = ({
   }, [activities]);
 
   const subActivityCounts = useMemo(() => {
-    const counts = new Map<string, number>();
+    // Constrói árvore parent -> filhos diretos e calcula total de descendentes (recursivo)
+    const childrenMap = new Map<string, string[]>();
     activities.forEach((a) => {
       if (a.parent_id) {
-        counts.set(a.parent_id, (counts.get(a.parent_id) || 0) + 1);
+        if (!childrenMap.has(a.parent_id)) childrenMap.set(a.parent_id, []);
+        childrenMap.get(a.parent_id)!.push(a.id);
+      }
+    });
+    const counts = new Map<string, number>();
+    const countDescendants = (id: string, visited: Set<string>): number => {
+      if (visited.has(id)) return 0;
+      visited.add(id);
+      const direct = childrenMap.get(id) || [];
+      let total = direct.length;
+      for (const childId of direct) {
+        total += countDescendants(childId, visited);
+      }
+      return total;
+    };
+    activities.forEach((a) => {
+      if (childrenMap.has(a.id)) {
+        counts.set(a.id, countDescendants(a.id, new Set()));
       }
     });
     return counts;
@@ -1573,29 +1545,11 @@ export const ActivityKanban = ({
     const map: Record<string, Activity[]> = {};
     stages.forEach((s) => (map[s.id] = []));
 
-    const visibleStagesLocal = stages.filter((s) => s.display_order > 0 && s.is_visible !== false);
-    const fallbackBacklogVisibleStage =
-      visibleStagesLocal.find((s) => /backlog/i.test(s.title)) ||
-      visibleStagesLocal[0] ||
-      null;
-    const stageById = new Map(stages.map((stage) => [stage.id, stage]));
-
     activities.forEach((a) => {
       // Use optimistic override if available
       const stageId = optimisticMoves[a.id] || a.workflow_stage_id;
-
       if (stageId && map[stageId]) {
-        const stage = stageById.get(stageId);
-        const isHiddenBacklog =
-          !!stage &&
-          (/backlog/i.test(stage.title) || stage.display_order === 0) &&
-          (stage.display_order <= 0 || stage.is_visible === false);
-
-        if (isHiddenBacklog && fallbackBacklogVisibleStage) {
-          map[fallbackBacklogVisibleStage.id].push(a);
-        } else {
-          map[stageId].push(a);
-        }
+        map[stageId].push(a);
       } else if (stages.length > 0) {
         map[stages[0].id].push(a);
       }
@@ -1848,17 +1802,11 @@ export const ActivityKanban = ({
       toast({ title: "A etapa Backlog não pode ser excluída", variant: "destructive" });
       return;
     }
-    const ok = await appConfirm({
-      title: "Excluir coluna",
-      description: "Atividades nesta coluna perderão a associação. Continuar?",
-      confirmText: "Excluir",
-      destructive: true,
-    });
-    if (!ok) return;
+    if (!confirm("Atividades nesta coluna perderão a associação. Continuar?")) return;
     const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
     if (error) toast({ title: "Erro ao excluir", variant: "destructive" });
     else { toast({ title: "Coluna excluída!" }); fetchStages(); }
-  }, [appConfirm, stages, toast]);
+  }, [stages, toast]);
 
   const handleChangeStageColor = useCallback(async (id: string, color: string) => {
     await supabase.from("workflow_stages").update({ color }).eq("id", id);
@@ -1898,57 +1846,32 @@ export const ActivityKanban = ({
 
   if (stages.length === 0) {
     return (
-      <Card className="p-8 text-center space-y-3">
-        {stagesLoading ? (
-          <p className="text-muted-foreground">Carregando etapas do workflow...</p>
-        ) : stagesError ? (
-          <>
-            <p className="text-destructive font-medium">
-              Erro ao carregar etapas do workflow
-            </p>
-            <p className="text-sm text-muted-foreground">{stagesError}</p>
-            <button
-              onClick={() => {
-                setStagesLoading(true);
-                fetchStages();
-              }}
-              className="text-sm underline text-primary"
-            >
-              Tentar novamente
-            </button>
-          </>
-        ) : (
-          <>
-            <p className="text-muted-foreground">
-              Nenhuma etapa de workflow encontrada para este projeto.
-            </p>
-            <button
-              onClick={() => {
-                setStagesLoading(true);
-                fetchStages();
-              }}
-              className="text-sm underline text-primary"
-            >
-              Criar etapas padrão
-            </button>
-          </>
-        )}
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground">Carregando etapas do workflow...</p>
       </Card>
     );
   }
 
   return (
-    <div className="space-y-3 mt-[30px]">
-      <div className="flex items-center justify-end">
+    <div className="space-y-1.5 mt-2">
+      {/* Toolbar - densidade dos cards */}
+      <div className="flex items-center justify-end px-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline" size="sm" className="h-8 px-2 gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              title="Tamanho dos cards"
+            >
               <LayoutGrid className="w-3.5 h-3.5" />
               {density === "sm" ? "Pequeno" : density === "lg" ? "Grande" : "Médio"}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuLabel>Tamanho dos cards</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Tamanho dos cards
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => setDensity("sm")}>
               {density === "sm" && <Check className="w-3.5 h-3.5 mr-2" />}
@@ -2015,7 +1938,7 @@ export const ActivityKanban = ({
                       onCreateStory={() => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
-                      progress={computeActivityProgress(activity.workflow_stage_id, stages)}
+                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id)}
                       density={density}
                     />
                   ))
@@ -2100,7 +2023,7 @@ export const ActivityKanban = ({
             );
           })}
           {(isAdmin || canCreate) && (
-            <AddStageColumn projectId={projectId} onStagesChanged={fetchStages} />
+            <AddStageColumn projectId={projectId} />
           )}
         </div>
       </SortableContext>
@@ -2116,7 +2039,7 @@ export const ActivityKanban = ({
               onToggle={() => {}}
               onMoveToBacklog={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
-              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages)}
+              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id)}
               density={density}
             />
           </div>

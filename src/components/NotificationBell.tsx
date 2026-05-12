@@ -1,9 +1,11 @@
 'use client';
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Bell, Check, Trash2, AlertTriangle, Clock, Info, BellRing, X, Ban } from "lucide-react";
+import { Bell, Check, Trash2, AlertTriangle, Clock, Info, BellRing, X, Ban, UserPlus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 interface Notification {
   id: string;
@@ -14,17 +16,22 @@ interface Notification {
   message: string | null;
   is_read: boolean;
   created_at: string;
+  target_user_id: string | null;
 }
 
 export const NotificationBell = () => {
+  const { user, isAdmin, profile } = useAuth();
+  const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [declineFor, setDeclineFor] = useState<string | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
 
   useEffect(() => {
     fetchNotifications();
 
     const channel = supabase
-      .channel(`notifications-realtime-${Math.random().toString(36).slice(2, 10)}`)
+      .channel("notifications-realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, () => {
         fetchNotifications();
       })
@@ -34,13 +41,38 @@ export const NotificationBell = () => {
   }, []);
 
   const fetchNotifications = async () => {
-    const { data } = await supabase
+    const uid = user?.id;
+    let query = supabase
       .from("notifications")
-      .select("*")
+      .select("*, activities:activity_id(assigned_to, participants)")
       .order("created_at", { ascending: false })
-      .limit(30);
+      .limit(100);
+    if (uid) query = query.or(`target_user_id.is.null,target_user_id.eq.${uid}`);
+    const { data } = await query;
+    if (!data) { setNotifications([]); return; }
 
-    if (data) setNotifications(data);
+    // Admin vê tudo
+    if (isAdmin) { setNotifications(data as any); return; }
+
+    // Filtra: somente notificações de atividades em que o usuário está cadastrado
+    // (líder via assigned_to ou na lista de participants), ou direcionadas a ele.
+    const myNames = [profile?.full_name, (profile as any)?.email, user?.email]
+      .filter(Boolean)
+      .map((s: string) => s.toLowerCase());
+
+    const filtered = (data as any[]).filter((n) => {
+      if (n.target_user_id && n.target_user_id === uid) return true;
+      // Sem atividade vinculada e sem alvo específico → não exibe para usuários comuns
+      if (!n.activity_id) return false;
+      const a = n.activities;
+      if (!a) return false;
+      const assigned = (a.assigned_to || "").toLowerCase();
+      if (assigned && myNames.includes(assigned)) return true;
+      const parts: string[] = Array.isArray(a.participants) ? a.participants : [];
+      if (parts.some((p) => myNames.includes((p || "").toLowerCase()))) return true;
+      return false;
+    });
+    setNotifications(filtered as any);
   };
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
@@ -84,6 +116,13 @@ export const NotificationBell = () => {
           bg: "bg-orange-500/10 border-orange-500/30",
           pulse: true,
         };
+      case "project_invite":
+        return {
+          icon: <UserPlus className="w-4 h-4" />,
+          color: "text-primary",
+          bg: "bg-primary/10 border-primary/30",
+          pulse: true,
+        };
       default:
         return {
           icon: <Info className="w-4 h-4" />,
@@ -92,6 +131,34 @@ export const NotificationBell = () => {
           pulse: false,
         };
     }
+  };
+
+  const acceptInvite = async (n: Notification) => {
+    if (!user?.id || !n.project_id) return;
+    const { error } = await supabase
+      .from("project_members")
+      .update({ invitation_status: "accepted", responded_at: new Date().toISOString(), decline_reason: null })
+      .eq("project_id", n.project_id)
+      .eq("user_id", user.id);
+    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+    await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
+    toast({ title: "Convite aceito!" });
+    fetchNotifications();
+  };
+
+  const declineInvite = async (n: Notification) => {
+    if (!user?.id || !n.project_id) return;
+    const { error } = await supabase
+      .from("project_members")
+      .update({ invitation_status: "declined", responded_at: new Date().toISOString(), decline_reason: declineReason || null })
+      .eq("project_id", n.project_id)
+      .eq("user_id", user.id);
+    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+    await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
+    setDeclineFor(null);
+    setDeclineReason("");
+    toast({ title: "Convite recusado" });
+    fetchNotifications();
   };
 
   const getTimeAgo = (dateStr: string) => {
@@ -205,6 +272,39 @@ export const NotificationBell = () => {
                     <p className="text-[10px] text-muted-foreground/70 mt-1 font-medium">
                       {getTimeAgo(n.created_at)}
                     </p>
+
+                    {n.type === "project_invite" && (
+                      <div className="mt-2 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        {declineFor === n.id ? (
+                          <div className="flex flex-col gap-1.5">
+                            <input
+                              autoFocus
+                              value={declineReason}
+                              onChange={(e) => setDeclineReason(e.target.value)}
+                              placeholder="Motivo (opcional)"
+                              className="w-full text-xs h-7 px-2 rounded border border-border bg-background"
+                            />
+                            <div className="flex gap-1">
+                              <Button size="sm" variant="destructive" className="h-6 text-[11px] px-2 flex-1" onClick={() => declineInvite(n)}>
+                                Confirmar recusa
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-6 text-[11px] px-2" onClick={() => { setDeclineFor(null); setDeclineReason(""); }}>
+                                Cancelar
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1.5">
+                            <Button size="sm" className="h-7 text-[11px] flex-1 bg-success hover:bg-success/90" onClick={() => acceptInvite(n)}>
+                              <Check className="w-3 h-3 mr-1" /> Aceitar
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-7 text-[11px] flex-1" onClick={() => setDeclineFor(n.id)}>
+                              <X className="w-3 h-3 mr-1" /> Recusar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions (show on hover) */}

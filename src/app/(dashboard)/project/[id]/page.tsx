@@ -1276,7 +1276,6 @@ export default function ProjectDetailsPage() {
           }}
           onActivityUpdated={fetchProjectData} phases={phases} allActivities={activities}
           projectId={id!} isQualityProject={isQualityProject}
-          initialTab={editActivityInitialTab}
         />
         {project && (
           <EditActivityDialog
