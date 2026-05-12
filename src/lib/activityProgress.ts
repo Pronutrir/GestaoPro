@@ -19,6 +19,7 @@ export interface ProgressStageLike {
   display_order: number;
   is_final?: boolean | null;
   is_blocked?: boolean | null;
+  is_exception?: boolean | null;
 }
 
 export interface ActivityProgress {
@@ -55,7 +56,8 @@ const PERCENT_LABELS: Record<number, string> = {
 
 export function computeActivityProgress(
   currentStageId: string | null | undefined,
-  stages: ProgressStageLike[] | null | undefined
+  stages: ProgressStageLike[] | null | undefined,
+  lastProgressStageId?: string | null
 ): ActivityProgress {
   if (!currentStageId || !stages || stages.length === 0) {
     return { percent: 0, paused: false, label: PERCENT_LABELS[0] };
@@ -74,9 +76,18 @@ export function computeActivityProgress(
     return { percent: 100, paused: false, label: PERCENT_LABELS[100] };
   }
 
-  // Linha de fluxo: ignora bloqueios, ordenada por display_order
+  // Se a coluna atual é uma exceção (ex.: "Atrasado"), o % deve refletir
+  // o último estágio real pelo qual a atividade passou — não a posição da exceção.
+  if (current.is_exception) {
+    if (lastProgressStageId && lastProgressStageId !== currentStageId) {
+      return computeActivityProgress(lastProgressStageId, stages, null);
+    }
+    return { percent: 0, paused: false, label: PERCENT_LABELS[0] };
+  }
+
+  // Linha de fluxo: ignora bloqueios e exceções, ordenada por display_order
   const flow = stages
-    .filter((s) => !s.is_blocked)
+    .filter((s) => !s.is_blocked && !s.is_exception)
     .sort((a, b) => a.display_order - b.display_order);
 
   if (flow.length <= 1) {

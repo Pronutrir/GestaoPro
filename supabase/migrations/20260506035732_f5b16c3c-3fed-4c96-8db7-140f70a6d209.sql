@@ -1,0 +1,1 @@
+UPDATE public.activities SET workflow_stage_id='a2df435c-8750-4086-b566-459f2f4e928c' WHERE id='7e309519-d951-4617-a662-fc52dbb50b00';
