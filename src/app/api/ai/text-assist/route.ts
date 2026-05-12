@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/integrations/supabase/server";
 
 type Action = "correct" | "improve" | "summarize" | "expand";
 
@@ -48,6 +49,15 @@ const CONTEXT_HINTS: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  }
+
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) {
     return NextResponse.json({ error: "OPENROUTER_API_KEY não configurada" }, { status: 500 });
