@@ -398,8 +398,8 @@ export const CreateTaskDialog = ({
                 onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
               >
                 <option value="">Sem responsável</option>
-                {members.map((m) => (
-                  <option key={m.full_name} value={m.full_name}>
+                {members.map((m, idx) => (
+                  <option key={`${m.full_name}-${idx}`} value={m.full_name}>
                     {m.full_name}
                   </option>
                 ))}
@@ -442,8 +442,8 @@ export const CreateTaskDialog = ({
               }}
             >
               <option value="">Adicionar participante...</option>
-              {allProfiles.filter(m => m.full_name && !formData.participants.includes(m.full_name)).map((m) => (
-                <option key={m.full_name} value={m.full_name}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
+              {allProfiles.filter(m => m.full_name && !formData.participants.includes(m.full_name)).map((m, idx) => (
+                <option key={`${m.full_name}-${idx}`} value={m.full_name}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
               ))}
             </select>
             {formData.participants.length > 0 && (
