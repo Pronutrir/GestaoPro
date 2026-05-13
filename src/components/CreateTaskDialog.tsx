@@ -20,7 +20,8 @@ import { GutPriorityField } from "@/components/GutPriorityField";
 
 export interface Phase { id: string; title: string }
 export interface WorkflowStage { id: string; title: string; color: string; is_final?: boolean }
-export interface Member { full_name: string; sector: string | null }
+export interface Member { id: string; full_name: string; sector: string | null }
+interface ProfileOption { id: string; full_name: string; sector: string | null }
 
 interface CreateTaskDialogProps {
   open: boolean;
@@ -77,7 +78,7 @@ export const CreateTaskDialog = ({
   const [fetchedStages, setFetchedStages] = useState<WorkflowStage[]>([]);
   const stages = stagesProp && stagesProp.length > 0 ? stagesProp : fetchedStages;
 
-  const [allProfiles, setAllProfiles] = useState<{ full_name: string; sector: string | null }[]>([]);
+  const [allProfiles, setAllProfiles] = useState<ProfileOption[]>([]);
 
   // Form state - mirrors EditActivityDialog
   const [formData, setFormData] = useState({
@@ -116,8 +117,8 @@ export const CreateTaskDialog = ({
         .order("display_order", { ascending: true })
         .then(({ data }) => { if (data) setFetchedStages(data as WorkflowStage[]); });
     }
-    supabase.from("profiles").select("full_name, sector").eq("is_active", true).then(({ data }) => {
-      if (data) setAllProfiles(data.filter(p => p.full_name) as any);
+    supabase.from("profiles").select("id, full_name, sector").eq("is_active", true).then(({ data }) => {
+      if (data) setAllProfiles(data.filter((profile): profile is ProfileOption => Boolean(profile.id && profile.full_name)));
     });
   }, [open, projectId, stagesProp]);
 
@@ -384,7 +385,7 @@ export const CreateTaskDialog = ({
             >
               <option value="">Sem responsável</option>
               {members.map((m) => (
-                <option key={m.full_name} value={m.full_name}>
+                <option key={m.id} value={m.full_name}>
                   {m.full_name}
                 </option>
               ))}
@@ -412,7 +413,7 @@ export const CreateTaskDialog = ({
             >
               <option value="">Adicionar participante...</option>
               {allProfiles.filter(m => m.full_name && !formData.participants.includes(m.full_name)).map((m) => (
-                <option key={m.full_name} value={m.full_name}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
+                <option key={m.id} value={m.full_name}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
               ))}
             </select>
             {formData.participants.length > 0 && (

@@ -55,7 +55,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
   const { toast } = useToast();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [activities, setActivities] = useState<{ id: string; title: string }[]>([]);
-  const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
+  const [members, setMembers] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
@@ -79,8 +79,14 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
     if (actData) setActivities(actData);
     if (memberData && memberData.length > 0) {
       const userIds = memberData.map(m => m.user_id);
-      const { data: profiles } = await supabase.from("profiles").select("full_name, sector").in("id", userIds);
-      if (profiles) setMembers(profiles.filter(p => p.full_name) as { full_name: string; sector: string | null }[]);
+      const { data: profiles } = await supabase.from("profiles").select("id, full_name, sector").in("id", userIds);
+      if (profiles) {
+        setMembers(
+          profiles.filter(
+            (profile): profile is { id: string; full_name: string; sector: string | null } => Boolean(profile.id && profile.full_name),
+          ),
+        );
+      }
     }
     setIsLoading(false);
   };
@@ -277,7 +283,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                         <SelectContent>
                           <SelectItem value="_none">Sem responsável</SelectItem>
                           {members.map((m) => (
-                            <SelectItem key={m.full_name!} value={m.full_name!}>
+                            <SelectItem key={m.id} value={m.full_name!}>
                               {m.full_name}
                             </SelectItem>
                           ))}

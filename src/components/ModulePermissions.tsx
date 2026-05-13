@@ -28,6 +28,7 @@ const ALL_MODULES = [
   { key: "team", label: "Equipe" },
   { key: "timeline", label: "Cronograma" },
   { key: "blocked", label: "Bloqueios" },
+  { key: "agent", label: "Agente de IA" },
   { key: "investments", label: "Gestão Financeira" },
   { key: "roadmap", label: "Roadmap" },
   { key: "reports", label: "Relatórios" },
@@ -35,7 +36,7 @@ const ALL_MODULES = [
   { key: "qualidade", label: "Gestão da Qualidade" },
 ] as const;
 
-const DEFAULT_MODULES = ["overview", "projects", "team", "timeline", "blocked"];
+const DEFAULT_MODULES = ["overview", "projects", "team", "timeline", "blocked", "agent"];
 
 export function ModulePermissions() {
   const { isAdmin } = useAuth();

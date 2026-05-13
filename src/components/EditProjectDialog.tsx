@@ -412,7 +412,7 @@ export const EditProjectDialog = ({
                       <SelectItem value={formData.owner}>{formData.owner}</SelectItem>
                     )}
                     {profiles.map((p) => (
-                      <SelectItem key={p.full_name!} value={p.full_name!}>
+                      <SelectItem key={p.id} value={p.full_name!}>
                         {p.full_name}
                       </SelectItem>
                     ))}
