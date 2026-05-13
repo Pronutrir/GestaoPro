@@ -1,3 +1,4 @@
+'use client';
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Bell, Check, Trash2, AlertTriangle, Clock, Info, BellRing, X, Ban, UserPlus } from "lucide-react";
@@ -134,11 +135,15 @@ export const NotificationBell = () => {
 
   const acceptInvite = async (n: Notification) => {
     if (!user?.id || !n.project_id) return;
-    const { error } = await supabase
-      .from("project_members")
-      .update({ invitation_status: "accepted", responded_at: new Date().toISOString(), decline_reason: null })
-      .eq("project_id", n.project_id)
-      .eq("user_id", user.id);
+    const { data, error } = await supabase.rpc("respond_project_invite_v2", {
+      _project_id: n.project_id,
+      _accept: true,
+      _decline_reason: null,
+    });
+    if (!data) {
+      toast({ title: "Erro", description: "Convite não encontrado ou já respondido.", variant: "destructive" });
+      return;
+    }
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
     await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
     toast({ title: "Convite aceito!" });
@@ -147,11 +152,15 @@ export const NotificationBell = () => {
 
   const declineInvite = async (n: Notification) => {
     if (!user?.id || !n.project_id) return;
-    const { error } = await supabase
-      .from("project_members")
-      .update({ invitation_status: "declined", responded_at: new Date().toISOString(), decline_reason: declineReason || null })
-      .eq("project_id", n.project_id)
-      .eq("user_id", user.id);
+    const { data, error } = await supabase.rpc("respond_project_invite_v2", {
+      _project_id: n.project_id,
+      _accept: false,
+      _decline_reason: declineReason || null,
+    });
+    if (!data) {
+      toast({ title: "Erro", description: "Convite não encontrado ou já respondido.", variant: "destructive" });
+      return;
+    }
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
     await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
     setDeclineFor(null);
