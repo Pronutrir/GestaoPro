@@ -1,23 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Loader2, Send, Bot, Trash2, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,93 +14,16 @@ import { AgentMessageRenderer } from '@/components/AgentMessageRenderer';
 
 const STORAGE_KEY = 'agent-chat-messages';
 
-type QuickReplyKind = 'confirm' | 'adjust' | 'cancel' | 'default';
-
-type QuickReplyOption = {
-  label: string;
-  kind: QuickReplyKind;
-};
-
-function getQuickReplyKind(label: string): QuickReplyKind {
-  const normalized = label.trim().toLowerCase();
-
-  if (/(^confirmar$|^sim$|^sim,|^pode |^criar$|^atualizar$|^mover$)/.test(normalized)) {
-    return 'confirm';
-  }
-
-  if (/(ajustar|editar|revisar|quero ajustar)/.test(normalized)) {
-    return 'adjust';
-  }
-
-  if (/(cancelar|cancel|não|nao)/.test(normalized)) {
-    return 'cancel';
-  }
-
-  return 'default';
-}
-
-function getQuickReplyClassName(kind: QuickReplyKind): string {
-  if (kind === 'confirm') {
-    return 'border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/15 hover:border-emerald-500/60';
-  }
-
-  if (kind === 'adjust') {
-    return 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/15 hover:border-amber-500/60';
-  }
-
-  if (kind === 'cancel') {
-    return 'border-destructive/40 bg-destructive/10 hover:bg-destructive/15 hover:border-destructive/60';
-  }
-
-  return 'border-border bg-card hover:bg-accent hover:border-primary/50';
-}
-
-function looksLikeMutatingIntent(text: string): boolean {
-  const normalized = text.trim().toLowerCase();
-  return /(criar|cadastrar|atualizar|editar|mover|movimentar|backfill|vincular)/.test(normalized);
-}
-
 const SUGGESTIONS = [
-  {
-    label: 'Quero criar um projeto de aplicativo com tarefas e subtarefas',
-    helper: 'Criação estruturada completa com confirmação',
-  },
-  {
-    label: 'Liste meus projetos e me diga qual está mais atrasado',
-    helper: 'Visão rápida para priorização',
-  },
-  {
-    label: 'No projeto [ID], busque tarefas relacionadas a login e autenticação',
-    helper: 'Busca focada por texto dentro do projeto',
-  },
-  {
-    label: 'Mostre os detalhes da tarefa [ID] e me sugira próximos passos',
-    helper: 'Diagnóstico e plano de execução',
-  },
-  {
-    label: 'Atualize a tarefa [ID] para prioridade alta e responsável [NOME]',
-    helper: 'Edição guiada com confirmação',
-  },
-  {
-    label: 'Mova a tarefa [ID] para a coluna Em Execução',
-    helper: 'Movimentação de coluna no kanban',
-  },
-  {
-    label: 'Vou colar um chamado GLPI para você analisar e montar a estrutura',
-    helper: 'Gera história, GUT, tarefa principal e subtarefas',
-  },
-  {
-    label: 'Quero vincular histórias em tarefas GLPI antigas deste projeto [ID]',
-    helper: 'Backfill para tarefas legadas sem história vinculada',
-  },
+  'Liste meus projetos',
+  'Crie um projeto chamado "Novo Produto" com prioridade alta',
+  'Liste as tarefas do projeto [cole o ID aqui]',
+  'Crie uma tarefa no projeto [ID]: implementar login',
 ];
 
 export default function AgentPage() {
-  const router = useRouter();
   const { user, loading } = useAuth();
   const [input, setInput] = useState('');
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pendingText, setPendingText] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { messages, sendMessage, status, error, setMessages } = useChat({
@@ -175,13 +87,9 @@ export default function AgentPage() {
       .map((p: any) => p.text)
       .join('');
     const seen = new Set<string>();
-    const opts: QuickReplyOption[] = [];
+    const opts: string[] = [];
     for (const m of text.matchAll(/\[([^\]]{1,60})\]/g)) {
-      const label = m[1].trim();
-      if (!seen.has(label)) {
-        seen.add(label);
-        opts.push({ label, kind: getQuickReplyKind(label) });
-      }
+      if (!seen.has(m[1])) { seen.add(m[1]); opts.push(m[1]); }
     }
     return opts;
   }, [messages, isBusy]);
@@ -199,49 +107,8 @@ export default function AgentPage() {
     e.preventDefault();
     const text = input.trim();
     if (!text || isBusy) return;
-
-    if (looksLikeMutatingIntent(text)) {
-      setPendingText(text);
-      setConfirmOpen(true);
-      return;
-    }
-
     sendMessage({ text });
     setInput('');
-  };
-
-  const handleConfirmSend = () => {
-    if (!pendingText || isBusy) return;
-    sendMessage({ text: pendingText });
-    setInput('');
-    setPendingText(null);
-    setConfirmOpen(false);
-  };
-
-  const handleCancelSend = () => {
-    setPendingText(null);
-    setConfirmOpen(false);
-  };
-
-  const handleQuickReply = (option: QuickReplyOption) => {
-    if (isBusy) return;
-
-    if (option.kind === 'confirm' || option.kind === 'cancel' || option.kind === 'adjust') {
-      sendMessage({ text: option.label });
-      return;
-    }
-
-    if (looksLikeMutatingIntent(option.label)) {
-      setPendingText(option.label);
-      setConfirmOpen(true);
-      return;
-    }
-
-    sendMessage({ text: option.label });
-  };
-
-  const handleOpenProject = (projectId: string) => {
-    router.push(`/project/${projectId}`);
   };
 
   if (loading) {
@@ -299,20 +166,17 @@ export default function AgentPage() {
               </div>
               <div>
                 <p className="text-lg font-semibold text-foreground mb-2">Bem-vindo ao Agente de Projetos!</p>
-                <p className="text-sm text-muted-foreground">Posso criar, buscar, atualizar e mover tarefas, além de estruturar chamados GLPI. Clique em uma sugestão ou digite seu comando.</p>
+                <p className="text-sm text-muted-foreground">Posso criar projetos e tarefas para você. Clique em uma sugestão ou digite seu comando.</p>
               </div>
               <div className="flex flex-col gap-2 w-full max-w-md">
                 {SUGGESTIONS.map((s, idx) => (
                   <button
-                    key={s.label}
-                    onClick={() => setInput(s.label)}
+                    key={s}
+                    onClick={() => setInput(s)}
                     className="flex items-center gap-3 text-left px-4 py-3 rounded-lg border border-border bg-card hover:bg-accent hover:border-primary/50 transition-all duration-200"
                   >
                     <span className="text-sm font-medium text-muted-foreground w-6">{idx + 1}</span>
-                    <span className="flex-1 min-w-0">
-                      <span className="font-medium text-sm block">{s.label}</span>
-                      <span className="text-xs text-muted-foreground block mt-0.5">{s.helper}</span>
-                    </span>
+                    <span className="font-medium text-sm">{s}</span>
                   </button>
                 ))}
               </div>
@@ -333,7 +197,6 @@ export default function AgentPage() {
                     <AgentMessageRenderer 
                       parts={m.parts as any}
                       role={role}
-                      onOpenProject={handleOpenProject}
                     />
                   </div>
                 )}
@@ -377,12 +240,12 @@ export default function AgentPage() {
               <p className="text-xs font-semibold text-muted-foreground mb-3">Opções disponíveis:</p>
               {quickReplies.map((opt, i) => (
                 <button
-                  key={`${i}-${opt.label}`}
-                  onClick={() => handleQuickReply(opt)}
-                  className={`w-full flex items-center gap-3 text-left px-4 py-3 rounded-lg border transition-all duration-200 ${getQuickReplyClassName(opt.kind)}`}
+                  key={`${i}-${opt}`}
+                  onClick={() => sendMessage({ text: opt })}
+                  className="w-full flex items-center gap-3 text-left px-4 py-3 rounded-lg border border-border bg-card hover:bg-accent hover:border-primary/50 transition-all duration-200"
                 >
                   <span className="text-sm font-medium text-muted-foreground w-6">{i + 1}</span>
-                  <span className="font-medium text-sm">{opt.label}</span>
+                  <span className="font-medium text-sm">{opt}</span>
                 </button>
               ))}
             </div>
@@ -406,26 +269,6 @@ export default function AgentPage() {
           <span className="hidden sm:inline">Enviar</span>
         </Button>
       </form>
-
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar ação no agente</AlertDialogTitle>
-            <AlertDialogDescription>
-              Essa mensagem parece uma ação de criação/edição/movimentação. Deseja enviar mesmo assim?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {pendingText && (
-            <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-foreground break-words">
-              {pendingText}
-            </div>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleCancelSend}>Ajustar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmSend}>Confirmar envio</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

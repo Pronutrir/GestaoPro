@@ -14,6 +14,7 @@ import { EditProjectDialog } from '@/components/EditProjectDialog';
 import { ProjectCardPreview } from '@/components/SortableProjectCard';
 import { PipelineSkeleton } from '@/components/SkeletonScreens';
 import { useProjectAccess } from '@/hooks/useProjectAccess';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
@@ -32,7 +33,8 @@ interface Project {
 function ProjectsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { filterProjects, canManage: isAdmin, loading: authLoading } = useProjectAccess();
+  const { filterProjects, loading: authLoading } = useProjectAccess();
+  const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);

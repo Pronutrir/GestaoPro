@@ -29,9 +29,10 @@ interface ProjectMember {
 
 interface ProjectMembersManagerProps {
   projectId: string;
+  canManageProject?: boolean;
 }
 
-export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps) => {
+export const ProjectMembersManager = ({ projectId, canManageProject = false }: ProjectMembersManagerProps) => {
   const { toast } = useToast();
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -78,15 +79,17 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
   );
 
   const handleAdd = async () => {
-    if (!selectedUser) return;
-    const { error } = await supabase.from("project_members").insert({
+    if (!selectedUser || !canManageProject) return;
+    const { error } = await supabase.from("project_members").upsert({
       project_id: projectId,
       user_id: selectedUser,
       sector: selectedSector || null,
-      can_create: permissions.can_create || permissions.can_edit || permissions.can_move ? permissions.can_create : true,
-      can_edit: permissions.can_create || permissions.can_edit || permissions.can_move ? permissions.can_edit : true,
-      can_delete: permissions.can_delete,
-      can_move: permissions.can_create || permissions.can_edit || permissions.can_move ? permissions.can_move : true,
+      raci: null,
+      project_role: "contributor",
+      can_create: true,
+      can_edit: false,
+      can_delete: false,
+      can_move: false,
     });
     if (error) {
       toast({ title: "Erro ao adicionar", description: error.message, variant: "destructive" });
@@ -99,11 +102,13 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
   };
 
   const handleRemove = async (memberId: string) => {
+    if (!canManageProject) return;
     await supabase.from("project_members").delete().eq("id", memberId);
     fetchData();
   };
 
   const handleTogglePermission = async (memberId: string, field: string, value: boolean) => {
+    if (!canManageProject) return;
     await supabase.from("project_members").update({ [field]: value } as Database['public']['Tables']['project_members']['Update']).eq("id", memberId);
     fetchData();
   };
@@ -136,15 +141,17 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
 
       const createdUserId = data?.user?.id;
 
-      if (createdUserId) {
-        const { error: memberError } = await supabase.from("project_members").insert({
+      if (createdUserId && canManageProject) {
+        const { error: memberError } = await supabase.from("project_members").upsert({
           project_id: projectId,
           user_id: createdUserId,
           sector: newMemberSector || null,
+          raci: null,
+          project_role: "contributor",
           can_create: true,
-          can_edit: true,
+          can_edit: false,
           can_delete: false,
-          can_move: true,
+          can_move: false,
         });
 
         if (memberError) throw memberError;
@@ -214,6 +221,7 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
                   <label key={perm.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
                     <Checkbox
                       checked={(m as any)[perm.key]}
+                      disabled={!canManageProject}
                       onCheckedChange={(v) => handleTogglePermission(m.id, perm.key, !!v)}
                     />
                     {perm.label}
@@ -241,7 +249,7 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
             </SelectContent>
           </Select>
         </div>
-        {selectedUser && (
+        {selectedUser && canManageProject && (
           <>
             <div>
               <Label className="text-xs text-muted-foreground">Setor neste projeto</Label>
@@ -283,13 +291,14 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
           size="sm"
           variant="ghost"
           className="gap-1.5 text-xs text-muted-foreground hover:text-foreground w-full"
+          disabled={!canManageProject}
           onClick={() => setShowNewMember(!showNewMember)}
         >
           <Plus className="w-3.5 h-3.5" />
           Cadastrar novo membro
         </Button>
 
-        {showNewMember && (
+        {showNewMember && canManageProject && (
           <div className="p-3 rounded border border-primary/30 bg-primary/5 space-y-2">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Novo Cadastro</p>
             <Input

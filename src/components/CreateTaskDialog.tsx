@@ -46,14 +46,6 @@ interface CreateTaskDialogProps {
   isQualityProject?: boolean;
 }
 
-const RACI_OPTIONS = [
-  { value: "", label: "Nenhum" },
-  { value: "R", label: "R - Responsável" },
-  { value: "A", label: "A - Autoridade" },
-  { value: "C", label: "C - Consultado" },
-  { value: "I", label: "I - Informado" },
-];
-
 /** Parse hours as decimal from "Xh Ym" or plain number */
 function parseHoursInput(val: string): number {
   const hm = val.match(/(\d+)\s*h\s*(\d+)\s*m/i);
@@ -103,9 +95,7 @@ export const CreateTaskDialog = ({
     tendency: null as number | null,
     tags: [] as string[],
     story_points: "0",
-    raci_role: "",
     participants: [] as string[],
-    participant_roles: {} as Record<string, string>,
     deadline_flag: "",
     last_update_date: "",
     wbs_code: "",
@@ -149,9 +139,7 @@ export const CreateTaskDialog = ({
         tendency: null,
         tags: [],
         story_points: "0",
-        raci_role: "",
         participants: [],
-        participant_roles: {},
         deadline_flag: "",
         last_update_date: "",
         wbs_code: "",
@@ -229,13 +217,11 @@ export const CreateTaskDialog = ({
         parent_id: defaultParentId ?? null,
         assigned_to: formData.assigned_to || null,
         participants: formData.participants.length ? formData.participants : null,
-        participant_roles: formData.participant_roles ?? {},
         start_date: formData.start_date || null,
         end_date: formData.end_date || null,
         hours: parseHoursInput(formData.hours),
         cost: parseFloat(formData.cost) || 0,
         story_points: parseInt(formData.story_points) || 0,
-        raci_role: formData.raci_role || null,
         tags: formData.tags.length ? formData.tags : null,
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
@@ -386,8 +372,8 @@ export const CreateTaskDialog = ({
             />
           </div>
 
-          {/* Responsável + RACI */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Responsável */}
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <User className="w-4 h-4" /> Responsável
@@ -405,27 +391,13 @@ export const CreateTaskDialog = ({
                 ))}
               </select>
             </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                🏷️ Papel RACI
-              </Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={formData.raci_role}
-                onChange={(e) => setFormData({ ...formData, raci_role: e.target.value })}
-              >
-                {RACI_OPTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
-            </div>
           </div>
 
           {/* Participantes */}
           <div className="space-y-2">
             <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
               👥 Participantes
-              <span className="text-[11px] font-normal text-muted-foreground">— sem limite, com papel RACI individual</span>
+              <span className="text-[11px] font-normal text-muted-foreground">— sem limite</span>
             </Label>
             <select
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -436,7 +408,6 @@ export const CreateTaskDialog = ({
                   setFormData({
                     ...formData,
                     participants: [...formData.participants, name],
-                    participant_roles: { ...formData.participant_roles, [name]: formData.participant_roles[name] || "" },
                   });
                 }
               }}
@@ -451,31 +422,13 @@ export const CreateTaskDialog = ({
                 {formData.participants.map((p) => (
                   <div key={p} className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
                     <span className="flex-1 min-w-0 truncate text-xs font-medium text-foreground">{p}</span>
-                    <select
-                      className="h-7 rounded-md border border-input bg-background px-2 text-[11px]"
-                      value={formData.participant_roles[p] || ""}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          participant_roles: { ...formData.participant_roles, [p]: e.target.value },
-                        })
-                      }
-                      title="Papel RACI deste participante"
-                    >
-                      {RACI_OPTIONS.map((r) => (
-                        <option key={r.value} value={r.value}>{r.label}</option>
-                      ))}
-                    </select>
                     <button
                       type="button"
                       className="text-muted-foreground hover:text-destructive transition-colors"
                       onClick={() => {
-                        const nextRoles = { ...formData.participant_roles };
-                        delete nextRoles[p];
                         setFormData({
                           ...formData,
                           participants: formData.participants.filter((x) => x !== p),
-                          participant_roles: nextRoles,
                         });
                       }}
                       title="Remover participante"

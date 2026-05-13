@@ -10,7 +10,6 @@ import { AIAssistButton } from "@/components/AIAssistButton";
 import { Plus, Pencil, Trash2, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Assumption {
@@ -24,6 +23,7 @@ interface Assumption {
 
 interface AssumptionsManagerProps {
   projectId: string;
+  canManageProject?: boolean;
 }
 
 const STATUS_MAP: Record<string, { label: string; class: string }> = {
@@ -35,10 +35,9 @@ const STATUS_MAP: Record<string, { label: string; class: string }> = {
 const CATEGORIES = ["general", "technical", "organizational", "external"];
 const CAT_LABELS: Record<string, string> = { general: "Geral", technical: "Técnica", organizational: "Organizacional", external: "Externa" };
 
-export const AssumptionsManager = ({ projectId }: AssumptionsManagerProps) => {
+export const AssumptionsManager = ({ projectId, canManageProject = false }: AssumptionsManagerProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
-  const { canManage: isAdmin } = useAuth();
   const [items, setItems] = useState<Assumption[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -103,7 +102,7 @@ export const AssumptionsManager = ({ projectId }: AssumptionsManagerProps) => {
         <h3 className="text-lg font-semibold flex items-center gap-2">
           <ShieldCheck className="w-5 h-5 text-primary" /> Premissas ({items.length})
         </h3>
-        {isAdmin && (
+        {canManageProject && (
           <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }} className="gap-2">
             <Plus className="w-4 h-4" /> Nova Premissa
           </Button>
@@ -154,7 +153,7 @@ export const AssumptionsManager = ({ projectId }: AssumptionsManagerProps) => {
                 </div>
                 {item.impact && <p className="text-xs text-muted-foreground">Impacto: {item.impact}</p>}
               </div>
-              {isAdmin && (
+              {canManageProject && (
                 <div className="flex gap-1">
                   <Button size="icon" variant="ghost" onClick={() => handleEdit(item)}><Pencil className="w-4 h-4" /></Button>
                   <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>

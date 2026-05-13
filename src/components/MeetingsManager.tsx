@@ -83,6 +83,7 @@ interface MeetingsManagerProps {
   onCreateActivity?: (title: string, assignedTo?: string) => Promise<void>;
   onCreateBlocker?: (description: string) => Promise<void>;
   onCreateLesson?: (problem: string, suggestion: string) => Promise<void>;
+  canManageProject?: boolean;
 }
 
 const MEETING_TYPES = [
@@ -101,10 +102,10 @@ const MEETING_TYPE_COLORS: Record<string, string> = {
   retrospective: "bg-purple-500/20 text-purple-700",
 };
 
-export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateBlocker, onCreateLesson }: MeetingsManagerProps) => {
+export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateBlocker, onCreateLesson, canManageProject = false }: MeetingsManagerProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
-  const { canManage: isAdmin, user } = useAuth();
+  const { user } = useAuth();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -573,7 +574,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
             const isExpanded = expandedId === meeting.id;
             const meetingDecisions = decisions[meeting.id] || [];
             const meetingActions = actions[meeting.id] || [];
-            const canEditMeeting = isAdmin || meeting.created_by === user?.id;
+            const canEditMeeting = canManageProject || meeting.created_by === user?.id;
 
             return (
               <div key={meeting.id} className="border border-border rounded-lg bg-card overflow-hidden">
@@ -639,7 +640,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                       </div>
                     </div>
                   </div>
-                  {(isAdmin || meeting.created_by === user?.id) && (
+                  {(canManageProject || meeting.created_by === user?.id) && (
                     <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEdit(meeting)}>
                         <Pencil className="w-3 h-3" />

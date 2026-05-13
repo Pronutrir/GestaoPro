@@ -19,7 +19,6 @@ import {
 import { DollarSign, Plus, TrendingUp, TrendingDown, Pencil, Trash2, Wallet, Receipt, PiggyBank } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
 
 interface Investment {
   id: string;
@@ -37,6 +36,7 @@ interface ProjectFinancialsProps {
   budgetPlanned: number;
   budgetUsed: number;
   onProjectUpdated: () => void;
+  canManageProject?: boolean;
 }
 
 const categoryLabels: Record<string, string> = {
@@ -51,9 +51,8 @@ const categoryLabels: Record<string, string> = {
   outros: "Outros",
 };
 
-export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProjectUpdated }: ProjectFinancialsProps) => {
+export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProjectUpdated, canManageProject = false }: ProjectFinancialsProps) => {
   const { toast } = useToast();
-  const { canManage: isAdmin } = useAuth();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [activities, setActivities] = useState<{ id: string; title: string }[]>([]);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
@@ -231,7 +230,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
 
       {/* Actions */}
       <div className="flex gap-2 flex-wrap">
-        {isAdmin && (
+        {canManageProject && (
           <>
             <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); setEditingInvestment(null); } setDialogOpen(open); }}>
               <DialogTrigger asChild>
@@ -374,7 +373,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                     <TableHead>Categoria</TableHead>
                     <TableHead>Responsável</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
-                    {isAdmin && <TableHead className="w-20">Ações</TableHead>}
+                    {canManageProject && <TableHead className="w-20">Ações</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -390,7 +389,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                         </TableCell>
                         <TableCell className="text-sm">{inv.responsible || "—"}</TableCell>
                         <TableCell className="text-right font-medium text-sm">{formatCurrency(inv.amount)}</TableCell>
-                        {isAdmin && (
+                        {canManageProject && (
                           <TableCell>
                             <div className="flex gap-1">
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(inv)}>

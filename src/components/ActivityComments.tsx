@@ -33,6 +33,8 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
 
   const currentAuthorName: string =
     profile?.full_name?.trim() || user?.email || "Usuário";
+  const isOwnComment = (author: string | null) =>
+    Boolean(author && author.trim().toLowerCase() === currentAuthorName.trim().toLowerCase());
 
   useEffect(() => {
     fetchComments();
@@ -76,6 +78,10 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
 
   const handleUpdateComment = async () => {
     if (!editingComment || !editContent.trim()) return;
+    if (!isOwnComment(editingComment.author)) {
+      toast({ title: "Você só pode editar seus próprios comentários", variant: "destructive" });
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -94,6 +100,12 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
   };
 
   const handleDeleteComment = async (commentId: string) => {
+    const comment = comments.find((item) => item.id === commentId);
+    if (!comment || !isOwnComment(comment.author)) {
+      toast({ title: "Você só pode excluir seus próprios comentários", variant: "destructive" });
+      return;
+    }
+
     const ok = await appConfirm({
       title: "Excluir comentário",
       description: "Excluir este comentário?",
@@ -161,27 +173,29 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
                     </div>
                     <p className="text-sm text-foreground whitespace-pre-wrap">{comment.content}</p>
                   </div>
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6"
-                      onClick={() => {
-                        setEditingComment(comment);
-                        setEditContent(comment.content);
-                      }}
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 text-destructive"
-                      onClick={() => handleDeleteComment(comment.id)}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
+                  {isOwnComment(comment.author) && (
+                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          setEditingComment(comment);
+                          setEditContent(comment.content);
+                        }}
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 text-destructive"
+                        onClick={() => handleDeleteComment(comment.id)}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             )

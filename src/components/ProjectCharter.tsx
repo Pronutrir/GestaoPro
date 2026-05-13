@@ -51,24 +51,14 @@ const AutoTextarea = ({
 
 interface Phase { id: string; title: string }
 interface Risk { id: string; description: string; probability: string; impact: string; status: string }
-type RaciRole = "R" | "A" | "C" | "I";
 interface MemberRow {
   id: string;
   user_id: string;
   full_name: string;
   sector: string | null;
-  raci: RaciRole | null;
   invitation_status: "pending" | "accepted" | "declined";
   decline_reason: string | null;
 }
-const raciOptions: { v: RaciRole; label: string; cls: string }[] = [
-  { v: "R", label: "R - Responsável", cls: "bg-blue-500/15 text-blue-600 border-blue-500/40" },
-  { v: "A", label: "A - Autoridade", cls: "bg-amber-500/15 text-amber-600 border-amber-500/40" },
-  { v: "C", label: "C - Consultado", cls: "bg-purple-500/15 text-purple-600 border-purple-500/40" },
-  { v: "I", label: "I - Informado", cls: "bg-muted text-muted-foreground border-border" },
-];
-const raciClass = (r: RaciRole | null) =>
-  raciOptions.find((o) => o.v === r)?.cls || "bg-muted text-muted-foreground border-border";
 const inviteBadge = (s: MemberRow["invitation_status"]) => {
   if (s === "accepted") return { label: "Aceito", cls: "bg-success/15 text-success border-success/40" };
   if (s === "declined") return { label: "Recusado", cls: "bg-destructive/15 text-destructive border-destructive/40" };
@@ -176,7 +166,8 @@ const SectionBlock = ({ n, title, children }: { n: number; title: string; childr
 /* ============================================================ */
 export const ProjectCharter = ({ projectId, project, phases, members, onMembersChanged }: ProjectCharterProps) => {
   const { toast } = useToast();
-  const { canManage: isAdmin, user } = useAuth();
+  const { isAdmin: isRealAdmin, user, profile } = useAuth();
+  const canManageTeam = isRealAdmin || (!!project.owner && !!profile?.full_name && project.owner.trim().toLowerCase() === profile.full_name.trim().toLowerCase());
 
   const [editing, setEditing] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
@@ -253,7 +244,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       supabase.from("assumptions").select("id, description, category, impact").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
       supabase.from("user_roles").select("user_id").eq("role", "admin"),
-      supabase.from("project_members").select("id, user_id, raci, invitation_status, decline_reason").eq("project_id", projectId),
+      supabase.from("project_members").select("id, user_id, invitation_status, decline_reason").eq("project_id", projectId),
     ]);
     if (r.data) setRisks(r.data);
     if (a.data) setAssumptionsList(a.data);
@@ -268,7 +259,6 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           user_id: m.user_id,
           full_name: p?.full_name || "—",
           sector: p?.sector || null,
-          raci: (m.raci as RaciRole) || "I",
           invitation_status: (m.invitation_status as MemberRow["invitation_status"]) || "pending",
           decline_reason: m.decline_reason || null,
         };
@@ -283,10 +273,11 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     const profile = allProfiles.find((p) => p.id === selectedProfileId);
     const { error } = await supabase.from("project_members").insert({
       project_id: projectId, user_id: selectedProfileId, sector: profile?.sector || null,
-      raci: "I",
+      raci: null,
+      project_role: "contributor",
       invitation_status: "pending",
       invited_by: user?.id ?? null,
-      can_create: false, can_edit: false, can_delete: false, can_move: false,
+      can_create: true, can_edit: false, can_delete: false, can_move: false,
     });
     setAddingMember(false);
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
@@ -309,17 +300,6 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
     await fetchRelations();
     onMembersChanged?.();
-  };
-
-  const handleRaciChange = async (memberId: string, r: RaciRole | null) => {
-    // garante apenas um "A" por projeto
-    if (r === "A" && memberRows.some((m) => m.id !== memberId && m.raci === "A")) {
-      toast({ title: "Apenas uma Autoridade (A)", description: "Já existe uma Autoridade definida neste projeto.", variant: "destructive" });
-      return;
-    }
-    const { error } = await supabase.from("project_members").update({ raci: r }).eq("id", memberId);
-    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
-    await fetchRelations();
   };
 
   const handleResendInvite = async (m: MemberRow) => {
@@ -418,7 +398,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             <Printer className="w-4 h-4" /> Imprimir / PDF
           </Button>
         </div>
-        {!previewMode && isAdmin && (
+        {!previewMode && isRealAdmin && (
           <div className="flex gap-2">
             {editing ? (
               <>
@@ -488,7 +468,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
         </div>
         <div className="mt-4 pt-3 border-t">
           <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Cronograma — Previsto x Real</p>
-          <BaselineBlock project={project as any} canManage={!!isAdmin} />
+          <BaselineBlock project={project as any} canManage={!!isRealAdmin} />
         </div>
       </SectionBlock>
 
@@ -689,10 +669,10 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           </Button>
         )}
 
-        {/* Equipe do Projeto / RACI */}
+        {/* Equipe do Projeto */}
         <div className="pt-2 border-t border-border">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Equipe do Projeto (RACI)
+            Equipe do Projeto
           </p>
           {memberRows.length > 0 ? (
             <div className="space-y-1.5">
@@ -710,23 +690,9 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                         <p className="text-[11px] text-destructive truncate">Motivo: {m.decline_reason}</p>
                       )}
                     </div>
-                    {editing && isAdmin ? (
-                      <Select value={m.raci || "_none"} onValueChange={(v) => handleRaciChange(m.id, v === "_none" ? null : (v as RaciRole))}>
-                        <SelectTrigger className="h-7 w-[140px] text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Nenhum</SelectItem>
-                          {raciOptions.map((o) => (
-                            <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Badge className={`text-[10px] ${raciClass(m.raci)}`}>{m.raci || "I"}</Badge>
-                    )}
+                    <Badge className="text-[10px] bg-primary/10 text-primary border-primary/20">Membro</Badge>
                     <Badge className={`text-[10px] ${ib.cls}`}>{ib.label}</Badge>
-                    {editing && isAdmin && m.invitation_status !== "accepted" && (
+                    {editing && canManageTeam && m.invitation_status !== "accepted" && (
                       <>
                         <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => handleResendInvite(m)}>
                           Reenviar
@@ -736,7 +702,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                         </Button>
                       </>
                     )}
-                    {editing && isAdmin && (
+                    {editing && canManageTeam && (
                       <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive" onClick={() => handleRemoveStakeholder(m.id)}>×</Button>
                     )}
                   </div>
@@ -746,7 +712,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           ) : (
             <p className="text-sm text-muted-foreground italic">Nenhum membro cadastrado</p>
           )}
-          {editing && isAdmin && (
+          {editing && canManageTeam && (
             <div className="pt-2 mt-2 flex flex-col sm:flex-row gap-2">
               <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
                 <SelectTrigger className="text-sm flex-1 h-9">
