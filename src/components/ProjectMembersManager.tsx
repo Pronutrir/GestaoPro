@@ -1,3 +1,4 @@
+'use client';
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -137,7 +138,7 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
   };
 
   const handleTogglePermission = async (memberId: string, field: string, value: boolean) => {
-    await supabase.from("project_members").update({ [field]: value }).eq("id", memberId);
+    await supabase.from("project_members").update({ [field]: value } as any).eq("id", memberId);
     fetchData();
   };
 
