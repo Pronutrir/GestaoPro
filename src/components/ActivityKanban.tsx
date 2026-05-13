@@ -197,6 +197,7 @@ interface ActivityKanbanProps {
   projectId: string;
   activities: Activity[];
   phases: Phase[];
+  consumedMinutesByActivity?: Record<string, number>;
   onDataChanged: () => void;
   onEditActivity: (activity: Activity) => void;
   onDeleteActivity: (activityId: string) => void;
@@ -231,6 +232,7 @@ function SortableKanbanCard({
   onToggleExpand,
   progress,
   density,
+  consumedMinutes,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -255,6 +257,7 @@ function SortableKanbanCard({
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
   density?: KanbanDensity;
+  consumedMinutes?: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -292,6 +295,7 @@ function SortableKanbanCard({
         onToggleExpand={onToggleExpand}
         progress={progress}
         density={density}
+        consumedMinutes={consumedMinutes}
       />
     </div>
   );
@@ -322,6 +326,7 @@ function KanbanCard({
   onToggleExpand,
   progress,
   density = "md",
+  consumedMinutes,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -347,6 +352,7 @@ function KanbanCard({
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
   density?: KanbanDensity;
+  consumedMinutes?: number;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -522,18 +528,26 @@ function KanbanCard({
                     </Badge>
                   )}
                   {activity.hours > 0 && (() => {
-                    const isDone = activity.status === "completed" || !!activity.completed_at;
+                    const consumedH = (consumedMinutes ?? 0) / 60;
+                    const plannedH = activity.hours;
+                    const hasConsumed = consumedH > 0;
+                    const isOver = hasConsumed && consumedH > plannedH;
+                    const label = hasConsumed
+                      ? `${formatHours(consumedH)}/${formatHours(plannedH)}`
+                      : formatHours(plannedH);
                     return (
                       <Badge
-                        variant={isDone ? undefined : "secondary"}
+                        variant={hasConsumed ? undefined : "secondary"}
                         className={`text-[10px] px-1.5 py-0 ${
-                          isDone
+                          isOver
+                            ? "bg-destructive/15 text-destructive border-destructive/30"
+                            : hasConsumed
                             ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
                             : ""
                         }`}
-                        title={isDone ? `Consumidas: ${formatHours(activity.hours)}` : `Planejadas: ${formatHours(activity.hours)}`}
+                        title={hasConsumed ? `Consumidas: ${formatHours(consumedH)} / Planejadas: ${formatHours(plannedH)}` : `Planejadas: ${formatHours(plannedH)}`}
                       >
-                        {isDone ? "✓ " : ""}{formatHours(activity.hours)}
+                        {label}
                       </Badge>
                     );
                   })()}
@@ -708,6 +722,7 @@ function SortableColumn({
   onToggleStageVisible,
   allStages,
   density,
+  consumedMinutesByActivity = {},
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -742,6 +757,7 @@ function SortableColumn({
   onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
   allStages: WorkflowStage[];
   density: KanbanDensity;
+  consumedMinutesByActivity?: Record<string, number>;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -1173,6 +1189,7 @@ function SortableColumn({
                     onToggleExpand={() => toggleExpanded(activity.id)}
                     progress={computeActivityProgress(activity.workflow_stage_id, allStages)}
                     density={density}
+                    consumedMinutes={consumedMinutesByActivity[activity.id] ?? 0}
                   />
                   {expanded && inlineChildren.length > 0 && (
                     <div className="ml-4 pl-2 border-l-2 border-primary/30 space-y-1.5">
@@ -1200,6 +1217,7 @@ function SortableColumn({
                           subActivityCount={0}
                           progress={computeActivityProgress(child.workflow_stage_id, allStages)}
                           density={density}
+                          consumedMinutes={consumedMinutesByActivity[child.id] ?? 0}
                         />
                       ))}
                     </div>
@@ -1285,6 +1303,7 @@ export const ActivityKanban = ({
   projectId,
   activities,
   phases,
+  consumedMinutesByActivity = {},
   onDataChanged,
   onEditActivity,
   onDeleteActivity,
@@ -2107,6 +2126,7 @@ export const ActivityKanban = ({
                 onToggleStageVisible={handleToggleStageVisible}
                 allStages={stages}
                 density={density}
+                consumedMinutesByActivity={consumedMinutesByActivity}
               />
             );
           })}

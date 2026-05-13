@@ -148,6 +148,7 @@ export default function ProjectDetailsPage() {
   const [activityScopedAccess, setActivityScopedAccess] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [consumedMinutesByActivity, setConsumedMinutesByActivity] = useState<Record<string, number>>({});
   const [phases, setPhases] = useState<Phase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [permissionsLoading, setPermissionsLoading] = useState(true);
@@ -657,6 +658,7 @@ export default function ProjectDetailsPage() {
         { data: projectData, error: projectError },
         { data: phasesData, error: phasesError },
         { data: activitiesData, error: activitiesError },
+        { data: timeEntriesData },
       ] = await Promise.all([
         supabase.from("projects").select("*").eq("id", id).single(),
         supabase
@@ -665,6 +667,7 @@ export default function ProjectDetailsPage() {
         (supabase
           .from("activities").select("*").eq("project_id", id) as any).eq("is_trashed", false)
           .order("display_order", { ascending: true }).order("created_at", { ascending: true }),
+        supabase.from("time_entries").select("activity_id, duration_minutes").eq("project_id", id),
       ]);
 
       if (projectError) throw new Error(toErrorMessage(projectError, "projects"));
@@ -699,6 +702,15 @@ export default function ProjectDetailsPage() {
           : (phasesData || []),
       );
       setActivities(visibleActivities);
+
+      // Build consumed-minutes map for kanban cards
+      const map: Record<string, number> = {};
+      for (const entry of (timeEntriesData || [])) {
+        if (entry.activity_id && entry.duration_minutes) {
+          map[entry.activity_id] = (map[entry.activity_id] || 0) + entry.duration_minutes;
+        }
+      }
+      setConsumedMinutesByActivity(map);
     } catch (error) {
       const message = toErrorMessage(error, "fetchProjectData");
       console.error("Erro ao buscar dados do projeto:", { message, error });
@@ -1026,6 +1038,7 @@ export default function ProjectDetailsPage() {
             <TabsContent value="kanban" className="mt-0">
               <ActivityKanban
                 projectId={id!} activities={activities} phases={phases}
+                consumedMinutesByActivity={consumedMinutesByActivity}
                 onDataChanged={fetchProjectData}
                 onEditActivity={(activity) => openEditActivity(activity)}
                 onDeleteActivity={handleDeleteActivity}
