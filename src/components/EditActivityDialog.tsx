@@ -1,3 +1,4 @@
+'use client';
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,7 @@ interface EditActivityDialogProps {
   allActivities?: Activity[];
   projectId?: string;
   isQualityProject?: boolean;
+  initialTab?: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history";
   /** When true, opens in create mode: inserts a draft activity on open and lets user fill all fields with full feature parity. */
   createMode?: boolean;
   defaultStageId?: string | null;
@@ -124,6 +126,7 @@ function formatHoursDisplay(hours: number): string {
 export const EditActivityDialog = ({
   activity, open, onOpenChange, onActivityUpdated,
   phases = [], allActivities = [], projectId, isQualityProject = false,
+  initialTab = "details",
   createMode = false, defaultStageId = null, defaultPhaseId = null, defaultParentId = null,
   onActivityCreated,
   parentActivityTitle, onBackToParent,
@@ -166,7 +169,7 @@ export const EditActivityDialog = ({
   const [creatorEmail, setCreatorEmail] = useState<string | null>(null);
   const [lastEditorName, setLastEditorName] = useState<string | null>(null);
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "stories" | "history">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "stories" | "history">(initialTab);
 
   // Divergências pai vs subatividades (alerta apenas, sem bloqueio)
   const subHoursTotal = subActivities.reduce((sum, s) => sum + (Number((s as any).hours) || 0), 0);
@@ -1445,7 +1448,7 @@ export const EditActivityDialog = ({
                         {/* Colunas dinâmicas (na ordem de ALL_COLS, apenas as visíveis) */}
                         {ALL_COLS.filter((c) => visibleCols.includes(c.id)).map(({ id: colId }) => {
                           const updateField = async (value: any) => {
-                            await supabase.from("activities").update({ [colId]: value }).eq("id", sub.id);
+                            await supabase.from("activities").update({ [colId]: value } as any).eq("id", sub.id);
                             if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
                             onActivityUpdated();
                           };
