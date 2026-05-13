@@ -1,4 +1,3 @@
-'use client';
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -224,20 +223,8 @@ export const EditProjectDialog = ({
       if (toRemove.length > 0) {
         await supabase.from("project_members").delete().in("id", toRemove.map((m: any) => m.id));
       }
-      // Atualiza RACI dos persistidos (caso tenha mudado)
-      for (const m of team.filter((t) => t.persisted)) {
-        await supabase
-          .from("project_members")
-          .update({
-            raci: null,
-            project_role: "contributor",
-            can_create: true,
-            can_edit: false,
-            can_delete: false,
-            can_move: false,
-          })
-          .eq("id", m.id);
-      }
+      // Membros não têm mais distinção Leitor/Editor — permissões ficam zeradas;
+      // a edição vem do papel de participante/responsável da atividade (RLS).
       // Insere novos
       const newOnes = team.filter((m) => !m.persisted);
       if (newOnes.length > 0) {
@@ -245,28 +232,25 @@ export const EditProjectDialog = ({
           project_id: project.id,
           user_id: m.user_id,
           sector: m.sector,
-          raci: null,
-          project_role: "contributor" as const,
           invitation_status: "pending" as const,
           invited_by: user?.id ?? null,
-          can_create: true,
+          can_create: false,
           can_edit: false,
           can_delete: false,
           can_move: false,
         }));
-        const { error: memErr } = await supabase
-          .from("project_members")
-          .upsert(rows, { onConflict: "project_id,user_id", ignoreDuplicates: false });
-        if (memErr) throw new Error(`Erro ao salvar equipe: ${memErr.message}`);
-        await supabase.from("notifications").insert(
-          newOnes.map((m) => ({
-            project_id: project.id,
-            target_user_id: m.user_id,
-            type: "project_invite",
-            title: `Convite para o projeto: ${formData.title}`,
-            message: `Você foi convidado(a) para participar do projeto "${formData.title}". Aceita participar?`,
-          }))
-        );
+        const { error: memErr } = await supabase.from("project_members").insert(rows);
+        if (!memErr) {
+          await supabase.from("notifications").insert(
+            newOnes.map((m) => ({
+              project_id: project.id,
+              target_user_id: m.user_id,
+              type: "project_invite",
+              title: `Convite para o projeto: ${formData.title}`,
+              message: `Você foi convidado(a) a participar do projeto "${formData.title}". Aceita?`,
+            }))
+          );
+        }
       }
 
       toast({
@@ -453,7 +437,7 @@ export const EditProjectDialog = ({
             <div className="grid gap-2 rounded-lg border border-dashed border-border p-3">
               <Label className="text-sm font-semibold">Equipe do Projeto</Label>
               <p className="text-[11px] text-muted-foreground -mt-1">
-                Adicione ou remova membros. Entrar na equipe concede acesso ao projeto e permissão para criar atividades.
+                Adicione ou remova membros. Novos membros recebem um convite ao salvar.
               </p>
 
               {team.length > 0 && (

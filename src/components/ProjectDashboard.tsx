@@ -1,4 +1,3 @@
-'use client';
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -103,19 +102,40 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
       return d >= today && d <= sevenDaysLater;
     });
     const highPriority = activities.filter(a => a.priority === "high" && a.status !== "completed");
-    // Leaf activities = those whose id does not appear as a parent_id of another activity
-    const parentIds = new Set(activities.map(a => a.parent_id).filter(Boolean));
-    const leafActivities = activities.filter(a => !parentIds.has(a.id));
-    const plannedHours = leafActivities.reduce((sum, a) => sum + (a.hours || 0), 0);
-    const consumedHours = leafActivities
-      .filter(a => !!a.completed_at)
-      .reduce((sum, a) => sum + (a.hours || 0), 0);
+
+    // Horas consolidadas evitando duplicidade pai vs subs (somente raízes; subs herdam pelo pai quando o pai não tem horas próprias)
+    const childrenByParent = new Map<string, Activity[]>();
+    activities.forEach((a) => {
+      if (a.parent_id) {
+        const arr = childrenByParent.get(a.parent_id) || [];
+        arr.push(a);
+        childrenByParent.set(a.parent_id, arr);
+      }
+    });
+    let plannedHours = 0;
+    let consumedHours = 0;
+    activities
+      .filter((a) => !a.parent_id)
+      .forEach((a) => {
+        const kids = childrenByParent.get(a.id) || [];
+        const ownH = a.hours || 0;
+        if (kids.length > 0) {
+          const subPlanned = kids.reduce((s, c) => s + (c.hours || 0), 0);
+          plannedHours += ownH > 0 ? ownH : subPlanned;
+          consumedHours += kids
+            .filter((c) => c.status === "completed")
+            .reduce((s, c) => s + (c.hours || 0), 0);
+        } else {
+          plannedHours += ownH;
+          consumedHours += a.status === "completed" ? ownH : 0;
+        }
+      });
     const totalHours = plannedHours;
     const flagGreen = activities.filter(a => a.deadline_flag === "green");
     const flagOrange = activities.filter(a => a.deadline_flag === "orange");
     const flagRed = activities.filter(a => a.deadline_flag === "red");
 
-    return { total, completed, completionRate, overdue, nearDeadline, highPriority, totalHours, consumedHours, plannedHours, flagGreen, flagOrange, flagRed };
+    return { total, completed, completionRate, overdue, nearDeadline, highPriority, totalHours, plannedHours, consumedHours, flagGreen, flagOrange, flagRed };
   }, [activities]);
 
   // Pendencies for quality projects
@@ -255,13 +275,15 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
     },
     {
       label: "Horas Consumidas",
-      value: stats.consumedHours,
+      value: `${stats.consumedHours.toFixed(1)}h`,
+      subtitle: `de ${stats.plannedHours.toFixed(1)}h planejadas${
+        stats.plannedHours > 0
+          ? ` · ${Math.min(100, Math.round((stats.consumedHours / stats.plannedHours) * 100))}%`
+          : ""
+      }`,
       icon: Timer,
-      color: stats.consumedHours > stats.plannedHours ? "text-destructive" : "text-indigo-500",
-      bg: stats.consumedHours > stats.plannedHours ? "bg-destructive/10" : "bg-indigo-500/10",
-      subtitle: stats.plannedHours > 0
-        ? `${stats.plannedHours}h planejadas · ${Math.round((stats.consumedHours / stats.plannedHours) * 100)}%`
-        : undefined,
+      color: "text-indigo-500",
+      bg: "bg-indigo-500/10",
       items: [],
     },
   ];

@@ -6,7 +6,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { AIAssistButton } from "@/components/AIAssistButton";
-import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Comment {
   id: string;
@@ -19,13 +18,15 @@ interface Comment {
 
 interface ActivityCommentsProps {
   activityId: string;
+  /** When true, also fetch (read-only) comments from sub-activities (parent_id = activityId). */
+  includeSubActivities?: boolean;
 }
 
-export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
+export const ActivityComments = ({ activityId, includeSubActivities = false }: ActivityCommentsProps) => {
   const { toast } = useToast();
-  const appConfirm = useAppConfirm();
   const { user, profile } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
+  const [subActivityMap, setSubActivityMap] = useState<Record<string, string>>({});
   const [newComment, setNewComment] = useState("");
   const [editingComment, setEditingComment] = useState<Comment | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -33,24 +34,33 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
 
   const currentAuthorName: string =
     profile?.full_name?.trim() || user?.email || "Usuário";
-  const isOwnComment = (author: string | null) =>
-    Boolean(author && author.trim().toLowerCase() === currentAuthorName.trim().toLowerCase());
 
   useEffect(() => {
     fetchComments();
-  }, [activityId]);
+  }, [activityId, includeSubActivities]);
 
   const fetchComments = async () => {
+    let ids: string[] = [activityId];
+    let map: Record<string, string> = {};
+    if (includeSubActivities) {
+      const { data: subs } = await supabase
+        .from("activities")
+        .select("id,title")
+        .eq("parent_id", activityId)
+        .eq("is_trashed", false);
+      if (subs && subs.length) {
+        ids = [activityId, ...subs.map((s: any) => s.id)];
+        map = Object.fromEntries(subs.map((s: any) => [s.id, s.title]));
+      }
+    }
+    setSubActivityMap(map);
     const { data, error } = await supabase
       .from("activity_comments")
       .select("*")
-      .eq("activity_id", activityId)
+      .in("activity_id", ids)
       .eq("is_trashed", false)
       .order("created_at", { ascending: true });
-
-    if (!error && data) {
-      setComments(data);
-    }
+    if (!error && data) setComments(data as Comment[]);
   };
 
   const handleAddComment = async () => {
@@ -78,10 +88,6 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
 
   const handleUpdateComment = async () => {
     if (!editingComment || !editContent.trim()) return;
-    if (!isOwnComment(editingComment.author)) {
-      toast({ title: "Você só pode editar seus próprios comentários", variant: "destructive" });
-      return;
-    }
 
     try {
       const { error } = await supabase
@@ -100,19 +106,7 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
   };
 
   const handleDeleteComment = async (commentId: string) => {
-    const comment = comments.find((item) => item.id === commentId);
-    if (!comment || !isOwnComment(comment.author)) {
-      toast({ title: "Você só pode excluir seus próprios comentários", variant: "destructive" });
-      return;
-    }
-
-    const ok = await appConfirm({
-      title: "Excluir comentário",
-      description: "Excluir este comentário?",
-      confirmText: "Excluir",
-      destructive: true,
-    });
-    if (!ok) return;
+    if (!confirm("Excluir este comentário?")) return;
 
     try {
       const { error } = await supabase
@@ -157,7 +151,7 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
               <div key={comment.id} className="p-3 bg-accent/30 rounded-lg group">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       {comment.author && (
                         <span className="text-xs font-medium text-foreground">{comment.author}</span>
                       )}
@@ -170,32 +164,35 @@ export const ActivityComments = ({ activityId }: ActivityCommentsProps) => {
                           minute: "2-digit",
                         })}
                       </span>
+                      {comment.activity_id !== activityId && subActivityMap[comment.activity_id] && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                          ↳ {subActivityMap[comment.activity_id]}
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-foreground whitespace-pre-wrap">{comment.content}</p>
                   </div>
-                  {isOwnComment(comment.author) && (
-                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6"
-                        onClick={() => {
-                          setEditingComment(comment);
-                          setEditContent(comment.content);
-                        }}
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6 text-destructive"
-                        onClick={() => handleDeleteComment(comment.id)}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex gap-0.5">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      onClick={() => {
+                        setEditingComment(comment);
+                        setEditContent(comment.content);
+                      }}
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 text-destructive"
+                      onClick={() => handleDeleteComment(comment.id)}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             )

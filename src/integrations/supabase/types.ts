@@ -1204,6 +1204,48 @@ export type Database = {
           },
         ]
       }
+      permission_schemes: {
+        Row: {
+          access_level: string
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_move: boolean
+          created_at: string
+          description: string | null
+          id: string
+          is_system: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          access_level?: string
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_move?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_system?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          access_level?: string
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_move?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_system?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       phases: {
         Row: {
           created_at: string
@@ -1419,6 +1461,7 @@ export type Database = {
       }
       project_members: {
         Row: {
+          access_level: string
           can_create: boolean
           can_delete: boolean
           can_edit: boolean
@@ -1437,6 +1480,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          access_level?: string
           can_create?: boolean
           can_delete?: boolean
           can_edit?: boolean
@@ -1455,6 +1499,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          access_level?: string
           can_create?: boolean
           can_delete?: boolean
           can_edit?: boolean
@@ -2343,6 +2388,10 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_activity_member: {
+        Args: { _activity_id: string; _user_id: string }
         Returns: boolean
       }
       is_project_leader: {

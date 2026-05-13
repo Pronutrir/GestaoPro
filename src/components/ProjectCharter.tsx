@@ -1,4 +1,3 @@
-'use client';
 import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -166,8 +165,7 @@ const SectionBlock = ({ n, title, children }: { n: number; title: string; childr
 /* ============================================================ */
 export const ProjectCharter = ({ projectId, project, phases, members, onMembersChanged }: ProjectCharterProps) => {
   const { toast } = useToast();
-  const { isAdmin: isRealAdmin, user, profile } = useAuth();
-  const canManageTeam = isRealAdmin || (!!project.owner && !!profile?.full_name && project.owner.trim().toLowerCase() === profile.full_name.trim().toLowerCase());
+  const { canManage: isAdmin, user } = useAuth();
 
   const [editing, setEditing] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
@@ -273,11 +271,9 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     const profile = allProfiles.find((p) => p.id === selectedProfileId);
     const { error } = await supabase.from("project_members").insert({
       project_id: projectId, user_id: selectedProfileId, sector: profile?.sector || null,
-      raci: null,
-      project_role: "contributor",
       invitation_status: "pending",
       invited_by: user?.id ?? null,
-      can_create: true, can_edit: false, can_delete: false, can_move: false,
+      can_create: false, can_edit: false, can_delete: false, can_move: false,
     });
     setAddingMember(false);
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
@@ -398,7 +394,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             <Printer className="w-4 h-4" /> Imprimir / PDF
           </Button>
         </div>
-        {!previewMode && isRealAdmin && (
+        {!previewMode && isAdmin && (
           <div className="flex gap-2">
             {editing ? (
               <>
@@ -468,7 +464,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
         </div>
         <div className="mt-4 pt-3 border-t">
           <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Cronograma — Previsto x Real</p>
-          <BaselineBlock project={project as any} canManage={!!isRealAdmin} />
+          <BaselineBlock project={project as any} canManage={!!isAdmin} />
         </div>
       </SectionBlock>
 
@@ -690,9 +686,8 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                         <p className="text-[11px] text-destructive truncate">Motivo: {m.decline_reason}</p>
                       )}
                     </div>
-                    <Badge className="text-[10px] bg-primary/10 text-primary border-primary/20">Membro</Badge>
                     <Badge className={`text-[10px] ${ib.cls}`}>{ib.label}</Badge>
-                    {editing && canManageTeam && m.invitation_status !== "accepted" && (
+                    {editing && isAdmin && m.invitation_status !== "accepted" && (
                       <>
                         <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => handleResendInvite(m)}>
                           Reenviar
@@ -702,7 +697,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                         </Button>
                       </>
                     )}
-                    {editing && canManageTeam && (
+                    {editing && isAdmin && (
                       <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive" onClick={() => handleRemoveStakeholder(m.id)}>×</Button>
                     )}
                   </div>
@@ -712,7 +707,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           ) : (
             <p className="text-sm text-muted-foreground italic">Nenhum membro cadastrado</p>
           )}
-          {editing && canManageTeam && (
+          {editing && isAdmin && (
             <div className="pt-2 mt-2 flex flex-col sm:flex-row gap-2">
               <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
                 <SelectTrigger className="text-sm flex-1 h-9">
