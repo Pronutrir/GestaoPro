@@ -4,13 +4,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
 
 /**
- * Returns filtered project IDs for the current user.
- * Only Admins see all projects. Gestors and regular users see projects where
- * they are: (a) explicitly added as members, (b) the project creator, (c) the
- * project Líder (owner) or Gerente (manager), (d) listed as a participant
- * (assignees), or (e) assigned to at least one activity inside the project —
- * using tolerant identity matching (NFD + tokens) so short and long forms of
- * the same name still bind to the right user.
+ * Retorna os projetos visíveis para o usuário atual conforme o modelo v2.
+ * Somente admins veem tudo. Usuários comuns veem apenas projetos onde são
+ * membros explícitos ou líderes do projeto (owner por nome).
  */
 export const useProjectAccess = () => {
   const { user, isAdmin, isGestor, canManage, profile, loading } = useAuth();
@@ -34,12 +30,17 @@ export const useProjectAccess = () => {
       user?.email,
     ]);
 
-    // Fetch project_members + ALL non-trashed projects. Keep backward-compat
-    // with databases that still don't have created_by/manager columns.
     const membersPromise = supabase
       .from("project_members")
       .select("project_id")
       .eq("user_id", user.id);
+
+    const projectsPromise = candidates.length > 0
+      ? supabase
+          .from("projects")
+          .select("id, owner")
+          .eq("is_trashed", false)
+      : Promise.resolve({ data: [] as any[], error: null });
 
     const activitiesPromise = candidates.length > 0
       ? supabase
@@ -48,61 +49,34 @@ export const useProjectAccess = () => {
           .eq("is_trashed", false)
       : Promise.resolve({ data: [] as any[], error: null });
 
-    const projectsPromise = candidates.length > 0
-      ? (async () => {
-          const primary = await supabase
-            .from("projects")
-            .select("id, created_by, owner, assignees, manager")
-            .eq("is_trashed", false);
-
-          if (!primary.error) {
-            return primary as { data: any[] | null; error: any };
-          }
-
-          const fallback = await supabase
-            .from("projects")
-            .select("id, owner, assignees")
-            .eq("is_trashed", false);
-
-          return fallback as { data: any[] | null; error: any };
-        })()
-      : Promise.resolve({ data: [] as any[], error: null });
-
-    const [membersRes, activitiesRes, projectsRes] = await Promise.all([
+    const [membersRes, projectsRes, activitiesRes] = await Promise.all([
       membersPromise,
-      activitiesPromise,
       projectsPromise,
+      activitiesPromise,
     ]);
 
     const ids = new Set<string>();
     (membersRes.data || []).forEach((m: any) => ids.add(m.project_id));
 
-    (activitiesRes.data || []).forEach((activity: any) => {
-      const assignedMatch = matchesIdentity(activity.assigned_to, candidates);
-      const participantMatch =
-        Array.isArray(activity.participants) &&
-        anyMatchesIdentity(activity.participants, candidates);
-
-      if ((assignedMatch || participantMatch) && typeof activity.project_id === "string") {
-        ids.add(activity.project_id);
-      }
-    });
-
     if (candidates.length > 0) {
       (projectsRes.data || []).forEach((p: any) => {
-        const creatorMatch =
-          typeof p.created_by === "string" && p.created_by === user.id;
         const ownerMatch = matchesIdentity(p.owner, candidates);
-        const managerMatch = matchesIdentity(p.manager, candidates);
-        const assigneeMatch =
-          Array.isArray(p.assignees) && anyMatchesIdentity(p.assignees, candidates);
-        if (creatorMatch || ownerMatch || managerMatch || assigneeMatch) ids.add(p.id);
+        if (ownerMatch) ids.add(p.id);
+      });
+
+      (activitiesRes.data || []).forEach((a: any) => {
+        const isAssignedActor = matchesIdentity(a.assigned_to, candidates);
+        const isParticipantActor = Array.isArray(a.participants) && anyMatchesIdentity(a.participants, candidates);
+
+        if (isAssignedActor || isParticipantActor) {
+          ids.add(a.project_id);
+        }
       });
     }
 
     setMemberProjectIds(ids);
     setMembershipsLoading(false);
-  }, [isAdmin, loading, user?.email, user?.id, profile?.email, profile?.full_name]);
+  }, [isAdmin, loading, user?.id, profile?.email, profile?.full_name]);
 
   useEffect(() => {
     loadMemberships();
