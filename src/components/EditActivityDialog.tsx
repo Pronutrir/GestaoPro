@@ -79,6 +79,24 @@ interface Phase {
   title: string;
 }
 
+interface PersonOption {
+  id: string;
+  full_name: string;
+  sector: string | null;
+}
+
+function normalizePersonOptions(options: Array<Partial<PersonOption> | null | undefined>): PersonOption[] {
+  return options
+    .filter((option): option is Partial<PersonOption> & { full_name: string } => Boolean(option?.full_name?.trim()))
+    .map((option, index) => ({
+      id: typeof option.id === "string" && option.id.trim().length > 0
+        ? option.id
+        : `person-${option.full_name.trim()}-${option.sector ?? "no-sector"}-${index}`,
+      full_name: option.full_name.trim(),
+      sector: option.sector ?? null,
+    }));
+}
+
 interface EditActivityDialogProps {
   activity: Activity | null;
   open: boolean;
@@ -159,8 +177,8 @@ export const EditActivityDialog = ({
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
   const [editingSubActivity, setEditingSubActivity] = useState<Activity | null>(null);
   const [editingSubOpen, setEditingSubOpen] = useState(false);
-  const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
-  const [allProfiles, setAllProfiles] = useState<{ full_name: string; sector: string | null }[]>([]);
+  const [members, setMembers] = useState<PersonOption[]>([]);
+  const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
   const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean }[]>([]);
   const [currentStageId, setCurrentStageId] = useState("");
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false);
@@ -288,8 +306,8 @@ export const EditActivityDialog = ({
     }
 
     // Fetch all active profiles for participants dropdown
-    supabase.from("profiles").select("full_name, sector").eq("is_active", true).then(({ data }) => {
-      if (data) setAllProfiles(data.filter(p => p.full_name));
+    supabase.from("profiles").select("id, full_name, sector").eq("is_active", true).then(({ data }) => {
+      if (data) setAllProfiles(normalizePersonOptions(data));
     });
 
     // Resolve creator's full name from email
@@ -372,8 +390,8 @@ export const EditActivityDialog = ({
       supabase.from("project_members").select("user_id").eq("project_id", projectId).then(({ data: memberData }) => {
         if (memberData && memberData.length > 0) {
           const userIds = memberData.map(m => m.user_id);
-          supabase.from("profiles").select("full_name, sector").in("id", userIds).then(({ data: profiles }) => {
-            if (profiles) setMembers(profiles.filter(p => p.full_name));
+          supabase.from("profiles").select("id, full_name, sector").in("id", userIds).then(({ data: profiles }) => {
+            if (profiles) setMembers(normalizePersonOptions(profiles));
           });
         }
       });
@@ -1019,8 +1037,8 @@ export const EditActivityDialog = ({
                     onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
                   >
                     <option value="">Sem líder</option>
-                    {allProfiles.map((m) => (
-                      <option key={m.full_name} value={m.full_name!}>
+                    {allProfiles.map((m, index) => (
+                      <option key={`${m.id}-${index}`} value={m.full_name!}>
                         {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
                       </option>
                     ))}
@@ -1241,8 +1259,8 @@ export const EditActivityDialog = ({
                             <option value="">Selecionar pessoa...</option>
                             {allProfiles
                               .filter((m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name!)))
-                              .map((m) => (
-                                <option key={m.full_name} value={m.full_name!}>
+                              .map((m, index) => (
+                                <option key={`${m.id}-${index}`} value={m.full_name!}>
                                   {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
                                 </option>
                               ))}
@@ -1481,9 +1499,9 @@ export const EditActivityDialog = ({
                                     >
                                       Sem responsável
                                     </button>
-                                    {members.map((m) => (
+                                    {members.map((m, index) => (
                                       <button
-                                        key={m.full_name}
+                                        key={`${m.id}-${index}`}
                                         type="button"
                                         className={`w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted ${
                                           sub.assigned_to === m.full_name ? "bg-primary/10 text-primary font-medium" : ""
