@@ -98,6 +98,41 @@ interface EditActivityDialogProps {
   onBackToParent?: () => void;
 }
 
+/** Helper para serializar erros robustamente, capturando propriedades não-enumeráveis */
+function serializeError(error: any): Record<string, any> {
+  const obj: Record<string, any> = {
+    type: typeof error,
+    constructor: error?.constructor?.name,
+    isError: error instanceof Error,
+  };
+
+  if (error && typeof error === "object") {
+    // Pegar propriedades enumeráveis
+    for (const key in error) {
+      if (Object.prototype.hasOwnProperty.call(error, key)) {
+        try {
+          obj[key] = error[key];
+        } catch {}
+      }
+    }
+    // Pegar propriedades não-enumeráveis comuns
+    ["message", "name", "code", "hint", "details", "stack", "status"].forEach((key) => {
+      if (!(key in obj) && key in error) {
+        try {
+          obj[key] = error[key];
+        } catch {}
+      }
+    });
+  }
+
+  if (Object.keys(obj).length === 3 && !obj.message) {
+    // Se só tem type/constructor/isError, tenta converter para string
+    obj.stringified = String(error);
+  }
+
+  return obj;
+}
+
 const RACI_OPTIONS = [
   { value: "", label: "Nenhum" },
   { value: "R", label: "R - Responsável" },
@@ -524,10 +559,13 @@ export const EditActivityDialog = ({
             const others = (siblings || []).filter((s: any) => s.id !== act.id).map((s: any) => s.wbs_code);
             wbsToSave = getNextSubWbs(parentWbs, others);
           }
-        } catch { /* ignora */ }
+        } catch (wbsErr) {
+          console.warn("Aviso ao gerar WBS automático:", wbsErr);
+        }
       }
 
-      const { error } = await supabase.from("activities").update({
+      // Atualizar atividade principal
+      const updatePayload: any = {
         title: formData.title,
         description: formData.description || null,
         assigned_to: formData.assigned_to || null,
@@ -542,7 +580,7 @@ export const EditActivityDialog = ({
         tags: formData.tags,
         parent_id: formData.parent_id || null,
         story_points: parseInt(formData.story_points) || 0,
-        raci_role: "A", // Líder do projeto é sempre Accountable
+        raci_role: "A",
         participants: formData.participants.filter((p) => p && p.trim().length > 0),
         participant_roles: Object.fromEntries(
           Object.entries(formData.participant_roles ?? {}).filter(([k]) => k && k.trim().length > 0)
@@ -553,9 +591,28 @@ export const EditActivityDialog = ({
         is_milestone: formData.is_milestone,
         item_type: formData.item_type,
         progress_flag: formData.progress_flag ?? 0,
-        wbs_code: wbsToSave,
-      } as any).eq("id", act.id);
-      if (error) throw error;
+      };
+
+      // Incluir wbs_code apenas se foi gerado automaticamente (para não quebrar se coluna ainda não existe no banco)
+      if (wbsToSave) {
+        updatePayload.wbs_code = wbsToSave;
+      }
+
+      console.log("Atualizando atividade", act.id, "com payload:", updatePayload);
+
+      const { error: updateError, data: updateData } = await supabase
+        .from("activities")
+        .update(updatePayload)
+        .eq("id", act.id);
+
+      if (updateError) {
+        const errorObj = serializeError(updateError);
+        console.error("❌ Erro direto do Supabase.update:", errorObj);
+        throw updateError;
+      }
+
+      console.log("Atividade atualizada com sucesso");
+
 
       // Cascade dates to successors when end_date moved (skip quality projects)
       if (
@@ -564,34 +621,73 @@ export const EditActivityDialog = ({
         formData.end_date &&
         formData.end_date !== previousEndDate
       ) {
-        const [{ data: deps }, { data: acts }] = await Promise.all([
-          supabase.from("task_dependencies").select("predecessor_id, successor_id, lag_days, dependency_type"),
-          supabase.from("activities").select("id, start_date, end_date").eq("project_id", projectId),
-        ]);
-        const updates = cascadeDates(
-          act.id,
-          formData.end_date,
-          (acts || []) as any,
-          (deps || []) as any,
-        );
-        if (updates.length > 0) {
-          await Promise.all(
-            updates.map(u =>
-              supabase.from("activities")
-                .update({ start_date: u.start_date, end_date: u.end_date })
-                .eq("id", u.id),
-            ),
+        try {
+          console.log("Iniciando cascata de datas para sucessores");
+          const [depsRes, actsRes] = await Promise.all([
+            supabase.from("task_dependencies").select("predecessor_id, successor_id, lag_days, dependency_type"),
+            supabase.from("activities").select("id, start_date, end_date").eq("project_id", projectId),
+          ]);
+
+          const { data: deps, error: depsError } = depsRes;
+          const { data: acts, error: actsError } = actsRes;
+
+          if (depsError) throw new Error(`Erro ao buscar dependências: ${depsError.message}`);
+          if (actsError) throw new Error(`Erro ao buscar atividades: ${actsError.message}`);
+
+          const updates = cascadeDates(
+            act.id,
+            formData.end_date,
+            (acts || []) as any,
+            (deps || []) as any,
           );
-          toast({ title: `${updates.length} sucessor(es) replanejado(s) automaticamente` });
+          console.log("Cascata calculou", updates.length, "atividades a replanejam");
+          
+          if (updates.length > 0) {
+            const cascadeErrors: string[] = [];
+            await Promise.all(
+              updates.map(async (u) => {
+                console.log("Replanejando atividade", u.id, "com datas", u.start_date, u.end_date);
+                const { error: cascadeErr } = await supabase
+                  .from("activities")
+                  .update({ start_date: u.start_date, end_date: u.end_date })
+                  .eq("id", u.id);
+                if (cascadeErr) cascadeErrors.push(`${u.id}: ${cascadeErr.message}`);
+              }),
+            );
+            if (cascadeErrors.length > 0) {
+              console.warn("Erros ao replanejam sucessores:", cascadeErrors);
+            } else {
+              console.log("Todos os sucessores replanejados com sucesso");
+              toast({ title: `${updates.length} sucessor(es) replanejado(s) automaticamente` });
+            }
+          }
+        } catch (cascadeErr: any) {
+          const cascadeErrorObj = serializeError(cascadeErr);
+          console.error("❌ Erro na cascata de datas:", cascadeErrorObj);
         }
       }
 
       toast({ title: createMode ? "Atividade criada!" : "Atividade atualizada!" });
       onActivityUpdated();
       onOpenChange(false);
-    } catch (error) {
-      console.error("Erro ao atualizar atividade:", error);
-      toast({ title: "Erro ao atualizar atividade", variant: "destructive" });
+    } catch (error: any) {
+      const errorObj = serializeError(error);
+      const errorMsg =
+        error?.message ||
+        error?.details ||
+        error?.hint ||
+        errorObj.stringified ||
+        "Erro desconhecido";
+
+      console.error("❌ Erro ao atualizar atividade:", errorObj);
+      console.error("   Mensagem:", errorMsg);
+      if (error?.stack) console.error("   Stack:", error.stack);
+
+      toast({
+        title: "Erro ao atualizar atividade",
+        description: errorMsg.slice(0, 200),
+        variant: "destructive",
+      });
     }
   };
 
