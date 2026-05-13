@@ -1,4 +1,3 @@
-'use client';
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -70,6 +69,8 @@ interface Activity {
   priority?: string;
   tags?: string[];
   parent_id?: string | null;
+  workflow_stage_id?: string | null;
+  last_progress_stage_id?: string | null;
 }
 
 interface Phase {
@@ -96,43 +97,6 @@ interface EditActivityDialogProps {
   parentActivityTitle?: string;
   /** Called when user clicks the "Back" arrow — used to close only the nested dialog and return to parent. */
   onBackToParent?: () => void;
-  /** Tab inicial ao abrir o diálogo. */
-  initialTab?: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history";
-}
-
-/** Helper para serializar erros robustamente, capturando propriedades não-enumeráveis */
-function serializeError(error: any): Record<string, any> {
-  const obj: Record<string, any> = {
-    type: typeof error,
-    constructor: error?.constructor?.name,
-    isError: error instanceof Error,
-  };
-
-  if (error && typeof error === "object") {
-    // Pegar propriedades enumeráveis
-    for (const key in error) {
-      if (Object.prototype.hasOwnProperty.call(error, key)) {
-        try {
-          obj[key] = error[key];
-        } catch {}
-      }
-    }
-    // Pegar propriedades não-enumeráveis comuns
-    ["message", "name", "code", "hint", "details", "stack", "status"].forEach((key) => {
-      if (!(key in obj) && key in error) {
-        try {
-          obj[key] = error[key];
-        } catch {}
-      }
-    });
-  }
-
-  if (Object.keys(obj).length === 3 && !obj.message) {
-    // Se só tem type/constructor/isError, tenta converter para string
-    obj.stringified = String(error);
-  }
-
-  return obj;
 }
 
 /** Parse hours as decimal from "Xh Ym" or plain number */
@@ -157,22 +121,12 @@ function formatHoursDisplay(hours: number): string {
   return "0h";
 }
 
-function isCompletedStatus(status: string | null | undefined): boolean {
-  if (!status) return false;
-  const normalized = status
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  return normalized === "completed" || normalized === "concluido";
-}
-
 export const EditActivityDialog = ({
   activity, open, onOpenChange, onActivityUpdated,
   phases = [], allActivities = [], projectId, isQualityProject = false,
   createMode = false, defaultStageId = null, defaultPhaseId = null, defaultParentId = null,
   onActivityCreated,
   parentActivityTitle, onBackToParent,
-  initialTab = "details",
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
@@ -202,7 +156,6 @@ export const EditActivityDialog = ({
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
   const [editingSubActivity, setEditingSubActivity] = useState<Activity | null>(null);
   const [editingSubOpen, setEditingSubOpen] = useState(false);
-  const [consumedMinutes, setConsumedMinutes] = useState<number>(0);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [allProfiles, setAllProfiles] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean }[]>([]);
@@ -215,12 +168,6 @@ export const EditActivityDialog = ({
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "stories" | "history">("details");
 
-  useEffect(() => {
-    if (open) {
-      setActiveTab(initialTab);
-    }
-  }, [open, initialTab]);
-
   // Divergências pai vs subatividades (alerta apenas, sem bloqueio)
   const subHoursTotal = subActivities.reduce((sum, s) => sum + (Number((s as any).hours) || 0), 0);
   const parentHoursNum = parseHoursInput(formData.hours);
@@ -228,6 +175,14 @@ export const EditActivityDialog = ({
     subActivities.length > 0 &&
     parentHoursNum > 0 &&
     Math.abs(parentHoursNum - subHoursTotal) > 0.01;
+
+  // Horas consumidas (consolidado pai + subs, evitando duplicidade)
+  const subsConsumed = subActivities
+    .filter((s) => s.status === "completed")
+    .reduce((sum, s) => sum + (Number((s as any).hours) || 0), 0);
+  const ownConsumed = effectiveActivity?.status === "completed" ? parentHoursNum : 0;
+  const consumedHours = subActivities.length > 0 ? subsConsumed : ownConsumed;
+  const plannedHours = parentHoursNum > 0 ? parentHoursNum : subHoursTotal;
 
   const subStartDates = subActivities.map((s) => s.start_date).filter(Boolean) as string[];
   const subEndDates = subActivities.map((s) => s.end_date).filter(Boolean) as string[];
@@ -285,7 +240,9 @@ export const EditActivityDialog = ({
     // Create a draft activity when opening in create mode
     if (createMode && !draftActivity && !creatingDraft && projectId) {
       setCreatingDraft(true);
+      const draftId = crypto.randomUUID();
       const insertPayload: any = {
+        id: draftId,
         project_id: projectId,
         title: "Nova atividade",
         status: "pending",
@@ -294,15 +251,34 @@ export const EditActivityDialog = ({
         phase_id: defaultPhaseId || null,
         parent_id: defaultParentId || null,
       };
-      supabase.from("activities").insert(insertPayload).select("*").single().then(({ data, error }) => {
+      supabase.from("activities").insert(insertPayload).then(({ error }) => {
         setCreatingDraft(false);
-        if (error || !data) {
+        if (error) {
+          console.error("Erro ao iniciar rascunho de atividade:", error);
           toast({ title: "Erro ao iniciar nova atividade", variant: "destructive" });
           onOpenChange(false);
           return;
         }
-        setDraftActivity(data as Activity);
-        onActivityCreated?.((data as any).id);
+        setDraftActivity({
+          id: draftId,
+          project_id: projectId,
+          title: "Nova atividade",
+          description: null,
+          status: "pending",
+          completed_at: null,
+          created_at: new Date().toISOString(),
+          assigned_to: null,
+          start_date: null,
+          end_date: null,
+          cost: 0,
+          hours: 0,
+          phase_id: defaultPhaseId || null,
+          priority: "medium",
+          tags: [],
+          parent_id: defaultParentId || null,
+          workflow_stage_id: defaultStageId || null,
+        } as Activity & { project_id: string; workflow_stage_id: string | null });
+        onActivityCreated?.(draftId);
         // Pre-fill title empty so user types fresh
         setFormData((prev) => ({ ...prev, title: "" }));
       });
@@ -431,20 +407,6 @@ export const EditActivityDialog = ({
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       fetchSubActivities(act.id);
-      // Fetch consumed minutes from time_entries for this activity
-      if (!createMode) {
-        supabase
-          .from("time_entries")
-          .select("duration_minutes")
-          .eq("activity_id", act.id)
-          .then(({ data }) => {
-            const total = (data ?? []).reduce(
-              (sum, e) => sum + (e.duration_minutes ?? 0),
-              0
-            );
-            setConsumedMinutes(total);
-          });
-      }
     }
   }, [activity, draftActivity, createMode]);
 
@@ -479,25 +441,57 @@ export const EditActivityDialog = ({
   };
 
   const handleToggleSubActivity = async (sub: Activity) => {
-    const wasCompleted = isCompletedStatus(sub.status);
-    const newStatus = wasCompleted ? "pending" : "completed";
+    const newStatus = sub.status === "completed" ? "pending" : "completed";
+    const finalStage = workflowStages.find((stage) => stage.is_final);
+    const backlogStage = workflowStages.find((stage) => stage.display_order === 0) || workflowStages[0];
+    const currentStageId = sub.workflow_stage_id || null;
+    const reopenStageId =
+      sub.last_progress_stage_id ||
+      (currentStageId && currentStageId !== finalStage?.id ? currentStageId : null) ||
+      backlogStage?.id ||
+      null;
     const updateData: any = {
       status: newStatus,
       completed_at: newStatus === "completed" ? new Date().toISOString() : null,
     };
-    // Regra B+C: NÃO move a subatividade de coluna ao concluir.
-    // Apenas marca status/completed_at, mantendo workflow_stage_id intacto.
-    const { error: subUpdateError } = await supabase
+    if (newStatus === "completed") {
+      if (finalStage?.id) {
+        updateData.workflow_stage_id = finalStage.id;
+      }
+      if (currentStageId && currentStageId !== finalStage?.id) {
+        updateData.last_progress_stage_id = currentStageId;
+      }
+    } else if (reopenStageId) {
+      updateData.workflow_stage_id = reopenStageId;
+    }
+
+    // Atualização otimista no estado local para feedback imediato
+    setSubActivities((prev) =>
+      prev.map((s) =>
+        s.id === sub.id
+          ? ({
+              ...s,
+              status: newStatus,
+              completed_at: updateData.completed_at,
+              workflow_stage_id: updateData.workflow_stage_id ?? s.workflow_stage_id ?? null,
+              last_progress_stage_id: updateData.last_progress_stage_id ?? s.last_progress_stage_id ?? null,
+            } as Activity)
+          : s
+      )
+    );
+    const { error: subErr } = await supabase
       .from("activities")
       .update(updateData)
       .eq("id", sub.id);
-
-    if (subUpdateError) {
+    if (subErr) {
+      console.error("[handleToggleSubActivity] erro ao atualizar subatividade:", subErr);
       toast({
-        title: "Não foi possível concluir a subtarefa",
-        description: subUpdateError.message,
+        title: "Não foi possível atualizar a subatividade",
+        description: subErr.message || "Verifique suas permissões no projeto.",
         variant: "destructive",
       });
+      // Reverte a atualização otimista
+      if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
       return;
     }
 
@@ -511,29 +505,31 @@ export const EditActivityDialog = ({
       const subs = (siblings || []) as Array<{ id: string; status: string }>;
 
       if (subs.length > 0) {
-        const allDone = subs.every((s) => isCompletedStatus(s.status));
+        const allDone = subs.every((s) => s.status === "completed");
 
-        if (newStatus === "completed" && allDone && !isCompletedStatus(parent.status)) {
+        if (newStatus === "completed" && allDone && parent.status !== "completed") {
           // Todas concluídas → move o pai para "Final" e marca completed
-          const { data: finalStage } = await supabase
-            .from("workflow_stages")
-            .select("id")
-            .eq("project_id", projectId)
-            .eq("is_final", true)
-            .limit(1)
-            .maybeSingle();
           const parentUpdate: any = {
             status: "completed",
             completed_at: new Date().toISOString(),
           };
-          if (finalStage) parentUpdate.workflow_stage_id = finalStage.id;
+          if (finalStage?.id) parentUpdate.workflow_stage_id = finalStage.id;
+          if (parent.workflow_stage_id && parent.workflow_stage_id !== finalStage?.id) {
+            parentUpdate.last_progress_stage_id = parent.workflow_stage_id;
+          }
           await supabase.from("activities").update(parentUpdate).eq("id", parent.id);
           toast({ title: "Atividade concluída", description: "Todas as subatividades foram concluídas — a atividade-pai foi movida para Final." });
-        } else if (newStatus === "pending" && isCompletedStatus(parent.status)) {
+        } else if (newStatus === "pending" && parent.status === "completed") {
           // Reabriu uma sub e o pai estava concluído → reabre o pai
+          const parentReopenStageId =
+            parent.last_progress_stage_id ||
+            (parent.workflow_stage_id && parent.workflow_stage_id !== finalStage?.id ? parent.workflow_stage_id : null) ||
+            backlogStage?.id ||
+            null;
           await supabase.from("activities").update({
             status: "pending",
             completed_at: null,
+            ...(parentReopenStageId ? { workflow_stage_id: parentReopenStageId } : {}),
           }).eq("id", parent.id);
           toast({ title: "Atividade reaberta", description: "Uma subatividade foi reaberta — a atividade-pai voltou para pendente." });
         }
@@ -591,13 +587,10 @@ export const EditActivityDialog = ({
             const others = (siblings || []).filter((s: any) => s.id !== act.id).map((s: any) => s.wbs_code);
             wbsToSave = getNextSubWbs(parentWbs, others);
           }
-        } catch (wbsErr) {
-          console.warn("Aviso ao gerar WBS automático:", wbsErr);
-        }
+        } catch { /* ignora */ }
       }
 
-      // Atualizar atividade principal
-      const updatePayload: any = {
+      const { error } = await supabase.from("activities").update({
         title: formData.title,
         description: formData.description || null,
         assigned_to: formData.assigned_to || null,
@@ -612,7 +605,6 @@ export const EditActivityDialog = ({
         tags: formData.tags,
         parent_id: formData.parent_id || null,
         story_points: parseInt(formData.story_points) || 0,
-        raci_role: "A",
         participants: formData.participants.filter((p) => p && p.trim().length > 0),
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
@@ -620,28 +612,9 @@ export const EditActivityDialog = ({
         is_milestone: formData.is_milestone,
         item_type: formData.item_type,
         progress_flag: formData.progress_flag ?? 0,
-      };
-
-      // Incluir wbs_code apenas se foi gerado automaticamente (para não quebrar se coluna ainda não existe no banco)
-      if (wbsToSave) {
-        updatePayload.wbs_code = wbsToSave;
-      }
-
-      console.log("Atualizando atividade", act.id, "com payload:", updatePayload);
-
-      const { error: updateError, data: updateData } = await supabase
-        .from("activities")
-        .update(updatePayload)
-        .eq("id", act.id);
-
-      if (updateError) {
-        const errorObj = serializeError(updateError);
-        console.error("❌ Erro direto do Supabase.update:", errorObj);
-        throw updateError;
-      }
-
-      console.log("Atividade atualizada com sucesso");
-
+        wbs_code: wbsToSave,
+      } as any).eq("id", act.id);
+      if (error) throw error;
 
       // Cascade dates to successors when end_date moved (skip quality projects)
       if (
@@ -650,73 +623,34 @@ export const EditActivityDialog = ({
         formData.end_date &&
         formData.end_date !== previousEndDate
       ) {
-        try {
-          console.log("Iniciando cascata de datas para sucessores");
-          const [depsRes, actsRes] = await Promise.all([
-            supabase.from("task_dependencies").select("predecessor_id, successor_id, lag_days, dependency_type"),
-            supabase.from("activities").select("id, start_date, end_date").eq("project_id", projectId),
-          ]);
-
-          const { data: deps, error: depsError } = depsRes;
-          const { data: acts, error: actsError } = actsRes;
-
-          if (depsError) throw new Error(`Erro ao buscar dependências: ${depsError.message}`);
-          if (actsError) throw new Error(`Erro ao buscar atividades: ${actsError.message}`);
-
-          const updates = cascadeDates(
-            act.id,
-            formData.end_date,
-            (acts || []) as any,
-            (deps || []) as any,
+        const [{ data: deps }, { data: acts }] = await Promise.all([
+          supabase.from("task_dependencies").select("predecessor_id, successor_id, lag_days, dependency_type"),
+          supabase.from("activities").select("id, start_date, end_date").eq("project_id", projectId),
+        ]);
+        const updates = cascadeDates(
+          act.id,
+          formData.end_date,
+          (acts || []) as any,
+          (deps || []) as any,
+        );
+        if (updates.length > 0) {
+          await Promise.all(
+            updates.map(u =>
+              supabase.from("activities")
+                .update({ start_date: u.start_date, end_date: u.end_date })
+                .eq("id", u.id),
+            ),
           );
-          console.log("Cascata calculou", updates.length, "atividades a replanejam");
-          
-          if (updates.length > 0) {
-            const cascadeErrors: string[] = [];
-            await Promise.all(
-              updates.map(async (u) => {
-                console.log("Replanejando atividade", u.id, "com datas", u.start_date, u.end_date);
-                const { error: cascadeErr } = await supabase
-                  .from("activities")
-                  .update({ start_date: u.start_date, end_date: u.end_date })
-                  .eq("id", u.id);
-                if (cascadeErr) cascadeErrors.push(`${u.id}: ${cascadeErr.message}`);
-              }),
-            );
-            if (cascadeErrors.length > 0) {
-              console.warn("Erros ao replanejam sucessores:", cascadeErrors);
-            } else {
-              console.log("Todos os sucessores replanejados com sucesso");
-              toast({ title: `${updates.length} sucessor(es) replanejado(s) automaticamente` });
-            }
-          }
-        } catch (cascadeErr: any) {
-          const cascadeErrorObj = serializeError(cascadeErr);
-          console.error("❌ Erro na cascata de datas:", cascadeErrorObj);
+          toast({ title: `${updates.length} sucessor(es) replanejado(s) automaticamente` });
         }
       }
 
       toast({ title: createMode ? "Atividade criada!" : "Atividade atualizada!" });
       onActivityUpdated();
       onOpenChange(false);
-    } catch (error: any) {
-      const errorObj = serializeError(error);
-      const errorMsg =
-        error?.message ||
-        error?.details ||
-        error?.hint ||
-        errorObj.stringified ||
-        "Erro desconhecido";
-
-      console.error("❌ Erro ao atualizar atividade:", errorObj);
-      console.error("   Mensagem:", errorMsg);
-      if (error?.stack) console.error("   Stack:", error.stack);
-
-      toast({
-        title: "Erro ao atualizar atividade",
-        description: errorMsg.slice(0, 200),
-        variant: "destructive",
-      });
+    } catch (error) {
+      console.error("Erro ao atualizar atividade:", error);
+      toast({ title: "Erro ao atualizar atividade", variant: "destructive" });
     }
   };
 
@@ -1026,28 +960,6 @@ export const EditActivityDialog = ({
                           <option key={h} value={`${h}h`} label={h === 1 ? "1 hora" : `${h} horas`} />
                         ))}
                       </datalist>
-                      {/* Consumidas: badge only for leaf activities (no subtasks) */}
-                      {subActivities.length === 0 && !createMode && parentHoursNum > 0 && (() => {
-                        const consumedH = consumedMinutes / 60;
-                        const isOver = consumedH > parentHoursNum;
-                        const hasConsumed = consumedMinutes > 0;
-                        const label = `${formatHoursDisplay(consumedH) || "0h"} / ${formatHoursDisplay(parentHoursNum)}`;
-                        return (
-                          <span
-                            className={`inline-flex items-center gap-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded border ${
-                              isOver
-                                ? "bg-destructive/10 text-destructive border-destructive/30"
-                                : hasConsumed
-                                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
-                                : "bg-muted text-muted-foreground border-border"
-                            }`}
-                            title="Horas consumidas vs planejadas (via apontamentos)"
-                          >
-                            <Clock className="w-3 h-3" />
-                            {label}
-                          </span>
-                        );
-                      })()}
                       {hoursDivergence && (
                         <TooltipProvider delayDuration={150}>
                           <Tooltip>
@@ -1061,6 +973,24 @@ export const EditActivityDialog = ({
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
+                      )}
+                      {plannedHours > 0 && (
+                        <span
+                          className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${
+                            consumedHours > plannedHours
+                              ? "text-destructive border-destructive/40 bg-destructive/10"
+                              : consumedHours > 0
+                              ? "text-emerald-700 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/10"
+                              : "text-muted-foreground border-border bg-muted/30"
+                          }`}
+                          title={
+                            subActivities.length > 0
+                              ? "Consumido nas subatividades concluídas"
+                              : "Consumido (atividade concluída)"
+                          }
+                        >
+                          Consumidas: {formatHoursDisplay(consumedHours) || "0h"} / {formatHoursDisplay(plannedHours)}
+                        </span>
                       )}
                     </div>
                   </PropertyRow>
@@ -1086,8 +1016,8 @@ export const EditActivityDialog = ({
                     onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
                   >
                     <option value="">Sem líder</option>
-                    {allProfiles.map((m, idx) => (
-                      <option key={`${m.full_name}-${idx}`} value={m.full_name!}>
+                    {allProfiles.map((m) => (
+                      <option key={m.full_name} value={m.full_name!}>
                         {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
                       </option>
                     ))}
@@ -1308,8 +1238,8 @@ export const EditActivityDialog = ({
                             <option value="">Selecionar pessoa...</option>
                             {allProfiles
                               .filter((m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name!)))
-                              .map((m, idx) => (
-                                <option key={`${m.full_name}-${idx}`} value={m.full_name!}>
+                              .map((m) => (
+                                <option key={m.full_name} value={m.full_name!}>
                                   {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
                                 </option>
                               ))}
@@ -1479,9 +1409,9 @@ export const EditActivityDialog = ({
                           type="button"
                           className="h-5 w-5 shrink-0"
                           onClick={() => handleToggleSubActivity(sub)}
-                          title={isCompletedStatus(sub.status) ? "Reabrir" : "Concluir"}
+                          title={sub.status === "completed" ? "Reabrir" : "Concluir"}
                         >
-                          {isCompletedStatus(sub.status) ? (
+                          {sub.status === "completed" ? (
                             <CheckCircle2 className="w-3.5 h-3.5 text-success" />
                           ) : (
                             <Circle className="w-3.5 h-3.5 text-muted-foreground" />
@@ -1491,7 +1421,7 @@ export const EditActivityDialog = ({
                           type="button"
                           onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
                           className={`text-xs truncate text-left ${
-                            isCompletedStatus(sub.status) ? "line-through text-muted-foreground" : "text-foreground hover:text-primary"
+                            sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground hover:text-primary"
                           }`}
                           title={sub.title}
                         >
@@ -1515,7 +1445,7 @@ export const EditActivityDialog = ({
                         {/* Colunas dinâmicas (na ordem de ALL_COLS, apenas as visíveis) */}
                         {ALL_COLS.filter((c) => visibleCols.includes(c.id)).map(({ id: colId }) => {
                           const updateField = async (value: any) => {
-                            await (supabase.from("activities").update({ [colId]: value } as any) as any).eq("id", sub.id);
+                            await supabase.from("activities").update({ [colId]: value }).eq("id", sub.id);
                             if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
                             onActivityUpdated();
                           };
@@ -1548,9 +1478,9 @@ export const EditActivityDialog = ({
                                     >
                                       Sem responsável
                                     </button>
-                                    {members.map((m, idx) => (
+                                    {members.map((m) => (
                                       <button
-                                        key={`${m.full_name}-${idx}`}
+                                        key={m.full_name}
                                         type="button"
                                         className={`w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted ${
                                           sub.assigned_to === m.full_name ? "bg-primary/10 text-primary font-medium" : ""
@@ -1846,7 +1776,7 @@ export const EditActivityDialog = ({
                     )}
                   </TabsList>
                   <TabsContent value="comments" className="mt-3">
-                    <ActivityComments activityId={act.id} />
+                    <ActivityComments activityId={act.id} includeSubActivities />
                   </TabsContent>
                   {!createMode && (
                     <TabsContent value="history" className="mt-3">

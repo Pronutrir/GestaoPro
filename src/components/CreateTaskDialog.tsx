@@ -1,4 +1,3 @@
-'use client';
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -373,24 +372,22 @@ export const CreateTaskDialog = ({
           </div>
 
           {/* Responsável */}
-          <div className="grid grid-cols-1 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <User className="w-4 h-4" /> Responsável
-              </Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={formData.assigned_to}
-                onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-              >
-                <option value="">Sem responsável</option>
-                {members.map((m, idx) => (
-                  <option key={`${m.full_name}-${idx}`} value={m.full_name}>
-                    {m.full_name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <User className="w-4 h-4" /> Responsável
+            </Label>
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={formData.assigned_to}
+              onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+            >
+              <option value="">Sem responsável</option>
+              {members.map((m) => (
+                <option key={m.full_name} value={m.full_name}>
+                  {m.full_name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Participantes */}
@@ -413,8 +410,8 @@ export const CreateTaskDialog = ({
               }}
             >
               <option value="">Adicionar participante...</option>
-              {allProfiles.filter(m => m.full_name && !formData.participants.includes(m.full_name)).map((m, idx) => (
-                <option key={`${m.full_name}-${idx}`} value={m.full_name}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
+              {allProfiles.filter(m => m.full_name && !formData.participants.includes(m.full_name)).map((m) => (
+                <option key={m.full_name} value={m.full_name}>{m.full_name}{m.sector ? ` — ${m.sector}` : ''}</option>
               ))}
             </select>
             {formData.participants.length > 0 && (

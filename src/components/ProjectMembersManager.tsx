@@ -4,9 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, UserPlus, User, Building2, Plus } from "lucide-react";
+import { X, UserPlus, User, Building2, Plus, Wand2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 
 interface Profile {
@@ -14,6 +13,17 @@ interface Profile {
   email: string;
   full_name: string;
   sector: string | null;
+}
+
+interface Scheme {
+  id: string;
+  name: string;
+  description: string | null;
+  access_level: "viewer" | "commenter" | "contributor";
+  can_create: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  can_move: boolean;
 }
 
 interface ProjectMember {
@@ -24,21 +34,24 @@ interface ProjectMember {
   can_edit: boolean;
   can_delete: boolean;
   can_move: boolean;
+  access_level: "viewer" | "commenter" | "contributor";
   profile?: Profile;
 }
 
 interface ProjectMembersManagerProps {
   projectId: string;
-  canManageProject?: boolean;
 }
 
-export const ProjectMembersManager = ({ projectId, canManageProject = false }: ProjectMembersManagerProps) => {
+export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps) => {
   const { toast } = useToast();
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
+  const [schemes, setSchemes] = useState<Scheme[]>([]);
+  const [selectedScheme, setSelectedScheme] = useState<string>("");
   const [selectedUser, setSelectedUser] = useState("");
   const [selectedSector, setSelectedSector] = useState("");
+  const [selectedAccessLevel, setSelectedAccessLevel] = useState<"viewer" | "commenter" | "contributor">("contributor");
   const [permissions, setPermissions] = useState({
     can_create: false,
     can_edit: false,
@@ -52,16 +65,18 @@ export const ProjectMembersManager = ({ projectId, canManageProject = false }: P
   const [creatingMember, setCreatingMember] = useState(false);
 
   const fetchData = async () => {
-    const [{ data: membersData }, { data: profilesData }, { data: adminRoles }, { data: sectorsData }] = await Promise.all([
+    const [{ data: membersData }, { data: profilesData }, { data: adminRoles }, { data: sectorsData }, { data: schemesData }] = await Promise.all([
       supabase.from("project_members").select("*").eq("project_id", projectId),
       supabase.from("profiles").select("id, email, full_name, sector"),
       supabase.from("user_roles").select("user_id").eq("role", "admin"),
       supabase.from("sectors").select("id, name").order("name"),
+      supabase.from("permission_schemes").select("*").order("is_system", { ascending: false }).order("name"),
     ]);
     const adminIds = new Set((adminRoles || []).map(r => r.user_id));
 
     if (profilesData) setProfiles(profilesData.filter(p => !adminIds.has(p.id)));
     if (sectorsData) setSectors(sectorsData);
+    if (schemesData) setSchemes(schemesData as any);
 
     if (membersData && profilesData) {
       const enriched = membersData.map((m: any) => ({
@@ -72,6 +87,19 @@ export const ProjectMembersManager = ({ projectId, canManageProject = false }: P
     }
   };
 
+  const applyScheme = (schemeId: string) => {
+    setSelectedScheme(schemeId);
+    const s = schemes.find((x) => x.id === schemeId);
+    if (!s) return;
+    setSelectedAccessLevel(s.access_level);
+    setPermissions({
+      can_create: s.can_create,
+      can_edit: s.can_edit,
+      can_delete: s.can_delete,
+      can_move: s.can_move,
+    });
+  };
+
   useEffect(() => { fetchData(); }, [projectId]);
 
   const availableUsers = profiles.filter(
@@ -79,37 +107,49 @@ export const ProjectMembersManager = ({ projectId, canManageProject = false }: P
   );
 
   const handleAdd = async () => {
-    if (!selectedUser || !canManageProject) return;
-    const { error } = await supabase.from("project_members").upsert({
+    if (!selectedUser) return;
+    const isReadOnly = selectedAccessLevel !== "contributor";
+    const { error } = await supabase.from("project_members").insert({
       project_id: projectId,
       user_id: selectedUser,
       sector: selectedSector || null,
-      raci: null,
-      project_role: "contributor",
-      can_create: true,
-      can_edit: false,
-      can_delete: false,
-      can_move: false,
+      access_level: selectedAccessLevel,
+      can_create: isReadOnly ? false : permissions.can_create,
+      can_edit:   isReadOnly ? false : permissions.can_edit,
+      can_delete: isReadOnly ? false : permissions.can_delete,
+      can_move:   isReadOnly ? false : permissions.can_move,
     });
     if (error) {
       toast({ title: "Erro ao adicionar", description: error.message, variant: "destructive" });
     } else {
       setSelectedUser("");
       setSelectedSector("");
+      setSelectedAccessLevel("contributor");
+      setSelectedScheme("");
       setPermissions({ can_create: false, can_edit: false, can_delete: false, can_move: false });
       fetchData();
     }
   };
 
   const handleRemove = async (memberId: string) => {
-    if (!canManageProject) return;
     await supabase.from("project_members").delete().eq("id", memberId);
     fetchData();
   };
 
   const handleTogglePermission = async (memberId: string, field: string, value: boolean) => {
-    if (!canManageProject) return;
-    await supabase.from("project_members").update({ [field]: value } as Database['public']['Tables']['project_members']['Update']).eq("id", memberId);
+    await supabase.from("project_members").update({ [field]: value }).eq("id", memberId);
+    fetchData();
+  };
+
+  const handleChangeAccessLevel = async (memberId: string, level: "viewer" | "commenter" | "contributor") => {
+    const patch: any = { access_level: level };
+    if (level !== "contributor") {
+      patch.can_create = false;
+      patch.can_edit = false;
+      patch.can_delete = false;
+      patch.can_move = false;
+    }
+    await supabase.from("project_members").update(patch).eq("id", memberId);
     fetchData();
   };
 
@@ -120,53 +160,36 @@ export const ProjectMembersManager = ({ projectId, canManageProject = false }: P
     }
     setCreatingMember(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch("/api/admin/create-user", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke("admin-create-user", {
+        body: {
           email: newMemberEmail.trim(),
+          password: "Temp@1234",
           full_name: newMemberName.trim(),
           sector: newMemberSector || null,
           role_title: null,
           role: "user",
-        }),
+        },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "Erro ao criar membro");
+      if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
       const createdUserId = data?.user?.id;
 
-      if (createdUserId && canManageProject) {
-        const { error: memberError } = await supabase.from("project_members").upsert({
+      if (createdUserId) {
+        const { error: memberError } = await supabase.from("project_members").insert({
           project_id: projectId,
           user_id: createdUserId,
           sector: newMemberSector || null,
-          raci: null,
-          project_role: "contributor",
           can_create: true,
-          can_edit: false,
+          can_edit: true,
           can_delete: false,
-          can_move: false,
+          can_move: true,
         });
 
         if (memberError) throw memberError;
       }
 
-      const temporaryPassword = typeof data?.temporary_password === "string"
-        ? data.temporary_password
-        : null;
-
-      toast({
-        title: "Membro cadastrado e vinculado ao projeto!",
-        description: temporaryPassword
-          ? `Senha temporária: ${temporaryPassword}`
-          : "Usuário criado com sucesso.",
-      });
+      toast({ title: "Membro cadastrado e vinculado ao projeto!", description: `Senha temporária: Temp@1234` });
       setNewMemberName("");
       setNewMemberEmail("");
       setNewMemberSector("");
@@ -199,7 +222,15 @@ export const ProjectMembersManager = ({ projectId, canManageProject = false }: P
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-muted-foreground" />
                   <div className="flex flex-col">
-                    <span className="text-sm font-medium">{m.profile?.full_name || m.profile?.email}</span>
+                    <span className="text-sm font-medium flex items-center gap-2">
+                      {m.profile?.full_name || m.profile?.email}
+                      {m.access_level === "viewer" && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">VIEWER</span>
+                      )}
+                      {m.access_level === "commenter" && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold">COMMENTER</span>
+                      )}
+                    </span>
                     {m.sector && (
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Building2 className="w-3 h-3" /> {m.sector}
@@ -211,7 +242,25 @@ export const ProjectMembersManager = ({ projectId, canManageProject = false }: P
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="flex flex-wrap gap-3 pl-6">
+              <div className="pl-6 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-[11px] text-muted-foreground">Nível:</Label>
+                  <Select
+                    value={m.access_level || "contributor"}
+                    onValueChange={(v) => handleChangeAccessLevel(m.id, v as any)}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-44">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="contributor">Contribuidor (escreve)</SelectItem>
+                      <SelectItem value="commenter">Commenter (vê + comenta)</SelectItem>
+                      <SelectItem value="viewer">Viewer (só visualiza)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(m.access_level || "contributor") === "contributor" && (
+                  <div className="flex flex-wrap gap-3">
                 {[
                   { key: "can_create", label: "Criar" },
                   { key: "can_edit", label: "Editar" },
@@ -221,12 +270,13 @@ export const ProjectMembersManager = ({ projectId, canManageProject = false }: P
                   <label key={perm.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
                     <Checkbox
                       checked={(m as any)[perm.key]}
-                      disabled={!canManageProject}
                       onCheckedChange={(v) => handleTogglePermission(m.id, perm.key, !!v)}
                     />
                     {perm.label}
                   </label>
                 ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -249,8 +299,27 @@ export const ProjectMembersManager = ({ projectId, canManageProject = false }: P
             </SelectContent>
           </Select>
         </div>
-        {selectedUser && canManageProject && (
+        {selectedUser && (
           <>
+            {schemes.length > 0 && (
+              <div>
+                <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Wand2 className="w-3 h-3" /> Aplicar template de permissão
+                </Label>
+                <Select value={selectedScheme} onValueChange={applyScheme}>
+                  <SelectTrigger className="h-8 text-sm mt-1">
+                    <SelectValue placeholder="Escolher um template (opcional)..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {schemes.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}{s.description ? ` — ${s.description}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label className="text-xs text-muted-foreground">Setor neste projeto</Label>
               <Input
@@ -260,6 +329,20 @@ export const ProjectMembersManager = ({ projectId, canManageProject = false }: P
                 onChange={(e) => setSelectedSector(e.target.value)}
               />
             </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Nível de acesso</Label>
+              <Select value={selectedAccessLevel} onValueChange={(v) => setSelectedAccessLevel(v as any)}>
+                <SelectTrigger className="h-8 text-sm mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="contributor">Contribuidor — pode escrever conforme permissões abaixo</SelectItem>
+                  <SelectItem value="commenter">Commenter — apenas visualiza e comenta</SelectItem>
+                  <SelectItem value="viewer">Viewer — apenas visualiza</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedAccessLevel === "contributor" && (
             <div className="flex flex-wrap gap-3">
               {[
                 { key: "can_create", label: "Criar" },
@@ -276,6 +359,7 @@ export const ProjectMembersManager = ({ projectId, canManageProject = false }: P
                 </label>
               ))}
             </div>
+            )}
             <Button type="button" size="sm" variant="outline" className="h-8 gap-1 w-full" onClick={handleAdd}>
               <UserPlus className="w-4 h-4" />
               Adicionar à Equipe
@@ -291,14 +375,13 @@ export const ProjectMembersManager = ({ projectId, canManageProject = false }: P
           size="sm"
           variant="ghost"
           className="gap-1.5 text-xs text-muted-foreground hover:text-foreground w-full"
-          disabled={!canManageProject}
           onClick={() => setShowNewMember(!showNewMember)}
         >
           <Plus className="w-3.5 h-3.5" />
           Cadastrar novo membro
         </Button>
 
-        {showNewMember && canManageProject && (
+        {showNewMember && (
           <div className="p-3 rounded border border-primary/30 bg-primary/5 space-y-2">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Novo Cadastro</p>
             <Input

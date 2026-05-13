@@ -1,4 +1,3 @@
-'use client';
 import {
   LayoutDashboard,
   Home,
@@ -17,13 +16,16 @@ import {
   Calendar,
   Trash2,
   Briefcase,
-  Bot,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useRouter } from "next/navigation";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 import {
   Sidebar,
@@ -35,15 +37,12 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 const allNavItems = [
   { path: "/", label: "Visão Geral", icon: Home, minRole: "user" as const, moduleKey: "overview" },
   { path: "/projects", label: "Projetos", icon: FolderKanban, minRole: "user" as const, moduleKey: "projects" },
-  { path: "/portfolio", label: "Portfólio", icon: Briefcase, minRole: "gestor" as const, moduleKey: "portfolio" },
+  // Módulo Portfólio em standby — mantido no código mas oculto da navegação
+  // { path: "/portfolio", label: "Portfólio", icon: Briefcase, minRole: "gestor" as const, moduleKey: "portfolio" },
   { path: "/qualidade", label: "Gestão da Qualidade", icon: ShieldCheck, minRole: "qualidade" as const, moduleKey: "qualidade" },
   { path: "/team", label: "Equipe", icon: Users, minRole: "user" as const, moduleKey: "team" },
   { path: "/timeline", label: "Cronograma", icon: GanttChart, minRole: "user" as const, moduleKey: "timeline" },
@@ -62,7 +61,8 @@ const DEFAULT_MODULES = ["overview", "projects", "team", "timeline", "blocked"];
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const router = useRouter();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { signOut, profile, isAdmin, canManage, user } = useAuth();
   const userSector = profile?.sector?.toLowerCase() || "";
   const isQualidade = userSector === "qualidade";
@@ -81,7 +81,7 @@ export function AppSidebar() {
     fetchModules();
 
     const channel = supabase
-      .channel(`module-perms-${user.id}-${Math.random().toString(36).slice(2, 10)}`)
+      .channel(`module-perms-${user.id}`)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
@@ -92,8 +92,6 @@ export function AppSidebar() {
 
     return () => { supabase.removeChannel(channel); };
   }, [user?.id, canManage]);
-
-  const showAgent = user?.email === "williame.correia@pronutrir.com.br";
 
   const navItems = allNavItems.filter(item => {
     // Settings is always admin-only
@@ -109,7 +107,6 @@ export function AppSidebar() {
 
     // For regular users, check module permissions
     if (item.minRole === "qualidade") {
-      if (!isQualidade) return false;
       if (allowedModules && !allowedModules.includes(item.moduleKey)) return false;
       return true;
     }
@@ -127,7 +124,7 @@ export function AppSidebar() {
 
   const handleSignOut = async () => {
     await signOut();
-    router.push("/login");
+    navigate("/login");
   };
 
   return (
@@ -149,7 +146,7 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.path}>
                   <SidebarMenuButton asChild tooltip={collapsed ? item.label : undefined}>
                     <NavLink
-                      href={item.path}
+                      to={item.path}
                       end
                       className="hover:bg-muted/50"
                       activeClassName="bg-primary text-primary-foreground font-medium"
@@ -160,21 +157,6 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              {showAgent && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip={collapsed ? "Agente IA" : undefined}>
-                    <NavLink
-                      href="/agent"
-                      end
-                      className="hover:bg-muted/50"
-                      activeClassName="bg-primary text-primary-foreground font-medium"
-                    >
-                      <Bot className="h-4 w-4 shrink-0" />
-                      {!collapsed && <span className="ml-2">Agente IA</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

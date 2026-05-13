@@ -1,6 +1,5 @@
-'use client';
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { computeActivityProgress } from "@/lib/activityProgress";
 import { endVariance, varianceTone, varianceClasses, formatVariance } from "@/lib/dateVariance";
@@ -113,7 +112,7 @@ export function ProjectCronogramaPanel({
   defaultMode = "gantt",
   showProjectColumn = false,
 }: Props) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [activities, setActivities] = useState<any[]>([]);
   const [phases, setPhases] = useState<any[]>([]);
   const [deps, setDeps] = useState<any[]>([]);
@@ -535,7 +534,7 @@ export function ProjectCronogramaPanel({
   const goToDependencies = (projectId?: string) => {
     const pid = projectId || (projectIds && projectIds[0]);
     if (!pid) return;
-    router.push(`/project/${pid}?tab=dependencies`);
+    navigate(`/project/${pid}?tab=dependencies`);
   };
 
   // ===== Gantt data =====

@@ -1,4 +1,3 @@
-'use client';
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,12 +20,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Plus, X, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { GutPriorityField } from "@/components/GutPriorityField";
 import { useAuth } from "@/contexts/AuthContext";
+
+interface PendingMember {
+  user_id: string;
+  full_name: string;
+  sector: string | null;
+}
 
 interface AddProjectDialogProps {
   onProjectAdded: () => void;
@@ -34,56 +39,10 @@ interface AddProjectDialogProps {
 }
 
 export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProjectDialogProps) => {
-  const { profile, user } = useAuth();
-  const getErrorMessage = (error: unknown): string => {
-    if (error instanceof Error) return error.message;
-
-    if (typeof error === "object" && error !== null) {
-      const maybeError = error as {
-        message?: string;
-        details?: string;
-        hint?: string;
-        code?: string;
-      };
-
-      const parts = [
-        maybeError.message,
-        maybeError.details,
-        maybeError.hint,
-        maybeError.code ? `code=${maybeError.code}` : undefined,
-      ].filter(Boolean);
-
-      if (parts.length > 0) return parts.join(" | ");
-    }
-
-    return "Erro desconhecido ao criar projeto.";
-  };
-
-  const serializeError = (error: unknown): Record<string, unknown> => {
-    if (error instanceof Error) {
-      return {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
-      };
-    }
-
-    if (typeof error === "object" && error !== null) {
-      const ownProps = Object.getOwnPropertyNames(error).reduce<Record<string, unknown>>((acc, key) => {
-        acc[key] = (error as Record<string, unknown>)[key];
-        return acc;
-      }, {});
-
-      return {
-        ...ownProps,
-        toString: String(error),
-      };
-    }
-
-    return { value: error };
-  };
-
+  const { user } = useAuth();
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
+  const [team, setTeam] = useState<PendingMember[]>([]);
+  const [pickedUserId, setPickedUserId] = useState<string>("");
 
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -123,17 +82,6 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     root_cause: "",
   });
 
-  useEffect(() => {
-    if (!open) return;
-    if (formData.owner) return;
-    if (!profile?.full_name) return;
-
-    setFormData((prev) => ({
-      ...prev,
-      owner: prev.owner || profile.full_name,
-    }));
-  }, [formData.owner, open, profile?.full_name]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -144,7 +92,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         .map((a) => a.trim())
         .filter((a) => a);
 
-      const { data: insertedProject, error, status, statusText } = await supabase.from("projects").insert({
+      const { data: created, error } = await supabase.from("projects").insert({
         title: formData.title,
         description: formData.description,
         status: formData.status,
@@ -168,29 +116,35 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         root_cause: formData.root_cause || null,
       }).select("id").single();
 
-      if (error) {
-        throw {
-          ...error,
-          message: [error.message, `HTTP ${status} ${statusText}`].filter(Boolean).join(" | "),
-        };
-      }
+      if (error) throw error;
 
-      // Garante vínculo estável por user_id para o criador do projeto.
-      if (insertedProject?.id && user?.id) {
-        const { error: memberError } = await supabase
-          .from("project_members")
-          .insert({
-            project_id: insertedProject.id,
-            user_id: user.id,
-            sector: profile?.sector || null,
-            can_create: true,
-            can_edit: true,
-            can_delete: false,
-            can_move: true,
-          });
-
-        if (memberError) {
-          console.warn("Projeto criado, mas falhou ao criar vínculo do criador em project_members:", serializeError(memberError));
+      // Insere equipe + envia convites individuais
+      if (created?.id && team.length > 0) {
+        const rows = team.map((m) => ({
+          project_id: created.id,
+          user_id: m.user_id,
+          sector: m.sector,
+          invitation_status: "pending" as const,
+          invited_by: user?.id ?? null,
+          can_create: false,
+          can_edit: false,
+          can_delete: false,
+          can_move: false,
+        }));
+        const { error: memErr } = await supabase.from("project_members").insert(rows);
+        if (memErr) {
+          console.warn("Erro ao adicionar equipe:", memErr.message);
+        } else {
+          // Notificações direcionadas
+          await supabase.from("notifications").insert(
+            team.map((m) => ({
+              project_id: created.id,
+              target_user_id: m.user_id,
+              type: "project_invite",
+              title: `Convite para o projeto: ${formData.title}`,
+              message: `Você foi convidado(a) a participar do projeto "${formData.title}". Aceita?`,
+            }))
+          );
         }
       }
 
@@ -222,27 +176,37 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         problem_statement: "",
         root_cause: "",
       });
+      setTeam([]);
+      setPickedUserId("");
       setOpen(false);
-      try {
-        onProjectAdded();
-      } catch (refreshError) {
-        console.error("Projeto criado, mas falhou ao atualizar a lista:", serializeError(refreshError));
-      }
+      onProjectAdded();
     } catch (error) {
-      const message = getErrorMessage(error);
-      console.error("Erro ao criar projeto:", {
-        message,
-        raw: serializeError(error),
-      });
+      console.error("Erro ao criar projeto:", error);
       toast({
         title: "Erro ao criar projeto",
-        description: message,
+        description: "Não foi possível criar o projeto. Tente novamente.",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
   };
+
+  const addTeamMember = () => {
+    if (!pickedUserId) return;
+    const p = profiles.find((x) => x.id === pickedUserId);
+    if (!p) return;
+    setTeam((prev) => [
+      ...prev,
+      { user_id: p.id, full_name: p.full_name, sector: p.sector },
+    ]);
+    setPickedUserId("");
+  };
+
+  const removeTeamMember = (uid: string) =>
+    setTeam((prev) => prev.filter((m) => m.user_id !== uid));
+
+  const availableForTeam = profiles.filter((p) => !team.some((t) => t.user_id === p.id));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -404,6 +368,48 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   placeholder="Preenchido ao escolher o líder"
                   className="bg-muted"
                 />
+              </div>
+            </div>
+
+            {/* Equipe do Projeto */}
+            <div className="grid gap-2 rounded-lg border border-dashed border-border p-3">
+              <Label className="text-sm font-semibold">Equipe do Projeto</Label>
+              <p className="text-[11px] text-muted-foreground -mt-1">
+                Cada pessoa receberá um convite e poderá aceitar ou recusar a participação.
+              </p>
+
+              {team.length > 0 && (
+                <div className="space-y-1.5">
+                  {team.map((m) => (
+                    <div key={m.user_id} className="flex items-center gap-2 p-2 rounded-md bg-muted/40 border border-border">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{m.full_name}</p>
+                        {m.sector && <p className="text-[11px] text-muted-foreground truncate">{m.sector}</p>}
+                      </div>
+                      <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeTeamMember(m.user_id)}>
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Select value={pickedUserId} onValueChange={setPickedUserId}>
+                  <SelectTrigger className="h-9 text-sm flex-1">
+                    <SelectValue placeholder="Selecionar membro..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableForTeam.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.full_name}{p.sector ? ` — ${p.sector}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" size="sm" variant="outline" className="h-9 gap-1" onClick={addTeamMember} disabled={!pickedUserId}>
+                  <UserPlus className="w-4 h-4" /> Adicionar
+                </Button>
               </div>
             </div>
           </div>
