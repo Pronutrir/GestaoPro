@@ -339,7 +339,7 @@ export default function ProjectDetailsPage() {
       const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }, { data: projectActivities }] = await Promise.all([
         supabase
           .from("project_members")
-          .select("id, can_create, can_edit, can_delete, can_move")
+          .select("id, invitation_status, can_create, can_edit, can_delete, can_move")
           .eq("project_id", id)
           .eq("user_id", currentUser.id)
           .maybeSingle(),
@@ -380,11 +380,11 @@ export default function ProjectDetailsPage() {
           (Array.isArray(activity.participants) && anyMatchesIdentity(activity.participants, candidates))
         ));
       const hasImplicitAccess = creatorMatch || ownerMatch || managerMatch || assigneeMatch || activityAssignmentMatch;
-      const hasExplicitMembership = !!perms?.id;
+      const hasAcceptedMembership = !!perms?.id && (perms.invitation_status ?? "accepted") === "accepted";
       const hasProjectWideAccess = creatorMatch || ownerMatch || managerMatch || assigneeMatch;
-      const isActivityScoped = !hasExplicitMembership && !hasProjectWideAccess && activityAssignmentMatch;
+      const isActivityScoped = !hasAcceptedMembership && !hasProjectWideAccess && activityAssignmentMatch;
 
-      if (!hasExplicitMembership && !hasImplicitAccess) {
+      if (!hasAcceptedMembership && !hasImplicitAccess) {
         // Regra estrita: somente criador, membro ou equipe.
         setAccessDenied(true);
         setActivityScopedAccess(false);
@@ -397,7 +397,7 @@ export default function ProjectDetailsPage() {
       // If member exists, use those granular permissions. Otherwise (Líder/Participante),
       // grant full operational permissions by default.
       setUserPerms(
-        hasExplicitMembership
+        hasAcceptedMembership
           ? {
               can_create: !!perms.can_create,
               can_edit: !!perms.can_edit,

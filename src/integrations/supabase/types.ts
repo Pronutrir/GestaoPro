@@ -2402,6 +2402,14 @@ export type Database = {
         Args: { _project_id: string; _user_id: string }
         Returns: boolean
       }
+      respond_project_invite_v2: {
+        Args: {
+          _accept: boolean
+          _decline_reason?: string | null
+          _project_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "user" | "gestor"
