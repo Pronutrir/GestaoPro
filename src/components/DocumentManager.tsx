@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 
@@ -40,6 +39,7 @@ interface DocumentManagerProps {
   projectId: string;
   phases: Phase[];
   activities: Activity[];
+  canManageProject?: boolean;
 }
 
 const emptyForm = {
@@ -52,10 +52,9 @@ const emptyForm = {
   activity_id: "",
 };
 
-export const DocumentManager = ({ projectId, phases, activities }: DocumentManagerProps) => {
+export const DocumentManager = ({ projectId, phases, activities, canManageProject = false }: DocumentManagerProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
-  const { canManage: isAdmin } = useAuth();
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -151,7 +150,7 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
           <FileText className="w-5 h-5 text-primary" />
           Documentos ({documents.length})
         </h3>
-        {isAdmin && (
+        {canManageProject && (
           <Button
             size="sm"
             variant={showForm ? "secondary" : "default"}
@@ -230,7 +229,7 @@ export const DocumentManager = ({ projectId, phases, activities }: DocumentManag
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 </Button>
-                {isAdmin && (
+                {canManageProject && (
                   <>
                     <Button
                       size="icon"

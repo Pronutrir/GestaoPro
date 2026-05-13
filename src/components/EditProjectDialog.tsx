@@ -26,16 +26,11 @@ import { GutPriorityField } from "@/components/GutPriorityField";
 import { UserPlus, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-type RaciRole = "R" | "A" | "C" | "I";
-const raciLabel = (r: RaciRole) =>
-  ({ R: "Responsável", A: "Autoridade", C: "Consultado", I: "Informado" }[r]);
 interface MemberRow {
   id: string; // project_members.id (existing) or temp uuid for pending add
   user_id: string;
   full_name: string;
   sector: string | null;
-  raci: RaciRole | null;
-  access: "viewer" | "editor";
   invitation_status: "pending" | "accepted" | "declined";
   persisted: boolean;
 }
@@ -81,8 +76,6 @@ export const EditProjectDialog = ({
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
   const [team, setTeam] = useState<MemberRow[]>([]);
   const [pickedUserId, setPickedUserId] = useState<string>("");
-  const [pickedRaci, setPickedRaci] = useState<RaciRole | "_none">("_none");
-  const [pickedAccess, setPickedAccess] = useState<"viewer" | "editor">("viewer");
 
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -102,7 +95,7 @@ export const EditProjectDialog = ({
       if (!project?.id || !open) return;
       const { data: members } = await supabase
         .from("project_members")
-        .select("id, user_id, raci, invitation_status, can_edit, can_create, can_move")
+        .select("id, user_id, invitation_status")
         .eq("project_id", project.id);
       if (!members) { setTeam([]); return; }
       const ids = members.map((m: any) => m.user_id);
@@ -118,16 +111,12 @@ export const EditProjectDialog = ({
             user_id: m.user_id,
             full_name: p?.full_name || "—",
             sector: p?.sector || null,
-            raci: (m.raci as RaciRole) || null,
-            access: (m.can_edit || m.can_create || m.can_move) ? "editor" : "viewer",
             invitation_status: (m.invitation_status as MemberRow["invitation_status"]) || "pending",
             persisted: true,
           };
         })
       );
       setPickedUserId("");
-      setPickedRaci("_none");
-      setPickedAccess("viewer");
     };
     loadTeam();
   }, [project?.id, open]);
@@ -240,10 +229,12 @@ export const EditProjectDialog = ({
         await supabase
           .from("project_members")
           .update({
-            raci: m.raci,
-            can_create: m.access === "editor",
-            can_edit: m.access === "editor",
-            can_move: m.access === "editor",
+            raci: null,
+            project_role: "contributor",
+            can_create: true,
+            can_edit: false,
+            can_delete: false,
+            can_move: false,
           })
           .eq("id", m.id);
       }
@@ -254,26 +245,28 @@ export const EditProjectDialog = ({
           project_id: project.id,
           user_id: m.user_id,
           sector: m.sector,
-          raci: m.raci,
+          raci: null,
+          project_role: "contributor" as const,
           invitation_status: "pending" as const,
           invited_by: user?.id ?? null,
-          can_create: m.access === "editor",
-          can_edit: m.access === "editor",
+          can_create: true,
+          can_edit: false,
           can_delete: false,
-          can_move: m.access === "editor",
+          can_move: false,
         }));
-        const { error: memErr } = await supabase.from("project_members").insert(rows);
-        if (!memErr) {
-          await supabase.from("notifications").insert(
-            newOnes.map((m) => ({
-              project_id: project.id,
-              target_user_id: m.user_id,
-              type: "project_invite",
-              title: `Convite para o projeto: ${formData.title}`,
-              message: `Você foi convidado(a)${m.raci ? ` como ${raciLabel(m.raci)}` : ""} no projeto "${formData.title}". Aceita participar?`,
-            }))
-          );
-        }
+        const { error: memErr } = await supabase
+          .from("project_members")
+          .upsert(rows, { onConflict: "project_id,user_id", ignoreDuplicates: false });
+        if (memErr) throw new Error(`Erro ao salvar equipe: ${memErr.message}`);
+        await supabase.from("notifications").insert(
+          newOnes.map((m) => ({
+            project_id: project.id,
+            target_user_id: m.user_id,
+            type: "project_invite",
+            title: `Convite para o projeto: ${formData.title}`,
+            message: `Você foi convidado(a) para participar do projeto "${formData.title}". Aceita participar?`,
+          }))
+        );
       }
 
       toast({
@@ -456,11 +449,11 @@ export const EditProjectDialog = ({
               </div>
             </div>
 
-            {/* Equipe do Projeto (RACI) */}
+            {/* Equipe do Projeto */}
             <div className="grid gap-2 rounded-lg border border-dashed border-border p-3">
-              <Label className="text-sm font-semibold">Equipe do Projeto (RACI)</Label>
+              <Label className="text-sm font-semibold">Equipe do Projeto</Label>
               <p className="text-[11px] text-muted-foreground -mt-1">
-                Adicione ou remova membros. Novos membros recebem um convite ao salvar.
+                Adicione ou remova membros. Entrar na equipe concede acesso ao projeto e permissão para criar atividades.
               </p>
 
               {team.length > 0 && (
@@ -489,46 +482,6 @@ export const EditProjectDialog = ({
                         )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                      <Select
-                        value={m.raci ?? "_none"}
-                        onValueChange={(v) =>
-                          setTeam((prev) => prev.map((x) => (x.id === m.id ? { ...x, raci: v === "_none" ? null : (v as RaciRole) } : x)))
-                        }
-                      >
-                        <SelectTrigger className="h-8 w-[150px] text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Nenhum</SelectItem>
-                          <SelectItem value="R">R - Responsável</SelectItem>
-                          <SelectItem
-                            value="A"
-                            disabled={team.some((t) => t.id !== m.id && t.raci === "A")}
-                          >
-                            A - Autoridade
-                          </SelectItem>
-                          <SelectItem value="C">C - Consultado</SelectItem>
-                          <SelectItem value="I">I - Informado</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={m.access}
-                        onValueChange={(v) =>
-                          setTeam((prev) =>
-                            prev.map((x) =>
-                              x.id === m.id ? { ...x, access: v as "viewer" | "editor" } : x
-                            )
-                          )
-                        }
-                      >
-                        <SelectTrigger className="h-8 w-[110px] text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="viewer">👁 Leitor</SelectItem>
-                          <SelectItem value="editor">✏️ Editor</SelectItem>
-                        </SelectContent>
-                      </Select>
                       <Button
                         type="button"
                         size="icon"
@@ -560,27 +513,6 @@ export const EditProjectDialog = ({
                       ))}
                   </SelectContent>
                 </Select>
-                <Select value={pickedRaci} onValueChange={(v) => setPickedRaci(v as RaciRole | "_none")}>
-                  <SelectTrigger className="h-9 text-sm w-full sm:w-[150px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Nenhum</SelectItem>
-                    <SelectItem value="R">R - Responsável</SelectItem>
-                    <SelectItem value="A" disabled={team.some((t) => t.raci === "A")}>A - Autoridade</SelectItem>
-                    <SelectItem value="C">C - Consultado</SelectItem>
-                    <SelectItem value="I">I - Informado</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={pickedAccess} onValueChange={(v) => setPickedAccess(v as "viewer" | "editor")}>
-                  <SelectTrigger className="h-9 text-sm w-full sm:w-[120px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="viewer">👁 Leitor</SelectItem>
-                    <SelectItem value="editor">✏️ Editor</SelectItem>
-                  </SelectContent>
-                </Select>
                 <Button
                   type="button"
                   size="sm"
@@ -590,11 +522,6 @@ export const EditProjectDialog = ({
                     if (!pickedUserId) return;
                     const p = profiles.find((x) => x.id === pickedUserId);
                     if (!p) return;
-                    const raciVal: RaciRole | null = pickedRaci === "_none" ? null : pickedRaci;
-                    if (raciVal === "A" && team.some((t) => t.raci === "A")) {
-                      toast({ title: "Apenas uma Autoridade (A) por projeto", variant: "destructive" });
-                      return;
-                    }
                     setTeam((prev) => [
                       ...prev,
                       {
@@ -602,15 +529,11 @@ export const EditProjectDialog = ({
                         user_id: p.id,
                         full_name: p.full_name,
                         sector: p.sector,
-                        raci: raciVal,
-                        access: pickedAccess,
                         invitation_status: "pending",
                         persisted: false,
                       },
                     ]);
                     setPickedUserId("");
-                    setPickedRaci("_none");
-                    setPickedAccess("viewer");
                   }}
                 >
                   <UserPlus className="w-4 h-4" /> Adicionar

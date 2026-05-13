@@ -9,7 +9,6 @@ import { AIAssistButton } from "@/components/AIAssistButton";
 import { Plus, Pencil, Trash2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface Risk {
@@ -29,6 +28,7 @@ interface Risk {
 
 interface RisksManagerProps {
   projectId: string;
+  canManageProject?: boolean;
 }
 
 // Mapping low/medium/high → 30/60/90%
@@ -95,10 +95,9 @@ const RESPONSE_STRATEGIES = [
 
 const formatRiskId = (idx: number) => `R-${String(idx + 1).padStart(3, "0")}`;
 
-export const RisksManager = ({ projectId }: RisksManagerProps) => {
+export const RisksManager = ({ projectId, canManageProject = false }: RisksManagerProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
-  const { canManage: isAdmin } = useAuth();
   const [items, setItems] = useState<Risk[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -236,7 +235,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
               {occ && <Badge className="bg-destructive/15 text-destructive border-destructive/40">Ocorreu: Sim</Badge>}
             </div>
           </div>
-          {isAdmin && (
+          {canManageProject && (
             <div className="flex gap-1">
               <Button size="icon" variant="ghost" onClick={() => handleEdit(item)}><Pencil className="w-4 h-4" /></Button>
               <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
@@ -260,7 +259,7 @@ export const RisksManager = ({ projectId }: RisksManagerProps) => {
           <Button size="sm" variant={showMatrix ? "secondary" : "outline"} onClick={() => { setShowMatrix(!showMatrix); setMatrixFilter(null); }} className="gap-2">
             {showMatrix ? "Lista" : "Matriz de Risco"}
           </Button>
-          {isAdmin && (
+          {canManageProject && (
             <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }} className="gap-2">
               <Plus className="w-4 h-4" /> Novo Risco
             </Button>

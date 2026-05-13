@@ -11,15 +11,7 @@ import {
 } from '@/lib/identityMatch';
 
 export const runtime = 'nodejs';
-export const maxDuration = 90;
-
-function getEnvNumber(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
+export const maxDuration = 60;
 
 
 // Prioridade para projetos (inglês)
@@ -64,13 +56,6 @@ function normalizeActivityPriority(val?: string): string {
   return normalizeValue(val, ACTIVITY_PRIORITY_MAP, 'media');
 }
 
-function projectPriorityToActivityPriority(priority?: string): string {
-  const normalized = normalizeProjectPriority(priority);
-  if (normalized === 'high') return 'alta';
-  if (normalized === 'low') return 'baixa';
-  return 'media';
-}
-
 function normalizeStatus(val?: string): string {
   return normalizeValue(val, STATUS_MAP, 'ideacao');
 }
@@ -81,130 +66,6 @@ type GlpiTaskSuggestion = {
   subtasks: string[];
   estimated_hours: number;
   status: string;
-};
-
-type ProjectPlanTask = {
-  title: string;
-  description?: string;
-  priority?: string;
-  start_date?: string;
-  end_date?: string;
-  estimated_hours?: number;
-  subtasks?: Array<{
-    title: string;
-    description?: string;
-    priority?: string;
-    start_date?: string;
-    end_date?: string;
-    estimated_hours?: number;
-  }>;
-};
-
-function buildDefaultAppProjectTasks(): ProjectPlanTask[] {
-  return [
-    {
-      title: 'Descoberta e alinhamento do produto',
-      description: 'Definir escopo, objetivos e restricoes do aplicativo.',
-      priority: 'alta',
-      estimated_hours: 8,
-      subtasks: [
-        { title: 'Mapear objetivos e metricas de sucesso', estimated_hours: 2 },
-        { title: 'Levantar requisitos funcionais e nao funcionais', estimated_hours: 4 },
-        { title: 'Definir backlog inicial priorizado', estimated_hours: 2 },
-      ],
-    },
-    {
-      title: 'UX e prototipacao',
-      description: 'Desenhar fluxo principal e validar a experiencia do usuario.',
-      priority: 'media',
-      estimated_hours: 10,
-      subtasks: [
-        { title: 'Criar fluxos de navegacao e jornadas', estimated_hours: 3 },
-        { title: 'Prototipar telas principais', estimated_hours: 5 },
-        { title: 'Revisar prototipo com stakeholders', estimated_hours: 2 },
-      ],
-    },
-    {
-      title: 'Implementacao frontend',
-      description: 'Construir interface, estados e integracoes no cliente.',
-      priority: 'alta',
-      estimated_hours: 20,
-      subtasks: [
-        { title: 'Configurar estrutura de paginas e componentes', estimated_hours: 6 },
-        { title: 'Implementar formularios e validacoes', estimated_hours: 8 },
-        { title: 'Integrar consumo de API no frontend', estimated_hours: 6 },
-      ],
-    },
-    {
-      title: 'Implementacao backend e dados',
-      description: 'Estruturar persistencia, regras de negocio e seguranca.',
-      priority: 'alta',
-      estimated_hours: 20,
-      subtasks: [
-        { title: 'Modelar entidades e esquema de dados', estimated_hours: 6 },
-        { title: 'Implementar endpoints e regras de negocio', estimated_hours: 10 },
-        { title: 'Configurar autenticacao e autorizacao', estimated_hours: 4 },
-      ],
-    },
-    {
-      title: 'Qualidade e testes',
-      description: 'Validar comportamento funcional e reduzir regressao.',
-      priority: 'media',
-      estimated_hours: 12,
-      subtasks: [
-        { title: 'Definir cenarios de teste principais', estimated_hours: 3 },
-        { title: 'Executar testes funcionais e correcao de bugs', estimated_hours: 7 },
-        { title: 'Realizar validacao final com usuario-chave', estimated_hours: 2 },
-      ],
-    },
-    {
-      title: 'Publicacao e acompanhamento inicial',
-      description: 'Preparar deploy, monitoramento e rotina de melhorias.',
-      priority: 'media',
-      estimated_hours: 8,
-      subtasks: [
-        { title: 'Configurar ambiente de producao', estimated_hours: 3 },
-        { title: 'Publicar versao inicial e checklist de release', estimated_hours: 3 },
-        { title: 'Monitorar erros e coletar feedback inicial', estimated_hours: 2 },
-      ],
-    },
-  ];
-}
-
-type VisibleActivityRow = {
-  project_id: string | null;
-  assigned_to: string | null;
-  participants: string[] | null;
-};
-
-type VisibleProjectRow = {
-  id: string;
-  title: string;
-  status: string;
-  priority: string;
-  description: string | null;
-  due_date: string | null;
-  created_by: string | null;
-  owner: string | null;
-  manager: string | null;
-  assignees: string[] | null;
-};
-
-type ParentActivityRow = {
-  id: string;
-  title: string | null;
-  description: string | null;
-  item_type: string | null;
-};
-
-type ExistingStoryRow = {
-  activity_id: string | null;
-};
-
-type InsertedStoryRow = {
-  id: string;
-  title: string;
-  activity_id: string;
 };
 
 function normalizeTextForMatch(text: string): string {
@@ -493,24 +354,16 @@ Referência de datas do sistema:
 Diretrizes gerais:
 - Responda sempre em português (PT-BR)
 - Quando o usuário pedir para criar ou atualizar algo, use as ferramentas disponíveis — nunca simule
-- Antes de qualquer ação que altere dados (criar, atualizar, mover, vincular ou backfill), apresente um resumo curto do que será feito e peça confirmação explícita
-- Só execute a ferramenta mutável depois de uma confirmação clara do usuário como "sim", "confirmar", "pode criar", "pode atualizar", "pode mover" ou equivalente
-- Se ainda não houver confirmação explícita, permaneça em modo de planejamento e refinamento; não grave nada
-- Depois de executar, confirme o que foi criado/atualizado citando o nome e o ID retornado pela ferramenta
+- Confirme o que foi criado/atualizado citando o nome e o ID retornado pela ferramenta
 - Se o usuário enviar um chamado GLPI (texto livre), chame analyzeGlpiTicket IMEDIATAMENTE e use a sugestão para preencher o máximo de dados
 - Após validar projeto/coluna, para criar tarefa principal+subtarefas de chamado GLPI e vincular a história na aba da tarefa, use createGlpiWorkPackage
 - Para vincular histórias em tarefas GLPI antigas (sem história na aba), use backfillGlpiTaskStories
 - Para criar uma atividade: chame listProjects IMEDIATAMENTE — a ferramenta retornará um formatted_response, copie-o exatamente
 - Após o usuário escolher o projeto: chame listWorkflowStages IMEDIATAMENTE — a ferramenta retornará um formatted_response, copie-o exatamente
 - Quando precisar atribuir um usuário (responsável de tarefa/projeto): chame listUsers IMEDIATAMENTE — a ferramenta retornará um formatted_response, copie-o exatamente
-- Para buscar tarefas por texto no projeto, use searchActivities
-- Para inspecionar os detalhes completos de uma tarefa específica, use getActivityDetails
-- Para alterar dados de uma tarefa existente, use updateActivity
-- Para mover uma tarefa entre colunas, use moveActivityToStage
 - Só após ter projeto E coluna escolhidos, colete as demais informações (título, prioridade, etc.)
 - Status válidos para projetos: ideacao, poc, mvp, em-execucao, blocked, drawer (padrão: ideacao)
 - Seja conciso mas informativo
-- Sempre que possível, feche sua resposta com a próxima ação clara para o usuário escolher
 
 Perguntas de esclarecimento — regras obrigatórias:
 - NUNCA liste todas as perguntas de uma vez. Faça EXATAMENTE UMA pergunta, aguarde a resposta e só então faça a próxima
@@ -523,12 +376,8 @@ Perguntas de esclarecimento — regras obrigatórias:
 - Ao perguntar o responsável, ofereça sempre o usuário logado como primeira opção clicável: [${userName}] | [Outro]
 - Se o usuário escolher "Outro", chame listUsers IMEDIATAMENTE e copie o formatted_response exatamente
 - Fluxo obrigatório para criar projeto: (1) nome → (2) objetivo/descrição → (3) prioridade → (4) prazo (opcional) → executar
-- Quando o pedido envolver "projeto de aplicativo", "projeto de sistema" ou "projeto de software", NUNCA use createProject direto
-- Para esses casos, use createProjectWithTasks e siga o fluxo: (1) nome → (2) objetivo/descrição → (3) prioridade → (4) prazo (opcional) → (5) tarefas principais com subtarefas → (6) confirmação final
-- Se o usuário não informar tarefas/subtarefas, proponha uma estrutura inicial e peça confirmação antes de executar
-- Se o usuário confirmar criação sem detalhar tarefas/subtarefas, use o template padrao automaticamente em createProjectWithTasks
 - Campos opcionais: pergunte "Tem data de entrega? Se não, pode pular." — se o usuário disser "não" ou "pular", siga sem esse campo
-- Se o usuário fornecer detalhes suficientes desde o início, ainda assim faça um resumo final curto e peça confirmação antes de executar
+- Se o usuário fornecer detalhes suficientes desde o início, execute diretamente sem perguntar
 
 Fluxo GLPI — createGlpiWorkPackage (REGRA OBRIGATÓRIA):
 - Quando o usuário disser "Sim, criar estrutura" (ou similar) APÓS uma análise GLPI, você DEVE usar os valores JÁ CALCULADOS de persona, action, benefit, gravity, urgency, tendency
@@ -538,7 +387,6 @@ Fluxo GLPI — createGlpiWorkPackage (REGRA OBRIGATÓRIA):
 Formatação de opções clicáveis:
 - Sempre que oferecer opções fixas de escolha, coloque-as em uma linha separada no formato: [Opção 1] | [Opção 2] | [Opção 3]
 - Use rótulos em português, nunca em inglês (ex: [Alta] [Média] [Baixa] em vez de high/medium/low)
-- Quando estiver aguardando confirmação para ação mutável, termine com opções clicáveis como: [Confirmar] | [Ajustar] | [Cancelar]
 - Exemplos corretos:
   Qual a prioridade?
   [Alta] | [Média] | [Baixa]
@@ -595,8 +443,7 @@ export async function POST(req: Request) {
   const userEmail = profile?.email ?? user.email ?? '';
 
   const openrouter = createOpenRouter({ apiKey });
-  const modelId = process.env.OPENROUTER_MODEL ?? 'openai/gpt-4.1';
-  const maxSteps = getEnvNumber('OPENROUTER_MAX_STEPS', 11);
+  const modelId = process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini';
 
   let modelMessages: Awaited<ReturnType<typeof convertToModelMessages>> = [];
   try {
@@ -610,7 +457,7 @@ export async function POST(req: Request) {
     model: openrouter.chat(modelId),
     system: buildSystemPrompt(userName),
     messages: modelMessages,
-    stopWhen: stepCountIs(maxSteps),
+    stopWhen: stepCountIs(14),
     tools: {
       getSystemDateReference: tool({
         description: 'Retorna a data de referência do sistema (data de hoje) com o dia da semana em português (PT-BR). Use esta ferramenta para saber em qual dia as tarefas serão criadas/planejadas.',
@@ -657,7 +504,7 @@ export async function POST(req: Request) {
           const visibleIds = new Set<string>();
           (membersRes.data ?? []).forEach((m) => visibleIds.add(m.project_id));
 
-          (activitiesRes.data ?? []).forEach((a: VisibleActivityRow) => {
+          (activitiesRes.data ?? []).forEach((a: any) => {
             if (
               matchesIdentity(a.assigned_to, candidates) ||
               (Array.isArray(a.participants) && anyMatchesIdentity(a.participants, candidates))
@@ -666,8 +513,8 @@ export async function POST(req: Request) {
             }
           });
 
-          const allProjects: VisibleProjectRow[] = projectsRes.data ?? [];
-          allProjects.forEach((p) => {
+          const allProjects = projectsRes.data ?? [];
+          allProjects.forEach((p: any) => {
             if (
               p.created_by === user.id ||
               matchesIdentity(p.owner, candidates) ||
@@ -679,8 +526,8 @@ export async function POST(req: Request) {
           });
 
           const projects = allProjects
-            .filter((p) => visibleIds.has(p.id))
-            .map(({ created_by, owner, manager, assignees, ...rest }) => rest);
+            .filter((p: any) => visibleIds.has(p.id))
+            .map(({ created_by, owner, manager, assignees, ...rest }: any) => rest);
 
           if (projects.length === 0) {
             return {
@@ -689,7 +536,7 @@ export async function POST(req: Request) {
             };
           }
 
-          const options = projects.map((p) => `[${p.title}]`).join(' | ');
+          const options = projects.map((p: any) => `[${p.title}]`).join(' | ');
           return {
             projects,
             formatted_response: `Em qual projeto você deseja trabalhar?\n${options}`,
@@ -698,7 +545,7 @@ export async function POST(req: Request) {
       }),
 
       createProject: tool({
-        description: 'Cria somente o projeto (sem tarefas e sem subtarefas) e adiciona o usuário como membro. Use apenas quando o usuário pedir explicitamente para criar apenas o card do projeto.',
+        description: 'Cria um novo projeto no sistema e adiciona o usuário como membro com permissões completas.',
         inputSchema: z.object({
           title: z.string().describe('Título do projeto'),
           description: z.string().optional().describe('Descrição do projeto'),
@@ -737,223 +584,6 @@ export async function POST(req: Request) {
           }
 
           return { project };
-        },
-      }),
-
-      createProjectWithTasks: tool({
-        description: 'Cria projeto completo com tarefas e subtarefas iniciais. Use este fluxo para pedidos de projeto de aplicativo/sistema/software.',
-        inputSchema: z.object({
-          title: z.string().describe('Título do projeto'),
-          description: z.string().describe('Objetivo ou descrição principal do projeto'),
-          status: z.string().optional().describe('Status: ideacao, poc, mvp, em-execucao, blocked, drawer ou equivalente em português'),
-          priority: z.string().optional().describe('Prioridade: high/alta, medium/média, low/baixa'),
-          due_date: z.string().optional().describe('Data de entrega no formato YYYY-MM-DD'),
-          workflow_stage_name: z.string().optional().describe('Nome da coluna para criar as tarefas (padrão: Backlog ou primeira visível)'),
-          assigned_to: z.string().optional().describe('Responsável pelas tarefas e subtarefas (padrão: usuário logado)'),
-          tasks: z.array(
-            z.object({
-              title: z.string().describe('Título da tarefa principal'),
-              description: z.string().optional().describe('Descrição da tarefa principal'),
-              priority: z.string().optional().describe('Prioridade da tarefa (alta/média/baixa)'),
-              start_date: z.string().optional().describe('Data de início YYYY-MM-DD'),
-              end_date: z.string().optional().describe('Data de entrega YYYY-MM-DD'),
-              estimated_hours: z.number().optional().describe('Horas estimadas da tarefa principal'),
-              subtasks: z.array(
-                z.object({
-                  title: z.string().describe('Título da subtarefa'),
-                  description: z.string().optional().describe('Descrição da subtarefa'),
-                  priority: z.string().optional().describe('Prioridade da subtarefa (alta/média/baixa)'),
-                  start_date: z.string().optional().describe('Data de início YYYY-MM-DD'),
-                  end_date: z.string().optional().describe('Data de entrega YYYY-MM-DD'),
-                  estimated_hours: z.number().optional().describe('Horas estimadas da subtarefa'),
-                }),
-              ).optional().describe('Subtarefas da tarefa principal'),
-            }),
-          ).min(1).max(60).optional().describe('Lista de tarefas principais com subtarefas. Se omitido, sera usado um template padrao de projeto de aplicativo.'),
-        }),
-        execute: async ({ title, description, status, priority, due_date, workflow_stage_name, assigned_to, tasks }) => {
-          const planTasks = tasks && tasks.length > 0 ? tasks : buildDefaultAppProjectTasks();
-          const { data: project, error } = await adminClient
-            .from('projects')
-            .insert({
-              title,
-              description,
-              priority: normalizeProjectPriority(priority),
-              status: normalizeStatus(status),
-              due_date: due_date ?? null,
-              created_by: user.id,
-              owner: userName,
-            })
-            .select('id, title, status, priority')
-            .single();
-
-          if (error || !project) {
-            return { error: error?.message ?? 'Falha ao criar projeto' };
-          }
-
-          const warnings: string[] = [];
-
-          const { error: memberError } = await adminClient.from('project_members').insert({
-            project_id: project.id,
-            user_id: user.id,
-            can_create: true,
-            can_edit: true,
-            can_delete: true,
-            can_move: true,
-          });
-
-          if (memberError) {
-            warnings.push(`Projeto criado, mas houve falha ao adicionar membro: ${memberError.message}`);
-          }
-
-          const { data: currentStages, error: stagesError } = await adminClient
-            .from('workflow_stages')
-            .select('id, title, display_order, is_visible')
-            .eq('project_id', project.id)
-            .order('display_order', { ascending: true });
-
-          if (stagesError) {
-            warnings.push(`Não foi possível carregar colunas do projeto: ${stagesError.message}`);
-          }
-
-          let visibleStages = (currentStages ?? []).filter((stage) => isVisibleKanbanStage(stage));
-
-          if (visibleStages.length === 0) {
-            const { data: createdStage, error: createStageError } = await adminClient
-              .from('workflow_stages')
-              .insert({
-                project_id: project.id,
-                title: 'Backlog',
-                display_order: 1,
-                is_visible: true,
-                color: '#3b82f6',
-              })
-              .select('id, title, display_order, is_visible')
-              .single();
-
-            if (createStageError) {
-              return {
-                project,
-                error: `Projeto criado, mas não foi possível preparar coluna de tarefas: ${createStageError.message}`,
-                warnings,
-              };
-            }
-
-            if (createdStage) {
-              visibleStages = [createdStage];
-            }
-          }
-
-          let selectedStage = visibleStages.find((s) => stageNameMatchesInput(s.title, workflow_stage_name ?? ''));
-          if (!selectedStage) {
-            selectedStage =
-              visibleStages.find((s) => normalizeStageName(s.title).includes('backlog')) ??
-              visibleStages[0] ??
-              null;
-          }
-
-          if (!selectedStage) {
-            return {
-              project,
-              error: 'Projeto criado, mas nenhuma coluna visível foi encontrada para inserir tarefas.',
-              warnings,
-            };
-          }
-
-          const createdTasks: Array<{ id: string; title: string }> = [];
-          const createdSubtasks: Array<{ id: string; title: string; parent_id: string | null }> = [];
-          let failedItemsCount = 0;
-
-          for (const task of planTasks) {
-            const taskPriority = normalizeActivityPriority(task.priority ?? projectPriorityToActivityPriority(priority));
-
-            const { data: createdTask, error: taskError } = await adminClient
-              .from('activities')
-              .insert({
-                project_id: project.id,
-                title: task.title,
-                description: task.description ?? null,
-                assigned_to: assigned_to ?? userName,
-                priority: taskPriority,
-                status: 'pending',
-                item_type: 'tarefa',
-                workflow_stage_id: selectedStage.id,
-                start_date: task.start_date ?? null,
-                end_date: task.end_date ?? null,
-                hours: task.estimated_hours ?? null,
-                created_by: user.id,
-                created_by_email: userEmail,
-              })
-              .select('id, title')
-              .single();
-
-            if (taskError || !createdTask) {
-              failedItemsCount += 1;
-              warnings.push(`Falha ao criar tarefa "${task.title}": ${taskError?.message ?? 'erro desconhecido'}`);
-              continue;
-            }
-
-            createdTasks.push({ id: createdTask.id, title: createdTask.title });
-
-            for (const subtask of task.subtasks ?? []) {
-              const subtaskPriority = normalizeActivityPriority(subtask.priority ?? task.priority ?? projectPriorityToActivityPriority(priority));
-
-              const { data: createdSubtask, error: subtaskError } = await adminClient
-                .from('activities')
-                .insert({
-                  project_id: project.id,
-                  parent_id: createdTask.id,
-                  title: subtask.title,
-                  description: subtask.description ?? null,
-                  assigned_to: assigned_to ?? userName,
-                  priority: subtaskPriority,
-                  status: 'pending',
-                  item_type: 'subtarefa',
-                  workflow_stage_id: selectedStage.id,
-                  start_date: subtask.start_date ?? null,
-                  end_date: subtask.end_date ?? null,
-                  hours: subtask.estimated_hours ?? null,
-                  created_by: user.id,
-                  created_by_email: userEmail,
-                })
-                .select('id, title, parent_id')
-                .single();
-
-              if (subtaskError || !createdSubtask) {
-                failedItemsCount += 1;
-                warnings.push(`Falha ao criar subtarefa "${subtask.title}": ${subtaskError?.message ?? 'erro desconhecido'}`);
-                continue;
-              }
-
-              createdSubtasks.push({
-                id: createdSubtask.id,
-                title: createdSubtask.title,
-                parent_id: createdSubtask.parent_id,
-              });
-            }
-          }
-
-          const formattedResponse =
-            `✅ Projeto criado com estrutura inicial\n\n` +
-            `Projeto: ${project.title} (ID: ${project.id})\n` +
-            `Coluna usada: ${selectedStage.title}\n` +
-            `Origem do plano: ${tasks && tasks.length > 0 ? 'definido pelo usuario' : 'template padrao de aplicativo'}\n` +
-            `Tarefas criadas: ${createdTasks.length}\n` +
-            `Subtarefas criadas: ${createdSubtasks.length}` +
-            `${failedItemsCount > 0 ? `\nItens com falha: ${failedItemsCount}` : ''}` +
-            `${warnings.length > 0 ? `\n\nAvisos:\n${warnings.map((w) => `- ${w}`).join('\n')}` : ''}`;
-
-          return {
-            project,
-            stage: { id: selectedStage.id, title: selectedStage.title },
-            created_tasks_count: createdTasks.length,
-            created_subtasks_count: createdSubtasks.length,
-            failed_items_count: failedItemsCount,
-            created_tasks: createdTasks,
-            created_subtasks: createdSubtasks,
-            warnings,
-            formatted_response: formattedResponse,
-          };
         },
       }),
 
@@ -1429,7 +1059,7 @@ export async function POST(req: Request) {
               .select('id, title, description, item_type')
               .in('id', parentIds);
 
-            parentMap = new Map((parents ?? []).map((row: ParentActivityRow) => [row.id, row]));
+            parentMap = new Map((parents ?? []).map((row: any) => [row.id, row]));
           }
 
           const taskIds = taskRows.map((t) => t.id);
@@ -1445,7 +1075,7 @@ export async function POST(req: Request) {
           }
 
           const existingByActivity = new Set((existingStories ?? [])
-            .map((s: ExistingStoryRow) => s.activity_id)
+            .map((s: any) => s.activity_id)
             .filter((id: unknown): id is string => typeof id === 'string'));
 
           const pending = taskRows.filter((task) => !existingByActivity.has(task.id));
@@ -1544,7 +1174,7 @@ export async function POST(req: Request) {
           }
 
           const createdCount = insertedStories?.length ?? 0;
-          const sample = (insertedStories ?? []).slice(0, 5).map((s: InsertedStoryRow) => `• ${s.title}`).join('\n');
+          const sample = (insertedStories ?? []).slice(0, 5).map((s: any) => `• ${s.title}`).join('\n');
 
           return {
             project_id,
@@ -1630,309 +1260,6 @@ export async function POST(req: Request) {
 
           if (error) return { error: error.message };
           return { activity };
-        },
-      }),
-
-      searchActivities: tool({
-        description: 'Busca tarefas/atividades dentro de um projeto por texto e filtros (responsável, status e tipo).',
-        inputSchema: z.object({
-          project_id: z.string().describe('ID do projeto onde a busca será feita'),
-          query: z.string().optional().describe('Texto livre para buscar em título e descrição'),
-          assigned_to: z.string().optional().describe('Responsável da tarefa para filtrar'),
-          status: z.string().optional().describe('Status da tarefa para filtrar'),
-          item_type: z.string().optional().describe('Tipo do item para filtrar (atividade, tarefa, subtarefa, etc.)'),
-          limit: z.number().int().min(1).max(100).optional().describe('Limite de resultados (padrão 30)'),
-        }),
-        execute: async ({ project_id, query, assigned_to, status, item_type, limit }) => {
-          const candidates = buildUserCandidates([profile?.full_name, profile?.email, user.email]);
-
-          const [memberRow, projectRow] = await Promise.all([
-            adminClient.from('project_members').select('project_id').eq('project_id', project_id).eq('user_id', user.id).maybeSingle(),
-            adminClient.from('projects').select('created_by, owner, manager, assignees, title').eq('id', project_id).maybeSingle(),
-          ]);
-
-          const p = projectRow.data;
-          const hasAccess =
-            !!memberRow.data ||
-            p?.created_by === user.id ||
-            matchesIdentity(p?.owner, candidates) ||
-            matchesIdentity(p?.manager, candidates) ||
-            (Array.isArray(p?.assignees) && anyMatchesIdentity(p.assignees, candidates));
-
-          if (!hasAccess) {
-            return { error: 'Sem acesso a este projeto' };
-          }
-
-          let queryBuilder = adminClient
-            .from('activities')
-            .select('id, title, status, priority, item_type, assigned_to, start_date, end_date, workflow_stage_id, parent_id, updated_at')
-            .eq('project_id', project_id)
-            .eq('is_trashed', false);
-
-          const normalizedQuery = query?.trim();
-          if (normalizedQuery) {
-            queryBuilder = queryBuilder.or(`title.ilike.%${normalizedQuery}%,description.ilike.%${normalizedQuery}%`);
-          }
-
-          if (assigned_to?.trim()) {
-            queryBuilder = queryBuilder.eq('assigned_to', assigned_to.trim());
-          }
-
-          if (status?.trim()) {
-            queryBuilder = queryBuilder.eq('status', status.trim());
-          }
-
-          if (item_type?.trim()) {
-            queryBuilder = queryBuilder.eq('item_type', item_type.trim());
-          }
-
-          const rowLimit = limit ?? 30;
-          const { data: activities, error } = await queryBuilder
-            .order('updated_at', { ascending: false })
-            .limit(rowLimit);
-
-          if (error) {
-            return { error: `Erro ao buscar atividades: ${error.message}` };
-          }
-
-          const activityRows = activities ?? [];
-          if (activityRows.length === 0) {
-            return {
-              activities: [],
-              formatted_response: 'Não encontrei atividades com esses critérios. Deseja ajustar os filtros de busca?',
-            };
-          }
-
-          const options = activityRows.slice(0, 12).map((a) => `[${a.title}]`).join(' | ');
-          const projectTitle = p?.title ?? project_id;
-
-          return {
-            activities: activityRows,
-            project_id,
-            project_title: projectTitle,
-            total_found: activityRows.length,
-            formatted_response:
-              `Encontrei ${activityRows.length} atividade(s) em ${projectTitle}.\n` +
-              `Qual delas você quer detalhar?\n${options}`,
-          };
-        },
-      }),
-
-      getActivityDetails: tool({
-        description: 'Retorna detalhes completos de uma atividade/tarefa de um projeto.',
-        inputSchema: z.object({
-          project_id: z.string().describe('ID do projeto da atividade'),
-          activity_id: z.string().describe('ID da atividade/tarefa'),
-        }),
-        execute: async ({ project_id, activity_id }) => {
-          const candidates = buildUserCandidates([profile?.full_name, profile?.email, user.email]);
-
-          const [memberRow, projectRow] = await Promise.all([
-            adminClient.from('project_members').select('project_id').eq('project_id', project_id).eq('user_id', user.id).maybeSingle(),
-            adminClient.from('projects').select('created_by, owner, manager, assignees, title').eq('id', project_id).maybeSingle(),
-          ]);
-
-          const p = projectRow.data;
-          const hasAccess =
-            !!memberRow.data ||
-            p?.created_by === user.id ||
-            matchesIdentity(p?.owner, candidates) ||
-            matchesIdentity(p?.manager, candidates) ||
-            (Array.isArray(p?.assignees) && anyMatchesIdentity(p.assignees, candidates));
-
-          if (!hasAccess) {
-            return { error: 'Sem acesso a este projeto' };
-          }
-
-          const { data: activity, error: activityError } = await adminClient
-            .from('activities')
-            .select('id, project_id, parent_id, workflow_stage_id, title, description, status, priority, item_type, assigned_to, start_date, end_date, hours, gravity, urgency, tendency, progress_flag, updated_at, created_at')
-            .eq('project_id', project_id)
-            .eq('id', activity_id)
-            .eq('is_trashed', false)
-            .maybeSingle();
-
-          if (activityError) {
-            return { error: `Erro ao buscar atividade: ${activityError.message}` };
-          }
-
-          if (!activity) {
-            return { error: 'Atividade não encontrada neste projeto' };
-          }
-
-          const [stageRow, subtasksRes] = await Promise.all([
-            activity.workflow_stage_id
-              ? adminClient
-                  .from('workflow_stages')
-                  .select('id, title')
-                  .eq('id', activity.workflow_stage_id)
-                  .maybeSingle()
-              : Promise.resolve({ data: null, error: null }),
-            adminClient
-              .from('activities')
-              .select('id', { count: 'exact', head: true })
-              .eq('project_id', project_id)
-              .eq('parent_id', activity.id)
-              .eq('is_trashed', false),
-          ]);
-
-          const stageTitle = stageRow.data?.title ?? null;
-          const subtasksCount = subtasksRes.count ?? 0;
-
-          return {
-            activity: {
-              ...activity,
-              stage_title: stageTitle,
-              subtasks_count: subtasksCount,
-            },
-            formatted_response:
-              `Detalhes carregados para "${activity.title}".\n` +
-              `Deseja atualizar dados ou mover de coluna?\n` +
-              `[Atualizar dados] | [Mover de coluna] | [Cancelar]`,
-          };
-        },
-      }),
-
-      updateActivity: tool({
-        description: 'Atualiza campos editáveis de uma atividade/tarefa existente.',
-        inputSchema: z.object({
-          project_id: z.string().describe('ID do projeto da atividade'),
-          activity_id: z.string().describe('ID da atividade/tarefa'),
-          title: z.string().optional().describe('Novo título'),
-          description: z.string().optional().describe('Nova descrição'),
-          assigned_to: z.string().optional().describe('Novo responsável'),
-          priority: z.string().optional().describe('Nova prioridade (alta/média/baixa ou high/medium/low)'),
-          status: z.string().optional().describe('Novo status da atividade'),
-          start_date: z.string().optional().describe('Nova data de início YYYY-MM-DD'),
-          end_date: z.string().optional().describe('Nova data de entrega YYYY-MM-DD'),
-          hours: z.number().optional().describe('Nova estimativa de horas'),
-        }),
-        execute: async ({ project_id, activity_id, title, description, assigned_to, priority, status, start_date, end_date, hours }) => {
-          const candidates = buildUserCandidates([profile?.full_name, profile?.email, user.email]);
-
-          const [memberRow, projectRow] = await Promise.all([
-            adminClient.from('project_members').select('project_id').eq('project_id', project_id).eq('user_id', user.id).maybeSingle(),
-            adminClient.from('projects').select('created_by, owner, manager, assignees').eq('id', project_id).maybeSingle(),
-          ]);
-
-          const p = projectRow.data;
-          const hasAccess =
-            !!memberRow.data ||
-            p?.created_by === user.id ||
-            matchesIdentity(p?.owner, candidates) ||
-            matchesIdentity(p?.manager, candidates) ||
-            (Array.isArray(p?.assignees) && anyMatchesIdentity(p.assignees, candidates));
-
-          if (!hasAccess) {
-            return { error: 'Sem acesso a este projeto' };
-          }
-
-          const updates: Record<string, unknown> = {};
-          if (title !== undefined) updates.title = title;
-          if (description !== undefined) updates.description = description;
-          if (assigned_to !== undefined) updates.assigned_to = assigned_to;
-          if (priority !== undefined) updates.priority = normalizeActivityPriority(priority);
-          if (status !== undefined) updates.status = status;
-          if (start_date !== undefined) updates.start_date = start_date;
-          if (end_date !== undefined) updates.end_date = end_date;
-          if (hours !== undefined) updates.hours = hours;
-
-          if (Object.keys(updates).length === 0) {
-            return { error: 'Nenhum campo informado para atualizar na atividade' };
-          }
-
-          const { data: activity, error } = await adminClient
-            .from('activities')
-            .update(updates)
-            .eq('id', activity_id)
-            .eq('project_id', project_id)
-            .eq('is_trashed', false)
-            .select('id, title, status, priority, item_type, assigned_to, start_date, end_date, hours')
-            .maybeSingle();
-
-          if (error) {
-            return { error: `Erro ao atualizar atividade: ${error.message}` };
-          }
-
-          if (!activity) {
-            return { error: 'Atividade não encontrada para atualização' };
-          }
-
-          return {
-            activity,
-            formatted_response: `Atividade "${activity.title}" atualizada com sucesso (ID: ${activity.id}).`,
-          };
-        },
-      }),
-
-      moveActivityToStage: tool({
-        description: 'Move uma atividade/tarefa para outra coluna (workflow stage) do mesmo projeto.',
-        inputSchema: z.object({
-          project_id: z.string().describe('ID do projeto da atividade'),
-          activity_id: z.string().describe('ID da atividade/tarefa'),
-          target_stage_name: z.string().describe('Nome da coluna de destino'),
-          status: z.string().optional().describe('Status opcional para atualizar junto com a movimentação'),
-        }),
-        execute: async ({ project_id, activity_id, target_stage_name, status }) => {
-          const candidates = buildUserCandidates([profile?.full_name, profile?.email, user.email]);
-
-          const [memberRow, projectRow] = await Promise.all([
-            adminClient.from('project_members').select('project_id').eq('project_id', project_id).eq('user_id', user.id).maybeSingle(),
-            adminClient.from('projects').select('created_by, owner, manager, assignees').eq('id', project_id).maybeSingle(),
-          ]);
-
-          const p = projectRow.data;
-          const hasAccess =
-            !!memberRow.data ||
-            p?.created_by === user.id ||
-            matchesIdentity(p?.owner, candidates) ||
-            matchesIdentity(p?.manager, candidates) ||
-            (Array.isArray(p?.assignees) && anyMatchesIdentity(p.assignees, candidates));
-
-          if (!hasAccess) {
-            return { error: 'Sem acesso a este projeto' };
-          }
-
-          const { data: stages } = await adminClient
-            .from('workflow_stages')
-            .select('id, title, display_order, is_visible')
-            .eq('project_id', project_id)
-            .order('display_order', { ascending: true });
-
-          const visibleStages = (stages ?? []).filter((s) => isVisibleKanbanStage(s));
-          const targetStage = visibleStages.find((s) => stageNameMatchesInput(s.title, target_stage_name));
-
-          if (!targetStage) {
-            const available = visibleStages.map((s) => s.title).join(', ');
-            return { error: `Coluna "${target_stage_name}" não encontrada. Colunas disponíveis: ${available}` };
-          }
-
-          const updates: Record<string, unknown> = { workflow_stage_id: targetStage.id };
-          if (status !== undefined) updates.status = status;
-
-          const { data: activity, error } = await adminClient
-            .from('activities')
-            .update(updates)
-            .eq('id', activity_id)
-            .eq('project_id', project_id)
-            .eq('is_trashed', false)
-            .select('id, title, status, workflow_stage_id, item_type')
-            .maybeSingle();
-
-          if (error) {
-            return { error: `Erro ao mover atividade: ${error.message}` };
-          }
-
-          if (!activity) {
-            return { error: 'Atividade não encontrada para movimentação' };
-          }
-
-          return {
-            activity,
-            target_stage: { id: targetStage.id, title: targetStage.title },
-            formatted_response:
-              `Movi "${activity.title}" para a coluna "${targetStage.title}" com sucesso.`,
-          };
         },
       }),
 

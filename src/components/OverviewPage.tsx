@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardSkeleton } from '@/components/SkeletonScreens';
 import { useProjectAccess } from '@/hooks/useProjectAccess';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -103,7 +104,8 @@ const STATUS_CARD_STYLES = {
 
 export function OverviewPage() {
   const router = useRouter();
-  const { filterProjects, canManage: isAdmin, loading: authLoading } = useProjectAccess();
+  const { filterProjects, loading: authLoading } = useProjectAccess();
+  const { isAdmin } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);

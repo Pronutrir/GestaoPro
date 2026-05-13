@@ -30,7 +30,6 @@ interface CscTicket {
   created_at: string;
   resolved_at: string | null;
   requested_date: string | null;
-  raci_role: string | null;
   project_id: string | null;
   activity_id: string | null;
   created_by: string | null;

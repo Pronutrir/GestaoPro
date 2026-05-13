@@ -48,7 +48,7 @@ interface DeliveryPackageDrawerProps {
   projectId: string;
   activities: Activity[];
   onDataChanged: () => void;
-  isAdmin?: boolean;
+  canManagePackage?: boolean;
 }
 
 export const DeliveryPackageDrawer = ({
@@ -58,7 +58,7 @@ export const DeliveryPackageDrawer = ({
   projectId,
   activities,
   onDataChanged,
-  isAdmin = false,
+  canManagePackage = false,
 }: DeliveryPackageDrawerProps) => {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("view");
@@ -194,7 +194,7 @@ export const DeliveryPackageDrawer = ({
             <TabsTrigger value="view" className="flex-1 gap-1.5">
               <Eye className="w-3.5 h-3.5" /> Visualização
             </TabsTrigger>
-            {isAdmin && (
+            {canManagePackage && (
               <TabsTrigger value="edit" className="flex-1 gap-1.5">
                 <Pencil className="w-3.5 h-3.5" /> Edição
               </TabsTrigger>
@@ -267,7 +267,7 @@ export const DeliveryPackageDrawer = ({
           </TabsContent>
 
           {/* Edit Tab */}
-          {isAdmin && (
+          {canManagePackage && (
             <TabsContent value="edit" className="space-y-3 mt-4">
               <Input placeholder="Título *" value={title} onChange={(e) => setTitle(e.target.value)} />
               <Textarea placeholder="Descrição" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />

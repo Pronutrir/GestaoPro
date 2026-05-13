@@ -133,14 +133,6 @@ function serializeError(error: any): Record<string, any> {
   return obj;
 }
 
-const RACI_OPTIONS = [
-  { value: "", label: "Nenhum" },
-  { value: "R", label: "R - Responsável" },
-  { value: "A", label: "A - Autoridade" },
-  { value: "C", label: "C - Consultado" },
-  { value: "I", label: "I - Informado" },
-];
-
 /** Parse hours as decimal from "Xh Ym" or plain number */
 function parseHoursInput(val: string): number {
   const hm = val.match(/(\d+)\s*h\s*(\d+)\s*m/i);
@@ -183,9 +175,8 @@ export const EditActivityDialog = ({
     urgency: null as number | null,
     tendency: null as number | null,
     tags: [] as string[], parent_id: "",
-    story_points: "0", raci_role: "",
+    story_points: "0",
     participants: [] as string[],
-    participant_roles: {} as Record<string, string>,
     deadline_flag: "" as string,
     last_update_date: "",
     ui_color_tag: "" as string,
@@ -240,7 +231,6 @@ export const EditActivityDialog = ({
     { id: "story_points", label: "Pontos", width: "56px" },
     { id: "status", label: "Status", width: "96px" },
     { id: "tags", label: "Etiquetas", width: "120px" },
-    { id: "raci_role", label: "RACI", width: "56px" },
     { id: "id_short", label: "ID", width: "72px" },
   ];
   const DEFAULT_COLS = ["assigned_to", "priority", "end_date"];
@@ -411,11 +401,7 @@ export const EditActivityDialog = ({
         tags: act.tags || [],
         parent_id: act.parent_id || "",
         story_points: (act as any).story_points?.toString() || "0",
-        raci_role: (act as any).raci_role || "",
         participants: (act as any).participants || [],
-        participant_roles: ((act as any).participant_roles && typeof (act as any).participant_roles === "object")
-          ? (act as any).participant_roles
-          : {},
         deadline_flag: (act as any).deadline_flag || "",
         last_update_date: (act as any).last_update_date || "",
         ui_color_tag: (act as any).ui_color_tag || "",
@@ -582,9 +568,6 @@ export const EditActivityDialog = ({
         story_points: parseInt(formData.story_points) || 0,
         raci_role: "A",
         participants: formData.participants.filter((p) => p && p.trim().length > 0),
-        participant_roles: Object.fromEntries(
-          Object.entries(formData.participant_roles ?? {}).filter(([k]) => k && k.trim().length > 0)
-        ),
         deadline_flag: formData.deadline_flag || null,
         last_update_date: formData.last_update_date || null,
         ui_color_tag: formData.ui_color_tag || null,
@@ -1223,7 +1206,6 @@ export const EditActivityDialog = ({
                       setFormData({
                         ...formData,
                         participants: [...formData.participants, ""],
-                        participant_roles: { ...formData.participant_roles, "": "" },
                       });
                     }}
                   >
@@ -1232,9 +1214,8 @@ export const EditActivityDialog = ({
                 </div>
 
                 <div className="rounded-md border border-border overflow-hidden">
-                  <div className="grid grid-cols-[1fr_180px_36px] items-center bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  <div className="grid grid-cols-[1fr_36px] items-center bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                     <span>Participante</span>
-                    <span>Papel RACI</span>
                     <span className="sr-only">Ações</span>
                   </div>
                   {formData.participants.length === 0 ? (
@@ -1244,7 +1225,7 @@ export const EditActivityDialog = ({
                   ) : (
                     <div className="divide-y divide-border">
                       {formData.participants.map((p, idx) => (
-                        <div key={`${p}-${idx}`} className="grid grid-cols-[1fr_180px_36px] items-center gap-2 px-3 py-2 bg-background">
+                        <div key={`${p}-${idx}`} className="grid grid-cols-[1fr_36px] items-center gap-2 px-3 py-2 bg-background">
                           <select
                             className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                             value={p}
@@ -1253,11 +1234,7 @@ export const EditActivityDialog = ({
                               if (newName !== p && formData.participants.includes(newName)) return;
                               const nextParticipants = [...formData.participants];
                               nextParticipants[idx] = newName;
-                              const nextRoles = { ...formData.participant_roles };
-                              const role = nextRoles[p] || "";
-                              delete nextRoles[p];
-                              nextRoles[newName] = role;
-                              setFormData({ ...formData, participants: nextParticipants, participant_roles: nextRoles });
+                              setFormData({ ...formData, participants: nextParticipants });
                             }}
                           >
                             <option value="">Selecionar pessoa...</option>
@@ -1269,31 +1246,13 @@ export const EditActivityDialog = ({
                                 </option>
                               ))}
                           </select>
-                          <select
-                            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                            value={formData.participant_roles[p] || ""}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                participant_roles: { ...formData.participant_roles, [p]: e.target.value },
-                              })
-                            }
-                            title="Papel RACI deste participante"
-                          >
-                            {RACI_OPTIONS.map((r) => (
-                              <option key={r.value} value={r.value}>{r.label}</option>
-                            ))}
-                          </select>
                           <button
                             type="button"
                             className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                             onClick={() => {
-                              const nextRoles = { ...formData.participant_roles };
-                              delete nextRoles[p];
                               setFormData({
                                 ...formData,
                                 participants: formData.participants.filter((_, i) => i !== idx),
-                                participant_roles: nextRoles,
                               });
                             }}
                             title="Remover participante"
@@ -1700,23 +1659,6 @@ export const EditActivityDialog = ({
                               >
                                 {tags && tags.length > 0 ? tags.join(", ") : "—"}
                               </button>
-                            );
-                          }
-                          if (colId === "raci_role") {
-                            const raci = (sub as any).raci_role || "";
-                            return (
-                              <select
-                                key={colId}
-                                value={raci}
-                                onChange={(e) => updateField(e.target.value || null)}
-                                className="h-6 w-full text-xs px-1 rounded border border-input bg-background text-center"
-                              >
-                                <option value="">—</option>
-                                <option value="R">R</option>
-                                <option value="A">A</option>
-                                <option value="C">C</option>
-                                <option value="I">I</option>
-                              </select>
                             );
                           }
                           if (colId === "id_short") {

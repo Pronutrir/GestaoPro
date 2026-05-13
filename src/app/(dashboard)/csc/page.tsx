@@ -34,7 +34,6 @@ interface CscTicket {
   status: string;
   department: string;
   assigned_to: string | null;
-  raci_role: string | null;
   project_id: string | null;
   activity_id: string | null;
   created_by: string | null;
@@ -648,7 +647,7 @@ const CSC = () => {
                     </div>
                   </div>
 
-                  {/* Edit assigned / RACI */}
+                  {/* Edit assigned */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="grid gap-1">
                       <Label className="text-xs">Responsável</Label>

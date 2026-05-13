@@ -10,7 +10,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Pencil, Trash2, Package, Calendar } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
 import { DeliveryPackageDrawer } from "@/components/DeliveryPackageDrawer";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 
@@ -52,12 +51,12 @@ interface DeliveryPackagesManagerProps {
   projectId: string;
   activities: Activity[];
   phases?: Phase[];
+  canManageProject?: boolean;
 }
 
-export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: DeliveryPackagesManagerProps) => {
+export const DeliveryPackagesManager = ({ projectId, activities, phases = [], canManageProject = false }: DeliveryPackagesManagerProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
-  const { canManage: isAdmin } = useAuth();
   const [packages, setPackages] = useState<DeliveryPackage[]>([]);
   const [packageActivities, setPackageActivities] = useState<Record<string, string[]>>({});
   const [showForm, setShowForm] = useState(false);
@@ -189,7 +188,7 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: 
               </SelectContent>
             </Select>
           )}
-          {isAdmin && (
+          {canManageProject && (
             <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }} className="gap-2">
               <Plus className="w-4 h-4" /> Novo Pacote
             </Button>
@@ -294,7 +293,7 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: 
                       <p className="text-xs text-muted-foreground">{packageActivities[pkg.id].length} atividade(s) vinculada(s)</p>
                     )}
                   </div>
-                  {isAdmin && (
+                  {canManageProject && (
                     <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                       <Button size="icon" variant="ghost" onClick={() => { setDrawerPkg(pkg); setDrawerOpen(true); }}><Pencil className="w-4 h-4" /></Button>
                       <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(pkg.id)}><Trash2 className="w-4 h-4" /></Button>
@@ -314,7 +313,7 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [] }: 
         projectId={projectId}
         activities={activities}
         onDataChanged={fetchData}
-        isAdmin={isAdmin}
+        canManagePackage={canManageProject}
       />
     </div>
   );

@@ -10,6 +10,7 @@ import { ArrowLeft, Users, Clock, CheckCircle2, AlertTriangle, Briefcase, X, Fil
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Activity {
   id: string;
@@ -47,7 +48,8 @@ type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | null;
 
 const TeamView = () => {
   const router = useRouter();
-  const { filterProjects, canManage: isAdmin, loading: authLoading } = useProjectAccess();
+  const { filterProjects, loading: authLoading } = useProjectAccess();
+  const { isAdmin } = useAuth();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
