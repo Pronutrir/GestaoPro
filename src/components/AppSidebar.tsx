@@ -17,6 +17,7 @@ import {
   Calendar,
   Trash2,
   Briefcase,
+  Bot,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useRouter } from "next/navigation";
@@ -51,13 +52,14 @@ const allNavItems = [
   { path: "/investments", label: "Gestão Financeira", icon: DollarSign, minRole: "gestor" as const, moduleKey: "investments" },
   { path: "/roadmap", label: "Roadmap", icon: Map, minRole: "gestor" as const, moduleKey: "roadmap" },
   { path: "/calendario", label: "Calendário", icon: Calendar, minRole: "user" as const, moduleKey: "calendario" },
+  { path: "/agent", label: "Agente de IA", icon: Bot, minRole: "user" as const, moduleKey: "agent" },
   { path: "/reports", label: "Relatórios", icon: BarChart3, minRole: "gestor" as const, moduleKey: "reports" },
   { path: "/csc", label: "CSC", icon: Layers, minRole: "gestor" as const, moduleKey: "csc" },
   { path: "/trash", label: "Arquivo", icon: Trash2, minRole: "gestor" as const, moduleKey: "projects" },
   { path: "/settings", label: "Configurações", icon: Settings, minRole: "admin" as const, moduleKey: "settings" },
 ];
 
-const DEFAULT_MODULES = ["overview", "projects", "team", "timeline", "blocked"];
+const DEFAULT_MODULES = ["overview", "projects", "team", "timeline", "blocked", "agent"];
 
 export function AppSidebar() {
   const { state } = useSidebar();
