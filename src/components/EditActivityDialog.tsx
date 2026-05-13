@@ -939,8 +939,8 @@ export const EditActivityDialog = ({
                     onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
                   >
                     <option value="">Sem líder</option>
-                    {allProfiles.map((m) => (
-                      <option key={m.full_name} value={m.full_name!}>
+                    {allProfiles.map((m, idx) => (
+                      <option key={`${m.full_name}-${idx}`} value={m.full_name!}>
                         {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
                       </option>
                     ))}
@@ -1167,8 +1167,8 @@ export const EditActivityDialog = ({
                             <option value="">Selecionar pessoa...</option>
                             {allProfiles
                               .filter((m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name!)))
-                              .map((m) => (
-                                <option key={m.full_name} value={m.full_name!}>
+                              .map((m, idx) => (
+                                <option key={`${m.full_name}-${idx}`} value={m.full_name!}>
                                   {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
                                 </option>
                               ))}
@@ -1425,9 +1425,9 @@ export const EditActivityDialog = ({
                                     >
                                       Sem responsável
                                     </button>
-                                    {members.map((m) => (
+                                    {members.map((m, idx) => (
                                       <button
-                                        key={m.full_name}
+                                        key={`${m.full_name}-${idx}`}
                                         type="button"
                                         className={`w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted ${
                                           sub.assigned_to === m.full_name ? "bg-primary/10 text-primary font-medium" : ""
