@@ -1,3 +1,4 @@
+'use client';
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card } from "@/components/ui/card";
@@ -216,6 +217,7 @@ interface ActivityKanbanProps {
   projectId: string;
   activities: Activity[];
   phases: Phase[];
+  consumedMinutesByActivity?: Record<string, number>;
   onDataChanged: () => void;
   onEditActivity: (activity: Activity) => void;
   onDeleteActivity: (activityId: string) => void;
