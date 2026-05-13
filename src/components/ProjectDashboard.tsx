@@ -27,6 +27,7 @@ interface Activity {
   completed_at: string | null;
   deadline_flag?: string | null;
   last_update_date?: string | null;
+  parent_id?: string | null;
 }
 
 interface Phase {
@@ -102,12 +103,19 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
       return d >= today && d <= sevenDaysLater;
     });
     const highPriority = activities.filter(a => a.priority === "high" && a.status !== "completed");
-    const totalHours = activities.reduce((sum, a) => sum + (a.hours || 0), 0);
+    // Leaf activities = those whose id does not appear as a parent_id of another activity
+    const parentIds = new Set(activities.map(a => a.parent_id).filter(Boolean));
+    const leafActivities = activities.filter(a => !parentIds.has(a.id));
+    const plannedHours = leafActivities.reduce((sum, a) => sum + (a.hours || 0), 0);
+    const consumedHours = leafActivities
+      .filter(a => !!a.completed_at)
+      .reduce((sum, a) => sum + (a.hours || 0), 0);
+    const totalHours = plannedHours;
     const flagGreen = activities.filter(a => a.deadline_flag === "green");
     const flagOrange = activities.filter(a => a.deadline_flag === "orange");
     const flagRed = activities.filter(a => a.deadline_flag === "red");
 
-    return { total, completed, completionRate, overdue, nearDeadline, highPriority, totalHours, flagGreen, flagOrange, flagRed };
+    return { total, completed, completionRate, overdue, nearDeadline, highPriority, totalHours, consumedHours, plannedHours, flagGreen, flagOrange, flagRed };
   }, [activities]);
 
   // Pendencies for quality projects
@@ -246,11 +254,14 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
       items: stats.highPriority,
     },
     {
-      label: "Horas Registradas",
-      value: stats.totalHours,
+      label: "Horas Consumidas",
+      value: stats.consumedHours,
       icon: Timer,
-      color: "text-indigo-500",
-      bg: "bg-indigo-500/10",
+      color: stats.consumedHours > stats.plannedHours ? "text-destructive" : "text-indigo-500",
+      bg: stats.consumedHours > stats.plannedHours ? "bg-destructive/10" : "bg-indigo-500/10",
+      subtitle: stats.plannedHours > 0
+        ? `${stats.plannedHours}h planejadas · ${Math.round((stats.consumedHours / stats.plannedHours) * 100)}%`
+        : undefined,
       items: [],
     },
   ];
