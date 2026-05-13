@@ -55,8 +55,12 @@ export const useTaskBlockers = (activityId: string | undefined) => {
   useEffect(() => {
     refresh();
     if (!activityId) return;
+
+    // Nome único por mount evita reaproveitar canal já inscrito internamente
+    // pelo supabase-js e disparar erro ao adicionar callbacks após subscribe().
+    const channelName = `task-blockers-${activityId}-${Math.random().toString(36).slice(2, 10)}`;
     const channel = supabase
-      .channel(`task-blockers-${activityId}`)
+      .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "task_relations" }, () => refresh())
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "activities" }, () => refresh())
       .subscribe();
