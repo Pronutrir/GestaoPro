@@ -521,11 +521,22 @@ function KanbanCard({
                       📖 {storyCount && storyCount > 1 ? `${storyCount} Histórias` : "História"}
                     </Badge>
                   )}
-                  {activity.hours > 0 && (
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                      {formatHours(activity.hours)}
-                    </Badge>
-                  )}
+                  {activity.hours > 0 && (() => {
+                    const isDone = activity.status === "completed" || !!activity.completed_at;
+                    return (
+                      <Badge
+                        variant={isDone ? undefined : "secondary"}
+                        className={`text-[10px] px-1.5 py-0 ${
+                          isDone
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                            : ""
+                        }`}
+                        title={isDone ? `Consumidas: ${formatHours(activity.hours)}` : `Planejadas: ${formatHours(activity.hours)}`}
+                      >
+                        {isDone ? "✓ " : ""}{formatHours(activity.hours)}
+                      </Badge>
+                    );
+                  })()}
                   {dependencyCount && (dependencyCount.pred > 0 || dependencyCount.succ > 0) && (
                     <Badge
                       variant="outline"

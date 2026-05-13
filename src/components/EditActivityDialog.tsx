@@ -96,6 +96,8 @@ interface EditActivityDialogProps {
   parentActivityTitle?: string;
   /** Called when user clicks the "Back" arrow — used to close only the nested dialog and return to parent. */
   onBackToParent?: () => void;
+  /** Tab inicial ao abrir o diálogo. */
+  initialTab?: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history";
 }
 
 /** Helper para serializar erros robustamente, capturando propriedades não-enumeráveis */
@@ -155,12 +157,22 @@ function formatHoursDisplay(hours: number): string {
   return "0h";
 }
 
+function isCompletedStatus(status: string | null | undefined): boolean {
+  if (!status) return false;
+  const normalized = status
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  return normalized === "completed" || normalized === "concluido";
+}
+
 export const EditActivityDialog = ({
   activity, open, onOpenChange, onActivityUpdated,
   phases = [], allActivities = [], projectId, isQualityProject = false,
   createMode = false, defaultStageId = null, defaultPhaseId = null, defaultParentId = null,
   onActivityCreated,
   parentActivityTitle, onBackToParent,
+  initialTab = "details",
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
@@ -190,6 +202,7 @@ export const EditActivityDialog = ({
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
   const [editingSubActivity, setEditingSubActivity] = useState<Activity | null>(null);
   const [editingSubOpen, setEditingSubOpen] = useState(false);
+  const [consumedMinutes, setConsumedMinutes] = useState<number>(0);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [allProfiles, setAllProfiles] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean }[]>([]);
@@ -201,6 +214,12 @@ export const EditActivityDialog = ({
   const [lastEditorName, setLastEditorName] = useState<string | null>(null);
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "stories" | "history">("details");
+
+  useEffect(() => {
+    if (open) {
+      setActiveTab(initialTab);
+    }
+  }, [open, initialTab]);
 
   // Divergências pai vs subatividades (alerta apenas, sem bloqueio)
   const subHoursTotal = subActivities.reduce((sum, s) => sum + (Number((s as any).hours) || 0), 0);
@@ -412,6 +431,20 @@ export const EditActivityDialog = ({
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       fetchSubActivities(act.id);
+      // Fetch consumed minutes from time_entries for this activity
+      if (!createMode) {
+        supabase
+          .from("time_entries")
+          .select("duration_minutes")
+          .eq("activity_id", act.id)
+          .then(({ data }) => {
+            const total = (data ?? []).reduce(
+              (sum, e) => sum + (e.duration_minutes ?? 0),
+              0
+            );
+            setConsumedMinutes(total);
+          });
+      }
     }
   }, [activity, draftActivity, createMode]);
 
@@ -446,14 +479,27 @@ export const EditActivityDialog = ({
   };
 
   const handleToggleSubActivity = async (sub: Activity) => {
-    const newStatus = sub.status === "completed" ? "pending" : "completed";
+    const wasCompleted = isCompletedStatus(sub.status);
+    const newStatus = wasCompleted ? "pending" : "completed";
     const updateData: any = {
       status: newStatus,
       completed_at: newStatus === "completed" ? new Date().toISOString() : null,
     };
     // Regra B+C: NÃO move a subatividade de coluna ao concluir.
     // Apenas marca status/completed_at, mantendo workflow_stage_id intacto.
-    await supabase.from("activities").update(updateData).eq("id", sub.id);
+    const { error: subUpdateError } = await supabase
+      .from("activities")
+      .update(updateData)
+      .eq("id", sub.id);
+
+    if (subUpdateError) {
+      toast({
+        title: "Não foi possível concluir a subtarefa",
+        description: subUpdateError.message,
+        variant: "destructive",
+      });
+      return;
+    }
 
     // Propagação para a atividade-pai (regra B):
     const parent = effectiveActivity;
@@ -465,9 +511,9 @@ export const EditActivityDialog = ({
       const subs = (siblings || []) as Array<{ id: string; status: string }>;
 
       if (subs.length > 0) {
-        const allDone = subs.every((s) => s.status === "completed");
+        const allDone = subs.every((s) => isCompletedStatus(s.status));
 
-        if (newStatus === "completed" && allDone && parent.status !== "completed") {
+        if (newStatus === "completed" && allDone && !isCompletedStatus(parent.status)) {
           // Todas concluídas → move o pai para "Final" e marca completed
           const { data: finalStage } = await supabase
             .from("workflow_stages")
@@ -483,7 +529,7 @@ export const EditActivityDialog = ({
           if (finalStage) parentUpdate.workflow_stage_id = finalStage.id;
           await supabase.from("activities").update(parentUpdate).eq("id", parent.id);
           toast({ title: "Atividade concluída", description: "Todas as subatividades foram concluídas — a atividade-pai foi movida para Final." });
-        } else if (newStatus === "pending" && parent.status === "completed") {
+        } else if (newStatus === "pending" && isCompletedStatus(parent.status)) {
           // Reabriu uma sub e o pai estava concluído → reabre o pai
           await supabase.from("activities").update({
             status: "pending",
@@ -980,6 +1026,28 @@ export const EditActivityDialog = ({
                           <option key={h} value={`${h}h`} label={h === 1 ? "1 hora" : `${h} horas`} />
                         ))}
                       </datalist>
+                      {/* Consumidas: badge only for leaf activities (no subtasks) */}
+                      {subActivities.length === 0 && !createMode && parentHoursNum > 0 && (() => {
+                        const consumedH = consumedMinutes / 60;
+                        const isOver = consumedH > parentHoursNum;
+                        const hasConsumed = consumedMinutes > 0;
+                        const label = `${formatHoursDisplay(consumedH) || "0h"} / ${formatHoursDisplay(parentHoursNum)}`;
+                        return (
+                          <span
+                            className={`inline-flex items-center gap-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded border ${
+                              isOver
+                                ? "bg-destructive/10 text-destructive border-destructive/30"
+                                : hasConsumed
+                                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                                : "bg-muted text-muted-foreground border-border"
+                            }`}
+                            title="Horas consumidas vs planejadas (via apontamentos)"
+                          >
+                            <Clock className="w-3 h-3" />
+                            {label}
+                          </span>
+                        );
+                      })()}
                       {hoursDivergence && (
                         <TooltipProvider delayDuration={150}>
                           <Tooltip>
@@ -1411,9 +1479,9 @@ export const EditActivityDialog = ({
                           type="button"
                           className="h-5 w-5 shrink-0"
                           onClick={() => handleToggleSubActivity(sub)}
-                          title={sub.status === "completed" ? "Reabrir" : "Concluir"}
+                          title={isCompletedStatus(sub.status) ? "Reabrir" : "Concluir"}
                         >
-                          {sub.status === "completed" ? (
+                          {isCompletedStatus(sub.status) ? (
                             <CheckCircle2 className="w-3.5 h-3.5 text-success" />
                           ) : (
                             <Circle className="w-3.5 h-3.5 text-muted-foreground" />
@@ -1423,7 +1491,7 @@ export const EditActivityDialog = ({
                           type="button"
                           onClick={() => { setEditingSubActivity(sub); setEditingSubOpen(true); }}
                           className={`text-xs truncate text-left ${
-                            sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground hover:text-primary"
+                            isCompletedStatus(sub.status) ? "line-through text-muted-foreground" : "text-foreground hover:text-primary"
                           }`}
                           title={sub.title}
                         >
