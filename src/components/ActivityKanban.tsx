@@ -881,11 +881,6 @@ function SortableColumn({
   phases.forEach((p, i) => { phaseOrderMap[p.id] = i; });
   const priorityWeight: Record<string, number> = { high: 0, medium: 1, low: 2 };
   const stageActivityIds = useMemo(() => new Set(stageActivities.map((a) => a.id)), [stageActivities]);
-  const activityById = useMemo(() => {
-    const map = new Map<string, Activity>();
-    activities.forEach((activity) => map.set(activity.id, activity));
-    return map;
-  }, [activities]);
 
   const sortStageItems = useCallback((list: Activity[]) => {
     const sorted = [...list];
@@ -924,37 +919,18 @@ function SortableColumn({
   }, [colSort, phases]);
 
   const rootStageActivities = useMemo(() => {
-    const parentIdsWithChildrenInStage = new Set(
-      stageActivities
-        .filter((a) => a.parent_id)
-        .map((a) => a.parent_id as string)
-    );
-
     return sortStageItems(
       stageActivities.filter((a) => {
         if (!a.parent_id) return true;
-        return !parentIdsWithChildrenInStage.has(a.parent_id);
+        // Subtarefa: só esconde da raiz se o PAI também estiver nesta coluna
+        // (nesse caso ela aparece aninhada sob o pai). Caso contrário, aparece
+        // como card independente com breadcrumb do pai.
+        return !stageActivityIds.has(a.parent_id);
       })
     );
-  }, [stageActivities, sortStageItems]);
+  }, [stageActivities, stageActivityIds, sortStageItems]);
 
-  const mirroredParents = useMemo(() => {
-    const parentIds = Array.from(
-      new Set(
-        stageActivities
-          .filter((a) => a.parent_id && !stageActivityIds.has(a.parent_id))
-          .map((a) => a.parent_id as string)
-      )
-    );
-
-    return sortStageItems(
-      parentIds
-        .map((parentId) => activityById.get(parentId))
-        .filter((activity): activity is Activity => Boolean(activity))
-    );
-  }, [stageActivities, stageActivityIds, activityById, sortStageItems]);
-
-  const sortedActivities = useMemo(() => [...rootStageActivities, ...mirroredParents], [rootStageActivities, mirroredParents]);
+  const sortedActivities = rootStageActivities;
 
   const visibleCardCount = useMemo(() => {
     return sortedActivities.reduce((total, activity) => {
