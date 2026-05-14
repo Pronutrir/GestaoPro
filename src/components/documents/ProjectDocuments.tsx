@@ -40,7 +40,6 @@ import { cn } from "@/lib/utils";
 import { TaskReferenceNode } from "./TaskReferenceCard";
 import { AIAssistButton, type AIAction } from "@/components/AIAssistButton";
 import { ImageEditorDialog } from "./ImageEditorDialog";
-import { useAppConfirm } from "@/components/AppConfirmProvider";
 
 interface PageDoc {
   id: string;
@@ -95,7 +94,6 @@ function clearDraft(pageId: string) {
 
 export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocumentsProps) {
   const { user } = useAuth();
-  const appConfirm = useAppConfirm();
   const [pages, setPages] = useState<PageDoc[]>([]);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
@@ -127,8 +125,6 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   const [pendingImageSrc, setPendingImageSrc] = useState<string | null>(null);
   const [pendingImageWidthPct, setPendingImageWidthPct] = useState<number>(100);
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
-  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-  const [linkUrlDraft, setLinkUrlDraft] = useState("");
   const editingImagePosRef = useRef<number | null>(null);
 
   const parseImageWidthPct = useCallback((width: unknown) => {
@@ -212,7 +208,6 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
 
   /* ---------- Editor ---------- */
   const editor = useEditor({
-    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
@@ -674,13 +669,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   };
 
   const deletePage = async (id: string) => {
-    const ok = await appConfirm({
-      title: "Excluir documento",
-      description: "Excluir este documento?",
-      confirmText: "Excluir",
-      destructive: true,
-    });
-    if (!ok) return;
+    if (!confirm("Excluir este documento?")) return;
     await supabase
       .from("project_pages" as any)
       .update({ is_trashed: true, trashed_at: new Date().toISOString() } as any)
@@ -879,9 +868,8 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                     <Sep />
                     <ToolbarBtn icon={LinkIcon} label="Inserir link"
                       onClick={() => {
-                        const current = editor?.getAttributes("link")?.href as string | undefined;
-                        setLinkUrlDraft(current || "");
-                        setLinkDialogOpen(true);
+                        const url = window.prompt("URL do link:");
+                        if (url) editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
                       }} />
                     <ToolbarBtn icon={TableIcon} label="Inserir tabela 3x3"
                       onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} />
@@ -1103,35 +1091,6 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
         }}
         onConfirm={handleImageEditorConfirm}
       />
-      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-        <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle>Inserir link</DialogTitle>
-          </DialogHeader>
-          <Input
-            value={linkUrlDraft}
-            onChange={(e) => setLinkUrlDraft(e.target.value)}
-            placeholder="https://exemplo.com"
-            autoFocus
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setLinkDialogOpen(false)}>Cancelar</Button>
-            <Button
-              onClick={() => {
-                const value = linkUrlDraft.trim();
-                if (!value || !editor) {
-                  setLinkDialogOpen(false);
-                  return;
-                }
-                editor.chain().focus().extendMarkRange("link").setLink({ href: value }).run();
-                setLinkDialogOpen(false);
-              }}
-            >
-              Inserir
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </TooltipProvider>
   );
 }
