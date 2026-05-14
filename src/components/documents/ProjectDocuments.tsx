@@ -316,7 +316,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
 
   /* ---------- Hydrate current page from local draft (preferred) or server ---------- */
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     if (!activePage) {
       hydratingRef.current = true;
       setTitleDraft("");
@@ -384,7 +384,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
 
   /* ---------- Convert current line into a task w/ reference card ---------- */
   const convertCurrentLineToTask = useCallback(async () => {
-    if (!editor || !projectId) return;
+    if (!editor || editor.isDestroyed || !projectId) return;
     const { state } = editor;
     const { from } = state.selection;
     const $from = state.doc.resolve(from);
@@ -439,7 +439,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
 
   /* ---------- AI assist on selection (or current line) ---------- */
   const getAITargetRange = useCallback(() => {
-    if (!editor) return null;
+    if (!editor || editor.isDestroyed) return null;
     const { state } = editor;
     const { from, to, empty } = state.selection;
     if (!empty) {
@@ -480,7 +480,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
 
   const applyAIResult = useCallback(
     (next: string) => {
-      if (!editor || !aiRangeRef.current) return;
+      if (!editor || editor.isDestroyed || !aiRangeRef.current) return;
       const { from, to } = aiRangeRef.current;
       editor
         .chain()
@@ -494,7 +494,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   /* ---------- Apply slash command ---------- */
   const applySlash = useCallback(
     async (key: SlashKey) => {
-      if (!editor) return;
+      if (!editor || editor.isDestroyed) return;
       const { state } = editor;
       const { from } = state.selection;
       const $from = state.doc.resolve(from);
@@ -555,7 +555,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
 
   /* ---------- Save ---------- */
   const savePage = useCallback(async () => {
-    if (!editor || !activePage) return;
+    if (!editor || editor.isDestroyed || !activePage) return;
     setSaving(true);
     const json = editor.getJSON();
     const nextTitle = titleDraftRef.current || "Documento sem título";
@@ -583,14 +583,14 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   /* ---------- Mantém flushRef sempre atualizado ---------- */
   useEffect(() => {
     flushRef.current = async () => {
-      if (!editor || !activePage || !dirtyRef.current) return;
+      if (!editor || editor.isDestroyed || !activePage || !dirtyRef.current) return;
       await savePage();
     };
   }, [editor, activePage, savePage]);
 
   /* ---------- Auto-save: rascunho local imediato + debounce no servidor ---------- */
   useEffect(() => {
-    if (!editor || !activePage) return;
+    if (!editor || editor.isDestroyed || !activePage) return;
     const pageId = activePage.id;
     let timer: number | null = null;
 
@@ -617,7 +617,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
 
   /* ---------- Salva também quando o título muda ---------- */
   useEffect(() => {
-    if (!editor || !activePage) return;
+    if (!editor || editor.isDestroyed || !activePage) return;
     if (hydratingRef.current) return;
     if (titleDraft === activePage.title) return;
     writeDraft(activePage.id, titleDraft || "Documento sem título", editor.getJSON());
