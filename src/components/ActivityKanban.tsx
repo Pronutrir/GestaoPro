@@ -226,6 +226,8 @@ interface ActivityKanbanProps {
   canCreate?: boolean;
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;
+  /** Mapa de id de perfil → nome completo para resolução de assigned_to */
+  profilesMap?: Record<string, string>;
 }
 
 function SortableKanbanCard({
@@ -255,6 +257,7 @@ function SortableKanbanCard({
   parentBreadcrumb,
   blockedSubsCount,
   hoursStat,
+  profilesMap = {},
 }: {
   activity: Activity;
   phases: Phase[];
@@ -282,6 +285,7 @@ function SortableKanbanCard({
   parentBreadcrumb?: { id: string; title: string } | null;
   blockedSubsCount?: number;
   hoursStat?: { planned: number; consumed: number; hasSubs: boolean };
+  profilesMap?: Record<string, string>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -322,6 +326,7 @@ function SortableKanbanCard({
         parentBreadcrumb={parentBreadcrumb}
         blockedSubsCount={blockedSubsCount}
         hoursStat={hoursStat}
+        profilesMap={profilesMap}
       />
     </div>
   );
@@ -356,6 +361,7 @@ function KanbanCard({
   blockedSubsCount,
   hoursStat,
   readOnlyPreview = false,
+  profilesMap = {},
 }: {
   activity: Activity;
   phases: Phase[];
@@ -385,6 +391,7 @@ function KanbanCard({
   blockedSubsCount?: number;
   hoursStat?: { planned: number; consumed: number; hasSubs: boolean };
   readOnlyPreview?: boolean;
+  profilesMap?: Record<string, string>;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     switch (priority) {
@@ -414,7 +421,7 @@ function KanbanCard({
   const tooltipLines = [
     activity.title,
     activity.description ? `📝 ${activity.description}` : null,
-    activity.assigned_to ? `👤 Responsável: ${activity.assigned_to}` : null,
+    activity.assigned_to ? `👤 Responsável: ${profilesMap[activity.assigned_to] ?? activity.assigned_to}` : null,
     activity.priority ? `⚡ Prioridade: ${activity.priority === "high" ? "Alta" : activity.priority === "medium" ? "Média" : "Baixa"}` : null,
     activity.start_date ? `📅 Início: ${parseDate(activity.start_date).toLocaleDateString("pt-BR")}` : null,
     activity.end_date ? `📅 Fim: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}` : null,
@@ -556,7 +563,7 @@ function KanbanCard({
                   )}
                   {activity.assigned_to && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                      👤 {activity.assigned_to}
+                      👤 {profilesMap[activity.assigned_to] ?? activity.assigned_to}
                     </Badge>
                   )}
                   {activity.participants && activity.participants.length > 0 && (
@@ -788,6 +795,7 @@ function SortableColumn({
   onToggleStageVisible,
   allStages,
   density,
+  profilesMap = {},
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -823,6 +831,7 @@ function SortableColumn({
   allStages: WorkflowStage[];
   density: KanbanDensity;
   hoursStatsByActivity?: Map<string, { planned: number; consumed: number; hasSubs: boolean }>;
+  profilesMap?: Record<string, string>;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -1258,6 +1267,7 @@ function SortableColumn({
                       blockedSubsCount={blockedSubsCount}
                       hoursStat={hoursStatsByActivity?.get(activity.id)}
                       readOnlyPreview
+                      profilesMap={profilesMap}
                     />
                   ) : (
                     <SortableKanbanCard
@@ -1287,6 +1297,7 @@ function SortableColumn({
                       parentBreadcrumb={parentBreadcrumb}
                       blockedSubsCount={blockedSubsCount}
                       hoursStat={hoursStatsByActivity?.get(activity.id)}
+                      profilesMap={profilesMap}
                     />
                   )}
                   {expanded && (inlineChildren.length > 0 || externalChildren.length > 0) && (
@@ -1323,6 +1334,7 @@ function SortableColumn({
                           progress={computeActivityProgress(child.workflow_stage_id, allStages, child.last_progress_stage_id)}
                           density={density}
                           hoursStat={hoursStatsByActivity?.get(child.id)}
+                          profilesMap={profilesMap}
                         />
                       ))}
                       {externalChildren.map((child) => {
@@ -1364,6 +1376,7 @@ function SortableColumn({
                               progress={computeActivityProgress(child.workflow_stage_id, allStages, child.last_progress_stage_id)}
                               density={density}
                               hoursStat={hoursStatsByActivity?.get(child.id)}
+                              profilesMap={profilesMap}
                             />
                           </div>
                         );
@@ -1455,6 +1468,7 @@ export const ActivityKanban = ({
   canCreate = false,
   isQualityProject = false,
   onOpenCreateTask,
+  profilesMap = {},
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
@@ -1508,8 +1522,12 @@ export const ActivityKanban = ({
     (a: Activity) => {
       if (!myId && !myName) return false;
       if (myId && (a as any).created_by === myId) return true;
+      if (myId && a.assigned_to === myId) return true;
       if (myName) {
         if ((a.assigned_to || "").trim().toLowerCase() === myName) return true;
+        // Resolve UUID → nome para comparação
+        const resolvedName = a.assigned_to ? (profilesMap[a.assigned_to] || "").trim().toLowerCase() : "";
+        if (resolvedName && resolvedName === myName) return true;
         if (Array.isArray(a.participants) && a.participants.some((p) => (p || "").trim().toLowerCase() === myName)) return true;
       }
       return false;
@@ -2268,6 +2286,7 @@ export const ActivityKanban = ({
                 onToggleStageVisible={handleToggleStageVisible}
                 allStages={stages}
                 density={density}
+                profilesMap={profilesMap}
               />
             );
           })}
@@ -2290,6 +2309,7 @@ export const ActivityKanban = ({
               hasStory={storyLinkedActivities.has(activeActivity.id)}
               progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id)}
               density={density}
+              profilesMap={profilesMap}
             />
           </div>
         ) : activeColumn ? (

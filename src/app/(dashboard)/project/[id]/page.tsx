@@ -181,6 +181,7 @@ export default function ProjectDetailsPage() {
   const [sprintGoal, setSprintGoal] = useState("");
   const [activeSprintId, setActiveSprintId] = useState<string | null>(null);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
+  const [profilesMap, setProfilesMap] = useState<Record<string, string>>({});
   const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
   const [pendingChangeRequests, setPendingChangeRequests] = useState(0);
 
@@ -598,8 +599,13 @@ export default function ProjectDetailsPage() {
     if (memberData && memberData.length > 0) {
       const userIds = memberData.map(m => m.user_id);
       const { data: profiles } = await supabase
-        .from("profiles").select("full_name, sector").in("id", userIds);
-      if (profiles) setMembers(profiles.filter(p => p.full_name));
+        .from("profiles").select("id, full_name, sector").in("id", userIds);
+      if (profiles) {
+        setMembers(profiles.filter(p => p.full_name) as { full_name: string; sector: string | null }[]);
+        const map: Record<string, string> = {};
+        profiles.forEach(p => { if (p.id && p.full_name) map[p.id] = p.full_name; });
+        setProfilesMap(map);
+      }
     }
   };
 
@@ -1046,6 +1052,7 @@ export default function ProjectDetailsPage() {
                 isAdmin={canDelete}
                 canCreate={canCreate}
                 isQualityProject={isQualityProject}
+                profilesMap={profilesMap}
                 onOpenCreateTask={(stageId) => {
                   setCreateTaskStageId(stageId);
                   setShowAddActivity(true);
