@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Loader2, Crop as CropIcon } from "lucide-react";
+import { toast } from "sonner";
 
 interface Props {
   file: File | null;
@@ -20,13 +21,29 @@ interface Props {
 async function getCroppedBlob(src: string, area: Area, mime = "image/png"): Promise<Blob> {
   const img = new Image();
   img.crossOrigin = "anonymous";
-  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = src; });
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("Nao foi possivel carregar a imagem para edicao."));
+    img.src = src;
+  });
   const canvas = document.createElement("canvas");
   canvas.width = area.width;
   canvas.height = area.height;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Nao foi possivel preparar a area de edicao da imagem.");
+  }
   ctx.drawImage(img, area.x, area.y, area.width, area.height, 0, 0, area.width, area.height);
-  return await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), mime, 0.92));
+  return await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("Nao foi possivel gerar a imagem recortada."));
+        return;
+      }
+
+      resolve(blob);
+    }, mime, 0.92);
+  });
 }
 
 export function ImageEditorDialog({ file, imageSrc = null, open, onOpenChange, onConfirm, initialWidthPercent = 100 }: Props) {
@@ -63,6 +80,8 @@ export function ImageEditorDialog({ file, imageSrc = null, open, onOpenChange, o
       const blob = await getCroppedBlob(src, croppedArea);
       await onConfirm(blob, widthPct);
       onOpenChange(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao processar a imagem.");
     } finally {
       setBusy(false);
     }
