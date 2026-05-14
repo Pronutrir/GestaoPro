@@ -466,8 +466,14 @@ export const EditActivityDialog = ({
     const finalStage = workflowStages.find((stage) => stage.is_final);
     const backlogStage = workflowStages.find((stage) => stage.display_order === 0) || workflowStages[0];
     const currentStageId = sub.workflow_stage_id || null;
+    // Ao reabrir, NUNCA voltar para a coluna Final — preferir last_progress (se não for a Final),
+    // depois a coluna atual (se não for a Final), por fim o Backlog.
+    const lastProgressNotFinal =
+      sub.last_progress_stage_id && sub.last_progress_stage_id !== finalStage?.id
+        ? sub.last_progress_stage_id
+        : null;
     const reopenStageId =
-      sub.last_progress_stage_id ||
+      lastProgressNotFinal ||
       (currentStageId && currentStageId !== finalStage?.id ? currentStageId : null) ||
       backlogStage?.id ||
       null;
@@ -542,8 +548,12 @@ export const EditActivityDialog = ({
           toast({ title: "Atividade concluída", description: "Todas as subatividades foram concluídas — a atividade-pai foi movida para Final." });
         } else if (newStatus === "pending" && parent.status === "completed") {
           // Reabriu uma sub e o pai estava concluído → reabre o pai
+          const parentLastProgressNotFinal =
+            parent.last_progress_stage_id && parent.last_progress_stage_id !== finalStage?.id
+              ? parent.last_progress_stage_id
+              : null;
           const parentReopenStageId =
-            parent.last_progress_stage_id ||
+            parentLastProgressNotFinal ||
             (parent.workflow_stage_id && parent.workflow_stage_id !== finalStage?.id ? parent.workflow_stage_id : null) ||
             backlogStage?.id ||
             null;
@@ -1571,7 +1581,8 @@ export const EditActivityDialog = ({
                             const ds = sub.start_date
                               ? (() => {
                                   const [y, m, d] = sub.start_date!.split("-").map(Number);
-                                  return `${m}/${d}/${String(y).slice(-2)}`;
+                                  const pad = (n: number) => String(n).padStart(2, "0");
+                                  return `${pad(d)}/${pad(m)}/${y}`;
                                 })()
                               : "—";
                             return (
