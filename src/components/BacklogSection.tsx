@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
-  ChevronsUpDown, ChevronsDownUp,
+  ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -103,6 +103,8 @@ export const BacklogSection = ({
   // Inline edit title
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState("");
+  // Modo de seleção em lote: quando ativo, exibe checkboxes nas linhas
+  const [selectMode, setSelectMode] = useState(false);
 
   useEffect(() => {
     const ids = activities.map((a) => a.id);
@@ -236,12 +238,22 @@ export const BacklogSection = ({
   childrenByParent.forEach(sortByOrder);
   topLevelByPhase.forEach(sortByOrder);
 
-  // Helper: detecta se uma activity top-level deve ser tratada como "fase virtual"
-  // (containers criados via toggle "É uma fase" ou simplesmente que possuem filhas)
-  const isPhaseLikeActivity = (a: Activity) => {
-    if (a.item_type === "fase") return true;
-    return (childrenByParent.get(a.id) || []).length > 0;
-  };
+  // Helper: uma atividade marcada como "É uma fase" vira card-fase virtual.
+  const isPhaseLikeActivity = (a: Activity) => a.item_type === "fase";
+
+  // Coleta TODAS as atividades-fase (item_type='fase') em qualquer nível top-level
+  // (independente de phase_id) e as remove dos grupos normais para serem renderizadas
+  // como cards-fase virtuais.
+  const virtualPhaseActs: Activity[] = [];
+  topLevelByPhase.forEach((arr, key) => {
+    const filtered: Activity[] = [];
+    for (const a of arr) {
+      if (isPhaseLikeActivity(a)) virtualPhaseActs.push(a);
+      else filtered.push(a);
+    }
+    topLevelByPhase.set(key, filtered);
+  });
+  sortByOrder(virtualPhaseActs);
 
   const togglePhase = (id: string) => {
     setCollapsedPhases((prev) => {
@@ -357,25 +369,28 @@ export const BacklogSection = ({
             <span className="w-5 shrink-0" />
           )}
 
-          <Checkbox
-            checked={isSelected}
-            onCheckedChange={() => toggleSelect(activity.id)}
-            onClick={(e) => e.stopPropagation()}
-            aria-label={`Selecionar ${activity.title}`}
-          />
-
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 shrink-0"
-            onClick={(e) => { e.stopPropagation(); onToggleActivity(activity.id, activity.status); }}
-          >
-            {activity.status === "completed" ? (
-              <CheckCircle2 className="w-4 h-4 text-success" />
-            ) : (
-              <Circle className="w-4 h-4 text-muted-foreground" />
-            )}
-          </Button>
+          {selectMode ? (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => toggleSelect(activity.id)}
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Selecionar ${activity.title}`}
+            />
+          ) : (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 shrink-0"
+              onClick={(e) => { e.stopPropagation(); onToggleActivity(activity.id, activity.status); }}
+              title={activity.status === "completed" ? "Reabrir tarefa" : "Concluir tarefa"}
+            >
+              {activity.status === "completed" ? (
+                <CheckCircle2 className="w-4 h-4 text-success" />
+              ) : (
+                <Circle className="w-4 h-4 text-muted-foreground" />
+              )}
+            </Button>
+          )}
 
           {/* Color dot for priority */}
           <span
@@ -704,13 +719,30 @@ export const BacklogSection = ({
       {backlogActs.length > 0 && (
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-3">
-            <Checkbox
-              checked={allSelected}
-              onCheckedChange={toggleSelectAll}
-              aria-label="Selecionar todas"
-            />
+            <Button
+              size="sm"
+              variant={selectMode ? "default" : "outline"}
+              className="h-7 px-2 text-xs gap-1.5"
+              onClick={() => {
+                setSelectMode((v) => {
+                  if (v) setSelectedIds(new Set());
+                  return !v;
+                });
+              }}
+              title="Modo de seleção em lote"
+            >
+              <MousePointerSquareDashed className="w-3.5 h-3.5" />
+              {selectMode ? "Sair da seleção" : "Selecionar"}
+            </Button>
+            {selectMode && (
+              <Checkbox
+                checked={allSelected}
+                onCheckedChange={toggleSelectAll}
+                aria-label="Selecionar todas"
+              />
+            )}
             <p className="text-sm text-muted-foreground">
-              {selectedIds.size > 0
+              {selectMode && selectedIds.size > 0
                 ? `${selectedIds.size} de ${backlogActs.length} selecionada(s)`
                 : `${backlogActs.length} tarefa(s) no projeto`}
             </p>
@@ -739,7 +771,7 @@ export const BacklogSection = ({
             >
               <ChevronsDownUp className="w-3.5 h-3.5" /> Recolher
             </Button>
-            {selectedIds.size > 0 && (
+            {selectMode && selectedIds.size > 0 && (
               <Button size="sm" className="h-7 text-xs gap-1.5 ml-1" onClick={() => setMoveDialogOpen(true)}>
                 <ArrowRight className="w-3.5 h-3.5" />
                 Mudar status ({selectedIds.size})
@@ -763,14 +795,15 @@ export const BacklogSection = ({
 
         {phases.map((p) => renderPhaseGroup(p.id, p.title))}
 
-        {/* Activities top-level sem phase_id: separar em fases virtuais (item_type='fase' ou com filhas) e tarefas soltas */}
+        {/* Atividades-fase (item_type='fase') em qualquer nível top-level viram cards de fase virtuais */}
+        {virtualPhaseActs.map((vp) => renderVirtualPhase(vp))}
+
+        {/* Atividades top-level sem phase_id que não são fases viram grupo "Sem fase" */}
         {(() => {
           const orphanTop = topLevelByPhase.get("none") || [];
-          const virtualPhases = orphanTop.filter(isPhaseLikeActivity);
-          const looseTasks = orphanTop.filter((a) => !isPhaseLikeActivity(a));
+          const looseTasks = orphanTop;
           return (
             <>
-              {virtualPhases.map((vp) => renderVirtualPhase(vp))}
               {looseTasks.length > 0 && (
                 <Card className="p-3 bg-muted/40 border-border">
                   <div className="flex items-center gap-2 mb-2">

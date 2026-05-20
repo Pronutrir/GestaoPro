@@ -25,6 +25,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 import {
   Popover,
   PopoverContent,
@@ -58,6 +59,7 @@ interface Profile {
 
 interface WorkflowStageManagerProps {
   projectId: string;
+  onChanged?: () => void;
 }
 
 const PRESET_COLORS = [
@@ -274,8 +276,9 @@ function SortableStageItem({
   );
 }
 
-export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) => {
+export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageManagerProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -371,6 +374,7 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
         await supabase.from("workflow_stages").update({ display_order: i }).eq("id", reordered[i].id);
       }
       toast({ title: "Ordem atualizada!" });
+      onChanged?.();
     } catch {
       toast({ title: "Erro ao reordenar", variant: "destructive" });
       fetchStages();
@@ -394,6 +398,7 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
       setNewTitle("");
       fetchStages();
       toast({ title: "Etapa criada!" });
+      onChanged?.();
     }
   };
 
@@ -408,6 +413,7 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
     } else {
       setEditingId(null);
       fetchStages();
+      onChanged?.();
     }
   };
 
@@ -417,24 +423,34 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
       toast({ title: "A etapa Backlog não pode ser excluída", description: "Ela é reservada para atividades ainda não iniciadas.", variant: "destructive" });
       return;
     }
-    if (!confirm("Atividades nesta etapa perderão a associação. Continuar?")) return;
+    const ok = await appConfirm({
+      title: "Excluir etapa?",
+      description: "Atividades nesta etapa perderão a associação. Esta ação não pode ser desfeita.",
+      confirmText: "Excluir",
+      cancelText: "Cancelar",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
     if (error) {
       toast({ title: "Erro ao excluir etapa", variant: "destructive" });
     } else {
       fetchStages();
       toast({ title: "Etapa excluída!" });
+      onChanged?.();
     }
   };
 
   const handleToggleFinal = async (id: string, current: boolean) => {
     await supabase.from("workflow_stages").update({ is_final: !current, ...(current ? {} : { is_blocked: false }) }).eq("id", id);
     fetchStages();
+    onChanged?.();
   };
 
   const handleToggleBlocked = async (id: string, current: boolean) => {
     await supabase.from("workflow_stages").update({ is_blocked: !current, ...(current ? {} : { is_final: false }) }).eq("id", id);
     fetchStages();
+    onChanged?.();
   };
 
   const handleToggleException = async (id: string, current: boolean) => {
@@ -443,16 +459,19 @@ export const WorkflowStageManager = ({ projectId }: WorkflowStageManagerProps) =
       .update({ is_exception: !current, ...(current ? {} : { is_final: false }) })
       .eq("id", id);
     fetchStages();
+    onChanged?.();
   };
 
   const handleToggleVisible = async (id: string, current: boolean) => {
     await supabase.from("workflow_stages").update({ is_visible: !current }).eq("id", id);
     fetchStages();
+    onChanged?.();
   };
 
   const handleColorChange = async (id: string, color: string) => {
     await supabase.from("workflow_stages").update({ color }).eq("id", id);
     fetchStages();
+    onChanged?.();
   };
 
   return (

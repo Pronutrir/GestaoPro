@@ -181,6 +181,21 @@
   animation: pulse-slow 3s ease-in-out infinite;
 }
 
+@keyframes pulse-strong {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 hsl(var(--destructive) / 0.7);
+  }
+  50% {
+    opacity: 0.45;
+    box-shadow: 0 0 8px 2px hsl(var(--destructive) / 0.9);
+  }
+}
+
+.animate-pulse-strong {
+  animation: pulse-strong 0.9s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 /* React Big Calendar — sem destaque para "hoje" */
 .rbc-today {
   background-color: transparent !important;
