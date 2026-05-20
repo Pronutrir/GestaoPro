@@ -2,12 +2,14 @@
 # NEXT_PUBLIC_SUPABASE_ANON_KEY is a public anon key intentionally embedded in the JS bundle
 
 # ---- Build stage ----
-FROM oven/bun:1 AS builder
+# Usar node:22-alpine (mesma base do runtime) para evitar erros de bun ao
+# extrair tarballs de pacotes nativos grandes (@next/swc-*, sharp) no Docker.
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json bun.lockb ./
-RUN bun install
+COPY package.json ./
+RUN npm install --legacy-peer-deps
 
 COPY . .
 
@@ -19,7 +21,7 @@ ARG APP_VERSION=0.1.0
 ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 
-RUN bun run build
+RUN npm run build
 
 # ---- Serve stage ----
 # Node.js Alpine: executa o servidor standalone gerado pelo Next.js
