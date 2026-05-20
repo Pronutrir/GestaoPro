@@ -150,20 +150,18 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
           <FileText className="w-5 h-5 text-primary" />
           Documentos ({documents.length})
         </h3>
-        {canManageProject && (
-          <Button
-            size="sm"
-            variant={showForm ? "secondary" : "default"}
-            onClick={() => { if (showForm) resetForm(); else { resetForm(); setShowForm(true); } }}
-            className="gap-1"
-          >
-            {showForm ? <><X className="w-4 h-4" /> Cancelar</> : <><Plus className="w-4 h-4" /> Novo Documento</>}
-          </Button>
-        )}
+        <Button
+          size="sm"
+          variant={showForm ? "secondary" : "default"}
+          onClick={() => { if (showForm) resetForm(); else { resetForm(); setShowForm(true); } }}
+          className="gap-1"
+        >
+          {showForm ? <><X className="w-4 h-4" /> Cancelar</> : <><Plus className="w-4 h-4" /> Novo Documento</>}
+        </Button>
       </div>
 
       {showForm && (
-        <div className="space-y-3 p-4 bg-accent/30 rounded-lg border border-border">
+        <div className="space-y-3 p-4 bg-card rounded-lg border border-border shadow-sm">
           <Input placeholder="Nome do documento *" value={form.file_name} onChange={(e) => setForm({ ...form, file_name: e.target.value })} />
           <Input placeholder="URL do documento *" value={form.file_url} onChange={(e) => setForm({ ...form, file_url: e.target.value })} />
           <div className="grid grid-cols-2 gap-3">

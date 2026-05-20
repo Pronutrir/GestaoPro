@@ -24,7 +24,7 @@ import { ProjectFlatList } from "@/components/ProjectFlatList";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 import { MeetingsManager } from "@/components/MeetingsManager";
-import { AssumptionsManager } from "@/components/AssumptionsManager";
+
 import { RisksManager } from "@/components/RisksManager";
 import { ChangeRequestsManager } from "@/components/ChangeRequestsManager";
 import { ProjectDependenciesView } from "@/components/ProjectDependenciesView";
@@ -36,7 +36,7 @@ import { ProjectDocuments } from "@/components/documents/ProjectDocuments";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, GanttChart, BookOpen, FileText, Flag,
-  ChevronRight, Settings2, Kanban, Users, ShieldCheck, AlertTriangle,
+  ChevronRight, Settings2, Kanban, Users, AlertTriangle,
   Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
   NotebookPen, Search, X,
 } from "lucide-react";
@@ -966,7 +966,6 @@ export default function ProjectDetailsPage() {
                 { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-fuchsia-500" },
                 { value: "tap", label: "TAP", icon: <ClipboardList className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-indigo-500" },
                 { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-teal-500" },
-                { value: "assumptions", label: "Premissas", icon: <ShieldCheck className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-lime-600" },
                 { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-red-500" },
                 { value: "changes", label: "Mudanças", icon: <GitPullRequest className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-orange-500" },
                 { value: "dependencies", label: "Dependências", icon: <GitPullRequest className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-cyan-500" },
@@ -1081,7 +1080,12 @@ export default function ProjectDetailsPage() {
             )}
 
             <TabsContent value="documents" className="mt-0">
-              <DocumentManager projectId={id!} phases={phases} activities={activities.map(a => ({ id: a.id, title: a.title }))} />
+              <DocumentManager
+                projectId={id!}
+                phases={phases}
+                activities={activities.map(a => ({ id: a.id, title: a.title }))}
+                canManageProject={isAdmin}
+              />
             </TabsContent>
 
             <TabsContent value="docpages" className="mt-0">
@@ -1114,10 +1118,6 @@ export default function ProjectDetailsPage() {
 
             <TabsContent value="lessons" className="mt-0">
               <LessonsLearned projectId={id!} phases={phases} />
-            </TabsContent>
-
-            <TabsContent value="assumptions" className="mt-0">
-              <AssumptionsManager projectId={id!} />
             </TabsContent>
 
             <TabsContent value="risks" className="mt-0">

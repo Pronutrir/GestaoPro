@@ -235,12 +235,10 @@ export const RisksManager = ({ projectId, canManageProject = false }: RisksManag
               {occ && <Badge className="bg-destructive/15 text-destructive border-destructive/40">Ocorreu: Sim</Badge>}
             </div>
           </div>
-          {canManageProject && (
-            <div className="flex gap-1">
+          <div className="flex gap-1">
               <Button size="icon" variant="ghost" onClick={() => handleEdit(item)}><Pencil className="w-4 h-4" /></Button>
               <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
             </div>
-          )}
         </div>
         {item.root_cause && <p className="text-xs text-muted-foreground"><strong>Causa Raiz:</strong> {item.root_cause}</p>}
         {item.mitigation && <p className="text-xs text-muted-foreground"><strong>Contramedida:</strong> {item.mitigation}</p>}
@@ -259,11 +257,9 @@ export const RisksManager = ({ projectId, canManageProject = false }: RisksManag
           <Button size="sm" variant={showMatrix ? "secondary" : "outline"} onClick={() => { setShowMatrix(!showMatrix); setMatrixFilter(null); }} className="gap-2">
             {showMatrix ? "Lista" : "Matriz de Risco"}
           </Button>
-          {canManageProject && (
-            <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }} className="gap-2">
-              <Plus className="w-4 h-4" /> Novo Risco
-            </Button>
-          )}
+          <Button size="sm" onClick={() => { resetForm(); setShowForm(true); }} className="gap-2">
+            <Plus className="w-4 h-4" /> Novo Risco
+          </Button>
         </div>
       </div>
 
