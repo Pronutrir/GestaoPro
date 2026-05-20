@@ -119,6 +119,20 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
 
       if (error) throw error;
 
+      // Adiciona o criador como membro com acesso total
+      if (created?.id && user?.id) {
+        await supabase.from("project_members").insert({
+          project_id: created.id,
+          user_id: user.id,
+          invitation_status: "accepted",
+          invited_by: user.id,
+          can_create: true,
+          can_edit: true,
+          can_delete: true,
+          can_move: true,
+        });
+      }
+
       // Insere equipe + envia convites individuais
       if (created?.id && team.length > 0) {
         const rows = team.map((m) => ({
