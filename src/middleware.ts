@@ -52,8 +52,16 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Não use getSession() — getUser() valida o JWT no servidor de forma segura
-  const { data: { user } } = await supabase.auth.getUser();
+  // getUser() valida o JWT no servidor; envolvemos em try/catch porque em
+  // ambientes com conectividade instável o fetch pode falhar — nesse caso
+  // deixamos passar e a autenticação client-side trata o redirecionamento.
+  let user: { id: string } | null = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    return supabaseResponse;
+  }
 
   if (pathname === '/setup' && !initialSetupEnabled) {
     return NextResponse.redirect(new URL(user ? '/' : '/login', request.url));
@@ -71,14 +79,18 @@ export async function middleware(request: NextRequest) {
   if (user) {
     // Bloqueia usuários inativos (ex.: novo cadastro Azure aguardando aprovação)
     if (pathname !== '/pending-approval') {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_active')
-        .eq('id', user.id)
-        .maybeSingle();
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_active')
+          .eq('id', user.id)
+          .maybeSingle();
 
-      if (profile && profile.is_active === false) {
-        return NextResponse.redirect(new URL('/pending-approval', request.url));
+        if (profile && profile.is_active === false) {
+          return NextResponse.redirect(new URL('/pending-approval', request.url));
+        }
+      } catch {
+        // Falha ao buscar perfil — permite continuar, a página tratará o estado
       }
     }
 
