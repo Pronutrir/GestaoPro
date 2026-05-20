@@ -236,8 +236,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
 
       {/* Actions */}
       <div className="flex gap-2 flex-wrap">
-        {canManageProject && (
-          <>
+        <>
             <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); setEditingInvestment(null); } setDialogOpen(open); }}>
               <DialogTrigger asChild>
                 <Button size="sm" className="gap-1.5"><Plus className="w-4 h-4" /> Registrar Custo</Button>
@@ -333,8 +332,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-          </>
-        )}
+        </>
       </div>
 
       {/* Category Breakdown */}
@@ -379,7 +377,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                     <TableHead>Categoria</TableHead>
                     <TableHead>Responsável</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
-                    {canManageProject && <TableHead className="w-20">Ações</TableHead>}
+                    <TableHead className="w-20">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -395,8 +393,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                         </TableCell>
                         <TableCell className="text-sm">{inv.responsible || "—"}</TableCell>
                         <TableCell className="text-right font-medium text-sm">{formatCurrency(inv.amount)}</TableCell>
-                        {canManageProject && (
-                          <TableCell>
+                        <TableCell>
                             <div className="flex gap-1">
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(inv)}>
                                 <Pencil className="w-3.5 h-3.5" />
@@ -406,7 +403,6 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                               </Button>
                             </div>
                           </TableCell>
-                        )}
                       </TableRow>
                     );
                   })}

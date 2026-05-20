@@ -367,7 +367,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       </div>
 
       {showForm && (
-        <div className="space-y-3 p-4 bg-accent/30 rounded-lg border border-border">
+        <div className="space-y-3 p-4 bg-card rounded-lg border border-border shadow-sm">
           {/* Meeting Type Selector */}
           <div className="flex gap-2 flex-wrap">
             {MEETING_TYPES.map((t) => (

@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  FileText, Save, ClipboardList, CheckCircle2, Ban, Printer, Eye, Pencil,
+  FileText, Save, ClipboardList, CheckCircle2, Ban,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -150,9 +150,9 @@ const TextField = ({
 
 /* -------- Section header faixa azul-marinho -------- */
 const SectionHeader = ({ n, title }: { n: number; title: string }) => (
-  <div className="bg-primary text-primary-foreground px-4 py-2 rounded-t-md flex items-center gap-3 print:bg-primary print:text-primary-foreground">
-    <span className="text-xs font-bold bg-primary-foreground/20 rounded px-2 py-0.5">{n}</span>
-    <h3 className="text-sm font-semibold uppercase tracking-wide">{title}</h3>
+  <div className="bg-primary/10 text-foreground px-4 py-2 rounded-t-md flex items-center gap-3 border-b border-primary/20">
+    <span className="text-xs font-bold bg-primary/15 text-primary rounded px-2 py-0.5">{n}</span>
+    <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">{title}</h3>
   </div>
 );
 
@@ -166,13 +166,11 @@ const SectionBlock = ({ n, title, children }: { n: number; title: string; childr
 /* ============================================================ */
 export const ProjectCharter = ({ projectId, project, phases, members, onMembersChanged }: ProjectCharterProps) => {
   const { toast } = useToast();
-  const { canManage: isAdmin, user } = useAuth();
+  const { user } = useAuth();
 
   const [editing, setEditing] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [risks, setRisks] = useState<Risk[]>([]);
-  const [assumptionsList, setAssumptionsList] = useState<{ id: string; description: string; category: string | null; impact: string | null }[]>([]);
   const [allProfiles, setAllProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
   const [memberRows, setMemberRows] = useState<MemberRow[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
@@ -238,15 +236,13 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
   useEffect(() => { fetchRelations(); }, [projectId]);
 
   const fetchRelations = async () => {
-    const [r, a, prof, adminRoles, mem] = await Promise.all([
+    const [r, prof, adminRoles, mem] = await Promise.all([
       supabase.from("risks").select("id, description, probability, impact, status").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false }),
-      supabase.from("assumptions").select("id, description, category, impact").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
       supabase.from("user_roles").select("user_id").eq("role", "admin"),
       supabase.from("project_members").select("id, user_id, invitation_status, decline_reason").eq("project_id", projectId),
     ]);
     if (r.data) setRisks(r.data);
-    if (a.data) setAssumptionsList(a.data);
     const adminIds = new Set((adminRoles.data || []).map((x: any) => x.user_id));
     const profiles = (prof.data || []).filter((p: any) => p.full_name && !adminIds.has(p.id));
     setAllProfiles(profiles);
@@ -378,50 +374,35 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     const list = [...(data.benefits_table || [])]; list.splice(idx, 1); setData({ ...data, benefits_table: list });
   };
 
-  const handlePrint = () => window.print();
-
   return (
     <div className="space-y-4 print:space-y-2">
       {/* Toolbar (oculta na impressão) */}
-      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant={previewMode ? "outline" : "default"} onClick={() => setPreviewMode(false)} className="gap-1">
-            <Pencil className="w-4 h-4" /> Editar
-          </Button>
-          <Button size="sm" variant={previewMode ? "default" : "outline"} onClick={() => setPreviewMode(true)} className="gap-1">
-            <Eye className="w-4 h-4" /> Apresentação
-          </Button>
-          <Button size="sm" variant="outline" onClick={handlePrint} className="gap-1">
-            <Printer className="w-4 h-4" /> Imprimir / PDF
-          </Button>
-        </div>
-        {!previewMode && isAdmin && (
-          <div className="flex gap-2">
-            {editing ? (
-              <>
-                <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1">
-                  <Save className="w-4 h-4" /> {saving ? "Salvando..." : "Salvar TAP"}
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setEditing(false)}>Cancelar</Button>
-              </>
-            ) : (
-              <Button size="sm" variant="default" onClick={() => setEditing(true)} className="gap-1">
-                <ClipboardList className="w-4 h-4" /> Editar campos
+      <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+        <div className="flex gap-2">
+          {editing ? (
+            <>
+              <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1">
+                <Save className="w-4 h-4" /> {saving ? "Salvando..." : "Salvar TAP"}
               </Button>
-            )}
-          </div>
-        )}
+              <Button size="sm" variant="outline" onClick={() => setEditing(false)}>Cancelar</Button>
+            </>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="gap-1">
+              <ClipboardList className="w-4 h-4" /> Editar campos
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Cabeçalho geral azul-marinho */}
-      <Card className="overflow-hidden border-primary/30 print:break-inside-avoid">
-        <div className="bg-primary text-primary-foreground p-5 flex items-center gap-4 print:bg-primary">
+      {/* Cabeçalho geral */}
+      <Card className="overflow-hidden border-border print:break-inside-avoid">
+        <div className="bg-primary/10 text-foreground p-5 flex items-center gap-4">
           <div className="w-12 h-12 rounded-lg bg-primary-foreground/15 flex items-center justify-center flex-shrink-0">
             <FileText className="w-6 h-6" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs uppercase tracking-widest opacity-80">Termo de Abertura do Projeto · TAP</p>
-            <h1 className="text-xl md:text-2xl font-bold truncate">{project.title}</h1>
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">Termo de Abertura do Projeto · TAP</p>
+            <h1 className="text-xl md:text-2xl font-bold truncate text-foreground">{project.title}</h1>
           </div>
         </div>
       </Card>
@@ -465,7 +446,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
         </div>
         <div className="mt-4 pt-3 border-t">
           <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Cronograma — Previsto x Real</p>
-          <BaselineBlock project={project as any} canManage={!!isAdmin} />
+          <BaselineBlock project={project as any} canManage />
         </div>
       </SectionBlock>
 
@@ -544,55 +525,6 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             </div>
           </div>
         )}
-      </SectionBlock>
-
-      {/* 5. PREMISSAS, RESTRIÇÕES E DEPENDÊNCIAS */}
-      <SectionBlock n={5} title="Premissas, Restrições e Dependências">
-        <div className="overflow-x-auto -mx-1 px-1">
-          <table className="w-full text-sm border border-border rounded-md overflow-hidden">
-            <thead>
-              <tr className="bg-muted">
-                <th className="px-3 py-2 text-left font-semibold border-b-2 border-border w-32">Tipo</th>
-                <th className="px-3 py-2 text-left font-semibold border-b-2 border-border">Descrição</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-border">
-                <td className="px-3 py-2 align-top bg-warning/10">
-                  <Badge className="bg-warning/20 text-warning border-warning/40 hover:bg-warning/20">Premissa</Badge>
-                </td>
-                <td className="px-3 py-2 align-top">
-                  <TextField editing={editing} value={data.assumptions} onChange={(v) => setData({ ...data, assumptions: v })} placeholder="Premissas adotadas (uma por linha)..." rows={3} aiContext="assumption_description" />
-                  {assumptionsList.length > 0 && (
-                    <ul className="mt-2 space-y-1 text-xs text-muted-foreground border-t border-border pt-2">
-                      {assumptionsList.map((a) => (
-                        <li key={a.id} className="flex items-start gap-1.5">
-                          <span className="text-warning">•</span><span>{a.description}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </td>
-              </tr>
-              <tr className="border-b border-border">
-                <td className="px-3 py-2 align-top bg-destructive/5">
-                  <Badge className="bg-destructive/15 text-destructive border-destructive/40 hover:bg-destructive/15">Restrição</Badge>
-                </td>
-                <td className="px-3 py-2 align-top">
-                  <TextField editing={editing} value={form.restrictions} onChange={(v) => setForm({ ...form, restrictions: v })} placeholder="Limitações de tempo, custo, recursos, regulatórias..." rows={3} aiContext="tap_restrictions" />
-                </td>
-              </tr>
-              <tr>
-                <td className="px-3 py-2 align-top bg-primary/10">
-                  <Badge className="bg-primary/20 text-primary border-primary/40 hover:bg-primary/20">Dependência</Badge>
-                </td>
-                <td className="px-3 py-2 align-top">
-                  <TextField editing={editing} value={data.deliverables} onChange={(v) => setData({ ...data, deliverables: v })} placeholder="Dependências externas, projetos relacionados, recursos críticos..." rows={3} aiContext="tap_benefits" />
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
       </SectionBlock>
 
       {/* 6. BENEFÍCIOS E CRITÉRIOS DE SUCESSO */}
@@ -688,7 +620,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                       )}
                     </div>
                     <Badge className={`text-[10px] ${ib.cls}`}>{ib.label}</Badge>
-                    {editing && isAdmin && m.invitation_status !== "accepted" && (
+                    {editing && m.invitation_status !== "accepted" && (
                       <>
                         <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => handleResendInvite(m)}>
                           Reenviar
@@ -698,7 +630,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                         </Button>
                       </>
                     )}
-                    {editing && isAdmin && (
+                    {editing && (
                       <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive" onClick={() => handleRemoveStakeholder(m.id)}>×</Button>
                     )}
                   </div>
@@ -708,7 +640,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           ) : (
             <p className="text-sm text-muted-foreground italic">Nenhum membro cadastrado</p>
           )}
-          {editing && isAdmin && (
+          {editing && (
             <div className="pt-2 mt-2 flex flex-col sm:flex-row gap-2">
               <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
                 <SelectTrigger className="text-sm flex-1 h-9">
