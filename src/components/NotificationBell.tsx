@@ -27,27 +27,15 @@ export const NotificationBell = () => {
   const [declineFor, setDeclineFor] = useState<string | null>(null);
   const [declineReason, setDeclineReason] = useState("");
 
-  useEffect(() => {
-    fetchNotifications();
-
-    const channel = supabase
-      .channel("notifications-realtime")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, () => {
-        fetchNotifications();
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
   const fetchNotifications = async () => {
     const uid = user?.id;
+    if (!uid) { setNotifications([]); return; }
     let query = supabase
       .from("notifications")
       .select("*, activities:activity_id(assigned_to, participants)")
       .order("created_at", { ascending: false })
       .limit(100);
-    if (uid) query = query.or(`target_user_id.is.null,target_user_id.eq.${uid}`);
+    query = query.or(`target_user_id.is.null,target_user_id.eq.${uid}`);
     const { data } = await query;
     if (!data) { setNotifications([]); return; }
 
@@ -75,6 +63,22 @@ export const NotificationBell = () => {
     setNotifications(filtered as any);
   };
 
+  // Re-busca e resubscreve sempre que o auth mudar (resolve closure stale e carregamento tardio)
+  useEffect(() => {
+    if (!user?.id) return;
+    fetchNotifications();
+
+    const channel = supabase
+      .channel(`notifications-realtime-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, () => {
+        fetchNotifications();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isAdmin, profile]);
+
   const unreadCount = notifications.filter((n) => !n.is_read).length;
   const overdueCount = notifications.filter((n) => !n.is_read && n.type === "overdue").length;
 
@@ -84,7 +88,11 @@ export const NotificationBell = () => {
   };
 
   const markAllAsRead = async () => {
-    await supabase.from("notifications").update({ is_read: true }).eq("is_read", false);
+    const uid = user?.id;
+    if (!uid) return;
+    const unreadIds = notifications.filter((n) => !n.is_read).map((n) => n.id);
+    if (unreadIds.length === 0) return;
+    await supabase.from("notifications").update({ is_read: true }).in("id", unreadIds);
     fetchNotifications();
   };
 
