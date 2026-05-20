@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   ChevronDown, ChevronRight, Columns3, Trash2, RotateCcw, Archive, CheckCheck, CircleDot,
+  MousePointerSquareDashed,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -69,6 +70,7 @@ export function ProjectFlatList({
   const [showTrash, setShowTrash] = useState(false);
   const [trashed, setTrashed] = useState<Activity[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
   const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
@@ -281,7 +283,7 @@ export function ProjectFlatList({
     <div className="space-y-4">
       {/* Toolbar: ações em lote (à esquerda) + seletor de colunas (à direita) */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        {selectedIds.size > 0 ? (
+        {selectMode && selectedIds.size > 0 ? (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/30">
             <span className="text-xs font-medium text-primary">{selectedIds.size} selecionada(s)</span>
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => bulkComplete("completed")}>
@@ -295,7 +297,23 @@ export function ProjectFlatList({
             </Button>
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={clearSelection}>Limpar</Button>
           </div>
-        ) : <div />}
+        ) : (
+          <Button
+            size="sm"
+            variant={selectMode ? "default" : "outline"}
+            className="h-8 px-2 text-xs gap-1.5"
+            onClick={() => {
+              setSelectMode((v) => {
+                if (v) clearSelection();
+                return !v;
+              });
+            }}
+            title="Modo de seleção em lote"
+          >
+            <MousePointerSquareDashed className="w-3.5 h-3.5" />
+            {selectMode ? "Sair da seleção" : "Selecionar"}
+          </Button>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-8 gap-1.5">
@@ -324,11 +342,13 @@ export function ProjectFlatList({
         <div className="grid gap-3 px-4 py-2 bg-muted/40 text-xs font-medium text-muted-foreground border-b border-border"
              style={{ gridTemplateColumns: `minmax(240px, ${Math.max(2, 4 - visibleList.length)}fr) ${visibleList.map(c => `minmax(${colSpec[c.key].min}px, ${colSpec[c.key].fr}fr)`).join(" ")}` }}>
           <div className="flex items-center gap-2">
-            <Checkbox
-              checked={allSelected ? true : someSelected ? "indeterminate" : false}
-              onCheckedChange={toggleSelectAll}
-              aria-label="Selecionar todas"
-            />
+            {selectMode && (
+              <Checkbox
+                checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                onCheckedChange={toggleSelectAll}
+                aria-label="Selecionar todas"
+              />
+            )}
             <span>Tarefa</span>
           </div>
           {visibleList.map(c => (
@@ -358,21 +378,24 @@ export function ProjectFlatList({
               onClick={() => onEditActivity(a)}
             >
               <div className="flex items-center gap-2 min-w-0">
-                <div onClick={(e) => e.stopPropagation()}>
-                  <Checkbox
-                    checked={selectedIds.has(a.id)}
-                    onCheckedChange={() => toggleSelectOne(a.id)}
-                    aria-label="Selecionar tarefa"
-                  />
-                </div>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <Checkbox
-                    checked={a.status === "completed"}
-                    onCheckedChange={() => onToggleActivity(a.id, a.status)}
-                    className="shrink-0 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
-                    title="Marcar como concluída"
-                  />
-                </div>
+                {selectMode ? (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedIds.has(a.id)}
+                      onCheckedChange={() => toggleSelectOne(a.id)}
+                      aria-label="Selecionar tarefa"
+                    />
+                  </div>
+                ) : (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={a.status === "completed"}
+                      onCheckedChange={() => onToggleActivity(a.id, a.status)}
+                      className="shrink-0 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                      title="Marcar como concluída"
+                    />
+                  </div>
+                )}
                 <span className={cn("truncate flex-1", a.status === "completed" && "line-through text-muted-foreground")}>
                   {a.title}
                 </span>

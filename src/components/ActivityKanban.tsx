@@ -67,6 +67,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { UserStoryDrawer } from "@/components/UserStoryDrawer";
 import {
   DropdownMenu,
@@ -85,6 +86,7 @@ import {
   type ActivityProgress,
 } from "@/lib/activityProgress";
 import { useAuth } from "@/contexts/AuthContext";
+import { normalizeGut, GUT_META, type GutLevel } from "@/lib/gutPriority";
 
 const formatHours = (hours: number): string => {
   if (!hours || hours <= 0) return "";
@@ -106,6 +108,28 @@ const STAGE_PRESET_COLORS = [
   "hsl(0, 84%, 60%)",
   "hsl(340, 82%, 52%)",
 ];
+
+const getStageDisplayTitle = (title: string) => {
+  const normalized = title
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+  const lettersOnly = normalized.replace(/[^a-z]/g, "");
+
+  if (
+    normalized === "concluida" ||
+    normalized === "concluada" ||
+    normalized === "concluãda" ||
+    lettersOnly === "concluida" ||
+    lettersOnly === "concluada" ||
+    (lettersOnly.startsWith("conclu") && lettersOnly.endsWith("da"))
+  ) {
+    return "Concluída";
+  }
+
+  return title;
+};
 
 export type KanbanDensity = "sm" | "md" | "lg";
 
@@ -199,6 +223,7 @@ interface Activity {
   phase_id: string | null;
   display_order?: number | null;
   priority?: string;
+  priority_score?: number | null;
   tags?: string[];
   parent_id?: string | null;
   workflow_stage_id?: string | null;
@@ -394,16 +419,15 @@ function KanbanCard({
   profilesMap?: Record<string, string>;
 }) {
   const getPriorityIndicator = (priority?: string) => {
-    switch (priority) {
-      case "high":
-        return <div className="w-1.5 h-1.5 rounded-full bg-destructive" title="Alta" />;
-      case "medium":
-        return <div className="w-1.5 h-1.5 rounded-full bg-warning" title="Média" />;
-      case "low":
-        return <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground" title="Baixa" />;
-      default:
-        return null;
-    }
+    const lvl = normalizeGut(priority);
+    if (lvl === "pendente") return null;
+    const meta = GUT_META[lvl];
+    return (
+      <div
+        className={`w-1.5 h-1.5 rounded-full ${meta.dotClass} ${meta.pulse ? "animate-pulse" : ""}`}
+        title={meta.label}
+      />
+    );
   };
 
   const parseDate = (d: string) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day); };
@@ -422,7 +446,9 @@ function KanbanCard({
     activity.title,
     activity.description ? `📝 ${activity.description}` : null,
     activity.assigned_to ? `👤 Responsável: ${profilesMap[activity.assigned_to] ?? activity.assigned_to}` : null,
-    activity.priority ? `⚡ Prioridade: ${activity.priority === "high" ? "Alta" : activity.priority === "medium" ? "Média" : "Baixa"}` : null,
+    activity.priority
+      ? `⚡ Prioridade: ${GUT_META[normalizeGut(activity.priority)].label}${activity.priority_score ? ` (${activity.priority_score})` : ""}`
+      : null,
     activity.start_date ? `📅 Início: ${parseDate(activity.start_date).toLocaleDateString("pt-BR")}` : null,
     activity.end_date ? `📅 Fim: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}` : null,
     isQualityProject && activity.last_update_date ? `🔄 Atualização: ${parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}` : null,
@@ -481,16 +507,29 @@ function KanbanCard({
                     <span className="truncate">{parentBreadcrumb.title}</span>
                   </button>
                 )}
-                <div className="flex items-center gap-1.5 mb-1">
-                  {getPriorityIndicator(activity.priority)}
+                <div className="flex items-start gap-1.5 mb-1">
+                  {(() => {
+                    const lvl = normalizeGut(activity.priority);
+                    if (lvl === "pendente") return null;
+                    const meta = GUT_META[lvl];
+                    return (
+                      <span
+                        className={`shrink-0 mt-0.5 inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold leading-none ${meta.badgeClass} ${meta.pulse ? "animate-pulse-strong" : ""}`}
+                        title={`Prioridade: ${meta.label}${activity.priority_score ? ` (${activity.priority_score})` : ""}`}
+                        aria-label={`Prioridade ${meta.label}`}
+                      >
+                        {meta.shortLabel}
+                      </span>
+                    );
+                  })()}
                   {isMilestone && (
                     <Diamond
-                      className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0"
+                      className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0 mt-0.5"
                       aria-label="Marco"
                     />
                   )}
                   <p
-                    className={`${d.title} font-medium line-clamp-2 ${
+                    className={`${d.title} font-medium line-clamp-2 flex-1 min-w-0 ${
                       activity.status === "completed"
                         ? "line-through text-muted-foreground"
                         : "text-foreground"
@@ -879,7 +918,7 @@ function SortableColumn({
 
   const phaseOrderMap: Record<string, number> = {};
   phases.forEach((p, i) => { phaseOrderMap[p.id] = i; });
-  const priorityWeight: Record<string, number> = { high: 0, medium: 1, low: 2 };
+  const priorityWeight: Record<GutLevel, number> = { urgente: 0, critica: 1, alta: 2, media: 3, baixa: 4, pendente: 5 };
   const stageActivityIds = useMemo(() => new Set(stageActivities.map((a) => a.id)), [stageActivities]);
 
   const sortStageItems = useCallback((list: Activity[]) => {
@@ -903,7 +942,7 @@ function SortableColumn({
         case "updated_asc":
           return new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime();
         case "priority":
-          return (priorityWeight[a.priority || "medium"] ?? 1) - (priorityWeight[b.priority || "medium"] ?? 1);
+          return (priorityWeight[normalizeGut(a.priority)] ?? 5) - (priorityWeight[normalizeGut(b.priority)] ?? 5);
         case "due_date": {
           const da = a.end_date ? new Date(a.end_date).getTime() : Infinity;
           const db = b.end_date ? new Date(b.end_date).getTime() : Infinity;
@@ -988,7 +1027,7 @@ function SortableColumn({
               />
             ) : (
               <h3 className={`${dCol.colHeaderTitle} font-semibold text-foreground truncate`}>
-                {stage.title}
+                {getStageDisplayTitle(stage.title)}
               </h3>
             )}
             <Badge
@@ -1322,10 +1361,10 @@ function SortableColumn({
                                 <span
                                   className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide text-white"
                                   style={{ backgroundColor: childStage.color }}
-                                  title={`Esta subtarefa está em "${childStage.title}"`}
+                                  title={`Esta subtarefa está em "${getStageDisplayTitle(childStage.title)}"`}
                                 >
                                   <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
-                                  {childStage.title}
+                                  {getStageDisplayTitle(childStage.title)}
                                 </span>
                               </div>
                             )}
@@ -1403,7 +1442,7 @@ function DroppableColumn({
   );
 }
 
-function AddStageColumn({ projectId }: { projectId: string }) {
+function AddStageColumn({ projectId, onChanged }: { projectId: string; onChanged?: () => void }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -1418,13 +1457,19 @@ function AddStageColumn({ projectId }: { projectId: string }) {
         Criar grupo
       </button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) onChanged?.();
+        }}
+      >
         <DialogContent className="max-w-[750px] p-0 gap-0">
           <DialogHeader className="px-6 pt-6 pb-2">
             <DialogTitle>Configurar grupos do Kanban</DialogTitle>
           </DialogHeader>
           <div className="p-4">
-            <WorkflowStageManager projectId={projectId} />
+            <WorkflowStageManager projectId={projectId} onChanged={onChanged} />
           </div>
         </DialogContent>
       </Dialog>
@@ -1447,6 +1492,7 @@ export const ActivityKanban = ({
   profilesMap = {},
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
@@ -1969,7 +2015,7 @@ export const ActivityKanban = ({
         activity_id: activityId,
         type: "blocked",
         title: "🚫 Atividade bloqueada: " + draggedActivity.title,
-        message: `A atividade "${draggedActivity.title}" foi movida para a etapa "${stage.title}" e está bloqueada.`,
+        message: `A atividade "${draggedActivity.title}" foi movida para a etapa "${getStageDisplayTitle(stage.title)}" e está bloqueada.`,
       }).then(() => {});
     }
   };
@@ -2032,11 +2078,18 @@ export const ActivityKanban = ({
       toast({ title: "A etapa Backlog não pode ser excluída", variant: "destructive" });
       return;
     }
-    if (!confirm("Atividades nesta coluna perderão a associação. Continuar?")) return;
+    const ok = await appConfirm({
+      title: "Excluir coluna do Kanban?",
+      description: "Atividades nesta coluna perderão a associação. Esta ação não pode ser desfeita.",
+      confirmText: "Excluir",
+      cancelText: "Cancelar",
+      destructive: true,
+    });
+    if (!ok) return;
     const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
     if (error) toast({ title: "Erro ao excluir", variant: "destructive" });
     else { toast({ title: "Coluna excluída!" }); fetchStages(); }
-  }, [stages, toast]);
+  }, [stages, toast, appConfirm]);
 
   const handleChangeStageColor = useCallback(async (id: string, color: string) => {
     await supabase.from("workflow_stages").update({ color }).eq("id", id);
@@ -2267,7 +2320,7 @@ export const ActivityKanban = ({
             );
           })}
           {(isAdmin || canCreate) && (
-            <AddStageColumn projectId={projectId} />
+            <AddStageColumn projectId={projectId} onChanged={fetchStages} />
           )}
         </div>
       </SortableContext>
@@ -2292,7 +2345,7 @@ export const ActivityKanban = ({
           <div className="opacity-70 w-[200px] rounded-xl border bg-muted/50 p-3">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: activeColumn.color }} />
-              <span className="text-sm font-semibold text-foreground">{activeColumn.title}</span>
+              <span className="text-sm font-semibold text-foreground">{getStageDisplayTitle(activeColumn.title)}</span>
             </div>
           </div>
         ) : null}

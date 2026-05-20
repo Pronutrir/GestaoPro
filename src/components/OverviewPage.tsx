@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PipelineByTypeLanes } from '@/components/PipelineByTypeLanes';
+import { PriorityBadge } from '@/components/PriorityBadge';
+import { normalizeGut, type GutLevel } from '@/lib/gutPriority';
 import {
   AlertTriangle,
   Archive,
@@ -76,6 +78,7 @@ interface Activity {
   hours: number;
   cost: number;
   priority: string;
+  priority_score?: number | null;
 }
 
 interface TimeEntry {
@@ -175,7 +178,11 @@ export function OverviewPage() {
   });
 
   const highPriorityPending = activities.filter(
-    (activity) => activity.priority === 'high' && activity.status !== 'completed',
+    (activity) => {
+      if (activity.status === 'completed') return false;
+      const level = normalizeGut(activity.priority);
+      return level === 'alta' || level === 'critica' || level === 'urgente';
+    },
   );
   const totalHoursEstimated = activities.reduce((sum, activity) => sum + (activity.hours || 0), 0);
   const totalHoursTracked = timeEntries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0) / 60;
@@ -657,6 +664,15 @@ export function OverviewPage() {
               )}
               {kpiDialog?.items.map((activity) => {
                 const project = projects.find((item) => item.id === activity.project_id);
+                const scoreByLevel: Record<GutLevel, number> = {
+                  urgente: 5,
+                  critica: 4,
+                  alta: 3,
+                  media: 2,
+                  baixa: 1,
+                  pendente: 0,
+                };
+                const rankingScore = activity.priority_score ?? scoreByLevel[normalizeGut(activity.priority)];
                 return (
                   <div
                     key={activity.id}
@@ -678,18 +694,7 @@ export function OverviewPage() {
                             {new Date(activity.end_date).toLocaleDateString('pt-BR')}
                           </span>
                         )}
-                        <Badge
-                          variant={
-                            activity.priority === 'high'
-                              ? 'destructive'
-                              : activity.priority === 'medium'
-                                ? 'secondary'
-                                : 'outline'
-                          }
-                          className="text-xs"
-                        >
-                          {activity.priority === 'high' ? 'Alta' : activity.priority === 'medium' ? 'Média' : 'Baixa'}
-                        </Badge>
+                        <PriorityBadge priority={activity.priority} score={rankingScore} showScore />
                       </div>
                     </div>
                     <Button
