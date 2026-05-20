@@ -678,6 +678,9 @@ export const EditActivityDialog = ({
 
       toast({ title: createMode ? "Atividade criada!" : "Atividade atualizada!" });
       onActivityUpdated();
+      if (createMode) {
+        setDraftActivity(null);
+      }
       onOpenChange(false);
     } catch (error) {
       console.error("Erro ao atualizar atividade:", error);
