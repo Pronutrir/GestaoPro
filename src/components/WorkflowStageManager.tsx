@@ -26,6 +26,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
+import { inferStagePreset } from "@/lib/workflowStageRules";
 import {
   Popover,
   PopoverContent,
@@ -133,22 +134,29 @@ function SortableStageItem({
       </button>
 
       {/* Color dot + picker */}
-      <div className="relative group">
-        <div
-          className="w-4 h-4 rounded-full cursor-pointer ring-2 ring-border"
-          style={{ backgroundColor: stage.color }}
-        />
-        <div className="absolute left-0 top-6 z-20 hidden group-hover:flex gap-1 bg-popover border border-border rounded-lg p-2 shadow-lg">
-          {PRESET_COLORS.map((c) => (
-            <button
-              key={c}
-              className="w-5 h-5 rounded-full ring-1 ring-border hover:ring-primary transition-all"
-              style={{ backgroundColor: c }}
-              onClick={() => onColorChange(stage.id, c)}
-            />
-          ))}
-        </div>
-      </div>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="w-4 h-4 rounded-full ring-2 ring-border hover:ring-foreground/40 transition-colors"
+            style={{ backgroundColor: stage.color }}
+            title="Alterar cor da coluna"
+          />
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-2" align="start">
+          <div className="grid grid-cols-4 gap-1.5">
+            {PRESET_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className="w-5 h-5 rounded-full ring-1 ring-border hover:ring-foreground/50 transition-all"
+                style={{ backgroundColor: c }}
+                onClick={() => onColorChange(stage.id, c)}
+              />
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
 
       {editingId === stage.id ? (
         <div className="flex-1 flex items-center gap-2">
@@ -168,15 +176,30 @@ function SortableStageItem({
       ) : (
         <>
           <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-foreground truncate">{stage.title}</span>
+            <span className="text-sm font-medium text-foreground truncate">{inferStagePreset(stage.title, stage.display_order).normalizedTitle}</span>
             {stage.is_final && (
-              <Badge className="bg-success/20 text-success text-[10px]">Final</Badge>
+              <Badge
+                className="bg-success/20 text-success text-[10px]"
+                title="Final: atividades nesta coluna são consideradas 100% concluídas."
+              >
+                Final
+              </Badge>
             )}
             {stage.is_blocked && (
-              <Badge className="bg-destructive/20 text-destructive text-[10px]">Bloqueio</Badge>
+              <Badge
+                className="bg-destructive/20 text-destructive text-[10px]"
+                title="Bloqueio: a atividade fica pausada e não avança no progresso enquanto permanecer nesta coluna."
+              >
+                Bloqueio
+              </Badge>
             )}
             {stage.is_exception && (
-              <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[10px]">Exceção</Badge>
+              <Badge
+                className="bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[10px]"
+                title="Exceção: não conta como avanço no fluxo; usa o último estágio real para calcular progresso."
+              >
+                Exceção
+              </Badge>
             )}
             {stageMembers.length > 0 && (
               <Badge variant="outline" className="text-[10px]">
@@ -236,7 +259,7 @@ function SortableStageItem({
             variant="ghost"
             className="h-7 w-7 shrink-0"
             title="Renomear"
-            onClick={() => onStartEdit(stage.id, stage.title)}
+            onClick={() => onStartEdit(stage.id, inferStagePreset(stage.title, stage.display_order).normalizedTitle)}
           >
             <Pencil className="w-3.5 h-3.5" />
           </Button>
@@ -249,21 +272,30 @@ function SortableStageItem({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onClick={() => onToggleFinal(stage.id, stage.is_final)}>
+              <DropdownMenuItem
+                onClick={() => onToggleFinal(stage.id, stage.is_final)}
+                className="focus:bg-muted/60 focus:text-foreground"
+                title="Final: marca a coluna como conclusão do fluxo (100%)."
+              >
                 {stage.is_final ? "Remover final" : "Marcar como final"}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onToggleBlocked(stage.id, stage.is_blocked)}>
+              <DropdownMenuItem
+                onClick={() => onToggleBlocked(stage.id, stage.is_blocked)}
+                className="focus:bg-muted/60 focus:text-foreground"
+                title="Bloqueio: etapa de impedimento; o progresso fica pausado nesta coluna."
+              >
                 {stage.is_blocked ? "Remover bloqueio" : "Marcar como bloqueio"}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onToggleException(stage.id, !!stage.is_exception)}
-                title="Colunas de exceção (ex.: Atrasado) não contam como avanço."
+                className="focus:bg-muted/60 focus:text-foreground"
+                title="Exceção: não conta como avanço (ex.: Atrasado) e não deve ser coluna final."
               >
                 {stage.is_exception ? "Remover exceção" : "Marcar como exceção"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
+                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
                 onClick={() => onDelete(stage.id)}
               >
                 <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir etapa
@@ -306,7 +338,22 @@ export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageMana
       .select("*")
       .eq("project_id", projectId)
       .order("display_order");
-    if (data) setStages(data);
+    if (data) {
+      const normalized = data.map((s) => ({ ...s, title: inferStagePreset(s.title, s.display_order).normalizedTitle }));
+      setStages(normalized);
+
+      const fixes = normalized.filter((s, idx) => s.title !== data[idx].title);
+      if (fixes.length > 0) {
+        await Promise.all(
+          fixes.map((s) =>
+            supabase
+              .from("workflow_stages")
+              .update({ title: s.title })
+              .eq("id", s.id)
+          )
+        );
+      }
+    }
   };
 
   const fetchProjectMembers = async () => {
@@ -384,16 +431,36 @@ export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageMana
   const handleAdd = async () => {
     if (!newTitle.trim()) return;
     const maxOrder = stages.reduce((max, s) => Math.max(max, s.display_order), -1);
+    const nextOrder = maxOrder + 1;
+    const preset = inferStagePreset(newTitle.trim(), nextOrder);
+    const normalizedTitle = preset.normalizedTitle;
     const colorIndex = stages.length % PRESET_COLORS.length;
-    const { error } = await supabase.from("workflow_stages").insert({
+    const basePayload = {
       project_id: projectId,
-      title: newTitle.trim(),
+      title: normalizedTitle,
       color: PRESET_COLORS[colorIndex],
-      display_order: maxOrder + 1,
-      is_final: false,
-    });
+      display_order: nextOrder,
+      is_final: preset.isFinal,
+      is_blocked: preset.isBlocked,
+      is_exception: preset.isException,
+    };
+    let { error } = await supabase.from("workflow_stages").insert(basePayload);
+    if (error && /(is_exception|is_blocked|progress_percent|contributes_to_progress)/i.test(error.message || "")) {
+      const compat = await supabase.from("workflow_stages").insert({
+        project_id: projectId,
+        title: normalizedTitle,
+        color: PRESET_COLORS[colorIndex],
+        display_order: nextOrder,
+        is_final: preset.isFinal,
+      });
+      error = compat.error;
+    }
     if (error) {
-      toast({ title: "Erro ao criar etapa", variant: "destructive" });
+      toast({
+        title: "Erro ao criar etapa",
+        description: error.message,
+        variant: "destructive",
+      });
     } else {
       setNewTitle("");
       fetchStages();
@@ -404,12 +471,30 @@ export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageMana
 
   const handleRename = async (id: string) => {
     if (!editingTitle.trim()) return;
-    const { error } = await supabase
+    const stage = stages.find((s) => s.id === id);
+    const preset = inferStagePreset(editingTitle.trim(), stage?.display_order);
+    const normalizedTitle = preset.normalizedTitle;
+    let { error } = await supabase
       .from("workflow_stages")
-      .update({ title: editingTitle.trim() })
+      .update({
+        title: normalizedTitle,
+        is_final: preset.isFinal,
+        is_blocked: preset.isBlocked,
+        is_exception: preset.isException,
+      })
       .eq("id", id);
+    if (error && /(is_exception|is_blocked|progress_percent|contributes_to_progress)/i.test(error.message || "")) {
+      const compat = await supabase
+        .from("workflow_stages")
+        .update({
+          title: normalizedTitle,
+          is_final: preset.isFinal,
+        })
+        .eq("id", id);
+      error = compat.error;
+    }
     if (error) {
-      toast({ title: "Erro ao renomear", variant: "destructive" });
+      toast({ title: "Erro ao renomear", description: error.message, variant: "destructive" });
     } else {
       setEditingId(null);
       fetchStages();

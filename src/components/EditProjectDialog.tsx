@@ -50,6 +50,7 @@ interface Project {
   program?: string | null;
   project_type?: string | null;
   start_date?: string | null;
+  actual_start_date?: string | null;
   sponsor?: string | null;
   manager?: string | null;
   objective?: string | null;
@@ -137,6 +138,7 @@ export const EditProjectDialog = ({
     program: "",
     project_type: "",
     start_date: "",
+    actual_start_date: "",
     sponsor: "",
     manager: "",
     objective: "",
@@ -163,6 +165,7 @@ export const EditProjectDialog = ({
         program: (project as any).program || "",
         project_type: (project as any).project_type || "",
         start_date: (project as any).start_date || "",
+        actual_start_date: (project as any).actual_start_date || "",
         sponsor: (project as any).sponsor || "",
         manager: (project as any).manager || "",
         objective: (project as any).objective || "",
@@ -184,65 +187,98 @@ export const EditProjectDialog = ({
         .map((a) => a.trim())
         .filter((a) => a);
 
-      const { error } = await supabase
+      const fullUpdatePayload = {
+        title: formData.title,
+        description: formData.description,
+        status: formData.status,
+        gravity: formData.gravity,
+        urgency: formData.urgency,
+        tendency: formData.tendency,
+        due_date: formData.due_date || null,
+        assignees: assigneesArray,
+        budget_planned: parseFloat(formData.budget_planned) || 0,
+        owner: formData.owner || null,
+        blockers: formData.blockers,
+        category: formData.category || "general",
+        program: formData.program || null,
+        project_type: formData.project_type || null,
+        start_date: formData.start_date || null,
+        actual_start_date: formData.actual_start_date || null,
+        sponsor: formData.sponsor || null,
+        manager: formData.manager || null,
+        objective: formData.objective || null,
+        problem_statement: formData.problem_statement || null,
+        root_cause: formData.root_cause || null,
+      };
+
+      let { error } = await supabase
         .from("projects")
-        .update({
-          title: formData.title,
-          description: formData.description,
-          status: formData.status,
-          gravity: formData.gravity,
-          urgency: formData.urgency,
-          tendency: formData.tendency,
-          due_date: formData.due_date || null,
-          assignees: assigneesArray,
-          budget_planned: parseFloat(formData.budget_planned) || 0,
-          owner: formData.owner || null,
-          blockers: formData.blockers,
-          category: formData.category || "general",
-          program: formData.program || null,
-          project_type: formData.project_type || null,
-          start_date: formData.start_date || null,
-          sponsor: formData.sponsor || null,
-          manager: formData.manager || null,
-          objective: formData.objective || null,
-          problem_statement: formData.problem_statement || null,
-          root_cause: formData.root_cause || null,
-        })
+        .update(fullUpdatePayload)
         .eq("id", project.id);
 
-      if (error) throw error;
+      let titleOnlyFallbackUsed = false;
+      if (error) {
+        // Fallback resiliente: se o payload completo falhar (schema/permissão parcial),
+        // ainda tentamos persistir ao menos o nome do projeto.
+        const { error: titleError } = await supabase
+          .from("projects")
+          .update({ title: formData.title })
+          .eq("id", project.id);
+
+        if (titleError) {
+          throw titleError;
+        }
+
+        titleOnlyFallbackUsed = true;
+      }
 
       // Sincroniza equipe (project_members)
-      const { data: existingMembers } = await supabase
-        .from("project_members")
-        .select("id, user_id")
-        .eq("project_id", project.id);
-      const existingIds = new Set((existingMembers || []).map((m: any) => m.id));
-      const keptIds = new Set(team.filter((m) => m.persisted).map((m) => m.id));
-      // Remove os que foram retirados na UI
-      const toRemove = (existingMembers || []).filter((m: any) => !keptIds.has(m.id));
-      if (toRemove.length > 0) {
-        await supabase.from("project_members").delete().in("id", toRemove.map((m: any) => m.id));
-      }
-      // Membros não têm mais distinção Leitor/Editor — permissões ficam zeradas;
-      // a edição vem do papel de participante/responsável da atividade (RLS).
-      // Insere novos
-      const newOnes = team.filter((m) => !m.persisted);
-      if (newOnes.length > 0) {
-        const rows = newOnes.map((m) => ({
-          project_id: project.id,
-          user_id: m.user_id,
-          sector: m.sector,
-          invitation_status: "pending" as const,
-          invited_by: user?.id ?? null,
-          can_create: false,
-          can_edit: false,
-          can_delete: false,
-          can_move: false,
-        }));
-        const { error: memErr } = await supabase.from("project_members").insert(rows);
-        if (!memErr) {
-          await supabase.from("notifications").insert(
+      let teamSyncError: string | null = null;
+      try {
+        const { data: existingMembers, error: existingMembersError } = await supabase
+          .from("project_members")
+          .select("id, user_id")
+          .eq("project_id", project.id);
+
+        if (existingMembersError) {
+          throw existingMembersError;
+        }
+
+        const keptIds = new Set(team.filter((m) => m.persisted).map((m) => m.id));
+        // Remove os que foram retirados na UI
+        const toRemove = (existingMembers || []).filter((m: any) => !keptIds.has(m.id));
+        if (toRemove.length > 0) {
+          const { error: removeError } = await supabase
+            .from("project_members")
+            .delete()
+            .in("id", toRemove.map((m: any) => m.id));
+          if (removeError) {
+            throw removeError;
+          }
+        }
+
+        // Membros não têm mais distinção Leitor/Editor — permissões ficam zeradas;
+        // a edição vem do papel de participante/responsável da atividade (RLS).
+        // Insere novos
+        const newOnes = team.filter((m) => !m.persisted);
+        if (newOnes.length > 0) {
+          const rows = newOnes.map((m) => ({
+            project_id: project.id,
+            user_id: m.user_id,
+            sector: m.sector,
+            invitation_status: "pending" as const,
+            invited_by: user?.id ?? null,
+            can_create: false,
+            can_edit: false,
+            can_delete: false,
+            can_move: false,
+          }));
+          const { error: memErr } = await supabase.from("project_members").insert(rows);
+          if (memErr) {
+            throw memErr;
+          }
+
+          const { error: notificationError } = await supabase.from("notifications").insert(
             newOnes.map((m) => ({
               project_id: project.id,
               target_user_id: m.user_id,
@@ -251,7 +287,12 @@ export const EditProjectDialog = ({
               message: `Você foi convidado(a) a participar do projeto "${formData.title}". Aceita?`,
             }))
           );
+          if (notificationError) {
+            throw notificationError;
+          }
         }
+      } catch (teamErr: any) {
+        teamSyncError = teamErr?.message || "Falha ao sincronizar equipe.";
       }
 
       toast({
@@ -259,13 +300,21 @@ export const EditProjectDialog = ({
         description: "As alterações foram salvas com sucesso.",
       });
 
+      if (teamSyncError) {
+        toast({
+          title: "Projeto salvo com aviso",
+          description: `A equipe não foi sincronizada: ${teamSyncError}`,
+          variant: "destructive",
+        });
+      }
+
       onOpenChange(false);
       onProjectUpdated();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao atualizar projeto:", error);
       toast({
         title: "Erro ao atualizar projeto",
-        description: "Não foi possível atualizar o projeto. Tente novamente.",
+        description: error?.message || "Não foi possível atualizar o projeto. Tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -340,7 +389,7 @@ export const EditProjectDialog = ({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="edit-start_date">Data de Início</Label>
                 <Input
@@ -349,6 +398,17 @@ export const EditProjectDialog = ({
                   value={formData.start_date}
                   onChange={(e) =>
                     setFormData({ ...formData, start_date: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-actual_start_date">Data de Início Real</Label>
+                <Input
+                  id="edit-actual_start_date"
+                  type="date"
+                  value={formData.actual_start_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, actual_start_date: e.target.value })
                   }
                 />
               </div>

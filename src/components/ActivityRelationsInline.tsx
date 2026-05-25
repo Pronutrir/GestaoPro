@@ -7,12 +7,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Link2, Ban, Clock3, ArrowLeft, ArrowRight, Plus } from "lucide-react";
 import { TaskRelations } from "@/components/TaskRelations";
 
@@ -37,17 +31,19 @@ interface Counts {
 interface Props {
   activityId: string;
   projectId: string;
+  onChanged?: () => void;
 }
 
-export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
+type UnifiedKind = "predecessor" | "successor" | "related" | "blocking" | "waiting_on";
+
+export const ActivityRelationsInline = ({ activityId, projectId, onChanged }: Props) => {
   const [counts, setCounts] = useState<Counts>({
     predecessor: 0, successor: 0, blocking: 0, waiting_on: 0, related: 0,
   });
   const [open, setOpen] = useState(false);
-  /** Quando o usuário escolhe um tipo no menu (estado vazio), abrimos um diálogo
-   *  com o painel TaskRelations ancorado em "criar vínculo daquele tipo". */
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [autoOpenAdd, setAutoOpenAdd] = useState(false);
+  /** Dispara abertura direta do diálogo de criação no TaskRelations com o tipo já escolhido. */
+  const [initialKind, setInitialKind] = useState<UnifiedKind | null>(null);
+  const [initialKindToken, setInitialKindToken] = useState(0);
 
   const fetchCounts = async () => {
     const [{ data: deps }, { data: rels }] = await Promise.all([
@@ -111,6 +107,11 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
       desc: "Vínculo informativo: tarefas relacionadas, sem impacto direto no fluxo." },
   ] as const;
 
+  const handleRelationsChanged = () => {
+    fetchCounts();
+    onChanged?.();
+  };
+
   // ESTADO VAZIO: dropdown direto com os 5 tipos (sem popover intermediário).
   if (total === 0) {
     return (
@@ -132,8 +133,8 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
               <DropdownMenuItem
                 key={kind}
                 onClick={() => {
-                  setAutoOpenAdd(true);
-                  setCreateDialogOpen(true);
+                  setInitialKind(kind as UnifiedKind);
+                  setInitialKindToken((prev) => prev + 1);
                 }}
                 className="gap-2 cursor-pointer items-start py-2 rounded-md
                            focus:bg-muted focus:text-foreground
@@ -151,25 +152,18 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Dialog
-          open={createDialogOpen}
-          onOpenChange={(v) => {
-            setCreateDialogOpen(v);
-            if (!v) setAutoOpenAdd(false);
-          }}
-        >
-          <DialogContent className="max-w-[520px] p-4">
-            <DialogHeader>
-              <DialogTitle className="text-sm">Adicionar vínculo</DialogTitle>
-            </DialogHeader>
-            <TaskRelations
-              activityId={activityId}
-              projectId={projectId}
-              autoOpenAdd={autoOpenAdd}
-              hideHeader
-            />
-          </DialogContent>
-        </Dialog>
+        {/* Mantém o painel montado para abrir o diálogo interno diretamente,
+            sem modal intermediário e sem pedir tipo duas vezes. */}
+        <div className="hidden" aria-hidden>
+          <TaskRelations
+            activityId={activityId}
+            projectId={projectId}
+            hideHeader
+            initialKind={initialKind}
+            initialKindToken={initialKindToken}
+            onChanged={handleRelationsChanged}
+          />
+        </div>
       </>
     );
   }
@@ -184,8 +178,11 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
         <button
           type="button"
           className="flex items-center gap-1 flex-wrap min-h-[28px] w-full text-left"
-          title="Gerenciar relacionamentos"
+          title="Adicionar ou gerenciar relacionamentos"
         >
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground px-2 py-0.5 rounded-md border border-dashed border-border hover:border-primary/50 hover:text-primary transition-colors">
+            <Plus className="w-3 h-3" /> Adicionar vínculo
+          </span>
           {pills
             .filter((p) => p.count > 0)
             .map(({ key, count, label, Icon, cls }) => (
@@ -200,7 +197,12 @@ export const ActivityRelationsInline = ({ activityId, projectId }: Props) => {
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[420px] max-w-[92vw] p-3" align="start" side="bottom">
-        <TaskRelations activityId={activityId} projectId={projectId} hideHeader={false} />
+        <TaskRelations
+          activityId={activityId}
+          projectId={projectId}
+          hideHeader={false}
+          onChanged={handleRelationsChanged}
+        />
       </PopoverContent>
     </Popover>
   );

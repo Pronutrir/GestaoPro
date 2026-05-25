@@ -75,6 +75,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -82,11 +85,12 @@ import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { getBlockedDays, formatBlockedDays } from "@/lib/blockedTime";
 import {
   computeActivityProgress,
-  PROGRESS_FLAG_COLORS,
   type ActivityProgress,
 } from "@/lib/activityProgress";
 import { useAuth } from "@/contexts/AuthContext";
 import { normalizeGut, GUT_META, type GutLevel } from "@/lib/gutPriority";
+import { LinkParentDialog } from "@/components/LinkParentDialog";
+import { inferStagePreset } from "@/lib/workflowStageRules";
 
 const formatHours = (hours: number): string => {
   if (!hours || hours <= 0) return "";
@@ -96,6 +100,24 @@ const formatHours = (hours: number): string => {
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h${m}m`;
+};
+
+const toHoursNumber = (value: unknown): number => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(",", ".");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const progressLabelFromPercent = (percent: number): string => {
+  if (percent >= 100) return "Validada";
+  if (percent >= 75) return "Concluída";
+  if (percent >= 50) return "Realizada";
+  if (percent >= 25) return "Iniciada";
+  return "Não iniciada";
 };
 
 const STAGE_PRESET_COLORS = [
@@ -108,6 +130,15 @@ const STAGE_PRESET_COLORS = [
   "hsl(0, 84%, 60%)",
   "hsl(340, 82%, 52%)",
 ];
+
+const getProgressBarColor = (percent: number, paused: boolean) => {
+  if (paused) return "bg-muted-foreground/30";
+  if (percent >= 100) return "bg-emerald-500";
+  if (percent >= 75) return "bg-violet-500";
+  if (percent >= 50) return "bg-blue-500";
+  if (percent >= 25) return "bg-amber-500";
+  return "bg-muted-foreground/40";
+};
 
 const getStageDisplayTitle = (title: string) => {
   const normalized = title
@@ -200,6 +231,8 @@ interface WorkflowStage {
   is_final: boolean;
   is_blocked: boolean;
   is_visible: boolean;
+  progress_percent?: number | null;
+  contributes_to_progress?: boolean;
 }
 
 interface Phase {
@@ -210,6 +243,7 @@ interface Phase {
 interface Activity {
   id: string;
   title: string;
+  wbs_code?: string | null;
   description: string | null;
   status: string;
   completed_at: string | null;
@@ -255,6 +289,17 @@ interface ActivityKanbanProps {
   profilesMap?: Record<string, string>;
 }
 
+type HoursStat = {
+  planned: number;
+  consumed: number;
+  hasSubs: boolean;
+};
+
+type SubActivityStatusSummary = {
+  completed: number;
+  pending: number;
+};
+
 function SortableKanbanCard({
   activity,
   phases,
@@ -262,6 +307,7 @@ function SortableKanbanCard({
   onDelete,
   onToggle,
   onMoveToBacklog,
+  onLinkParent,
   isAdmin,
   isBlocked,
   hasStory,
@@ -281,6 +327,7 @@ function SortableKanbanCard({
   density,
   parentBreadcrumb,
   blockedSubsCount,
+  subActivityStatusSummary,
   hoursStat,
   profilesMap = {},
 }: {
@@ -290,6 +337,7 @@ function SortableKanbanCard({
   onDelete: () => void;
   onToggle: () => void;
   onMoveToBacklog: () => void;
+  onLinkParent?: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
   hasStory?: boolean;
@@ -307,9 +355,10 @@ function SortableKanbanCard({
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
   density?: KanbanDensity;
-  parentBreadcrumb?: { id: string; title: string } | null;
+  parentBreadcrumb?: { id: string; title: string; wbsCode?: string | null } | null;
   blockedSubsCount?: number;
-  hoursStat?: { planned: number; consumed: number; hasSubs: boolean };
+  subActivityStatusSummary?: SubActivityStatusSummary;
+  hoursStat?: HoursStat;
   profilesMap?: Record<string, string>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -330,6 +379,7 @@ function SortableKanbanCard({
         onDelete={onDelete}
         onToggle={onToggle}
         onMoveToBacklog={onMoveToBacklog}
+        onLinkParent={onLinkParent}
         dragListeners={listeners}
         isAdmin={isAdmin}
         isBlocked={isBlocked}
@@ -350,6 +400,7 @@ function SortableKanbanCard({
         density={density}
         parentBreadcrumb={parentBreadcrumb}
         blockedSubsCount={blockedSubsCount}
+        subActivityStatusSummary={subActivityStatusSummary}
         hoursStat={hoursStat}
         profilesMap={profilesMap}
       />
@@ -364,6 +415,7 @@ function KanbanCard({
   onDelete,
   onToggle,
   onMoveToBacklog,
+  onLinkParent,
   dragListeners,
   isAdmin,
   isBlocked,
@@ -384,6 +436,7 @@ function KanbanCard({
   density = "md",
   parentBreadcrumb,
   blockedSubsCount,
+  subActivityStatusSummary,
   hoursStat,
   readOnlyPreview = false,
   profilesMap = {},
@@ -394,6 +447,7 @@ function KanbanCard({
   onDelete: () => void;
   onToggle: () => void;
   onMoveToBacklog: () => void;
+  onLinkParent?: () => void;
   dragListeners?: any;
   isAdmin?: boolean;
   isBlocked?: boolean;
@@ -412,9 +466,10 @@ function KanbanCard({
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
   density?: KanbanDensity;
-  parentBreadcrumb?: { id: string; title: string } | null;
+  parentBreadcrumb?: { id: string; title: string; wbsCode?: string | null } | null;
   blockedSubsCount?: number;
-  hoursStat?: { planned: number; consumed: number; hasSubs: boolean };
+  subActivityStatusSummary?: SubActivityStatusSummary;
+  hoursStat?: HoursStat;
   readOnlyPreview?: boolean;
   profilesMap?: Record<string, string>;
 }) {
@@ -462,9 +517,7 @@ function KanbanCard({
     ?? { percent: 0, paused: false, label: "Não iniciada" };
   const progressPaused = progressInfo.paused;
   const progressPercent = progressInfo.percent ?? 0;
-  const progressBarColor = progressPaused
-    ? "bg-muted-foreground/30"
-    : (PROGRESS_FLAG_COLORS[progressPercent] ?? PROGRESS_FLAG_COLORS[0]);
+  const progressBarColor = getProgressBarColor(progressPercent, progressPaused);
   const progressBarWidth = progressPaused ? 100 : progressPercent;
   const progressTooltip = progressPaused
     ? "Pausada (coluna de bloqueio)"
@@ -504,6 +557,11 @@ function KanbanCard({
                     title={`Subtarefa de: ${parentBreadcrumb.title}`}
                   >
                     <span className="shrink-0">↳</span>
+                    {parentBreadcrumb.wbsCode ? (
+                      <span className="inline-flex items-center h-4 px-1 rounded border border-border bg-muted/40 text-[10px] font-mono text-muted-foreground align-middle shrink-0">
+                        {parentBreadcrumb.wbsCode}
+                      </span>
+                    ) : null}
                     <span className="truncate">{parentBreadcrumb.title}</span>
                   </button>
                 )}
@@ -514,7 +572,7 @@ function KanbanCard({
                     const meta = GUT_META[lvl];
                     return (
                       <span
-                        className={`shrink-0 mt-0.5 inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold leading-none ${meta.badgeClass} ${meta.pulse ? "animate-pulse-strong" : ""}`}
+                        className={`shrink-0 mt-0.5 ml-1 inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold leading-none ${meta.badgeClass} ${meta.pulse ? "animate-pulse-strong" : ""}`}
                         title={`Prioridade: ${meta.label}${activity.priority_score ? ` (${activity.priority_score})` : ""}`}
                         aria-label={`Prioridade ${meta.label}`}
                       >
@@ -535,7 +593,12 @@ function KanbanCard({
                         : "text-foreground"
                     }`}
                   >
-                    {activity.title}
+                    {activity.wbs_code ? (
+                      <span className="inline-flex items-center h-4 px-1 mr-1 rounded border border-border bg-muted/40 text-[10px] font-mono text-muted-foreground align-middle">
+                        {activity.wbs_code}
+                      </span>
+                    ) : null}
+                    <span>{activity.title}</span>
                   </p>
                 </div>
 
@@ -637,7 +700,7 @@ function KanbanCard({
                       📖 {storyCount && storyCount > 1 ? `${storyCount} Histórias` : "História"}
                     </Badge>
                   )}
-                  {hoursStat && hoursStat.planned > 0 ? (
+                  {hoursStat && (hoursStat.planned > 0 || hoursStat.consumed > 0) ? (
                     <Badge
                       variant="secondary"
                       className={`text-[10px] px-1.5 py-0 ${
@@ -649,15 +712,15 @@ function KanbanCard({
                       }`}
                       title={
                         hoursStat.hasSubs
-                          ? "Consumido nas subatividades concluídas / planejado"
-                          : "Consumido / planejado"
+                          ? "Consumido automático nas subatividades / planejado"
+                          : "Consumido automático / planejado"
                       }
                     >
-                      {formatHours(hoursStat.consumed) || "0h"}/{formatHours(hoursStat.planned)}
+                      {formatHours(hoursStat.consumed) || "0h"}/{formatHours(hoursStat.planned) || "0h"}
                     </Badge>
-                  ) : activity.hours > 0 ? (
+                  ) : toHoursNumber(activity.hours) > 0 ? (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                      {formatHours(activity.hours)}
+                      {formatHours(toHoursNumber(activity.hours))}
                     </Badge>
                   ) : null}
                   {dependencyCount && (dependencyCount.pred > 0 || dependencyCount.succ > 0) && (
@@ -751,26 +814,46 @@ function KanbanCard({
                     <span>{subActivityCount} {subActivityCount === 1 ? "subtarefa" : "subtarefas"}</span>
                   </button>
                 ) : null}
+                {subActivityStatusSummary && (subActivityStatusSummary.completed > 0 || subActivityStatusSummary.pending > 0) ? (
+                  <Badge
+                    variant="outline"
+                    className="mt-1 text-[10px] px-1.5 py-0 bg-muted/40 border-border/60 text-muted-foreground"
+                    title="Resumo das subatividades"
+                  >
+                    Subs: {subActivityStatusSummary.completed} concluidas / {subActivityStatusSummary.pending} pendentes
+                  </Badge>
+                ) : null}
               </div>
             </div>
 
             {!readOnlyPreview && (
               <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onToggle} title="Concluir">
+                <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onToggle} title="Concluir">
                   {activity.status === "completed" ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-success" />
                   ) : (
                     <Circle className="w-3.5 h-3.5 text-muted-foreground" />
                   )}
                 </Button>
-                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEdit} title="Editar">
+                <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onEdit} title="Editar">
                   <Pencil className="w-3.5 h-3.5" />
                 </Button>
-                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onMoveToBacklog} title="Mover para Backlog">
+                <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onMoveToBacklog} title="Mover para Backlog">
                   <Inbox className="w-3.5 h-3.5" />
                 </Button>
+                {onLinkParent && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                    onClick={onLinkParent}
+                    title="Vincular ao pai"
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
                 {onCreateStory && (
-                  <Button size="icon" variant="ghost" className="h-6 w-6 text-primary hover:text-primary" onClick={onCreateStory} title="Criar História">
+                  <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onCreateStory} title="Criar História">
                     <BookOpen className="w-3.5 h-3.5" />
                   </Button>
                 )}
@@ -778,7 +861,7 @@ function KanbanCard({
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-6 w-6 text-destructive hover:text-destructive"
+                    className="h-6 w-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     onClick={onDelete}
                     title="Excluir"
                   >
@@ -810,6 +893,7 @@ function SortableColumn({
   onDeleteActivity,
   onToggleActivity,
   onMoveToBacklog,
+  onLinkParent,
   onCreateActivity,
   storyLinkedActivities,
   isAdmin,
@@ -829,6 +913,8 @@ function SortableColumn({
   onRenameStage,
   onDeleteStage,
   onChangeStageColor,
+  onSetStageProgress,
+  onToggleStageContributes,
   onToggleStageFinal,
   onToggleStageBlocked,
   onToggleStageVisible,
@@ -846,6 +932,7 @@ function SortableColumn({
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onMoveToBacklog: (activityId: string) => void;
+  onLinkParent?: (activityId: string, currentParentId: string | null) => void;
   onCreateActivity: (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => Promise<void>;
   storyLinkedActivities: Map<string, number>;
   isAdmin?: boolean;
@@ -864,12 +951,14 @@ function SortableColumn({
   onRenameStage: (id: string, title: string) => Promise<void>;
   onDeleteStage: (id: string) => Promise<void>;
   onChangeStageColor: (id: string, color: string) => Promise<void>;
+  onSetStageProgress: (id: string, current: number | null | undefined) => Promise<void>;
+  onToggleStageContributes: (id: string, current: boolean | undefined) => Promise<void>;
   onToggleStageFinal: (id: string, current: boolean) => Promise<void>;
   onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
   onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
   allStages: WorkflowStage[];
   density: KanbanDensity;
-  hoursStatsByActivity?: Map<string, { planned: number; consumed: number; hasSubs: boolean }>;
+  hoursStatsByActivity?: Map<string, HoursStat>;
   profilesMap?: Record<string, string>;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
@@ -902,6 +991,78 @@ function SortableColumn({
     );
     return map;
   }, [activities]);
+
+  const descendantSummaryById = useMemo(() => {
+    const memo = new Map<string, { completed: number; pending: number }>();
+
+    const walk = (id: string, seen = new Set<string>()): { completed: number; pending: number } => {
+      if (memo.has(id)) return memo.get(id)!;
+      if (seen.has(id)) return { completed: 0, pending: 0 };
+
+      const nextSeen = new Set(seen);
+      nextSeen.add(id);
+
+      const children = childrenByParent.get(id) || [];
+      let completed = 0;
+      let pending = 0;
+
+      children.forEach((child) => {
+        if (child.status === "completed") completed += 1;
+        else pending += 1;
+
+        const deep = walk(child.id, nextSeen);
+        completed += deep.completed;
+        pending += deep.pending;
+      });
+
+      const summary = { completed, pending };
+      memo.set(id, summary);
+      return summary;
+    };
+
+    activities.forEach((a) => {
+      memo.set(a.id, walk(a.id));
+    });
+
+    return memo;
+  }, [activities, childrenByParent]);
+
+  const descendantProgressById = useMemo(() => {
+    const memo = new Map<string, { sum: number; count: number }>();
+
+    const walk = (id: string, seen = new Set<string>()): { sum: number; count: number } => {
+      if (memo.has(id)) return memo.get(id)!;
+      if (seen.has(id)) return { sum: 0, count: 0 };
+
+      const nextSeen = new Set(seen);
+      nextSeen.add(id);
+
+      const children = childrenByParent.get(id) || [];
+      let sum = 0;
+      let count = 0;
+
+      children.forEach((child) => {
+        const info = computeActivityProgress(child.workflow_stage_id, allStages, child.last_progress_stage_id);
+        const pct = info.paused ? 0 : (info.percent ?? 0);
+        sum += pct;
+        count += 1;
+
+        const deep = walk(child.id, nextSeen);
+        sum += deep.sum;
+        count += deep.count;
+      });
+
+      const result = { sum, count };
+      memo.set(id, result);
+      return result;
+    };
+
+    activities.forEach((a) => {
+      memo.set(a.id, walk(a.id));
+    });
+
+    return memo;
+  }, [activities, childrenByParent, allStages]);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: `col-${stage.id}` });
@@ -1061,7 +1222,7 @@ function SortableColumn({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                    className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
                     onClick={(e) => e.stopPropagation()}
                     onPointerDown={(e) => e.stopPropagation()}
                     title="Opções da coluna"
@@ -1078,6 +1239,7 @@ function SortableColumn({
                   <DropdownMenuLabel className="text-xs">Gerenciar coluna</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
+                    className="focus:bg-muted/60 focus:text-foreground"
                     onSelect={(e) => {
                       e.preventDefault();
                       setRenameValue(stage.title);
@@ -1086,45 +1248,78 @@ function SortableColumn({
                   >
                     <Pencil className="w-3.5 h-3.5 mr-2" /> Renomear
                   </DropdownMenuItem>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                        <div className="w-3.5 h-3.5 mr-2 rounded-full" style={{ backgroundColor: stage.color }} />
-                        Alterar cor
-                      </DropdownMenuItem>
-                    </PopoverTrigger>
-                    <PopoverContent side="left" className="w-auto p-2" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="focus:bg-muted/60 focus:text-foreground data-[state=open]:bg-muted/60 data-[state=open]:text-foreground">
+                      <div className="w-3.5 h-3.5 mr-2 rounded-full" style={{ backgroundColor: stage.color }} />
+                      Alterar cor
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent sideOffset={6} className="p-2">
                       <div className="grid grid-cols-4 gap-1.5">
                         {STAGE_PRESET_COLORS.map((c) => (
                           <button
                             key={c}
-                            className="w-6 h-6 rounded-full ring-1 ring-border hover:ring-primary"
+                            type="button"
+                            className="w-6 h-6 rounded-full ring-1 ring-border hover:ring-foreground/50 focus:outline-none focus:ring-2 focus:ring-foreground/40"
                             style={{ backgroundColor: c }}
-                            onClick={() => onChangeStageColor(stage.id, c)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onChangeStageColor(stage.id, c);
+                            }}
                           />
                         ))}
                       </div>
-                    </PopoverContent>
-                  </Popover>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
                   <DropdownMenuItem
+                    className="focus:bg-muted/60 focus:text-foreground"
                     onSelect={(e) => {
                       e.preventDefault();
                       onToggleStageFinal(stage.id, stage.is_final);
                     }}
+                    title="Final: atividades nesta coluna passam a representar 100% do fluxo."
                   >
                     <Check className="w-3.5 h-3.5 mr-2 text-success" />
                     {stage.is_final ? "Remover marca de Final" : "Marcar como Final"}
                   </DropdownMenuItem>
                   <DropdownMenuItem
+                    className="focus:bg-muted/60 focus:text-foreground"
                     onSelect={(e) => {
                       e.preventDefault();
                       onToggleStageBlocked(stage.id, stage.is_blocked);
                     }}
+                    title="Bloqueio: atividades nesta coluna ficam pausadas, sem avanço de progresso."
                   >
                     <AlertCircle className="w-3.5 h-3.5 mr-2 text-orange-500" />
                     {stage.is_blocked ? "Remover Bloqueio" : "Marcar como Bloqueio"}
                   </DropdownMenuItem>
                   <DropdownMenuItem
+                    className="focus:bg-muted/60 focus:text-foreground"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onSetStageProgress(stage.id, stage.progress_percent ?? null);
+                    }}
+                    title="Define um percentual fixo para esta coluna. Em branco = automático por posição."
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5 mr-2" />
+                    {stage.progress_percent == null
+                      ? "Definir progresso (%)"
+                      : `Editar progresso (${stage.progress_percent}%)`}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="focus:bg-muted/60 focus:text-foreground"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onToggleStageContributes(stage.id, stage.contributes_to_progress);
+                    }}
+                    title="Quando desativado, esta coluna não avança o progresso do fluxo."
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 mr-2" />
+                    {stage.contributes_to_progress === false
+                      ? "Incluir no progresso"
+                      : "Remover do progresso"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="focus:bg-muted/60 focus:text-foreground"
                     onSelect={(e) => {
                       e.preventDefault();
                       onToggleStageVisible(stage.id, stage.is_visible);
@@ -1135,7 +1330,7 @@ function SortableColumn({
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
+                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
                     onSelect={(e) => {
                       e.preventDefault();
                       onDeleteStage(stage.id);
@@ -1241,12 +1436,30 @@ function SortableColumn({
               const allChildren = childrenByParent.get(activity.id) || [];
               const inlineChildren = allChildren.filter((child) => stageActivityIds.has(child.id));
               const externalChildren = allChildren.filter((child) => !stageActivityIds.has(child.id));
+              const subActivityStatusSummary =
+                descendantSummaryById.get(activity.id) || { completed: 0, pending: 0 };
+              const parentProgress = (() => {
+                const deepProgress = descendantProgressById.get(activity.id);
+                const totalSubs = deepProgress?.count || 0;
+                if (totalSubs === 0) {
+                  return computeActivityProgress(activity.workflow_stage_id, allStages, activity.last_progress_stage_id);
+                }
+                const percent = Math.max(
+                  0,
+                  Math.min(100, Math.round((deepProgress!.sum / totalSubs))),
+                );
+                return {
+                  percent,
+                  paused: false,
+                  label: progressLabelFromPercent(percent),
+                } as ActivityProgress;
+              })();
               const expanded = expandedIds.has(activity.id);
               const isMirrorParent = !stageActivityIds.has(activity.id) && inlineChildren.length > 0;
               // Breadcrumb do pai quando esta atividade é uma subtarefa "solta" (pai em outra coluna)
               const parentAct = activity.parent_id ? activities.find((p) => p.id === activity.parent_id) : null;
               const parentBreadcrumb = parentAct && parentAct.workflow_stage_id !== activity.workflow_stage_id
-                ? { id: parentAct.id, title: parentAct.title }
+                ? { id: parentAct.id, title: parentAct.title, wbsCode: parentAct.wbs_code }
                 : null;
               // Contagem de subs em colunas de bloqueio
               const blockedStageIds = new Set(allStages.filter((s) => s.is_blocked).map((s) => s.id));
@@ -1261,6 +1474,7 @@ function SortableColumn({
                       onDelete={() => onDeleteActivity(activity.id)}
                       onToggle={() => onToggleActivity(activity.id, activity.status)}
                       onMoveToBacklog={() => onMoveToBacklog(activity.id)}
+                      onLinkParent={() => onLinkParent?.(activity.id, activity.parent_id ?? null)}
                       isAdmin={isAdmin}
                       isBlocked={stage.is_blocked}
                       hasStory={storyLinkedActivities.has(activity.id)}
@@ -1276,10 +1490,11 @@ function SortableColumn({
                       subActivityCount={allChildren.length}
                       isExpanded={expanded}
                       onToggleExpand={() => toggleExpanded(activity.id)}
-                      progress={computeActivityProgress(activity.workflow_stage_id, allStages, activity.last_progress_stage_id)}
+                      progress={parentProgress}
                       density={density}
                       parentBreadcrumb={parentBreadcrumb}
                       blockedSubsCount={blockedSubsCount}
+                      subActivityStatusSummary={subActivityStatusSummary}
                       hoursStat={hoursStatsByActivity?.get(activity.id)}
                       readOnlyPreview
                       profilesMap={profilesMap}
@@ -1292,6 +1507,7 @@ function SortableColumn({
                       onDelete={() => onDeleteActivity(activity.id)}
                       onToggle={() => onToggleActivity(activity.id, activity.status)}
                       onMoveToBacklog={() => onMoveToBacklog(activity.id)}
+                      onLinkParent={() => onLinkParent?.(activity.id, activity.parent_id ?? null)}
                       isAdmin={isAdmin}
                       isBlocked={stage.is_blocked}
                       hasStory={storyLinkedActivities.has(activity.id)}
@@ -1307,10 +1523,11 @@ function SortableColumn({
                       subActivityCount={allChildren.length}
                       isExpanded={expanded}
                       onToggleExpand={() => toggleExpanded(activity.id)}
-                      progress={computeActivityProgress(activity.workflow_stage_id, allStages, activity.last_progress_stage_id)}
+                      progress={parentProgress}
                       density={density}
                       parentBreadcrumb={parentBreadcrumb}
                       blockedSubsCount={blockedSubsCount}
+                      subActivityStatusSummary={subActivityStatusSummary}
                       hoursStat={hoursStatsByActivity?.get(activity.id)}
                       profilesMap={profilesMap}
                     />
@@ -1333,6 +1550,7 @@ function SortableColumn({
                           onDelete={() => onDeleteActivity(child.id)}
                           onToggle={() => onToggleActivity(child.id, child.status)}
                           onMoveToBacklog={() => onMoveToBacklog(child.id)}
+                          onLinkParent={() => onLinkParent?.(child.id, child.parent_id ?? null)}
                           isAdmin={isAdmin}
                           isBlocked={stage.is_blocked}
                           hasStory={storyLinkedActivities.has(child.id)}
@@ -1375,6 +1593,7 @@ function SortableColumn({
                               onDelete={() => onDeleteActivity(child.id)}
                               onToggle={() => onToggleActivity(child.id, child.status)}
                               onMoveToBacklog={() => onMoveToBacklog(child.id)}
+                              onLinkParent={() => onLinkParent?.(child.id, child.parent_id ?? null)}
                               isAdmin={isAdmin}
                               isBlocked={!!childStage?.is_blocked}
                               hasStory={storyLinkedActivities.has(child.id)}
@@ -1508,6 +1727,9 @@ export const ActivityKanban = ({
   const [createStoryTitle, setCreateStoryTitle] = useState("");
   const [createStoryNarrative, setCreateStoryNarrative] = useState("");
   const [createStoryLoading, setCreateStoryLoading] = useState(false);
+  const [linkParentIds, setLinkParentIds] = useState<string[] | null>(null);
+  const [linkParentCurrent, setLinkParentCurrent] = useState<string | null>(null);
+  const canManageHierarchy = isAdmin || canCreate;
   
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
@@ -1701,6 +1923,28 @@ export const ActivityKanban = ({
     };
   }, [projectId]);
 
+  // Realtime sync for activities so kanban updates live when other users move/edit cards.
+  useEffect(() => {
+    if (!projectId) return;
+
+    const channel = supabase
+      .channel(`kanban_activities_${projectId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "activities", filter: `project_id=eq.${projectId}` },
+        () => {
+          // Limpa overrides otimistas locais e força recarga dos dados do projeto.
+          setOptimisticMoves({});
+          onDataChanged();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [projectId, onDataChanged]);
+
   
 
   const fetchStages = async () => {
@@ -1710,7 +1954,23 @@ export const ActivityKanban = ({
       .eq("project_id", projectId)
       .order("display_order");
     console.log("[Kanban] fetchStages:", { data, error, projectId });
-    if (data) setStages(data);
+    if (data) {
+      const normalized = data.map((s) => ({ ...s, title: getStageDisplayTitle(s.title) }));
+      setStages(normalized);
+
+      // Autocorrige no banco títulos legados com encoding ruim (ex.: Concluãda/ConcluÃda).
+      const fixes = normalized.filter((s, idx) => s.title !== data[idx].title);
+      if (fixes.length > 0) {
+        await Promise.all(
+          fixes.map((s) =>
+            supabase
+              .from("workflow_stages")
+              .update({ title: s.title })
+              .eq("id", s.id)
+          )
+        );
+      }
+    }
   };
 
   const handleMoveToBacklog = async (activityId: string) => {
@@ -1729,8 +1989,12 @@ export const ActivityKanban = ({
       .update({ stage_id: backlogStage.id })
       .eq("activity_id", activityId); 
     onDataChanged();
-    toast({ title: "Atividade movida para o Backlog" });
   };
+
+  const openLinkParent = useCallback((activityId: string, currentParentId: string | null) => {
+    setLinkParentIds([activityId]);
+    setLinkParentCurrent(currentParentId);
+  }, []);
 
   // Clear optimistic moves when activities prop changes (parent refetched)
   useEffect(() => {
@@ -1766,8 +2030,9 @@ export const ActivityKanban = ({
   }, [activities]);
 
   // Mapa de horas consumidas/planejadas por atividade
-  // - Com subs: planejado = sum subs.hours; consumido = sum subs.completed.hours
-  // - Sem subs: planejado = self.hours; consumido = status==='completed' ? self.hours : 0
+  // - Consumo automático: horas planejadas entram no consumo ao concluir
+  // - Com subs: consumo vem da soma das subatividades concluídas
+  // - Sem subs: consumo do próprio item quando concluído
   const hoursStatsByActivity = useMemo(() => {
     const childrenMap = new Map<string, Activity[]>();
     activities.forEach((a) => {
@@ -1777,24 +2042,26 @@ export const ActivityKanban = ({
         childrenMap.set(a.parent_id, arr);
       }
     });
-    const map = new Map<string, { planned: number; consumed: number; hasSubs: boolean }>();
+    const map = new Map<string, HoursStat>();
     activities.forEach((a) => {
       const kids = childrenMap.get(a.id) || [];
-      const ownH = a.hours || 0;
+      const ownH = toHoursNumber(a.hours);
       if (kids.length > 0) {
-        const subPlanned = kids.reduce((s, c) => s + (c.hours || 0), 0);
-        const subConsumed = kids
-          .filter((c) => c.status === "completed")
-          .reduce((s, c) => s + (c.hours || 0), 0);
+        const subPlanned = kids.reduce((s, c) => s + toHoursNumber(c.hours), 0);
+        const subComputed = kids.reduce((s, c) => {
+          const auto = c.status === "completed" ? toHoursNumber(c.hours) : 0;
+          return s + auto;
+        }, 0);
         map.set(a.id, {
           planned: ownH > 0 ? ownH : subPlanned,
-          consumed: subConsumed,
+          consumed: subComputed,
           hasSubs: true,
         });
       } else {
+        const ownComputed = a.status === "completed" ? ownH : 0;
         map.set(a.id, {
           planned: ownH,
-          consumed: a.status === "completed" ? ownH : 0,
+          consumed: ownComputed,
           hasSubs: false,
         });
       }
@@ -1871,7 +2138,6 @@ export const ActivityKanban = ({
     if (error) {
       toast({ title: "Erro ao criar história", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "História criada! Ela aparecerá na aba Histórias em Rascunho." });
       setStoryLinkedActivities((prev) => {
         const next = new Map(prev);
         next.set(createStoryActivity.id, (next.get(createStoryActivity.id) || 0) + 1);
@@ -1973,11 +2239,54 @@ export const ActivityKanban = ({
       return;
     }
 
-    // Optimistic update — move card instantly in the UI
-    setOptimisticMoves((prev) => ({ ...prev, [activityId]: targetStageId! }));
-
     const stage = stages.find((s) => s.id === targetStageId);
     const newStatus = stage?.is_final ? "completed" : "pending";
+
+    if (draggedActivity && newStatus === "completed") {
+      const { data: hierarchyRows } = await supabase
+        .from("activities")
+        .select("id,parent_id,status")
+        .eq("project_id", projectId)
+        .eq("is_trashed", false);
+
+      const childrenMap = new Map<string, Array<{ id: string; status: string; parent_id: string | null }>>();
+      (hierarchyRows || []).forEach((candidate) => {
+        if (!candidate.parent_id) return;
+        const arr = childrenMap.get(candidate.parent_id) || [];
+        arr.push(candidate as { id: string; status: string; parent_id: string | null });
+        childrenMap.set(candidate.parent_id, arr);
+      });
+
+      const stack = [...(childrenMap.get(draggedActivity.id) || [])];
+      const seen = new Set<string>();
+      let pendingCount = 0;
+
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        if (seen.has(current.id)) continue;
+        seen.add(current.id);
+
+        if (current.status !== "completed") {
+          pendingCount += 1;
+        }
+
+        const children = childrenMap.get(current.id) || [];
+        children.forEach((child) => stack.push(child));
+      }
+
+      if (pendingCount > 0) {
+        toast({
+          title: "Atividade com pendências",
+          description: `Não é possível concluir enquanto existirem ${pendingCount} subatividade(s) pendente(s).`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Optimistic update — move card instantly in the UI (após validações)
+    setOptimisticMoves((prev) => ({ ...prev, [activityId]: targetStageId! }));
+
     const completedAt = stage?.is_final ? new Date().toISOString() : null;
 
     // Fire DB update in background
@@ -1996,6 +2305,103 @@ export const ActivityKanban = ({
           .from("user_stories")
           .update({ stage_id: targetStageId })
           .eq("activity_id", activityId);
+
+        // Recalcula os pais: só ficam concluídos quando 100% dos filhos diretos estiverem concluídos.
+        const { data: stageRows } = await supabase
+          .from("workflow_stages")
+          .select("id, title, display_order, is_final")
+          .eq("project_id", projectId)
+          .order("display_order", { ascending: true });
+
+        const normalized = (value: string | null | undefined) =>
+          (value || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .trim();
+
+        const stageList = stageRows || [];
+        const finalStageId =
+          targetStageId && stage?.is_final
+            ? targetStageId
+            : stageList.find((s) => s.is_final)?.id || null;
+        const explicitAFazer = stageList.find((s) => {
+          const title = normalized(s.title);
+          return title === "a fazer" || title === "afazer" || title.includes("a fazer");
+        });
+        const displayOrderOne = stageList.find((s) => !s.is_final && s.display_order === 1);
+        const firstActiveStage = stageList.find((s) => !s.is_final && s.display_order > 0);
+        const backlogStage = stageList.find((s) => s.display_order === 0);
+        const reopenStageId = (explicitAFazer || displayOrderOne || firstActiveStage || backlogStage)?.id || null;
+
+        const { data: hierarchyRows } = await supabase
+          .from("activities")
+          .select("id,parent_id,status")
+          .eq("project_id", projectId)
+          .eq("is_trashed", false);
+
+        const parentById = new Map<string, string | null>();
+        const childrenByParent = new Map<string, string[]>();
+        const statusById = new Map<string, string>();
+
+        (hierarchyRows || []).forEach((row) => {
+          parentById.set(row.id, row.parent_id || null);
+          statusById.set(row.id, row.status || "pending");
+          if (!row.parent_id) return;
+          const arr = childrenByParent.get(row.parent_id) || [];
+          arr.push(row.id);
+          childrenByParent.set(row.parent_id, arr);
+        });
+
+        statusById.set(activityId, newStatus);
+
+        const ancestorIds: string[] = [];
+        const seenAncestors = new Set<string>();
+        let cursor = parentById.get(activityId) || null;
+        while (cursor) {
+          if (seenAncestors.has(cursor)) break;
+          seenAncestors.add(cursor);
+          ancestorIds.push(cursor);
+          cursor = parentById.get(cursor) || null;
+        }
+
+        const ancestorsToComplete: string[] = [];
+        const ancestorsToReopen: string[] = [];
+
+        ancestorIds.forEach((ancestorId) => {
+          const childIds = childrenByParent.get(ancestorId) || [];
+          const allChildrenCompleted =
+            childIds.length > 0 && childIds.every((childId) => statusById.get(childId) === "completed");
+          const previousStatus = statusById.get(ancestorId) || "pending";
+          const nextStatus = allChildrenCompleted ? "completed" : "pending";
+
+          if (previousStatus !== nextStatus) {
+            if (nextStatus === "completed") ancestorsToComplete.push(ancestorId);
+            else ancestorsToReopen.push(ancestorId);
+          }
+
+          statusById.set(ancestorId, nextStatus);
+        });
+
+        if (ancestorsToComplete.length > 0) {
+          const completePayload: any = { status: "completed", completed_at: new Date().toISOString() };
+          if (finalStageId) completePayload.workflow_stage_id = finalStageId;
+          await (supabase.from("activities").update(completePayload) as any).in("id", ancestorsToComplete);
+          if (finalStageId) {
+            await (supabase.from("user_stories").update({ stage_id: finalStageId }) as any)
+              .in("activity_id", ancestorsToComplete);
+          }
+        }
+
+        if (ancestorsToReopen.length > 0) {
+          const reopenPayload: any = { status: "pending", completed_at: null };
+          if (reopenStageId) reopenPayload.workflow_stage_id = reopenStageId;
+          await (supabase.from("activities").update(reopenPayload) as any).in("id", ancestorsToReopen);
+          if (reopenStageId) {
+            await (supabase.from("user_stories").update({ stage_id: reopenStageId }) as any)
+              .in("activity_id", ancestorsToReopen);
+          }
+        }
       })()
     )
       .then(() => onDataChanged())
@@ -2032,14 +2438,11 @@ export const ActivityKanban = ({
       project_id: projectId,
       title,
       phase_id: phaseId,
-      workflow_stage_id: targetStageId,
-      display_order: displayOrder,
       status: "pending",
     });
     if (error) {
       toast({ title: "Erro ao criar atividade", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Atividade criada com sucesso" });
       onDataChanged();
     }
   };
@@ -2049,28 +2452,63 @@ export const ActivityKanban = ({
 
   // ===== Stage management handlers (admin/gestor only) =====
   const handleCreateStage = useCallback(async (title: string) => {
+    const preset = inferStagePreset(title, undefined);
+    const normalizedTitle = getStageDisplayTitle(preset.normalizedTitle);
     const maxOrder = stages.reduce((max, s) => Math.max(max, s.display_order), -1);
     const colorIdx = stages.length % STAGE_PRESET_COLORS.length;
-    const { error } = await supabase.from("workflow_stages").insert({
+    const basePayload = {
       project_id: projectId,
-      title,
+      title: normalizedTitle,
       color: STAGE_PRESET_COLORS[colorIdx],
       display_order: maxOrder + 1,
-      is_final: false,
-    });
+      is_final: preset.isFinal,
+      is_blocked: preset.isBlocked,
+      is_exception: preset.isException,
+    };
+    let { error } = await supabase.from("workflow_stages").insert(basePayload);
+    if (error && /(is_exception|is_blocked|progress_percent|contributes_to_progress)/i.test(error.message || "")) {
+      const compat = await supabase.from("workflow_stages").insert({
+        project_id: projectId,
+        title: normalizedTitle,
+        color: STAGE_PRESET_COLORS[colorIdx],
+        display_order: maxOrder + 1,
+        is_final: preset.isFinal,
+      });
+      error = compat.error;
+    }
     if (error) {
-      toast({ title: "Erro ao criar grupo", variant: "destructive" });
+      toast({ title: "Erro ao criar grupo", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Grupo criado!" });
       fetchStages();
     }
   }, [stages, projectId, toast]);
 
   const handleRenameStage = useCallback(async (id: string, title: string) => {
-    const { error } = await supabase.from("workflow_stages").update({ title }).eq("id", id);
-    if (error) toast({ title: "Erro ao renomear", variant: "destructive" });
+    const stage = stages.find((s) => s.id === id);
+    const preset = inferStagePreset(title, stage?.display_order);
+    const normalizedTitle = getStageDisplayTitle(preset.normalizedTitle);
+    let { error } = await supabase
+      .from("workflow_stages")
+      .update({
+        title: normalizedTitle,
+        is_final: preset.isFinal,
+        is_blocked: preset.isBlocked,
+        is_exception: preset.isException,
+      })
+      .eq("id", id);
+    if (error && /(is_exception|is_blocked|progress_percent|contributes_to_progress)/i.test(error.message || "")) {
+      const compat = await supabase
+        .from("workflow_stages")
+        .update({
+          title: normalizedTitle,
+          is_final: preset.isFinal,
+        })
+        .eq("id", id);
+      error = compat.error;
+    }
+    if (error) toast({ title: "Erro ao renomear", description: error.message, variant: "destructive" });
     else fetchStages();
-  }, [toast]);
+  }, [stages, toast]);
 
   const handleDeleteStage = useCallback(async (id: string) => {
     const stage = stages.find((s) => s.id === id);
@@ -2088,7 +2526,7 @@ export const ActivityKanban = ({
     if (!ok) return;
     const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
     if (error) toast({ title: "Erro ao excluir", variant: "destructive" });
-    else { toast({ title: "Coluna excluída!" }); fetchStages(); }
+    else { fetchStages(); }
   }, [stages, toast, appConfirm]);
 
   const handleChangeStageColor = useCallback(async (id: string, color: string) => {
@@ -2105,6 +2543,51 @@ export const ActivityKanban = ({
     await supabase.from("workflow_stages").update({ is_blocked: !current, ...(current ? {} : { is_final: false }) }).eq("id", id);
     fetchStages();
   }, []);
+
+  const handleSetStageProgress = useCallback(async (id: string, current: number | null | undefined) => {
+    const initial = current == null ? "" : String(current);
+    const input = window.prompt(
+      "Defina o progresso desta coluna (0-100). Deixe em branco para automático por posição.",
+      initial,
+    );
+    if (input === null) return;
+
+    const raw = input.trim();
+    let progress: number | null = null;
+    if (raw.length > 0) {
+      const parsed = Number(raw.replace(",", "."));
+      if (!Number.isFinite(parsed)) {
+        toast({ title: "Percentual inválido", description: "Informe um número entre 0 e 100.", variant: "destructive" });
+        return;
+      }
+      progress = Math.max(0, Math.min(100, Math.round(parsed)));
+    }
+
+    const { error } = await supabase
+      .from("workflow_stages")
+      .update({ progress_percent: progress, contributes_to_progress: progress === null ? undefined : true } as never)
+      .eq("id", id);
+
+    if (error) {
+      toast({ title: "Erro ao salvar progresso", description: error.message, variant: "destructive" });
+      return;
+    }
+    fetchStages();
+  }, [toast]);
+
+  const handleToggleStageContributes = useCallback(async (id: string, current: boolean | undefined) => {
+    const next = current === false;
+    const { error } = await supabase
+      .from("workflow_stages")
+      .update({ contributes_to_progress: next } as never)
+      .eq("id", id);
+
+    if (error) {
+      toast({ title: "Erro ao atualizar contribuição", description: error.message, variant: "destructive" });
+      return;
+    }
+    fetchStages();
+  }, [toast]);
 
   const handleToggleStageVisible = useCallback(async (id: string, current: boolean) => {
     await supabase.from("workflow_stages").update({ is_visible: !current }).eq("id", id);
@@ -2225,6 +2708,7 @@ export const ActivityKanban = ({
                       onDelete={() => onDeleteActivity(activity.id)}
                       onToggle={() => onToggleActivity(activity.id, activity.status)}
                       onMoveToBacklog={() => handleMoveToBacklog(activity.id)}
+                      onLinkParent={canManageHierarchy ? () => openLinkParent(activity.id, activity.parent_id ?? null) : undefined}
                       isAdmin={isAdmin}
                       hasStory={storyLinkedActivities.has(activity.id)}
                       storyCount={storyLinkedActivities.get(activity.id) || 0}
@@ -2257,6 +2741,7 @@ export const ActivityKanban = ({
                 onDeleteActivity={onDeleteActivity}
                 onToggleActivity={onToggleActivity}
                 onMoveToBacklog={handleMoveToBacklog}
+                onLinkParent={canManageHierarchy ? openLinkParent : undefined}
                 onCreateActivity={handleCreateActivity}
                 storyLinkedActivities={storyLinkedActivities}
                 isAdmin={isAdmin}
@@ -2304,12 +2789,13 @@ export const ActivityKanban = ({
                     });
                     return next;
                   });
-                  toast({ title: "Vínculo removido" });
                 }}
                 isAdminOrGestor={isAdmin || canCreate}
                 onRenameStage={handleRenameStage}
                 onDeleteStage={handleDeleteStage}
                 onChangeStageColor={handleChangeStageColor}
+                onSetStageProgress={handleSetStageProgress}
+                onToggleStageContributes={handleToggleStageContributes}
                 onToggleStageFinal={handleToggleStageFinal}
                 onToggleStageBlocked={handleToggleStageBlocked}
                 onToggleStageVisible={handleToggleStageVisible}
@@ -2369,6 +2855,25 @@ export const ActivityKanban = ({
             });
         }}
       />
+
+      {linkParentIds && linkParentIds.length > 0 && (
+        <LinkParentDialog
+          open={!!linkParentIds}
+          onOpenChange={(open) => {
+            if (!open) {
+              setLinkParentIds(null);
+              setLinkParentCurrent(null);
+            }
+          }}
+          projectId={projectId}
+          activityIds={linkParentIds}
+          currentParentId={linkParentCurrent}
+          onLinked={() => {
+            onDataChanged();
+            fetchStages();
+          }}
+        />
+      )}
 
       {/* Dialog para criar história rápida */}
       <Dialog open={!!createStoryActivity} onOpenChange={(open) => { if (!open) setCreateStoryActivity(null); }}>

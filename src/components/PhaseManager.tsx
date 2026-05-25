@@ -370,7 +370,7 @@ export const PhaseManager = ({
               <Card key={phase.id} className="overflow-hidden">
                 <Collapsible open={isExpanded} onOpenChange={() => togglePhase(phase.id)}>
                   <CollapsibleTrigger asChild>
-                    <div className="p-4 cursor-pointer hover:bg-accent/50 transition-colors">
+                    <div className="p-4 cursor-pointer hover:bg-muted/40 transition-colors">
                       {editingPhase?.id === phase.id ? (
                         <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
                           <Input
@@ -427,7 +427,7 @@ export const PhaseManager = ({
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8"
+                                className="h-8 w-8 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                                 onClick={() => {
                                   setEditingPhase(phase);
                                   setEditTitle(phase.title);
@@ -439,7 +439,7 @@ export const PhaseManager = ({
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8 text-destructive"
+                                className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                                 onClick={() => handleDeletePhase(phase.id)}
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -643,24 +643,24 @@ const SubActivityTree = ({
               {sub.assigned_to && <span className="text-[10px] text-muted-foreground">👤 {sub.assigned_to}</span>}
               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="relative">
-                  <Button size="icon" variant="ghost" className="h-6 w-6" title="Mover para..." onClick={() => setMovingId(isMoving ? null : sub.id)}>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" title="Mover para..." onClick={() => setMovingId(isMoving ? null : sub.id)}>
                     <ArrowRightLeft className="w-3 h-3" />
                   </Button>
                   {isMoving && (
                     <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-50 min-w-[200px] max-h-[250px] overflow-y-auto">
                       <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase border-b border-border">Mover para fase</div>
-                      <button className="w-full px-3 py-1.5 text-left text-xs hover:bg-accent" onClick={() => { onMoveActivity(sub.id, null, null); setMovingId(null); }}>
+                      <button className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/60" onClick={() => { onMoveActivity(sub.id, null, null); setMovingId(null); }}>
                         Sem fase (raiz)
                       </button>
                       {phases.map(p => (
-                        <button key={p.id} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-accent ${sub.phase_id === p.id && !sub.parent_id ? "bg-accent" : ""}`}
+                        <button key={p.id} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-muted/60 ${sub.phase_id === p.id && !sub.parent_id ? "bg-muted" : ""}`}
                           onClick={() => { onMoveActivity(sub.id, null, p.id); setMovingId(null); }}>
                           📁 {p.title}
                         </button>
                       ))}
                       <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase border-b border-t border-border">Mover para atividade</div>
                       {moveTargets.map(a => (
-                        <button key={a.id} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-accent ${sub.parent_id === a.id ? "bg-accent" : ""}`}
+                        <button key={a.id} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-muted/60 ${sub.parent_id === a.id ? "bg-muted" : ""}`}
                           onClick={() => { onMoveActivity(sub.id, a.id, a.phase_id); setMovingId(null); }}>
                           ↳ {a.title}
                         </button>
@@ -668,8 +668,8 @@ const SubActivityTree = ({
                     </div>
                   )}
                 </div>
-                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditActivity(sub)}><Pencil className="w-3 h-3" /></Button>
-                {isAdmin && <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => onDeleteActivity(sub.id)}><Trash2 className="w-3 h-3" /></Button>}
+                <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={() => onEditActivity(sub)}><Pencil className="w-3 h-3" /></Button>
+                {isAdmin && <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" onClick={() => onDeleteActivity(sub.id)}><Trash2 className="w-3 h-3" /></Button>}
               </div>
             </div>
             {isExpanded && (
@@ -780,7 +780,7 @@ const ActivityCard = ({
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7"
+            className="h-7 w-7 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
             onClick={() => setShowPhaseSelector(!showPhaseSelector)}
             title="Mover para fase"
           >
@@ -789,7 +789,7 @@ const ActivityCard = ({
           {showPhaseSelector && (
             <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-10 min-w-[150px]">
               <button
-                className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                className="w-full px-3 py-2 text-left text-sm hover:bg-muted/60"
                 onClick={() => {
                   onMoveToPhase(activity.id, null);
                   setShowPhaseSelector(false);
@@ -800,8 +800,8 @@ const ActivityCard = ({
               {phases.map((phase) => (
                 <button
                   key={phase.id}
-                  className={`w-full px-3 py-2 text-left text-sm hover:bg-accent ${
-                    activity.phase_id === phase.id ? "bg-accent" : ""
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-muted/60 ${
+                    activity.phase_id === phase.id ? "bg-muted" : ""
                   }`}
                   onClick={() => {
                     onMoveToPhase(activity.id, phase.id);
@@ -817,7 +817,7 @@ const ActivityCard = ({
         <Button
           size="icon"
           variant="ghost"
-          className="h-7 w-7"
+          className="h-7 w-7 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
           onClick={() => onEdit(activity)}
         >
           <Pencil className="w-3 h-3" />
@@ -826,7 +826,7 @@ const ActivityCard = ({
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 text-destructive"
+            className="h-7 w-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             onClick={() => onDelete(activity.id)}
           >
             <Trash2 className="w-3 h-3" />

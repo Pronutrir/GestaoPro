@@ -3,23 +3,26 @@
  * da posição da sua coluna no workflow do projeto.
  *
  * Regras (memória do produto):
- *  - Cálculo 100% automático pelo Kanban (sem override manual).
- *  - Mapeamento fixo nas 5 flags: 0 / 25 / 50 / 75 / 100.
+ *  - Cálculo 100% automático pelo Kanban (sem override manual por atividade).
+ *  - Cada coluna pode ter um percentual explícito (progress_percent).
+ *  - Colunas podem participar ou não da evolução (contributes_to_progress).
  *  - Coluna marcada como "Bloqueio" → status "pausado" (sem %).
  *  - Coluna marcada como "Final" → 100%.
  *  - Sem stage definida → 0%.
  *
- * O cálculo considera apenas as colunas não bloqueadas, ordenadas por
- * display_order. A posição da coluna atual nessa lista é convertida em
- * fração (0..1) e arredondada para a flag mais próxima (0/25/50/75/100).
+ * O cálculo usa a ordem (display_order) apenas como fallback para colunas
+ * sem percentual explícito, mantendo comportamento adaptável por projeto.
  */
 
 export interface ProgressStageLike {
   id: string;
   display_order: number;
+  title?: string | null;
   is_final?: boolean | null;
   is_blocked?: boolean | null;
   is_exception?: boolean | null;
+  progress_percent?: number | null;
+  contributes_to_progress?: boolean | null;
 }
 
 export interface ActivityProgress {
@@ -31,21 +34,6 @@ export interface ActivityProgress {
   label: string;
 }
 
-const FLAGS = [0, 25, 50, 75, 100] as const;
-
-function snapToFlag(value: number): number {
-  let best = FLAGS[0] as number;
-  let bestDist = Math.abs(value - best);
-  for (const f of FLAGS) {
-    const d = Math.abs(value - f);
-    if (d < bestDist) {
-      best = f;
-      bestDist = d;
-    }
-  }
-  return best;
-}
-
 const PERCENT_LABELS: Record<number, string> = {
   0: "Não iniciada",
   25: "Iniciada",
@@ -53,6 +41,31 @@ const PERCENT_LABELS: Record<number, string> = {
   75: "Concluída",
   100: "Validada",
 };
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function getPercentLabel(percent: number): string {
+  if (percent >= 100) return PERCENT_LABELS[100];
+  if (percent >= 75) return PERCENT_LABELS[75];
+  if (percent >= 50) return PERCENT_LABELS[50];
+  if (percent >= 25) return PERCENT_LABELS[25];
+  return PERCENT_LABELS[0];
+}
+
+function normalize(value: string | null | undefined): string {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function isBacklogStage(stage: ProgressStageLike): boolean {
+  const t = normalize(stage.title);
+  return stage.display_order === 0 || t === "backlog";
+}
 
 export function computeActivityProgress(
   currentStageId: string | null | undefined,
@@ -76,18 +89,36 @@ export function computeActivityProgress(
     return { percent: 100, paused: false, label: PERCENT_LABELS[100] };
   }
 
-  // Se a coluna atual é uma exceção (ex.: "Atrasado"), o % deve refletir
-  // o último estágio real pelo qual a atividade passou — não a posição da exceção.
+  // Exceção (ex.: "Atrasado") deve sempre aparecer como pausada,
+  // sem percentual de avanço.
   if (current.is_exception) {
-    if (lastProgressStageId && lastProgressStageId !== currentStageId) {
-      return computeActivityProgress(lastProgressStageId, stages, null);
-    }
+    return { percent: null, paused: true, label: "Pausada" };
+  }
+
+  const contributes = current.contributes_to_progress !== false;
+  if (!contributes) {
     return { percent: 0, paused: false, label: PERCENT_LABELS[0] };
   }
 
-  // Linha de fluxo: ignora bloqueios e exceções, ordenada por display_order
+  // Regra automática: Backlog não deve avançar percentual.
+  if (isBacklogStage(current)) {
+    return { percent: 0, paused: false, label: PERCENT_LABELS[0] };
+  }
+
+  if (current.progress_percent != null) {
+    const explicit = clampPercent(current.progress_percent);
+    return { percent: explicit, paused: false, label: getPercentLabel(explicit) };
+  }
+
+  // Fallback dinâmico por ordem: ignora bloqueios/exceções, colunas não participantes e backlog.
   const flow = stages
-    .filter((s) => !s.is_blocked && !s.is_exception)
+    .filter(
+      (s) =>
+        !s.is_blocked &&
+        !s.is_exception &&
+        s.contributes_to_progress !== false &&
+        !isBacklogStage(s),
+    )
     .sort((a, b) => a.display_order - b.display_order);
 
   if (flow.length <= 1) {
@@ -101,9 +132,8 @@ export function computeActivityProgress(
 
   // Fração 0..1 da posição atual no fluxo
   const fraction = idx / (flow.length - 1);
-  const raw = fraction * 100;
-  const snapped = snapToFlag(raw);
-  return { percent: snapped, paused: false, label: PERCENT_LABELS[snapped] ?? PERCENT_LABELS[0] };
+  const raw = clampPercent(fraction * 100);
+  return { percent: raw, paused: false, label: getPercentLabel(raw) };
 }
 
 export const PROGRESS_FLAG_COLORS: Record<number, string> = {

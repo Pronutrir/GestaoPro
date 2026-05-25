@@ -37,6 +37,12 @@ interface Props {
   projectId: string;
   /** Quando true, abre automaticamente o diálogo de criação de vínculo (tipo "related") ao montar. */
   autoOpenAdd?: boolean;
+  /** Quando informado, abre diretamente o diálogo de criação no tipo escolhido. */
+  initialKind?: UnifiedKind | null;
+  /** Token incremental para forçar reabertura mesmo no mesmo tipo. */
+  initialKindToken?: number;
+  /** Callback para atualizar a tela pai após alterações em vínculos. */
+  onChanged?: () => void;
   /** Quando true, oculta o cabeçalho interno (título + botão "+ Vincular").
    *  Usado quando o painel é embutido em outro container que já tem cabeçalho próprio,
    *  como o popover de pills inline na atividade. */
@@ -109,7 +115,15 @@ const META: Record<UnifiedKind, {
 
 const ORDER: UnifiedKind[] = ["predecessor", "successor", "blocking", "waiting_on", "related"];
 
-export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hideHeader = false }: Props) => {
+export const TaskRelations = ({
+  activityId,
+  projectId,
+  autoOpenAdd = false,
+  initialKind = null,
+  initialKindToken,
+  onChanged,
+  hideHeader = false,
+}: Props) => {
   const { toast } = useToast();
   const [rows, setRows] = useState<UnifiedRow[]>([]);
   const [activities, setActivities] = useState<ActivityOpt[]>([]);
@@ -220,6 +234,13 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
     }
   }, [autoOpenAdd]);
 
+  useEffect(() => {
+    if (!initialKind) return;
+    setTypeMenuOpen(false);
+    openDialog(initialKind);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialKind, initialKindToken]);
+
   const titleOf = (id: string) => activities.find((a) => a.id === id)?.title || "—";
   const statusOf = (id: string) => activities.find((a) => a.id === id)?.status || "";
 
@@ -277,9 +298,9 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
       }
       return;
     }
-    toast({ title: "✅ Vínculo criado!" });
     setDialogKind(null);
     fetchAll();
+    onChanged?.();
   };
 
   const handleDelete = async (row: UnifiedRow) => {
@@ -290,8 +311,8 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
       toast({ title: "Erro ao remover", variant: "destructive" });
       return;
     }
-    toast({ title: "Vínculo removido" });
     fetchAll();
+    onChanged?.();
   };
 
   // Lista de candidatos do diálogo — busca por título OU id (full ou prefix)
@@ -403,20 +424,21 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
                 {list.map((row) => {
                   const otherStatus = statusOf(row.otherId);
                   const isCompleted = otherStatus === "completed";
-                  // Para related/blocking/waiting_on indicar sentido (outgoing/incoming)
-                  let dirLabel = "";
+                  // Mostra o tipo real do vínculo criado. Para relações direcionais,
+                  // complementa com o sentido (outgoing/incoming).
+                  let relationLabel = META[kind].label;
                   if (row.source === "rels" && row.raw) {
                     if (kind === "blocking") {
-                      dirLabel = row.raw.isOutgoing ? "bloqueia" : "bloqueada por";
+                      relationLabel = row.raw.isOutgoing ? "Bloqueia" : "Bloqueada por";
                     } else if (kind === "waiting_on") {
-                      dirLabel = row.raw.isOutgoing ? "aguardando" : "aguardada por";
+                      relationLabel = row.raw.isOutgoing ? "Aguardando" : "Aguardada por";
                     } else if (kind === "related") {
-                      dirLabel = "vinculada";
+                      relationLabel = "Vinculada";
                     }
                   } else if (kind === "predecessor") {
-                    dirLabel = "depende de";
+                    relationLabel = "Predecessora";
                   } else if (kind === "successor") {
-                    dirLabel = "depende desta";
+                    relationLabel = "Sucessora";
                   }
 
                   return (
@@ -425,8 +447,8 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
                       className="flex items-center gap-1.5 px-2 py-1 rounded border group transition-colors bg-muted/20 border-border/40 hover:bg-muted/40"
                     >
                       <Icon className={`w-3 h-3 shrink-0 ${meta.chipClass.split(" ").find(c => c.startsWith("text-")) || ""}`} />
-                      <span className="text-[10px] text-muted-foreground shrink-0 lowercase">
-                        {dirLabel}
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {relationLabel}
                       </span>
                       <span className={`text-xs flex-1 truncate ${isCompleted ? "line-through text-muted-foreground" : "text-foreground"}`}>
                         {titleOf(row.otherId)}
@@ -456,7 +478,7 @@ export const TaskRelations = ({ activityId, projectId, autoOpenAdd = false, hide
 
       {/* Diálogo de criação — único e unificado */}
       <Dialog open={!!dialogKind} onOpenChange={(o) => { if (!o) setDialogKind(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-xl w-[min(92vw,900px)]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {dialogKind && (() => {

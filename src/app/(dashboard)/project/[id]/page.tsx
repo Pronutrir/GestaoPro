@@ -66,6 +66,7 @@ interface Project {
   description: string | null;
   status: string;
   priority: string;
+  actual_start_date?: string | null;
   due_date: string | null;
   assignees: string[];
   budget_planned: number;
@@ -101,6 +102,8 @@ interface Activity {
   tags?: string[];
   parent_id?: string | null;
   participants?: string[] | null;
+  item_type?: "fase" | "tarefa" | null;
+  is_milestone?: boolean | null;
 }
 
 const SUPPORTED_PROJECT_TABS = [
@@ -752,37 +755,167 @@ export default function ProjectDetailsPage() {
       return;
     }
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
+
+    const { data: hierarchyRows } = await supabase
+      .from("activities")
+      .select("id,parent_id,status")
+      .eq("project_id", id)
+      .eq("is_trashed", false);
+
+    const childrenMap = new Map<string, string[]>();
+    const parentById = new Map<string, string | null>();
+    const statusById = new Map<string, string>();
+    (hierarchyRows || []).forEach((candidate) => {
+      parentById.set(candidate.id, candidate.parent_id || null);
+      statusById.set(candidate.id, candidate.status || "pending");
+      if (!candidate.parent_id) return;
+      const arr = childrenMap.get(candidate.parent_id) || [];
+      arr.push(candidate.id);
+      childrenMap.set(candidate.parent_id, arr);
+    });
+
+    const descendantIds: string[] = [];
+    const stack = [...(childrenMap.get(activityId) || [])];
+    const seen = new Set<string>();
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (seen.has(current)) continue;
+      seen.add(current);
+      descendantIds.push(current);
+      const children = childrenMap.get(current) || [];
+      children.forEach((childId) => stack.push(childId));
+    }
+
+    const idsToUpdate = [activityId, ...descendantIds];
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
     const updatePayload: any = { status: newStatus, completed_at: completedAt };
+    let finalStageId: string | null = null;
+    let reopenStageId: string | null = null;
 
     if (id) {
-      if (newStatus === "completed") {
-        const { data: finalStage } = await supabase
-          .from("workflow_stages")
-          .select("id")
-          .eq("project_id", id)
-          .eq("is_final", true)
-          .limit(1)
-          .maybeSingle();
-        if (finalStage) {
-          updatePayload.workflow_stage_id = finalStage.id;
-        }
-      } else {
-        // When un-completing, move back to backlog stage
-        const { data: backlogStage } = await supabase
-          .from("workflow_stages")
-          .select("id")
-          .eq("project_id", id)
-          .eq("display_order", 0)
-          .limit(1)
-          .maybeSingle();
-        if (backlogStage) {
-          updatePayload.workflow_stage_id = backlogStage.id;
+      const { data: stageRows } = await supabase
+        .from("workflow_stages")
+        .select("id, title, display_order, is_final")
+        .eq("project_id", id)
+        .order("display_order", { ascending: true });
+
+      const stageList = stageRows || [];
+      finalStageId = stageList.find((stage) => stage.is_final)?.id || null;
+
+      const normalized = (value: string | null | undefined) =>
+        (value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .trim();
+
+      const explicitAFazer = stageList.find((stage) => {
+        const title = normalized(stage.title);
+        return title === "a fazer" || title === "afazer" || title.includes("a fazer");
+      });
+      const displayOrderOne = stageList.find(
+        (stage) => !stage.is_final && stage.display_order === 1,
+      );
+      const firstActiveStage = stageList.find(
+        (stage) => !stage.is_final && stage.display_order > 0,
+      );
+      const backlogStage = stageList.find((stage) => stage.display_order === 0);
+      reopenStageId = (explicitAFazer || displayOrderOne || firstActiveStage || backlogStage)?.id || null;
+
+      if (newStatus === "completed" && finalStageId) {
+        updatePayload.workflow_stage_id = finalStageId;
+      }
+      if (newStatus === "pending" && reopenStageId) {
+        updatePayload.workflow_stage_id = reopenStageId;
+      }
+
+      if (newStatus === "pending" && !reopenStageId) {
+        toast.error("Não foi possível identificar a coluna de reabertura (A Fazer).");
+        return;
+      }
+    }
+
+    const { error: updateActivitiesError } = await (supabase.from("activities").update(updatePayload) as any).in("id", idsToUpdate);
+    if (updateActivitiesError) {
+      toast.error(`Erro ao atualizar atividade(s): ${updateActivitiesError.message}`);
+      return;
+    }
+
+    idsToUpdate.forEach((idToUpdate) => {
+      statusById.set(idToUpdate, newStatus);
+    });
+
+    if (updatePayload.workflow_stage_id) {
+      const { error: updateStoriesError } = await (supabase.from("user_stories").update({ stage_id: updatePayload.workflow_stage_id }) as any)
+        .in("activity_id", idsToUpdate);
+      if (updateStoriesError) {
+        toast.error(`Erro ao atualizar estágio das histórias: ${updateStoriesError.message}`);
+      }
+    }
+
+    // Recalcula ancestrais: pai só fica concluído com 100% dos filhos diretos concluídos.
+    const ancestorIds: string[] = [];
+    const seenAncestors = new Set<string>();
+    let cursor = parentById.get(activityId) || null;
+    while (cursor) {
+      if (seenAncestors.has(cursor)) break;
+      seenAncestors.add(cursor);
+      ancestorIds.push(cursor);
+      cursor = parentById.get(cursor) || null;
+    }
+
+    const ancestorsToComplete: string[] = [];
+    const ancestorsToReopen: string[] = [];
+
+    ancestorIds.forEach((ancestorId) => {
+      const childIds = childrenMap.get(ancestorId) || [];
+      const allChildrenCompleted =
+        childIds.length > 0 && childIds.every((childId) => statusById.get(childId) === "completed");
+      const previousStatus = statusById.get(ancestorId) || "pending";
+      const nextStatus = allChildrenCompleted ? "completed" : "pending";
+
+      if (previousStatus !== nextStatus) {
+        if (nextStatus === "completed") ancestorsToComplete.push(ancestorId);
+        else ancestorsToReopen.push(ancestorId);
+      }
+
+      statusById.set(ancestorId, nextStatus);
+    });
+
+    if (ancestorsToComplete.length > 0) {
+      const completePayload: any = { status: "completed", completed_at: new Date().toISOString() };
+      if (finalStageId) completePayload.workflow_stage_id = finalStageId;
+      const { error: completeAncestorsError } = await (supabase.from("activities").update(completePayload) as any).in("id", ancestorsToComplete);
+      if (completeAncestorsError) {
+        toast.error(`Erro ao concluir atividade pai: ${completeAncestorsError.message}`);
+        return;
+      }
+      if (finalStageId) {
+        const { error: completeAncestorStoriesError } = await (supabase.from("user_stories").update({ stage_id: finalStageId }) as any)
+          .in("activity_id", ancestorsToComplete);
+        if (completeAncestorStoriesError) {
+          toast.error(`Erro ao atualizar histórias da atividade pai: ${completeAncestorStoriesError.message}`);
         }
       }
     }
 
-    await supabase.from("activities").update(updatePayload).eq("id", activityId);
+    if (ancestorsToReopen.length > 0) {
+      const reopenPayload: any = { status: "pending", completed_at: null };
+      if (reopenStageId) reopenPayload.workflow_stage_id = reopenStageId;
+      const { error: reopenAncestorsError } = await (supabase.from("activities").update(reopenPayload) as any).in("id", ancestorsToReopen);
+      if (reopenAncestorsError) {
+        toast.error(`Erro ao reabrir atividade pai: ${reopenAncestorsError.message}`);
+        return;
+      }
+      if (reopenStageId) {
+        const { error: reopenAncestorStoriesError } = await (supabase.from("user_stories").update({ stage_id: reopenStageId }) as any)
+          .in("activity_id", ancestorsToReopen);
+        if (reopenAncestorStoriesError) {
+          toast.error(`Erro ao atualizar histórias da reabertura: ${reopenAncestorStoriesError.message}`);
+        }
+      }
+    }
+
     fetchProjectData();
   };
 
@@ -868,7 +1001,12 @@ export default function ProjectDetailsPage() {
                   <LayoutDashboard className="w-3.5 h-3.5" />
                   Dashboard
                 </Button>
-                <h2 className="text-sm font-semibold text-foreground">Informações do Projeto</h2>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-muted-foreground">Projeto:</span>
+                  <span className="font-semibold text-foreground truncate max-w-[260px]" title={project.title}>
+                    {project.title}
+                  </span>
+                </div>
                 {canEdit && (
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingProject(project); setEditDialogOpen(true); }}>
                     <Pencil className="w-3.5 h-3.5" />
@@ -992,51 +1130,53 @@ export default function ProjectDetailsPage() {
               };
 
               return (
-                <DraggableTabBar
-                  storageKey={`project-tabs-order-${id}`}
-                  activeTab={activeTab}
-                  onTabChange={setActiveTab}
-                  tabs={renderedTabs}
-                  onRemoveTab={handleRemoveTab}
-                  removableValues={renderedTabs.map(t => t.value)}
-                  extraSlotPosition="left"
-                  extraSlot={
-                    <Popover open={tabPickerOpen} onOpenChange={setTabPickerOpen}>
-                      <PopoverTrigger asChild>
-                        <button
-                          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors"
-                          aria-label="Adicionar visualização"
-                        >
-                          <Plus className="w-4 h-4" />
-                          Visualização
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent align="start" className="w-64 p-2">
-                        <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5">
-                          Adicionar visualização
-                        </div>
-                        {availableToAdd.length === 0 ? (
-                          <div className="text-xs text-muted-foreground px-2 py-3 text-center">
-                            Todas as visualizações disponíveis já foram adicionadas.
+                <div className="mb-2">
+                  <DraggableTabBar
+                    storageKey={`project-tabs-order-${id}`}
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
+                    tabs={renderedTabs}
+                    onRemoveTab={handleRemoveTab}
+                    removableValues={renderedTabs.map(t => t.value)}
+                    extraSlotPosition="left"
+                    extraSlot={
+                      <Popover open={tabPickerOpen} onOpenChange={setTabPickerOpen}>
+                        <PopoverTrigger asChild>
+                          <button
+                            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors"
+                            aria-label="Adicionar visualização"
+                          >
+                            <Plus className="w-4 h-4" />
+                            Visualização
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" className="w-64 p-2">
+                          <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5">
+                            Adicionar visualização
                           </div>
-                        ) : (
-                          <div className="flex flex-col gap-0.5 max-h-80 overflow-y-auto">
-                            {availableToAdd.map(t => (
-                              <button
-                                key={t.value}
-                                onClick={() => handleAddTab(t.value)}
-                                className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-foreground hover:bg-accent transition-colors text-left"
-                              >
-                                <span className={t.iconColor ?? ""}>{t.icon}</span>
-                                <span>{t.label}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </PopoverContent>
-                    </Popover>
-                  }
-                />
+                          {availableToAdd.length === 0 ? (
+                            <div className="text-xs text-muted-foreground px-2 py-3 text-center">
+                              Todas as visualizações disponíveis já foram adicionadas.
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-0.5 max-h-80 overflow-y-auto">
+                              {availableToAdd.map(t => (
+                                <button
+                                  key={t.value}
+                                  onClick={() => handleAddTab(t.value)}
+                                  className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-foreground hover:bg-muted/80 focus-visible:bg-muted/80 active:bg-muted/80 focus-visible:outline-none transition-colors text-left"
+                                >
+                                  <span className={t.iconColor ?? ""}>{t.icon}</span>
+                                  <span>{t.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </PopoverContent>
+                      </Popover>
+                    }
+                  />
+                </div>
               );
             })()}
 
@@ -1062,7 +1202,11 @@ export default function ProjectDetailsPage() {
 
 
             <TabsContent value="timeline" className="mt-0">
-              <ProjectCronogramaPanel projectIds={[id!]} defaultMode="table" />
+              <ProjectCronogramaPanel
+                projectIds={[id!]}
+                defaultMode="table"
+                onEditActivity={(activity) => openEditActivity(activity)}
+              />
             </TabsContent>
 
             {!isQualityProject && (

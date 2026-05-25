@@ -15,10 +15,27 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
-  Table2, GanttChart, ExternalLink, AlertTriangle, CalendarOff,
+  Table2, GanttChart, ExternalLink, AlertTriangle, AlertCircle, CalendarOff,
   CalendarDays, Settings2, Filter, FolderKanban, Search, X,
-  ArrowUp, ArrowDown, ArrowUpDown,
+  ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, ChevronDown, Layers, Diamond, GripVertical,
 } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  closestCenter,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  horizontalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -45,6 +62,7 @@ interface Props {
   projectIds: string[] | null;
   defaultMode?: CronogramaMode;
   showProjectColumn?: boolean;
+  onEditActivity?: (activity: any) => void;
 }
 
 const LINK_TYPES: Record<string, { short: string; label: string; desc: string }> = {
@@ -73,26 +91,26 @@ const ZOOM_LABEL: Record<GanttZoom, string> = {
 
 /** Colunas opcionais da tabela (controladas pelo usuário, persistidas em localStorage). */
 type ColKey =
-  | "id" | "eap" | "title" | "preds" | "responsible" | "duration"
+  | "id" | "eap" | "title" | "preds" | "responsible" | "column" | "status" | "duration"
   | "plannedStart" | "plannedEnd" | "actualStart" | "actualEnd"
-  | "variance" | "progress" | "slack" | "mainResource" | "effort" | "compression"
+  | "variance" | "progress" | "slack" | "slackFree" | "mainResource" | "effort" | "compression"
   | "observation" | "project" | "blockedDays";
 
 const COL_LABELS: Record<ColKey, string> = {
   id: "ID", eap: "EAP", title: "Atividade", preds: "Predecessoras",
-  responsible: "Responsável", duration: "Duração (d)",
+  responsible: "Responsável", column: "Coluna", status: "Status", duration: "Duração (d)",
   plannedStart: "Início Previsto", plannedEnd: "Térm. Previsto",
   actualStart: "Início Real", actualEnd: "Térm. Real",
   variance: "Desvio (d)",
-  progress: "% Concluído", slack: "Folga (d)",
+  progress: "% Concluído", slack: "Folga Total", slackFree: "Folga Livre",
   mainResource: "Recurso Principal", effort: "Esforço (h)",
   compression: "Compressão", observation: "Observações",
   project: "Projeto", blockedDays: "Dias Bloqueada",
 };
 
 const DEFAULT_VISIBLE: ColKey[] = [
-  "id", "eap", "title", "preds", "responsible",
-  "duration", "plannedStart", "plannedEnd", "progress", "slack",
+  "id", "eap", "title", "preds", "responsible", "column",
+  "duration", "plannedStart", "plannedEnd", "progress", "slack", "slackFree",
 ];
 
 function formatDateBR(iso: string | null) {
@@ -108,10 +126,89 @@ function workDays(startISO: string | null, endISO: string | null) {
   } catch { return null; }
 }
 
+function SortableHeaderCell({
+  col,
+  sortable,
+  active,
+  cycleSort,
+  label,
+}: {
+  col: ColKey;
+  sortable: boolean;
+  active: boolean;
+  cycleSort: (col: ColKey) => void;
+  label: string;
+}) {
+  const {
+    setNodeRef,
+    transform,
+    transition,
+    attributes,
+    listeners,
+    isDragging,
+  } = useSortable({ id: col });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 30 : undefined,
+  } as React.CSSProperties;
+
+  return (
+    <th
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "relative",
+        col === "title" && "text-left min-w-[260px]",
+        col === "observation" && "text-left min-w-[180px]",
+        col === "column" && "min-w-[140px]",
+        col === "status" && "min-w-[140px]",
+        isDragging && "opacity-60",
+      )}
+    >
+      <div className="inline-flex items-center gap-1.5" title="Segure e arraste para reordenar a coluna">
+        <span
+          {...attributes}
+          {...listeners}
+          className={cn(
+            "inline-flex items-center rounded-sm p-0.5 cursor-grab active:cursor-grabbing select-none",
+            isDragging && "cursor-grabbing bg-primary-foreground/15"
+          )}
+          aria-label="Arrastar coluna"
+        >
+          <GripVertical className="h-3.5 w-3.5 opacity-70" />
+        </span>
+        {sortable ? (
+          <button
+            type="button"
+            onClick={() => cycleSort(col)}
+            className={cn(
+              "inline-flex items-center gap-1 hover:text-primary-foreground/90 transition-colors",
+              active && "text-amber-300"
+            )}
+            title={
+              active
+                ? `Ordenando por ${label}. Clique para inverter/limpar.`
+                : `Ordenar por ${label}`
+            }
+          >
+            <span>{label}</span>
+            {active ? <ArrowUp className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+          </button>
+        ) : (
+          <span>{label}</span>
+        )}
+      </div>
+    </th>
+  );
+}
+
 export function ProjectCronogramaPanel({
   projectIds,
   defaultMode = "gantt",
   showProjectColumn = false,
+  onEditActivity,
 }: Props) {
   const router = useRouter();
   const [activities, setActivities] = useState<any[]>([]);
@@ -151,14 +248,37 @@ export function ProjectCronogramaPanel({
 
   const [visibleCols, setVisibleCols] = useState<ColKey[]>(() => {
     const stored = typeof window !== "undefined" ? localStorage.getItem("cronograma:cols") : null;
+    const baseDefaults = showProjectColumn ? (["project", ...DEFAULT_VISIBLE] as ColKey[]) : [...DEFAULT_VISIBLE];
     if (stored) {
-      try { return JSON.parse(stored) as ColKey[]; } catch {}
+      try {
+        const parsed = JSON.parse(stored) as ColKey[];
+        const valid = parsed
+          .filter((k) => Object.prototype.hasOwnProperty.call(COL_LABELS, k))
+          .filter((k) => showProjectColumn || k !== "project");
+        if (valid.length > 0) return valid;
+      } catch {}
     }
-    return showProjectColumn ? ["project", ...DEFAULT_VISIBLE] : DEFAULT_VISIBLE;
+    return baseDefaults;
   });
   useEffect(() => {
     localStorage.setItem("cronograma:cols", JSON.stringify(visibleCols));
   }, [visibleCols]);
+
+  const moveVisibleCol = useCallback((from: ColKey, to: ColKey, position: "before" | "after" = "before") => {
+    if (from === to) return;
+    setVisibleCols((prev) => {
+      const fromIdx = prev.indexOf(from);
+      const toIdx = prev.indexOf(to);
+      if (fromIdx < 0 || toIdx < 0) return prev;
+      const next = [...prev];
+      const [picked] = next.splice(fromIdx, 1);
+      const targetIdx = next.indexOf(to);
+      if (targetIdx < 0) return prev;
+      const insertAt = position === "after" ? targetIdx + 1 : targetIdx;
+      next.splice(insertAt, 0, picked);
+      return next;
+    });
+  }, []);
 
   // ===== Ordenação por coluna =====
   type SortDir = "asc" | "desc";
@@ -182,7 +302,7 @@ export function ProjectCronogramaPanel({
   /** Colunas que podem ser ordenadas via clique no cabeçalho. */
   const SORTABLE_COLS = new Set<ColKey>([
     "id", "eap", "title", "plannedStart", "plannedEnd",
-    "actualStart", "actualEnd", "variance", "duration", "progress", "slack",
+    "actualStart", "actualEnd", "variance", "duration", "progress", "slack", "slackFree",
     "mainResource", "responsible", "blockedDays",
   ]);
 
@@ -222,6 +342,28 @@ export function ProjectCronogramaPanel({
   const toggleCol = (k: ColKey) => {
     setVisibleCols(v => v.includes(k) ? v.filter(x => x !== k) : [...v, k]);
   };
+
+  const [draggingCol, setDraggingCol] = useState<ColKey | null>(null);
+  const [draggingHeaderCol, setDraggingHeaderCol] = useState<ColKey | null>(null);
+  const headerSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const handleHeaderDragStart = useCallback((event: DragStartEvent) => {
+    setDraggingHeaderCol(String(event.active.id) as ColKey);
+  }, []);
+
+  const handleHeaderDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    setDraggingHeaderCol(null);
+    if (!over || active.id === over.id) return;
+    setVisibleCols((prev) => {
+      const oldIndex = prev.indexOf(active.id as ColKey);
+      const newIndex = prev.indexOf(over.id as ColKey);
+      if (oldIndex < 0 || newIndex < 0) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  }, []);
 
   // ===== Fetch =====
   const fetchData = useCallback(async () => {
@@ -298,9 +440,9 @@ export function ProjectCronogramaPanel({
     [activities, deps]
   );
 
-  // ===== Folga real =====
-  const slackMap = useMemo(() => {
-    const map = new Map<string, number>();
+  // ===== Folgas CPM (Total e Livre) =====
+  const slackMetricsById = useMemo(() => {
+    const map = new Map<string, { total: number; free: number }>();
     const valid = activities.filter(a => a.start_date && a.end_date);
     if (valid.length === 0) return map;
 
@@ -335,6 +477,14 @@ export function ProjectCronogramaPanel({
         if (inDeg.get(s.id) === 0) queue.push(s.id);
       });
     }
+
+    // Se houver ciclo, mantém ordem fallback para evitar buracos no cálculo.
+    if (order.length < valid.length) {
+      valid.forEach((a) => {
+        if (!order.includes(a.id)) order.push(a.id);
+      });
+    }
+
     const ef = new Map<string, number>();
     const es = new Map<string, number>();
     order.forEach(id => {
@@ -360,31 +510,37 @@ export function ProjectCronogramaPanel({
       lf.set(id, latest);
       ls.set(id, latest - dur.get(id)!);
     });
+
     valid.forEach(a => {
-      const hasDeps = (pred.get(a.id)!.length + succ.get(a.id)!.length) > 0;
-      if (hasDeps) {
-        // Folga CPM clássica
-        const slack = (ls.get(a.id) ?? 0) - (es.get(a.id) ?? 0);
-        map.set(a.id, Math.max(0, slack));
-      } else {
-        // Sem dependências: folga = dias restantes até o fim, considerando hoje.
-        // Se concluída, folga zera. Se hoje > fim, folga = 0 (atrasada).
-        if (a.status === "completed") {
-          map.set(a.id, 0);
-        } else {
-          // Normaliza tudo ao meio-dia local para evitar shift de UTC-3
-          const today = new Date();
-          today.setHours(12, 0, 0, 0);
-          const start = parseISO(a.start_date!.slice(0, 10) + "T12:00:00");
-          const end = parseISO(a.end_date!.slice(0, 10) + "T12:00:00");
-          const ref = today > start ? today : start;
-          const slack = differenceInDays(end, ref);
-          map.set(a.id, Math.max(0, slack));
-        }
+      // FT = LS - ES (equivale a LF - EF)
+      const ft = Math.max(0, (ls.get(a.id) ?? 0) - (es.get(a.id) ?? 0));
+
+      // FL = min(ES_sucessora - EF_atual - lag)
+      const successors = succ.get(a.id) || [];
+      let fl = ft;
+      if (successors.length > 0) {
+        let minFree = Number.POSITIVE_INFINITY;
+        successors.forEach((s) => {
+          const esSucc = es.get(s.id);
+          const efCur = ef.get(a.id);
+          if (esSucc === undefined || efCur === undefined) return;
+          const freeCandidate = esSucc - efCur - s.lag;
+          minFree = Math.min(minFree, freeCandidate);
+        });
+        if (Number.isFinite(minFree)) fl = Math.max(0, minFree);
       }
+
+      map.set(a.id, { total: ft, free: fl });
     });
+
     return map;
-  }, [activities, deps, projectDeadlines]);
+  }, [activities, deps]);
+
+  const slackMap = useMemo(() => {
+    const map = new Map<string, number>();
+    slackMetricsById.forEach((v, id) => map.set(id, v.total));
+    return map;
+  }, [slackMetricsById]);
 
   const baseRows = useMemo(
     () => {
@@ -407,6 +563,160 @@ export function ProjectCronogramaPanel({
     return m;
   }, [stages]);
 
+  const resolveResponsible = useCallback((assignedTo: string | null | undefined) => {
+    const raw = (assignedTo || "").trim();
+    if (!raw) return "—";
+    const mapped = profiles[raw]?.name;
+    if (mapped) return mapped;
+    // Compatibilidade com registros antigos onde assigned_to foi salvo como nome.
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) return "—";
+    return raw;
+  }, [profiles]);
+
+  const childrenByParent = useMemo(() => {
+    const m = new Map<string, any[]>();
+    activities.forEach((a) => {
+      if (!a.parent_id) return;
+      const arr = m.get(a.parent_id) || [];
+      arr.push(a);
+      m.set(a.parent_id, arr);
+    });
+    return m;
+  }, [activities]);
+
+  const activityById = useMemo(() => {
+    const m = new Map<string, any>();
+    activities.forEach((a) => m.set(a.id, a));
+    return m;
+  }, [activities]);
+
+  const depthById = useMemo(() => {
+    const m = new Map<string, number>();
+    const computeDepth = (id: string, seen = new Set<string>()): number => {
+      if (m.has(id)) return m.get(id)!;
+      if (seen.has(id)) return 0;
+      seen.add(id);
+      const item = activityById.get(id);
+      if (!item || !item.parent_id) {
+        m.set(id, 0);
+        return 0;
+      }
+      const depth = computeDepth(item.parent_id, seen) + 1;
+      m.set(id, depth);
+      return depth;
+    };
+    activities.forEach((a) => computeDepth(a.id));
+    return m;
+  }, [activities, activityById]);
+
+  const descendantProgressById = useMemo(() => {
+    const memo = new Map<string, { sum: number; count: number }>();
+    const stagesByProjectLocal = new Map<string, typeof stages>();
+    stages.forEach((s) => {
+      if (!stagesByProjectLocal.has(s.project_id)) stagesByProjectLocal.set(s.project_id, [] as any);
+      (stagesByProjectLocal.get(s.project_id) as any).push(s);
+    });
+
+    const walk = (id: string, seen = new Set<string>()): { sum: number; count: number } => {
+      if (memo.has(id)) return memo.get(id)!;
+      if (seen.has(id)) return { sum: 0, count: 0 };
+
+      const nextSeen = new Set(seen);
+      nextSeen.add(id);
+
+      const children = childrenByParent.get(id) || [];
+      let sum = 0;
+      let count = 0;
+
+      children.forEach((child) => {
+        const projStages = stagesByProjectLocal.get(child.project_id) || [];
+        const info = computeActivityProgress(child.workflow_stage_id, projStages as any, child.last_progress_stage_id);
+        const pct = info.paused ? 0 : (info.percent ?? 0);
+        sum += pct;
+        count += 1;
+
+        const deep = walk(child.id, nextSeen);
+        sum += deep.sum;
+        count += deep.count;
+      });
+
+      const result = { sum, count };
+      memo.set(id, result);
+      return result;
+    };
+
+    activities.forEach((a) => {
+      memo.set(a.id, walk(a.id));
+    });
+
+    return memo;
+  }, [activities, childrenByParent, stages]);
+
+  const phaseDerivedDates = useMemo(() => {
+    const m = new Map<string, { start: Date | null; end: Date | null }>();
+    const collectDescendants = (id: string, out: any[] = [], seen = new Set<string>()): any[] => {
+      if (seen.has(id)) return out;
+      seen.add(id);
+      const children = childrenByParent.get(id) || [];
+      children.forEach((child) => {
+        out.push(child);
+        collectDescendants(child.id, out, seen);
+      });
+      return out;
+    };
+
+    activities.forEach((a) => {
+      if (a.item_type !== "fase") return;
+      const descendants = collectDescendants(a.id);
+      const starts = descendants
+        .filter((d) => d.start_date)
+        .map((d) => parseISO(d.start_date.slice(0, 10) + "T12:00:00"));
+      const ends = descendants
+        .filter((d) => d.end_date || d.start_date)
+        .map((d) => parseISO((d.end_date || d.start_date).slice(0, 10) + "T12:00:00"));
+
+      m.set(a.id, {
+        start: starts.length ? dateMin(starts) : null,
+        end: ends.length ? dateMax(ends) : null,
+      });
+    });
+    return m;
+  }, [activities, childrenByParent]);
+
+  const collapseKey = useMemo(() => {
+    if (projectIds && projectIds.length === 1) return `cronograma:collapsed:${projectIds[0]}`;
+    return "cronograma:collapsed:geral";
+  }, [projectIds]);
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = localStorage.getItem(collapseKey);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem(collapseKey, JSON.stringify(Array.from(collapsedPhases)));
+  }, [collapsedPhases, collapseKey]);
+  const togglePhase = (id: string) => {
+    setCollapsedPhases((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const isHiddenByCollapse = useCallback((a: any): boolean => {
+    let current = a.parent_id ? activityById.get(a.parent_id) : null;
+    while (current) {
+      if (current.item_type === "fase" && collapsedPhases.has(current.id)) return true;
+      current = current.parent_id ? activityById.get(current.parent_id) : null;
+    }
+    return false;
+  }, [activityById, collapsedPhases]);
+
   /** Stages agrupadas por projeto, para cálculo de andamento por contexto. */
   const stagesByProject = useMemo(() => {
     const m = new Map<string, typeof stages>();
@@ -418,28 +728,39 @@ export function ProjectCronogramaPanel({
   }, [stages]);
 
   const progressFor = useCallback((a: any): number => {
+    const deep = descendantProgressById.get(a.id);
+    const totalSubs = deep?.count || 0;
+    if (totalSubs > 0) {
+      return Math.max(0, Math.min(100, Math.round((deep!.sum / totalSubs))));
+    }
     const projStages = stagesByProject.get(a.project_id) || [];
     const info = computeActivityProgress(a.workflow_stage_id, projStages as any, a.last_progress_stage_id);
     if (info.paused) return 0;
     return info.percent ?? 0;
-  }, [stagesByProject]);
+  }, [stagesByProject, descendantProgressById]);
 
   /**
    * Linhas finais aplicadas ao Cronograma (tabela e Gantt).
    * Mantém a ordem original quando `sort` é nulo; senão aplica o
    * comparador da coluna selecionada e usa `idx` como desempate estável.
    */
-  /** Para multi-projeto: agrupar status com mesmo título (Backlog, Em Andamento, etc.). */
-  const uniqueStageTitles = useMemo(() => {
-    const map = new Map<string, { title: string; color: string; ids: string[]; is_final: boolean }>();
-    stages.forEach(s => {
-      const key = s.title.trim().toLowerCase();
-      const ex = map.get(key);
-      if (ex) ex.ids.push(s.id);
-      else map.set(key, { title: s.title, color: s.color, ids: [s.id], is_final: s.is_final });
-    });
-    return Array.from(map.values()).sort((a, b) => a.title.localeCompare(b.title));
-  }, [stages]);
+  /** Opções de status/coluna do Kanban (todas as colunas do projeto, sem agrupar). */
+  const stageOptions = useMemo(() => {
+    const hasManyProjects = new Set(stages.map((s) => s.project_id)).size > 1;
+    return [...stages]
+      .sort((a, b) => {
+        const po = (a.display_order ?? 0) - (b.display_order ?? 0);
+        if (po !== 0) return po;
+        return a.title.localeCompare(b.title, "pt-BR", { sensitivity: "base" });
+      })
+      .map((s) => ({
+        id: s.id,
+        title: s.title,
+        color: s.color,
+        is_final: s.is_final,
+        projectLabel: hasManyProjects ? (projectsMap[s.project_id] || "Projeto") : null,
+      }));
+  }, [stages, projectsMap]);
 
   /** Lista ordenada de projetos com pelo menos uma atividade carregada (alimenta o filtro de projetos). */
   const projectOptions = useMemo(() => {
@@ -511,6 +832,10 @@ export function ProjectCronogramaPanel({
           const s = slackMap.get(a.id);
           return s === undefined ? null : s;
         }
+        case "slackFree": {
+          const s = slackMetricsById.get(a.id)?.free;
+          return s === undefined ? null : s;
+        }
         case "mainResource":
         case "responsible":
           return profiles[a.assigned_to || ""]?.name || "";
@@ -550,21 +875,52 @@ export function ProjectCronogramaPanel({
     router.push(`/project/${pid}?tab=dependencies`);
   };
 
+  const openFromCronograma = useCallback((activity: any) => {
+    onEditActivity?.(activity);
+  }, [onEditActivity]);
+
+  const parseYmdDate = useCallback((d: string) => {
+    const [y, m, day] = d.split("-").map(Number);
+    return new Date(y, m - 1, day);
+  }, []);
+
+  const isOverdueByRule = useCallback((activity: any, isCompletedByStage: boolean) => {
+    if (!activity?.end_date) return false;
+    if (isCompletedByStage || activity.status === "completed") return false;
+    return parseYmdDate(activity.end_date) < new Date();
+  }, [parseYmdDate]);
+
   // ===== Gantt data =====
   const ROW_H = 32;
   const LABEL_W = 280;
 
   const ganttData = useMemo(() => {
-    const withDates = rows
+    const visibleRows = rows.filter((r) => !isHiddenByCollapse(r.a));
+
+    const withDates = visibleRows
       .map(r => {
-        const s = r.a.start_date ? parseISO(r.a.start_date) : null;
-        const e = r.a.end_date ? parseISO(r.a.end_date) : (s ? addDays(s, 1) : null);
+        let s: Date | null = null;
+        let e: Date | null = null;
+        if (r.a.item_type === "fase") {
+          const derived = phaseDerivedDates.get(r.a.id);
+          s = derived?.start ?? null;
+          e = derived?.end ?? (s ? addDays(s, 1) : null);
+        } else {
+          s = r.a.start_date ? parseISO(r.a.start_date) : null;
+          e = r.a.end_date ? parseISO(r.a.end_date) : (s ? addDays(s, 1) : null);
+        }
         return s && e ? { ...r, s, e } : null;
       })
       .filter(Boolean) as Array<{ a: any; idx: number; mock: any; s: Date; e: Date }>;
 
-    const undated = rows
-      .filter(r => !(r.a.start_date && r.a.end_date))
+    const undated = visibleRows
+      .filter(r => {
+        if (r.a.item_type === "fase") {
+          const d = phaseDerivedDates.get(r.a.id);
+          return !(d?.start && d?.end);
+        }
+        return !(r.a.start_date && r.a.end_date);
+      })
       .map(r => ({ ...r, s: null as Date | null, e: null as Date | null }));
 
     if (!withDates.length && !undated.length) return null;
@@ -628,7 +984,7 @@ export function ProjectCronogramaPanel({
     const days = eachDayOfInterval({ start: minDate, end: maxDate });
     const all = [...withDates, ...undated];
     return { dated: withDates, undated, all, minDate, maxDate, days };
-  }, [rows, zoom]);
+  }, [rows, zoom, isHiddenByCollapse, phaseDerivedDates]);
 
   /** Largura de um dia: divide o espaço disponível igualmente entre todos os dias. */
   const DAY_W = useMemo(() => {
@@ -651,7 +1007,7 @@ export function ProjectCronogramaPanel({
 
   /** Renderiza UMA célula da tabela conforme a coluna. */
   const renderCell = (k: ColKey, ctx: any) => {
-    const { a, idx, mock, id, dur, progress, preds, responsible } = ctx;
+    const { a, idx, mock, id, dur, progress, preds, responsible, depth, isOverdue } = ctx;
     switch (k) {
       case "id": return (
         <td className="px-2 py-1.5 text-center">
@@ -667,9 +1023,36 @@ export function ProjectCronogramaPanel({
       case "project": return <td className="px-2 py-1.5 truncate max-w-[180px] text-muted-foreground" title={projectsMap[a.project_id] || "—"}>{projectsMap[a.project_id] || "—"}</td>;
       case "title": return (
         <td className="px-2 py-1.5">
-          <div className="font-medium truncate max-w-[360px]" title={a.title}>{a.title}</div>
+          <div className="flex items-center gap-1.5 min-w-0" style={{ paddingLeft: depth > 0 ? depth * 12 : 0 }}>
+            {a.is_milestone ? (
+              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-orange-500/15 text-orange-700 border-orange-500/40 shrink-0 gap-1">
+                <Diamond className="h-2.5 w-2.5 fill-orange-500 text-orange-500" />
+                Marco
+              </Badge>
+            ) : a.item_type === "fase" ? (
+              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-primary/10 text-primary border-primary/30 shrink-0">
+                Fase
+              </Badge>
+            ) : a.parent_id ? (
+              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-amber-500/10 text-amber-700 border-amber-500/30 shrink-0">
+                Subatividade
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-emerald-500/10 text-emerald-700 border-emerald-500/30 shrink-0">
+                Atividade
+              </Badge>
+            )}
+            <button
+              type="button"
+              onClick={() => openFromCronograma(a)}
+              className="font-medium truncate max-w-[360px] text-left hover:underline cursor-pointer"
+              title="Abrir edição da atividade"
+            >
+              {a.title}
+            </button>
+          </div>
           {a.description && (
-            <div className="text-muted-foreground truncate max-w-[360px]" title={a.description}>{a.description}</div>
+            <div className="text-muted-foreground truncate max-w-[360px]" style={{ paddingLeft: depth > 0 ? depth * 12 : 0 }} title={a.description}>{a.description}</div>
           )}
         </td>
       );
@@ -685,12 +1068,15 @@ export function ProjectCronogramaPanel({
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary font-mono text-[11px] transition-colors">
                     {preds.map((p: any, i: number) => {
                       const lt = LINK_TYPES[p.dependency_type] || LINK_TYPES.finish_to_start;
-                      const pid = indexById.get(p.predecessor_id) ?? "?";
+                      const pact = activityById.get(p.predecessor_id);
+                      const predecessorRef = (pact && wbsById.get(pact.id))
+                        ? (wbsById.get(pact.id) as string)
+                        : (pact?.project_id ? shortIdOf(pact.project_id) : (indexById.get(p.predecessor_id) ?? "?"));
                       const lag = (p.lag_days ?? 0);
                       return (
                         <span key={p.id}>
                           {i > 0 && ";"}
-                          {pid}{lt.short !== "TI" ? lt.short : ""}{lag ? (lag > 0 ? `+${lag}d` : `${lag}d`) : ""}
+                          {predecessorRef}{lt.short !== "TI" ? lt.short : ""}{lag ? (lag > 0 ? `+${lag}d` : `${lag}d`) : ""}
                         </span>
                       );
                     })}
@@ -701,11 +1087,16 @@ export function ProjectCronogramaPanel({
                     <div className="text-xs font-semibold">Predecessoras</div>
                     {preds.map((p: any) => {
                       const lt = LINK_TYPES[p.dependency_type] || LINK_TYPES.finish_to_start;
-                      const pid = indexById.get(p.predecessor_id) ?? "?";
-                      const pact = activities.find(x => x.id === p.predecessor_id);
+                      const pact = activityById.get(p.predecessor_id);
+                      const eap = pact ? wbsById.get(pact.id) : undefined;
+                      const projectRef = pact?.project_id ? shortIdOf(pact.project_id) : "?";
+                      const predecessorRef = eap || projectRef;
+                      const predecessorRefTitle = eap
+                        ? `EAP ${eap}`
+                        : (pact?.project_id ? `ID Projeto ${pact.project_id}` : "Sem referência");
                       return (
                         <div key={p.id} className="text-[11px]">
-                          <div className="font-mono">#{pid} • {lt.label}</div>
+                          <div className="font-mono" title={predecessorRefTitle}>{predecessorRef} • {lt.label}</div>
                           <div className="text-muted-foreground">{pact?.title || "—"}</div>
                           <div className="text-muted-foreground">{lt.desc}</div>
                           {p.lag_days != null && p.lag_days !== 0 && (
@@ -714,9 +1105,16 @@ export function ProjectCronogramaPanel({
                         </div>
                       );
                     })}
-                    <div className="pt-1.5 mt-1.5 border-t flex items-center gap-1 text-[10px] text-primary">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        goToDependencies(a.project_id);
+                      }}
+                      className="w-full pt-1.5 mt-1.5 border-t flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 text-left"
+                    >
                       <ExternalLink className="h-3 w-3" /> Clique para abrir Dependências
-                    </div>
+                    </button>
                   </div>
                 </TooltipContent>
               </Tooltip>
@@ -725,9 +1123,53 @@ export function ProjectCronogramaPanel({
         </td>
       );
       case "responsible": return <td className="px-2 py-1.5 truncate max-w-[160px]" title={responsible}>{responsible}</td>;
+      case "column": return (() => {
+        const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
+        if (!stageInfo) return <td className="px-2 py-1.5 text-center text-muted-foreground">—</td>;
+        return (
+          <td className="px-2 py-1.5 text-center">
+            <Badge variant="outline" className="text-[10px] py-0 px-1.5" style={{ borderColor: stageInfo.color, color: stageInfo.color }}>
+              {stageInfo.title}
+            </Badge>
+          </td>
+        );
+      })();
+      case "status": return (() => {
+        const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
+        const projStages = stagesByProject.get(a.project_id) || [];
+        const progressInfo = computeActivityProgress(a.workflow_stage_id, projStages as any, a.last_progress_stage_id);
+        const label = stageInfo?.is_final
+          ? "Concluída"
+          : progressInfo.paused
+            ? "Pausada"
+            : stageInfo?.title || "Sem status";
+        const cls = stageInfo?.is_final
+          ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/40"
+          : progressInfo.paused
+            ? "bg-amber-500/10 text-amber-700 border-amber-500/40"
+            : "bg-primary/10 text-primary border-primary/30";
+        return (
+          <td className="px-2 py-1.5 text-center">
+            <Badge variant="outline" className={cn("text-[10px] py-0 px-1.5", cls)}>
+              {label}
+            </Badge>
+          </td>
+        );
+      })();
       case "duration": return <td className="px-2 py-1.5 text-center">{dur ?? "—"}</td>;
       case "plannedStart": return <td className="px-2 py-1.5 text-center">{formatDateBR(a.start_date)}</td>;
-      case "plannedEnd": return <td className="px-2 py-1.5 text-center">{formatDateBR(a.end_date)}</td>;
+      case "plannedEnd": return (
+        <td className="px-2 py-1.5 text-center">
+          {isOverdue ? (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-destructive bg-destructive/10 text-destructive animate-pulse-overdue">
+              <AlertCircle className="h-2.5 w-2.5 mr-0.5" />
+              {formatDateBR(a.end_date)}
+            </Badge>
+          ) : (
+            formatDateBR(a.end_date)
+          )}
+        </td>
+      );
       case "actualStart": return <td className="px-2 py-1.5 text-center text-muted-foreground">{formatDateBR(a.actual_start_date || null)}</td>;
       case "actualEnd": return <td className="px-2 py-1.5 text-center text-muted-foreground">{formatDateBR(a.actual_end_date || a.completed_at || null)}</td>;
       case "variance": {
@@ -786,16 +1228,36 @@ export function ProjectCronogramaPanel({
         <td className="px-2 py-1.5 text-center">
           {(() => {
             if (!a.start_date || !a.end_date) return <span className="text-muted-foreground text-[11px]">—</span>;
-            const slack = slackMap.get(a.id);
-            if (slack === undefined) return <span className="text-muted-foreground text-[11px]">—</span>;
+            const metrics = slackMetricsById.get(a.id);
+            if (!metrics) return <span className="text-muted-foreground text-[11px]">—</span>;
+            const slack = metrics.total;
             const cls =
               slack === 0 ? "bg-red-500/10 text-red-600 border-red-500/40"
               : slack <= 3 ? "bg-amber-500/10 text-amber-700 border-amber-500/40"
               : "bg-emerald-500/10 text-emerald-700 border-emerald-500/40";
             return (
-              <Badge variant="outline" className={cn("text-[10px] py-0 px-1.5 gap-1 font-mono", cls)}>
+              <Badge variant="outline" className={cn("text-[10px] py-0 px-1.5 gap-1 font-mono", cls)} title={`Folga total: ${metrics.total}d`}>
                 {slack === 0 && <AlertTriangle className="h-3 w-3" />}
                 {slack}d
+              </Badge>
+            );
+          })()}
+        </td>
+      );
+      case "slackFree": return (
+        <td className="px-2 py-1.5 text-center">
+          {(() => {
+            if (!a.start_date || !a.end_date) return <span className="text-muted-foreground text-[11px]">—</span>;
+            const metrics = slackMetricsById.get(a.id);
+            if (!metrics) return <span className="text-muted-foreground text-[11px]">—</span>;
+            const fl = metrics.free;
+            const cls =
+              fl === 0 ? "bg-red-500/10 text-red-600 border-red-500/40"
+              : fl <= 3 ? "bg-amber-500/10 text-amber-700 border-amber-500/40"
+              : "bg-emerald-500/10 text-emerald-700 border-emerald-500/40";
+            return (
+              <Badge variant="outline" className={cn("text-[10px] py-0 px-1.5 font-mono", cls)} title={`Folga livre: ${fl}d`}>
+                {fl}d
               </Badge>
             );
           })()}
@@ -826,44 +1288,34 @@ export function ProjectCronogramaPanel({
     <div className="border rounded-lg overflow-auto bg-card">
       <table className="w-full text-xs">
         <thead className="bg-primary/95 text-primary-foreground sticky top-0 z-10">
-          <tr className="[&>th]:px-2 [&>th]:py-2 [&>th]:font-semibold [&>th]:text-center [&>th]:border-r [&>th]:border-primary-foreground/20 [&>th:last-child]:border-r-0">
-            {visibleCols.map(k => {
-              const sortable = SORTABLE_COLS.has(k);
-              const active = sort?.col === k;
-              return (
-                <th key={k} className={cn(
-                  k === "title" && "text-left min-w-[260px]",
-                  k === "observation" && "text-left min-w-[180px]",
-                )}>
-                  {sortable ? (
-                    <button
-                      type="button"
-                      onClick={() => cycleSort(k)}
-                      className={cn(
-                        "inline-flex items-center gap-1 hover:text-primary-foreground/90 transition-colors",
-                        active && "text-amber-300"
-                      )}
-                      title={
-                        active
-                          ? `Ordenando por ${COL_LABELS[k]} (${sort?.dir === "asc" ? "crescente" : "decrescente"}). Clique para ${sort?.dir === "asc" ? "inverter" : "limpar"}.`
-                          : `Ordenar por ${COL_LABELS[k]}`
-                      }
-                    >
-                      <span>{COL_LABELS[k]}</span>
-                      {active
-                        ? (sort?.dir === "asc"
-                            ? <ArrowUp className="h-3 w-3" />
-                            : <ArrowDown className="h-3 w-3" />)
-                        : <ArrowUpDown className="h-3 w-3 opacity-40" />
-                      }
-                    </button>
-                  ) : (
-                    COL_LABELS[k]
-                  )}
-                </th>
-              );
-            })}
-          </tr>
+          <DndContext
+            sensors={headerSensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleHeaderDragStart}
+            onDragEnd={handleHeaderDragEnd}
+          >
+            <SortableContext items={visibleCols} strategy={horizontalListSortingStrategy}>
+              <tr className="[&>th]:px-2 [&>th]:py-2 [&>th]:font-semibold [&>th]:text-center [&>th]:border-r [&>th]:border-primary-foreground/20 [&>th:last-child]:border-r-0">
+                {visibleCols.map((k) => (
+                  <SortableHeaderCell
+                    key={k}
+                    col={k}
+                    sortable={SORTABLE_COLS.has(k)}
+                    active={sort?.col === k}
+                    cycleSort={cycleSort}
+                    label={COL_LABELS[k]}
+                  />
+                ))}
+              </tr>
+            </SortableContext>
+            <DragOverlay>
+              {draggingHeaderCol ? (
+                <div className="px-3 py-2 rounded-md border border-primary/30 bg-card/90 shadow-lg text-xs font-semibold text-foreground">
+                  {COL_LABELS[draggingHeaderCol]}
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         </thead>
         <tbody>
           {rows.length === 0 && (
@@ -874,17 +1326,20 @@ export function ProjectCronogramaPanel({
             const dur = workDays(a.start_date, a.end_date);
             const progress = progressFor(a);
             const preds = predsOf(a.id);
-            const responsible = profiles[a.assigned_to || ""]?.name || "—";
-            const ctx = { a, idx, mock, id, dur, progress, preds, responsible };
+            const responsible = resolveResponsible(a.assigned_to);
+            const depth = depthById.get(a.id) ?? 0;
             const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
             const stageColor = stageInfo?.color;
             const isStageFinal = stageInfo?.is_final;
+            const isOverdue = isOverdueByRule(a, !!isStageFinal);
+            const ctx = { a, idx, mock, id, dur, progress, preds, responsible, depth, isOverdue };
             return (
               <tr
                 key={a.id}
                 className={cn(
                   "border-b hover:bg-muted/40 transition-colors",
-                  isStageFinal && "opacity-90"
+                  isStageFinal && "opacity-90",
+                  isOverdue && "animate-pulse-overdue"
                 )}
                 style={stageColor ? { borderLeft: `3px solid ${stageColor}` } : undefined}
               >
@@ -929,8 +1384,12 @@ export function ProjectCronogramaPanel({
           Caminho crítico (folga 0)
         </span>
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+          <Diamond className="h-3.5 w-3.5 fill-orange-500 text-orange-500 shrink-0" />
           Marco
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Layers className="h-3.5 w-3.5 shrink-0" />
+          Fase (datas derivadas)
         </span>
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
           <CalendarOff className="h-3.5 w-3.5 shrink-0" />
@@ -961,16 +1420,66 @@ export function ProjectCronogramaPanel({
                 const id = indexById.get(a.id);
                 const isCritical = criticalSet.has(a.id);
                 const noDates = !a.start_date || !a.end_date;
-                const responsible = profiles[a.assigned_to || ""]?.name || "—";
+                const responsible = resolveResponsible(a.assigned_to);
                 const projTitle = projectsMap[a.project_id];
+                const depth = depthById.get(a.id) ?? 0;
+                const isPhase = a.item_type === "fase";
+                const isSubactivity = !isPhase && !!a.parent_id;
+                const isMilestone = !!a.is_milestone;
+                const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
+                const isCompleted = stageInfo?.is_final || a.status === "completed";
+                const isOverdue = isOverdueByRule(a, !!isCompleted);
+                const hasChildren = (childrenByParent.get(a.id) || []).length > 0;
+                const collapsed = collapsedPhases.has(a.id);
                 return (
                   <div key={a.id}
-                    className="border-b px-3 flex items-center gap-2 hover:bg-muted/40"
-                    style={{ height: ROW_H }}>
+                    className={cn(
+                      "border-b px-3 flex items-center gap-2 hover:bg-muted/40",
+                      isOverdue && "animate-pulse-overdue"
+                    )}
+                    style={{ height: ROW_H, paddingLeft: 12 + depth * 14 }}>
+                    {isPhase && hasChildren ? (
+                      <button
+                        type="button"
+                        onClick={() => togglePhase(a.id)}
+                        className="shrink-0 p-0.5 -ml-1 rounded hover:bg-muted"
+                        title={collapsed ? "Expandir fase" : "Recolher fase"}
+                      >
+                        {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      </button>
+                    ) : isPhase ? (
+                      <Layers className="h-3.5 w-3.5 text-primary shrink-0" />
+                    ) : null}
                     <span className="text-[10px] font-mono text-muted-foreground w-[52px] shrink-0">#{id}</span>
                     <div className="flex-1 min-w-0">
-                      <div className={cn("text-xs flex items-center gap-1", isCritical && "font-semibold")}>
-                        <span className="truncate" title={a.title}>{a.title}</span>
+                      <div className={cn("text-xs flex items-center gap-1", (isCritical || isPhase) && "font-semibold", isPhase && "text-primary uppercase tracking-wide")}>
+                        {isMilestone ? (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-orange-500/15 text-orange-700 border-orange-500/40 shrink-0 gap-1">
+                            <Diamond className="h-2.5 w-2.5 fill-orange-500 text-orange-500" />
+                            Marco
+                          </Badge>
+                        ) : isPhase ? (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-primary/10 text-primary border-primary/30 shrink-0">
+                            Fase
+                          </Badge>
+                        ) : isSubactivity ? (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-amber-500/10 text-amber-700 border-amber-500/30 shrink-0">
+                            Sub
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-emerald-500/10 text-emerald-700 border-emerald-500/30 shrink-0">
+                            Atv
+                          </Badge>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openFromCronograma(a)}
+                          className="truncate text-left hover:underline cursor-pointer"
+                          title="Abrir edição da atividade"
+                        >
+                          {a.title}
+                        </button>
+                        {isOverdue && <AlertCircle className="h-3 w-3 text-destructive animate-pulse shrink-0" />}
                         {isCritical && <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />}
                         {noDates && <CalendarOff className="h-3 w-3 text-muted-foreground shrink-0" />}
                       </div>
@@ -1062,11 +1571,13 @@ export function ProjectCronogramaPanel({
                 })()}
 
                 {ganttData.all.map(({ a, s, e }) => {
+                  const depth = depthById.get(a.id) ?? 0;
+                  const hierarchyOffset = Math.min(24, depth * 6);
                   if (!s || !e) {
                     const todayIdx = ganttData.days.findIndex(
                       d => d.toDateString() === new Date(new Date().setHours(0,0,0,0)).toDateString()
                     );
-                    const left = (todayIdx >= 0 ? todayIdx : 0) * DAY_W;
+                    const left = (todayIdx >= 0 ? todayIdx : 0) * DAY_W + hierarchyOffset;
                     return (
                       <div key={a.id} className="relative border-b bg-muted/10" style={{ height: ROW_H }}>
                         <div className="absolute top-1/2 -translate-y-1/2 inline-flex items-center gap-1 px-2 py-0.5 rounded border border-dashed border-muted-foreground/40 bg-card text-[10px] text-muted-foreground"
@@ -1079,13 +1590,16 @@ export function ProjectCronogramaPanel({
                   }
                   const startIdx = ganttData.days.findIndex(d => d.toDateString() === s.toDateString());
                   const endIdx = ganttData.days.findIndex(d => d.toDateString() === e.toDateString());
-                  const left = Math.max(0, startIdx) * DAY_W;
-                  const width = Math.max(2, (endIdx - startIdx + 1)) * DAY_W - 2;
+                  const left = Math.max(0, startIdx) * DAY_W + hierarchyOffset;
+                  const width = Math.max(2, Math.max(2, (endIdx - startIdx + 1)) * DAY_W - 2 - hierarchyOffset);
                   const isCritical = criticalSet.has(a.id);
                   const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
                   const isCompleted = stageInfo?.is_final || a.status === "completed";
+                  const isOverdue = isOverdueByRule(a, !!isCompleted);
                   const progress = progressFor(a);
-                  const responsible = profiles[a.assigned_to || ""]?.name || "—";
+                  const responsible = resolveResponsible(a.assigned_to);
+                  const isPhase = a.item_type === "fase";
+                  const isSubactivity = !isPhase && !!a.parent_id;
 
                   return (
                     <div key={a.id} className="relative border-b" style={{ height: ROW_H }}>
@@ -1094,14 +1608,60 @@ export function ProjectCronogramaPanel({
                           <TooltipTrigger asChild>
                             {a.is_milestone ? (
                               <div className="absolute top-1/2 -translate-y-1/2"
-                                style={{ left: left + DAY_W / 2 - 8 }}>
-                                <div className="w-4 h-4 rotate-45 bg-amber-500 border border-amber-700" />
+                                style={{ left: left + DAY_W / 2 - 8 }}
+                                onClick={() => openFromCronograma(a)}
+                                title="Abrir edição da atividade"
+                              >
+                                <div className={cn(
+                                  "w-4 h-4 rotate-45 bg-amber-500 border border-amber-700",
+                                  isOverdue && "animate-pulse-overdue"
+                                )} />
+                              </div>
+                            ) : isPhase ? (
+                              <div
+                                className={cn(
+                                  "absolute top-1/2 -translate-y-1/2",
+                                  isOverdue && "animate-pulse-overdue"
+                                )}
+                                style={{ left, width, height: 10 }}
+                                onClick={() => openFromCronograma(a)}
+                                title="Abrir edição da atividade"
+                              >
+                                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 bg-foreground/80 rounded" />
+                                <div
+                                  className="absolute left-0 top-1/2 -translate-y-1/2"
+                                  style={{
+                                    width: 0,
+                                    height: 0,
+                                    borderLeft: "5px solid transparent",
+                                    borderRight: "5px solid transparent",
+                                    borderTop: "7px solid hsl(var(--foreground))",
+                                  }}
+                                />
+                                <div
+                                  className="absolute right-0 top-1/2 -translate-y-1/2"
+                                  style={{
+                                    width: 0,
+                                    height: 0,
+                                    borderLeft: "5px solid transparent",
+                                    borderRight: "5px solid transparent",
+                                    borderTop: "7px solid hsl(var(--foreground))",
+                                  }}
+                                />
+                                {DAY_W >= 6 && width > 80 && (
+                                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-foreground/80 uppercase tracking-wide whitespace-nowrap">
+                                    {a.title}
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div className={cn(
                                 "absolute top-1.5 rounded-sm shadow-sm overflow-hidden cursor-pointer transition-opacity hover:opacity-90",
+                                isOverdue && "animate-pulse-overdue border-destructive",
                                 !stageInfo && (isCritical ? "bg-red-500" : isCompleted ? "bg-emerald-500/70" : "bg-primary")
                               )}
+                                onClick={() => openFromCronograma(a)}
+                                title="Abrir edição da atividade"
                                 style={{
                                   left,
                                   width,
@@ -1109,6 +1669,9 @@ export function ProjectCronogramaPanel({
                                   backgroundColor: stageInfo
                                     ? (isCritical ? undefined : stageInfo.color)
                                     : undefined,
+                                  borderStyle: isSubactivity ? "dashed" : "solid",
+                                  borderWidth: 1,
+                                  borderColor: isSubactivity ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.35)",
                                   outline: isCritical ? "2px solid hsl(0 84% 55%)" : undefined,
                                 }}>
                                 <div className="h-full bg-white/30" style={{ width: `${100 - progress}%`, marginLeft: `${progress}%` }} />
@@ -1127,6 +1690,7 @@ export function ProjectCronogramaPanel({
                               <div>👤 {responsible}</div>
                               <div>📊 {progress}% {isCritical && <span className="text-red-400 font-semibold ml-1">• Caminho crítico</span>}</div>
                               {a.is_milestone && <div>🎯 Marco</div>}
+                              {isPhase && <div>📚 Fase — datas derivadas dos filhos</div>}
                             </div>
                           </TooltipContent>
                         </Tooltip>
@@ -1214,6 +1778,34 @@ export function ProjectCronogramaPanel({
                 );
               })}
             </div>
+            {visibleCols.length > 1 && (
+              <>
+                <div className="text-xs font-semibold mt-3 mb-2 text-muted-foreground uppercase">Ordem das colunas (arraste)</div>
+                <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                  {visibleCols.map((k) => (
+                    <button
+                      key={`reorder-${k}`}
+                      type="button"
+                      draggable
+                      onDragStart={() => setDraggingCol(k)}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (draggingCol && draggingCol !== k) moveVisibleCol(draggingCol, k);
+                      }}
+                      onDragEnd={() => setDraggingCol(null)}
+                      className={cn(
+                        "w-full flex items-center gap-2 rounded border px-2 py-1 text-left text-xs bg-card",
+                        draggingCol === k ? "opacity-60 border-primary" : "border-border hover:bg-muted/40"
+                      )}
+                      title="Arraste para reordenar"
+                    >
+                      <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="truncate">{COL_LABELS[k]}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <div className="mt-3 pt-2 border-t flex items-center justify-between">
               <Button variant="ghost" size="sm" className="text-xs h-7"
                 onClick={() => setVisibleCols(showProjectColumn ? ["project", ...DEFAULT_VISIBLE] : DEFAULT_VISIBLE)}>
@@ -1222,6 +1814,68 @@ export function ProjectCronogramaPanel({
               <Button variant="ghost" size="sm" className="text-xs h-7"
                 onClick={() => setVisibleCols(Object.keys(COL_LABELS) as ColKey[])}>
                 Mostrar todas
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+
+      {/* Filtro por status do Kanban (workflow_stages) */}
+      {stageOptions.length > 0 && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5">
+              <Filter className="h-4 w-4" /> Status
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
+                {stageFilter === null ? `Todas (${stageOptions.length})` : `${stageFilter.size}/${stageOptions.length}`}
+              </Badge>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-72 p-3">
+            <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase">Filtrar por coluna do Kanban</div>
+            <div className="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
+              {stageOptions.map(s => {
+                const allActive = stageFilter === null;
+                const checked = allActive ? true : stageFilter.has(s.id);
+                return (
+                  <label key={s.id}
+                    className="flex items-center gap-2 px-1 py-1 rounded hover:bg-muted/50 cursor-pointer">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => {
+                        setStageFilter(prev => {
+                          const base = prev === null
+                            ? new Set(stageOptions.map(x => x.id)) // partir de todas
+                            : new Set(prev);
+                          if (base.has(s.id)) base.delete(s.id);
+                          else base.add(s.id);
+                          return base;
+                        });
+                      }}
+                    />
+                    <span
+                      className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+                      style={{ backgroundColor: s.color }}
+                    />
+                    <Label className="text-xs cursor-pointer flex-1 truncate" title={s.title}>
+                      {s.title}{s.projectLabel ? ` • ${s.projectLabel}` : ""}{s.is_final ? " ✓" : ""}
+                    </Label>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-3 pt-2 border-t flex items-center justify-between gap-2">
+              <Button variant="ghost" size="sm" className="text-xs h-7"
+                onClick={() => setStageFilter(null)}>
+                Mostrar todas
+              </Button>
+              <Button variant="ghost" size="sm" className="text-xs h-7"
+                onClick={() => {
+                  // Apenas não-concluídas (oculta is_final)
+                  const ids = stageOptions.filter(s => !s.is_final).map(s => s.id);
+                  setStageFilter(new Set(ids));
+                }}>
+                Ocultar concluídas
               </Button>
             </div>
           </PopoverContent>
@@ -1300,69 +1954,6 @@ export function ProjectCronogramaPanel({
               <Button variant="ghost" size="sm" className="text-xs h-7"
                 onClick={() => setProjectFilter(new Set())}>
                 Limpar seleção
-              </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
-      )}
-
-      {/* Filtro por status do Kanban (workflow_stages) */}
-      {uniqueStageTitles.length > 0 && (
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9 gap-1.5">
-              <Filter className="h-4 w-4" /> Status
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
-                {stageFilter === null ? "Todas" : stageFilter.size}
-              </Badge>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-72 p-3">
-            <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase">Filtrar por coluna do Kanban</div>
-            <div className="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
-              {uniqueStageTitles.map(s => {
-                const allActive = stageFilter === null;
-                const checked = allActive ? true : s.ids.some(id => stageFilter!.has(id));
-                return (
-                  <label key={s.title}
-                    className="flex items-center gap-2 px-1 py-1 rounded hover:bg-muted/50 cursor-pointer">
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={() => {
-                        setStageFilter(prev => {
-                          const base = prev === null
-                            ? new Set(stages.map(x => x.id)) // partir de todas
-                            : new Set(prev);
-                          const isOn = s.ids.some(id => base.has(id));
-                          if (isOn) s.ids.forEach(id => base.delete(id));
-                          else s.ids.forEach(id => base.add(id));
-                          return base;
-                        });
-                      }}
-                    />
-                    <span
-                      className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
-                      style={{ backgroundColor: s.color }}
-                    />
-                    <Label className="text-xs cursor-pointer flex-1 truncate" title={s.title}>
-                      {s.title}{s.is_final ? " ✓" : ""}
-                    </Label>
-                  </label>
-                );
-              })}
-            </div>
-            <div className="mt-3 pt-2 border-t flex items-center justify-between gap-2">
-              <Button variant="ghost" size="sm" className="text-xs h-7"
-                onClick={() => setStageFilter(null)}>
-                Mostrar todas
-              </Button>
-              <Button variant="ghost" size="sm" className="text-xs h-7"
-                onClick={() => {
-                  // Apenas não-concluídas (oculta is_final)
-                  const ids = stages.filter(s => !s.is_final).map(s => s.id);
-                  setStageFilter(new Set(ids));
-                }}>
-                Ocultar concluídas
               </Button>
             </div>
           </PopoverContent>

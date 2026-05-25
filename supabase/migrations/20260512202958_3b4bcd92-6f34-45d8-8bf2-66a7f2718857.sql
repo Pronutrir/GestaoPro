@@ -47,6 +47,20 @@ DROP POLICY IF EXISTS "Permitir exclusão pública" ON public.projects;
 DROP POLICY IF EXISTS "Permitir inserção pública" ON public.projects;
 DROP POLICY IF EXISTS "Permitir leitura pública" ON public.projects;
 
+-- Limpeza defensiva para reexecucao: remove policies antigas de membro/lider
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT schemaname, tablename, policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND (policyname LIKE 'Members can %' OR policyname LIKE 'Leaders can %')
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I.%I', r.policyname, r.schemaname, r.tablename);
+  END LOOP;
+END $$;
+
 -- ============================================================
 -- 2) Funções de acesso (SECURITY DEFINER)
 -- ============================================================

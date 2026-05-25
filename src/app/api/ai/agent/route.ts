@@ -339,7 +339,7 @@ function getSystemDateReference() {
   };
 }
 
-function buildSystemPrompt(userName: string) { return `Você é um assistente de gerenciamento de projetos integrado ao Insight Finder Pal.
+function buildSystemPrompt(userName: string) { return `Você é um assistente de gerenciamento de projetos integrado ao gestaopro.
 O usuário logado atualmente é: ${userName}
 Você tem acesso direto ao banco de dados da aplicação e pode criar, consultar e atualizar projetos e tarefas em nome do usuário.
 
