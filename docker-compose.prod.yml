@@ -12,7 +12,7 @@
 
 services:
   app:
-    image: pronutrir/gestaopro:${APP_VERSION:-2026-05-04-00}
+    image: pronutrir/gestaopro:${APP_VERSION:-2026-05-22-01}
     container_name: gestaopro
     env_file:
       - .env
@@ -40,4 +40,4 @@ services:
         max-file: "3"
     labels:
       - "com.pronutrir.description=GestãoPro frontend"
-      - "com.pronutrir.version=${APP_VERSION:-2026-05-04-00}"
+      - "com.pronutrir.version=${APP_VERSION:-2026-05-22-01}"

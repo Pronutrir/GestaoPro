@@ -1,4 +1,4 @@
-# Copilot Instructions — insight-finder-pal
+# Copilot Instructions — gestaopro
 
 ## O que é este projeto
 

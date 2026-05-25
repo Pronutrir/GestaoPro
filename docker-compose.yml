@@ -5,8 +5,8 @@ services:
       args:
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-        APP_VERSION: ${APP_VERSION:-2026-05-04-00}
-    image: pronutrir/gestaopro:${APP_VERSION:-2026-05-04-00}
+        APP_VERSION: ${APP_VERSION:-2026-05-22-01}
+    image: pronutrir/gestaopro:${APP_VERSION:-2026-05-22-01}
     container_name: gestaopro
     env_file:
       - .env

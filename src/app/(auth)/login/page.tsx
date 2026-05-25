@@ -84,7 +84,7 @@ export default function LoginPage() {
             <LayoutDashboard className="w-8 h-8 text-primary-foreground" />
           </div>
           <div className="text-center space-y-2">
-            <h1 className="text-2xl font-bold text-foreground">Pipeline de Gestão de Projetos</h1>
+            <h1 className="text-2xl font-bold text-foreground">gestaopro</h1>
             <p className="text-sm text-muted-foreground">Por favor, faça login para continuar</p>
           </div>
 

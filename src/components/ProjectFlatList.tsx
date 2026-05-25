@@ -11,11 +11,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   ChevronDown, ChevronRight, Columns3, Trash2, RotateCcw, Archive, CheckCheck, CircleDot,
-  MousePointerSquareDashed,
+  MousePointerSquareDashed, Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
+import { duplicateActivity, countChildren } from "@/lib/duplicateActivity";
 
 interface Phase { id: string; title: string; display_order?: number | null; }
 interface WorkflowStage { id: string; title: string; color?: string | null; display_order?: number; }
@@ -71,6 +72,7 @@ export function ProjectFlatList({
   const [trashed, setTrashed] = useState<Activity[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
@@ -156,6 +158,31 @@ export function ProjectFlatList({
     toast({ title: "Atividade arquivada!" });
     onDataChanged();
     if (showTrash) fetchTrash();
+  };
+
+  const handleDuplicate = async (id: string) => {
+    if (duplicatingId) return;
+    setDuplicatingId(id);
+    try {
+      const children = await countChildren(id);
+      const includeChildren =
+        children > 0
+          ? confirm(`Esta atividade possui ${children} subtarefa(s). Duplicar tambem as subtarefas?`)
+          : false;
+
+      await duplicateActivity({ activityId: id, includeChildren });
+      toast({ title: "Atividade duplicada!" });
+      onDataChanged();
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Tente novamente";
+      toast({
+        title: "Erro ao duplicar",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setDuplicatingId(null);
+    }
   };
 
   const toggleCol = (key: ColKey) => {
@@ -371,7 +398,7 @@ export function ProjectFlatList({
             <div
               key={a.id}
               className={cn(
-                "group grid gap-3 px-4 py-2.5 text-sm border-b border-border hover:bg-muted/30 transition-colors items-center cursor-pointer",
+                "group grid gap-3 px-4 py-2.5 text-sm border-b border-border hover:bg-muted/40 transition-colors items-center cursor-pointer",
                 selectedIds.has(a.id) && "bg-primary/5"
               )}
               style={{ gridTemplateColumns: `minmax(240px, ${Math.max(2, 4 - visibleList.length)}fr) ${visibleList.map(c => `minmax(${colSpec[c.key].min}px, ${colSpec[c.key].fr}fr)`).join(" ")}` }}
@@ -402,7 +429,17 @@ export function ProjectFlatList({
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted/70 hover:text-foreground"
+                  disabled={duplicatingId === a.id}
+                  onClick={(e) => { e.stopPropagation(); handleDuplicate(a.id); }}
+                  title={duplicatingId === a.id ? "Duplicando..." : "Duplicar atividade"}
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   onClick={(e) => { e.stopPropagation(); handleArchive(a.id); }}
                   title="Arquivar atividade"
                 >

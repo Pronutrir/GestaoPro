@@ -3,7 +3,7 @@ import { Providers } from './providers'
 import '../index.css'
 
 export const metadata: Metadata = {
-  title: 'Insight Finder Pal',
+  title: 'Gestão Pro',
   description: 'Plataforma de gestao de projetos.',
 }
 

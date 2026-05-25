@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" role="img" aria-labelledby="title desc">
+  <title id="title">Logo GestãoPro</title>
+  <desc id="desc">Marca abstrata em tons de verde-agua.</desc>
+  <path
+    d="M38 56C58 22 112 20 138 53C164 86 154 128 124 149C92 171 54 166 34 140C18 119 19 84 38 56Z"
+    fill="#0FA5AA"
+  />
+  <path
+    d="M179 151C210 129 245 135 265 160C286 185 286 226 264 257C241 288 191 293 164 266C140 241 143 191 179 151Z"
+    fill="#0FA5AA"
+  />
+  <path
+    d="M176 42C206 16 245 26 261 57C274 83 266 117 242 135C217 151 186 139 173 113C161 88 155 61 176 42Z"
+    fill="#8ABCBF"
+  />
+  <path
+    d="M52 183C76 166 108 172 121 196C134 220 128 250 103 269C80 285 50 279 38 255C28 233 30 200 52 183Z"
+    fill="#8ABCBF"
+  />
+</svg>
