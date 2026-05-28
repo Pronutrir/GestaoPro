@@ -46,6 +46,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calculateCriticalPath } from "@/lib/criticalPath";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 
 /**
  * Painel de Cronograma reutilizável (Tabela MS-Project + Gantt CPM).
@@ -211,6 +212,7 @@ export function ProjectCronogramaPanel({
   onEditActivity,
 }: Props) {
   const router = useRouter();
+  const { filterProjects, loading: accessLoading } = useProjectAccess();
   const [activities, setActivities] = useState<any[]>([]);
   const [phases, setPhases] = useState<any[]>([]);
   const [deps, setDeps] = useState<any[]>([]);
@@ -367,27 +369,48 @@ export function ProjectCronogramaPanel({
 
   // ===== Fetch =====
   const fetchData = useCallback(async () => {
-    let actsQ = supabase.from("activities").select("*")
-      .eq("is_trashed", false)
-      .order("display_order", { ascending: true });
-    if (projectIds && projectIds.length > 0) {
-      actsQ = actsQ.in("project_id", projectIds);
-    } else if (projectIds && projectIds.length === 0) {
+    if (accessLoading) return;
+
+    if (projectIds && projectIds.length === 0) {
       setActivities([]); setDeps([]); setPhases([]); setStages([]);
       return;
     }
 
-    const stagesQ = projectIds && projectIds.length
-      ? supabase.from("workflow_stages").select("id, title, color, is_final, is_blocked, display_order, project_id").in("project_id", projectIds)
-      : supabase.from("workflow_stages").select("id, title, color, is_final, is_blocked, display_order, project_id");
+    const { data: allProjects } = await supabase
+      .from("projects")
+      .select("id, title, due_date")
+      .eq("is_trashed", false);
 
-    const [{ data: acts }, { data: phs }, { data: profs }, { data: projs }, { data: stgs }] = await Promise.all([
+    const visibleProjects = await filterProjects((allProjects || []) as Array<{ id: string; title: string; due_date: string | null }>);
+    const visibleProjectIds = new Set(visibleProjects.map((p) => p.id));
+
+    const scopedProjectIds = projectIds
+      ? projectIds.filter((id) => visibleProjectIds.has(id))
+      : Array.from(visibleProjectIds);
+
+    if (scopedProjectIds.length === 0) {
+      setActivities([]); setDeps([]); setPhases([]); setStages([]);
+      setProjectsMap({});
+      setProjectDeadlines({});
+      return;
+    }
+
+    const actsQ = supabase
+      .from("activities")
+      .select("*")
+      .eq("is_trashed", false)
+      .in("project_id", scopedProjectIds)
+      .order("display_order", { ascending: true });
+
+    const stagesQ = supabase
+      .from("workflow_stages")
+      .select("id, title, color, is_final, is_blocked, display_order, project_id")
+      .in("project_id", scopedProjectIds);
+
+    const [{ data: acts }, { data: phs }, { data: profs }, { data: stgs }] = await Promise.all([
       actsQ,
-      projectIds && projectIds.length
-        ? supabase.from("phases").select("*").in("project_id", projectIds).eq("is_trashed", false).order("display_order", { ascending: true })
-        : supabase.from("phases").select("*").eq("is_trashed", false).order("display_order", { ascending: true }),
+      supabase.from("phases").select("*").in("project_id", scopedProjectIds).eq("is_trashed", false).order("display_order", { ascending: true }),
       supabase.from("profiles").select("id, full_name, sector"),
-      supabase.from("projects").select("id, title, due_date").eq("is_trashed", false),
       stagesQ,
     ]);
     setActivities(acts || []);
@@ -398,7 +421,7 @@ export function ProjectCronogramaPanel({
     setProfiles(map);
     const pm: Record<string, string> = {};
     const pdl: Record<string, string | null> = {};
-    (projs || []).forEach((p: any) => {
+    visibleProjects.forEach((p) => {
       pm[p.id] = p.title;
       pdl[p.id] = p.due_date || null;
     });
@@ -411,7 +434,7 @@ export function ProjectCronogramaPanel({
         .or(`predecessor_id.in.(${ids.join(",")}),successor_id.in.(${ids.join(",")})`);
       setDeps(d || []);
     } else setDeps([]);
-  }, [projectIds]);
+  }, [projectIds, accessLoading, filterProjects]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -447,13 +470,14 @@ export function ProjectCronogramaPanel({
     if (valid.length === 0) return map;
 
     const byId = new Map(valid.map(a => [a.id, a]));
-    const succ = new Map<string, { id: string; lag: number }[]>();
-    const pred = new Map<string, { id: string; lag: number }[]>();
+    const succ = new Map<string, { id: string; lag: number; type: string }[]>();
+    const pred = new Map<string, { id: string; lag: number; type: string }[]>();
     valid.forEach(a => { succ.set(a.id, []); pred.set(a.id, []); });
     deps.forEach(d => {
       if (byId.has(d.predecessor_id) && byId.has(d.successor_id)) {
-        succ.get(d.predecessor_id)!.push({ id: d.successor_id, lag: d.lag_days ?? 0 });
-        pred.get(d.successor_id)!.push({ id: d.predecessor_id, lag: d.lag_days ?? 0 });
+        const type = d.dependency_type || "finish_to_start";
+        succ.get(d.predecessor_id)!.push({ id: d.successor_id, lag: d.lag_days ?? 0, type });
+        pred.get(d.successor_id)!.push({ id: d.predecessor_id, lag: d.lag_days ?? 0, type });
       }
     });
     const dur = new Map<string, number>();
@@ -487,35 +511,74 @@ export function ProjectCronogramaPanel({
 
     const ef = new Map<string, number>();
     const es = new Map<string, number>();
+
+    const forwardConstraint = (type: string, esPred: number, durPred: number, durCur: number, lag: number) => {
+      switch (type) {
+        case "start_to_start":
+          return esPred + lag;
+        case "finish_to_finish":
+          return esPred + durPred + lag - durCur;
+        case "start_to_finish":
+          return esPred + lag - durCur;
+        case "finish_to_start":
+        default:
+          return esPred + durPred + lag;
+      }
+    };
+
     order.forEach(id => {
       const a = byId.get(id)!;
+      const durCur = dur.get(id)!;
       const baseEs = differenceInDays(parseISO(a.start_date!), minDate);
       let earliest = baseEs;
       pred.get(id)!.forEach(p => {
-        const pEf = ef.get(p.id);
-        if (pEf !== undefined) earliest = Math.max(earliest, pEf + p.lag);
+        const esPred = es.get(p.id);
+        if (esPred === undefined) return;
+        const durPred = dur.get(p.id) ?? 1;
+        const candidate = forwardConstraint(p.type, esPred, durPred, durCur, p.lag);
+        earliest = Math.max(earliest, candidate);
       });
       es.set(id, earliest);
-      ef.set(id, earliest + dur.get(id)!);
+      ef.set(id, earliest + durCur);
     });
     const projectEnd = ef.size ? Math.max(...Array.from(ef.values())) : 0;
-    const lf = new Map<string, number>();
     const ls = new Map<string, number>();
+    const lf = new Map<string, number>();
+
+    const backwardConstraint = (type: string, lsSucc: number, durPred: number, durSucc: number, lag: number) => {
+      switch (type) {
+        case "start_to_start":
+          return lsSucc - lag;
+        case "finish_to_finish":
+          return lsSucc + durSucc - durPred - lag;
+        case "start_to_finish":
+          return lsSucc + durSucc - lag;
+        case "finish_to_start":
+        default:
+          return lsSucc - durPred - lag;
+      }
+    };
+
     [...order].reverse().forEach(id => {
       const succs = succ.get(id)!;
-      let latest = projectEnd;
+      const durPred = dur.get(id)!;
+      let latestStart = projectEnd - durPred;
       if (succs.length > 0) {
-        latest = Math.min(...succs.map(s => (ls.get(s.id) ?? projectEnd) - s.lag));
+        latestStart = Math.min(...succs.map(s => {
+          const lsSucc = ls.get(s.id) ?? (projectEnd - (dur.get(s.id) ?? 1));
+          const durSucc = dur.get(s.id) ?? 1;
+          return backwardConstraint(s.type, lsSucc, durPred, durSucc, s.lag);
+        }));
       }
-      lf.set(id, latest);
-      ls.set(id, latest - dur.get(id)!);
+      ls.set(id, latestStart);
+      lf.set(id, latestStart + durPred);
     });
 
     valid.forEach(a => {
       // FT = LS - ES (equivale a LF - EF)
       const ft = Math.max(0, (ls.get(a.id) ?? 0) - (es.get(a.id) ?? 0));
 
-      // FL = min(ES_sucessora - EF_atual - lag)
+      // FL (folga livre) considera o tipo da dependência.
       const successors = succ.get(a.id) || [];
       let fl = ft;
       if (successors.length > 0) {
@@ -523,8 +586,26 @@ export function ProjectCronogramaPanel({
         successors.forEach((s) => {
           const esSucc = es.get(s.id);
           const efCur = ef.get(a.id);
-          if (esSucc === undefined || efCur === undefined) return;
-          const freeCandidate = esSucc - efCur - s.lag;
+          const esCur = es.get(a.id);
+          if (esSucc === undefined || efCur === undefined || esCur === undefined) return;
+          const durCur = dur.get(a.id) ?? 1;
+          const durSucc = dur.get(s.id) ?? 1;
+          let freeCandidate = 0;
+          switch (s.type) {
+            case "start_to_start":
+              freeCandidate = esSucc - (esCur + s.lag);
+              break;
+            case "finish_to_finish":
+              freeCandidate = (esSucc + durSucc) - (esCur + durCur + s.lag);
+              break;
+            case "start_to_finish":
+              freeCandidate = (esSucc + durSucc) - (esCur + s.lag);
+              break;
+            case "finish_to_start":
+            default:
+              freeCandidate = esSucc - efCur - s.lag;
+              break;
+          }
           minFree = Math.min(minFree, freeCandidate);
         });
         if (Number.isFinite(minFree)) fl = Math.max(0, minFree);
@@ -808,9 +889,6 @@ export function ProjectCronogramaPanel({
    * comparador da coluna selecionada e usa `idx` como desempate estável.
    */
   const rows = useMemo(() => {
-    if (!sort) return baseRows;
-    const dir = sort.dir === "asc" ? 1 : -1;
-
     const valueOf = (a: any): any => {
       switch (sort.col) {
         case "id": return shortIdOf(a.id);
@@ -822,7 +900,7 @@ export function ProjectCronogramaPanel({
         case "actualEnd": return a.actual_end_date || null;
         case "variance": {
           const ref = a.baseline_end_date || a.end_date;
-          const real = a.actual_end_date || a.completed_at;
+          const real = a.actual_end_date || null;
           if (!ref || !real) return null;
           return endVariance(real, a.baseline_end_date, a.end_date);
         }
@@ -844,7 +922,7 @@ export function ProjectCronogramaPanel({
       }
     };
 
-    return [...baseRows].sort((x, y) => {
+    const compareRows = (x: { a: any; idx: number; mock: any }, y: { a: any; idx: number; mock: any }) => {
       const av = valueOf(x.a);
       const bv = valueOf(y.a);
       const ne = nullsLast(av, bv);
@@ -861,11 +939,43 @@ export function ProjectCronogramaPanel({
       } else {
         r = String(av).localeCompare(String(bv), "pt-BR", { numeric: true });
       }
-      if (ne === null) r = r * dir;
+      if (ne === null) r = r * (sort.dir === "asc" ? 1 : -1);
       if (r !== 0) return r;
       return x.idx - y.idx;
-    });
-  }, [baseRows, sort, slackMap, profiles, wbsById, progressFor]);
+    };
+
+    const visibleIds = new Set(baseRows.map((row) => row.a.id));
+    const roots = baseRows.filter((row) => !row.a.parent_id || !visibleIds.has(row.a.parent_id));
+    if (!sort) {
+      const byOriginalOrder = [...roots].sort((x, y) => x.idx - y.idx);
+      const ordered: typeof baseRows = [];
+      const visit = (node: { a: any; idx: number; mock: any }) => {
+        ordered.push(node);
+        const children = (childrenByParent.get(node.a.id) || [])
+          .filter((child) => visibleIds.has(child.id))
+          .map((child) => baseRows.find((row) => row.a.id === child.id))
+          .filter((row): row is (typeof baseRows)[number] => !!row)
+          .sort((x, y) => x.idx - y.idx);
+        children.forEach(visit);
+      };
+      byOriginalOrder.forEach(visit);
+      return ordered;
+    }
+
+    const ordered: typeof baseRows = [];
+    const visit = (node: { a: any; idx: number; mock: any }) => {
+      ordered.push(node);
+      const children = (childrenByParent.get(node.a.id) || [])
+        .filter((child) => visibleIds.has(child.id))
+        .map((child) => baseRows.find((row) => row.a.id === child.id))
+        .filter((row): row is (typeof baseRows)[number] => !!row)
+        .sort(compareRows);
+      children.forEach(visit);
+    };
+
+    [...roots].sort(compareRows).forEach(visit);
+    return ordered;
+  }, [baseRows, childrenByParent, sort, slackMap, profiles, wbsById, progressFor]);
 
   const predsOf = (actId: string) => deps.filter((d) => d.successor_id === actId);
 
@@ -1051,9 +1161,6 @@ export function ProjectCronogramaPanel({
               {a.title}
             </button>
           </div>
-          {a.description && (
-            <div className="text-muted-foreground truncate max-w-[360px]" style={{ paddingLeft: depth > 0 ? depth * 12 : 0 }} title={a.description}>{a.description}</div>
-          )}
         </td>
       );
       case "preds": return (
@@ -1064,8 +1171,7 @@ export function ProjectCronogramaPanel({
             <TooltipProvider delayDuration={150}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button onClick={() => goToDependencies(a.project_id)}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary font-mono text-[11px] transition-colors">
+                  <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono text-[11px]">
                     {preds.map((p: any, i: number) => {
                       const lt = LINK_TYPES[p.dependency_type] || LINK_TYPES.finish_to_start;
                       const pact = activityById.get(p.predecessor_id);
@@ -1074,13 +1180,22 @@ export function ProjectCronogramaPanel({
                         : (pact?.project_id ? shortIdOf(pact.project_id) : (indexById.get(p.predecessor_id) ?? "?"));
                       const lag = (p.lag_days ?? 0);
                       return (
-                        <span key={p.id}>
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="inline-flex items-center gap-0.5 hover:underline hover:text-primary/80 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (pact) openFromCronograma(pact);
+                          }}
+                          title={pact ? `Abrir predecessora: ${pact.title}` : "Predecessora indisponível"}
+                        >
                           {i > 0 && ";"}
                           {predecessorRef}{lt.short !== "TI" ? lt.short : ""}{lag ? (lag > 0 ? `+${lag}d` : `${lag}d`) : ""}
-                        </span>
+                        </button>
                       );
                     })}
-                  </button>
+                  </div>
                 </TooltipTrigger>
                 <TooltipContent side="right" className="max-w-xs">
                   <div className="space-y-1.5">
@@ -1095,14 +1210,23 @@ export function ProjectCronogramaPanel({
                         ? `EAP ${eap}`
                         : (pact?.project_id ? `ID Projeto ${pact.project_id}` : "Sem referência");
                       return (
-                        <div key={p.id} className="text-[11px]">
-                          <div className="font-mono" title={predecessorRefTitle}>{predecessorRef} • {lt.label}</div>
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="w-full text-left rounded px-1 py-1 hover:bg-muted/60 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (pact) openFromCronograma(pact);
+                          }}
+                          title={pact ? `Abrir predecessora: ${pact.title}` : predecessorRefTitle}
+                        >
+                          <div className="font-mono">{predecessorRef} • {lt.label}</div>
                           <div className="text-muted-foreground">{pact?.title || "—"}</div>
                           <div className="text-muted-foreground">{lt.desc}</div>
                           {p.lag_days != null && p.lag_days !== 0 && (
                             <div className="text-muted-foreground">Lag: {p.lag_days}d</div>
                           )}
-                        </div>
+                        </button>
                       );
                     })}
                     <button
@@ -1171,9 +1295,9 @@ export function ProjectCronogramaPanel({
         </td>
       );
       case "actualStart": return <td className="px-2 py-1.5 text-center text-muted-foreground">{formatDateBR(a.actual_start_date || null)}</td>;
-      case "actualEnd": return <td className="px-2 py-1.5 text-center text-muted-foreground">{formatDateBR(a.actual_end_date || a.completed_at || null)}</td>;
+      case "actualEnd": return <td className="px-2 py-1.5 text-center text-muted-foreground">{formatDateBR(a.actual_end_date || null)}</td>;
       case "variance": {
-        const real = a.actual_end_date || a.completed_at;
+        const real = a.actual_end_date || null;
         const v = endVariance(real, a.baseline_end_date, a.end_date);
         if (v === null) return <td className="px-2 py-1.5 text-center text-muted-foreground">—</td>;
         const tone = varianceTone(v);
@@ -1286,14 +1410,14 @@ export function ProjectCronogramaPanel({
 
   const TableView = (
     <div className="border rounded-lg overflow-auto bg-card">
-      <table className="w-full text-xs">
-        <thead className="bg-primary/95 text-primary-foreground sticky top-0 z-10">
-          <DndContext
-            sensors={headerSensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleHeaderDragStart}
-            onDragEnd={handleHeaderDragEnd}
-          >
+      <DndContext
+        sensors={headerSensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleHeaderDragStart}
+        onDragEnd={handleHeaderDragEnd}
+      >
+        <table className="w-full text-xs">
+          <thead className="bg-primary/95 text-primary-foreground sticky top-0 z-10">
             <SortableContext items={visibleCols} strategy={horizontalListSortingStrategy}>
               <tr className="[&>th]:px-2 [&>th]:py-2 [&>th]:font-semibold [&>th]:text-center [&>th]:border-r [&>th]:border-primary-foreground/20 [&>th:last-child]:border-r-0">
                 {visibleCols.map((k) => (
@@ -1308,49 +1432,49 @@ export function ProjectCronogramaPanel({
                 ))}
               </tr>
             </SortableContext>
-            <DragOverlay>
-              {draggingHeaderCol ? (
-                <div className="px-3 py-2 rounded-md border border-primary/30 bg-card/90 shadow-lg text-xs font-semibold text-foreground">
-                  {COL_LABELS[draggingHeaderCol]}
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        </thead>
-        <tbody>
-          {rows.length === 0 && (
-            <tr><td colSpan={visibleCols.length} className="text-center py-10 text-muted-foreground">Nenhuma atividade encontrada.</td></tr>
-          )}
-          {rows.map(({ a, idx, mock }) => {
-            const id = indexById.get(a.id) ?? shortIdOf(a.id);
-            const dur = workDays(a.start_date, a.end_date);
-            const progress = progressFor(a);
-            const preds = predsOf(a.id);
-            const responsible = resolveResponsible(a.assigned_to);
-            const depth = depthById.get(a.id) ?? 0;
-            const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
-            const stageColor = stageInfo?.color;
-            const isStageFinal = stageInfo?.is_final;
-            const isOverdue = isOverdueByRule(a, !!isStageFinal);
-            const ctx = { a, idx, mock, id, dur, progress, preds, responsible, depth, isOverdue };
-            return (
-              <tr
-                key={a.id}
-                className={cn(
-                  "border-b hover:bg-muted/40 transition-colors",
-                  isStageFinal && "opacity-90",
-                  isOverdue && "animate-pulse-overdue"
-                )}
-                style={stageColor ? { borderLeft: `3px solid ${stageColor}` } : undefined}
-              >
-                {visibleCols.map((k) => (
-                  <Fragment key={k}>{renderCell(k, ctx)}</Fragment>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr><td colSpan={visibleCols.length} className="text-center py-10 text-muted-foreground">Nenhuma atividade encontrada.</td></tr>
+            )}
+            {rows.map(({ a, idx, mock }, rowIdx) => {
+              const id = indexById.get(a.id) ?? shortIdOf(a.id);
+              const dur = workDays(a.start_date, a.end_date);
+              const progress = progressFor(a);
+              const preds = predsOf(a.id);
+              const responsible = resolveResponsible(a.assigned_to);
+              const depth = depthById.get(a.id) ?? 0;
+              const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
+              const stageColor = stageInfo?.color;
+              const isStageFinal = stageInfo?.is_final;
+              const isOverdue = isOverdueByRule(a, !!isStageFinal);
+              const ctx = { a, idx, mock, id, dur, progress, preds, responsible, depth, isOverdue };
+              return (
+                <tr
+                  key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`}
+                  className={cn(
+                    "border-b hover:bg-muted/40 transition-colors",
+                    isStageFinal && "opacity-90",
+                    isOverdue && "animate-pulse-overdue"
+                  )}
+                  style={stageColor ? { borderLeft: `3px solid ${stageColor}` } : undefined}
+                >
+                  {visibleCols.map((k) => (
+                    <Fragment key={k}>{renderCell(k, ctx)}</Fragment>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <DragOverlay>
+          {draggingHeaderCol ? (
+            <div className="px-3 py-2 rounded-md border border-primary/30 bg-card/90 shadow-lg text-xs font-semibold text-foreground">
+              {COL_LABELS[draggingHeaderCol]}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
       <div className="px-3 py-2 text-[10px] text-muted-foreground border-t flex items-center gap-3 flex-wrap">
         <span className="inline-flex items-center gap-1">
           <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/40 text-[10px] py-0 px-1.5 font-mono">0d</Badge>
@@ -1416,7 +1540,7 @@ export function ProjectCronogramaPanel({
                   Atividade
                 </div>
               </div>
-              {ganttData.all.map(({ a }) => {
+              {ganttData.all.map(({ a }, rowIdx) => {
                 const id = indexById.get(a.id);
                 const isCritical = criticalSet.has(a.id);
                 const noDates = !a.start_date || !a.end_date;
@@ -1432,7 +1556,7 @@ export function ProjectCronogramaPanel({
                 const hasChildren = (childrenByParent.get(a.id) || []).length > 0;
                 const collapsed = collapsedPhases.has(a.id);
                 return (
-                  <div key={a.id}
+                  <div key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`}
                     className={cn(
                       "border-b px-3 flex items-center gap-2 hover:bg-muted/40",
                       isOverdue && "animate-pulse-overdue"
@@ -1482,9 +1606,6 @@ export function ProjectCronogramaPanel({
                         {isOverdue && <AlertCircle className="h-3 w-3 text-destructive animate-pulse shrink-0" />}
                         {isCritical && <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />}
                         {noDates && <CalendarOff className="h-3 w-3 text-muted-foreground shrink-0" />}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground truncate">
-                        {showProjectColumn && projTitle ? `${projTitle} • ` : ""}{responsible}
                       </div>
                     </div>
                   </div>
@@ -1570,7 +1691,7 @@ export function ProjectCronogramaPanel({
                   );
                 })()}
 
-                {ganttData.all.map(({ a, s, e }) => {
+                {ganttData.all.map(({ a, s, e }, rowIdx) => {
                   const depth = depthById.get(a.id) ?? 0;
                   const hierarchyOffset = Math.min(24, depth * 6);
                   if (!s || !e) {
@@ -1579,7 +1700,7 @@ export function ProjectCronogramaPanel({
                     );
                     const left = (todayIdx >= 0 ? todayIdx : 0) * DAY_W + hierarchyOffset;
                     return (
-                      <div key={a.id} className="relative border-b bg-muted/10" style={{ height: ROW_H }}>
+                      <div key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`} className="relative border-b bg-muted/10" style={{ height: ROW_H }}>
                         <div className="absolute top-1/2 -translate-y-1/2 inline-flex items-center gap-1 px-2 py-0.5 rounded border border-dashed border-muted-foreground/40 bg-card text-[10px] text-muted-foreground"
                           style={{ left: Math.max(0, left - 60) }}>
                           <CalendarOff className="h-3 w-3" />
@@ -1602,7 +1723,7 @@ export function ProjectCronogramaPanel({
                   const isSubactivity = !isPhase && !!a.parent_id;
 
                   return (
-                    <div key={a.id} className="relative border-b" style={{ height: ROW_H }}>
+                    <div key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`} className="relative border-b" style={{ height: ROW_H }}>
                       <TooltipProvider delayDuration={150}>
                         <Tooltip>
                           <TooltipTrigger asChild>

@@ -229,6 +229,7 @@ export const ChangeRequestsManager = ({ projectId, projectOwner, onChanged }: Pr
         if (newOnes.length > 0) {
           await supabase.from("notifications").insert(newOnes.map(_uid => ({
             project_id: projectId,
+            target_user_id: _uid,
             type: "change_request_decision",
             title: "🔔 Você foi designado como decisor",
             message: `Solicitação de mudança "${title.trim()}" aguarda sua aprovação.`,

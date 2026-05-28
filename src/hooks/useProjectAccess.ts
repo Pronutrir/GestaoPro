@@ -3,6 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
 
+const ACCESS_CACHE_TTL_MS = 60_000;
+const memberIdsCacheByUser = new Map<string, { ids: Set<string>; ts: number }>();
+const inflightByUser = new Map<string, Promise<Set<string>>>();
+
 /**
  * Retorna os projetos visíveis para o usuário atual conforme o modelo v2.
  * Somente admins veem tudo. Usuários comuns veem apenas projetos onde são
@@ -12,6 +16,7 @@ export const useProjectAccess = () => {
   const { user, isAdmin, isGestor, canManage, profile, loading } = useAuth();
   const [memberProjectIds, setMemberProjectIds] = useState<Set<string>>(new Set());
   const [membershipsLoading, setMembershipsLoading] = useState(true);
+  const lastRefreshRef = useRef(0);
 
   const loadMemberships = useCallback(async () => {
     if (loading) return;
@@ -22,60 +27,89 @@ export const useProjectAccess = () => {
       return;
     }
 
-    setMembershipsLoading(true);
-
-    const candidates = buildUserCandidates([
-      profile?.full_name,
-      profile?.email,
-      user?.email,
-    ]);
-
-    const membersPromise = supabase
-      .from("project_members")
-      .select("project_id")
-      .eq("user_id", user.id);
-
-    const projectsPromise = candidates.length > 0
-      ? supabase
-          .from("projects")
-          .select("id, owner")
-          .eq("is_trashed", false)
-      : Promise.resolve({ data: [] as any[], error: null });
-
-    const activitiesPromise = candidates.length > 0
-      ? supabase
-          .from("activities")
-          .select("project_id, assigned_to, participants")
-          .eq("is_trashed", false)
-      : Promise.resolve({ data: [] as any[], error: null });
-
-    const [membersRes, projectsRes, activitiesRes] = await Promise.all([
-      membersPromise,
-      projectsPromise,
-      activitiesPromise,
-    ]);
-
-    const ids = new Set<string>();
-    (membersRes.data || []).forEach((m: any) => ids.add(m.project_id));
-
-    if (candidates.length > 0) {
-      (projectsRes.data || []).forEach((p: any) => {
-        const ownerMatch = matchesIdentity(p.owner, candidates);
-        if (ownerMatch) ids.add(p.id);
-      });
-
-      (activitiesRes.data || []).forEach((a: any) => {
-        const isAssignedActor = matchesIdentity(a.assigned_to, candidates);
-        const isParticipantActor = Array.isArray(a.participants) && anyMatchesIdentity(a.participants, candidates);
-
-        if (isAssignedActor || isParticipantActor) {
-          ids.add(a.project_id);
-        }
-      });
+    const cached = memberIdsCacheByUser.get(user.id);
+    if (cached && Date.now() - cached.ts < ACCESS_CACHE_TTL_MS) {
+      setMemberProjectIds(new Set(cached.ids));
+      setMembershipsLoading(false);
+      return;
     }
 
-    setMemberProjectIds(ids);
-    setMembershipsLoading(false);
+    setMembershipsLoading(true);
+
+    try {
+      let inflight = inflightByUser.get(user.id);
+      if (!inflight) {
+        inflight = (async () => {
+          const candidates = buildUserCandidates([
+            profile?.full_name,
+            profile?.email,
+            user?.email,
+          ]);
+
+          const membersPromise = supabase
+            .from("project_members")
+            .select("project_id, invitation_status")
+            .eq("user_id", user.id);
+
+          const projectsPromise = candidates.length > 0
+            ? supabase
+                .from("projects")
+                .select("id, owner")
+                .eq("is_trashed", false)
+            : Promise.resolve({ data: [] as any[], error: null });
+
+          const activitiesPromise = candidates.length > 0
+            ? supabase
+                .from("activities")
+                .select("project_id, assigned_to, participants")
+                .eq("is_trashed", false)
+            : Promise.resolve({ data: [] as any[], error: null });
+
+          const [membersRes, projectsRes, activitiesRes] = await Promise.all([
+            membersPromise,
+            projectsPromise,
+            activitiesPromise,
+          ]);
+
+          const ids = new Set<string>();
+          (membersRes.data || []).forEach((m: any) => {
+            const status = (m.invitation_status || "accepted").toLowerCase();
+            if (status !== "declined") ids.add(m.project_id);
+          });
+
+          if (candidates.length > 0) {
+            (projectsRes.data || []).forEach((p: any) => {
+              const ownerMatch = matchesIdentity(p.owner, candidates);
+              if (ownerMatch) ids.add(p.id);
+            });
+
+            (activitiesRes.data || []).forEach((a: any) => {
+              const isAssignedActor = matchesIdentity(a.assigned_to, candidates);
+              const isParticipantActor = Array.isArray(a.participants) && anyMatchesIdentity(a.participants, candidates);
+
+              if (isAssignedActor || isParticipantActor) {
+                ids.add(a.project_id);
+              }
+            });
+          }
+
+          return ids;
+        })().finally(() => {
+          inflightByUser.delete(user.id);
+        });
+
+        inflightByUser.set(user.id, inflight);
+      }
+
+      const ids = await inflight;
+      memberIdsCacheByUser.set(user.id, { ids: new Set(ids), ts: Date.now() });
+      setMemberProjectIds(new Set(ids));
+    } catch (error) {
+      console.error("[useProjectAccess] loadMemberships failed", error);
+      setMemberProjectIds(new Set());
+    } finally {
+      setMembershipsLoading(false);
+    }
   }, [isAdmin, loading, user?.id, profile?.email, profile?.full_name]);
 
   useEffect(() => {
@@ -94,6 +128,9 @@ export const useProjectAccess = () => {
     if (loading || isAdmin || !user?.id) return;
 
     const refresh = () => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < 5_000) return;
+      lastRefreshRef.current = now;
       loadMembershipsRef.current();
     };
 
@@ -103,8 +140,6 @@ export const useProjectAccess = () => {
         refresh();
       }
     };
-    const intervalId = window.setInterval(refresh, 10000);
-
     // Nome único por mount: evita o singleton interno do supabase-js
     // (mesmo nome após remountagem rapida retorna o canal antigo já "joined"
     // e .on() lança "cannot add postgres_changes callbacks after subscribe()").
@@ -116,16 +151,6 @@ export const useProjectAccess = () => {
         { event: "*", schema: "public", table: "project_members", filter: `user_id=eq.${user.id}` },
         refresh
       )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "projects" },
-        refresh
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activities" },
-        refresh
-      )
       .subscribe();
 
     window.addEventListener("focus", handleFocus);
@@ -134,16 +159,15 @@ export const useProjectAccess = () => {
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
   }, [isAdmin, loading, user?.id]);
 
-  const filterProjects = async <T extends { id: string }>(projects: T[]): Promise<T[]> => {
+  const filterProjects = useCallback(async <T extends { id: string }>(projects: T[]): Promise<T[]> => {
     if (isAdmin || !user) return projects;
 
     return projects.filter((p) => memberProjectIds.has(p.id));
-  };
+  }, [isAdmin, memberProjectIds, user]);
 
   return { filterProjects, isAdmin, isGestor, canManage, user, loading: loading || membershipsLoading };
 };

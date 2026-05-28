@@ -23,9 +23,29 @@ export const NotificationBell = () => {
   const { user, isAdmin, profile } = useAuth();
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [memberProjectIds, setMemberProjectIds] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [declineFor, setDeclineFor] = useState<string | null>(null);
   const [declineReason, setDeclineReason] = useState("");
+
+  useEffect(() => {
+    const loadMemberProjects = async () => {
+      const uid = user?.id;
+      if (!uid) {
+        setMemberProjectIds([]);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("project_members")
+        .select("project_id")
+        .eq("user_id", uid);
+
+      setMemberProjectIds((data || []).map((row: any) => row.project_id).filter(Boolean));
+    };
+
+    loadMemberProjects();
+  }, [user?.id]);
 
   const fetchNotifications = async () => {
     const uid = user?.id;
@@ -50,6 +70,7 @@ export const NotificationBell = () => {
 
     const filtered = (data as any[]).filter((n) => {
       if (n.target_user_id && n.target_user_id === uid) return true;
+      if (n.project_id && memberProjectIds.includes(n.project_id)) return true;
       // Sem atividade vinculada e sem alvo específico → não exibe para usuários comuns
       if (!n.activity_id) return false;
       const a = n.activities;
@@ -77,7 +98,7 @@ export const NotificationBell = () => {
 
     return () => { supabase.removeChannel(channel); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, isAdmin, profile]);
+  }, [user?.id, isAdmin, profile, memberProjectIds]);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
   const overdueCount = notifications.filter((n) => !n.is_read && n.type === "overdue").length;

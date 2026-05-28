@@ -270,6 +270,7 @@ interface Activity {
   progress_flag?: number | null;
   blocked_since?: string | null;
   blocked_days_total?: number | null;
+  created_by?: string | null;
 }
 
 interface ActivityKanbanProps {
@@ -283,6 +284,7 @@ interface ActivityKanbanProps {
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   isAdmin?: boolean;
   canCreate?: boolean;
+  projectLocked?: boolean;
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;
   /** Mapa de id de perfil → nome completo para resolução de assigned_to */
@@ -1706,12 +1708,20 @@ export const ActivityKanban = ({
   onToggleActivity,
   isAdmin = false,
   canCreate = false,
+  projectLocked = false,
   isQualityProject = false,
   onOpenCreateTask,
   profilesMap = {},
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
+  const showProjectLockedToast = (action: string) => {
+    toast({
+      title: "Projeto concluído",
+      description: `Reabra o projeto para ${action}.`,
+      variant: "destructive",
+    });
+  };
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
@@ -1778,6 +1788,20 @@ export const ActivityKanban = ({
     },
     [myId, myName]
   );
+
+  const canMutateActivity = useCallback((a?: Activity | null) => {
+    if (!a) return false;
+    if (isAdmin) return true;
+    if (myId && a.created_by === myId) return true;
+    if (myId && a.assigned_to === myId) return true;
+    if (myName) {
+      const assignedRaw = (a.assigned_to || "").trim().toLowerCase();
+      const resolvedAssigned = a.assigned_to ? (profilesMap[a.assigned_to] || "").trim().toLowerCase() : "";
+      if (assignedRaw && assignedRaw === myName) return true;
+      if (resolvedAssigned && resolvedAssigned === myName) return true;
+    }
+    return false;
+  }, [isAdmin, myId, myName, profilesMap]);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
@@ -1974,6 +1998,15 @@ export const ActivityKanban = ({
   };
 
   const handleMoveToBacklog = async (activityId: string) => {
+    if (projectLocked) {
+      showProjectLockedToast("mover atividades");
+      return;
+    }
+    const activity = activities.find((a) => a.id === activityId);
+    if (!canMutateActivity(activity)) {
+      toast({ title: "Somente o criador ou responsável da atividade pode mover para backlog.", variant: "destructive" });
+      return;
+    }
     const backlogStage = stages.find((s) => s.display_order === 0);
     if (!backlogStage) {
       toast({ title: "Etapa de Backlog não encontrada", variant: "destructive" });
@@ -2105,6 +2138,10 @@ export const ActivityKanban = ({
   }, [activities, stages, phases, optimisticMoves, onlyMine, isMineActivity]);
 
   const handleCreateStory = async () => {
+    if (projectLocked) {
+      showProjectLockedToast("criar histórias");
+      return;
+    }
     if (!createStoryActivity || !createStoryTitle.trim()) return;
     setCreateStoryLoading(true);
 
@@ -2159,6 +2196,12 @@ export const ActivityKanban = ({
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (projectLocked) {
+      setActiveId(null);
+      setDragType(null);
+      showProjectLockedToast("mover atividades");
+      return;
+    }
     setActiveId(null);
     setDragType(null);
     const { active, over } = event;
@@ -2222,6 +2265,10 @@ export const ActivityKanban = ({
     if (!targetStageId) return;
 
     const draggedActivity = activities.find((a) => a.id === activityId);
+    if (!canMutateActivity(draggedActivity)) {
+      toast({ title: "Somente o criador ou responsável da atividade pode mover no kanban.", variant: "destructive" });
+      return;
+    }
     const currentStageId = draggedActivity?.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
     if (targetStageId === currentStageId) return;
 
@@ -2713,7 +2760,15 @@ export const ActivityKanban = ({
                       hasStory={storyLinkedActivities.has(activity.id)}
                       storyCount={storyLinkedActivities.get(activity.id) || 0}
                       onStoryClick={() => { setStoryDrawerActivityId(activity.id); setStoryDrawerOpen(true); }}
-                      onCreateStory={() => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
+                      onCreateStory={() => {
+                        if (projectLocked) {
+                          showProjectLockedToast("criar histórias");
+                          return;
+                        }
+                        setCreateStoryActivity(activity);
+                        setCreateStoryTitle("");
+                        setCreateStoryNarrative("");
+                      }}
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
                       progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id)}
@@ -2748,7 +2803,15 @@ export const ActivityKanban = ({
                 canCreate={canCreate}
                 onResizeStart={handleResizeStart}
                 onStoryClick={(activityId) => { setStoryDrawerActivityId(activityId); setStoryDrawerOpen(true); }}
-                onCreateStory={(activity) => { setCreateStoryActivity(activity); setCreateStoryTitle(""); setCreateStoryNarrative(""); }}
+                onCreateStory={(activity) => {
+                  if (projectLocked) {
+                    showProjectLockedToast("criar histórias");
+                    return;
+                  }
+                  setCreateStoryActivity(activity);
+                  setCreateStoryTitle("");
+                  setCreateStoryNarrative("");
+                }}
                 isQualityProject={isQualityProject}
                 onOpenCreateTask={onOpenCreateTask}
                 subActivityCounts={subActivityCounts}
@@ -2840,6 +2903,7 @@ export const ActivityKanban = ({
       <UserStoryDrawer
         activityId={storyDrawerActivityId}
         projectId={projectId}
+        projectLocked={projectLocked}
         open={storyDrawerOpen}
         onOpenChange={setStoryDrawerOpen}
         onStoriesChanged={() => {

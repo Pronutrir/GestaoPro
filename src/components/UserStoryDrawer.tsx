@@ -32,14 +32,22 @@ interface UserStory {
 interface Props {
   activityId: string | null;
   projectId: string;
+  projectLocked?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onStoriesChanged?: () => void;
 }
 
-export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onStoriesChanged }: Props) => {
+export const UserStoryDrawer = ({ activityId, projectId, projectLocked = false, open, onOpenChange, onStoriesChanged }: Props) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
+  const showProjectLockedToast = (action: string) => {
+    toast({
+      title: "Projeto concluído",
+      description: `Reabra o projeto para ${action}.`,
+      variant: "destructive",
+    });
+  };
   const [stories, setStories] = useState<UserStory[]>([]);
   const [phaseName, setPhaseName] = useState("");
   const [activityName, setActivityName] = useState("");
@@ -82,6 +90,10 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
   }, [open, activityId, projectId]);
 
   const startEdit = (story: UserStory) => {
+    if (projectLocked) {
+      showProjectLockedToast("editar histórias");
+      return;
+    }
     setEditingId(story.id);
     setEditForm({ title: story.title || "", narrative: story.narrative || "", image_url: story.image_url });
   };
@@ -91,6 +103,10 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
   };
 
   const handleSaveEdit = async () => {
+    if (projectLocked) {
+      showProjectLockedToast("salvar histórias");
+      return;
+    }
     if (!editingId || !editForm.title.trim()) return;
     const { error } = await supabase.from("user_stories").update({
       title: editForm.title.trim(),
@@ -108,6 +124,10 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
   };
 
   const handleDelete = async (id: string) => {
+    if (projectLocked) {
+      showProjectLockedToast("excluir histórias");
+      return;
+    }
     const ok = await appConfirm({
       title: "Excluir história",
       description: "Excluir esta história?",
@@ -126,6 +146,10 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (projectLocked) {
+      showProjectLockedToast("alterar histórias");
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
@@ -214,7 +238,7 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
                   <div className="space-y-3">
                     <div className="space-y-1">
                       <Label className="text-xs">Título</Label>
-                      <Input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className="h-8 text-sm" />
+                      <Input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className="h-8 text-sm" disabled={projectLocked} />
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
@@ -237,6 +261,7 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
                         rows={6}
                         className="min-h-[140px] max-h-[600px] text-sm leading-relaxed resize-y"
                         placeholder="Descreva o contexto, motivações e detalhes da história..."
+                        disabled={projectLocked}
                       />
                     </div>
                     <div className="space-y-1">
@@ -244,7 +269,7 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
                       {editForm.image_url ? (
                         <div className="relative">
                           <img src={editForm.image_url} alt="Preview" className="rounded-lg border border-border max-h-32 w-full object-cover" />
-                          <Button size="icon" variant="destructive" className="absolute top-1 right-1 h-5 w-5" onClick={() => setEditForm({ ...editForm, image_url: "" })}>
+                          <Button size="icon" variant="destructive" className="absolute top-1 right-1 h-5 w-5" onClick={() => setEditForm({ ...editForm, image_url: "" })} disabled={projectLocked}>
                             <X className="w-3 h-3" />
                           </Button>
                         </div>
@@ -253,18 +278,19 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
                           className="w-full border border-dashed border-border rounded-lg p-3 text-xs text-muted-foreground hover:bg-muted/40 transition-colors"
+                          disabled={projectLocked}
                         >
                           <Upload className="w-4 h-4 mx-auto mb-1" />
                           {uploading ? "Carregando..." : "Anexar imagem"}
                         </button>
                       )}
-                      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={projectLocked} />
                     </div>
                     <div className="flex items-center gap-2 justify-end">
-                      <Button size="sm" variant="outline" onClick={cancelEdit} className="h-7 text-xs">
+                      <Button size="sm" variant="outline" onClick={cancelEdit} className="h-7 text-xs" disabled={projectLocked}>
                         <X className="w-3 h-3 mr-1" /> Cancelar
                       </Button>
-                      <Button size="sm" onClick={handleSaveEdit} disabled={!editForm.title.trim()} className="h-7 text-xs">
+                      <Button size="sm" onClick={handleSaveEdit} disabled={projectLocked || !editForm.title.trim()} className="h-7 text-xs">
                         <Check className="w-3 h-3 mr-1" /> Salvar
                       </Button>
                     </div>
@@ -274,10 +300,10 @@ export const UserStoryDrawer = ({ activityId, projectId, open, onOpenChange, onS
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-semibold text-foreground flex-1 min-w-0">{story.title || "Sem título"}</p>
                       <div className="flex items-center gap-0.5 shrink-0">
-                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit(story)}>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit(story)} disabled={projectLocked}>
                           <Pencil className="w-3 h-3" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDelete(story.id)}>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDelete(story.id)} disabled={projectLocked}>
                           <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>

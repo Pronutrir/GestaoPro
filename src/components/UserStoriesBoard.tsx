@@ -55,11 +55,18 @@ interface UserStory {
 interface Phase { id: string; title: string; display_order: number | null; }
 interface Activity { id: string; title: string; phase_id: string | null; workflow_stage_id?: string | null; }
 
-interface Props { projectId: string; }
+interface Props { projectId: string; projectLocked?: boolean; }
 
-export const UserStoriesBoard = ({ projectId }: Props) => {
+export const UserStoriesBoard = ({ projectId, projectLocked = false }: Props) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
+  const showProjectLockedToast = (action: string) => {
+    toast({
+      title: "Projeto concluído",
+      description: `Reabra o projeto para ${action}.`,
+      variant: "destructive",
+    });
+  };
   const [stories, setStories] = useState<UserStory[]>([]);
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -94,7 +101,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   const fetchPhasesAndActivities = async () => {
     const [{ data: ph }, { data: act }] = await Promise.all([
       supabase.from("phases").select("id, title, display_order").eq("project_id", projectId).eq("is_trashed", false).order("display_order"),
-      supabase.from("activities").select("id, title, phase_id, workflow_stage_id").eq("project_id", projectId).order("title"),
+      supabase.from("activities").select("id, title, phase_id, workflow_stage_id").eq("project_id", projectId).eq("is_trashed", false).order("title"),
     ]);
     if (ph) setPhases(ph);
     if (act) setActivities(act);
@@ -110,12 +117,20 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
     });
 
   const openCreateDialog = () => {
+    if (projectLocked) {
+      showProjectLockedToast("criar histórias");
+      return;
+    }
     setEditingStory(null);
     setForm({ title: "", narrative: "", image_url: null, phase_id: null, activity_id: null });
     setDialogOpen(true);
   };
 
   const openEditDialog = (story: UserStory) => {
+    if (projectLocked) {
+      showProjectLockedToast("editar histórias");
+      return;
+    }
     setEditingStory(story);
     setForm({
       title: story.title || "",
@@ -126,6 +141,10 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (projectLocked) {
+      showProjectLockedToast("alterar histórias");
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
@@ -143,6 +162,10 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleSave = async () => {
+    if (projectLocked) {
+      showProjectLockedToast("salvar histórias");
+      return;
+    }
     if (!form.title.trim()) {
       toast({ title: "Preencha o título", variant: "destructive" });
       return;
@@ -171,6 +194,10 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleDelete = async (id: string) => {
+    if (projectLocked) {
+      showProjectLockedToast("excluir histórias");
+      return;
+    }
     const ok = await appConfirm({
       title: "Excluir história",
       description: "Excluir esta história?",
@@ -184,6 +211,10 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleMoveStory = async (storyId: string, newStageId: string) => {
+    if (projectLocked) {
+      showProjectLockedToast("mover histórias");
+      return;
+    }
     const story = stories.find((item) => item.id === storyId);
     setStories(prev => prev.map(s => s.id === storyId ? { ...s, stage_id: newStageId } : s));
 
@@ -201,10 +232,15 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
   };
 
   const handleDragStart = (event: DragStartEvent) => {
+    if (projectLocked) return;
     setActiveStory(stories.find(s => s.id === event.active.id) || null);
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (projectLocked) {
+      setActiveStory(null);
+      return;
+    }
     setActiveStory(null);
     const { active, over } = event;
     if (!over) return;
@@ -240,7 +276,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
           <Badge variant="secondary" className="text-xs">{stories.length}</Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={openCreateDialog} className="gap-1.5">
+          <Button size="sm" onClick={openCreateDialog} className="gap-1.5" disabled={projectLocked}>
             <Plus className="w-4 h-4" /> Nova História
           </Button>
         </div>
@@ -255,6 +291,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
               <DroppableColumn key={stage.id} stageId={stage.id} color={stage.color} label={stage.title} count={stageStories.length}>
                 {stageStories.map(story => (
                   <DraggableStoryCard key={story.id} story={story} stages={stages} phases={phases} activities={activities}
+                    locked={projectLocked}
                     onEdit={() => openEditDialog(story)} onDelete={() => handleDelete(story.id)}
                     onMove={(stageId) => handleMoveStory(story.id, stageId)} />
                 ))}
@@ -288,7 +325,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Fase</Label>
-                  <Select value={form.phase_id || "none"} onValueChange={v => setForm({ ...form, phase_id: v === "none" ? null : v, activity_id: null })}>
+                  <Select value={form.phase_id || "none"} onValueChange={v => setForm({ ...form, phase_id: v === "none" ? null : v, activity_id: null })} disabled={projectLocked}>
                     <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>
@@ -298,7 +335,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Atividade</Label>
-                  <Select value={form.activity_id || "none"} onValueChange={v => setForm({ ...form, activity_id: v === "none" ? null : v })}>
+                  <Select value={form.activity_id || "none"} onValueChange={v => setForm({ ...form, activity_id: v === "none" ? null : v })} disabled={projectLocked}>
                     <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>
@@ -317,7 +354,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                 <AIAssistButton value={form.title} onChange={(v) => setForm({ ...form, title: v })} context="story_title" />
               </div>
               <Input placeholder="Título da história..." value={form.title}
-                onChange={e => setForm({ ...form, title: e.target.value })} autoFocus />
+                onChange={e => setForm({ ...form, title: e.target.value })} autoFocus disabled={projectLocked} />
             </div>
 
             <div className="space-y-2">
@@ -327,7 +364,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
               </div>
               <Textarea placeholder="Conte a história com mais detalhes..." value={form.narrative}
                 onChange={e => setForm({ ...form, narrative: e.target.value })} rows={4} autoResize
-                className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" />
+                className="w-full min-w-0 break-words whitespace-pre-wrap [overflow-wrap:anywhere]" disabled={projectLocked} />
             </div>
 
             <div className="space-y-2">
@@ -336,16 +373,16 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
                 <div className="relative group">
                   <img src={form.image_url} alt="Story" className="w-full max-h-48 object-cover rounded-lg border border-border" />
                   <Button size="icon" variant="destructive" className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => setForm({ ...form, image_url: null })}><X className="w-4 h-4" /></Button>
+                    onClick={() => setForm({ ...form, image_url: null })} disabled={projectLocked}><X className="w-4 h-4" /></Button>
                 </div>
               ) : (
                 <button type="button" onClick={() => fileInputRef.current?.click()}
-                  className="w-full border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 hover:bg-accent/30 transition-colors" disabled={uploading}>
+                  className="w-full border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 hover:bg-accent/30 transition-colors" disabled={uploading || projectLocked}>
                   <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
                   <p className="text-sm text-muted-foreground">{uploading ? "Carregando..." : "Clique para anexar uma imagem"}</p>
                 </button>
               )}
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={projectLocked} />
             </div>
 
           </div>
@@ -359,7 +396,7 @@ export const UserStoriesBoard = ({ projectId }: Props) => {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>{editingStory ? "Salvar" : "Criar História"}</Button>
+            <Button onClick={handleSave} disabled={projectLocked}>{editingStory ? "Salvar" : "Criar História"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -386,17 +423,18 @@ const DroppableColumn = ({ stageId, color, label, count, children }: {
 };
 
 /* ── Draggable Story Card ── */
-const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelete, onMove }: {
+const DraggableStoryCard = ({ story, stages, phases, activities, locked = false, onEdit, onDelete, onMove }: {
   story: UserStory; stages: WorkflowStage[]; phases: Phase[]; activities: Activity[];
+  locked?: boolean;
   onEdit: () => void; onDelete: () => void; onMove: (stageId: string) => void;
 }) => {
   const [showMenu, setShowMenu] = useState(false);
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: story.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: story.id, disabled: locked });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
 
   return (
     <Card ref={setNodeRef} style={style}
-      className="p-3 space-y-2 cursor-pointer hover:shadow-md transition-shadow group border-border/60" onClick={onEdit}>
+      className="p-3 space-y-2 cursor-pointer hover:shadow-md transition-shadow group border-border/60" onClick={() => { if (!locked) onEdit(); }}>
       <div className="flex items-start justify-between gap-1 min-w-0">
         <div {...attributes} {...listeners} className="shrink-0 cursor-grab active:cursor-grabbing pt-0.5 touch-none">
           <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
@@ -407,7 +445,7 @@ const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelet
           </p>
         </div>
         <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive"
+          <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" disabled={locked}
             onClick={e => { e.stopPropagation(); onDelete(); }}><Trash2 className="w-3 h-3" /></Button>
         </div>
       </div>
@@ -429,7 +467,7 @@ const DraggableStoryCard = ({ story, stages, phases, activities, onEdit, onDelet
       <div className="flex items-center justify-between gap-1">
         <div className="flex-1" />
         <div className="relative">
-          <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100"
+          <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100" disabled={locked}
             onClick={e => { e.stopPropagation(); setShowMenu(!showMenu); }}><ChevronDown className="w-3 h-3" /></Button>
           {showMenu && (
             <div className="absolute right-0 bottom-7 z-50 bg-popover border border-border rounded-lg shadow-lg p-1 min-w-[120px]"

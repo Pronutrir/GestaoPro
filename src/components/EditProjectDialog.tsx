@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import {
@@ -25,6 +26,7 @@ import { AIAssistButton } from "@/components/AIAssistButton";
 import { GutPriorityField } from "@/components/GutPriorityField";
 import { UserPlus, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { gutLabel, gutScore } from "@/lib/gutPriority";
 
 interface MemberRow {
   id: string; // project_members.id (existing) or temp uuid for pending add
@@ -51,8 +53,11 @@ interface Project {
   project_type?: string | null;
   start_date?: string | null;
   actual_start_date?: string | null;
+  actual_end_date?: string | null;
   sponsor?: string | null;
   manager?: string | null;
+  sector?: string | null;
+  created_by?: string | null;
   objective?: string | null;
   problem_statement?: string | null;
   root_cause?: string | null;
@@ -75,17 +80,21 @@ export const EditProjectDialog = ({
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
+  const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [team, setTeam] = useState<MemberRow[]>([]);
   const [pickedUserId, setPickedUserId] = useState<string>("");
+  const [createdByLabel, setCreatedByLabel] = useState<string>("—");
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      const [{ data: profileData }, { data: adminRoles }] = await Promise.all([
+      const [{ data: profileData }, { data: adminRoles }, { data: sectorData }] = await Promise.all([
         supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
+        supabase.from("sectors").select("id, name").order("name"),
       ]);
       const adminIds = new Set((adminRoles || []).map(r => r.user_id));
       if (profileData) setProfiles(profileData.filter(p => p.full_name && !adminIds.has(p.id)));
+      if (sectorData) setSectors(sectorData);
     };
     if (open) fetchProfiles();
   }, [open]);
@@ -139,12 +148,16 @@ export const EditProjectDialog = ({
     project_type: "",
     start_date: "",
     actual_start_date: "",
+    actual_end_date: "",
     sponsor: "",
     manager: "",
+    sector: "",
     objective: "",
     problem_statement: "",
     root_cause: "",
   });
+  const isProjectConcluded = project?.status === "concluido";
+  const isProjectReadOnly = isProjectConcluded && formData.status === "concluido";
 
   useEffect(() => {
     if (project && open) {
@@ -166,8 +179,10 @@ export const EditProjectDialog = ({
         project_type: (project as any).project_type || "",
         start_date: (project as any).start_date || "",
         actual_start_date: (project as any).actual_start_date || "",
+        actual_end_date: (project as any).actual_end_date || "",
         sponsor: (project as any).sponsor || "",
         manager: (project as any).manager || "",
+        sector: (project as any).sector || "",
         objective: (project as any).objective || "",
         problem_statement: (project as any).problem_statement || "",
         root_cause: (project as any).root_cause || "",
@@ -175,9 +190,87 @@ export const EditProjectDialog = ({
     }
   }, [project, open]);
 
+  useEffect(() => {
+    const loadCreator = async () => {
+      if (!project || !open) {
+        setCreatedByLabel("—");
+        return;
+      }
+
+      if (!project.created_by) {
+        setCreatedByLabel("Não informado");
+        return;
+      }
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", project.created_by)
+        .maybeSingle();
+
+      const resolvedName = data?.full_name?.trim();
+      setCreatedByLabel(resolvedName || project.created_by);
+    };
+
+    void loadCreator();
+  }, [open, project]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!project) return;
+
+    if (isProjectReadOnly) {
+      toast({
+        title: "Projeto concluído",
+        description: "Altere o status para reabrir o projeto antes de editar os demais campos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isProjectConcluded && formData.status !== "concluido") {
+      setIsLoading(true);
+      try {
+        const { error } = await supabase
+          .from("projects")
+          .update({ status: formData.status })
+          .eq("id", project.id);
+        if (error) throw error;
+        toast({ title: "Projeto reaberto com sucesso!" });
+        onOpenChange(false);
+        onProjectUpdated();
+      } catch (error: any) {
+        toast({
+          title: "Erro ao reabrir projeto",
+          description: error?.message || "Não foi possível reabrir o projeto.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    const missingRequiredFields: string[] = [];
+    if (!formData.title.trim()) missingRequiredFields.push("Título");
+    if (!formData.project_type.trim()) missingRequiredFields.push("Tipo do Projeto");
+    if (!formData.start_date) missingRequiredFields.push("Data de Início");
+    if (!formData.due_date) missingRequiredFields.push("Data de Entrega");
+    if (!formData.status.trim()) missingRequiredFields.push("Status");
+    if (!formData.owner.trim()) missingRequiredFields.push("Líder do Projeto");
+    if (!formData.sector.trim()) missingRequiredFields.push("Setor Responsável");
+
+    const currentPriority = formData.priority || "pendente";
+    if (currentPriority === "pendente") missingRequiredFields.push("Prioridade");
+
+    if (missingRequiredFields.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Preencha: ${missingRequiredFields.join(", ")}.`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsLoading(true);
 
@@ -187,53 +280,95 @@ export const EditProjectDialog = ({
         .map((a) => a.trim())
         .filter((a) => a);
 
-      const fullUpdatePayload = {
+      const computedGutPriority = gutLabel(gutScore(formData.gravity, formData.urgency, formData.tendency));
+      const persistedPriority = computedGutPriority !== "pendente"
+        ? computedGutPriority
+        : (formData.priority || "pendente");
+
+      const baseUpdatePayload = {
         title: formData.title,
         description: formData.description,
         status: formData.status,
-        gravity: formData.gravity,
-        urgency: formData.urgency,
-        tendency: formData.tendency,
+        priority: persistedPriority,
+        project_type: formData.project_type || null,
+        start_date: formData.start_date || null,
         due_date: formData.due_date || null,
         assignees: assigneesArray,
         budget_planned: parseFloat(formData.budget_planned) || 0,
         owner: formData.owner || null,
         blockers: formData.blockers,
-        category: formData.category || "general",
-        program: formData.program || null,
-        project_type: formData.project_type || null,
-        start_date: formData.start_date || null,
-        actual_start_date: formData.actual_start_date || null,
-        sponsor: formData.sponsor || null,
-        manager: formData.manager || null,
-        objective: formData.objective || null,
-        problem_statement: formData.problem_statement || null,
-        root_cause: formData.root_cause || null,
       };
 
-      let { error } = await supabase
+      const extendedUpdatePayload: Record<string, any> = {};
+      const assignOptional = (key: string, value: unknown) => {
+        if (value === null || value === undefined) return;
+        if (typeof value === "string" && value.trim() === "") return;
+        extendedUpdatePayload[key] = value;
+      };
+
+      assignOptional("gravity", formData.gravity);
+      assignOptional("urgency", formData.urgency);
+      assignOptional("tendency", formData.tendency);
+      assignOptional("category", formData.category);
+      assignOptional("program", formData.program);
+      assignOptional("actual_start_date", formData.actual_start_date);
+      assignOptional("actual_end_date", formData.actual_end_date);
+      assignOptional("sponsor", formData.sponsor);
+      assignOptional("manager", formData.manager);
+      assignOptional("sector", formData.sector);
+      assignOptional("objective", formData.objective);
+      assignOptional("problem_statement", formData.problem_statement);
+      assignOptional("root_cause", formData.root_cause);
+
+      const { error: baseError } = await supabase
         .from("projects")
-        .update(fullUpdatePayload)
+        .update(baseUpdatePayload)
         .eq("id", project.id);
 
-      let titleOnlyFallbackUsed = false;
-      if (error) {
-        // Fallback resiliente: se o payload completo falhar (schema/permissão parcial),
-        // ainda tentamos persistir ao menos o nome do projeto.
-        const { error: titleError } = await supabase
-          .from("projects")
-          .update({ title: formData.title })
-          .eq("id", project.id);
+      if (baseError) {
+        throw baseError;
+      }
 
-        if (titleError) {
-          throw titleError;
+      // Campos opcionais/expandidos: tentativa resiliente para ambientes com schema legado.
+      const extractMissingColumn = (message?: string | null) => {
+        if (!message) return null;
+        const match = message.match(/Could not find the '([^']+)' column/i);
+        return match?.[1] || null;
+      };
+
+      let optionalFieldsWarning: string | null = null;
+      const droppedOptionalColumns: string[] = [];
+      const safeExtendedPayload: Record<string, any> = { ...extendedUpdatePayload };
+
+      if (Object.keys(safeExtendedPayload).length > 0) {
+        while (Object.keys(safeExtendedPayload).length > 0) {
+          const { error: extendedError } = await supabase
+            .from("projects")
+            .update(safeExtendedPayload)
+            .eq("id", project.id);
+
+          if (!extendedError) {
+            break;
+          }
+
+          const missingColumn = extractMissingColumn(extendedError.message);
+          if (!missingColumn || !(missingColumn in safeExtendedPayload)) {
+            optionalFieldsWarning = extendedError.message || "Alguns campos avançados não foram atualizados.";
+            break;
+          }
+
+          delete safeExtendedPayload[missingColumn];
+          droppedOptionalColumns.push(missingColumn);
         }
 
-        titleOnlyFallbackUsed = true;
+        if (!optionalFieldsWarning && droppedOptionalColumns.length > 0) {
+          optionalFieldsWarning = `Campos não disponíveis neste ambiente foram ignorados: ${droppedOptionalColumns.join(", ")}`;
+        }
       }
 
       // Sincroniza equipe (project_members)
       let teamSyncError: string | null = null;
+      let notifySyncError: string | null = null;
       try {
         const { data: existingMembers, error: existingMembersError } = await supabase
           .from("project_members")
@@ -266,9 +401,10 @@ export const EditProjectDialog = ({
             project_id: project.id,
             user_id: m.user_id,
             sector: m.sector,
-            invitation_status: "pending" as const,
+            invitation_status: "accepted" as const,
+            responded_at: new Date().toISOString(),
             invited_by: user?.id ?? null,
-            can_create: false,
+            can_create: true,
             can_edit: false,
             can_delete: false,
             can_move: false,
@@ -283,12 +419,12 @@ export const EditProjectDialog = ({
               project_id: project.id,
               target_user_id: m.user_id,
               type: "project_invite",
-              title: `Convite para o projeto: ${formData.title}`,
-              message: `Você foi convidado(a) a participar do projeto "${formData.title}". Aceita?`,
+              title: `Você foi adicionado(a) ao projeto: ${formData.title}`,
+              message: `Seu acesso ao projeto "${formData.title}" já está ativo.`,
             }))
           );
           if (notificationError) {
-            throw notificationError;
+            notifySyncError = notificationError.message || "Falha ao enviar notificações.";
           }
         }
       } catch (teamErr: any) {
@@ -304,6 +440,22 @@ export const EditProjectDialog = ({
         toast({
           title: "Projeto salvo com aviso",
           description: `A equipe não foi sincronizada: ${teamSyncError}`,
+          variant: "destructive",
+        });
+      }
+
+      if (!teamSyncError && notifySyncError) {
+        toast({
+          title: "Equipe sincronizada com aviso",
+          description: `Membros atualizados, mas houve falha nas notificações: ${notifySyncError}`,
+          variant: "destructive",
+        });
+      }
+
+      if (optionalFieldsWarning) {
+        toast({
+          title: "Projeto salvo com aviso",
+          description: `Campos principais (incluindo líder) foram salvos, mas houve falha em campos extras: ${optionalFieldsWarning}`,
           variant: "destructive",
         });
       }
@@ -336,6 +488,36 @@ export const EditProjectDialog = ({
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
+              <Label htmlFor="edit-status">Status *</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, status: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ideacao">Ideação</SelectItem>
+                  <SelectItem value="poc">POC</SelectItem>
+                  <SelectItem value="mvp">MVP</SelectItem>
+                  <SelectItem value="blocked">Bloqueio</SelectItem>
+                  <SelectItem value="drawer">Gaveta</SelectItem>
+                  <SelectItem value="em-execucao">Em Execução</SelectItem>
+                  <SelectItem value="concluido">Concluído</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {isProjectReadOnly && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                Projeto concluído: somente o campo de status está liberado para reabertura.
+              </p>
+            )}
+
+            <fieldset disabled={isProjectReadOnly} className="grid gap-4 disabled:opacity-70">
+            <div className="grid gap-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="edit-title">Título *</Label>
                 <AIAssistButton
@@ -353,9 +535,36 @@ export const EditProjectDialog = ({
                 required
               />
             </div>
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit-description">Descrição</Label>
+                <AIAssistButton
+                  value={formData.description}
+                  onChange={(next) => setFormData({ ...formData, description: next })}
+                  context="project_description"
+                />
+              </div>
+              <Textarea
+                id="edit-description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Descreva o projeto, objetivo e contexto..."
+                rows={3}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-created-by">Criado por</Label>
+              <Input
+                id="edit-created-by"
+                value={createdByLabel}
+                readOnly
+                disabled
+                className="bg-muted"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="edit-project_type">Tipo do Projeto</Label>
+                <Label htmlFor="edit-project_type">Tipo do Projeto *</Label>
                 <Select
                   value={formData.project_type || "_none"}
                   onValueChange={(v) =>
@@ -389,15 +598,26 @@ export const EditProjectDialog = ({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="edit-start_date">Data de Início</Label>
+                <Label htmlFor="edit-start_date">Data de Início *</Label>
                 <Input
                   id="edit-start_date"
                   type="date"
                   value={formData.start_date}
                   onChange={(e) =>
                     setFormData({ ...formData, start_date: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-due_date">Data de Entrega *</Label>
+                <Input
+                  id="edit-due_date"
+                  type="date"
+                  value={formData.due_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, due_date: e.target.value })
                   }
                 />
               </div>
@@ -413,55 +633,47 @@ export const EditProjectDialog = ({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="edit-due_date">Data de Entrega</Label>
+                <Label htmlFor="edit-actual_end_date">Data de Término Real</Label>
                 <Input
-                  id="edit-due_date"
+                  id="edit-actual_end_date"
                   type="date"
-                  value={formData.due_date}
+                  value={formData.actual_end_date}
                   onChange={(e) =>
-                    setFormData({ ...formData, due_date: e.target.value })
+                    setFormData({ ...formData, actual_end_date: e.target.value })
                   }
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-status">Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, status: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ideacao">Ideação</SelectItem>
-                    <SelectItem value="poc">POC</SelectItem>
-                    <SelectItem value="mvp">MVP</SelectItem>
-                    <SelectItem value="blocked">Bloqueio</SelectItem>
-                    <SelectItem value="drawer">Gaveta</SelectItem>
-                    <SelectItem value="em-execucao">Em Execução</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Prioridade (GUT)</Label>
+            <div className="grid gap-2">
+                <Label>Prioridade (GUT) *</Label>
                 <GutPriorityField
                   gravity={formData.gravity}
                   urgency={formData.urgency}
                   tendency={formData.tendency}
-                  onChange={(v) => setFormData({ ...formData, ...v })}
+                  onChange={(v) => {
+                    const computed = gutLabel(gutScore(v.gravity, v.urgency, v.tendency));
+                    setFormData({
+                      ...formData,
+                      ...v,
+                      priority: computed,
+                    });
+                  }}
                 />
-              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>Líder do Projeto</Label>
+                <Label>Líder do Projeto *</Label>
                 <Select
                   value={formData.owner || "_none"}
-                  onValueChange={(v) => setFormData({ ...formData, owner: v === "_none" ? "" : v })}
+                  onValueChange={(v) => {
+                    const owner = v === "_none" ? "" : v;
+                    const leader = profiles.find((p) => p.full_name === owner);
+                    setFormData({
+                      ...formData,
+                      owner,
+                      sector: formData.sector || leader?.sector || "",
+                    });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o líder" />
@@ -480,17 +692,22 @@ export const EditProjectDialog = ({
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label>Setor</Label>
-                <Input
-                  value={(() => {
-                    const match = profiles.find(p => p.full_name === formData.owner);
-                    return match?.sector || "";
-                  })()}
-                  readOnly
-                  disabled
-                  placeholder="Selecione um líder"
-                  className="bg-muted"
-                />
+                <Label>Setor do Projeto (Responsável) *</Label>
+                <Select
+                  value={formData.sector || "_none"}
+                  onValueChange={(v) => setFormData({ ...formData, sector: v === "_none" ? "" : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o setor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Selecione</SelectItem>
+                    {sectors.map((s) => (
+                      <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">Define o setor do projeto. Pode ser diferente do setor do líder.</p>
               </div>
             </div>
 
@@ -585,6 +802,7 @@ export const EditProjectDialog = ({
                 </Button>
               </div>
             </div>
+            </fieldset>
           </div>
           <DialogFooter>
             <Button
@@ -594,7 +812,7 @@ export const EditProjectDialog = ({
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading || isProjectReadOnly}>
               {isLoading ? "Salvando..." : "Salvar Alterações"}
             </Button>
           </DialogFooter>

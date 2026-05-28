@@ -42,17 +42,20 @@ interface AddProjectDialogProps {
 export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProjectDialogProps) => {
   const { user } = useAuth();
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
+  const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [team, setTeam] = useState<PendingMember[]>([]);
   const [pickedUserId, setPickedUserId] = useState<string>("");
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      const [{ data: profileData }, { data: adminRoles }] = await Promise.all([
+      const [{ data: profileData }, { data: adminRoles }, { data: sectorData }] = await Promise.all([
         supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
+        supabase.from("sectors").select("id, name").order("name"),
       ]);
       const adminIds = new Set((adminRoles || []).map(r => r.user_id));
       if (profileData) setProfiles(profileData.filter(p => p.full_name && !adminIds.has(p.id)));
+      if (sectorData) setSectors(sectorData);
     };
     fetchProfiles();
   }, []);
@@ -77,8 +80,11 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     project_type: "",
     objective: "",
     start_date: "",
+    actual_start_date: "",
+    actual_end_date: "",
     sponsor: "",
     manager: "",
+    sector: "",
     problem_statement: "",
     root_cause: "",
   });
@@ -88,12 +94,27 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     setIsLoading(true);
 
     try {
+      if (!formData.sector.trim()) {
+        toast({
+          title: "Campo obrigatório",
+          description: "Selecione o setor responsável pelo projeto.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const assigneesArray = formData.assignees
         .split(",")
         .map((a) => a.trim())
         .filter((a) => a);
 
-      const { data: created, error } = await supabase.from("projects").insert({
+      const extractMissingColumn = (message?: string | null) => {
+        if (!message) return null;
+        const match = message.match(/Could not find the '([^']+)' column/i);
+        return match?.[1] || null;
+      };
+
+      const insertPayload: Record<string, any> = {
         title: formData.title,
         description: formData.description,
         status: formData.status,
@@ -111,17 +132,52 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         project_type: formData.project_type || null,
         objective: formData.objective || null,
         start_date: formData.start_date || null,
+        actual_start_date: formData.actual_start_date || null,
+        actual_end_date: formData.actual_end_date || null,
         sponsor: formData.sponsor || null,
         manager: formData.manager || null,
+        sector: formData.sector || null,
         problem_statement: formData.problem_statement || null,
         root_cause: formData.root_cause || null,
-      }).select("id").single();
+      };
+
+      const safeInsertPayload: Record<string, any> = { ...insertPayload };
+      let created: { id: string } | null = null;
+      let error: any = null;
+      const droppedOptionalColumns: string[] = [];
+
+      while (Object.keys(safeInsertPayload).length > 0) {
+        const result = await supabase.from("projects").insert(safeInsertPayload as any).select("id").single();
+        if (!result.error) {
+          created = result.data;
+          error = null;
+          break;
+        }
+
+        const missingColumn = extractMissingColumn(result.error.message);
+        if (!missingColumn || !(missingColumn in safeInsertPayload)) {
+          error = result.error;
+          break;
+        }
+
+        delete safeInsertPayload[missingColumn];
+        droppedOptionalColumns.push(missingColumn);
+      }
 
       if (error) throw error;
+      if (!created) throw new Error("Falha ao criar projeto.");
+
+      if (droppedOptionalColumns.includes("sector")) {
+        toast({
+          title: "Projeto criado com aviso",
+          description: "O campo Setor Responsável não está disponível neste ambiente e não pôde ser salvo no projeto.",
+          variant: "destructive",
+        });
+      }
 
       // Adiciona o criador como membro com acesso total
       if (created?.id && user?.id) {
-        await supabase.from("project_members").insert({
+        const { error: creatorMemberError } = await supabase.from("project_members").insert({
           project_id: created.id,
           user_id: user.id,
           invitation_status: "accepted",
@@ -131,37 +187,15 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
           can_delete: true,
           can_move: true,
         });
-      }
-
-      // Insere equipe + envia convites individuais
-      if (created?.id && team.length > 0) {
-        const rows = team.map((m) => ({
-          project_id: created.id,
-          user_id: m.user_id,
-          sector: m.sector,
-          invitation_status: "pending" as const,
-          invited_by: user?.id ?? null,
-          can_create: false,
-          can_edit: false,
-          can_delete: false,
-          can_move: false,
-        }));
-        const { error: memErr } = await supabase.from("project_members").insert(rows);
-        if (memErr) {
-          console.warn("Erro ao adicionar equipe:", memErr.message);
-        } else {
-          // Notificações direcionadas
-          await supabase.from("notifications").insert(
-            team.map((m) => ({
-              project_id: created.id,
-              target_user_id: m.user_id,
-              type: "project_invite",
-              title: `Convite para o projeto: ${formData.title}`,
-              message: `Você foi convidado(a) a participar do projeto "${formData.title}". Aceita?`,
-            }))
-          );
+        if (creatorMemberError) {
+          console.warn("Erro ao vincular criador como membro:", creatorMemberError.message);
         }
       }
+
+      const createdProjectId = created?.id;
+      const createdProjectTitle = formData.title;
+      const teamSnapshot = [...team];
+      const invitedBy = user?.id ?? null;
 
       toast({
         title: "Projeto criado!",
@@ -186,8 +220,11 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         project_type: "",
         objective: "",
         start_date: "",
+        actual_start_date: "",
+        actual_end_date: "",
         sponsor: "",
         manager: "",
+        sector: "",
         problem_statement: "",
         root_cause: "",
       });
@@ -195,11 +232,62 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
       setPickedUserId("");
       setOpen(false);
       onProjectAdded();
+
+      // Inserções secundárias (equipe/notificações) em background para não
+      // bloquear feedback da criação principal.
+      if (createdProjectId && teamSnapshot.length > 0) {
+        void (async () => {
+          const rows = teamSnapshot.map((m) => ({
+            project_id: createdProjectId,
+            user_id: m.user_id,
+            sector: m.sector,
+            invitation_status: "accepted" as const,
+            responded_at: new Date().toISOString(),
+            invited_by: invitedBy,
+            can_create: true,
+            can_edit: false,
+            can_delete: false,
+            can_move: false,
+          }));
+
+          const { error: memErr } = await supabase.from("project_members").insert(rows);
+          if (memErr) {
+            console.warn("Erro ao adicionar equipe:", memErr.message);
+            toast({
+              title: "Projeto criado com aviso",
+              description: `O projeto foi salvo, mas houve falha ao sincronizar equipe: ${memErr.message}`,
+              variant: "destructive",
+            });
+            return;
+          }
+
+          const { error: notifErr } = await supabase.from("notifications").insert(
+            teamSnapshot.map((m) => ({
+              project_id: createdProjectId,
+              target_user_id: m.user_id,
+              type: "project_invite",
+              title: `Você foi adicionado(a) ao projeto: ${createdProjectTitle}`,
+              message: `Seu acesso ao projeto "${createdProjectTitle}" já está ativo.`,
+            })),
+          );
+
+          if (notifErr) {
+            console.warn("Erro ao criar notificações de convite:", notifErr.message);
+            toast({
+              title: "Projeto criado com aviso",
+              description: `Equipe sincronizada, mas houve falha nas notificações: ${notifErr.message}`,
+              variant: "destructive",
+            });
+          }
+        })();
+      }
     } catch (error) {
       console.error("Erro ao criar projeto:", error);
+      const maybe = error as { message?: string; details?: string; hint?: string; code?: string };
+      const detail = [maybe?.message, maybe?.details, maybe?.hint, maybe?.code].filter(Boolean).join(" | ");
       toast({
         title: "Erro ao criar projeto",
-        description: "Não foi possível criar o projeto. Tente novamente.",
+        description: detail || "Não foi possível criar o projeto. Tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -320,6 +408,30 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
+                <Label htmlFor="actual_start_date">Data de Início Real</Label>
+                <Input
+                  id="actual_start_date"
+                  type="date"
+                  value={formData.actual_start_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, actual_start_date: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="actual_end_date">Data de Término Real</Label>
+                <Input
+                  id="actual_end_date"
+                  type="date"
+                  value={formData.actual_end_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, actual_end_date: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
                 <Label htmlFor="status">Status</Label>
                 <Select
                   value={formData.status}
@@ -337,6 +449,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                     <SelectItem value="blocked">Bloqueio</SelectItem>
                     <SelectItem value="drawer">Gaveta</SelectItem>
                     <SelectItem value="em-execucao">Em Execução</SelectItem>
+                    <SelectItem value="concluido">Concluído</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -355,7 +468,15 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 <Label>Líder do Projeto</Label>
                 <Select
                   value={formData.owner || "_none"}
-                  onValueChange={(v) => setFormData({ ...formData, owner: v === "_none" ? "" : v })}
+                  onValueChange={(v) => {
+                    const owner = v === "_none" ? "" : v;
+                    const leader = profiles.find((p) => p.full_name === owner);
+                    setFormData({
+                      ...formData,
+                      owner,
+                      sector: formData.sector || leader?.sector || "",
+                    });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o líder" />
@@ -372,17 +493,22 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label>Setor (do Líder)</Label>
-                <Input
-                  value={(() => {
-                    const match = profiles.find(p => p.full_name === formData.owner);
-                    return match?.sector || "";
-                  })()}
-                  readOnly
-                  disabled
-                  placeholder="Preenchido ao escolher o líder"
-                  className="bg-muted"
-                />
+                <Label>Setor do Projeto (Responsável) *</Label>
+                <Select
+                  value={formData.sector || "_none"}
+                  onValueChange={(v) => setFormData({ ...formData, sector: v === "_none" ? "" : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o setor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Selecione</SelectItem>
+                    {sectors.map((s) => (
+                      <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">Define o setor do projeto. Pode ser diferente do setor do líder.</p>
               </div>
             </div>
 

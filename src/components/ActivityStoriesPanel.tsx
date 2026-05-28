@@ -21,6 +21,7 @@ interface UserStory {
 interface Props {
   activityId: string;
   projectId: string;
+  projectLocked?: boolean;
 }
 
 /**
@@ -29,9 +30,16 @@ interface Props {
  * sem upload de imagem ou critérios — focado no fluxo dentro do diálogo
  * de edição da atividade.
  */
-export const ActivityStoriesPanel = ({ activityId, projectId }: Props) => {
+export const ActivityStoriesPanel = ({ activityId, projectId, projectLocked = false }: Props) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
+  const showProjectLockedToast = (action: string) => {
+    toast({
+      title: "Projeto concluído",
+      description: `Reabra o projeto para ${action}.`,
+      variant: "destructive",
+    });
+  };
   const [stories, setStories] = useState<UserStory[]>([]);
   const [loading, setLoading] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -60,6 +68,10 @@ export const ActivityStoriesPanel = ({ activityId, projectId }: Props) => {
   }, [activityId]);
 
   const handleCreate = async () => {
+    if (projectLocked) {
+      showProjectLockedToast("criar histórias");
+      return;
+    }
     if (!newTitle.trim()) return;
     setSaving(true);
     const { error } = await supabase.from("user_stories").insert({
@@ -81,12 +93,20 @@ export const ActivityStoriesPanel = ({ activityId, projectId }: Props) => {
   };
 
   const startEdit = (s: UserStory) => {
+    if (projectLocked) {
+      showProjectLockedToast("editar histórias");
+      return;
+    }
     setEditingId(s.id);
     setEditTitle(s.title || "");
     setEditNarrative(s.narrative || "");
   };
 
   const handleSaveEdit = async () => {
+    if (projectLocked) {
+      showProjectLockedToast("salvar histórias");
+      return;
+    }
     if (!editingId || !editTitle.trim()) return;
     const { error } = await supabase
       .from("user_stories")
@@ -102,6 +122,10 @@ export const ActivityStoriesPanel = ({ activityId, projectId }: Props) => {
   };
 
   const handleDelete = async (id: string) => {
+    if (projectLocked) {
+      showProjectLockedToast("excluir histórias");
+      return;
+    }
     const ok = await appConfirm({
       title: "Excluir história",
       description: "Excluir esta história?",
@@ -149,6 +173,7 @@ export const ActivityStoriesPanel = ({ activityId, projectId }: Props) => {
                   onChange={(e) => setEditTitle(e.target.value)}
                   placeholder="Título da história"
                   className="h-8 text-sm"
+                  disabled={projectLocked}
                 />
                 <div className="flex items-center justify-end">
                   <AIAssistButton value={editNarrative} onChange={setEditNarrative} context="story_narrative" />
@@ -158,10 +183,11 @@ export const ActivityStoriesPanel = ({ activityId, projectId }: Props) => {
                   onChange={(e) => setEditNarrative(e.target.value)}
                   placeholder="Como [persona], quero [ação], para [benefício]..."
                   className="min-h-[60px] text-sm"
+                  disabled={projectLocked}
                 />
                 <div className="flex gap-1">
-                  <Button size="sm" onClick={handleSaveEdit}>Salvar</Button>
-                  <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Cancelar</Button>
+                  <Button size="sm" onClick={handleSaveEdit} disabled={projectLocked}>Salvar</Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingId(null)} disabled={projectLocked}>Cancelar</Button>
                 </div>
               </div>
             ) : (
@@ -176,10 +202,10 @@ export const ActivityStoriesPanel = ({ activityId, projectId }: Props) => {
                     )}
                   </div>
                   <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit(s)}>
+                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit(s)} disabled={projectLocked}>
                       <Pencil className="w-3 h-3" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDelete(s.id)}>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDelete(s.id)} disabled={projectLocked}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -203,6 +229,7 @@ export const ActivityStoriesPanel = ({ activityId, projectId }: Props) => {
           onChange={(e) => setNewTitle(e.target.value)}
           placeholder="Título da história..."
           className="h-8 text-sm"
+          disabled={projectLocked}
         />
         <div className="flex items-center justify-end">
           {newNarrative.trim() && (
@@ -216,12 +243,13 @@ export const ActivityStoriesPanel = ({ activityId, projectId }: Props) => {
             placeholder="Como [persona], quero [ação], para [benefício]..."
             className="min-h-[36px] text-sm resize-none flex-1"
             rows={1}
+            disabled={projectLocked}
           />
           <Button
             size="icon"
             className="h-9 w-9 flex-shrink-0"
             onClick={handleCreate}
-            disabled={saving || !newTitle.trim()}
+            disabled={projectLocked || saving || !newTitle.trim()}
             title="Criar história"
           >
             {saving ? <Plus className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

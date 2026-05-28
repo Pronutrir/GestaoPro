@@ -268,24 +268,25 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     const profile = allProfiles.find((p) => p.id === selectedProfileId);
     const { error } = await supabase.from("project_members").insert({
       project_id: projectId, user_id: selectedProfileId, sector: profile?.sector || null,
-      invitation_status: "pending",
+      invitation_status: "accepted",
+      responded_at: new Date().toISOString(),
       invited_by: user?.id ?? null,
-      can_create: false, can_edit: false, can_delete: false, can_move: false,
+      can_create: true, can_edit: false, can_delete: false, can_move: false,
     });
     setAddingMember(false);
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
-    // dispara convite direcionado
+    // notificação direcionada
     await supabase.from("notifications").insert({
       project_id: projectId,
       target_user_id: selectedProfileId,
       type: "project_invite",
-      title: `Convite para o projeto: ${project.title}`,
-      message: `Você foi convidado(a) a participar do projeto "${project.title}". Aceita?`,
+      title: `Você foi adicionado(a) ao projeto: ${project.title}`,
+      message: `Seu acesso ao projeto "${project.title}" já está ativo.`,
     });
     setSelectedProfileId("");
     await fetchRelations();
     onMembersChanged?.();
-    toast({ title: "Convite enviado!" });
+    toast({ title: "Membro adicionado!" });
   };
 
   const handleRemoveStakeholder = async (memberId: string) => {
