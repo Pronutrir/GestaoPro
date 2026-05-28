@@ -43,16 +43,40 @@ async function nextDisplayOrder(projectId: string, workflowStageId: string | nul
   return (Number.isFinite(max) ? max : 0) + 1;
 }
 
-export async function duplicateActivity(opts: {
-  activityId: string;
-  includeChildren?: boolean;
-  titleSuffix?: string;
-  overrideParentId?: string | null;
-}): Promise<string> {
+async function listChildrenIds(projectId: string, parentId: string) {
+  const { data, error } = await supabase
+    .from("activities")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("parent_id", parentId)
+    .or("is_trashed.is.false,is_trashed.is.null");
+
+  if (!error) return data || [];
+
+  // Fallback para ambientes legados sem coluna is_trashed.
+  const fallback = await supabase
+    .from("activities")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("parent_id", parentId);
+
+  if (fallback.error) throw fallback.error;
+  return fallback.data || [];
+}
+
+async function duplicateActivityInternal(
+  opts: {
+    activityId: string;
+    includeChildren: boolean;
+    titleSuffix: string;
+    overrideParentId?: string | null;
+  },
+  createdIds: string[],
+): Promise<string> {
   const {
     activityId,
-    includeChildren = true,
-    titleSuffix = " (copia)",
+    includeChildren,
+    titleSuffix,
     overrideParentId,
   } = opts;
 
@@ -88,32 +112,71 @@ export async function duplicateActivity(opts: {
     throw createError || new Error("Falha ao duplicar");
   }
 
-  if (includeChildren) {
-    const { data: children } = await supabase
-      .from("activities")
-      .select("id")
-      .eq("project_id", base.project_id)
-      .eq("parent_id", activityId)
-      .neq("is_trashed", true);
+  createdIds.push(created.id);
 
-    for (const child of children || []) {
-      await duplicateActivity({
+  if (includeChildren) {
+    const children = await listChildrenIds(base.project_id, activityId);
+
+    for (const child of children) {
+      await duplicateActivityInternal({
         activityId: child.id,
         includeChildren: true,
         titleSuffix: "",
         overrideParentId: created.id,
-      });
+      }, createdIds);
     }
   }
 
   return created.id;
 }
 
+export async function duplicateActivity(opts: {
+  activityId: string;
+  includeChildren?: boolean;
+  titleSuffix?: string;
+  overrideParentId?: string | null;
+}): Promise<string> {
+  const {
+    activityId,
+    includeChildren = true,
+    titleSuffix = " (copia)",
+    overrideParentId,
+  } = opts;
+
+  const createdIds: string[] = [];
+  try {
+    return await duplicateActivityInternal(
+      {
+        activityId,
+        includeChildren,
+        titleSuffix,
+        overrideParentId,
+      },
+      createdIds,
+    );
+  } catch (error) {
+    if (createdIds.length > 0) {
+      await supabase.from("activities").delete().in("id", createdIds);
+    }
+    throw error;
+  }
+}
+
 export async function countChildren(activityId: string): Promise<number> {
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from("activities")
     .select("id", { count: "exact", head: true })
     .eq("parent_id", activityId)
-    .neq("is_trashed", true);
-  return count ?? 0;
+    .or("is_trashed.is.false,is_trashed.is.null");
+
+  if (!error) return count ?? 0;
+
+  // Fallback para ambientes legados sem coluna is_trashed.
+  const fallback = await supabase
+    .from("activities")
+    .select("id", { count: "exact", head: true })
+    .eq("parent_id", activityId);
+
+  if (fallback.error) throw fallback.error;
+  return fallback.count ?? 0;
 }

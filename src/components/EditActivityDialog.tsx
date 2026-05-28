@@ -110,6 +110,7 @@ interface EditActivityDialogProps {
   initialTab?: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history";
   /** When true, opens in create mode: inserts a draft activity on open and lets user fill all fields with full feature parity. */
   createMode?: boolean;
+  projectLocked?: boolean;
   defaultStageId?: string | null;
   defaultPhaseId?: string | null;
   defaultParentId?: string | null;
@@ -118,6 +119,8 @@ interface EditActivityDialogProps {
   parentActivityTitle?: string;
   /** Called when user clicks the "Back" arrow — used to close only the nested dialog and return to parent. */
   onBackToParent?: () => void;
+  /** Minutes apontados por atividade (fonte: time_entries) para cálculo de tempo real. */
+  consumedMinutesByActivity?: Record<string, number>;
 }
 
 /** Parse hours as decimal from "Xh Ym" or plain number */
@@ -274,11 +277,21 @@ export const EditActivityDialog = ({
   activity, open, onOpenChange, onActivityUpdated,
   phases = [], allActivities = [], projectId, isQualityProject = false,
   initialTab = "details",
-  createMode = false, defaultStageId = null, defaultPhaseId = null, defaultParentId = null,
+  createMode = false, projectLocked = false, defaultStageId = null, defaultPhaseId = null, defaultParentId = null,
   onActivityCreated,
   parentActivityTitle, onBackToParent,
+  consumedMinutesByActivity = {},
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
+  const ensureProjectUnlocked = () => {
+    if (!projectLocked) return true;
+    toast({
+      title: "Projeto concluído",
+      description: "Reabra o projeto para alterar atividades.",
+      variant: "destructive",
+    });
+    return false;
+  };
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
   const [creatingDraft, setCreatingDraft] = useState(false);
   const effectiveActivity = createMode ? draftActivity : activity;
@@ -287,6 +300,7 @@ export const EditActivityDialog = ({
     title: "", description: "", assigned_to: "",
     start_date: "", end_date: "", cost: "", hours: "",
     actual_start_date: "",
+    actual_end_date: "",
     phase_id: "", priority: "pendente",
     gravity: null as number | null,
     urgency: null as number | null,
@@ -339,7 +353,11 @@ export const EditActivityDialog = ({
   }, 0);
   const ownAutoConsumed = effectiveActivity?.status === "completed" ? parentHoursNum : 0;
   const computedHours = subActivities.length > 0 ? subsComputed : ownAutoConsumed;
-  const consumedHours = computedHours;
+  const trackedOwnHours = effectiveActivity ? (Number(consumedMinutesByActivity[effectiveActivity.id]) || 0) / 60 : 0;
+  const trackedSubHours = subActivities.reduce((sum, s) => sum + ((Number(consumedMinutesByActivity[s.id]) || 0) / 60), 0);
+  const trackedHours = subActivities.length > 0 ? trackedSubHours : trackedOwnHours;
+  const consumedHours = trackedHours > 0 ? trackedHours : computedHours;
+  const consumedFromTrackedEntries = trackedHours > 0;
   const plannedHours = parentHoursNum > 0 ? parentHoursNum : subHoursTotal;
 
   const subStartDates = subActivities.map((s) => s.start_date).filter(Boolean) as string[];
@@ -395,6 +413,15 @@ export const EditActivityDialog = ({
 
   useEffect(() => {
     if (!open) return;
+    if (createMode && projectLocked) {
+      toast({
+        title: "Projeto concluído",
+        description: "Reabra o projeto para criar atividades.",
+        variant: "destructive",
+      });
+      onOpenChange(false);
+      return;
+    }
     // Create a draft activity when opening in create mode
     if (createMode && !draftActivity && !creatingDraft && projectId) {
       setCreatingDraft(true);
@@ -545,6 +572,7 @@ export const EditActivityDialog = ({
         start_date: act.start_date || "",
         end_date: act.end_date || ((act as any).is_milestone ? (act.start_date || "") : ""),
         actual_start_date: (act as any).actual_start_date || "",
+        actual_end_date: (act as any).actual_end_date || "",
         cost: act.cost?.toString() || "0",
         hours: formatHoursDisplay(act.hours || 0),
         phase_id: act.phase_id || "",
@@ -619,6 +647,7 @@ export const EditActivityDialog = ({
   };
 
   const handleAddSubActivity = async () => {
+    if (!ensureProjectUnlocked()) return;
     const act = effectiveActivity;
     if (!newSubTitle.trim() || !act || !projectId) return;
     await supabase.from("activities").insert({
@@ -633,12 +662,14 @@ export const EditActivityDialog = ({
   };
 
   const handleDeleteSubActivity = async (subId: string) => {
+    if (!ensureProjectUnlocked()) return;
     await supabase.from("activities").delete().eq("id", subId);
     if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
     onActivityUpdated();
   };
 
   const handleToggleSubActivity = async (sub: Activity) => {
+    if (!ensureProjectUnlocked()) return;
     const newStatus = sub.status === "completed" ? "pending" : "completed";
     const finalStage = workflowStages.find((stage) => stage.is_final);
     const backlogStage = workflowStages.find((stage) => stage.display_order === 0) || workflowStages[0];
@@ -659,6 +690,8 @@ export const EditActivityDialog = ({
       completed_at: newStatus === "completed" ? new Date().toISOString() : null,
     };
     if (newStatus === "completed") {
+      updateData.actual_start_date = (sub as any).actual_start_date || new Date().toISOString().slice(0, 10);
+      updateData.actual_end_date = new Date().toISOString().slice(0, 10);
       if (finalStage?.id) {
         updateData.workflow_stage_id = finalStage.id;
       }
@@ -667,6 +700,7 @@ export const EditActivityDialog = ({
       }
     } else if (reopenStageId) {
       updateData.workflow_stage_id = reopenStageId;
+      updateData.actual_end_date = null;
     }
 
     // Atualização otimista no estado local para feedback imediato
@@ -677,6 +711,8 @@ export const EditActivityDialog = ({
               ...s,
               status: newStatus,
               completed_at: updateData.completed_at,
+              actual_start_date: updateData.actual_start_date ?? (s as any).actual_start_date ?? null,
+              actual_end_date: updateData.actual_end_date ?? (s as any).actual_end_date ?? null,
               workflow_stage_id: updateData.workflow_stage_id ?? s.workflow_stage_id ?? null,
               last_progress_stage_id: updateData.last_progress_stage_id ?? s.last_progress_stage_id ?? null,
             } as Activity)
@@ -716,6 +752,8 @@ export const EditActivityDialog = ({
           const parentUpdate: any = {
             status: "completed",
             completed_at: new Date().toISOString(),
+            actual_start_date: (parent as any).actual_start_date || new Date().toISOString().slice(0, 10),
+            actual_end_date: new Date().toISOString().slice(0, 10),
           };
           if (finalStage?.id) parentUpdate.workflow_stage_id = finalStage.id;
           if (parent.workflow_stage_id && parent.workflow_stage_id !== finalStage?.id) {
@@ -736,6 +774,7 @@ export const EditActivityDialog = ({
           await supabase.from("activities").update({
             status: "pending",
             completed_at: null,
+            actual_end_date: null,
             ...(parentReopenStageId ? { workflow_stage_id: parentReopenStageId } : {}),
           }).eq("id", parent.id);
         }
@@ -765,6 +804,7 @@ export const EditActivityDialog = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ensureProjectUnlocked()) return;
     const act = createMode ? draftActivity : activity;
     if (!act) return;
     if (dateRangeInvalid) {
@@ -810,6 +850,7 @@ export const EditActivityDialog = ({
         assigned_to: formData.assigned_to || null,
         start_date: formData.is_milestone ? null : (formData.start_date || null),
         actual_start_date: formData.actual_start_date || null,
+        actual_end_date: formData.actual_end_date || null,
         end_date: formData.end_date || null,
         cost: parseFloat(formData.cost) || 0,
         hours: parseHoursInput(formData.hours),
@@ -831,6 +872,7 @@ export const EditActivityDialog = ({
       };
 
       const compatPayload: Record<string, any> = { ...updatePayload };
+      const droppedColumns: string[] = [];
       let error: any = null;
       for (let i = 0; i < 8; i += 1) {
         const result = await supabase
@@ -852,9 +894,18 @@ export const EditActivityDialog = ({
         }
 
         delete compatPayload[missingColumn];
+        droppedColumns.push(missingColumn);
       }
 
       if (error) throw error;
+
+      if (droppedColumns.length > 0) {
+        toast({
+          title: "Atividade salva com aviso",
+          description: `Alguns campos não foram salvos neste ambiente: ${droppedColumns.join(", ")}`,
+          variant: "destructive",
+        });
+      }
 
       // Cascade dates to successors when end_date moved (skip quality projects)
       if (
@@ -921,18 +972,12 @@ export const EditActivityDialog = ({
     if (duplicatingId) return;
     setDuplicatingId(activityId);
     try {
-      const { countChildren, duplicateActivity } = await import("@/lib/duplicateActivity");
-      const children = await countChildren(activityId);
-      const includeChildren =
-        children > 0
-          ? confirm(
-              kind === "subatividade"
-                ? `Esta subtarefa possui ${children} sub-subtarefa(s). Duplicar tambem?`
-                : `Esta atividade possui ${children} subtarefa(s). Duplicar tambem as subtarefas?`,
-            )
-          : false;
-
-      await duplicateActivity({ activityId, includeChildren });
+      const { duplicateActivity } = await import("@/lib/duplicateActivity");
+      await duplicateActivity({ activityId, includeChildren: true });
+      toast({
+        title: kind === "subatividade" ? "Subatividade duplicada!" : "Atividade duplicada!",
+        description: "A hierarquia de subtarefas tambem foi duplicada.",
+      });
       onActivityUpdated();
       if (effectiveActivity) {
         fetchSubActivities(effectiveActivity.id);
@@ -1132,13 +1177,20 @@ export const EditActivityDialog = ({
                               }
 
                               try {
+                                if (!ensureProjectUnlocked()) return;
+                                const today = new Date().toISOString().slice(0, 10);
                                 const updateData: any = { workflow_stage_id: stage.id };
                                 if (stage.is_final) {
                                   updateData.status = "completed";
                                   updateData.completed_at = new Date().toISOString();
+                                  updateData.actual_start_date = (act as any).actual_start_date || today;
+                                  updateData.actual_end_date = today;
                                 } else if (act.status === "completed") {
                                   updateData.status = "pending";
                                   updateData.completed_at = null;
+                                  updateData.actual_end_date = null;
+                                } else if (!(act as any).actual_start_date && stage.display_order > 0) {
+                                  updateData.actual_start_date = today;
                                 }
                                 const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
                                 if (error) throw error;
@@ -1201,6 +1253,17 @@ export const EditActivityDialog = ({
                         />
                       </div>
                     )}
+                    {!formData.is_milestone && (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Término real</span>
+                        <Input
+                          type="date"
+                          value={formData.actual_end_date}
+                          onChange={(e) => setFormData({ ...formData, actual_end_date: e.target.value })}
+                          className="h-7 px-1.5 text-xs w-[130px]"
+                        />
+                      </div>
+                    )}
                     {dateRangeInvalid && (
                       <TooltipProvider delayDuration={150}>
                         <Tooltip>
@@ -1239,7 +1302,7 @@ export const EditActivityDialog = ({
                 </PropertyRow>
 
                 {/* Datas Reais (somente leitura) + chip de Desvio — não se aplica a Qualidade */}
-                {!isQualityProject && (act?.actual_start_date || act?.actual_end_date || act?.completed_at) && !formData.is_milestone && (
+                {!isQualityProject && (act?.actual_start_date || act?.actual_end_date) && !formData.is_milestone && (
                   <PropertyRow icon={<Calendar className="w-3.5 h-3.5 text-muted-foreground" />} label="Real">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="font-mono">
@@ -1247,10 +1310,10 @@ export const EditActivityDialog = ({
                       </span>
                       <ArrowRight className="w-3 h-3" />
                       <span className="font-mono">
-                        {((act?.actual_end_date || act?.completed_at?.slice?.(0,10) || "—") + "").split("-").reverse().join("/")}
+                        {((act?.actual_end_date || "—") + "").split("-").reverse().join("/")}
                       </span>
                       {(() => {
-                        const real = act?.actual_end_date || (act?.completed_at ? String(act.completed_at).slice(0,10) : null);
+                        const real = act?.actual_end_date || null;
                         const v = endVariance(real, (act as any)?.baseline_end_date, act?.end_date);
                         if (v === null) return null;
                         const tone = varianceTone(v);
@@ -1333,12 +1396,14 @@ export const EditActivityDialog = ({
                               : "text-muted-foreground border-border bg-muted/30"
                           }`}
                           title={
-                            subActivities.length > 0
+                            consumedFromTrackedEntries
+                              ? "Tempo real somado de apontamentos (time_entries)"
+                              : subActivities.length > 0
                               ? "Consumido automático das subatividades concluídas"
                               : "Consumido automático da atividade concluída"
                           }
                         >
-                          Consumidas: {formatHoursDisplay(consumedHours) || "0h"} / {formatHoursDisplay(plannedHours) || "0h"}
+                          Consumidas ({consumedFromTrackedEntries ? "real" : "auto"}): {formatHoursDisplay(consumedHours) || "0h"} / Planejadas: {formatHoursDisplay(plannedHours) || "0h"}
                         </span>
                       )}
                     </div>
@@ -1803,6 +1868,7 @@ export const EditActivityDialog = ({
                         {/* Colunas dinâmicas (na ordem de ALL_COLS, apenas as visíveis) */}
                         {ALL_COLS.filter((c) => visibleCols.includes(c.id)).map(({ id: colId }) => {
                           const updateFields = async (values: Record<string, any>) => {
+                            if (!ensureProjectUnlocked()) return;
                             await supabase.from("activities").update(values as any).eq("id", sub.id);
                             if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
                             onActivityUpdated();
@@ -1973,6 +2039,7 @@ export const EditActivityDialog = ({
                                         stageId === s.id ? "bg-primary/10 text-primary font-medium" : ""
                                       }`}
                                       onClick={async () => {
+                                        if (!ensureProjectUnlocked()) return;
                                         const upd: any = { workflow_stage_id: s.id };
                                         if (s.is_final) {
                                           upd.status = "completed";
@@ -2028,7 +2095,7 @@ export const EditActivityDialog = ({
                             type="button"
                             size="icon"
                             variant="ghost"
-                            className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:bg-muted/70 hover:text-foreground"
+                            className="h-5 w-5 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                             disabled={duplicatingId === sub.id}
                             onClick={(e) => {
                               e.preventDefault();
@@ -2098,7 +2165,7 @@ export const EditActivityDialog = ({
             {/* ===== ABA HISTÓRIAS ===== */}
             <TabsContent value="stories" className="pt-4 mt-0">
           {act && projectId && (
-            <ActivityStoriesPanel activityId={act.id} projectId={projectId} />
+            <ActivityStoriesPanel activityId={act.id} projectId={projectId} projectLocked={projectLocked} />
           )}
             </TabsContent>
           </Tabs>
@@ -2185,6 +2252,7 @@ export const EditActivityDialog = ({
                   }
 
                   try {
+                    if (!ensureProjectUnlocked()) return;
                     // Find the final workflow stage
                     const { data: finalStage } = await supabase
                       .from("workflow_stages")
@@ -2197,6 +2265,8 @@ export const EditActivityDialog = ({
                     const updateData: any = {
                       status: "completed",
                       completed_at: new Date().toISOString(),
+                      actual_start_date: (act as any).actual_start_date || new Date().toISOString().slice(0, 10),
+                      actual_end_date: new Date().toISOString().slice(0, 10),
                     };
                     if (finalStage) {
                       updateData.workflow_stage_id = finalStage.id;
@@ -2221,6 +2291,7 @@ export const EditActivityDialog = ({
                 className="gap-2 text-primary border-primary/30 hover:bg-primary/10"
                 onClick={async () => {
                   if (!act) return;
+                  if (!ensureProjectUnlocked()) return;
                   if (!confirm("Arquivar esta atividade? Ela ficará marcada como arquivada e poderá ser consultada no histórico.")) return;
                   try {
                     const { error } = await supabase.from("activities").update({ closed_at: new Date().toISOString() }).eq("id", act.id);
@@ -2269,6 +2340,7 @@ export const EditActivityDialog = ({
           allActivities={allActivities}
           projectId={projectId}
           isQualityProject={isQualityProject}
+          consumedMinutesByActivity={consumedMinutesByActivity}
           parentActivityTitle={effectiveActivity?.title}
           onBackToParent={() => {
             setEditingSubOpen(false);

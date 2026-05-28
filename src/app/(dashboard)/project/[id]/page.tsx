@@ -90,6 +90,8 @@ interface Activity {
   description: string | null;
   status: string;
   completed_at: string | null;
+  actual_start_date?: string | null;
+  actual_end_date?: string | null;
   created_at: string;
   assigned_to: string | null;
   start_date: string | null;
@@ -104,6 +106,7 @@ interface Activity {
   participants?: string[] | null;
   item_type?: "fase" | "tarefa" | null;
   is_milestone?: boolean | null;
+  created_by?: string | null;
 }
 
 const SUPPORTED_PROJECT_TABS = [
@@ -205,25 +208,53 @@ export default function ProjectDetailsPage() {
   const baseCanEdit = !permissionsLoading && (isAdmin || (userPerms?.can_edit ?? false));
   const baseCanDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
   const baseCanMove = !permissionsLoading && (isAdmin || (userPerms?.can_move ?? false));
-  const canCreate = baseCanCreate && !isChangeBlocked;
-  const canEdit = baseCanEdit && !isChangeBlocked;
-  const canDelete = baseCanDelete && !isChangeBlocked;
-  const canMove = baseCanMove && !isChangeBlocked;
+  const isProjectConcluded = project?.status === "concluido";
+  const canCreate = baseCanCreate && !isChangeBlocked && !isProjectConcluded;
+  const canEdit = baseCanEdit && !isChangeBlocked && !isProjectConcluded;
+  const canDelete = baseCanDelete && !isChangeBlocked && !isProjectConcluded;
+  const canMove = baseCanMove && !isChangeBlocked && !isProjectConcluded;
   const isQualityProject = project?.category === "qualidade";
+  const showProjectLockedToast = useCallback((action: string) => {
+    toast.error("Projeto concluído", { description: `Reabra o projeto para ${action}.` });
+  }, [toast]);
+  const canMutateActivity = useCallback((activity?: Activity | null) => {
+    if (!activity) return false;
+    if (isRealAdmin || isAdmin) return true;
+    if (!currentUser?.id) return false;
+    if (!!activity.created_by && activity.created_by === currentUser.id) return true;
+
+    const identityCandidates = buildUserCandidates([
+      profile?.full_name,
+      profile?.email,
+      currentUser.email,
+      profile?.id,
+      currentUser.id,
+    ]);
+
+    return matchesIdentity(activity.assigned_to, identityCandidates);
+  }, [currentUser?.email, currentUser?.id, isAdmin, isRealAdmin, profile?.email, profile?.full_name]);
 
   // Helper que abre o EditActivityDialog respeitando bloqueios escopados
   const openEditActivity = useCallback((
     activity: any,
     initialTab: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history" = "details",
   ) => {
+    if (isProjectConcluded) {
+      showProjectLockedToast("editar atividades");
+      return;
+    }
     if (activity && isActivityBlocked(activity.id, activity.phase_id)) {
       toast.error("Atividade bloqueada: só pode ser editada após aprovação da solicitação de mudança.");
+      return;
+    }
+    if (activity && !canMutateActivity(activity as Activity)) {
+      toast.error("Somente o criador ou responsável da atividade pode editar.");
       return;
     }
     setEditActivityInitialTab(initialTab);
     setEditingActivity(activity);
     setEditActivityDialogOpen(true);
-  }, [isActivityBlocked, toast]);
+  }, [canMutateActivity, isActivityBlocked, isProjectConcluded, showProjectLockedToast, toast]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -334,13 +365,7 @@ export default function ProjectDetailsPage() {
         return fallback as { data: any; error: any };
       })();
 
-      const activitiesPromise = supabase
-        .from("activities")
-        .select("id, assigned_to, participants")
-        .eq("project_id", id)
-        .eq("is_trashed", false);
-
-      const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }, { data: projectActivities }] = await Promise.all([
+      const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }] = await Promise.all([
         supabase
           .from("project_members")
           .select("id, invitation_status, can_create, can_edit, can_delete, can_move")
@@ -353,7 +378,6 @@ export default function ProjectDetailsPage() {
           .eq("user_id", currentUser.id)
           .maybeSingle(),
         projectPromise,
-        activitiesPromise,
       ]);
 
       // Compute access from four sources: explicit member, project creator,
@@ -364,6 +388,8 @@ export default function ProjectDetailsPage() {
         profile?.full_name,
         profile?.email,
         currentUser.email,
+        profile?.id,
+        currentUser.id,
       ]);
 
       const ownerMatch = matchesIdentity(projectRow?.owner, candidates);
@@ -377,18 +403,32 @@ export default function ProjectDetailsPage() {
       const assigneeMatch =
         Array.isArray(projectRow?.assignees) &&
         anyMatchesIdentity(projectRow!.assignees!, candidates);
-      const activityAssignmentMatch =
-        Array.isArray(projectActivities) &&
-        projectActivities.some((activity: any) => (
-          matchesIdentity(activity.assigned_to, candidates) ||
-          (Array.isArray(activity.participants) && anyMatchesIdentity(activity.participants, candidates))
-        ));
-      const hasImplicitAccess = creatorMatch || ownerMatch || managerMatch || assigneeMatch || activityAssignmentMatch;
-      const hasAcceptedMembership = !!perms?.id && (perms.invitation_status ?? "accepted") === "accepted";
-      const hasProjectWideAccess = creatorMatch || ownerMatch || managerMatch || assigneeMatch;
-      const isActivityScoped = !hasAcceptedMembership && !hasProjectWideAccess && activityAssignmentMatch;
 
-      if (!hasAcceptedMembership && !hasImplicitAccess) {
+      const normalizedInvitationStatus = (perms?.invitation_status || "accepted").toLowerCase();
+      const hasValidMembership = !!perms?.id && normalizedInvitationStatus !== "declined";
+      const hasProjectWideAccess = creatorMatch || ownerMatch || managerMatch;
+
+      let activityAssignmentMatch = false;
+      if (!hasValidMembership && !hasProjectWideAccess && !assigneeMatch) {
+        const { data: projectActivities } = await supabase
+          .from("activities")
+          .select("assigned_to, participants")
+          .eq("project_id", id)
+          .eq("is_trashed", false);
+
+        activityAssignmentMatch =
+          Array.isArray(projectActivities) &&
+          projectActivities.some((activity: any) => (
+            matchesIdentity(activity.assigned_to, candidates) ||
+            (Array.isArray(activity.participants) && anyMatchesIdentity(activity.participants, candidates))
+          ));
+      }
+
+      const hasImplicitAccess = hasProjectWideAccess || assigneeMatch || activityAssignmentMatch;
+      const hasNonMemberImplicitAccess = assigneeMatch || activityAssignmentMatch;
+      const isActivityScoped = !hasValidMembership && !hasProjectWideAccess && hasNonMemberImplicitAccess;
+
+      if (!hasValidMembership && !hasImplicitAccess) {
         // Regra estrita: somente criador, membro ou equipe.
         setAccessDenied(true);
         setActivityScopedAccess(false);
@@ -401,9 +441,9 @@ export default function ProjectDetailsPage() {
       // If member exists, use those granular permissions. Otherwise (Líder/Participante),
       // grant full operational permissions by default.
       setUserPerms(
-        hasAcceptedMembership
+        hasValidMembership
           ? {
-              can_create: !!perms.can_create,
+              can_create: true,
               can_edit: !!perms.can_edit,
               can_delete: !!perms.can_delete,
               can_move: !!perms.can_move,
@@ -731,6 +771,10 @@ export default function ProjectDetailsPage() {
 
 
   const handleAddActivity = async () => {
+    if (isProjectConcluded) {
+      showProjectLockedToast("criar atividades");
+      return;
+    }
     if (!newActivity.trim() || !id) return;
     try {
       await supabase.from("activities").insert({
@@ -749,7 +793,15 @@ export default function ProjectDetailsPage() {
   };
 
   const handleToggleActivity = async (activityId: string, currentStatus: string) => {
+    if (isProjectConcluded) {
+      showProjectLockedToast("alterar atividades");
+      return;
+    }
     const act = activities.find(a => a.id === activityId);
+    if (act && !canMutateActivity(act)) {
+      toast.error("Somente o criador ou responsável da atividade pode concluir/reabrir.");
+      return;
+    }
     if (act && isActivityBlocked(activityId, act.phase_id)) {
       toast.error("Atividade bloqueada: resolva a solicitação de mudança");
       return;
@@ -788,6 +840,7 @@ export default function ProjectDetailsPage() {
 
     const idsToUpdate = [activityId, ...descendantIds];
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
+    const today = new Date().toISOString().slice(0, 10);
     const updatePayload: any = { status: newStatus, completed_at: completedAt };
     let finalStageId: string | null = null;
     let reopenStageId: string | null = null;
@@ -827,6 +880,13 @@ export default function ProjectDetailsPage() {
       }
       if (newStatus === "pending" && reopenStageId) {
         updatePayload.workflow_stage_id = reopenStageId;
+      }
+
+      if (newStatus === "completed") {
+        updatePayload.actual_start_date = act?.actual_start_date || today;
+        updatePayload.actual_end_date = today;
+      } else {
+        updatePayload.actual_end_date = null;
       }
 
       if (newStatus === "pending" && !reopenStageId) {
@@ -883,7 +943,11 @@ export default function ProjectDetailsPage() {
     });
 
     if (ancestorsToComplete.length > 0) {
-      const completePayload: any = { status: "completed", completed_at: new Date().toISOString() };
+      const completePayload: any = {
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        actual_end_date: today,
+      };
       if (finalStageId) completePayload.workflow_stage_id = finalStageId;
       const { error: completeAncestorsError } = await (supabase.from("activities").update(completePayload) as any).in("id", ancestorsToComplete);
       if (completeAncestorsError) {
@@ -900,7 +964,7 @@ export default function ProjectDetailsPage() {
     }
 
     if (ancestorsToReopen.length > 0) {
-      const reopenPayload: any = { status: "pending", completed_at: null };
+      const reopenPayload: any = { status: "pending", completed_at: null, actual_end_date: null };
       if (reopenStageId) reopenPayload.workflow_stage_id = reopenStageId;
       const { error: reopenAncestorsError } = await (supabase.from("activities").update(reopenPayload) as any).in("id", ancestorsToReopen);
       if (reopenAncestorsError) {
@@ -920,7 +984,15 @@ export default function ProjectDetailsPage() {
   };
 
   const handleDeleteActivity = async (activityId: string) => {
+    if (isProjectConcluded) {
+      showProjectLockedToast("alterar atividades");
+      return;
+    }
     const act = activities.find(a => a.id === activityId);
+    if (act && !canMutateActivity(act)) {
+      toast.error("Somente o criador ou responsável da atividade pode arquivar.");
+      return;
+    }
     if (act && isActivityBlocked(activityId, act.phase_id)) {
       toast.error("Atividade bloqueada: resolva a solicitação de mudança");
       return;
@@ -949,9 +1021,18 @@ export default function ProjectDetailsPage() {
   };
 
   const handleActivityDragEnd = async (event: DragEndEvent) => {
+    if (isProjectConcluded) {
+      showProjectLockedToast("reordenar atividades");
+      return;
+    }
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const parentActs = activities.filter((a) => !a.parent_id);
+    const activeActivity = parentActs.find((a) => a.id === active.id);
+    if (activeActivity && !canMutateActivity(activeActivity)) {
+      toast.error("Somente o criador ou responsável da atividade pode reordenar.");
+      return;
+    }
     const oldIndex = parentActs.findIndex((a) => a.id === active.id);
     const newIndex = parentActs.findIndex((a) => a.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
@@ -1190,9 +1271,14 @@ export default function ProjectDetailsPage() {
                 onToggleActivity={handleToggleActivity}
                 isAdmin={canDelete}
                 canCreate={canCreate}
+                projectLocked={isProjectConcluded}
                 isQualityProject={isQualityProject}
                 profilesMap={profilesMap}
                 onOpenCreateTask={(stageId) => {
+                  if (isProjectConcluded) {
+                    showProjectLockedToast("criar atividades");
+                    return;
+                  }
                   setCreateTaskStageId(stageId);
                   setShowAddActivity(true);
                 }}
@@ -1237,7 +1323,7 @@ export default function ProjectDetailsPage() {
             </TabsContent>
 
             <TabsContent value="stories" className="mt-0">
-              <UserStoriesBoard projectId={id!} />
+              <UserStoriesBoard projectId={id!} projectLocked={isProjectConcluded} />
             </TabsContent>
 
             <TabsContent value="tap" className="mt-0">
@@ -1248,6 +1334,10 @@ export default function ProjectDetailsPage() {
               <MeetingsManager
                 projectId={id!} phases={phases}
                 onCreateActivity={async (title, assignedTo) => {
+                  if (isProjectConcluded) {
+                    showProjectLockedToast("criar atividades");
+                    return;
+                  }
                   await supabase.from("activities").insert({ project_id: id!, title, assigned_to: assignedTo || null, status: "pending", priority: "medium" });
                   fetchProjectData();
                 }}
@@ -1433,6 +1523,7 @@ export default function ProjectDetailsPage() {
           }}
           onActivityUpdated={fetchProjectData} phases={phases} allActivities={activities}
           projectId={id!} isQualityProject={isQualityProject}
+          consumedMinutesByActivity={consumedMinutesByActivity}
           initialTab={editActivityInitialTab}
         />
         {project && (
@@ -1452,10 +1543,12 @@ export default function ProjectDetailsPage() {
             allActivities={activities}
             projectId={id!}
             isQualityProject={isQualityProject}
+            consumedMinutesByActivity={consumedMinutesByActivity}
             createMode
             defaultStageId={createTaskStageId}
             defaultPhaseId={createTaskPhaseId}
             defaultParentId={createTaskParentId}
+            projectLocked={isProjectConcluded}
           />
         )}
         <CreatePhaseDialog

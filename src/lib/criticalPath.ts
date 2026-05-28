@@ -27,14 +27,15 @@ export function calculateCriticalPath(
   if (valid.length === 0) return new Set();
 
   const byId = new Map(valid.map(a => [a.id, a]));
-  const succ = new Map<string, { id: string; lag: number }[]>();
-  const pred = new Map<string, { id: string; lag: number }[]>();
+  const succ = new Map<string, { id: string; lag: number; type: string }[]>();
+  const pred = new Map<string, { id: string; lag: number; type: string }[]>();
   valid.forEach(a => { succ.set(a.id, []); pred.set(a.id, []); });
 
   dependencies.forEach(d => {
     if (byId.has(d.predecessor_id) && byId.has(d.successor_id)) {
-      succ.get(d.predecessor_id)!.push({ id: d.successor_id, lag: d.lag_days ?? 0 });
-      pred.get(d.successor_id)!.push({ id: d.predecessor_id, lag: d.lag_days ?? 0 });
+      const type = d.dependency_type || "finish_to_start";
+      succ.get(d.predecessor_id)!.push({ id: d.successor_id, lag: d.lag_days ?? 0, type });
+      pred.get(d.successor_id)!.push({ id: d.predecessor_id, lag: d.lag_days ?? 0, type });
     }
   });
 
@@ -53,6 +54,20 @@ export function calculateCriticalPath(
   const ef = new Map<string, number>();
   const es = new Map<string, number>();
 
+  const forwardConstraint = (type: string, esPred: number, durPred: number, durCur: number, lag: number) => {
+    switch (type) {
+      case "start_to_start":
+        return esPred + lag;
+      case "finish_to_finish":
+        return esPred + durPred + lag - durCur;
+      case "start_to_finish":
+        return esPred + lag - durCur;
+      case "finish_to_start":
+      default:
+        return esPred + durPred + lag;
+    }
+  };
+
   // Topological order (Kahn)
   const inDeg = new Map<string, number>();
   valid.forEach(a => inDeg.set(a.id, pred.get(a.id)!.length));
@@ -69,29 +84,53 @@ export function calculateCriticalPath(
 
   order.forEach(id => {
     const a = byId.get(id)!;
+    const durCur = dur.get(id)!;
     const baseEs = differenceInDays(parseISO(a.start_date!), minDate);
     let earliest = baseEs;
     pred.get(id)!.forEach(p => {
-      const pEf = ef.get(p.id);
-      if (pEf !== undefined) earliest = Math.max(earliest, pEf + p.lag);
+      const esPred = es.get(p.id);
+      if (esPred === undefined) return;
+      const durPred = dur.get(p.id) ?? 1;
+      const candidate = forwardConstraint(p.type, esPred, durPred, durCur, p.lag);
+      earliest = Math.max(earliest, candidate);
     });
     es.set(id, earliest);
-    ef.set(id, earliest + dur.get(id)!);
+    ef.set(id, earliest + durCur);
   });
 
   const projectEnd = Math.max(...Array.from(ef.values()));
 
   // Backward pass
-  const lf = new Map<string, number>();
   const ls = new Map<string, number>();
+  const lf = new Map<string, number>();
+
+  const backwardConstraint = (type: string, lsSucc: number, durPred: number, durSucc: number, lag: number) => {
+    switch (type) {
+      case "start_to_start":
+        return lsSucc - lag;
+      case "finish_to_finish":
+        return lsSucc + durSucc - durPred - lag;
+      case "start_to_finish":
+        return lsSucc + durSucc - lag;
+      case "finish_to_start":
+      default:
+        return lsSucc - durPred - lag;
+    }
+  };
+
   [...order].reverse().forEach(id => {
     const succs = succ.get(id)!;
-    let latest = projectEnd;
+    const durPred = dur.get(id)!;
+    let latestStart = projectEnd - durPred;
     if (succs.length > 0) {
-      latest = Math.min(...succs.map(s => (ls.get(s.id) ?? projectEnd) - s.lag));
+      latestStart = Math.min(...succs.map(s => {
+        const lsSucc = ls.get(s.id) ?? (projectEnd - (dur.get(s.id) ?? 1));
+        const durSucc = dur.get(s.id) ?? 1;
+        return backwardConstraint(s.type, lsSucc, durPred, durSucc, s.lag);
+      }));
     }
-    lf.set(id, latest);
-    ls.set(id, latest - dur.get(id)!);
+    ls.set(id, latestStart);
+    lf.set(id, latestStart + durPred);
   });
 
   const critical = new Set<string>();

@@ -52,13 +52,13 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // getUser() valida o JWT no servidor; envolvemos em try/catch porque em
-  // ambientes com conectividade instável o fetch pode falhar — nesse caso
-  // deixamos passar e a autenticação client-side trata o redirecionamento.
+  // getSession() evita validação remota do JWT em toda navegação e reduz
+  // latência percebida de clique/rota. A proteção de rota segue pelo cookie
+  // de sessão e pelas validações de perfil abaixo.
   let user: { id: string } | null = null;
   try {
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
+    const { data } = await supabase.auth.getSession();
+    user = (data.session?.user as { id: string } | null) ?? null;
   } catch {
     return supabaseResponse;
   }
@@ -79,18 +79,31 @@ export async function middleware(request: NextRequest) {
   if (user) {
     // Bloqueia usuários inativos (ex.: novo cadastro Azure aguardando aprovação)
     if (pathname !== '/pending-approval') {
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_active')
-          .eq('id', user.id)
-          .maybeSingle();
+      const cachedActive = request.cookies.get('profile_active')?.value;
 
-        if (profile && profile.is_active === false) {
-          return NextResponse.redirect(new URL('/pending-approval', request.url));
+      if (cachedActive === '0') {
+        return NextResponse.redirect(new URL('/pending-approval', request.url));
+      }
+
+      if (cachedActive !== '1') {
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('is_active')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (profile && profile.is_active === false) {
+            const redirect = NextResponse.redirect(new URL('/pending-approval', request.url));
+            redirect.cookies.set('profile_active', '0', { maxAge: 120, path: '/' });
+            return redirect;
+          }
+
+          // Cache curto para reduzir latência de navegação entre páginas.
+          supabaseResponse.cookies.set('profile_active', '1', { maxAge: 120, path: '/' });
+        } catch {
+          // Falha ao buscar perfil — permite continuar, a página tratará o estado
         }
-      } catch {
-        // Falha ao buscar perfil — permite continuar, a página tratará o estado
       }
     }
 

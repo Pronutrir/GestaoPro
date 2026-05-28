@@ -15,8 +15,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
 import { format, parseISO } from "date-fns";
-import { duplicateActivity, countChildren } from "@/lib/duplicateActivity";
+import { duplicateActivity } from "@/lib/duplicateActivity";
 
 interface Phase { id: string; title: string; display_order?: number | null; }
 interface WorkflowStage { id: string; title: string; color?: string | null; display_order?: number; }
@@ -26,6 +28,7 @@ interface Activity {
   priority?: string | null; end_date?: string | null; start_date?: string | null;
   assigned_to?: string | null; hours?: number | null; cost?: number | null;
   created_at?: string; trashed_at?: string | null; is_trashed?: boolean | null;
+  created_by?: string | null;
 }
 
 interface Props {
@@ -67,6 +70,15 @@ export function ProjectFlatList({
   projectId, activities, phases, onEditActivity, onToggleActivity, onDataChanged, isAdmin,
 }: Props) {
   const { toast } = useToast();
+  const { user, profile } = useAuth();
+  const currentUserId = user?.id || null;
+  const identityCandidates = useMemo(() => buildUserCandidates([
+    profile?.full_name,
+    profile?.email,
+    user?.email,
+    profile?.id,
+    user?.id,
+  ]), [profile?.email, profile?.full_name, profile?.id, user?.email, user?.id]);
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [showTrash, setShowTrash] = useState(false);
   const [trashed, setTrashed] = useState<Activity[]>([]);
@@ -154,6 +166,17 @@ export function ProjectFlatList({
   };
 
   const handleArchive = async (id: string) => {
+    const target = activities.find((a) => a.id === id);
+    const canMutate = !!isAdmin || (
+      !!target && (
+        (!!currentUserId && !!target.created_by && target.created_by === currentUserId)
+        || matchesIdentity(target.assigned_to, identityCandidates)
+      )
+    );
+    if (!canMutate) {
+      toast({ title: "Somente o criador ou responsável da atividade pode arquivar.", variant: "destructive" });
+      return;
+    }
     await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any) as any).eq("id", id);
     toast({ title: "Atividade arquivada!" });
     onDataChanged();
@@ -164,13 +187,7 @@ export function ProjectFlatList({
     if (duplicatingId) return;
     setDuplicatingId(id);
     try {
-      const children = await countChildren(id);
-      const includeChildren =
-        children > 0
-          ? confirm(`Esta atividade possui ${children} subtarefa(s). Duplicar tambem as subtarefas?`)
-          : false;
-
-      await duplicateActivity({ activityId: id, includeChildren });
+      await duplicateActivity({ activityId: id, includeChildren: true });
       toast({ title: "Atividade duplicada!" });
       onDataChanged();
     } catch (e: unknown) {
@@ -218,7 +235,13 @@ export function ProjectFlatList({
   const clearSelection = () => setSelectedIds(new Set());
 
   const bulkComplete = async (newStatus: "completed" | "pending") => {
-    const ids = Array.from(selectedIds);
+    const selected = activities.filter((a) => selectedIds.has(a.id));
+    const ids = selected
+      .filter((a) => !!isAdmin || (
+        (!!currentUserId && !!a.created_by && a.created_by === currentUserId)
+        || matchesIdentity(a.assigned_to, identityCandidates)
+      ))
+      .map((a) => a.id);
     if (ids.length === 0) return;
     const completed_at = newStatus === "completed" ? new Date().toISOString() : null;
     await (supabase.from("activities").update({ status: newStatus, completed_at } as any) as any).in("id", ids);
@@ -227,7 +250,13 @@ export function ProjectFlatList({
     onDataChanged();
   };
   const bulkArchive = async () => {
-    const ids = Array.from(selectedIds);
+    const selected = activities.filter((a) => selectedIds.has(a.id));
+    const ids = selected
+      .filter((a) => !!isAdmin || (
+        (!!currentUserId && !!a.created_by && a.created_by === currentUserId)
+        || matchesIdentity(a.assigned_to, identityCandidates)
+      ))
+      .map((a) => a.id);
     if (ids.length === 0) return;
     if (!confirm(`Arquivar ${ids.length} tarefa(s)?`)) return;
     await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any) as any).in("id", ids);
@@ -395,6 +424,12 @@ export function ProjectFlatList({
           <div className="p-12 text-center text-muted-foreground text-sm">Nenhuma tarefa encontrada.</div>
         ) : (
           sortedActivities.map((a) => (
+            (() => {
+              const canMutate = !!isAdmin || (
+                (!!currentUserId && !!a.created_by && a.created_by === currentUserId)
+                || matchesIdentity(a.assigned_to, identityCandidates)
+              );
+              return (
             <div
               key={a.id}
               className={cn(
@@ -402,7 +437,13 @@ export function ProjectFlatList({
                 selectedIds.has(a.id) && "bg-primary/5"
               )}
               style={{ gridTemplateColumns: `minmax(240px, ${Math.max(2, 4 - visibleList.length)}fr) ${visibleList.map(c => `minmax(${colSpec[c.key].min}px, ${colSpec[c.key].fr}fr)`).join(" ")}` }}
-              onClick={() => onEditActivity(a)}
+              onClick={() => {
+                if (!canMutate) {
+                  toast({ title: "Somente o criador ou responsável da atividade pode editar.", variant: "destructive" });
+                  return;
+                }
+                onEditActivity(a);
+              }}
             >
               <div className="flex items-center gap-2 min-w-0">
                 {selectMode ? (
@@ -417,7 +458,13 @@ export function ProjectFlatList({
                   <div onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={a.status === "completed"}
-                      onCheckedChange={() => onToggleActivity(a.id, a.status)}
+                      onCheckedChange={() => {
+                        if (!canMutate) {
+                          toast({ title: "Somente o criador ou responsável da atividade pode concluir/reabrir.", variant: "destructive" });
+                          return;
+                        }
+                        onToggleActivity(a.id, a.status);
+                      }}
                       className="shrink-0 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
                       title="Marcar como concluída"
                     />
@@ -440,6 +487,7 @@ export function ProjectFlatList({
                   size="icon"
                   variant="ghost"
                   className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  disabled={!canMutate}
                   onClick={(e) => { e.stopPropagation(); handleArchive(a.id); }}
                   title="Arquivar atividade"
                 >
@@ -450,6 +498,8 @@ export function ProjectFlatList({
                 <div key={c.key} className="min-w-0 flex items-center">{renderCell(a, c.key)}</div>
               ))}
             </div>
+              );
+            })()
           ))
         )}
       </div>

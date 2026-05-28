@@ -87,6 +87,8 @@ export const CreateTaskDialog = ({
     assigned_to: "",
     start_date: "",
     end_date: "",
+    actual_start_date: "",
+    actual_end_date: "",
     cost: "0",
     hours: "",
     phase_id: "",
@@ -131,6 +133,8 @@ export const CreateTaskDialog = ({
         assigned_to: "",
         start_date: "",
         end_date: "",
+        actual_start_date: "",
+        actual_end_date: "",
         cost: "0",
         hours: "",
         phase_id: defaultPhaseId ?? "",
@@ -180,12 +184,11 @@ export const CreateTaskDialog = ({
     }
     setLoading(true);
     try {
-      // Regra: toda atividade nova deve nascer no Backlog. O usuário move
-      // manualmente para a coluna correta do Kanban depois.
+      // Respeita a coluna escolhida pelo usuário; fallback para Backlog.
       const backlogStage =
         stages.find(s => /backlog/i.test(s.title)) ||
         stages[0]; // fallback: primeira coluna (display_order 0)
-      const newStageId = backlogStage?.id ?? stageId;
+      const newStageId = stageId ?? backlogStage?.id;
 
       // EAP automática para subatividades (parent_id definido).
       let autoWbs: string | null = formData.wbs_code.trim() || null;
@@ -220,6 +223,8 @@ export const CreateTaskDialog = ({
         participants: formData.participants.length ? formData.participants : null,
         start_date: formData.start_date || null,
         end_date: formData.end_date || null,
+        actual_start_date: formData.actual_start_date || null,
+        actual_end_date: formData.actual_end_date || null,
         hours: parseHoursInput(formData.hours),
         cost: parseFloat(formData.cost) || 0,
         story_points: parseInt(formData.story_points) || 0,
@@ -236,46 +241,76 @@ export const CreateTaskDialog = ({
         .single();
       if (error) throw error;
 
-      // Optional attachment upload
-      if (attachment && inserted?.id) {
-        const path = `${projectId}/${inserted.id}/${Date.now()}-${attachment.name}`;
-        const { error: upErr } = await supabase.storage
-          .from("csc-attachments")
-          .upload(path, attachment, { upsert: false });
-        if (!upErr) {
-          const { data: urlData } = supabase.storage
-            .from("csc-attachments")
-            .getPublicUrl(path);
-          if (urlData?.publicUrl) {
-            await supabase.from("project_documents").insert({
-              project_id: projectId,
-              activity_id: inserted.id,
-              file_name: attachment.name,
-              file_url: urlData.publicUrl,
-              file_type: attachment.type || null,
-              file_size: attachment.size,
-            } as never);
-          }
-        }
-      }
+      const createdActivityId = inserted!.id;
+      const attachmentSnapshot = attachment;
 
       toast({ title: "Atividade criada!" });
-      onCreated?.(inserted!.id);
+      onCreated?.(createdActivityId);
 
       if (afterAction === "close") {
         onOpenChange(false);
       } else if (afterAction === "details") {
         onOpenChange(false);
-        onOpenDetails?.(inserted!.id);
+        onOpenDetails?.(createdActivityId);
       } else {
         // "another" — keep dialog, reset only title/description/attachment
         setFormData((f) => ({ ...f, title: "", description: "" }));
         setAttachment(null);
         setTimeout(() => titleRef.current?.focus(), 30);
       }
+
+      // Upload de anexo em segundo plano para não atrasar a criação da tarefa.
+      if (attachmentSnapshot) {
+        void (async () => {
+          const path = `${projectId}/${createdActivityId}/${Date.now()}-${attachmentSnapshot.name}`;
+          const { error: upErr } = await supabase.storage
+            .from("csc-attachments")
+            .upload(path, attachmentSnapshot, { upsert: false });
+
+          if (upErr) {
+            console.warn("Falha ao enviar anexo da atividade:", upErr.message);
+            toast({
+              title: "Atividade criada com aviso",
+              description: `A atividade foi salva, mas o anexo não subiu: ${upErr.message}`,
+              variant: "destructive",
+            });
+            return;
+          }
+
+          const { data: urlData } = supabase.storage
+            .from("csc-attachments")
+            .getPublicUrl(path);
+
+          if (urlData?.publicUrl) {
+            const { error: docErr } = await supabase.from("project_documents").insert({
+              project_id: projectId,
+              activity_id: createdActivityId,
+              file_name: attachmentSnapshot.name,
+              file_url: urlData.publicUrl,
+              file_type: attachmentSnapshot.type || null,
+              file_size: attachmentSnapshot.size,
+            } as never);
+
+            if (docErr) {
+              console.warn("Falha ao vincular anexo da atividade:", docErr.message);
+              toast({
+                title: "Atividade criada com aviso",
+                description: `A atividade foi salva, mas houve falha ao vincular o anexo: ${docErr.message}`,
+                variant: "destructive",
+              });
+            }
+          }
+        })();
+      }
     } catch (e) {
       console.error(e);
-      toast({ title: "Erro ao criar atividade", variant: "destructive" });
+      const maybe = e as { message?: string; details?: string; hint?: string; code?: string };
+      const detail = [maybe?.message, maybe?.details, maybe?.hint, maybe?.code].filter(Boolean).join(" | ");
+      toast({
+        title: "Erro ao criar atividade",
+        description: detail || "Não foi possível salvar. Tente novamente.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -478,7 +513,7 @@ export const CreateTaskDialog = ({
 
           {/* Datas */}
           <div className="space-y-2">
-          <div className={`grid ${isQualityProject ? "grid-cols-3" : "grid-cols-2"} gap-4`}>
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Calendar className="w-4 h-4" /> Data de Início
@@ -499,6 +534,28 @@ export const CreateTaskDialog = ({
                 value={formData.end_date}
                 onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                 className={dateRangeInvalid ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
+            </div>
+          </div>
+          <div className={`grid ${isQualityProject ? "grid-cols-3" : "grid-cols-2"} gap-4`}>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Data de Início Real
+              </Label>
+              <Input
+                type="date"
+                value={formData.actual_start_date}
+                onChange={(e) => setFormData({ ...formData, actual_start_date: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Data de Término Real
+              </Label>
+              <Input
+                type="date"
+                value={formData.actual_end_date}
+                onChange={(e) => setFormData({ ...formData, actual_end_date: e.target.value })}
               />
             </div>
             {isQualityProject && (
