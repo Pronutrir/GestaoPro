@@ -5,7 +5,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-  Search, Lightbulb, Beaker, Rocket, CheckCircle, Archive, AlertTriangle,
+  Activity as ActivityIcon,
+  AlertTriangle,
+  Archive,
+  Beaker,
+  CheckCircle,
+  Lightbulb,
+  Rocket,
+  Search,
 } from 'lucide-react';
 import { ProjectColumn } from '@/components/ProjectColumn';
 import { ProjectDrawer } from '@/components/ProjectDrawer';
@@ -29,6 +36,51 @@ interface Project {
   owner: string | null; blockers: string | null; display_order: number;
   category?: string; program?: string | null;
 }
+
+const STATUS_CARD_STYLES = {
+  ideacao: {
+    active: 'border-amber-500 ring-2 ring-amber-300/40',
+    hover: 'hover:border-amber-400',
+    iconWrap: 'bg-gradient-to-br from-amber-100 to-amber-50 ring-1 ring-amber-200/70',
+    icon: 'text-amber-600',
+  },
+  poc: {
+    active: 'border-sky-500 ring-2 ring-sky-300/40',
+    hover: 'hover:border-sky-400',
+    iconWrap: 'bg-gradient-to-br from-sky-100 to-cyan-50 ring-1 ring-sky-200/70',
+    icon: 'text-sky-600',
+  },
+  mvp: {
+    active: 'border-indigo-500 ring-2 ring-indigo-300/40',
+    hover: 'hover:border-indigo-400',
+    iconWrap: 'bg-gradient-to-br from-indigo-100 to-blue-50 ring-1 ring-indigo-200/70',
+    icon: 'text-indigo-600',
+  },
+  blocked: {
+    active: 'border-rose-500 ring-2 ring-rose-300/40',
+    hover: 'hover:border-rose-400',
+    iconWrap: 'bg-gradient-to-br from-rose-100 to-red-50 ring-1 ring-rose-200/70',
+    icon: 'text-rose-600',
+  },
+  drawer: {
+    active: 'border-slate-500 ring-2 ring-slate-300/40',
+    hover: 'hover:border-slate-400',
+    iconWrap: 'bg-gradient-to-br from-slate-100 to-zinc-50 ring-1 ring-slate-200/70',
+    icon: 'text-slate-700',
+  },
+  'em-execucao': {
+    active: 'border-emerald-500 ring-2 ring-emerald-300/40',
+    hover: 'hover:border-emerald-400',
+    iconWrap: 'bg-gradient-to-br from-emerald-100 to-teal-50 ring-1 ring-emerald-200/70',
+    icon: 'text-emerald-600',
+  },
+  concluido: {
+    active: 'border-green-500 ring-2 ring-green-300/40',
+    hover: 'hover:border-green-400',
+    iconWrap: 'bg-gradient-to-br from-green-100 to-lime-50 ring-1 ring-green-200/70',
+    icon: 'text-green-600',
+  },
+} as const;
 
 function ProjectsContent() {
   const router = useRouter();
@@ -223,12 +275,13 @@ function ProjectsContent() {
     [...arr].sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
 
   const statusCards = [
-    { key: 'ideacao', label: 'Ideação', icon: Lightbulb, color: 'warning', projects: sortByOrder(filteredProjects.filter((p) => p.status === 'ideacao')) },
-    { key: 'poc', label: 'POC', icon: Beaker, color: 'info', projects: sortByOrder(filteredProjects.filter((p) => p.status === 'poc')) },
-    { key: 'mvp', label: 'MVP', icon: Rocket, color: 'accent', projects: sortByOrder(filteredProjects.filter((p) => p.status === 'mvp')) },
-    { key: 'blocked', label: 'Bloqueio', icon: AlertTriangle, color: 'destructive', projects: sortByOrder(filteredProjects.filter((p) => p.status === 'blocked')) },
-    { key: 'drawer', label: 'Gaveta', icon: Archive, color: 'secondary', projects: sortByOrder(filteredProjects.filter((p) => p.status === 'drawer')) },
-    { key: 'em-execucao', label: 'Em Execução', icon: CheckCircle, color: 'success', projects: sortByOrder(filteredProjects.filter((p) => p.status === 'em-execucao')) },
+    { key: 'ideacao', label: 'Ideação', icon: Lightbulb, projects: sortByOrder(filteredProjects.filter((p) => p.status === 'ideacao')) },
+    { key: 'poc', label: 'POC', icon: Beaker, projects: sortByOrder(filteredProjects.filter((p) => p.status === 'poc')) },
+    { key: 'mvp', label: 'MVP', icon: Rocket, projects: sortByOrder(filteredProjects.filter((p) => p.status === 'mvp')) },
+    { key: 'blocked', label: 'Bloqueio', icon: AlertTriangle, projects: sortByOrder(filteredProjects.filter((p) => p.status === 'blocked')) },
+    { key: 'drawer', label: 'Gaveta', icon: Archive, projects: sortByOrder(filteredProjects.filter((p) => p.status === 'drawer')) },
+    { key: 'em-execucao', label: 'Em Execução', icon: ActivityIcon, projects: sortByOrder(filteredProjects.filter((p) => p.status === 'em-execucao')) },
+    { key: 'concluido', label: 'Concluídos', icon: CheckCircle, projects: sortByOrder(filteredProjects.filter((p) => p.status === 'concluido')) },
   ];
 
   return (
@@ -250,18 +303,18 @@ function ProjectsContent() {
       </div>
 
       {/* Status Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4 mb-6">
         {statusCards.map((s) => (
           <div
             key={s.key}
             className={`bg-card border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${
-              statusFilter === s.key ? `border-${s.color} ring-2 ring-${s.color}/30` : 'border-border'
+              statusFilter === s.key ? STATUS_CARD_STYLES[s.key].active : `border-border ${STATUS_CARD_STYLES[s.key].hover}`
             }`}
             onClick={() => handleStatusFilter(statusFilter === s.key ? null : s.key)}
           >
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 bg-${s.color}/10 rounded-lg flex items-center justify-center`}>
-                <s.icon className={`w-5 h-5 text-${s.color}`} />
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${STATUS_CARD_STYLES[s.key].iconWrap}`}>
+                <s.icon className={`w-5 h-5 ${STATUS_CARD_STYLES[s.key].icon}`} />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">{s.label}</p>
@@ -294,7 +347,7 @@ function ProjectsContent() {
           onDragCancel={() => setActiveProjectId(null)}
         >
           <div
-            className={`grid gap-6 ${statusFilter ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-6'}`}
+            className={`grid gap-6 ${statusFilter ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-7'}`}
           >
             {statusCards
               .filter((s) => !statusFilter || statusFilter === s.key)
