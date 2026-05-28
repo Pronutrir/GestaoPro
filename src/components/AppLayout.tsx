@@ -25,6 +25,22 @@ function getInitials(name?: string | null, email?: string | null) {
   return (first + second).toUpperCase().slice(0, 2) || "?";
 }
 
+function normalizeAvatarUrl(value?: string | null) {
+  if (!value) return undefined;
+  const cleaned = value.trim();
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+function getReadableTextColor(hexColor: string) {
+  const match = hexColor.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+  if (!match) return "#0f172a";
+  const r = parseInt(match[1], 16);
+  const g = parseInt(match[2], 16);
+  const b = parseInt(match[3], 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "#0f172a" : "#ffffff";
+}
+
 export const AppLayout = ({ children, title }: { children: ReactNode; title?: string }) => {
   const router = useRouter();
   const { signOut, profile, isAdmin, canManage } = useAuth();
@@ -35,21 +51,10 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
   const email = profile?.email || "";
   const sector = profile?.sector || profile?.setor || null;
   const initials = getInitials(profile?.full_name, profile?.email);
-  const [localAvatarUrl, setLocalAvatarUrl] = useState<string | undefined>(profile?.avatar_url || undefined);
+  const [localAvatarUrl, setLocalAvatarUrl] = useState<string | undefined>(normalizeAvatarUrl(profile?.avatar_url));
   const [avatarColor, setAvatarColor] = useState<string>("#2563eb");
   const [avatarSaving, setAvatarSaving] = useState(false);
-
-  useEffect(() => {
-    setLocalAvatarUrl(profile?.avatar_url || undefined);
-  }, [profile?.avatar_url]);
-
-  useEffect(() => {
-    if (!profile?.id) return;
-    const saved = window.localStorage.getItem(`avatar-color:${profile.id}`);
-    if (saved) setAvatarColor(saved);
-  }, [profile?.id]);
-
-  const avatarUrl = localAvatarUrl;
+  const [avatarRemovalPending, setAvatarRemovalPending] = useState(false);
 
   const avatarColorOptions = useMemo(
     () => [
@@ -64,6 +69,35 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
     ],
     []
   );
+
+  useEffect(() => {
+    const nextProfileAvatar = normalizeAvatarUrl(profile?.avatar_url);
+
+    // Evita reidratar URL antiga do perfil enquanto aguardamos a remoção propagar.
+    if (avatarRemovalPending) {
+      if (!nextProfileAvatar) {
+        setAvatarRemovalPending(false);
+        setLocalAvatarUrl(undefined);
+      }
+      return;
+    }
+
+    setLocalAvatarUrl(nextProfileAvatar);
+  }, [profile?.avatar_url, avatarRemovalPending]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    const saved = window.localStorage.getItem(`avatar-color:${profile.id}`);
+    if (saved && avatarColorOptions.includes(saved)) {
+      setAvatarColor(saved);
+      return;
+    }
+    setAvatarColor("#2563eb");
+  }, [profile?.id, avatarColorOptions]);
+
+  const avatarUrl = normalizeAvatarUrl(localAvatarUrl);
+  const effectiveAvatarColor = avatarColorOptions.includes(avatarColor) ? avatarColor : "#2563eb";
+  const avatarTextColor = getReadableTextColor(effectiveAvatarColor);
 
   const roleLabel = isAdmin ? "Master" : canManage ? "Gestor" : "Usuário";
   const roleClass = isAdmin
@@ -114,7 +148,8 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
         .eq("id", profile.id);
       if (updateError) throw updateError;
 
-      setLocalAvatarUrl(publicUrl);
+      setAvatarRemovalPending(false);
+      setLocalAvatarUrl(normalizeAvatarUrl(publicUrl));
       toast({ title: "Foto atualizada" });
     } catch (error: any) {
       toast({ title: "Erro ao atualizar foto", description: error?.message || "Tente novamente.", variant: "destructive" });
@@ -127,6 +162,7 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
     if (!profile?.id) return;
     try {
       setAvatarSaving(true);
+      setAvatarRemovalPending(true);
       const { error } = await supabase
         .from("profiles")
         .update({ avatar_url: null })
@@ -135,6 +171,7 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
       setLocalAvatarUrl(undefined);
       toast({ title: "Foto removida" });
     } catch (error: any) {
+      setAvatarRemovalPending(false);
       toast({ title: "Erro ao remover foto", description: error?.message || "Tente novamente.", variant: "destructive" });
     } finally {
       setAvatarSaving(false);
@@ -142,9 +179,10 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
   };
 
   const handleAvatarColorChange = (color: string) => {
-    setAvatarColor(color);
+    const nextColor = avatarColorOptions.includes(color) ? color : "#2563eb";
+    setAvatarColor(nextColor);
     if (profile?.id) {
-      window.localStorage.setItem(`avatar-color:${profile.id}`, color);
+      window.localStorage.setItem(`avatar-color:${profile.id}`, nextColor);
     }
   };
 
@@ -173,8 +211,16 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
                       aria-label="Abrir menu do usuário"
                     >
                       <Avatar className="h-8 w-8 ring-2 ring-primary/20">
-                        {avatarUrl && <AvatarImage src={avatarUrl} alt={name} />}
-                        <AvatarFallback style={{ backgroundColor: avatarColor }} className="text-white text-xs font-semibold">
+                        {avatarUrl && (
+                          <AvatarImage
+                            src={avatarUrl}
+                            alt={name}
+                            onLoadingStatusChange={(status) => {
+                              if (status === "error") setLocalAvatarUrl(undefined);
+                            }}
+                          />
+                        )}
+                        <AvatarFallback style={{ backgroundColor: effectiveAvatarColor, color: avatarTextColor }} className="text-xs font-semibold">
                           {initials}
                         </AvatarFallback>
                       </Avatar>
@@ -190,8 +236,16 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
                     />
                     <div className="p-3 border-b border-border flex items-center gap-3">
                       <Avatar className="h-10 w-10">
-                        {avatarUrl && <AvatarImage src={avatarUrl} alt={name} />}
-                        <AvatarFallback style={{ backgroundColor: avatarColor }} className="text-white text-sm font-semibold">
+                        {avatarUrl && (
+                          <AvatarImage
+                            src={avatarUrl}
+                            alt={name}
+                            onLoadingStatusChange={(status) => {
+                              if (status === "error") setLocalAvatarUrl(undefined);
+                            }}
+                          />
+                        )}
+                        <AvatarFallback style={{ backgroundColor: effectiveAvatarColor, color: avatarTextColor }} className="text-sm font-semibold">
                           {initials}
                         </AvatarFallback>
                       </Avatar>

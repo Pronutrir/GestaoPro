@@ -20,12 +20,12 @@ import { PipelineByTypeLanes } from '@/components/PipelineByTypeLanes';
 import { PriorityBadge } from '@/components/PriorityBadge';
 import { normalizeGut, type GutLevel } from '@/lib/gutPriority';
 import {
+  Activity as ActivityIcon,
   AlertTriangle,
   Archive,
   Beaker,
   CalendarClock,
   CheckCircle2,
-  Clock,
   DollarSign,
   ExternalLink,
   Flag,
@@ -36,20 +36,6 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 
 interface Project {
   id: string;
@@ -82,6 +68,7 @@ interface Activity {
 }
 
 interface TimeEntry {
+  activity_id: string | null;
   duration_minutes: number | null;
   project_id: string;
   created_at: string;
@@ -97,12 +84,41 @@ const COLORS = {
 };
 
 const STATUS_CARD_STYLES = {
-  ideacao: { hover: 'hover:border-warning', iconWrap: 'bg-warning/10', icon: 'text-warning' },
-  poc: { hover: 'hover:border-info', iconWrap: 'bg-info/10', icon: 'text-info' },
-  mvp: { hover: 'hover:border-primary', iconWrap: 'bg-primary/10', icon: 'text-primary' },
-  blocked: { hover: 'hover:border-destructive', iconWrap: 'bg-destructive/10', icon: 'text-destructive' },
-  drawer: { hover: 'hover:border-secondary', iconWrap: 'bg-secondary/50', icon: 'text-secondary-foreground' },
-  'em-execucao': { hover: 'hover:border-success', iconWrap: 'bg-success/10', icon: 'text-success' },
+  ideacao: {
+    hover: 'hover:border-amber-400',
+    iconWrap: 'bg-gradient-to-br from-amber-100 to-amber-50 ring-1 ring-amber-200/70',
+    icon: 'text-amber-600',
+  },
+  poc: {
+    hover: 'hover:border-sky-400',
+    iconWrap: 'bg-gradient-to-br from-sky-100 to-cyan-50 ring-1 ring-sky-200/70',
+    icon: 'text-sky-600',
+  },
+  mvp: {
+    hover: 'hover:border-indigo-400',
+    iconWrap: 'bg-gradient-to-br from-indigo-100 to-blue-50 ring-1 ring-indigo-200/70',
+    icon: 'text-indigo-600',
+  },
+  blocked: {
+    hover: 'hover:border-rose-400',
+    iconWrap: 'bg-gradient-to-br from-rose-100 to-red-50 ring-1 ring-rose-200/70',
+    icon: 'text-rose-600',
+  },
+  drawer: {
+    hover: 'hover:border-slate-400',
+    iconWrap: 'bg-gradient-to-br from-slate-100 to-zinc-50 ring-1 ring-slate-200/70',
+    icon: 'text-slate-700',
+  },
+  'em-execucao': {
+    hover: 'hover:border-emerald-400',
+    iconWrap: 'bg-gradient-to-br from-emerald-100 to-teal-50 ring-1 ring-emerald-200/70',
+    icon: 'text-emerald-600',
+  },
+  concluido: {
+    hover: 'hover:border-green-400',
+    iconWrap: 'bg-gradient-to-br from-green-100 to-lime-50 ring-1 ring-green-200/70',
+    icon: 'text-green-600',
+  },
 } as const;
 
 export function OverviewPage() {
@@ -121,24 +137,57 @@ export function OverviewPage() {
     }
   }, [authLoading, isAdmin]);
 
+  useEffect(() => {
+    router.prefetch('/projects');
+    router.prefetch('/investments');
+    router.prefetch('/team');
+  }, [router]);
+
   const fetchAllData = async () => {
     try {
-      const [projectsRes, activitiesRes, timeRes] = await Promise.all([
-        supabase.from('projects').select('*').eq('is_trashed', false),
-        supabase.from('activities').select('*'),
-        supabase.from('time_entries').select('duration_minutes, project_id, created_at'),
-      ]);
+      const projectsRes = await supabase
+        .from('projects')
+        .select(
+          'id, title, status, budget_planned, budget_used, due_date, owner, blockers, project_type, priority, completion_percentage',
+        )
+        .eq('is_trashed', false);
 
       const allProjects = (projectsRes.data || []) as Project[];
       const filtered = await filterProjects(allProjects);
       setProjects(filtered as Project[]);
 
-      const projectIds = new Set(filtered.map((project: Project) => project.id));
+      const projectIds = filtered.map((project: Project) => project.id);
+      if (projectIds.length === 0) {
+        setActivities([]);
+        setTimeEntries([]);
+        return;
+      }
+
+      const [activitiesRes, timeRes] = await Promise.all([
+        supabase
+          .from('activities')
+          .select(
+            'id, title, status, project_id, assigned_to, start_date, end_date, completed_at, created_at, hours, cost, priority, priority_score, is_trashed',
+          )
+          .in('project_id', projectIds),
+        supabase
+          .from('time_entries')
+          .select('activity_id, duration_minutes, project_id, created_at')
+          .in('project_id', projectIds),
+      ]);
+
+      let activeActivities: Activity[] = [];
       if (activitiesRes.data) {
-        setActivities(activitiesRes.data.filter((activity) => projectIds.has(activity.project_id)));
+        activeActivities = activitiesRes.data.filter((activity: any) => activity.is_trashed !== true);
+        setActivities(activeActivities);
       }
       if (timeRes.data) {
-        setTimeEntries(timeRes.data.filter((entry) => projectIds.has(entry.project_id)));
+        const activeActivityIds = new Set(activeActivities.map((activity) => activity.id));
+        setTimeEntries(
+          timeRes.data.filter(
+            (entry) => entry.activity_id !== null && activeActivityIds.has(entry.activity_id),
+          ),
+        );
       }
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
@@ -155,6 +204,7 @@ export function OverviewPage() {
     blocked: projects.filter((project) => project.status === 'blocked').length,
     drawer: projects.filter((project) => project.status === 'drawer').length,
     'em-execucao': projects.filter((project) => project.status === 'em-execucao').length,
+    concluido: projects.filter((project) => project.status === 'concluido' || (project.completion_percentage ?? 0) >= 100).length,
   };
 
   const totalBudgetPlanned = projects.reduce((sum, project) => sum + (Number(project.budget_planned) || 0), 0);
@@ -187,61 +237,14 @@ export function OverviewPage() {
   const totalHoursEstimated = activities.reduce((sum, activity) => sum + (activity.hours || 0), 0);
   const totalHoursTracked = timeEntries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0) / 60;
 
-  const statusPieData = [
-    { name: 'Ideação', value: statusCounts.ideacao, color: COLORS.ideacao },
-    { name: 'POC', value: statusCounts.poc, color: COLORS.poc },
-    { name: 'MVP', value: statusCounts.mvp, color: COLORS.mvp },
-    { name: 'Bloqueio', value: statusCounts.blocked, color: COLORS.blocked },
-    { name: 'Gaveta', value: statusCounts.drawer, color: COLORS.drawer },
-    { name: 'Em Execução', value: statusCounts['em-execucao'], color: COLORS['em-execucao'] },
-  ].filter((entry) => entry.value > 0);
-
-  const burndownData = (() => {
-    const days: { date: string; remaining: number; completed: number }[] = [];
-    for (let index = 29; index >= 0; index -= 1) {
-      const date = new Date();
-      date.setDate(date.getDate() - index);
-      date.setHours(0, 0, 0, 0);
-      const label = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1)
-        .toString()
-        .padStart(2, '0')}`;
-      const completedByDate = activities.filter(
-        (activity) => activity.completed_at && new Date(activity.completed_at) <= date,
-      ).length;
-      const remaining = totalActivities - completedByDate;
-      days.push({ date: label, remaining, completed: completedByDate });
-    }
-    return days;
-  })();
-
-  const activitiesPerProject = (() => {
-    const items = new Map<string, { name: string; total: number; done: number }>();
-    activities.forEach((activity) => {
-      const project = projects.find((item) => item.id === activity.project_id);
-      if (!project) return;
-      const existing = items.get(activity.project_id) || {
-        name: project.title.substring(0, 20),
-        total: 0,
-        done: 0,
-      };
-      existing.total += 1;
-      if (activity.status === 'completed') {
-        existing.done += 1;
-      }
-      items.set(activity.project_id, existing);
-    });
-    return Array.from(items.values())
-      .sort((left, right) => right.total - left.total)
-      .slice(0, 10);
-  })();
-
   const statusCards = [
     { key: 'ideacao', label: 'Ideação', icon: Lightbulb, count: statusCounts.ideacao },
     { key: 'poc', label: 'POC', icon: Beaker, count: statusCounts.poc },
     { key: 'mvp', label: 'MVP', icon: Rocket, count: statusCounts.mvp },
     { key: 'blocked', label: 'Bloqueio', icon: AlertTriangle, count: statusCounts.blocked },
     { key: 'drawer', label: 'Gaveta', icon: Archive, count: statusCounts.drawer },
-    { key: 'em-execucao', label: 'Em Execução', icon: CheckCircle2, count: statusCounts['em-execucao'] },
+    { key: 'em-execucao', label: 'Em Execução', icon: ActivityIcon, count: statusCounts['em-execucao'] },
+    { key: 'concluido', label: 'Concluídos', icon: CheckCircle2, count: statusCounts.concluido },
   ] as const;
 
   return (
@@ -257,7 +260,7 @@ export function OverviewPage() {
           <DashboardSkeleton />
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-7">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-8">
               <Card
                 className="cursor-pointer p-5 transition-all hover:border-primary hover:shadow-md"
                 onClick={() => router.push('/projects')}
@@ -383,178 +386,13 @@ export function OverviewPage() {
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">{budgetProgress.toFixed(0)}% do planejado</p>
               </Card>
-              <Card className="cursor-pointer p-5 transition-shadow hover:shadow-md" onClick={() => router.push('/investments')}>
+              <Card className="cursor-pointer p-5 transition-shadow hover:shadow-md" onClick={() => router.push('/team')}>
                 <div className="mb-2 flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-emerald-600" />
                   <span className="text-sm text-muted-foreground">Horas Registradas</span>
                 </div>
                 <p className="text-3xl font-bold text-foreground">{totalHoursTracked.toFixed(0)}h</p>
                 <p className="mt-1 text-xs text-muted-foreground">de {totalHoursEstimated.toFixed(0)}h estimadas</p>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <Card className="p-6">
-                <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-foreground">
-                  <TrendingUp className="h-5 w-5 text-primary" /> Burn-down (30 dias)
-                </h3>
-                <div className="h-[280px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={burndownData}>
-                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                      <XAxis dataKey="date" tick={{ fontSize: 11 }} interval={4} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(var(--card))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
-                        }}
-                        labelStyle={{ color: 'hsl(var(--foreground))' }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="remaining"
-                        stroke="hsl(var(--destructive))"
-                        fill="hsl(var(--destructive))"
-                        fillOpacity={0.1}
-                        name="Restantes"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="completed"
-                        stroke="hsl(var(--success))"
-                        fill="hsl(var(--success))"
-                        fillOpacity={0.1}
-                        name="Concluídas"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <h3 className="mb-4 text-lg font-semibold text-foreground">Distribuição de Projetos</h3>
-                <div className="flex h-[280px] items-center">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={statusPieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        dataKey="value"
-                        label={({ name, value }) => `${name}: ${value}`}
-                      >
-                        {statusPieData.map((entry, index) => (
-                          <Cell key={index} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <Card className="p-6">
-                <div className="mb-6 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <DollarSign className="h-5 w-5 text-primary" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Investimento</h3>
-                </div>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Planejado</span>
-                    <span className="text-sm font-medium text-foreground">R$ {totalBudgetPlanned.toLocaleString('pt-BR')}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Utilizado</span>
-                    <span className="text-sm font-medium text-foreground">R$ {totalBudgetUsed.toLocaleString('pt-BR')}</span>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Utilização</span>
-                      <span className="font-medium">{budgetProgress.toFixed(1)}%</span>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={`h-full transition-all ${
-                          budgetProgress > 90 ? 'bg-destructive' : budgetProgress > 70 ? 'bg-warning' : 'bg-primary'
-                        }`}
-                        style={{ width: `${Math.min(budgetProgress, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-between border-t border-border pt-4">
-                    <span className="text-sm text-muted-foreground">Saldo</span>
-                    <span className={`text-lg font-bold ${totalBudgetPlanned - totalBudgetUsed >= 0 ? 'text-success' : 'text-destructive'}`}>
-                      R$ {(totalBudgetPlanned - totalBudgetUsed).toLocaleString('pt-BR')}
-                    </span>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <div className="mb-6 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-info/10">
-                    <Clock className="h-5 w-5 text-info" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Horas</h3>
-                </div>
-                <div className="space-y-6">
-                  <div>
-                    <p className="mb-1 text-sm text-muted-foreground">Estimadas</p>
-                    <p className="text-3xl font-bold text-foreground">{totalHoursEstimated.toFixed(0)}h</p>
-                  </div>
-                  <div>
-                    <p className="mb-1 text-sm text-muted-foreground">Registradas</p>
-                    <p className="text-3xl font-bold text-info">{totalHoursTracked.toFixed(1)}h</p>
-                  </div>
-                  {totalHoursEstimated > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Progresso</span>
-                        <span className="font-medium">{((totalHoursTracked / totalHoursEstimated) * 100).toFixed(0)}%</span>
-                      </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full bg-info transition-all"
-                          style={{ width: `${Math.min((totalHoursTracked / totalHoursEstimated) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <h3 className="mb-4 text-lg font-semibold text-foreground">Atividades por Projeto</h3>
-                {activitiesPerProject.length > 0 ? (
-                  <div className="h-[250px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={activitiesPerProject} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                        <XAxis type="number" tick={{ fontSize: 11 }} />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                          }}
-                        />
-                        <Bar dataKey="done" stackId="a" fill="hsl(var(--success))" name="Concluídas" radius={[0, 0, 0, 0]} />
-                        <Bar dataKey="total" stackId="b" fill="hsl(var(--muted))" name="Total" radius={[0, 4, 4, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <p className="py-8 text-center text-sm text-muted-foreground">Sem dados</p>
-                )}
               </Card>
             </div>
 

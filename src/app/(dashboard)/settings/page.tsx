@@ -1,162 +1,82 @@
 'use client';
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, X, Building2 } from "lucide-react";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Link } from "@/components/ui/link";
+import { Building2, Settings2, Shield, CalendarDays, Users as UsersIcon, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from 'sonner';
-import { useAuth } from "@/contexts/AuthContext";
-import { UserManagement } from "@/components/UserManagement";
-import { ModulePermissions } from "@/components/ModulePermissions";
-import { HolidaysManager } from "@/components/HolidaysManager";
-import { UserVacationsManager } from "@/components/UserVacationsManager";
+import { useRouter } from "next/navigation";
 
 interface Sector {
   id: string;
-  name: string;
-  created_at: string;
 }
 
 const Settings = () => {
-  const { isAdmin } = useAuth();
-  const [sectors, setSectors] = useState<Sector[]>([]);
-  const [newSector, setNewSector] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [editingSectorId, setEditingSectorId] = useState<string | null>(null);
-  const [editingSectorName, setEditingSectorName] = useState("");
+  const [sectorsCount, setSectorsCount] = useState(0);
+  const router = useRouter();
 
   const fetchSectors = async () => {
-    const { data, error } = await supabase.from("sectors").select("*").order("name");
-    if (!error && data) setSectors(data);
+    const { data, error } = await supabase.from("sectors").select("id");
+    if (!error && data) setSectorsCount(data.length);
   };
 
   useEffect(() => { fetchSectors(); }, []);
 
-  const handleAddSector = async () => {
-    const name = newSector.trim();
-    if (!name) return;
-    setIsLoading(true);
-    const { error } = await supabase.from("sectors").insert({ name });
-    if (error) {
-      toast.error("Erro");
-    } else {
-      toast.success(`Setor "${name}" criado!`);
-      setNewSector("");
-      fetchSectors();
-    }
-    setIsLoading(false);
-  };
-
-  const handleDeleteSector = async (sector: Sector) => {
-    const { error } = await supabase.from("sectors").delete().eq("id", sector.id);
-    if (error) {
-      toast.error("Erro ao excluir");
-    } else {
-      toast.success(`Setor "${sector.name}" removido!`);
-      fetchSectors();
-    }
-  };
-
-  const handleRenameSector = async (id: string) => {
-    const name = editingSectorName.trim();
-    if (!name) return;
-    const { error } = await supabase.from("sectors").update({ name }).eq("id", id);
-    if (error) {
-      toast.error("Erro ao renomear");
-    } else {
-      toast.success("Setor renomeado!");
-      setEditingSectorId(null);
-      fetchSectors();
-    }
-  };
+  useEffect(() => {
+    router.prefetch("/settings/estrutura");
+    router.prefetch("/settings/usuarios");
+    router.prefetch("/settings/acessos");
+    router.prefetch("/settings/calendario");
+  }, [router]);
 
   return (
-          <div className="px-4 py-6 space-y-6 max-w-4xl mx-auto">
-        {/* User Management (admin only) */}
-        <UserManagement />
-
-        {/* Module Permissions (admin only) */}
-        <ModulePermissions />
-
-        {/* Holidays (admin & gestor) */}
-        <HolidaysManager />
-
-        {/* User vacations (admin) */}
-        {isAdmin && <UserVacationsManager />}
-
-        {/* Sectors */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="w-5 h-5" />
-              Setores
-            </CardTitle>
-            <CardDescription>
-              Cadastre os setores que podem ser partes interessadas nos projetos.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Nome do setor (ex: TI, Marketing, RH...)"
-                value={newSector}
-                onChange={(e) => setNewSector(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddSector()}
-              />
-              <Button onClick={handleAddSector} disabled={isLoading || !newSector.trim()} className="gap-1 shrink-0">
-                <Plus className="w-4 h-4" /> Adicionar
-              </Button>
+    <div className="px-4 py-6 space-y-6 max-w-6xl mx-auto">
+      <Card>
+        <CardHeader className="space-y-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <CardTitle className="text-2xl flex items-center gap-2">
+                <Settings2 className="w-6 h-6 text-primary" />
+                Configuracoes do Sistema
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Escolha uma area para configurar. Cada tema possui pagina propria para reduzir complexidade e melhorar foco.
+              </CardDescription>
             </div>
-            {sectors.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Nenhum setor cadastrado ainda.</p>
-            ) : (
-              <div className="space-y-2 pt-2">
-                {sectors.map((sector) => (
-                  <div key={sector.id} className="flex items-center justify-between p-2 rounded-lg border border-border">
-                    {editingSectorId === sector.id ? (
-                      <div className="flex-1 flex items-center gap-2">
-                        <Input
-                          value={editingSectorName}
-                          onChange={(e) => setEditingSectorName(e.target.value)}
-                          className="h-8 text-sm"
-                          onKeyDown={(e) => e.key === "Enter" && handleRenameSector(sector.id)}
-                        />
-                        <Button size="sm" variant="ghost" onClick={() => handleRenameSector(sector.id)}>Salvar</Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingSectorId(null)}>
-                          <X className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <span className="text-sm font-medium text-foreground">{sector.name}</span>
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-xs"
-                            onClick={() => { setEditingSectorId(sector.id); setEditingSectorName(sector.name); }}
-                          >
-                            Renomear
-                          </Button>
-                          <button
-                            onClick={() => handleDeleteSector(sector)}
-                            className="text-muted-foreground hover:text-destructive transition-colors p-1"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    
+            <Badge variant="outline" className="text-xs">
+              Admin
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <Link href="/settings/estrutura" className="text-left rounded-lg border border-border p-3 hover:bg-accent/40 transition block">
+              <p className="text-xs text-muted-foreground">Estrutura</p>
+              <p className="text-sm font-semibold flex items-center gap-2 mt-1"><Building2 className="w-4 h-4" /> Setores</p>
+              <p className="text-xs text-muted-foreground mt-1">{sectorsCount} cadastrado(s)</p>
+              <span className="text-xs text-primary mt-2 inline-flex items-center gap-1">Abrir <ArrowRight className="w-3 h-3" /></span>
+            </Link>
+            <Link href="/settings/usuarios" className="text-left rounded-lg border border-border p-3 hover:bg-accent/40 transition block">
+              <p className="text-xs text-muted-foreground">Pessoas</p>
+              <p className="text-sm font-semibold flex items-center gap-2 mt-1"><UsersIcon className="w-4 h-4" /> Usuarios</p>
+              <p className="text-xs text-muted-foreground mt-1">Cadastro e manutencao</p>
+              <span className="text-xs text-primary mt-2 inline-flex items-center gap-1">Abrir <ArrowRight className="w-3 h-3" /></span>
+            </Link>
+            <Link href="/settings/acessos" className="text-left rounded-lg border border-border p-3 hover:bg-accent/40 transition block">
+              <p className="text-xs text-muted-foreground">Acessos</p>
+              <p className="text-sm font-semibold flex items-center gap-2 mt-1"><Shield className="w-4 h-4" /> Permissoes</p>
+              <p className="text-xs text-muted-foreground mt-1">Modulos e visibilidade</p>
+              <span className="text-xs text-primary mt-2 inline-flex items-center gap-1">Abrir <ArrowRight className="w-3 h-3" /></span>
+            </Link>
+            <Link href="/settings/calendario" className="text-left rounded-lg border border-border p-3 hover:bg-accent/40 transition block">
+              <p className="text-xs text-muted-foreground">Calendario</p>
+              <p className="text-sm font-semibold flex items-center gap-2 mt-1"><CalendarDays className="w-4 h-4" /> Feriados e Ferias</p>
+              <p className="text-xs text-muted-foreground mt-1">Capacidade e disponibilidade</p>
+              <span className="text-xs text-primary mt-2 inline-flex items-center gap-1">Abrir <ArrowRight className="w-3 h-3" /></span>
+            </Link>
+          </div>
+        </CardHeader>
+      </Card>
+    </div>
   );
 };
 

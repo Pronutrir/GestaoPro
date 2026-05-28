@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   Users, Plus, Shield, User, Pencil, Trash2, Ban, CheckCircle2,
   Camera, Mail, Building2, Briefcase, Key, Search, MoreVertical, LayoutGrid,
@@ -50,6 +49,16 @@ interface Sector {
   name: string;
 }
 
+const USER_MGMT_CACHE_TTL_MS = 60_000;
+let userManagementCache:
+  | {
+      timestamp: number;
+      profiles: Profile[];
+      roles: UserRole[];
+      sectors: Sector[];
+    }
+  | null = null;
+
 export const UserManagement = () => {
   const { toast } = useToast();
   const { isAdmin, user: currentUser } = useAuth();
@@ -71,16 +80,40 @@ export const UserManagement = () => {
     full_name: "", email: "", sector: "", role_title: "", role: "user", new_password: "",
   });
   const [userAllowedTabs, setUserAllowedTabs] = useState<string[]>(normalizeProjectTabs(ALL_TAB_VALUES));
+  const [tabsByUserId, setTabsByUserId] = useState<Record<string, string[]>>({});
 
-  const fetchData = async () => {
+  const fetchData = async ({ force = false }: { force?: boolean } = {}) => {
+    const now = Date.now();
+    if (!force && userManagementCache && now - userManagementCache.timestamp < USER_MGMT_CACHE_TTL_MS) {
+      setProfiles(userManagementCache.profiles);
+      setRoles(userManagementCache.roles);
+      setSectors(userManagementCache.sectors);
+      return;
+    }
+
     const [{ data: profilesData }, { data: rolesData }, { data: sectorsData }] = await Promise.all([
-      supabase.from("profiles").select("*").order("full_name"),
+      supabase
+        .from("profiles")
+        .select("id, email, full_name, sector, role_title, avatar_url, created_at, is_active, provider, last_login_at")
+        .order("full_name"),
       supabase.from("user_roles").select("user_id, role"),
       supabase.from("sectors").select("id, name").order("name"),
     ]);
-    if (profilesData) setProfiles(profilesData);
-    if (rolesData) setRoles(rolesData as UserRole[]);
-    if (sectorsData) setSectors(sectorsData);
+
+    const nextProfiles = profilesData || [];
+    const nextRoles = (rolesData as UserRole[]) || [];
+    const nextSectors = sectorsData || [];
+
+    setProfiles(nextProfiles);
+    setRoles(nextRoles);
+    setSectors(nextSectors);
+
+    userManagementCache = {
+      timestamp: now,
+      profiles: nextProfiles,
+      roles: nextRoles,
+      sectors: nextSectors,
+    };
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -127,7 +160,7 @@ export const UserManagement = () => {
       });
       setForm({ email: "", password: "", full_name: "", sector: "", role_title: "", role: "user" });
       setCreateOpen(false);
-      fetchData();
+      await fetchData({ force: true });
     } catch (error: any) {
       toast({ title: "Erro ao criar usuário", description: error.message, variant: "destructive" });
     }
@@ -162,7 +195,7 @@ export const UserManagement = () => {
       await handleSaveTabPermissions(selectedUser.id, userAllowedTabs);
       toast({ title: "Usuário atualizado!" });
       setSelectedUser(null);
-      fetchData();
+      await fetchData({ force: true });
     } catch (error: any) {
       toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
     }
@@ -195,7 +228,7 @@ export const UserManagement = () => {
       if (!avatarRes.ok) { const d = await avatarRes.json(); throw new Error(d.error ?? "Erro ao atualizar avatar"); }
 
       toast({ title: "Foto atualizada!" });
-      fetchData();
+      await fetchData({ force: true });
       setSelectedUser(prev => prev ? { ...prev, avatar_url: avatarUrl } : null);
     } catch (error: any) {
       toast({ title: "Erro no upload", description: error.message, variant: "destructive" });
@@ -227,7 +260,7 @@ export const UserManagement = () => {
       setDeleteConfirm(null);
       setBanConfirm(null);
       setSelectedUser(null);
-      fetchData();
+      await fetchData({ force: true });
     } catch (error: any) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     }
@@ -244,13 +277,21 @@ export const UserManagement = () => {
       role: getUserRole(profile.id),
       new_password: "",
     });
+    const cachedTabs = tabsByUserId[profile.id];
+    if (cachedTabs) {
+      setUserAllowedTabs(normalizeProjectTabs(cachedTabs));
+      return;
+    }
+
     // Fetch tab permissions
     const { data } = await supabase
       .from("user_tab_permissions")
       .select("allowed_tabs")
       .eq("user_id", profile.id)
       .maybeSingle();
-    setUserAllowedTabs(normalizeProjectTabs(data?.allowed_tabs));
+    const normalizedTabs = normalizeProjectTabs(data?.allowed_tabs);
+    setTabsByUserId(prev => ({ ...prev, [profile.id]: normalizedTabs }));
+    setUserAllowedTabs(normalizeProjectTabs(normalizedTabs));
   };
 
   const handleSaveTabPermissions = async (userId: string, tabs: string[]) => {
@@ -265,6 +306,7 @@ export const UserManagement = () => {
     } else {
       await supabase.from("user_tab_permissions").insert({ user_id: userId, allowed_tabs: normalizedTabs } as any);
     }
+    setTabsByUserId(prev => ({ ...prev, [userId]: normalizedTabs }));
   };
 
   const toggleTab = (tabValue: string) => {
@@ -477,165 +519,166 @@ export const UserManagement = () => {
         </CardContent>
       </Card>
 
-      {/* User Detail Sheet */}
-      <Sheet open={!!selectedUser} onOpenChange={(open) => { if (!open) setSelectedUser(null); }}>
-        <SheetContent className="sm:max-w-md overflow-y-auto">
+      {/* User Detail Dialog */}
+      <Dialog open={!!selectedUser} onOpenChange={(open) => { if (!open) setSelectedUser(null); }}>
+        <DialogContent className="w-[96vw] max-w-[1100px] p-0 overflow-hidden">
           {selectedUser && (
-            <>
-              <SheetHeader>
-                <SheetTitle className="text-lg">Editar Usuário</SheetTitle>
-              </SheetHeader>
+            <div className="flex max-h-[88vh] flex-col">
+              <DialogHeader className="border-b border-border px-5 py-4 sm:px-6">
+                <DialogTitle className="text-lg">Editar Usuário</DialogTitle>
+              </DialogHeader>
 
-              <div className="mt-6 space-y-6">
-                {/* Avatar Section */}
-                <div className="flex flex-col items-center gap-3">
-                  <div className="relative group">
-                    <Avatar className="h-20 w-20">
-                      <AvatarImage src={selectedUser.avatar_url || undefined} alt={selectedUser.full_name || ""} />
-                      <AvatarFallback className="text-xl bg-primary/15 text-primary">
-                        {getInitials(selectedUser.full_name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <button
-                      className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => avatarInputRef.current?.click()}
+              <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
+                <aside className="border-b border-border bg-muted/20 p-5 lg:border-b-0 lg:border-r lg:p-6">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative group">
+                      <Avatar className="h-24 w-24">
+                        <AvatarImage src={selectedUser.avatar_url || undefined} alt={selectedUser.full_name || ""} />
+                        <AvatarFallback className="text-xl bg-primary/15 text-primary">
+                          {getInitials(selectedUser.full_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <button
+                        className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => avatarInputRef.current?.click()}
+                      >
+                        <Camera className="w-5 h-5 text-white" />
+                      </button>
+                      <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                    </div>
+                    <div className="text-center">
+                      <p className="font-semibold text-foreground">{selectedUser.full_name || "Sem nome"}</p>
+                      <p className="text-sm text-muted-foreground break-all">{selectedUser.email}</p>
+                    </div>
+                    <Badge
+                      variant={getUserRole(selectedUser.id) === "admin" ? "default" : "secondary"}
+                      className={getUserRole(selectedUser.id) === "gestor" ? "bg-amber-100 text-amber-800 border-amber-200" : ""}
                     >
-                      <Camera className="w-5 h-5 text-white" />
-                    </button>
-                    <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
-                  </div>
-                  <div className="text-center">
-                    <p className="font-semibold text-foreground">{selectedUser.full_name || "Sem nome"}</p>
-                    <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
-                  </div>
-                  <Badge
-                    variant={getUserRole(selectedUser.id) === "admin" ? "default" : "secondary"}
-                    className={getUserRole(selectedUser.id) === "gestor" ? "bg-amber-100 text-amber-800 border-amber-200" : ""}
-                  >
-                    {getUserRole(selectedUser.id) === "admin" ? "Administrador" : getUserRole(selectedUser.id) === "gestor" ? "Gestor" : "Usuário"}
-                  </Badge>
-                  {selectedUser.is_active === false && (
-                    <Badge variant="destructive" className="text-xs gap-1">
-                      <Ban className="w-3 h-3" /> Inativo
+                      {getUserRole(selectedUser.id) === "admin" ? "Administrador" : getUserRole(selectedUser.id) === "gestor" ? "Gestor" : "Usuário"}
                     </Badge>
-                  )}
-                </div>
-
-                {/* Form Fields */}
-                <div className="space-y-4">
-                  <div className="grid gap-2">
-                    <Label className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Nome Completo</Label>
-                    <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
+                    {selectedUser.is_active === false && (
+                      <Badge variant="destructive" className="text-xs gap-1">
+                        <Ban className="w-3 h-3" /> Inativo
+                      </Badge>
+                    )}
                   </div>
 
-                  <div className="grid gap-2">
-                    <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email</Label>
-                    <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="email@empresa.com" />
+                  <div className="mt-6 text-xs text-muted-foreground space-y-1 border-t border-border pt-4">
+                    <p>Cadastrado em: {new Date(selectedUser.created_at).toLocaleDateString("pt-BR")}</p>
+                    <p>ID: {selectedUser.id.substring(0, 8)}…</p>
                   </div>
+                </aside>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-2">
-                      <Label className="flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5" /> Setor</Label>
-                      <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Cargo</Label>
-                      <Input value={editForm.role_title} onChange={(e) => setEditForm({ ...editForm, role_title: e.target.value })} />
-                    </div>
-                  </div>
+                <div className="min-h-0 overflow-y-auto p-5 sm:p-6">
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="grid gap-2">
+                        <Label className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Nome Completo</Label>
+                        <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
+                      </div>
 
-                  <div className="grid gap-2">
-                    <Label className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5" /> Perfil de Acesso</Label>
-                    <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Administrador</SelectItem>
-                        <SelectItem value="gestor">Gestor</SelectItem>
-                        <SelectItem value="user">Usuário</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      <div className="grid gap-2">
+                        <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email</Label>
+                        <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="email@empresa.com" />
+                      </div>
 
-                  <div className="grid gap-2">
-                    <Label className="flex items-center gap-1.5"><Key className="w-3.5 h-3.5" /> Redefinir Senha</Label>
-                    <Input
-                      type="password"
-                      value={editForm.new_password}
-                      onChange={(e) => setEditForm({ ...editForm, new_password: e.target.value })}
-                      placeholder="Deixe vazio para não alterar"
-                    />
-                  </div>
-                </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="grid gap-2">
+                          <Label className="flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5" /> Setor</Label>
+                          <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Cargo</Label>
+                          <Input value={editForm.role_title} onChange={(e) => setEditForm({ ...editForm, role_title: e.target.value })} />
+                        </div>
+                      </div>
 
-                {/* Tab Permissions */}
-                <div className="space-y-3 pt-2 border-t border-border">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-1.5"><LayoutGrid className="w-3.5 h-3.5" /> Abas Visíveis no Projeto</Label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground">Todas</span>
-                      <Switch
-                        checked={userAllowedTabs.length === ALL_TAB_VALUES.length}
-                        onCheckedChange={toggleAllTabs}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {ALL_PROJECT_TABS.map(tab => (
-                      <div key={tab.value} className="flex items-center justify-between p-2 rounded-lg border border-border">
-                        <span className="text-xs font-medium text-foreground">{tab.label}</span>
-                        <Switch
-                          checked={userAllowedTabs.includes(tab.value)}
-                          disabled={tab.value === "kanban"}
-                          onCheckedChange={() => toggleTab(tab.value)}
+                      <div className="grid gap-2">
+                        <Label className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5" /> Perfil de Acesso</Label>
+                        <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="admin">Administrador</SelectItem>
+                            <SelectItem value="gestor">Gestor</SelectItem>
+                            <SelectItem value="user">Usuário</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="grid gap-2">
+                        <Label className="flex items-center gap-1.5"><Key className="w-3.5 h-3.5" /> Redefinir Senha</Label>
+                        <Input
+                          type="password"
+                          value={editForm.new_password}
+                          onChange={(e) => setEditForm({ ...editForm, new_password: e.target.value })}
+                          placeholder="Deixe vazio para não alterar"
                         />
                       </div>
-                    ))}
+                    </div>
+
+                    <div className="space-y-3 border-t border-border pt-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="flex items-center gap-1.5"><LayoutGrid className="w-3.5 h-3.5" /> Abas Visíveis no Projeto</Label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground">Todas</span>
+                          <Switch
+                            checked={userAllowedTabs.length === ALL_TAB_VALUES.length}
+                            onCheckedChange={toggleAllTabs}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {ALL_PROJECT_TABS.map(tab => (
+                          <div key={tab.value} className="flex items-center justify-between p-2 rounded-lg border border-border">
+                            <span className="text-xs font-medium text-foreground">{tab.label}</span>
+                            <Switch
+                              checked={userAllowedTabs.includes(tab.value)}
+                              disabled={tab.value === "kanban"}
+                              onCheckedChange={() => toggleTab(tab.value)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 border-t border-border pt-4">
+                      <Button className="w-full" onClick={handleUpdate} disabled={isLoading}>
+                        {isLoading ? "Salvando..." : "Salvar Alterações"}
+                      </Button>
+
+                      {selectedUser.id !== currentUser?.id && (
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                          <Button
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => setBanConfirm({ profile: selectedUser, action: "ban" })}
+                          >
+                            <Ban className="w-3.5 h-3.5" /> Inativar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => setBanConfirm({ profile: selectedUser, action: "unban" })}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Reativar
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => setDeleteConfirm(selectedUser)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-
-                {/* Info */}
-                <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t border-border">
-                  <p>Cadastrado em: {new Date(selectedUser.created_at).toLocaleDateString("pt-BR")}</p>
-                  <p>ID: {selectedUser.id.substring(0, 8)}…</p>
-                </div>
-
-                {/* Actions */}
-                <div className="space-y-2 pt-2">
-                  <Button className="w-full" onClick={handleUpdate} disabled={isLoading}>
-                    {isLoading ? "Salvando..." : "Salvar Alterações"}
-                  </Button>
-
-                  {selectedUser.id !== currentUser?.id && (
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        className="flex-1 gap-1"
-                        onClick={() => setBanConfirm({ profile: selectedUser, action: "ban" })}
-                      >
-                        <Ban className="w-3.5 h-3.5" /> Inativar
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="flex-1 gap-1"
-                        onClick={() => setBanConfirm({ profile: selectedUser, action: "unban" })}
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Reativar
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        onClick={() => setDeleteConfirm(selectedUser)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
               </div>
-            </>
+            </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>

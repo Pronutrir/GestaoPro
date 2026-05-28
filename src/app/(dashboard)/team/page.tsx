@@ -78,7 +78,10 @@ const TeamView = () => {
 
   const fetchData = async () => {
     const [actRes, projRes, timeRes, membersRes] = await Promise.all([
-      supabase.from("activities").select("id, title, status, assigned_to, participants, project_id, hours, end_date, priority"),
+      supabase
+        .from("activities")
+        .select("id, title, status, assigned_to, participants, project_id, hours, end_date, priority, is_trashed")
+        .eq("is_trashed", false),
       supabase.from("projects").select("id, title, budget_planned, budget_used, owner").eq("is_trashed", false),
       supabase.from("time_entries").select("activity_id, duration_minutes, user_name, project_id"),
       supabase.from("project_members").select("project_id, user_id"),
@@ -86,8 +89,19 @@ const TeamView = () => {
     const filteredProjects = await filterProjects(projRes.data || []);
     setProjects(filteredProjects);
     const projectIds = new Set(filteredProjects.map((p) => p.id));
-    if (actRes.data) setActivities(actRes.data.filter((a) => projectIds.has(a.project_id)));
-    if (timeRes.data) setTimeEntries(timeRes.data.filter((t) => projectIds.has(t.project_id)));
+    let activeActivities: Activity[] = [];
+    if (actRes.data) {
+      activeActivities = actRes.data.filter((a: any) => projectIds.has(a.project_id) && a.is_trashed !== true);
+      setActivities(activeActivities);
+    }
+    if (timeRes.data) {
+      const activeActivityIds = new Set(activeActivities.map((activity) => activity.id));
+      setTimeEntries(
+        timeRes.data.filter(
+          (t) => projectIds.has(t.project_id) && activeActivityIds.has(t.activity_id),
+        ),
+      );
+    }
 
     // Build all member names from project_members profiles + project owners
     const filteredMembers = (membersRes.data || []).filter(m => projectIds.has(m.project_id));

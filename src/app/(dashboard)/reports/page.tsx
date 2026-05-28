@@ -34,15 +34,23 @@ const Reports = () => {
     const fetchAll = async () => {
       const [p, a, t, l] = await Promise.all([
         supabase.from("projects").select("*").eq("is_trashed", false),
-        supabase.from("activities").select("*"),
+        supabase.from("activities").select("*").eq("is_trashed", false),
         supabase.from("time_entries").select("*"),
         supabase.from("lessons_learned").select("*").eq("is_trashed", false),
       ]);
       const filteredProjects = await filterProjects(p.data || []);
       const allowedIds = new Set(filteredProjects.map((pr: any) => pr.id));
       setProjects(filteredProjects);
-      if (a.data) setActivities(a.data.filter((x: any) => allowedIds.has(x.project_id)));
-      if (t.data) setTimeEntries(t.data.filter((x: any) => allowedIds.has(x.project_id)));
+      const scopedActivities = (a.data || []).filter((x: any) => allowedIds.has(x.project_id));
+      setActivities(scopedActivities);
+      if (t.data) {
+        const activeActivityIds = new Set(scopedActivities.map((x: any) => x.id));
+        setTimeEntries(
+          t.data.filter(
+            (x: any) => allowedIds.has(x.project_id) && activeActivityIds.has(x.activity_id),
+          ),
+        );
+      }
       if (l.data) setLessons(l.data.filter((x: any) => allowedIds.has(x.project_id)));
       setIsLoading(false);
     };

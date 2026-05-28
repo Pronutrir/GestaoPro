@@ -72,14 +72,15 @@ const Investments = () => {
     const [projRes, invRes, actRes] = await Promise.all([
       supabase.from("projects").select("id, title, budget_planned, budget_used, status").eq("is_trashed", false),
       supabase.from("activity_investments").select("id, activity_id, amount, description, project_id, responsible, category, recorded_at"),
-      supabase.from("activities").select("id, title, assigned_to, project_id"),
+      supabase.from("activities").select("id, title, assigned_to, project_id, is_trashed").eq("is_trashed", false),
     ]);
     const filtered = await filterProjects(projRes.data || []);
     setProjects(filtered);
     const projectIds = new Set(filtered.map(p => p.id));
-    if (actRes.data) setActivities(actRes.data.filter(a => projectIds.has(a.project_id)));
+    const scopedActivities = (actRes.data || []).filter(a => projectIds.has(a.project_id) && a.is_trashed !== true);
+    setActivities(scopedActivities);
     if (invRes.data) {
-      const activityIds = new Set((actRes.data || []).filter(a => projectIds.has(a.project_id)).map(a => a.id));
+      const activityIds = new Set(scopedActivities.map(a => a.id));
       setInvestments(invRes.data.filter(i => activityIds.has(i.activity_id)));
     }
     setIsLoading(false);
