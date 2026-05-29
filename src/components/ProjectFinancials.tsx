@@ -83,9 +83,14 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
       const { data: profiles } = await supabase.from("profiles").select("id, full_name, sector, avatar_url").in("id", userIds);
       if (profiles) {
         setMembers(
-          profiles.filter(
-            (profile): profile is { id: string; full_name: string; sector: string | null; avatar_url?: string | null } => Boolean(profile.id && profile.full_name),
-          ),
+          profiles
+            .filter((profile) => Boolean(profile.id && profile.full_name))
+            .map((profile) => ({
+              id: profile.id,
+              full_name: profile.full_name || "",
+              sector: profile.sector,
+              avatar_url: profile.avatar_url,
+            })),
         );
       }
     }
