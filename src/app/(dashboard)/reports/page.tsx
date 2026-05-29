@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,32 +30,55 @@ const Reports = () => {
   const [lessons, setLessons] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      const [p, a, t, l] = await Promise.all([
-        supabase.from("projects").select("*").eq("is_trashed", false),
-        supabase.from("activities").select("*").eq("is_trashed", false),
-        supabase.from("time_entries").select("*"),
-        supabase.from("lessons_learned").select("*").eq("is_trashed", false),
-      ]);
-      const filteredProjects = await filterProjects(p.data || []);
-      const allowedIds = new Set(filteredProjects.map((pr: any) => pr.id));
-      setProjects(filteredProjects);
-      const scopedActivities = (a.data || []).filter((x: any) => allowedIds.has(x.project_id));
-      setActivities(scopedActivities);
-      if (t.data) {
-        const activeActivityIds = new Set(scopedActivities.map((x: any) => x.id));
-        setTimeEntries(
-          t.data.filter(
-            (x: any) => allowedIds.has(x.project_id) && activeActivityIds.has(x.activity_id),
-          ),
-        );
-      }
-      if (l.data) setLessons(l.data.filter((x: any) => allowedIds.has(x.project_id)));
-      setIsLoading(false);
-    };
-    fetchAll();
+  const fetchAll = useCallback(async () => {
+    const [p, a, t, l] = await Promise.all([
+      supabase.from("projects").select("*").eq("is_trashed", false),
+      supabase.from("activities").select("*").eq("is_trashed", false),
+      supabase.from("time_entries").select("*"),
+      supabase.from("lessons_learned").select("*").eq("is_trashed", false),
+    ]);
+    const filteredProjects = await filterProjects(p.data || []);
+    const allowedIds = new Set(filteredProjects.map((pr: any) => pr.id));
+    setProjects(filteredProjects);
+    const scopedActivities = (a.data || []).filter((x: any) => allowedIds.has(x.project_id));
+    setActivities(scopedActivities);
+    if (t.data) {
+      const activeActivityIds = new Set(scopedActivities.map((x: any) => x.id));
+      setTimeEntries(
+        t.data.filter(
+          (x: any) => allowedIds.has(x.project_id) && activeActivityIds.has(x.activity_id),
+        ),
+      );
+    }
+    if (l.data) setLessons(l.data.filter((x: any) => allowedIds.has(x.project_id)));
+    setIsLoading(false);
   }, [filterProjects]);
+
+  useEffect(() => {
+    void fetchAll();
+  }, [fetchAll]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('reports-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
+        void fetchAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, () => {
+        void fetchAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' }, () => {
+        void fetchAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lessons_learned' }, () => {
+        void fetchAll();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchAll]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

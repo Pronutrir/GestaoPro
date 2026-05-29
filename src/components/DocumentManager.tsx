@@ -4,11 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 interface ProjectDocument {
   id: string;
@@ -59,6 +62,7 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const uploadedByAvatarMap = useAssigneeAvatarLookup(documents.map((doc) => doc.uploaded_by));
 
   useEffect(() => {
     fetchDocuments();
@@ -213,7 +217,18 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                         {phases.find((p) => p.id === doc.phase_id)?.title}
                       </Badge>
                     )}
-                    {doc.uploaded_by && <span className="text-xs text-muted-foreground">👤 {doc.uploaded_by}</span>}
+                    {doc.uploaded_by && (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <Avatar className="h-4 w-4 shrink-0">
+                          {(() => {
+                            const avatar = resolveAvatarFromLookup(doc.uploaded_by, doc.uploaded_by, uploadedByAvatarMap);
+                            return avatar ? <AvatarImage src={avatar} alt={doc.uploaded_by} /> : null;
+                          })()}
+                          <AvatarFallback className="text-[8px]">{getAvatarInitials(doc.uploaded_by)}</AvatarFallback>
+                        </Avatar>
+                        <span>{doc.uploaded_by}</span>
+                      </span>
+                    )}
                     <span className="text-xs text-muted-foreground">
                       v{doc.version} · {new Date(doc.created_at).toLocaleDateString("pt-BR")}
                     </span>

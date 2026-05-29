@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardSkeleton } from '@/components/SkeletonScreens';
 import { useProjectAccess } from '@/hooks/useProjectAccess';
@@ -16,9 +16,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PipelineByTypeLanes } from '@/components/PipelineByTypeLanes';
 import { PriorityBadge } from '@/components/PriorityBadge';
 import { normalizeGut, type GutLevel } from '@/lib/gutPriority';
+import { getAvatarInitials, resolveAvatarFromLookup } from '@/lib/avatarLookup';
+import { useAssigneeAvatarLookup } from '@/hooks/useAssigneeAvatarLookup';
 import {
   Activity as ActivityIcon,
   AlertTriangle,
@@ -130,20 +133,9 @@ export function OverviewPage() {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [kpiDialog, setKpiDialog] = useState<{ title: string; items: Activity[] } | null>(null);
+  const assigneeAvatarMap = useAssigneeAvatarLookup(activities.map((activity) => activity.assigned_to));
 
-  useEffect(() => {
-    if (!authLoading) {
-      void fetchAllData();
-    }
-  }, [authLoading, isAdmin]);
-
-  useEffect(() => {
-    router.prefetch('/projects');
-    router.prefetch('/investments');
-    router.prefetch('/team');
-  }, [router]);
-
-  const fetchAllData = async () => {
+  const fetchAllData = useCallback(async () => {
     try {
       const projectsRes = await supabase
         .from('projects')
@@ -194,7 +186,40 @@ export function OverviewPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filterProjects]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      void fetchAllData();
+    }
+  }, [authLoading, isAdmin, fetchAllData]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const channel = supabase
+      .channel('overview-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
+        void fetchAllData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, () => {
+        void fetchAllData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' }, () => {
+        void fetchAllData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [authLoading, fetchAllData]);
+
+  useEffect(() => {
+    router.prefetch('/projects');
+    router.prefetch('/investments');
+    router.prefetch('/team');
+  }, [router]);
 
   const totalProjects = projects.length;
   const statusCounts = {
@@ -525,7 +550,16 @@ export function OverviewPage() {
                           </Badge>
                         )}
                         {activity.assigned_to && (
-                          <span className="whitespace-nowrap text-xs text-muted-foreground">{activity.assigned_to}</span>
+                          <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground max-w-[220px]">
+                            <Avatar className="h-4 w-4 shrink-0">
+                              {(() => {
+                                const avatar = resolveAvatarFromLookup(activity.assigned_to, activity.assigned_to, assigneeAvatarMap);
+                                return avatar ? <AvatarImage src={avatar} alt={activity.assigned_to} /> : null;
+                              })()}
+                              <AvatarFallback className="text-[8px]">{getAvatarInitials(activity.assigned_to)}</AvatarFallback>
+                            </Avatar>
+                            <span className="truncate">{activity.assigned_to}</span>
+                          </span>
                         )}
                         {activity.end_date && (
                           <span className="whitespace-nowrap text-xs text-muted-foreground">

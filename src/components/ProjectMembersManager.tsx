@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, UserPlus, User, Building2, Plus, Wand2 } from "lucide-react";
@@ -14,6 +15,7 @@ interface Profile {
   email: string;
   full_name: string;
   sector: string | null;
+  avatar_url?: string | null;
 }
 
 interface Scheme {
@@ -45,6 +47,13 @@ interface ProjectMembersManagerProps {
 
 export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps) => {
   const { toast } = useToast();
+  const getInitials = (name: string | null | undefined) =>
+    (name || "?")
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((n) => n[0]?.toUpperCase())
+      .join("") || "?";
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
@@ -68,7 +77,7 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
   const fetchData = async () => {
     const [{ data: membersData }, { data: profilesData }, { data: adminRoles }, { data: sectorsData }, { data: schemesData }] = await Promise.all([
       supabase.from("project_members").select("*").eq("project_id", projectId),
-      supabase.from("profiles").select("id, email, full_name, sector"),
+      supabase.from("profiles").select("id, email, full_name, sector, avatar_url"),
       supabase.from("user_roles").select("user_id").eq("role", "admin"),
       supabase.from("sectors").select("id, name").order("name"),
       supabase.from("permission_schemes").select("*").order("is_system", { ascending: false }).order("name"),
@@ -225,7 +234,10 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
             <div key={m.id} className="p-3 rounded border border-border bg-accent/10 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-muted-foreground" />
+                  <Avatar className="h-7 w-7 shrink-0">
+                    {m.profile?.avatar_url ? <AvatarImage src={m.profile.avatar_url} alt={m.profile?.full_name || "Usuário"} /> : null}
+                    <AvatarFallback className="text-[10px]">{getInitials(m.profile?.full_name || m.profile?.email)}</AvatarFallback>
+                  </Avatar>
                   <div className="flex flex-col">
                     <span className="text-sm font-medium flex items-center gap-2">
                       {m.profile?.full_name || m.profile?.email}
@@ -298,7 +310,13 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
             <SelectContent>
               {availableUsers.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
-                  {p.full_name || p.email}{p.sector ? ` — ${p.sector}` : ""}
+                  <span className="inline-flex items-center gap-2 min-w-0 w-full">
+                    <Avatar className="h-5 w-5 shrink-0">
+                      {p.avatar_url ? <AvatarImage src={p.avatar_url} alt={p.full_name || p.email} /> : null}
+                      <AvatarFallback className="text-[9px]">{getInitials(p.full_name || p.email)}</AvatarFallback>
+                    </Avatar>
+                    <span className="truncate">{p.full_name || p.email}{p.sector ? ` — ${p.sector}` : ""}</span>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>

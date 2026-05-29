@@ -4,12 +4,13 @@ import { useSortable } from "@dnd-kit/sortable";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { GripVertical, MoreVertical, Pencil, Trash2, Calendar } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatProjectDueDate } from "@/lib/projectDeadline";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 interface Project {
   id: string;
   title: string;
@@ -21,6 +22,7 @@ interface Project {
 
 interface SortableProjectCardProps {
   project: Project;
+  assigneeAvatarMap?: Record<string, string>;
   onEdit: (project: Project) => void;
   onDeleteClick: (id: string) => void;
   onCardClick?: (project: Project) => void;
@@ -33,7 +35,7 @@ const priorityColors: Record<string, string> = {
   low: "bg-muted text-muted-foreground border-border",
 };
 
-export const ProjectCardPreview = ({ project }: { project: Project }) => {
+export const ProjectCardPreview = ({ project, assigneeAvatarMap = {} }: { project: Project; assigneeAvatarMap?: Record<string, string> }) => {
   return (
     <Card className="p-4 shadow-lg ring-2 ring-primary bg-card">
       <div className="space-y-3">
@@ -66,7 +68,11 @@ export const ProjectCardPreview = ({ project }: { project: Project }) => {
           <div className="flex -space-x-2">
             {project.assignees.map((assignee, index) => (
               <Avatar key={index} className="w-6 h-6 border-2 border-background">
-                <AvatarFallback className="text-xs bg-primary text-primary-foreground">{assignee}</AvatarFallback>
+                {(() => {
+                  const avatar = resolveAvatarFromLookup(assignee, assignee, assigneeAvatarMap);
+                  return avatar ? <AvatarImage src={avatar} alt={assignee} /> : null;
+                })()}
+                <AvatarFallback className="text-xs bg-primary text-primary-foreground">{getAvatarInitials(assignee)}</AvatarFallback>
               </Avatar>
             ))}
           </div>
@@ -76,7 +82,7 @@ export const ProjectCardPreview = ({ project }: { project: Project }) => {
   );
 };
 
-export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClick, isAdmin = false }: SortableProjectCardProps) => {
+export const SortableProjectCard = ({ project, assigneeAvatarMap = {}, onEdit, onDeleteClick, onCardClick, isAdmin = false }: SortableProjectCardProps) => {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging, setActivatorNodeRef,
   } = useSortable({ id: project.id });
@@ -149,7 +155,11 @@ export const SortableProjectCard = ({ project, onEdit, onDeleteClick, onCardClic
           <div className="flex -space-x-2">
             {project.assignees.map((assignee, index) => (
               <Avatar key={index} className="w-6 h-6 border-2 border-background">
-                <AvatarFallback className="text-xs bg-primary text-primary-foreground">{assignee}</AvatarFallback>
+                {(() => {
+                  const avatar = resolveAvatarFromLookup(assignee, assignee, assigneeAvatarMap);
+                  return avatar ? <AvatarImage src={avatar} alt={assignee} /> : null;
+                })()}
+                <AvatarFallback className="text-xs bg-primary text-primary-foreground">{getAvatarInitials(assignee)}</AvatarFallback>
               </Avatar>
             ))}
           </div>

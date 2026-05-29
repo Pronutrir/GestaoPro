@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Target, Trash2, Pencil, Link2 } from "lucide-react";
@@ -10,6 +11,8 @@ import { toast } from "sonner";
 import { ObjectiveDialog } from "@/components/okr/ObjectiveDialog";
 import { KeyResultsPanel } from "@/components/okr/KeyResultsPanel";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 
 export interface Objective {
   id: string;
@@ -43,6 +46,7 @@ const OKRs = () => {
   const [editing, setEditing] = useState<Objective | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filterCycle, setFilterCycle] = useState<string>("all");
+  const ownerAvatarMap = useAssigneeAvatarLookup(objectives.map((objective) => objective.owner));
   const appConfirm = useAppConfirm();
 
   const fetchData = async () => {
@@ -133,7 +137,18 @@ const OKRs = () => {
                       <Badge className={`text-[10px] ${statusColor[obj.status] || ""}`}>
                         {statusLabel[obj.status] || obj.status}
                       </Badge>
-                      {obj.owner && <span className="text-xs text-muted-foreground">👤 {obj.owner}</span>}
+                      {obj.owner && (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground max-w-[200px]">
+                          <Avatar className="h-4 w-4 shrink-0">
+                            {(() => {
+                              const avatar = resolveAvatarFromLookup(obj.owner, obj.owner, ownerAvatarMap);
+                              return avatar ? <AvatarImage src={avatar} alt={obj.owner} /> : null;
+                            })()}
+                            <AvatarFallback className="text-[8px]">{getAvatarInitials(obj.owner)}</AvatarFallback>
+                          </Avatar>
+                          <span className="truncate">{obj.owner}</span>
+                        </span>
+                      )}
                     </div>
                     {obj.description && (
                       <p className="text-sm text-muted-foreground line-clamp-2">{obj.description}</p>

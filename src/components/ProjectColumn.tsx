@@ -30,8 +30,8 @@ interface Project {
 interface ProjectColumnProps {
   title: string;
   status: string;
-  color: string;
   projects: Project[];
+  assigneeAvatarMap?: Record<string, string>;
   onEdit: (project: Project) => void;
   onDelete: (projectId: string) => void;
   onStatusChange: (projectId: string, newStatus: string) => void;
@@ -42,8 +42,8 @@ interface ProjectColumnProps {
 export const ProjectColumn = ({
   title,
   status,
-  color,
   projects,
+  assigneeAvatarMap = {},
   onEdit,
   onDelete,
   onStatusChange,
@@ -94,6 +94,7 @@ export const ProjectColumn = ({
               <SortableProjectCard
                 key={project.id}
                 project={project}
+                assigneeAvatarMap={assigneeAvatarMap}
                 onEdit={onEdit}
                 onDeleteClick={handleDeleteClick}
                 onCardClick={onCardClick}

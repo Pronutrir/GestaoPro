@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -91,6 +92,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { normalizeGut, GUT_META, type GutLevel } from "@/lib/gutPriority";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
 import { inferStagePreset } from "@/lib/workflowStageRules";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 const formatHours = (hours: number): string => {
   if (!hours || hours <= 0) return "";
@@ -289,6 +291,8 @@ interface ActivityKanbanProps {
   onOpenCreateTask?: (stageId: string) => void;
   /** Mapa de id de perfil → nome completo para resolução de assigned_to */
   profilesMap?: Record<string, string>;
+  /** Mapa de id de perfil → avatar_url */
+  profileAvatarMap?: Record<string, string>;
 }
 
 type HoursStat = {
@@ -332,6 +336,7 @@ function SortableKanbanCard({
   subActivityStatusSummary,
   hoursStat,
   profilesMap = {},
+  profileAvatarMap = {},
 }: {
   activity: Activity;
   phases: Phase[];
@@ -362,6 +367,7 @@ function SortableKanbanCard({
   subActivityStatusSummary?: SubActivityStatusSummary;
   hoursStat?: HoursStat;
   profilesMap?: Record<string, string>;
+  profileAvatarMap?: Record<string, string>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: activity.id });
@@ -405,6 +411,7 @@ function SortableKanbanCard({
         subActivityStatusSummary={subActivityStatusSummary}
         hoursStat={hoursStat}
         profilesMap={profilesMap}
+        profileAvatarMap={profileAvatarMap}
       />
     </div>
   );
@@ -442,6 +449,7 @@ function KanbanCard({
   hoursStat,
   readOnlyPreview = false,
   profilesMap = {},
+  profileAvatarMap = {},
 }: {
   activity: Activity;
   phases: Phase[];
@@ -474,6 +482,7 @@ function KanbanCard({
   hoursStat?: HoursStat;
   readOnlyPreview?: boolean;
   profilesMap?: Record<string, string>;
+  profileAvatarMap?: Record<string, string>;
 }) {
   const getPriorityIndicator = (priority?: string) => {
     const lvl = normalizeGut(priority);
@@ -502,7 +511,7 @@ function KanbanCard({
   const tooltipLines = [
     activity.title,
     activity.description ? `📝 ${activity.description}` : null,
-    activity.assigned_to ? `👤 Responsável: ${profilesMap[activity.assigned_to] ?? activity.assigned_to}` : null,
+    activity.assigned_to ? `Responsável: ${profilesMap[activity.assigned_to] ?? activity.assigned_to}` : null,
     activity.priority
       ? `⚡ Prioridade: ${GUT_META[normalizeGut(activity.priority)].label}${activity.priority_score ? ` (${activity.priority_score})` : ""}`
       : null,
@@ -525,6 +534,11 @@ function KanbanCard({
     ? "Pausada (coluna de bloqueio)"
     : `${progressPercent}% — ${progressInfo.label}`;
   const progressBadge = progressPaused ? "⏸" : `${progressPercent}%`;
+  const assigneeRaw = (activity.assigned_to || "").trim();
+  const assigneeName = assigneeRaw
+    ? (profilesMap[assigneeRaw] ?? assigneeRaw)
+    : null;
+  const assigneeAvatar = resolveAvatarFromLookup(assigneeRaw, assigneeName, profileAvatarMap);
 
   const d = DENSITY_CLASSES[density];
 
@@ -667,7 +681,15 @@ function KanbanCard({
                   )}
                   {activity.assigned_to && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                      👤 {profilesMap[activity.assigned_to] ?? activity.assigned_to}
+                      <span className="inline-flex items-center gap-1 max-w-[180px]">
+                        <Avatar className="h-3.5 w-3.5 shrink-0">
+                          {assigneeAvatar ? <AvatarImage src={assigneeAvatar} alt={assigneeName || "Responsável"} /> : null}
+                          <AvatarFallback className="text-[7px] font-semibold">
+                            {getAvatarInitials(assigneeName)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="truncate">{assigneeName}</span>
+                      </span>
                     </Badge>
                   )}
                   {activity.participants && activity.participants.length > 0 && (
@@ -923,6 +945,7 @@ function SortableColumn({
   allStages,
   density,
   profilesMap = {},
+  profileAvatarMap = {},
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -962,6 +985,7 @@ function SortableColumn({
   density: KanbanDensity;
   hoursStatsByActivity?: Map<string, HoursStat>;
   profilesMap?: Record<string, string>;
+  profileAvatarMap?: Record<string, string>;
 }) {
   const [colSort, setColSort] = useState<string>("updated_desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -1500,6 +1524,7 @@ function SortableColumn({
                       hoursStat={hoursStatsByActivity?.get(activity.id)}
                       readOnlyPreview
                       profilesMap={profilesMap}
+                      profileAvatarMap={profileAvatarMap}
                     />
                   ) : (
                     <SortableKanbanCard
@@ -1532,6 +1557,7 @@ function SortableColumn({
                       subActivityStatusSummary={subActivityStatusSummary}
                       hoursStat={hoursStatsByActivity?.get(activity.id)}
                       profilesMap={profilesMap}
+                      profileAvatarMap={profileAvatarMap}
                     />
                   )}
                   {expanded && (inlineChildren.length > 0 || externalChildren.length > 0) && (
@@ -1570,6 +1596,7 @@ function SortableColumn({
                           density={density}
                           hoursStat={hoursStatsByActivity?.get(child.id)}
                           profilesMap={profilesMap}
+                          profileAvatarMap={profileAvatarMap}
                         />
                       ))}
                       {externalChildren.map((child) => {
@@ -1613,6 +1640,7 @@ function SortableColumn({
                               density={density}
                               hoursStat={hoursStatsByActivity?.get(child.id)}
                               profilesMap={profilesMap}
+                              profileAvatarMap={profileAvatarMap}
                             />
                           </div>
                         );
@@ -1712,6 +1740,7 @@ export const ActivityKanban = ({
   isQualityProject = false,
   onOpenCreateTask,
   profilesMap = {},
+  profileAvatarMap = {},
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -2463,13 +2492,7 @@ export const ActivityKanban = ({
 
     // Send notification in background (don't block)
     if (stage?.is_blocked && draggedActivity) {
-      supabase.from("notifications").insert({
-        project_id: projectId,
-        activity_id: activityId,
-        type: "blocked",
-        title: "🚫 Atividade bloqueada: " + draggedActivity.title,
-        message: `A atividade "${draggedActivity.title}" foi movida para a etapa "${getStageDisplayTitle(stage.title)}" e está bloqueada.`,
-      }).then(() => {});
+      supabase.rpc("generate_overdue_notifications", { p_project_id: projectId }).then(() => {});
     }
   };
 
@@ -2774,6 +2797,8 @@ export const ActivityKanban = ({
                       progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id)}
                       density={density}
                       hoursStat={hoursStatsByActivity.get(activity.id)}
+                      profilesMap={profilesMap}
+                      profileAvatarMap={profileAvatarMap}
                     />
                   ))
                 )}
@@ -2865,6 +2890,7 @@ export const ActivityKanban = ({
                 allStages={stages}
                 density={density}
                 profilesMap={profilesMap}
+                profileAvatarMap={profileAvatarMap}
               />
             );
           })}
@@ -2888,6 +2914,7 @@ export const ActivityKanban = ({
               progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id)}
               density={density}
               profilesMap={profilesMap}
+              profileAvatarMap={profileAvatarMap}
             />
           </div>
         ) : activeColumn ? (

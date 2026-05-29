@@ -2,10 +2,13 @@
 import { useMemo, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { format, differenceInDays, startOfDay, addDays, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 
 interface Phase {
   id: string; title: string; description: string | null; display_order: number; project_id: string;
@@ -25,6 +28,7 @@ interface TimelineViewProps {
 
 export const TimelineView = ({ phases, activities, projectDueDate, onActivityClick }: TimelineViewProps) => {
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
+  const assigneeAvatarMap = useAssigneeAvatarLookup(activities.map((activity) => activity.assigned_to));
   const scheduledActivities = activities.filter(a => a.start_date || a.end_date);
 
   useEffect(() => {
@@ -225,7 +229,18 @@ export const TimelineView = ({ phases, activities, projectDueDate, onActivityCli
                     </div>
                     <div className="absolute right-0 top-1/2 -translate-y-1/2 hidden group-hover:block z-20 bg-popover border border-border rounded-lg shadow-lg p-3 min-w-[200px]">
                       <p className="font-medium text-sm text-foreground">{activity.title}</p>
-                      {activity.assigned_to && <p className="text-xs text-muted-foreground mt-1">👤 {activity.assigned_to}</p>}
+                      {activity.assigned_to && (
+                        <p className="inline-flex items-center gap-1 text-xs text-muted-foreground mt-1 max-w-[220px]">
+                          <Avatar className="h-4 w-4 shrink-0">
+                            {(() => {
+                              const avatar = resolveAvatarFromLookup(activity.assigned_to, activity.assigned_to, assigneeAvatarMap);
+                              return avatar ? <AvatarImage src={avatar} alt={activity.assigned_to} /> : null;
+                            })()}
+                            <AvatarFallback className="text-[8px]">{getAvatarInitials(activity.assigned_to)}</AvatarFallback>
+                          </Avatar>
+                          <span className="truncate">{activity.assigned_to}</span>
+                        </p>
+                      )}
                       <div className="flex gap-2 mt-2 text-xs text-muted-foreground">
                         {activity.start_date && <span>Início: {format(parseISO(activity.start_date), "dd/MM/yyyy")}</span>}
                         {activity.end_date && <span>Fim: {format(parseISO(activity.end_date), "dd/MM/yyyy")}</span>}

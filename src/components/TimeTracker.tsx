@@ -3,10 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Play, Square, Clock, Trash2, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 interface TimeEntry {
   id: string;
@@ -43,6 +46,7 @@ export const TimeTracker = ({ projectId, activities }: TimeTrackerProps) => {
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualHours, setManualHours] = useState("");
   const [manualMinutes, setManualMinutes] = useState("");
+  const userNameAvatarMap = useAssigneeAvatarLookup(entries.map((entry) => entry.user_name));
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -305,7 +309,18 @@ export const TimeTracker = ({ projectId, activities }: TimeTrackerProps) => {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-foreground truncate">{activityTitle}</p>
                   <div className="flex gap-2 text-xs text-muted-foreground">
-                    {entry.user_name && <span>👤 {entry.user_name}</span>}
+                    {entry.user_name && (
+                      <span className="inline-flex items-center gap-1">
+                        <Avatar className="h-4 w-4 shrink-0">
+                          {(() => {
+                            const avatar = resolveAvatarFromLookup(entry.user_name, entry.user_name, userNameAvatarMap);
+                            return avatar ? <AvatarImage src={avatar} alt={entry.user_name} /> : null;
+                          })()}
+                          <AvatarFallback className="text-[8px]">{getAvatarInitials(entry.user_name)}</AvatarFallback>
+                        </Avatar>
+                        <span>{entry.user_name}</span>
+                      </span>
+                    )}
                     {entry.description && <span>· {entry.description}</span>}
                     <span>· {new Date(entry.started_at).toLocaleDateString("pt-BR")}</span>
                   </div>

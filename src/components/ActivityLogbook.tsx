@@ -3,10 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BookMarked, Plus, Trash2, ArrowUpRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 interface LogEntry {
   id: string;
@@ -29,6 +32,7 @@ export const ActivityLogbook = ({ activityId, projectId }: ActivityLogbookProps)
   const [showForm, setShowForm] = useState(false);
   const [description, setDescription] = useState("");
   const [createdBy, setCreatedBy] = useState("");
+  const createdByAvatarMap = useAssigneeAvatarLookup(entries.map((entry) => entry.created_by));
 
   useEffect(() => {
     fetchEntries();
@@ -154,7 +158,18 @@ export const ActivityLogbook = ({ activityId, projectId }: ActivityLogbookProps)
               <p className="text-foreground">{entry.description}</p>
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {entry.created_by && <span>👤 {entry.created_by}</span>}
+                  {entry.created_by && (
+                    <span className="inline-flex items-center gap-1">
+                      <Avatar className="h-4 w-4 shrink-0">
+                        {(() => {
+                          const avatar = resolveAvatarFromLookup(entry.created_by, entry.created_by, createdByAvatarMap);
+                          return avatar ? <AvatarImage src={avatar} alt={entry.created_by} /> : null;
+                        })()}
+                        <AvatarFallback className="text-[8px]">{getAvatarInitials(entry.created_by)}</AvatarFallback>
+                      </Avatar>
+                      <span>{entry.created_by}</span>
+                    </span>
+                  )}
                   <span>{new Date(entry.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
                   {entry.promoted_to_lesson_id && (
                     <Badge variant="secondary" className="text-[10px]">

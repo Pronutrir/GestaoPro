@@ -151,6 +151,16 @@ export const useProjectAccess = () => {
         { event: "*", schema: "public", table: "project_members", filter: `user_id=eq.${user.id}` },
         refresh
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "projects" },
+        refresh
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "activities" },
+        refresh
+      )
       .subscribe();
 
     window.addEventListener("focus", handleFocus);
@@ -169,5 +179,13 @@ export const useProjectAccess = () => {
     return projects.filter((p) => memberProjectIds.has(p.id));
   }, [isAdmin, memberProjectIds, user]);
 
-  return { filterProjects, isAdmin, isGestor, canManage, user, loading: loading || membershipsLoading };
+  return {
+    filterProjects,
+    accessibleProjectIds: memberProjectIds,
+    isAdmin,
+    isGestor,
+    canManage,
+    user,
+    loading: loading || membershipsLoading,
+  };
 };

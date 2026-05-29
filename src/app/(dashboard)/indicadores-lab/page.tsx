@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -97,72 +97,93 @@ export default function IndicadoresLabPage() {
     return subDays(new Date(), 365);
   }, [period]);
 
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [p, a, t, c, ws, pf, pm] = await Promise.all([
+        supabase.from('projects').select('*').eq('is_trashed', false),
+        supabase.from('activities').select('*').eq('is_trashed', false),
+        supabase.from('time_entries').select('*'),
+        supabase.from('change_requests').select('*').eq('is_trashed', false),
+        supabase.from('workflow_stages').select('id, project_id, title, color, display_order, is_visible, is_final, is_blocked'),
+        supabase.from('profiles').select('id, full_name, sector'),
+        supabase.from('project_members').select('project_id, user_id, sector'),
+      ]);
+
+      if (p.error || a.error || t.error || c.error || ws.error || pf.error || pm.error) {
+        throw new Error(
+          [p.error?.message, a.error?.message, t.error?.message, c.error?.message, ws.error?.message, pf.error?.message, pm.error?.message]
+            .filter(Boolean)
+            .join(' | ') || 'Falha ao carregar indicadores.',
+        );
+      }
+
+      const filteredProjects = await filterProjects(p.data || []);
+      const allowedProjectIds = new Set(filteredProjects.map((pr: any) => pr.id));
+      const scopedActivities = (a.data || []).filter((row: any) => allowedProjectIds.has(row.project_id));
+      const scopedActivityIds = new Set(scopedActivities.map((row: any) => row.id));
+
+      setProjects(filteredProjects);
+      setActivities(scopedActivities);
+      setTimeEntries(
+        (t.data || []).filter(
+          (row: any) => allowedProjectIds.has(row.project_id) && scopedActivityIds.has(row.activity_id),
+        ),
+      );
+      setChangeRequests((c.data || []).filter((row: any) => allowedProjectIds.has(row.project_id)));
+      setWorkflowStages((ws.data || []).filter((row: any) => allowedProjectIds.has(row.project_id) && row.is_visible !== false));
+      setProfiles(pf.data || []);
+      setProjectMembers((pm.data || []).filter((row: any) => allowedProjectIds.has(row.project_id)));
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Falha ao carregar indicadores.';
+      setLoadError(msg);
+      setProjects([]);
+      setActivities([]);
+      setTimeEntries([]);
+      setChangeRequests([]);
+      setWorkflowStages([]);
+      setProfiles([]);
+      setProjectMembers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filterProjects]);
+
+  useEffect(() => {
+    if (accessLoading) return;
+    void fetchAll();
+  }, [accessLoading, fetchAll]);
+
   useEffect(() => {
     if (accessLoading) return;
 
-    let cancelled = false;
-
-    const fetchAll = async () => {
-      setLoading(true);
-      setLoadError(null);
-      try {
-        const [p, a, t, c, ws, pf, pm] = await Promise.all([
-          supabase.from('projects').select('*').eq('is_trashed', false),
-          supabase.from('activities').select('*').eq('is_trashed', false),
-          supabase.from('time_entries').select('*'),
-          supabase.from('change_requests').select('*').eq('is_trashed', false),
-          supabase.from('workflow_stages').select('id, project_id, title, color, display_order, is_visible, is_final, is_blocked'),
-          supabase.from('profiles').select('id, full_name, sector'),
-          supabase.from('project_members').select('project_id, user_id, sector'),
-        ]);
-
-        if (p.error || a.error || t.error || c.error || ws.error || pf.error || pm.error) {
-          throw new Error(
-            [p.error?.message, a.error?.message, t.error?.message, c.error?.message, ws.error?.message, pf.error?.message, pm.error?.message]
-              .filter(Boolean)
-              .join(' | ') || 'Falha ao carregar indicadores.',
-          );
-        }
-
-        const filteredProjects = await filterProjects(p.data || []);
-        const allowedProjectIds = new Set(filteredProjects.map((pr: any) => pr.id));
-        const scopedActivities = (a.data || []).filter((row: any) => allowedProjectIds.has(row.project_id));
-        const scopedActivityIds = new Set(scopedActivities.map((row: any) => row.id));
-
-        if (cancelled) return;
-        setProjects(filteredProjects);
-        setActivities(scopedActivities);
-        setTimeEntries(
-          (t.data || []).filter(
-            (row: any) => allowedProjectIds.has(row.project_id) && scopedActivityIds.has(row.activity_id),
-          ),
-        );
-        setChangeRequests((c.data || []).filter((row: any) => allowedProjectIds.has(row.project_id)));
-        setWorkflowStages((ws.data || []).filter((row: any) => allowedProjectIds.has(row.project_id) && row.is_visible !== false));
-        setProfiles(pf.data || []);
-        setProjectMembers((pm.data || []).filter((row: any) => allowedProjectIds.has(row.project_id)));
-      } catch (error) {
-        if (cancelled) return;
-        const msg = error instanceof Error ? error.message : 'Falha ao carregar indicadores.';
-        setLoadError(msg);
-        setProjects([]);
-        setActivities([]);
-        setTimeEntries([]);
-        setChangeRequests([]);
-        setWorkflowStages([]);
-        setProfiles([]);
-        setProjectMembers([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    fetchAll();
+    const channel = supabase
+      .channel('indicadores-lab-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
+        void fetchAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, () => {
+        void fetchAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' }, () => {
+        void fetchAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'change_requests' }, () => {
+        void fetchAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_members' }, () => {
+        void fetchAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        void fetchAll();
+      })
+      .subscribe();
 
     return () => {
-      cancelled = true;
+      supabase.removeChannel(channel);
     };
-  }, [accessLoading, filterProjects]);
+  }, [accessLoading, fetchAll]);
 
   const dashboardData = useMemo(() => {
     const todayStart = new Date();

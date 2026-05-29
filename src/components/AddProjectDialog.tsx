@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Select,
@@ -32,6 +33,7 @@ interface PendingMember {
   user_id: string;
   full_name: string;
   sector: string | null;
+  avatar_url?: string | null;
 }
 
 interface AddProjectDialogProps {
@@ -41,7 +43,7 @@ interface AddProjectDialogProps {
 
 export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProjectDialogProps) => {
   const { user } = useAuth();
-  const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null; avatar_url?: string | null }[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [team, setTeam] = useState<PendingMember[]>([]);
   const [pickedUserId, setPickedUserId] = useState<string>("");
@@ -49,7 +51,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
   useEffect(() => {
     const fetchProfiles = async () => {
       const [{ data: profileData }, { data: adminRoles }, { data: sectorData }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
+        supabase.from("profiles").select("id, full_name, sector, avatar_url").not("full_name", "is", null).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
         supabase.from("sectors").select("id, name").order("name"),
       ]);
@@ -301,7 +303,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     if (!p) return;
     setTeam((prev) => [
       ...prev,
-      { user_id: p.id, full_name: p.full_name, sector: p.sector },
+      { user_id: p.id, full_name: p.full_name, sector: p.sector, avatar_url: p.avatar_url || null },
     ]);
     setPickedUserId("");
   };
@@ -479,14 +481,32 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione o líder" />
+                    {(() => {
+                      const leader = profiles.find((p) => p.full_name === formData.owner);
+                      if (!leader && !formData.owner) return <span className="text-muted-foreground">Selecione o líder</span>;
+                      if (!leader && formData.owner) return <span>{formData.owner}</span>;
+                      return (
+                        <span className="inline-flex items-center gap-2 min-w-0 w-full">
+                          <Avatar className="h-5 w-5 shrink-0">
+                            {leader?.avatar_url ? <AvatarImage src={leader.avatar_url} alt={leader.full_name} /> : null}
+                            <AvatarFallback className="text-[9px]">{(leader?.full_name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <span className="truncate">{leader?.full_name}{leader?.sector ? ` — ${leader.sector}` : ""}</span>
+                        </span>
+                      );
+                    })()}
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_none">Sem líder</SelectItem>
                     {profiles.map((p) => (
                       <SelectItem key={`ld-${p.id}`} value={p.full_name!}>
-                        {p.full_name}
-                        {p.sector ? ` — ${p.sector}` : ""}
+                        <span className="inline-flex items-center gap-2 min-w-0 w-full">
+                          <Avatar className="h-5 w-5 shrink-0">
+                            {p.avatar_url ? <AvatarImage src={p.avatar_url} alt={p.full_name} /> : null}
+                            <AvatarFallback className="text-[9px]">{p.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <span className="truncate">{p.full_name}{p.sector ? ` — ${p.sector}` : ""}</span>
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -523,6 +543,10 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 <div className="space-y-1.5">
                   {team.map((m) => (
                     <div key={m.user_id} className="flex items-center gap-2 p-2 rounded-md bg-muted/40 border border-border">
+                      <Avatar className="h-8 w-8 shrink-0">
+                        {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
+                        <AvatarFallback className="text-[10px]">{m.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
+                      </Avatar>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{m.full_name}</p>
                         {m.sector && <p className="text-[11px] text-muted-foreground truncate">{m.sector}</p>}
@@ -543,7 +567,13 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   <SelectContent>
                     {availableForTeam.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.full_name}{p.sector ? ` — ${p.sector}` : ""}
+                        <span className="inline-flex items-center gap-2 min-w-0 w-full">
+                          <Avatar className="h-5 w-5 shrink-0">
+                            {p.avatar_url ? <AvatarImage src={p.avatar_url} alt={p.full_name} /> : null}
+                            <AvatarFallback className="text-[9px]">{p.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <span className="truncate">{p.full_name}{p.sector ? ` — ${p.sector}` : ""}</span>
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
