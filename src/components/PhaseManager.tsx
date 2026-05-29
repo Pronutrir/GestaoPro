@@ -472,6 +472,7 @@ export const PhaseManager = ({
                                   <SortableActivityCard id={activity.id}>
                                     <ActivityCard
                                       activity={activity}
+                                      assigneeAvatarMap={assigneeAvatarMap}
                                       phases={phases}
                                       onEdit={onEditActivity}
                                       onDelete={onDeleteActivity}
@@ -487,6 +488,7 @@ export const PhaseManager = ({
                                     <SubActivityTree
                                       parentId={activity.id}
                                       activities={activities}
+                                      assigneeAvatarMap={assigneeAvatarMap}
                                       phases={phases}
                                       getSubActivities={getSubActivities}
                                       expandedActivities={expandedActivities}
@@ -547,6 +549,7 @@ export const PhaseManager = ({
                     <SortableActivityCard id={activity.id}>
                       <ActivityCard
                         activity={activity}
+                        assigneeAvatarMap={assigneeAvatarMap}
                         phases={phases}
                         onEdit={onEditActivity}
                         onDelete={onDeleteActivity}
@@ -562,6 +565,7 @@ export const PhaseManager = ({
                       <SubActivityTree
                         parentId={activity.id}
                         activities={activities}
+                        assigneeAvatarMap={assigneeAvatarMap}
                         phases={phases}
                         getSubActivities={getSubActivities}
                         expandedActivities={expandedActivities}
@@ -592,6 +596,7 @@ export const PhaseManager = ({
 interface SubActivityTreeProps {
   parentId: string;
   activities: Activity[];
+  assigneeAvatarMap: Record<string, string>;
   phases: Phase[];
   getSubActivities: (parentId: string) => Activity[];
   expandedActivities: Set<string>;
@@ -608,7 +613,7 @@ interface SubActivityTreeProps {
 }
 
 const SubActivityTree = ({
-  parentId, activities, phases, getSubActivities, expandedActivities, toggleActivityExpand,
+  parentId, activities, assigneeAvatarMap, phases, getSubActivities, expandedActivities, toggleActivityExpand,
   onToggleActivity, onEditActivity, onDeleteActivity, onMoveActivity, quickAddSubTitle, setQuickAddSubTitle,
   handleQuickAddSubActivity, isAdmin, depth,
 }: SubActivityTreeProps) => {
@@ -691,6 +696,7 @@ const SubActivityTree = ({
               <SubActivityTree
                 parentId={sub.id}
                 activities={activities}
+                assigneeAvatarMap={assigneeAvatarMap}
                 phases={phases}
                 getSubActivities={getSubActivities}
                 expandedActivities={expandedActivities}
@@ -730,6 +736,7 @@ const SubActivityTree = ({
 // Sub-component for activity cards within phases
 interface ActivityCardProps {
   activity: Activity;
+  assigneeAvatarMap: Record<string, string>;
   phases: Phase[];
   onEdit: (activity: Activity) => void;
   onDelete: (activityId: string) => void;
@@ -743,6 +750,7 @@ interface ActivityCardProps {
 
 const ActivityCard = ({
   activity,
+  assigneeAvatarMap,
   phases,
   onEdit,
   onDelete,
