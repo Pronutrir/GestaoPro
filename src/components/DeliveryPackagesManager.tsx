@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,6 +13,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { DeliveryPackageDrawer } from "@/components/DeliveryPackageDrawer";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 
 interface DeliveryPackage {
   id: string;
@@ -58,6 +61,7 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [], ca
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
   const [packages, setPackages] = useState<DeliveryPackage[]>([]);
+    const responsibleAvatarMap = useAssigneeAvatarLookup(packages.map((pkg) => pkg.responsible));
   const [packageActivities, setPackageActivities] = useState<Record<string, string[]>>({});
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -279,7 +283,20 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [], ca
                         {stageInfo.label}
                       </Badge>
                       {pkg.sector && <Badge variant="outline">{pkg.sector}</Badge>}
-                      {pkg.responsible && <Badge variant="outline">👤 {pkg.responsible}</Badge>}
+                      {pkg.responsible && (
+                        <Badge variant="outline">
+                          <span className="inline-flex items-center gap-1 max-w-[180px]">
+                            <Avatar className="h-4 w-4 shrink-0">
+                              {(() => {
+                                const avatar = resolveAvatarFromLookup(pkg.responsible, pkg.responsible, responsibleAvatarMap);
+                                return avatar ? <AvatarImage src={avatar} alt={pkg.responsible} /> : null;
+                              })()}
+                              <AvatarFallback className="text-[8px]">{getAvatarInitials(pkg.responsible)}</AvatarFallback>
+                            </Avatar>
+                            <span className="truncate">{pkg.responsible}</span>
+                          </span>
+                        </Badge>
+                      )}
                     </div>
                     {(pkg.start_date || pkg.end_date) && (
                       <p className="text-xs text-muted-foreground flex items-center gap-1">

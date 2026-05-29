@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -20,6 +20,7 @@ import {
   BarChart3, Users, Briefcase, Filter, ArrowRight, Paperclip, X,
 } from "lucide-react";
 import { CscKanbanBoard } from "@/components/CscKanbanBoard";
+import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 // ── Types ──────────────────────────────────────────
 interface CscTicket {
@@ -55,6 +56,7 @@ interface Profile {
   full_name: string | null;
   email: string | null;
   sector: string | null;
+  avatar_url: string | null;
 }
 
 // ── Constants ──────────────────────────────────────
@@ -149,7 +151,7 @@ const CSC = () => {
     const [{ data: t }, { data: s }, { data: p }, { data: sec }] = await Promise.all([
       supabase.from("csc_tickets").select("*").order("created_at", { ascending: false }),
       supabase.from("csc_sla_configs").select("*"),
-      supabase.from("profiles").select("id, full_name, email, sector").order("full_name"),
+      supabase.from("profiles").select("id, full_name, email, sector, avatar_url").order("full_name"),
       supabase.from("sectors").select("id, name").order("name"),
     ]);
     if (t) setTickets(t as CscTicket[]);
@@ -159,6 +161,7 @@ const CSC = () => {
   };
 
   const currentProfile = useMemo(() => profiles.find(p => p.id === user?.id), [profiles, user]);
+  const profileAvatarMap = useMemo(() => buildAvatarLookupMap(profiles), [profiles]);
 
   useEffect(() => {
     fetchData();
@@ -445,6 +448,7 @@ const CSC = () => {
             <CscKanbanBoard
               kanbanStatuses={kanbanStatuses}
               filteredTickets={filteredTickets}
+              profileAvatarMap={profileAvatarMap}
               getSlaStatus={getSlaStatus}
               getDeptLabel={getDeptLabel}
               PriorityBadge={PriorityBadge}
@@ -546,7 +550,11 @@ const CSC = () => {
                         {entries.map(([name, count]) => (
                           <div key={name} className="flex items-center gap-3">
                             <Avatar className="h-7 w-7">
-                              <AvatarFallback className="text-[10px]">{name.split(" ").map(n => n[0]).join("").slice(0, 2)}</AvatarFallback>
+                              {(() => {
+                                const avatar = resolveAvatarFromLookup(name, name, profileAvatarMap);
+                                return avatar ? <AvatarImage src={avatar} alt={name} /> : null;
+                              })()}
+                              <AvatarFallback className="text-[10px]">{getAvatarInitials(name)}</AvatarFallback>
                             </Avatar>
                             <span className="text-sm w-40 truncate">{name}</span>
                             <div className="flex-1"><Progress value={(count / maxCount) * 100} className="h-2" /></div>
@@ -586,7 +594,18 @@ const CSC = () => {
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-xs text-muted-foreground">{new Date(ticket.created_at).toLocaleDateString("pt-BR")}</span>
                             {ticket.requesting_area && <span className="text-xs text-muted-foreground">• {ticket.requesting_area}</span>}
-                            {ticket.assigned_to && <span className="text-xs text-muted-foreground">• {ticket.assigned_to}</span>}
+                            {ticket.assigned_to && (
+                              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground max-w-[220px]">
+                                <Avatar className="h-4 w-4 shrink-0">
+                                  {(() => {
+                                    const avatar = resolveAvatarFromLookup(ticket.assigned_to, ticket.assigned_to, profileAvatarMap);
+                                    return avatar ? <AvatarImage src={avatar} alt={ticket.assigned_to} /> : null;
+                                  })()}
+                                  <AvatarFallback className="text-[8px]">{getAvatarInitials(ticket.assigned_to)}</AvatarFallback>
+                                </Avatar>
+                                <span className="truncate">{ticket.assigned_to}</span>
+                              </span>
+                            )}
                           </div>
                         </div>
                         <PriorityBadge priority={ticket.priority} />
@@ -621,7 +640,19 @@ const CSC = () => {
                     <div><span className="text-muted-foreground">Prioridade:</span> <PriorityBadge priority={selectedTicket.priority} /></div>
                     <div><span className="text-muted-foreground">Status:</span> <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${getStatusObj(selectedTicket.status).color}`}>{getStatusObj(selectedTicket.status).label}</span></div>
                     <div><span className="text-muted-foreground">SLA:</span> <SlaBadge ticket={selectedTicket} /></div>
-                    {selectedTicket.assigned_to && <div><span className="text-muted-foreground">Responsável:</span> <strong>{selectedTicket.assigned_to}</strong></div>}
+                    {selectedTicket.assigned_to && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">Responsável:</span>
+                        <Avatar className="h-5 w-5">
+                          {(() => {
+                            const avatar = resolveAvatarFromLookup(selectedTicket.assigned_to, selectedTicket.assigned_to, profileAvatarMap);
+                            return avatar ? <AvatarImage src={avatar} alt={selectedTicket.assigned_to} /> : null;
+                          })()}
+                          <AvatarFallback className="text-[8px]">{getAvatarInitials(selectedTicket.assigned_to)}</AvatarFallback>
+                        </Avatar>
+                        <strong className="truncate">{selectedTicket.assigned_to}</strong>
+                      </div>
+                    )}
                     
                     {selectedTicket.requesting_area && <div><span className="text-muted-foreground">Área:</span> <strong>{selectedTicket.requesting_area}</strong></div>}
                   </div>

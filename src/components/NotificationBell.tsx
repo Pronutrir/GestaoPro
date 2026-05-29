@@ -1,11 +1,12 @@
 'use client';
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Bell, Check, Trash2, AlertTriangle, Clock, Info, BellRing, X, Ban, UserPlus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useProjectAccess } from "@/hooks/useProjectAccess";
 
 interface Notification {
   id: string;
@@ -17,71 +18,81 @@ interface Notification {
   is_read: boolean;
   created_at: string;
   target_user_id: string | null;
+  activities?: {
+    assigned_to: string | null;
+    participants: string[] | null;
+  } | null;
 }
 
 export const NotificationBell = () => {
   const { user, isAdmin, profile } = useAuth();
+  const { accessibleProjectIds, loading: accessLoading } = useProjectAccess();
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [memberProjectIds, setMemberProjectIds] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [declineFor, setDeclineFor] = useState<string | null>(null);
   const [declineReason, setDeclineReason] = useState("");
+  const accessibleProjectIdsKey = useMemo(
+    () => Array.from(accessibleProjectIds).sort().join(","),
+    [accessibleProjectIds],
+  );
+  const lastGenerationAtRef = useRef(0);
+
+  const triggerNotificationGeneration = useCallback(() => {
+    if (!user?.id || accessLoading || accessibleProjectIds.size === 0) return;
+
+    const now = Date.now();
+    if (now - lastGenerationAtRef.current < 60_000) return;
+    lastGenerationAtRef.current = now;
+
+    Array.from(accessibleProjectIds).forEach((projectId) => {
+      void supabase.rpc("generate_overdue_notifications", { p_project_id: projectId });
+    });
+  }, [accessLoading, accessibleProjectIds, user?.id]);
 
   useEffect(() => {
-    const loadMemberProjects = async () => {
-      const uid = user?.id;
-      if (!uid) {
-        setMemberProjectIds([]);
-        return;
+    triggerNotificationGeneration();
+  }, [triggerNotificationGeneration, accessibleProjectIdsKey]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const handleFocus = () => triggerNotificationGeneration();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        triggerNotificationGeneration();
       }
-
-      const { data } = await supabase
-        .from("project_members")
-        .select("project_id")
-        .eq("user_id", uid);
-
-      setMemberProjectIds((data || []).map((row: any) => row.project_id).filter(Boolean));
     };
+    const intervalId = window.setInterval(() => {
+      triggerNotificationGeneration();
+    }, 60_000);
 
-    loadMemberProjects();
-  }, [user?.id]);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(intervalId);
+    };
+  }, [triggerNotificationGeneration, user?.id]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    triggerNotificationGeneration();
+  }, [isOpen, triggerNotificationGeneration]);
 
   const fetchNotifications = async () => {
     const uid = user?.id;
     if (!uid) { setNotifications([]); return; }
-    let query = supabase
-      .from("notifications")
-      .select("*, activities:activity_id(assigned_to, participants)")
-      .order("created_at", { ascending: false })
-      .limit(100);
-    query = query.or(`target_user_id.is.null,target_user_id.eq.${uid}`);
-    const { data } = await query;
-    if (!data) { setNotifications([]); return; }
+    const response = await fetch("/api/notifications", { cache: "no-store" });
+    if (!response.ok) {
+      setNotifications([]);
+      return;
+    }
 
-    // Admin vê tudo
-    if (isAdmin) { setNotifications(data as any); return; }
-
-    // Filtra: somente notificações de atividades em que o usuário está cadastrado
-    // (líder via assigned_to ou na lista de participants), ou direcionadas a ele.
-    const myNames = [profile?.full_name, (profile as any)?.email, user?.email]
-      .filter(Boolean)
-      .map((s: string) => s.toLowerCase());
-
-    const filtered = (data as any[]).filter((n) => {
-      if (n.target_user_id && n.target_user_id === uid) return true;
-      if (n.project_id && memberProjectIds.includes(n.project_id)) return true;
-      // Sem atividade vinculada e sem alvo específico → não exibe para usuários comuns
-      if (!n.activity_id) return false;
-      const a = n.activities;
-      if (!a) return false;
-      const assigned = (a.assigned_to || "").toLowerCase();
-      if (assigned && myNames.includes(assigned)) return true;
-      const parts: string[] = Array.isArray(a.participants) ? a.participants : [];
-      if (parts.some((p) => myNames.includes((p || "").toLowerCase()))) return true;
-      return false;
-    });
-    setNotifications(filtered as any);
+    const payload = await response.json();
+    setNotifications(Array.isArray(payload.notifications) ? payload.notifications : []);
   };
 
   // Re-busca e resubscreve sempre que o auth mudar (resolve closure stale e carregamento tardio)
@@ -98,7 +109,7 @@ export const NotificationBell = () => {
 
     return () => { supabase.removeChannel(channel); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, isAdmin, profile, memberProjectIds]);
+  }, [user?.id, isAdmin, accessibleProjectIdsKey]);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
   const overdueCount = notifications.filter((n) => !n.is_read && n.type === "overdue").length;

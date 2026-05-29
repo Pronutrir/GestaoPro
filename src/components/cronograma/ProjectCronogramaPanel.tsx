@@ -6,6 +6,7 @@ import { computeActivityProgress } from "@/lib/activityProgress";
 import { endVariance, varianceTone, varianceClasses, formatVariance } from "@/lib/dateVariance";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -47,6 +48,7 @@ import {
 import { ptBR } from "date-fns/locale";
 import { calculateCriticalPath } from "@/lib/criticalPath";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
+import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 /**
  * Painel de Cronograma reutilizável (Tabela MS-Project + Gantt CPM).
@@ -161,7 +163,7 @@ function SortableHeaderCell({
       style={style}
       className={cn(
         "relative",
-        col === "title" && "text-left min-w-[260px]",
+        col === "title" && "text-left min-w-[320px]",
         col === "observation" && "text-left min-w-[180px]",
         col === "column" && "min-w-[140px]",
         col === "status" && "min-w-[140px]",
@@ -216,7 +218,7 @@ export function ProjectCronogramaPanel({
   const [activities, setActivities] = useState<any[]>([]);
   const [phases, setPhases] = useState<any[]>([]);
   const [deps, setDeps] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string }>>({});
+  const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string; avatar?: string }>>({});
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [projectDeadlines, setProjectDeadlines] = useState<Record<string, string | null>>({});
   const [mode, setMode] = useState<CronogramaMode>(defaultMode);
@@ -238,6 +240,17 @@ export function ProjectCronogramaPanel({
 
   const ganttScrollRef = useRef<HTMLDivElement>(null);
   const [ganttContainerWidth, setGanttContainerWidth] = useState(0);
+  const [ganttLabelWidth, setGanttLabelWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 340;
+    const stored = window.localStorage.getItem("cronograma:gantt:labelWidth");
+    const parsed = Number(stored);
+    if (!Number.isFinite(parsed)) return 340;
+    return Math.min(520, Math.max(260, parsed));
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("cronograma:gantt:labelWidth", String(ganttLabelWidth));
+  }, [ganttLabelWidth]);
   useEffect(() => {
     if (mode !== "gantt") return;
     const el = ganttScrollRef.current;
@@ -410,14 +423,20 @@ export function ProjectCronogramaPanel({
     const [{ data: acts }, { data: phs }, { data: profs }, { data: stgs }] = await Promise.all([
       actsQ,
       supabase.from("phases").select("*").in("project_id", scopedProjectIds).eq("is_trashed", false).order("display_order", { ascending: true }),
-      supabase.from("profiles").select("id, full_name, sector"),
+      supabase.from("profiles").select("id, full_name, sector, avatar_url"),
       stagesQ,
     ]);
     setActivities(acts || []);
     setPhases(phs || []);
     setStages(stgs || []);
-    const map: Record<string, { name: string; sector: string }> = {};
-    (profs || []).forEach((p: any) => { map[p.id] = { name: p.full_name, sector: p.sector || "—" }; });
+    const map: Record<string, { name: string; sector: string; avatar?: string }> = {};
+    (profs || []).forEach((p: any) => {
+      map[p.id] = {
+        name: p.full_name,
+        sector: p.sector || "—",
+        avatar: typeof p.avatar_url === "string" ? p.avatar_url : undefined,
+      };
+    });
     setProfiles(map);
     const pm: Record<string, string> = {};
     const pdl: Record<string, string | null> = {};
@@ -643,6 +662,17 @@ export function ProjectCronogramaPanel({
     stages.forEach(s => m.set(s.id, { title: s.title, color: s.color, is_final: s.is_final }));
     return m;
   }, [stages]);
+
+  const profileAvatarMap = useMemo(
+    () => buildAvatarLookupMap(
+      Object.entries(profiles).map(([id, profile]) => ({
+        id,
+        full_name: profile.name,
+        avatar_url: profile.avatar || null,
+      }))
+    ),
+    [profiles]
+  );
 
   const resolveResponsible = useCallback((assignedTo: string | null | undefined) => {
     const raw = (assignedTo || "").trim();
@@ -1002,7 +1032,7 @@ export function ProjectCronogramaPanel({
 
   // ===== Gantt data =====
   const ROW_H = 32;
-  const LABEL_W = 280;
+  const LABEL_W = ganttLabelWidth;
 
   const ganttData = useMemo(() => {
     const visibleRows = rows.filter((r) => !isHiddenByCollapse(r.a));
@@ -1102,7 +1132,7 @@ export function ProjectCronogramaPanel({
     if (!ganttData || ganttContainerWidth <= LABEL_W) return base;
     const dynamic = (ganttContainerWidth - LABEL_W) / ganttData.days.length;
     return Math.max(base, dynamic);
-  }, [zoom, ganttData, ganttContainerWidth]);
+  }, [zoom, ganttData, ganttContainerWidth, LABEL_W]);
 
   /** Botão "Hoje" — rola o Gantt até a coluna de hoje. */
   const handleScrollToToday = () => {
@@ -1155,7 +1185,7 @@ export function ProjectCronogramaPanel({
             <button
               type="button"
               onClick={() => openFromCronograma(a)}
-              className="font-medium truncate max-w-[360px] text-left hover:underline cursor-pointer"
+              className="font-medium truncate max-w-[480px] text-left hover:underline cursor-pointer"
               title="Abrir edição da atividade"
             >
               {a.title}
@@ -1808,7 +1838,16 @@ export function ProjectCronogramaPanel({
                             <div className="space-y-0.5 text-[11px]">
                               <div className="font-semibold">{a.title}</div>
                               <div>📅 {format(s, "dd/MM/yy")} → {format(e, "dd/MM/yy")} ({workDays(a.start_date, a.end_date)}d)</div>
-                              <div>👤 {responsible}</div>
+                              <div className="inline-flex items-center gap-1">
+                                <Avatar className="h-4 w-4 shrink-0">
+                                  {(() => {
+                                    const avatar = resolveAvatarFromLookup(a.assigned_to, responsible, profileAvatarMap);
+                                    return avatar ? <AvatarImage src={avatar} alt={responsible} /> : null;
+                                  })()}
+                                  <AvatarFallback className="text-[8px]">{getAvatarInitials(responsible)}</AvatarFallback>
+                                </Avatar>
+                                <span>{responsible}</span>
+                              </div>
                               <div>📊 {progress}% {isCritical && <span className="text-red-400 font-semibold ml-1">• Caminho crítico</span>}</div>
                               {a.is_milestone && <div>🎯 Marco</div>}
                               {isPhase && <div>📚 Fase — datas derivadas dos filhos</div>}
@@ -1872,6 +1911,22 @@ export function ProjectCronogramaPanel({
                 </Button>
               );
             })}
+          </div>
+
+          {/* Ajuste manual da largura da coluna "Atividade" no Gantt */}
+          <div className="inline-flex items-center gap-2 h-9 px-2.5 border rounded-lg bg-card">
+            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Largura atividade</span>
+            <input
+              type="range"
+              min={260}
+              max={520}
+              step={20}
+              value={ganttLabelWidth}
+              onChange={(e) => setGanttLabelWidth(Number(e.target.value))}
+              className="w-24"
+              aria-label="Ajustar largura da coluna de atividade"
+            />
+            <span className="text-[11px] font-mono text-muted-foreground w-[42px] text-right">{ganttLabelWidth}px</span>
           </div>
         </>
       )}

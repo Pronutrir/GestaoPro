@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -55,7 +56,7 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
   const { toast } = useToast();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [activities, setActivities] = useState<{ id: string; title: string }[]>([]);
-  const [members, setMembers] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
+  const [members, setMembers] = useState<{ id: string; full_name: string; sector: string | null; avatar_url?: string | null }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
@@ -79,11 +80,11 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
     if (actData) setActivities(actData);
     if (memberData && memberData.length > 0) {
       const userIds = memberData.map(m => m.user_id);
-      const { data: profiles } = await supabase.from("profiles").select("id, full_name, sector").in("id", userIds);
+      const { data: profiles } = await supabase.from("profiles").select("id, full_name, sector, avatar_url").in("id", userIds);
       if (profiles) {
         setMembers(
           profiles.filter(
-            (profile): profile is { id: string; full_name: string; sector: string | null } => Boolean(profile.id && profile.full_name),
+            (profile): profile is { id: string; full_name: string; sector: string | null; avatar_url?: string | null } => Boolean(profile.id && profile.full_name),
           ),
         );
       }
@@ -283,7 +284,13 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                           <SelectItem value="_none">Sem responsável</SelectItem>
                           {members.map((m) => (
                             <SelectItem key={m.id} value={m.full_name!}>
-                              {m.full_name}
+                              <span className="inline-flex items-center gap-2 min-w-0 w-full">
+                                <Avatar className="h-5 w-5 shrink-0">
+                                  {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
+                                  <AvatarFallback className="text-[9px]">{m.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
+                                </Avatar>
+                                <span className="truncate">{m.full_name}</span>
+                              </span>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -391,7 +398,25 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
                         <TableCell>
                           <Badge variant="outline" className="text-xs">{categoryLabels[inv.category || "geral"] || inv.category}</Badge>
                         </TableCell>
-                        <TableCell className="text-sm">{inv.responsible || "—"}</TableCell>
+                        <TableCell className="text-sm">
+                          {inv.responsible ? (
+                            <span className="inline-flex items-center gap-2 min-w-0 max-w-[220px]">
+                              {(() => {
+                                const member = members.find((m) => m.full_name === inv.responsible);
+                                const initials = (inv.responsible || "?").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+                                return (
+                                  <>
+                                    <Avatar className="h-5 w-5 shrink-0">
+                                      {member?.avatar_url ? <AvatarImage src={member.avatar_url} alt={inv.responsible} /> : null}
+                                      <AvatarFallback className="text-[9px]">{initials}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="truncate">{inv.responsible}</span>
+                                  </>
+                                );
+                              })()}
+                            </span>
+                          ) : "—"}
+                        </TableCell>
                         <TableCell className="text-right font-medium text-sm">{formatCurrency(inv.amount)}</TableCell>
                         <TableCell>
                             <div className="flex gap-1">

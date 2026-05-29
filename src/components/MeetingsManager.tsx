@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,6 +30,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 
 interface Meeting {
   id: string;
@@ -70,6 +73,7 @@ interface Profile {
   full_name: string | null;
   sector: string | null;
   role_title: string | null;
+  avatar_url?: string | null;
 }
 
 interface Phase {
@@ -115,6 +119,10 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   const [actions, setActions] = useState<Record<string, MeetingAction[]>>({});
   const [newDecision, setNewDecision] = useState("");
   const [newAction, setNewAction] = useState({ description: "", assigned_to: "", due_date: "" });
+  const assigneeAvatarMap = useAssigneeAvatarLookup([
+    ...meetings.map((meeting) => meeting.responsible),
+    ...Object.values(actions).flatMap((meetingActions) => meetingActions.map((action) => action.assigned_to)),
+  ]);
 
   const [form, setForm] = useState({
     title: "",
@@ -146,7 +154,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   }, [projectId]);
 
   const fetchProfiles = async () => {
-    const { data } = await supabase.from("profiles").select("id, email, full_name, sector, role_title");
+    const { data } = await supabase.from("profiles").select("id, email, full_name, sector, role_title, avatar_url");
     if (data) setProfiles(data);
   };
 
@@ -628,8 +636,15 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                           <span>{meeting.participants.length} participante(s)</span>
                         )}
                         {meeting.responsible && (
-                          <span className="flex items-center gap-1 font-medium text-foreground">
-                            👤 {meeting.responsible}
+                          <span className="inline-flex items-center gap-1 font-medium text-foreground max-w-[220px]">
+                            <Avatar className="h-4 w-4 shrink-0">
+                              {(() => {
+                                const avatar = resolveAvatarFromLookup(meeting.responsible, meeting.responsible, assigneeAvatarMap);
+                                return avatar ? <AvatarImage src={avatar} alt={meeting.responsible} /> : null;
+                              })()}
+                              <AvatarFallback className="text-[8px]">{getAvatarInitials(meeting.responsible)}</AvatarFallback>
+                            </Avatar>
+                            <span className="truncate">{meeting.responsible}</span>
                           </span>
                         )}
                         {meeting.phase_id && (
@@ -772,7 +787,20 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                               <span className={a.is_completed ? "line-through text-muted-foreground" : ""}>
                                 {a.description}
                               </span>
-                              {a.assigned_to && <Badge variant="outline" className="text-[10px]">👤 {a.assigned_to}</Badge>}
+                              {a.assigned_to && (
+                                <Badge variant="outline" className="text-[10px]">
+                                  <span className="inline-flex items-center gap-1 max-w-[180px]">
+                                    <Avatar className="h-4 w-4 shrink-0">
+                                      {(() => {
+                                        const avatar = resolveAvatarFromLookup(a.assigned_to, a.assigned_to, assigneeAvatarMap);
+                                        return avatar ? <AvatarImage src={avatar} alt={a.assigned_to} /> : null;
+                                      })()}
+                                      <AvatarFallback className="text-[8px]">{getAvatarInitials(a.assigned_to)}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="truncate">{a.assigned_to}</span>
+                                  </span>
+                                </Badge>
+                              )}
                               {a.due_date && <Badge variant="secondary" className="text-[10px]">📅 {new Date(a.due_date).toLocaleDateString("pt-BR")}</Badge>}
                             </div>
                             {canEditMeeting && (

@@ -59,6 +59,7 @@ import { normalizeProjectTabs } from "@/lib/projectTabs";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
+import { buildAvatarLookupMap } from "@/lib/avatarLookup";
 
 interface Project {
   id: string;
@@ -144,6 +145,9 @@ const sanitizeVisibleProjectTabs = (tabs: string[] | null | undefined) => {
 const arraysEqual = (left: string[], right: string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
+const looksLikeUuid = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim());
+
 export default function ProjectDetailsPage() {
   const params = useParams();
   const id = params?.id as string | undefined;
@@ -188,6 +192,7 @@ export default function ProjectDetailsPage() {
   const [activeSprintId, setActiveSprintId] = useState<string | null>(null);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [profilesMap, setProfilesMap] = useState<Record<string, string>>({});
+  const [profileAvatarMap, setProfileAvatarMap] = useState<Record<string, string>>({});
   const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
   const [pendingChangeRequests, setPendingChangeRequests] = useState(0);
 
@@ -311,8 +316,20 @@ export default function ProjectDetailsPage() {
       )
       .subscribe();
 
+    const timeEntriesChannel = supabase
+      .channel(`realtime-time-entries-${id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "time_entries", filter: `project_id=eq.${id}` },
+        () => {
+          fetchProjectData();
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(activitiesChannel);
+      supabase.removeChannel(timeEntriesChannel);
     };
   }, [id, authLoading]);
 
@@ -637,19 +654,79 @@ export default function ProjectDetailsPage() {
   }, [authLoading, id, currentUser?.id, isAdmin, loadAccess]);
 
   const fetchMembers = async () => {
-    const { data: memberData } = await supabase
-      .from("project_members").select("user_id").eq("project_id", id!);
-    if (memberData && memberData.length > 0) {
-      const userIds = memberData.map(m => m.user_id);
-      const { data: profiles } = await supabase
-        .from("profiles").select("id, full_name, sector").in("id", userIds);
-      if (profiles) {
-        setMembers(profiles.filter(p => p.full_name) as { full_name: string; sector: string | null }[]);
-        const map: Record<string, string> = {};
-        profiles.forEach(p => { if (p.id && p.full_name) map[p.id] = p.full_name; });
-        setProfilesMap(map);
-      }
+    const [{ data: memberData }, { data: activityAssignments }] = await Promise.all([
+      supabase
+        .from("project_members").select("user_id").eq("project_id", id!),
+      supabase
+        .from("activities").select("assigned_to").eq("project_id", id!).not("assigned_to", "is", null),
+    ]);
+
+    const memberIds = (memberData || [])
+      .map((m) => String(m.user_id || "").trim())
+      .filter(Boolean);
+
+    const assignedValues = (activityAssignments || [])
+      .map((row) => String((row as { assigned_to?: string | null }).assigned_to || "").trim())
+      .filter(Boolean);
+
+    const assignedIds = assignedValues.filter(looksLikeUuid);
+    const assignedEmails = assignedValues.filter((value) => !looksLikeUuid(value) && value.includes("@"));
+    const assignedNames = assignedValues.filter((value) => !looksLikeUuid(value) && !value.includes("@"));
+
+    const mergedById = new Map<string, { id: string; full_name: string | null; sector: string | null; avatar_url: string | null; email: string | null }>();
+
+    const allIds = Array.from(new Set([...memberIds, ...assignedIds]));
+    if (allIds.length > 0) {
+      const { data: profilesById } = await supabase
+        .from("profiles")
+        .select("id, full_name, sector, avatar_url, email")
+        .in("id", allIds);
+
+      (profilesById || []).forEach((profile) => {
+        mergedById.set(profile.id, profile as { id: string; full_name: string | null; sector: string | null; avatar_url: string | null; email: string | null });
+      });
     }
+
+    if (assignedNames.length > 0) {
+      const uniqueNames = Array.from(new Set(assignedNames));
+      const { data: profilesByName } = await supabase
+        .from("profiles")
+        .select("id, full_name, sector, avatar_url, email")
+        .in("full_name", uniqueNames);
+
+      (profilesByName || []).forEach((profile) => {
+        mergedById.set(profile.id, profile as { id: string; full_name: string | null; sector: string | null; avatar_url: string | null; email: string | null });
+      });
+    }
+
+    if (assignedEmails.length > 0) {
+      const uniqueEmails = Array.from(new Set(assignedEmails));
+      const { data: profilesByEmail } = await supabase
+        .from("profiles")
+        .select("id, full_name, sector, avatar_url, email")
+        .in("email", uniqueEmails);
+
+      (profilesByEmail || []).forEach((profile) => {
+        mergedById.set(profile.id, profile as { id: string; full_name: string | null; sector: string | null; avatar_url: string | null; email: string | null });
+      });
+    }
+
+    const profiles = Array.from(mergedById.values());
+    setMembers(profiles.filter((p) => p.full_name) as { full_name: string; sector: string | null }[]);
+
+    const map: Record<string, string> = {};
+    const avatarMap = buildAvatarLookupMap(profiles);
+
+    profiles.forEach((profile) => {
+      const fullName = typeof profile.full_name === "string" ? profile.full_name.trim() : "";
+
+      if (profile.id && fullName) {
+        map[profile.id] = fullName;
+      }
+    });
+
+    setProfilesMap(map);
+    setProfileAvatarMap(avatarMap);
   };
 
   const fetchActiveSprint = async () => {
@@ -1274,6 +1351,7 @@ export default function ProjectDetailsPage() {
                 projectLocked={isProjectConcluded}
                 isQualityProject={isQualityProject}
                 profilesMap={profilesMap}
+                profileAvatarMap={profileAvatarMap}
                 onOpenCreateTask={(stageId) => {
                   if (isProjectConcluded) {
                     showProjectLockedToast("criar atividades");

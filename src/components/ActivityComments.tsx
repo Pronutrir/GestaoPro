@@ -2,11 +2,14 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Pencil, Trash2, MessageSquare, Send, UserCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { AIAssistButton } from "@/components/AIAssistButton";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 interface Comment {
   id: string;
@@ -35,6 +38,10 @@ export const ActivityComments = ({ activityId, includeSubActivities = false }: A
 
   const currentAuthorName: string =
     profile?.full_name?.trim() || user?.email || "Usuário";
+  const authorAvatarMap = useAssigneeAvatarLookup([
+    currentAuthorName,
+    ...comments.map((comment) => comment.author),
+  ]);
   const isOwnComment = (author: string | null) =>
     Boolean(author && author.trim().toLowerCase() === currentAuthorName.trim().toLowerCase());
 
@@ -166,7 +173,16 @@ export const ActivityComments = ({ activityId, includeSubActivities = false }: A
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       {comment.author && (
-                        <span className="text-xs font-medium text-foreground">{comment.author}</span>
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+                          <Avatar className="h-5 w-5 shrink-0">
+                            {(() => {
+                              const avatar = resolveAvatarFromLookup(comment.author, comment.author, authorAvatarMap);
+                              return avatar ? <AvatarImage src={avatar} alt={comment.author} /> : null;
+                            })()}
+                            <AvatarFallback className="text-[9px]">{getAvatarInitials(comment.author)}</AvatarFallback>
+                          </Avatar>
+                          <span>{comment.author}</span>
+                        </span>
                       )}
                       <span className="text-xs text-muted-foreground">
                         {new Date(comment.created_at).toLocaleDateString("pt-BR", {
@@ -219,7 +235,13 @@ export const ActivityComments = ({ activityId, includeSubActivities = false }: A
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <UserCircle className="w-3.5 h-3.5" />
+            <Avatar className="h-5 w-5 shrink-0">
+              {(() => {
+                const avatar = resolveAvatarFromLookup(currentAuthorName, currentAuthorName, authorAvatarMap);
+                return avatar ? <AvatarImage src={avatar} alt={currentAuthorName} /> : null;
+              })()}
+              <AvatarFallback className="text-[9px]">{getAvatarInitials(currentAuthorName)}</AvatarFallback>
+            </Avatar>
             Comentando como <span className="font-medium text-foreground">{currentAuthorName}</span>
           </div>
           {newComment.trim() && (

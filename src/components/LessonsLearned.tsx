@@ -5,11 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { BookOpen, Plus, Pencil, Trash2, Lightbulb, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 interface Lesson {
   id: string;
@@ -52,6 +55,10 @@ export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showGlobal, setShowGlobal] = useState(false);
+  const reportedByAvatarMap = useAssigneeAvatarLookup([
+    ...lessons.map((lesson) => lesson.reported_by),
+    ...globalLessons.map((lesson) => lesson.reported_by),
+  ]);
   const [form, setForm] = useState({
     category: "general",
     problem: "",
@@ -208,7 +215,18 @@ export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
             )}
           </div>
           <div className="flex gap-2 mt-2 text-xs text-muted-foreground">
-            {lesson.reported_by && <span>👤 {lesson.reported_by}</span>}
+            {lesson.reported_by && (
+              <span className="inline-flex items-center gap-1">
+                <Avatar className="h-4 w-4 shrink-0">
+                  {(() => {
+                    const avatar = resolveAvatarFromLookup(lesson.reported_by, lesson.reported_by, reportedByAvatarMap);
+                    return avatar ? <AvatarImage src={avatar} alt={lesson.reported_by} /> : null;
+                  })()}
+                  <AvatarFallback className="text-[8px]">{getAvatarInitials(lesson.reported_by)}</AvatarFallback>
+                </Avatar>
+                <span>{lesson.reported_by}</span>
+              </span>
+            )}
             <span>{new Date(lesson.created_at).toLocaleDateString("pt-BR")}</span>
           </div>
         </div>

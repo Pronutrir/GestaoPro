@@ -20,11 +20,13 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
+import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 interface Phase { id: string; title: string; }
 interface WorkflowStage { id: string; title: string; display_order: number; color: string; }
@@ -90,7 +92,9 @@ export const BacklogSection = ({
   const [targetStageId, setTargetStageId] = useState<string>("");
   const [assignee, setAssignee] = useState<string>("");
   const [isMoving, setIsMoving] = useState(false);
-  const [profiles, setProfiles] = useState<{ id: string; full_name: string | null }[]>([]);
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string | null; email: string | null; avatar_url: string | null }[]>([]);
+  const [profileNameMap, setProfileNameMap] = useState<Record<string, string>>({});
+  const [profileAvatarMap, setProfileAvatarMap] = useState<Record<string, string>>({});
   const [showTrash, setShowTrash] = useState(false);
   const [trashedActivities, setTrashedActivities] = useState<any[]>([]);
   const [permanentDeleteId, setPermanentDeleteId] = useState<string | null>(null);
@@ -133,12 +137,23 @@ export const BacklogSection = ({
   useEffect(() => {
     const fetchProfiles = async () => {
       const [{ data: profilesData }, { data: adminRoles }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name").eq("is_active", true).order("full_name"),
+        supabase.from("profiles").select("id, full_name, email, avatar_url").eq("is_active", true).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
       ]);
       if (profilesData) {
         const adminIds = new Set((adminRoles || []).map((r: any) => r.user_id));
-        setProfiles(profilesData.filter((p) => !adminIds.has(p.id)));
+        const filteredProfiles = profilesData.filter((p) => !adminIds.has(p.id));
+        setProfiles(filteredProfiles);
+        const nextNameMap: Record<string, string> = {};
+        filteredProfiles.forEach((profile) => {
+          const fullName = typeof profile.full_name === "string" ? profile.full_name.trim() : "";
+          const email = typeof profile.email === "string" ? profile.email.trim() : "";
+          if (fullName && profile.id) nextNameMap[profile.id] = fullName;
+          if (fullName) nextNameMap[fullName] = fullName;
+          if (email && fullName) nextNameMap[email] = fullName;
+        });
+        setProfileNameMap(nextNameMap);
+        setProfileAvatarMap(buildAvatarLookupMap(filteredProfiles));
       }
     };
     fetchProfiles();
@@ -456,7 +471,26 @@ export const BacklogSection = ({
               );
             })()}
             {activity.assigned_to && (
-              <Badge variant="secondary" className="text-[10px]">👤 {activity.assigned_to}</Badge>
+              <Badge variant="secondary" className="text-[10px]">
+                <span className="inline-flex items-center gap-1 max-w-[180px]">
+                  {(() => {
+                    const rawAssignee = activity.assigned_to || "";
+                    const resolvedName = profileNameMap[rawAssignee] || rawAssignee;
+                    const avatar = resolveAvatarFromLookup(rawAssignee, resolvedName, profileAvatarMap);
+                    return (
+                      <>
+                        <Avatar className="h-3.5 w-3.5 shrink-0">
+                          {avatar ? <AvatarImage src={avatar} alt={resolvedName} /> : null}
+                          <AvatarFallback className="text-[7px] font-semibold">
+                            {getAvatarInitials(resolvedName)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="truncate">{resolvedName}</span>
+                      </>
+                    );
+                  })()}
+                </span>
+              </Badge>
             )}
             {(() => {
               const dc = dependencyCounts.get(activity.id);
@@ -949,7 +983,18 @@ export const BacklogSection = ({
                 <SelectContent>
                   <SelectItem value="__none__">Nenhum</SelectItem>
                   {profiles.map((p) => (
-                    <SelectItem key={p.id} value={p.full_name || p.id}>{p.full_name || "Sem nome"}</SelectItem>
+                    <SelectItem key={p.id} value={p.full_name || p.id}>
+                      <span className="inline-flex items-center gap-2 min-w-0 w-full">
+                        <Avatar className="h-5 w-5 shrink-0">
+                          {(() => {
+                            const avatar = resolveAvatarFromLookup(p.id, p.full_name || p.email || p.id, profileAvatarMap);
+                            return avatar ? <AvatarImage src={avatar} alt={p.full_name || "Usuário"} /> : null;
+                          })()}
+                          <AvatarFallback className="text-[9px]">{getAvatarInitials(p.full_name || p.email || "Sem nome")}</AvatarFallback>
+                        </Avatar>
+                        <span className="truncate">{p.full_name || "Sem nome"}</span>
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -17,6 +18,8 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 
 interface Project {
   id: string;
@@ -63,6 +66,7 @@ const Investments = () => {
   const [filterProject, setFilterProject] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const assigneeAvatarMap = useAssigneeAvatarLookup(investments.map((investment) => investment.responsible));
 
   useEffect(() => {
     if (!authLoading) fetchData();
@@ -413,7 +417,19 @@ const Investments = () => {
                             <span className="text-sm font-medium truncate block text-foreground">{inv.description || "Sem descrição"}</span>
                             <div className="flex items-center gap-2 mt-0.5">
                               {proj && <span className="text-[10px] text-muted-foreground">{proj.title}</span>}
-                              {inv.responsible && <span className="text-[10px] text-muted-foreground">· 👤 {inv.responsible}</span>}
+                              {inv.responsible && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground max-w-[180px]">
+                                  <span>·</span>
+                                  <Avatar className="h-4 w-4 shrink-0">
+                                    {(() => {
+                                      const avatar = resolveAvatarFromLookup(inv.responsible, inv.responsible, assigneeAvatarMap);
+                                      return avatar ? <AvatarImage src={avatar} alt={inv.responsible} /> : null;
+                                    })()}
+                                    <AvatarFallback className="text-[8px]">{getAvatarInitials(inv.responsible)}</AvatarFallback>
+                                  </Avatar>
+                                  <span className="truncate">{inv.responsible}</span>
+                                </span>
+                              )}
                               {inv.category && <Badge variant="outline" className="text-[9px] h-4">{inv.category}</Badge>}
                             </div>
                           </div>
@@ -485,7 +501,18 @@ const Investments = () => {
                             <div className="flex-1 min-w-0">
                               <span className="text-sm truncate block">{inv.description || "Sem descrição"}</span>
                               <div className="flex gap-2 mt-0.5">
-                                {inv.responsible && <span className="text-[10px] text-muted-foreground">👤 {inv.responsible}</span>}
+                                {inv.responsible && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground max-w-[180px]">
+                                    <Avatar className="h-4 w-4 shrink-0">
+                                      {(() => {
+                                        const avatar = resolveAvatarFromLookup(inv.responsible, inv.responsible, assigneeAvatarMap);
+                                        return avatar ? <AvatarImage src={avatar} alt={inv.responsible} /> : null;
+                                      })()}
+                                      <AvatarFallback className="text-[8px]">{getAvatarInitials(inv.responsible)}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="truncate">{inv.responsible}</span>
+                                  </span>
+                                )}
                                 {inv.category && <Badge variant="outline" className="text-[9px] h-4">{inv.category}</Badge>}
                               </div>
                             </div>

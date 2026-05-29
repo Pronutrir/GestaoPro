@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ArrowLeft, Users, Clock, CheckCircle2, AlertTriangle, Briefcase, X, Filter } from "lucide-react";
@@ -11,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { useAuth } from "@/contexts/AuthContext";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 
 interface Activity {
   id: string;
@@ -44,7 +47,14 @@ interface ProjectMemberProfile {
   project_ids: Set<string>;
 }
 
-type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | null;
+type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | "planned" | null;
+
+const normalizeIdentity = (value: string | null | undefined) =>
+  (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 
 const TeamView = () => {
   const router = useRouter();
@@ -54,12 +64,17 @@ const TeamView = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [allMemberNames, setAllMemberNames] = useState<ProjectMemberProfile[]>([]);
+  const [memberNameLookup, setMemberNameLookup] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>(null);
   const [filterProject, setFilterProject] = useState<string>("all");
   const [filterMember, setFilterMember] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const assigneeAvatarMap = useAssigneeAvatarLookup([
+    ...activities.map((activity) => activity.assigned_to),
+    ...allMemberNames.map((member) => member.full_name),
+  ]);
 
   useEffect(() => {
     if (!authLoading) fetchData();
@@ -68,8 +83,14 @@ const TeamView = () => {
   // Realtime subscription
   useEffect(() => {
     const channel = supabase
-      .channel('team-activities')
+      .channel('team-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, () => {
+        fetchData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' }, () => {
+        fetchData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_members' }, () => {
         fetchData();
       })
       .subscribe();
@@ -106,13 +127,21 @@ const TeamView = () => {
     // Build all member names from project_members profiles + project owners
     const filteredMembers = (membersRes.data || []).filter(m => projectIds.has(m.project_id));
     const userIds = [...new Set(filteredMembers.map(m => m.user_id))];
-    
+    const nextMemberLookup: Record<string, string> = {};
+
     const memberProfiles: ProjectMemberProfile[] = [];
     
     if (userIds.length > 0) {
-      const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", userIds);
+      const { data: profiles } = await supabase.from("profiles").select("id, full_name, email").in("id", userIds);
       if (profiles) {
         const profileMap = new Map(profiles.map(p => [p.id, p.full_name]));
+        profiles.forEach((profile) => {
+          const fullName = profile.full_name?.trim();
+          if (!fullName) return;
+          if (profile.id) nextMemberLookup[profile.id] = fullName;
+          if (profile.email) nextMemberLookup[profile.email] = fullName;
+          nextMemberLookup[normalizeIdentity(fullName)] = fullName;
+        });
         const nameToProjects = new Map<string, Set<string>>();
         
         filteredMembers.forEach(m => {
@@ -125,6 +154,7 @@ const TeamView = () => {
         nameToProjects.forEach((pIds, name) => {
           memberProfiles.push({ full_name: name, project_ids: pIds });
         });
+
       }
     }
 
@@ -132,6 +162,7 @@ const TeamView = () => {
     filteredProjects.forEach(p => {
       const owner = p.owner?.trim();
       if (owner) {
+        nextMemberLookup[normalizeIdentity(owner)] = owner;
         const existing = memberProfiles.find(mp => mp.full_name === owner);
         if (existing) {
           existing.project_ids.add(p.id);
@@ -142,6 +173,7 @@ const TeamView = () => {
     });
 
     setAllMemberNames(memberProfiles);
+    setMemberNameLookup(nextMemberLookup);
     setIsLoading(false);
   };
 
@@ -166,6 +198,19 @@ const TeamView = () => {
     });
 
     // Add activity data (responsible + participants)
+    const activityById = new Map(activities.map((activity) => [activity.id, activity]));
+
+    const resolveMemberName = (raw: string | null | undefined) => {
+      const trimmed = raw?.trim();
+      if (!trimmed) return null;
+      if (members.has(trimmed)) return trimmed;
+      const direct = memberNameLookup[trimmed];
+      if (direct && members.has(direct)) return direct;
+      const normalized = memberNameLookup[normalizeIdentity(trimmed)];
+      if (normalized && members.has(normalized)) return normalized;
+      return null;
+    };
+
     activities.forEach(a => {
       const addActivityToMember = (name: string | undefined | null, isParticipant = false) => {
         const trimmed = name?.trim();
@@ -189,14 +234,109 @@ const TeamView = () => {
       }
     });
 
-    timeEntries.forEach(te => {
-      const name = te.user_name?.trim();
-      if (!name || !members.has(name)) return;
-      members.get(name)!.hoursTracked += (te.duration_minutes || 0) / 60;
+    const trackedMinutesByActivity = new Map<string, number>();
+    const trackedMinutesByActivityAndUser = new Map<string, Map<string, number>>();
+    timeEntries.forEach((entry) => {
+      if (!entry.activity_id) return;
+      const current = trackedMinutesByActivity.get(entry.activity_id) || 0;
+      trackedMinutesByActivity.set(entry.activity_id, current + (entry.duration_minutes || 0));
+
+      const userName = entry.user_name?.trim();
+      if (!userName) return;
+      const byUser = trackedMinutesByActivityAndUser.get(entry.activity_id) || new Map<string, number>();
+      byUser.set(userName, (byUser.get(userName) || 0) + (entry.duration_minutes || 0));
+      trackedMinutesByActivityAndUser.set(entry.activity_id, byUser);
+    });
+
+    // Horas por membro devem refletir o consumo das atividades atribuídas ao membro,
+    // inclusive quando o user_name do apontamento está vazio ou diferente.
+    activities.forEach((activity) => {
+      const trackedMinutes = trackedMinutesByActivity.get(activity.id) || 0;
+      const plannedMinutes = Math.max(0, Math.round((Number(activity.hours) || 0) * 60));
+      const minutes = trackedMinutes > 0
+        ? trackedMinutes
+        : activity.status === "completed"
+          ? plannedMinutes
+          : 0;
+      if (minutes <= 0) return;
+
+      let memberName = resolveMemberName(activity.assigned_to);
+      if (!memberName) {
+        const fallbackAssignee = activity.assigned_to?.trim();
+        if (fallbackAssignee) {
+          memberName = fallbackAssignee;
+          if (!members.has(memberName)) {
+            members.set(memberName, {
+              name: memberName,
+              totalTasks: 0,
+              completedTasks: 0,
+              overdueTasks: 0,
+              highPriority: 0,
+              hoursEstimated: 0,
+              hoursTracked: 0,
+              projects: new Set(activity.project_id ? [activity.project_id] : []),
+            });
+          }
+        }
+      }
+
+      if (memberName && members.has(memberName)) {
+        members.get(memberName)!.hoursTracked += minutes / 60;
+        return;
+      }
+
+      // Quando não há responsável mapeado (comum em itens antigos/concluídos),
+      // distribui as horas pelos nomes dos apontamentos já registrados.
+      const minutesByUser = trackedMinutesByActivityAndUser.get(activity.id);
+      if (!minutesByUser) return;
+
+      minutesByUser.forEach((userMinutes, rawUserName) => {
+        let resolvedUser = resolveMemberName(rawUserName) || rawUserName;
+        const normalized = memberNameLookup[normalizeIdentity(resolvedUser)];
+        if (normalized) resolvedUser = normalized;
+
+        if (!members.has(resolvedUser)) {
+          members.set(resolvedUser, {
+            name: resolvedUser,
+            totalTasks: 0,
+            completedTasks: 0,
+            overdueTasks: 0,
+            highPriority: 0,
+            hoursEstimated: 0,
+            hoursTracked: 0,
+            projects: new Set(activity.project_id ? [activity.project_id] : []),
+          });
+        }
+
+        members.get(resolvedUser)!.hoursTracked += userMinutes / 60;
+      });
+    });
+
+    // Fallback para apontamentos sem atividade vinculada encontrada.
+    timeEntries.forEach((entry) => {
+      if (entry.activity_id && activityById.has(entry.activity_id)) return;
+
+      const fallbackName = entry.user_name?.trim();
+      if (!fallbackName) return;
+
+      if (!members.has(fallbackName)) {
+        members.set(fallbackName, {
+          name: fallbackName,
+          totalTasks: 0,
+          completedTasks: 0,
+          overdueTasks: 0,
+          highPriority: 0,
+          hoursEstimated: 0,
+          hoursTracked: 0,
+          projects: new Set(entry.project_id ? [entry.project_id] : []),
+        });
+      }
+
+      members.get(fallbackName)!.hoursTracked += (entry.duration_minutes || 0) / 60;
     });
 
     return Array.from(members.values()).sort((a, b) => b.totalTasks - a.totalTasks);
-  }, [activities, timeEntries, allMemberNames]);
+  }, [activities, timeEntries, allMemberNames, memberNameLookup]);
 
 
   const unassigned = activities.filter(a => !a.assigned_to?.trim());
@@ -215,15 +355,19 @@ const TeamView = () => {
     return { member, memberActivities, memberProjects, overdue, inProgress };
   }, [selectedMember, teamMembers, activities, projects]);
 
+  const totalTrackedHours = teamMembers.reduce((sum, member) => sum + member.hoursTracked, 0);
+  const totalPlannedHours = teamMembers.reduce((sum, member) => sum + member.hoursEstimated, 0);
+
   return (
           <main className="px-4 py-6 space-y-6">
         {/* Summary - clickable cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
           {[
             { key: "members" as SummaryFilter, label: "Membros", value: teamMembers.length, color: "text-foreground" },
             { key: "assigned" as SummaryFilter, label: "Tarefas Atribuídas", value: activities.filter(a => a.assigned_to?.trim()).length, color: "text-foreground" },
             { key: "unassigned" as SummaryFilter, label: "Sem Responsável", value: unassigned.length, color: "text-warning" },
-            { key: "hours" as SummaryFilter, label: "Horas Registradas", value: `${(timeEntries.reduce((s, t) => s + (t.duration_minutes || 0), 0) / 60).toFixed(0)}h`, color: "text-info" },
+            { key: "planned" as SummaryFilter, label: "Horas Planejadas", value: `${totalPlannedHours.toFixed(0)}h`, color: "text-foreground" },
+            { key: "hours" as SummaryFilter, label: "Horas Registradas", value: `${totalTrackedHours.toFixed(0)}h`, color: "text-info" },
           ].map(card => (
             <Card
               key={card.key}
@@ -244,6 +388,7 @@ const TeamView = () => {
                 {summaryFilter === "members" && `👥 Membros da Equipe (${teamMembers.length})`}
                 {summaryFilter === "assigned" && `📋 Tarefas Atribuídas`}
                 {summaryFilter === "unassigned" && `⚠️ Tarefas Sem Responsável`}
+                {summaryFilter === "planned" && `🗓️ Horas Planejadas por Membro`}
                 {summaryFilter === "hours" && `⏱️ Horas Registradas por Membro`}
               </h3>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setSummaryFilter(null); setFilterProject("all"); setFilterMember("all"); setFilterStatus("all"); }}>
@@ -265,8 +410,10 @@ const TeamView = () => {
                         ? unassigned.length
                         : summaryFilter === "assigned"
                         ? activities.filter(a => a.assigned_to?.trim()).length
+                        : summaryFilter === "planned"
+                        ? teamMembers.filter(m => m.hoursEstimated > 0).length
                         : summaryFilter === "hours"
-                        ? timeEntries.length
+                        ? teamMembers.filter(m => m.hoursTracked > 0).length
                         : 0;
                       return <SelectItem value="all">Todos os Projetos ({allCount})</SelectItem>;
                     })()}
@@ -275,8 +422,10 @@ const TeamView = () => {
                         ? unassigned.filter(a => a.project_id === p.id).length
                         : summaryFilter === "assigned"
                         ? activities.filter(a => a.assigned_to?.trim() && a.project_id === p.id).length
+                        : summaryFilter === "planned"
+                        ? teamMembers.filter(m => m.hoursEstimated > 0 && m.projects.has(p.id)).length
                         : summaryFilter === "hours"
-                        ? timeEntries.filter(t => t.project_id === p.id).length
+                        ? teamMembers.filter(m => m.hoursTracked > 0 && m.projects.has(p.id)).length
                         : 0;
                       return (
                         <SelectItem key={p.id} value={p.id}>
@@ -323,6 +472,10 @@ const TeamView = () => {
 
               const filteredAssigned = activities.filter(a => a.assigned_to?.trim()).filter(byProject).filter(byMember).filter(byStatus);
               const filteredUnassigned = unassigned.filter(byProject);
+              const filteredPlannedMembers = teamMembers.filter(m => m.hoursEstimated > 0).filter(m => {
+                if (filterProject === "all") return true;
+                return m.projects.has(filterProject);
+              }).sort((a, b) => b.hoursEstimated - a.hoursEstimated);
               const filteredHoursMembers = teamMembers.filter(m => m.hoursTracked > 0).filter(m => {
                 if (filterProject === "all") return true;
                 return m.projects.has(filterProject);
@@ -334,9 +487,13 @@ const TeamView = () => {
                     <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md cursor-pointer hover:bg-muted/50"
                       onClick={() => { setSummaryFilter(null); setSelectedMember(m.name); }}>
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 bg-primary/10 rounded-full flex items-center justify-center">
-                          <span className="text-[10px] font-bold text-primary">{m.name.substring(0, 2).toUpperCase()}</span>
-                        </div>
+                        <Avatar className="w-7 h-7">
+                          {(() => {
+                            const avatar = resolveAvatarFromLookup(m.name, m.name, assigneeAvatarMap);
+                            return avatar ? <AvatarImage src={avatar} alt={m.name} /> : null;
+                          })()}
+                          <AvatarFallback className="text-[10px] font-bold text-primary bg-primary/10">{getAvatarInitials(m.name)}</AvatarFallback>
+                        </Avatar>
                         <span className="text-sm font-medium">{m.name}</span>
                       </div>
                       <span className="text-xs text-muted-foreground">{m.totalTasks} tarefa(s) · {m.projects.size} projeto(s)</span>
@@ -352,7 +509,16 @@ const TeamView = () => {
                           <div key={a.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
                             <div className="flex-1 min-w-0">
                               <span className="text-sm font-medium truncate block">{a.title}</span>
-                              <span className="text-[10px] text-muted-foreground">👤 {a.assigned_to} · {proj?.title || ""}</span>
+                              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground max-w-[260px]">
+                                <Avatar className="h-4 w-4 shrink-0">
+                                  {(() => {
+                                    const avatar = resolveAvatarFromLookup(a.assigned_to, a.assigned_to, assigneeAvatarMap);
+                                    return avatar ? <AvatarImage src={avatar} alt={a.assigned_to || "Responsável"} /> : null;
+                                  })()}
+                                  <AvatarFallback className="text-[8px]">{getAvatarInitials(a.assigned_to)}</AvatarFallback>
+                                </Avatar>
+                                <span className="truncate">{a.assigned_to} · {proj?.title || ""}</span>
+                              </span>
                             </div>
                             <Badge variant="outline" className="text-[10px] ml-2 shrink-0">
                               {a.status === "completed" ? "Concluída" : a.status === "in_progress" ? "Em andamento" : "Pendente"}
@@ -399,6 +565,24 @@ const TeamView = () => {
                     </>
                   )}
 
+                  {summaryFilter === "planned" && (
+                    <>
+                      <p className="text-xs text-muted-foreground">{filteredPlannedMembers.length} membro(s)</p>
+                      {filteredPlannedMembers.map(m => (
+                        <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                          <span className="text-sm font-medium">{m.name}</span>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="font-semibold text-foreground">Planejado: {m.hoursEstimated.toFixed(1)}h</span>
+                            <span className="text-info">Registrado: {m.hoursTracked.toFixed(1)}h</span>
+                          </div>
+                        </div>
+                      ))}
+                      {filteredPlannedMembers.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">Nenhuma hora planejada ainda.</p>
+                      )}
+                    </>
+                  )}
+
                 </div>
               );
             })()}
@@ -411,6 +595,7 @@ const TeamView = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {teamMembers.map(member => {
               const completionRate = member.totalTasks > 0 ? (member.completedTasks / member.totalTasks) * 100 : 0;
+              const memberAvatar = resolveAvatarFromLookup(member.name, member.name, assigneeAvatarMap);
               return (
                 <Card
                   key={member.name}
@@ -418,9 +603,10 @@ const TeamView = () => {
                   onClick={() => setSelectedMember(member.name)}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-bold text-primary">{member.name.substring(0, 2).toUpperCase()}</span>
-                    </div>
+                    <Avatar className="w-10 h-10">
+                      {memberAvatar ? <AvatarImage src={memberAvatar} alt={member.name} /> : null}
+                      <AvatarFallback className="text-sm font-bold text-primary bg-primary/10">{getAvatarInitials(member.name)}</AvatarFallback>
+                    </Avatar>
                     <div className="flex-1">
                       <h3 className="font-semibold text-foreground">{member.name}</h3>
                       <p className="text-xs text-muted-foreground">{member.projects.size} projeto(s)</p>
@@ -465,14 +651,20 @@ const TeamView = () => {
           <SheetContent className="sm:max-w-lg overflow-y-auto">
             {selectedMemberData && (
               <>
+                {(() => {
+                  const selectedAvatar = resolveAvatarFromLookup(selectedMemberData.member.name, selectedMemberData.member.name, assigneeAvatarMap);
+                  return (
                 <SheetHeader>
                   <SheetTitle className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-bold text-primary">{selectedMemberData.member.name.substring(0, 2).toUpperCase()}</span>
-                    </div>
+                    <Avatar className="w-10 h-10">
+                      {selectedAvatar ? <AvatarImage src={selectedAvatar} alt={selectedMemberData.member.name} /> : null}
+                      <AvatarFallback className="text-sm font-bold text-primary bg-primary/10">{getAvatarInitials(selectedMemberData.member.name)}</AvatarFallback>
+                    </Avatar>
                     {selectedMemberData.member.name}
                   </SheetTitle>
                 </SheetHeader>
+                  );
+                })()}
 
                 <div className="mt-6 space-y-6">
                   {/* KPIs */}

@@ -2,13 +2,14 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Calendar, DollarSign, ExternalLink, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useHealthScore } from "@/hooks/useHealthScore";
 import { HealthBadge } from "@/components/HealthBadge";
 import { Progress } from "@/components/ui/progress";
 import { formatProjectDueDate } from "@/lib/projectDeadline";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 interface Project {
   id: string;
@@ -28,6 +29,7 @@ interface Project {
 
 interface ProjectDrawerProps {
   project: Project | null;
+  assigneeAvatarMap?: Record<string, string>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -53,7 +55,7 @@ const priorityColors: Record<string, string> = {
   high: "bg-destructive text-destructive-foreground",
 };
 
-export function ProjectDrawer({ project, open, onOpenChange }: ProjectDrawerProps) {
+export function ProjectDrawer({ project, assigneeAvatarMap = {}, open, onOpenChange }: ProjectDrawerProps) {
   const router = useRouter();
   const { health } = useHealthScore(project?.id);
 
@@ -153,7 +155,11 @@ export function ProjectDrawer({ project, open, onOpenChange }: ProjectDrawerProp
               <div className="flex gap-2 flex-wrap">
                 {project.assignees.map((a, i) => (
                   <Avatar key={i} className="w-8 h-8">
-                    <AvatarFallback className="text-xs bg-primary text-primary-foreground">{a}</AvatarFallback>
+                    {(() => {
+                      const avatar = resolveAvatarFromLookup(a, a, assigneeAvatarMap);
+                      return avatar ? <AvatarImage src={avatar} alt={a} /> : null;
+                    })()}
+                    <AvatarFallback className="text-xs bg-primary text-primary-foreground">{getAvatarInitials(a)}</AvatarFallback>
                   </Avatar>
                 ))}
               </div>

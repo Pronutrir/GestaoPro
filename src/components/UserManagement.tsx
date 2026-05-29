@@ -100,7 +100,7 @@ export const UserManagement = () => {
       supabase.from("sectors").select("id, name").order("name"),
     ]);
 
-    const nextProfiles = profilesData || [];
+    const nextProfiles = (profilesData as unknown as Profile[] | null) || [];
     const nextRoles = (rolesData as UserRole[]) || [];
     const nextSectors = sectorsData || [];
 

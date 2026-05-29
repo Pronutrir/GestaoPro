@@ -29,6 +29,7 @@ import {
   DragOverlay, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { buildAvatarLookupMap } from '@/lib/avatarLookup';
 
 interface Project {
   id: string; title: string; description: string | null; status: string; priority: string;
@@ -36,6 +37,9 @@ interface Project {
   owner: string | null; blockers: string | null; display_order: number;
   category?: string; program?: string | null;
 }
+
+const looksLikeUuid = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim());
 
 const STATUS_CARD_STYLES = {
   ideacao: {
@@ -94,6 +98,7 @@ function ProjectsContent() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [drawerProject, setDrawerProject] = useState<Project | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [assigneeAvatarMap, setAssigneeAvatarMap] = useState<Record<string, string>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const statusFilter = searchParams.get('status');
 
@@ -120,6 +125,53 @@ function ProjectsContent() {
       if (error) throw error;
       const filtered = await filterProjects(data || []);
       setProjects(filtered);
+
+      const assigneeValues = filtered
+        .flatMap((project) => Array.isArray(project.assignees) ? project.assignees : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+
+      if (assigneeValues.length === 0) {
+        setAssigneeAvatarMap({});
+      } else {
+        const ids = Array.from(new Set(assigneeValues.filter(looksLikeUuid)));
+        const emails = Array.from(new Set(assigneeValues.filter((value) => !looksLikeUuid(value) && value.includes('@'))));
+        const names = Array.from(new Set(assigneeValues.filter((value) => !looksLikeUuid(value) && !value.includes('@'))));
+
+        const mergedById = new Map<string, { id: string | null; full_name: string | null; email: string | null; avatar_url: string | null }>();
+
+        if (ids.length > 0) {
+          const { data: byIds } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, avatar_url')
+            .in('id', ids);
+          (byIds || []).forEach((profile) => mergedById.set(profile.id, profile));
+        }
+
+        if (emails.length > 0) {
+          const { data: byEmails } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, avatar_url')
+            .in('email', emails);
+          (byEmails || []).forEach((profile, index) => {
+            const key = profile.id || profile.email || profile.full_name || `email-${index}`;
+            mergedById.set(key, profile);
+          });
+        }
+
+        if (names.length > 0) {
+          const { data: byNames } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, avatar_url')
+            .in('full_name', names);
+          (byNames || []).forEach((profile, index) => {
+            const key = profile.id || profile.email || profile.full_name || `name-${index}`;
+            mergedById.set(key, profile);
+          });
+        }
+
+        setAssigneeAvatarMap(buildAvatarLookupMap(Array.from(mergedById.values())));
+      }
     } catch {
       toast.error('Erro ao carregar projetos');
     } finally {
@@ -356,8 +408,8 @@ function ProjectsContent() {
                   key={s.key}
                   title={s.label}
                   status={s.key}
-                  color={s.color}
                   projects={s.projects}
+                  assigneeAvatarMap={assigneeAvatarMap}
                   onEdit={(p: Project) => { setEditingProject(p); setEditDialogOpen(true); }}
                   onDelete={handleDelete}
                   onStatusChange={handleStatusChange}
@@ -369,7 +421,7 @@ function ProjectsContent() {
           <DragOverlay>
             {activeProject ? (
               <div className="rotate-2 opacity-90 w-[280px]">
-                <ProjectCardPreview project={activeProject} />
+                <ProjectCardPreview project={activeProject} assigneeAvatarMap={assigneeAvatarMap} />
               </div>
             ) : null}
           </DragOverlay>
@@ -382,7 +434,7 @@ function ProjectsContent() {
         onOpenChange={setEditDialogOpen}
         onProjectUpdated={fetchProjects}
       />
-      <ProjectDrawer project={drawerProject} open={drawerOpen} onOpenChange={setDrawerOpen} />
+      <ProjectDrawer project={drawerProject} assigneeAvatarMap={assigneeAvatarMap} open={drawerOpen} onOpenChange={setDrawerOpen} />
     </div>
   );
 }

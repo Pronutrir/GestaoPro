@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { GripVertical } from "lucide-react";
 import {
   DndContext,
@@ -15,6 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 interface CscTicket {
   id: string;
@@ -47,6 +48,7 @@ interface StatusObj {
 interface CscKanbanBoardProps {
   kanbanStatuses: StatusObj[];
   filteredTickets: CscTicket[];
+  profileAvatarMap?: Record<string, string>;
   getSlaStatus: (ticket: CscTicket) => "green" | "yellow" | "red";
   getDeptLabel: (d: string) => string;
   PriorityBadge: React.ComponentType<{ priority: string }>;
@@ -75,6 +77,7 @@ function SortableCscCard({
   getDeptLabel,
   PriorityBadge,
   SlaBadge,
+  profileAvatarMap = {},
   onSelect,
 }: {
   ticket: CscTicket;
@@ -82,6 +85,7 @@ function SortableCscCard({
   getDeptLabel: (d: string) => string;
   PriorityBadge: React.ComponentType<{ priority: string }>;
   SlaBadge: React.ComponentType<{ ticket: CscTicket }>;
+  profileAvatarMap?: Record<string, string>;
   onSelect: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ticket.id });
@@ -139,8 +143,12 @@ function SortableCscCard({
           </span>
           {ticket.assigned_to && (
             <Avatar className="h-5 w-5">
+              {(() => {
+                const avatar = resolveAvatarFromLookup(ticket.assigned_to, ticket.assigned_to, profileAvatarMap);
+                return avatar ? <AvatarImage src={avatar} alt={ticket.assigned_to} /> : null;
+              })()}
               <AvatarFallback className="text-[8px] bg-primary/10 text-primary">
-                {ticket.assigned_to.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                {getAvatarInitials(ticket.assigned_to)}
               </AvatarFallback>
             </Avatar>
           )}
@@ -153,6 +161,7 @@ function SortableCscCard({
 export function CscKanbanBoard({
   kanbanStatuses,
   filteredTickets,
+  profileAvatarMap = {},
   getSlaStatus,
   getDeptLabel,
   PriorityBadge,
@@ -241,6 +250,7 @@ export function CscKanbanBoard({
                       <SortableCscCard
                         key={ticket.id}
                         ticket={ticket}
+                        profileAvatarMap={profileAvatarMap}
                         getSlaStatus={getSlaStatus}
                         getDeptLabel={getDeptLabel}
                         PriorityBadge={PriorityBadge}

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   ChevronDown,
   ChevronRight,
@@ -29,6 +30,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 
 interface Phase {
   id: string;
@@ -78,6 +81,7 @@ export const PhaseManager = ({
 }: PhaseManagerProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
+  const assigneeAvatarMap = useAssigneeAvatarLookup(activities.map((activity) => activity.assigned_to));
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -640,7 +644,18 @@ const SubActivityTree = ({
               <input type="checkbox" checked={sub.status === "completed"} onChange={() => onToggleActivity(sub.id, sub.status)} className="h-3.5 w-3.5 rounded border-input" />
               <p className={`text-xs font-medium truncate flex-1 ${sub.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>{sub.title}</p>
               {subSubs.length > 0 && <Badge variant="secondary" className="text-[10px] px-1 py-0">{subSubs.length}</Badge>}
-              {sub.assigned_to && <span className="text-[10px] text-muted-foreground">👤 {sub.assigned_to}</span>}
+              {sub.assigned_to && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground max-w-[180px]">
+                  <Avatar className="h-4 w-4 shrink-0">
+                    {(() => {
+                      const avatar = resolveAvatarFromLookup(sub.assigned_to, sub.assigned_to, assigneeAvatarMap);
+                      return avatar ? <AvatarImage src={avatar} alt={sub.assigned_to} /> : null;
+                    })()}
+                    <AvatarFallback className="text-[7px]">{getAvatarInitials(sub.assigned_to)}</AvatarFallback>
+                  </Avatar>
+                  <span className="truncate">{sub.assigned_to}</span>
+                </span>
+              )}
               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="relative">
                   <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" title="Mover para..." onClick={() => setMovingId(isMoving ? null : sub.id)}>
@@ -768,7 +783,16 @@ const ActivityCard = ({
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{subCount} sub</Badge>
           )}
           {activity.assigned_to && (
-            <span className="text-xs text-muted-foreground">👤 {activity.assigned_to}</span>
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground max-w-[220px]">
+              <Avatar className="h-4 w-4 shrink-0">
+                {(() => {
+                  const avatar = resolveAvatarFromLookup(activity.assigned_to, activity.assigned_to, assigneeAvatarMap);
+                  return avatar ? <AvatarImage src={avatar} alt={activity.assigned_to} /> : null;
+                })()}
+                <AvatarFallback className="text-[8px]">{getAvatarInitials(activity.assigned_to)}</AvatarFallback>
+              </Avatar>
+              <span className="truncate">{activity.assigned_to}</span>
+            </span>
           )}
           {activity.hours > 0 && (
             <span className="text-xs text-muted-foreground">⏱️ {activity.hours}h</span>

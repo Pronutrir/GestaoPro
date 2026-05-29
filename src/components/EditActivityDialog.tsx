@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +37,8 @@ import { MessageSquare, Paperclip, ListTree, FileText, Users } from "lucide-reac
 import { ActivityStoriesPanel } from "@/components/ActivityStoriesPanel";
 import { AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 /** Linha de propriedade densa (ícone + label cinza + valor) usada no painel ClickUp-like. */
 const PropertyRow = ({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) => (
@@ -84,6 +87,8 @@ interface PersonOption {
   id: string;
   full_name: string;
   sector: string | null;
+  email?: string | null;
+  avatar_url?: string | null;
 }
 
 function normalizePersonOptions(options: Array<Partial<PersonOption> | null | undefined>): PersonOption[] {
@@ -95,6 +100,8 @@ function normalizePersonOptions(options: Array<Partial<PersonOption> | null | un
         : `person-${option.full_name.trim()}-${option.sector ?? "no-sector"}-${index}`,
       full_name: option.full_name.trim(),
       sector: option.sector ?? null,
+      email: option.email ?? null,
+      avatar_url: option.avatar_url ?? null,
     }));
 }
 
@@ -322,6 +329,7 @@ export const EditActivityDialog = ({
   const [editingSubActivity, setEditingSubActivity] = useState<Activity | null>(null);
   const [editingSubOpen, setEditingSubOpen] = useState(false);
   const [members, setMembers] = useState<PersonOption[]>([]);
+  const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
   const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
   const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean }[]>([]);
   const [currentStageId, setCurrentStageId] = useState("");
@@ -470,7 +478,7 @@ export const EditActivityDialog = ({
     }
 
     // Fetch all active profiles for participants dropdown
-    supabase.from("profiles").select("id, full_name, sector").eq("is_active", true).then(({ data }) => {
+    supabase.from("profiles").select("id, full_name, sector, email, avatar_url").eq("is_active", true).then(({ data }) => {
       if (data) setAllProfiles(normalizePersonOptions(data));
     });
 
@@ -554,7 +562,7 @@ export const EditActivityDialog = ({
       supabase.from("project_members").select("user_id").eq("project_id", projectId).then(({ data: memberData }) => {
         if (memberData && memberData.length > 0) {
           const userIds = memberData.map(m => m.user_id);
-          supabase.from("profiles").select("id, full_name, sector").in("id", userIds).then(({ data: profiles }) => {
+          supabase.from("profiles").select("id, full_name, sector, email, avatar_url").in("id", userIds).then(({ data: profiles }) => {
             if (profiles) setMembers(normalizePersonOptions(profiles));
           });
         }
@@ -1424,18 +1432,60 @@ export const EditActivityDialog = ({
                 )}
                 {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
                 <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
-                  <select
-                    className="h-7 rounded-md border border-input bg-background px-2 text-xs w-full max-w-[280px] truncate"
-                    value={formData.assigned_to}
-                    onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+                  <Select
+                    value={formData.assigned_to || "_none"}
+                    onValueChange={(value) => setFormData({ ...formData, assigned_to: value === "_none" ? "" : value })}
                   >
-                    <option value="">Sem líder</option>
-                    {allProfiles.map((m, index) => (
-                      <option key={`${m.id}-${index}`} value={m.full_name!}>
-                        {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="h-8 text-xs w-full max-w-[320px]">
+                      {(() => {
+                        const selected = allProfiles.find((m) => m.full_name === formData.assigned_to);
+                        if (!selected && !formData.assigned_to) {
+                          return <div className="text-muted-foreground">Sem líder</div>;
+                        }
+                        if (!selected && formData.assigned_to) {
+                          return (
+                            <div className="flex items-center gap-1.5 min-w-0 w-full pr-1">
+                              <Avatar className="h-5 w-5 shrink-0">
+                                <AvatarFallback className="text-[9px]">{getAvatarInitials(formData.assigned_to)}</AvatarFallback>
+                              </Avatar>
+                              <span className="truncate leading-none">{formData.assigned_to}</span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="flex items-center gap-1.5 min-w-0 w-full pr-1">
+                            <Avatar className="h-5 w-5 shrink-0">
+                              {selected?.avatar_url ? <AvatarImage src={selected.avatar_url} alt={selected.full_name} /> : null}
+                              <AvatarFallback className="text-[9px]">{getAvatarInitials(selected?.full_name)}</AvatarFallback>
+                            </Avatar>
+                            <span className="truncate leading-none">
+                              {selected?.full_name}{selected?.sector ? ` — ${selected.sector}` : ""}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      side="bottom"
+                      align="start"
+                      sideOffset={6}
+                      className="max-h-[min(320px,calc(100vh-180px))] overflow-y-auto"
+                    >
+                      <SelectItem value="_none">Sem líder</SelectItem>
+                      {allProfiles.map((m) => (
+                        <SelectItem key={m.id} value={m.full_name}>
+                          <div className="flex items-center gap-2 min-w-0 w-full">
+                            <Avatar className="h-5 w-5 shrink-0">
+                              {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
+                              <AvatarFallback className="text-[9px]">{getAvatarInitials(m.full_name)}</AvatarFallback>
+                            </Avatar>
+                            <span className="truncate leading-none">{m.full_name}{m.sector ? ` — ${m.sector}` : ""}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </PropertyRow>
 
                 {/* Prioridade — método GUT */}
@@ -1638,26 +1688,66 @@ export const EditActivityDialog = ({
                     <div className="divide-y divide-border">
                       {formData.participants.map((p, idx) => (
                         <div key={`${p}-${idx}`} className="grid grid-cols-[1fr_36px] items-center gap-2 px-3 py-2 bg-background">
-                          <select
-                            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                            value={p}
-                            onChange={(e) => {
-                              const newName = e.target.value;
+                          <Select
+                            value={p || "_none"}
+                            onValueChange={(value) => {
+                              const newName = value === "_none" ? "" : value;
                               if (newName !== p && formData.participants.includes(newName)) return;
                               const nextParticipants = [...formData.participants];
                               nextParticipants[idx] = newName;
                               setFormData({ ...formData, participants: nextParticipants });
                             }}
                           >
-                            <option value="">Selecionar pessoa...</option>
-                            {allProfiles
-                              .filter((m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name!)))
-                              .map((m, index) => (
-                                <option key={`${m.id}-${index}`} value={m.full_name!}>
-                                  {m.full_name}{m.sector ? ` — ${m.sector}` : ""}
-                                </option>
-                              ))}
-                          </select>
+                            <SelectTrigger className="h-9 w-full text-sm">
+                              {(() => {
+                                const selected = allProfiles.find((m) => m.full_name === p);
+                                if (!selected && !p) {
+                                  return <div className="text-muted-foreground">Selecionar pessoa...</div>;
+                                }
+                                if (!selected && p) {
+                                  return (
+                                    <div className="flex items-center gap-2 min-w-0 w-full pr-1">
+                                      <Avatar className="h-5 w-5 shrink-0">
+                                        <AvatarFallback className="text-[9px]">{getAvatarInitials(p)}</AvatarFallback>
+                                      </Avatar>
+                                      <span className="truncate leading-none">{p}</span>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="flex items-center gap-2 min-w-0 w-full pr-1">
+                                    <Avatar className="h-5 w-5 shrink-0">
+                                      {selected?.avatar_url ? <AvatarImage src={selected.avatar_url} alt={selected.full_name} /> : null}
+                                      <AvatarFallback className="text-[9px]">{getAvatarInitials(selected?.full_name)}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="truncate leading-none">{selected?.full_name}{selected?.sector ? ` — ${selected.sector}` : ""}</span>
+                                  </div>
+                                );
+                              })()}
+                            </SelectTrigger>
+                            <SelectContent
+                              position="popper"
+                              side="bottom"
+                              align="start"
+                              sideOffset={6}
+                              className="max-h-[min(320px,calc(100vh-180px))] overflow-y-auto"
+                            >
+                              <SelectItem value="_none">Selecionar pessoa...</SelectItem>
+                              {allProfiles
+                                .filter((m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name)))
+                                .map((m) => (
+                                  <SelectItem key={m.id} value={m.full_name}>
+                                    <div className="flex items-center gap-2 min-w-0 w-full">
+                                      <Avatar className="h-5 w-5 shrink-0">
+                                        {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
+                                        <AvatarFallback className="text-[9px]">{getAvatarInitials(m.full_name)}</AvatarFallback>
+                                      </Avatar>
+                                      <span className="truncate leading-none">{m.full_name}{m.sector ? ` — ${m.sector}` : ""}</span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
                           <button
                             type="button"
                             className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
@@ -1795,12 +1885,6 @@ export const EditActivityDialog = ({
                     </span>
                   </div>
                   {orderedSubActivities.map((sub) => {
-                    const initials = (sub.assigned_to || "")
-                      .split(" ")
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map((n) => n[0]?.toUpperCase())
-                      .join("");
                     const gutLevel = normalizeGut(sub.priority);
                     const gutMeta = GUT_META[gutLevel];
                     const prioLabel = gutMeta.label;
@@ -1886,9 +1970,15 @@ export const EditActivityDialog = ({
                                     title={sub.assigned_to || "Atribuir responsável"}
                                   >
                                     {sub.assigned_to ? (
-                                      <span className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                                        {initials}
-                                      </span>
+                                      <Avatar className="h-6 w-6">
+                                        {(() => {
+                                          const avatar = resolveAvatarFromLookup(sub.assigned_to, sub.assigned_to, memberAvatarMap);
+                                          return avatar ? <AvatarImage src={avatar} alt={sub.assigned_to || "Responsável"} /> : null;
+                                        })()}
+                                        <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
+                                          {getAvatarInitials(sub.assigned_to)}
+                                        </AvatarFallback>
+                                      </Avatar>
                                     ) : (
                                       <span className="h-6 w-6 rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground flex items-center justify-center">
                                         <UserPlus2 className="w-3 h-3" />

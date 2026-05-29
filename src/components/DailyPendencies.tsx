@@ -4,6 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, Pencil, User, Flag, AlertTriangle, CheckCircle2, AlertCircle, Filter } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 
 interface Activity {
   id: string;
@@ -42,6 +45,7 @@ const PRIORITY_LABELS: Record<string, { label: string; class: string }> = {
 
 export const DailyPendencies = ({ activities, onEditActivity }: Props) => {
   const [filterType, setFilterType] = useState<"all" | "end_date" | "update_date">("all");
+  const assigneeAvatarMap = useAssigneeAvatarLookup(activities.map((activity) => activity.assigned_to));
 
   const todayStr = useMemo(() => {
     const d = new Date();
@@ -206,7 +210,14 @@ export const DailyPendencies = ({ activities, onEditActivity }: Props) => {
                   <div className="flex items-center gap-3 flex-wrap">
                     {activity.assigned_to && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <User className="w-3 h-3" /> {activity.assigned_to}
+                        <Avatar className="h-4 w-4">
+                          {(() => {
+                            const avatar = resolveAvatarFromLookup(activity.assigned_to, activity.assigned_to, assigneeAvatarMap);
+                            return avatar ? <AvatarImage src={avatar} alt={activity.assigned_to} /> : null;
+                          })()}
+                          <AvatarFallback className="text-[8px]">{getAvatarInitials(activity.assigned_to)}</AvatarFallback>
+                        </Avatar>
+                        {activity.assigned_to}
                       </span>
                     )}
                     {priority && (
