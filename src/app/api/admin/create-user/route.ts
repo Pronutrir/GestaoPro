@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseServerUrl } from "@/integrations/supabase/config";
 
+// Origem permitida para CORS. O app é same-origin (chamadas via fetch relativo),
+// então restringimos ao domínio público em vez de "*". Configurável via
+// ALLOWED_ORIGIN; fallback para a URL pública do Supabase (mesmo domínio do app).
+const allowedOrigin =
+  process.env.ALLOWED_ORIGIN || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": allowedOrigin,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
