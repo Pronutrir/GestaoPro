@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-PW='***REMOVED***'
+PW="${PGPASSWORD:?defina PGPASSWORD no ambiente}"
 DB=supabase-db-1
 REST=supabase-rest-1
 

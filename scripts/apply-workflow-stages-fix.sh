@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-PW="${POSTGRES_PASSWORD:-***REMOVED***}"
+PW="${PGPASSWORD:?defina PGPASSWORD no ambiente}"
 CONT="${SUPABASE_DB_CONTAINER:-supabase-db-1}"
 SQL_LOCAL="/root/workflow_stages_align.sql"
 SQL_IN_CONTAINER="/tmp/workflow_stages_align.sql"

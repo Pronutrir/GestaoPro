@@ -1,7 +1,7 @@
 #!/bin/bash
 # Roda no VPS via ssh root@72.60.49.200 'bash -s' < this_file
 set -e
-PW='***REMOVED***'
+PW="${PGPASSWORD:?defina PGPASSWORD no ambiente}"
 
 echo "==== Identificando stack ativo (verifica qual container tem projetos) ===="
 for db in supabase-db-1 supabase_db_Supabase; do

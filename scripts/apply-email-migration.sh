@@ -1,5 +1,5 @@
 #!/bin/bash
-PW="***REMOVED***"
+PW="${PGPASSWORD:?defina PGPASSWORD no ambiente}"
 CONTAINER="supabase-db-1"
 
 echo "=== Aplicando migration: add email to profiles ==="

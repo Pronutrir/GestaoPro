@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-PGPASS="***REMOVED***"
+PGPASS="${PGPASSWORD:?defina PGPASSWORD no ambiente}"
 
 # Detecta o usuário dono das tabelas
 OWNER=$(docker exec -e PGPASSWORD="$PGPASS" supabase-db-1 psql -U supabase_admin -d postgres -tAc "SELECT tableowner FROM pg_tables WHERE schemaname='public' AND tablename='project_members' LIMIT 1;" 2>/dev/null || echo "supabase_admin")

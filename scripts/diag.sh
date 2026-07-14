@@ -1,5 +1,5 @@
 #!/bin/bash
-PW="***REMOVED***"
+PW="${PGPASSWORD:?defina PGPASSWORD no ambiente}"
 CONT="supabase-db-1"
 psql() { docker exec -e PGPASSWORD="$PW" "$CONT" psql -U supabase_admin -d postgres -tAq -c "$1"; }
 

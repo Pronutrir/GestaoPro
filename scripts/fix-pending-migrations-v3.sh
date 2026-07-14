@@ -10,7 +10,7 @@
 
 set -uo pipefail
 
-PW="***REMOVED***"
+PW="${PGPASSWORD:?defina PGPASSWORD no ambiente}"
 CONTAINER="supabase-db-1"
 
 echo "================================================================"

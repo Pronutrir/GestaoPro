@@ -5,7 +5,7 @@
 
 set -e
 
-PGPW="***REMOVED***"
+PGPW="${PGPASSWORD:?defina PGPASSWORD no ambiente}"
 CONTAINER="supabase-db-1"
 SCHEMA_MIGRATIONS="supabase_migrations.schema_migrations"
 
