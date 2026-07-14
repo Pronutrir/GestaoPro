@@ -21,6 +21,14 @@ ARG APP_VERSION=0.1.0
 ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 
+# Sem esses valores o bundle sai sem a URL do Supabase e o app quebra em runtime.
+RUN if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$NEXT_PUBLIC_SUPABASE_ANON_KEY" ]; then \
+      echo "ERRO: NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY sao obrigatorios."; \
+      echo "Use: docker build --build-arg NEXT_PUBLIC_SUPABASE_URL=... --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=... ."; \
+      echo "Ou:  docker compose build (le as variaveis do .env)"; \
+      exit 1; \
+    fi
+
 RUN npm run build
 
 # ---- Serve stage ----

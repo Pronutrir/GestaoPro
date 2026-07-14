@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { SUPABASE_COOKIE_NAME } from '@/integrations/supabase/config';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -13,7 +14,8 @@ export async function middleware(request: NextRequest) {
 
   let supabaseResponse = NextResponse.next({ request });
   const initialSetupEnabled = process.env.NEXT_PUBLIC_ENABLE_INITIAL_SETUP === 'true';
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseUrl =
+    process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   // Em ambientes sem .env (ex.: preview local), evita crash e mantém
@@ -35,6 +37,7 @@ export async function middleware(request: NextRequest) {
     supabaseUrl,
     supabaseAnonKey,
     {
+      cookieOptions: { name: SUPABASE_COOKIE_NAME },
       cookies: {
         getAll() {
           return request.cookies.getAll();

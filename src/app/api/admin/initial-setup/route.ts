@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getSupabaseServerUrl } from "@/integrations/supabase/config";
 
 export async function POST(req: NextRequest) {
   const enabled = process.env.INITIAL_SETUP_ENABLED === "true";
@@ -7,7 +8,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Setup inicial desabilitado" }, { status: 403 });
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseUrl = getSupabaseServerUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 

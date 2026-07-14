@@ -2,6 +2,7 @@ import { streamText, convertToModelMessages, stepCountIs, tool, type UIMessage }
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { getSupabaseServerUrl } from '@/integrations/supabase/config';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -11,7 +12,7 @@ Quando fizer sentido, use as ferramentas (tools) disponíveis em vez de inventar
 Seja breve e direto.`;
 
 async function requireAdmin(req: Request) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseUrl = getSupabaseServerUrl();
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 

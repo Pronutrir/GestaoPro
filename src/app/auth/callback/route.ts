@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { getSupabaseServerUrl, SUPABASE_COOKIE_NAME } from '@/integrations/supabase/config';
 
 /**
  * Callback OAuth (Azure AD).
@@ -37,9 +38,10 @@ export async function GET(request: NextRequest) {
     let response = NextResponse.redirect(new URL(next, origin));
 
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      getSupabaseServerUrl(),
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
+        cookieOptions: { name: SUPABASE_COOKIE_NAME },
         cookies: {
           getAll() {
             return request.cookies.getAll();

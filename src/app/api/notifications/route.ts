@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/integrations/supabase/server';
+import { getSupabaseServerUrl } from '@/integrations/supabase/config';
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from '@/lib/identityMatch';
 
 type NotificationRow = {
@@ -32,7 +33,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseUrl =
+    process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {

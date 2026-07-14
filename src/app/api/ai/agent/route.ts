@@ -9,6 +9,7 @@ import {
   buildUserCandidates,
   matchesIdentity,
 } from '@/lib/identityMatch';
+import { getSupabaseServerUrl } from '@/integrations/supabase/config';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -396,7 +397,7 @@ Formatação de opções clicáveis:
 - Use esse formato APENAS para opções de escolha predefinidas, nunca para campos de texto livre`; }
 
 async function requireAuth(req: Request) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseUrl = getSupabaseServerUrl();
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   const authHeader = req.headers.get('authorization');
@@ -429,7 +430,7 @@ export async function POST(req: Request) {
 
   const { messages } = (await req.json()) as { messages: UIMessage[] };
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseUrl = getSupabaseServerUrl();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
