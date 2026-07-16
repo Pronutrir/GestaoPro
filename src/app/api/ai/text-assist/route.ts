@@ -154,6 +154,10 @@ export async function POST(req: NextRequest) {
   const action = body.action as Action | undefined;
   const text = typeof body.text === "string" ? body.text.trim() : "";
   const context = typeof body.context === "string" ? body.context : "generic";
+  // Contexto adicional opcional (ex.: campos vizinhos de um formulário), para a
+  // IA entender o cenário em torno do texto que está sendo reescrito.
+  const extraContext =
+    typeof body.extraContext === "string" ? body.extraContext.trim().slice(0, 2000) : "";
 
   if (!action || !["correct", "improve", "summarize", "expand"].includes(action)) {
     return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
@@ -168,7 +172,11 @@ export async function POST(req: NextRequest) {
   const systemPrompt =
     SYSTEM_PROMPTS[action] +
     "\n\nContexto: " +
-    (CONTEXT_HINTS[context] ?? CONTEXT_HINTS.generic);
+    (CONTEXT_HINTS[context] ?? CONTEXT_HINTS.generic) +
+    (extraContext
+      ? "\n\nInformações de referência sobre a demanda (NÃO as reescreva e NÃO as inclua na resposta; use apenas para entender o cenário e manter o texto coerente e específico). Escreva sempre da perspectiva de quem solicita, sobre o assunto do pedido — o setor do solicitante é apenas a origem da demanda, nunca o tema do texto:\n" +
+        extraContext
+      : "");
 
   const model = process.env.OPENROUTER_TEXT_ASSIST_MODEL
     ?? process.env.OPENROUTER_MODEL

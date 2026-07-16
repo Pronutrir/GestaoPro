@@ -52,6 +52,12 @@ interface AIAssistButtonProps {
   value: string;
   onChange: (next: string) => void;
   context?: AIContext;
+  /**
+   * Contexto adicional sobre o cenário (ex.: campos vizinhos de um formulário).
+   * A IA usa apenas como referência para manter o texto coerente e específico —
+   * não reescreve nem devolve esse conteúdo.
+   */
+  extraContext?: string;
   /** Restrict available actions. Defaults to all 4. */
   actions?: AIAction[];
   className?: string;
@@ -90,12 +96,13 @@ export const AIAssistButton = ({
   value,
   onChange,
   context = "generic",
+  extraContext,
   actions = ["correct", "improve", "summarize", "expand"],
   className,
   size = "sm",
   label,
 }: AIAssistButtonProps) => {
-  const [loading, setLoading] = useState<AIAction | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   const runAction = async (action: AIAction) => {
@@ -108,12 +115,12 @@ export const AIAssistButton = ({
       });
       return;
     }
-    setLoading(action);
+    setIsLoading(true);
     try {
       const res = await fetch("/api/ai/text-assist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, text, context }),
+        body: JSON.stringify({ action, text, context, extraContext }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Erro na IA");
@@ -131,11 +138,9 @@ export const AIAssistButton = ({
         variant: "destructive",
       });
     } finally {
-      setLoading(null);
+      setIsLoading(false);
     }
   };
-
-  const isLoading = loading !== null;
 
   return (
     <DropdownMenu>
@@ -175,10 +180,10 @@ export const AIAssistButton = ({
             <DropdownMenuItem
               key={action}
               disabled={isLoading}
-              onClick={(e) => {
-                e.preventDefault();
-                void runAction(action);
-              }}
+              // Sem preventDefault: o menu fecha ao escolher a ação e a chamada
+              // segue em background — o gatilho já exibe o spinner e bloqueia
+              // novos cliques enquanto a IA responde.
+              onSelect={() => void runAction(action)}
               className="flex items-start gap-2 cursor-pointer py-2"
             >
               <Icon className="w-4 h-4 mt-0.5 text-primary shrink-0" />
@@ -188,9 +193,6 @@ export const AIAssistButton = ({
                   {meta.description}
                 </span>
               </div>
-              {loading === action && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin ml-auto" />
-              )}
             </DropdownMenuItem>
           );
         })}
