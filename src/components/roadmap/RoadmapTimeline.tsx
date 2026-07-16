@@ -49,7 +49,7 @@ export function RoadmapTimeline({ items }: Props) {
                   <p className="font-medium truncate">{item.title}</p>
                   <div className="flex items-center gap-1">
                     <Badge variant="outline" className="text-[10px]">
-                      Score: {item.score?.toFixed(1) ?? "—"}
+                      {item.score != null ? `${Math.round(item.score)}%` : "—"}
                     </Badge>
                   </div>
                 </div>
