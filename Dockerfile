@@ -56,4 +56,9 @@ ENV HOSTNAME=0.0.0.0
 
 EXPOSE 8080
 
-CMD ["node", "server.js"]
+# --max-http-header-size=32768: mesmo limite usado nos scripts dev/build/start
+# do package.json e nos buffers do nginx (proxy/nginx.conf). Sem isso o
+# standalone roda com o padrão do Node (8KB) e devolve HTTP 431 quando os
+# cookies de sessão do Supabase crescem — o token JWT vai no cookie e, somado a
+# outros, estoura o limite.
+CMD ["node", "--max-http-header-size=32768", "server.js"]
