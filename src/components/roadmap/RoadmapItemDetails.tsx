@@ -13,15 +13,12 @@ import {
   Archive,
   CalendarClock,
   ClipboardList,
-  Clock,
   HelpCircle,
   Inbox,
   Lightbulb,
   MessageSquare,
   Pencil,
   Target,
-  Users,
-  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -32,6 +29,7 @@ import {
   statusLabels,
 } from "@/components/roadmap/criterios";
 import type { RoadmapItem } from "@/components/roadmap/types";
+import { dateBR, diasRestantes, moneyBR } from "@/components/roadmap/format";
 import {
   MOTIVOS_PRAZO,
   PROBLEMAS,
@@ -50,10 +48,18 @@ interface Props {
 }
 
 /** Um campo de texto; não renderiza nada quando não há valor. */
-function Field({ label, value }: { label?: string; value?: React.ReactNode }) {
+function Field({
+  label,
+  value,
+  className,
+}: {
+  label?: string;
+  value?: React.ReactNode;
+  className?: string;
+}) {
   if (value === null || value === undefined || value === "") return null;
   return (
-    <div className="space-y-1">
+    <div className={cn("space-y-1", className)}>
       {label && (
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
@@ -85,62 +91,6 @@ function Section({
   );
 }
 
-/** Métrica em destaque: o dado que importa vem antes do rótulo. */
-function Metric({
-  icon: Icon,
-  value,
-  label,
-  tone = "default",
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  value: React.ReactNode;
-  label: string;
-  tone?: "default" | "warning" | "critical";
-}) {
-  return (
-    <div className="flex items-start gap-2.5 rounded-lg border bg-card px-3 py-2.5">
-      <Icon
-        className={cn(
-          "mt-0.5 h-4 w-4 shrink-0",
-          tone === "critical" && "text-destructive",
-          tone === "warning" && "text-amber-600 dark:text-amber-500",
-          tone === "default" && "text-muted-foreground",
-        )}
-      />
-      <div className="min-w-0">
-        <p
-          className={cn(
-            "text-sm font-semibold leading-tight tabular-nums",
-            tone === "critical" && "text-destructive",
-          )}
-        >
-          {value}
-        </p>
-        <p className="text-[11px] text-muted-foreground">{label}</p>
-      </div>
-    </div>
-  );
-}
-
-const dateBR = (iso?: string | null) =>
-  iso ? new Date(`${iso}T00:00:00`).toLocaleDateString("pt-BR") : null;
-
-const moneyBR = (v?: number | null) =>
-  v === null || v === undefined
-    ? null
-    : v.toLocaleString("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-        maximumFractionDigits: 0,
-      });
-
-/** Dias até a data pedida (negativo = vencida). */
-function diasRestantes(iso?: string | null): number | null {
-  if (!iso) return null;
-  const alvo = new Date(`${iso}T00:00:00`).getTime();
-  const hoje = new Date().setHours(0, 0, 0, 0);
-  return Math.round((alvo - hoje) / 86_400_000);
-}
 
 /**
  * Exibe, em modo somente leitura, os dados enviados pelo solicitante.
@@ -198,9 +148,14 @@ export function RoadmapItemDetails({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto p-0 gap-0">
+      {/* Flex-col + corpo rolável: só o conteúdo rola, cabeçalho e rodapé de
+          ações ficam fixos. max-h em svh (não vh) para não estourar sob a
+          barra de endereço em navegadores móveis. */}
+      {/* Largura cresce por breakpoint até 6xl: em telas grandes o modal ocupa
+          o espaço disponível em vez de deixar faixas vazias nas laterais. */}
+      <DialogContent className="flex w-[calc(100vw-1.5rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0 max-h-[calc(100svh-2rem)] sm:w-[92vw] sm:max-h-[90svh] lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl">
         {/* ── Cabeçalho ── */}
-        <DialogHeader className="space-y-3 border-b px-6 py-5 text-left">
+        <DialogHeader className="shrink-0 space-y-3 border-b px-4 py-4 text-left sm:px-6 sm:py-5">
           <div className="flex items-center gap-2">
             {isSolicitacao ? (
               <Inbox className="h-4 w-4 shrink-0 text-primary" />
@@ -233,84 +188,59 @@ export function RoadmapItemDetails({
                   variant="outline"
                   className="border-dashed font-normal text-muted-foreground"
                 >
-                  A classificar
+                  A priorizar
                 </Badge>
               )}
               <Badge variant="outline" className="font-normal">
                 {statusLabels[item.status] ?? item.status}
               </Badge>
-              {isSolicitacao && (
+              {/* Nome e área saíram daqui: agora aparecem rotulados na seção
+                  "1. Identificação". Fica só a data de envio, que não é campo
+                  do formulário. */}
+              {isSolicitacao && item.created_at && (
                 <span className="text-muted-foreground">
-                  {item.solicitante_nome}
-                  {item.area && ` · ${item.area}`}
-                  {item.created_at &&
-                    ` · ${new Date(item.created_at).toLocaleDateString("pt-BR")}`}
+                  Enviada em{" "}
+                  {new Date(item.created_at).toLocaleDateString("pt-BR")}
                 </span>
               )}
             </div>
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 px-6 py-5">
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {!isSolicitacao ? (
             <Field label="Descrição" value={item.description} />
           ) : (
             <>
-              {/* ── Métricas que decidem: impacto atual e prazo ── */}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <Metric
-                  icon={Clock}
-                  value={item.horas_semana != null ? `${item.horas_semana}h` : "—"}
-                  label="Por semana"
-                />
-                <Metric
-                  icon={Users}
-                  value={item.pessoas_envolvidas ?? "—"}
-                  label="Pessoas envolvidas"
-                />
-                <Metric
-                  icon={Wallet}
-                  value={moneyBR(item.custo_atual) ?? "—"}
-                  label="Custo atual/mês"
-                />
-                <Metric
-                  icon={CalendarClock}
-                  value={dateBR(item.data_necessaria) ?? "—"}
-                  label={prazoLabel}
-                  tone={prazoTone}
-                />
-              </div>
-
-              <Section icon={Target} title="O que se espera">
-                <Field label="Resultado esperado" value={item.resultado_esperado} />
-                {tiposResultado.length > 0 && (
-                  <div className="space-y-1.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Entregáveis
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {tiposResultado.map((t) => (
-                        <Badge key={t} variant="secondary" className="font-normal">
-                          {t}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <Field
-                  label="Primeira entrega (mínimo entregável)"
-                  value={item.minimo_entregavel}
-                />
+              {/* As seções seguem os 6 passos do formulário de solicitação, com
+                  as mesmas perguntas — quem lê acompanha o que o solicitante
+                  respondeu, na ordem em que respondeu. */}
+              <Section icon={ClipboardList} title="1. Identificação">
+                {/* Campos curtos: em telas largas cabem todos numa faixa só. */}
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <Field label="Nome completo" value={item.solicitante_nome} />
+                  <Field label="E-mail" value={item.solicitante_email} />
+                  <Field label="Área/Departamento" value={item.area} />
+                  <Field label="Cargo" value={item.solicitante_cargo} />
+                  <Field label="Tipo de necessidade" value={tipoNecessidade} />
+                </div>
               </Section>
 
               <Separator />
 
-              <Section icon={AlertTriangle} title="Situação atual">
-                <Field label="Como é feito hoje" value={item.processo_atual} />
+              <Section icon={AlertTriangle} title="2. Situação Atual e Problemas">
+                {/* max-w-prose: texto corrido que atravessa 1400px vira uma
+                    linha difícil de acompanhar — o olho perde o início da
+                    próxima ao voltar. */}
+                <Field
+                  label="Como você obtém essa informação hoje?"
+                  value={item.processo_atual}
+                  className="max-w-prose"
+                />
                 {problemas.length > 0 && (
                   <div className="space-y-1.5">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Problemas relatados
+                      Qual o principal problema hoje?
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {problemas.map((p) => (
@@ -325,43 +255,121 @@ export function RoadmapItemDetails({
                     </div>
                   </div>
                 )}
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field
+                    label="Horas/semana gastas com isso"
+                    value={item.horas_semana != null ? `${item.horas_semana}h` : null}
+                  />
+                  <Field
+                    label="Pessoas envolvidas"
+                    value={item.pessoas_envolvidas}
+                  />
+                  <Field
+                    label="Custo atual aproximado"
+                    value={moneyBR(item.custo_atual)}
+                  />
+                </div>
               </Section>
 
               <Separator />
 
-              <Section icon={HelpCircle} title="Perguntas a responder">
-                <Field value={item.perguntas} />
+              <Section icon={Target} title="3. Objetivo e Resultado Esperado">
+                {/* Empilhados, não lado a lado: são textos longos de tamanhos
+                    muito diferentes (uma frase vs. um parágrafo), e em colunas
+                    a mais curta deixa um vão embaixo. max-w-prose mantém a
+                    linha legível apesar da largura do modal.
+                    O objetivo é o título do item, repetido aqui com a pergunta
+                    original porque no cabeçalho aparece sem rótulo. */}
+                <Field
+                  label="Em uma frase: que decisão ou ação isso vai apoiar?"
+                  value={item.title}
+                  className="max-w-prose"
+                />
+                <Field
+                  label="Que resultado você espera alcançar?"
+                  value={item.resultado_esperado}
+                  className="max-w-prose"
+                />
               </Section>
 
               <Separator />
 
-              <Section icon={ClipboardList} title="Pedido">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Tipo de necessidade" value={tipoNecessidade} />
-                  <Field label="Motivo do prazo" value={motivoPrazo} />
-                  <Field label="E-mail" value={item.solicitante_email} />
-                  <Field label="Cargo" value={item.solicitante_cargo} />
+              <Section icon={HelpCircle} title="4. O Que Você Espera Receber">
+                {tiposResultado.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Que tipo de resultado você quer?
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tiposResultado.map((t) => (
+                        <Badge key={t} variant="secondary" className="font-normal">
+                          {t}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Também empilhados: mesmo motivo da seção 3. */}
+                <Field
+                  label="Que perguntas esse relatório/painel precisa responder?"
+                  value={item.perguntas}
+                  className="max-w-prose"
+                />
+                <Field
+                  label="Qual a primeira entrega (mínimo entregável)?"
+                  value={item.minimo_entregavel}
+                  className="max-w-prose"
+                />
+              </Section>
+
+              <Separator />
+
+              <Section icon={CalendarClock} title="5. Prazo e Urgência">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label="Quando você precisa disso funcionando?"
+                    value={
+                      dateBR(item.data_necessaria) && (
+                        <span
+                          className={cn(
+                            prazoTone === "critical" && "font-medium text-destructive",
+                            prazoTone === "warning" &&
+                              "font-medium text-amber-600 dark:text-amber-500",
+                          )}
+                        >
+                          {dateBR(item.data_necessaria)}
+                          {/* Mantém o alerta de prazo que o painel de métricas dava. */}
+                          {prazoLabel !== "Prazo desejado" && ` · ${prazoLabel}`}
+                        </span>
+                      )
+                    }
+                  />
+                  <Field label="Por que essa data?" value={motivoPrazo} />
                 </div>
               </Section>
 
               {item.observacoes && (
                 <>
                   <Separator />
-                  <Section icon={MessageSquare} title="Observações">
-                    <Field value={item.observacoes} />
+                  <Section icon={MessageSquare} title="6. Observações Finais">
+                    <Field
+                      label="Informações adicionais importantes"
+                      value={item.observacoes}
+                      className="max-w-prose"
+                    />
                   </Section>
                 </>
               )}
             </>
           )}
 
-          {/* ── Classificação já feita ── */}
+          {/* ── Priorização já feita ── */}
           {item.classificado_em && (
             <>
               <Separator />
               <section className="space-y-3 rounded-lg border bg-muted/30 p-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Classificação</h3>
+                  <h3 className="text-sm font-semibold">Priorização</h3>
                   <span
                     className={cn(
                       "rounded-full border px-2.5 py-0.5 text-xs font-bold tabular-nums",
@@ -410,7 +418,9 @@ export function RoadmapItemDetails({
         </div>
 
         {/* ── Ação ── */}
-        <div className="sticky bottom-0 flex items-center gap-2 border-t bg-background px-6 py-4">
+        {/* shrink-0 em vez de sticky: agora quem rola é o corpo, então o rodapé
+            já fica naturalmente fixo no rasgo do flex. */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t bg-background px-4 py-3 sm:px-6 sm:py-4">
           {item.status !== "descartado" && (
             <Button
               variant="ghost"
@@ -438,7 +448,7 @@ export function RoadmapItemDetails({
             }}
           >
             <Pencil className="mr-2 h-4 w-4" />
-            {item.classificado_em ? "Reavaliar" : "Classificar demanda"}
+            {item.classificado_em ? "Reavaliar" : "Priorizar demanda"}
           </Button>
         </div>
       </DialogContent>

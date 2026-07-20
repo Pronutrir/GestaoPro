@@ -149,7 +149,7 @@ export function RoadmapDrawer({ open, onOpenChange, editItem }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["roadmap_items"] });
       onOpenChange(false);
-      toast({ title: editItem ? "Classificação salva!" : "Ideia criada!" });
+      toast({ title: editItem ? "Priorização salva!" : "Ideia criada!" });
     },
     onError: () => {
       toast({ title: "Erro ao salvar", variant: "destructive" });
@@ -181,12 +181,14 @@ export function RoadmapDrawer({ open, onOpenChange, editItem }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-0 gap-0">
-        <DialogHeader className="space-y-1.5 border-b px-6 py-5 text-left">
+      {/* Mesmo padrão do modal de detalhes: só o corpo rola; svh evita estouro
+          sob a barra de endereço no mobile. */}
+      <DialogContent className="flex w-[calc(100vw-1.5rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-h-[calc(100svh-2rem)] sm:w-[92vw] sm:max-h-[90svh] xl:max-w-5xl 2xl:max-w-6xl">
+        <DialogHeader className="shrink-0 space-y-1.5 border-b px-4 py-4 text-left sm:px-6 sm:py-5">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="h-4 w-4 shrink-0 text-primary" />
             <DialogTitle className="text-[11px] font-semibold uppercase tracking-widest text-primary">
-              Classificar Demanda
+              Priorizar Demanda
             </DialogTitle>
           </div>
           <DialogDescription asChild>
@@ -206,7 +208,7 @@ export function RoadmapDrawer({ open, onOpenChange, editItem }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-6 px-6 py-5 lg:grid-cols-[1fr_260px] items-start">
+        <div className="grid min-h-0 flex-1 items-start gap-6 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 lg:grid-cols-[1fr_260px] 2xl:grid-cols-[1fr_320px] 2xl:gap-8">
           {/* ── Coluna esquerda: identificação + critérios ── */}
           <div className="space-y-4">
           {/* O objetivo e a descrição vêm do solicitante: exibidos em leitura,
@@ -339,7 +341,7 @@ export function RoadmapDrawer({ open, onOpenChange, editItem }: Props) {
 
             <div className="px-4 space-y-1">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Classificação por faixas
+                Faixas de prioridade
               </p>
               {[
                 { label: "Alta", range: "70 – 100%", pct: 85 },
@@ -398,7 +400,7 @@ export function RoadmapDrawer({ open, onOpenChange, editItem }: Props) {
           </aside>
         </div>
 
-        <div className="sticky bottom-0 flex gap-2 border-t bg-background px-6 py-4">
+        <div className="flex shrink-0 gap-2 border-t bg-background px-4 py-3 sm:px-6 sm:py-4">
           {editItem && editItem.status !== "descartado" && (
             <Button
               variant="ghost"
@@ -429,7 +431,7 @@ export function RoadmapDrawer({ open, onOpenChange, editItem }: Props) {
             }
             className="min-w-40"
           >
-            Salvar Classificação
+            Salvar Priorização
           </Button>
         </div>
       </DialogContent>
