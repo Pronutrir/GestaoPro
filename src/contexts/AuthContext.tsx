@@ -36,6 +36,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // Espelha `loading` num ref: o effect de subscribe abaixo só lê esse valor
+  // dentro do safety timer. Mantê-lo como dependência fazia o effect se
+  // reinscrever a cada troca de `loading` — e como o próprio effect chama
+  // setLoading, isso virava um laço de getSession + profiles + user_roles.
+  const loadingRef = useRef(loading);
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+
   const fetchUserData = useCallback(async (userId: string) => {
     try {
       const [{ data: profileData, error: profileError }, { data: rolesData, error: rolesError }] = await Promise.all([
@@ -68,7 +77,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let mounted = true;
 
     const safetyTimer = setTimeout(() => {
-      if (mounted && loading) {
+      if (mounted && loadingRef.current) {
         console.warn("Auth loading safety timeout reached");
         // Re-attempt getSession before giving up
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -127,7 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
-  }, [fetchUserData, loading]);
+  }, [fetchUserData]);
 
   // Mantém a refer\u00eancia mais recente de fetchUserData sem refazer o effect
   // de subscribe (que recriaria o canal Realtime e quebraria com
@@ -152,7 +161,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         refreshUserData();
       }
     };
-    const intervalId = window.setInterval(refreshUserData, 10000);
+    // Sem polling: a inscrição Realtime abaixo já reage a mudanças em
+    // profiles/user_roles, e o refresh no focus/visibilitychange cobre o
+    // caso de eventos perdidos com a aba em segundo plano.
 
     // Nome único por mount: evita o singleton interno do supabase-js
     // (mesmo nome após remountagem rapida retorna o canal antigo já "joined"
@@ -178,7 +189,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
   }, [user?.id]);
