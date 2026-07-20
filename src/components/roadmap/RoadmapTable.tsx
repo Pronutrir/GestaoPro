@@ -57,6 +57,8 @@ const rotuloTipoNecessidade = (item: RoadmapItem) =>
 interface Props {
   items: RoadmapItem[];
   isLoading: boolean;
+  /** admin/gestor: só eles movem estágio, projetizam e priorizam. */
+  canManage: boolean;
   onEdit: (item: RoadmapItem) => void;
   onProjetizar: (item: RoadmapItem) => void;
   /** Abre a visualização completa do item (clique na linha). */
@@ -68,6 +70,7 @@ interface Props {
 export function RoadmapTable({
   items,
   isLoading,
+  canManage,
   onEdit,
   onProjetizar,
   onView,
@@ -230,8 +233,13 @@ export function RoadmapTable({
               {/* stopPropagation: as ações não devem abrir a visualização da linha. */}
               <TableCell className="py-4 pr-4 align-middle" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-end gap-1">
-                  {/* Devolve a demanda ao estágio anterior (corrigir engano). */}
-                  {(() => {
+                  {/* Todas as ações da listagem (mover estágio, projetizar,
+                      priorizar) são de gestor. Usuário comum acompanha pela
+                      linha e edita a própria solicitação pelo detalhe. */}
+                  {!canManage && (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                  {canManage && (() => {
                     const estagio = ESTAGIOS.find((e) => e.value === item.status);
                     if (!estagio?.prev) return null;
                     return (
@@ -248,7 +256,7 @@ export function RoadmapTable({
                   })()}
 
                   {/* Ação principal do estágio: avança a demanda no fluxo. */}
-                  {(() => {
+                  {canManage && (() => {
                     const estagio = ESTAGIOS.find((e) => e.value === item.status);
                     if (estagio?.next) {
                       return (
@@ -293,10 +301,10 @@ export function RoadmapTable({
                     return null;
                   })()}
 
-                  {/* No backlog a única ação é "Analisar": a classificação por
+                  {/* No backlog a única ação é "Analisar": a priorização por
                       critérios acontece depois, quando a demanda entra em
                       análise. */}
-                  {item.status !== "backlog" && (
+                  {canManage && item.status !== "backlog" && (
                     <Button
                       variant="ghost"
                       size="icon"
