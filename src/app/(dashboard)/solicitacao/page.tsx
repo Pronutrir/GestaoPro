@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronLeft, ChevronRight, Loader2, Send, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSectors } from "@/hooks/useSectors";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CurrencyInputBRL } from "@/components/ui/currency-input-brl";
 import { Button } from "@/components/ui/button";
 import { AIAssistButton, type AIContext } from "@/components/AIAssistButton";
@@ -268,7 +270,12 @@ export default function SolicitacaoPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(defaultForm);
-  const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
+  // Áreas/departamentos vêm da tabela `sectors` (Configurações → Estrutura),
+  // mesma fonte usada em AddProjectDialog e no cadastro de usuários.
+  // O hook devolve uma referência estável para a lista vazia — não usar
+  // `= []` aqui, pois um literal novo a cada render reexecutaria o effect
+  // que pré-preenche a área.
+  const { sectors, isLoading: sectorsLoading } = useSectors();
   const [errors, setErrors] = useState<Errors>({});
   const [step, setStep] = useState(0);
   // Passos já visitados (habilitam clique direto no stepper).
@@ -330,30 +337,46 @@ export default function SolicitacaoPage() {
     return linhas.join("\n");
   };
 
-  // Áreas/departamentos vêm da tabela `sectors` (Configurações → Estrutura),
-  // mesma fonte usada em AddProjectDialog e no cadastro de usuários.
-  useEffect(() => {
-    supabase
-      .from("sectors")
-      .select("id, name")
-      .order("name")
-      .then(({ data }) => {
-        if (data) setSectors(data);
-      });
-  }, []);
+  // Área do perfil casada com a lista de setores. Calculado no render (não em
+  // effect) porque na navegação client-side `profile` e `sectors` já vêm
+  // prontos e estáveis — um effect com [profile, sectors] nunca dispararia,
+  // deixando o campo vazio (só funcionava no reload, quando as referências
+  // ainda mudavam depois da montagem).
+  const areaCorrespondente = useMemo(() => {
+    // profiles.sector é texto livre e pode divergir de sectors.name (acento,
+    // caixa, espaços). Casa de forma tolerante para não perder o pré-preenchimento.
+    const normalize = (v: string) =>
+      v.trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/\p{Diacritic}/gu, "");
+    const perfilSector = String(profile?.sector || "").trim();
+    if (!perfilSector) return undefined;
+    return sectors.find((s) => normalize(s.name) === normalize(perfilSector))?.name;
+  }, [profile?.sector, sectors]);
 
   // Pré-preenche identificação com os dados do usuário logado (sem sobrescrever
   // o que já foi digitado). Setor/área vem de profiles.sector.
+  //
+  // Roda a cada render em vez de depender de [profile, sectors] mudarem: na
+  // navegação client-side ambos já estão carregados quando a página monta, e
+  // um effect por dependência não dispararia. Os `prev.x ||` abaixo garantem
+  // idempotência — quando não há nada a preencher, o retorno é o mesmo objeto
+  // e o React não re-renderiza.
   useEffect(() => {
     if (!profile) return;
-    setForm((prev) => ({
-      ...prev,
-      nome: prev.nome || profile.full_name || "",
-      email: prev.email || profile.email || "",
-      cargo: prev.cargo || profile.role_title || "",
-      area: prev.area || profile.sector || "",
-    }));
-  }, [profile]);
+
+    setForm((prev) => {
+      const next = {
+        ...prev,
+        nome: prev.nome || profile.full_name || "",
+        email: prev.email || profile.email || "",
+        cargo: prev.cargo || profile.role_title || "",
+        area: prev.area || areaCorrespondente || "",
+      };
+      const mudou = (Object.keys(next) as (keyof FormState)[]).some(
+        (k) => next[k] !== prev[k],
+      );
+      return mudou ? next : prev;
+    });
+  });
 
   /** Alterna um valor dentro de um array de checkbox (problemas / tipoResultado). */
   const toggleInArray = (key: "problemas" | "tipoResultado", value: string) => {
@@ -669,31 +692,49 @@ export default function SolicitacaoPage() {
                   <Label>
                     Área/Departamento <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={form.area} onValueChange={(v) => set("area", v)}>
-                    <SelectTrigger
-                      aria-invalid={!!errors.area}
-                      className={errors.area ? "border-destructive" : undefined}
-                    >
-                      <SelectValue
-                        placeholder={
-                          sectors.length ? "Selecione..." : "Nenhum setor cadastrado"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sectors.map((s) => (
-                        <SelectItem key={s.id} value={s.name}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {sectorsLoading ? (
+                    // Mesma altura do SelectTrigger (h-10), para o formulário não
+                    // "pular" quando a lista de setores chega.
+                    <Skeleton
+                      className="h-10 w-full"
+                      role="status"
+                      aria-label="Carregando áreas/departamentos"
+                    />
+                  ) : (
+                    <Select value={form.area} onValueChange={(v) => set("area", v)}>
+                      <SelectTrigger
+                        aria-invalid={!!errors.area}
+                        className={errors.area ? "border-destructive" : undefined}
+                      >
+                        <SelectValue
+                          placeholder={
+                            sectors.length ? "Selecione..." : "Nenhum setor cadastrado"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sectors.map((s) => (
+                          <SelectItem key={s.id} value={s.name}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                   {errors.area ? (
                     <p className="text-xs text-destructive mt-1">{errors.area}</p>
+                  ) : sectorsLoading ? null : !sectors.length ? (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Cadastre setores em Configurações → Estrutura.
+                    </p>
                   ) : (
-                    !sectors.length && (
+                    // Sinaliza quando o setor do perfil não existe em `sectors`:
+                    // sem isso o campo só aparece vazio, sem explicar o motivo.
+                    !form.area &&
+                    !!profile?.sector && (
                       <p className="text-xs text-muted-foreground mt-1">
-                        Cadastre setores em Configurações → Estrutura.
+                        Seu setor no perfil ({profile.sector}) não consta na lista.
+                        Selecione a área correspondente.
                       </p>
                     )
                   )}
