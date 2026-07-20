@@ -20,6 +20,7 @@ import {
   Pencil,
   Target,
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
   CRITERIOS,
@@ -42,6 +43,10 @@ interface Props {
   item: RoadmapItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** admin/gestor: priorizar e arquivar são exclusivos deles. */
+  canManage: boolean;
+  /** Para liberar a edição da própria solicitação ao solicitante. */
+  currentUserId?: string;
   onEdit: (item: RoadmapItem) => void;
   /** Arquiva a demanda (status "descartado") — não apaga o registro. */
   onArquivar: (item: RoadmapItem) => void;
@@ -101,12 +106,26 @@ export function RoadmapItemDetails({
   item,
   open,
   onOpenChange,
+  canManage,
+  currentUserId,
   onEdit,
   onArquivar,
 }: Props) {
   if (!item) return null;
 
   const isSolicitacao = item.origem === "formulario";
+
+  /**
+   * O solicitante edita o próprio pedido enquanto ninguém começou a avaliar —
+   * espelha a policy de RLS em roadmap_items. Depois da priorização, mudar
+   * horas ou custo invalidaria a nota sem deixar rastro.
+   */
+  const podeEditarSolicitacao =
+    isSolicitacao &&
+    !!currentUserId &&
+    item.created_by === currentUserId &&
+    item.status === "backlog" &&
+    item.classificado_em == null;
 
   const notas = criteriosDoItem(item);
   const indice = indicePrioridade(notas);
@@ -421,7 +440,7 @@ export function RoadmapItemDetails({
         {/* shrink-0 em vez de sticky: agora quem rola é o corpo, então o rodapé
             já fica naturalmente fixo no rasgo do flex. */}
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t bg-background px-4 py-3 sm:px-6 sm:py-4">
-          {item.status !== "descartado" && (
+          {canManage && item.status !== "descartado" && (
             <Button
               variant="ghost"
               onClick={() => {
@@ -441,15 +460,27 @@ export function RoadmapItemDetails({
           >
             Fechar
           </Button>
-          <Button
-            onClick={() => {
-              onOpenChange(false);
-              onEdit(item);
-            }}
-          >
-            <Pencil className="mr-2 h-4 w-4" />
-            {item.classificado_em ? "Reavaliar" : "Priorizar demanda"}
-          </Button>
+          {/* Ação do solicitante: edita o conteúdo do próprio pedido. Distinta
+              de "Priorizar demanda", que é a avaliação por critérios. */}
+          {podeEditarSolicitacao && (
+            <Button variant="outline" asChild>
+              <Link href={`/solicitacao?id=${item.id}`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar solicitação
+              </Link>
+            </Button>
+          )}
+          {canManage && (
+            <Button
+              onClick={() => {
+                onOpenChange(false);
+                onEdit(item);
+              }}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              {item.classificado_em ? "Reavaliar" : "Priorizar demanda"}
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
