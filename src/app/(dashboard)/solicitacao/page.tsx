@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronLeft, ChevronRight, Loader2, Send, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSectors } from "@/hooks/useSectors";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CurrencyInputBRL } from "@/components/ui/currency-input-brl";
 import { Button } from "@/components/ui/button";
 import { AIAssistButton, type AIContext } from "@/components/AIAssistButton";
@@ -74,6 +76,48 @@ const defaultForm = {
 
 type FormState = typeof defaultForm;
 type Errors = Partial<Record<string, string>>;
+
+/**
+ * Converte uma linha de `roadmap_items` de volta para o estado do formulário.
+ * Inverso do payload montado no envio — os dois formatos são diferentes:
+ * números viram string, os `*OutroCheck` são reconstruídos a partir da
+ * presença do texto livre, e o objetivo vem de `title` (não de `description`,
+ * que guarda uma cópia do resultado).
+ */
+function rowParaForm(row: Record<string, any>): FormState {
+  const str = (v: unknown) => (v == null ? "" : String(v));
+  return {
+    nome: str(row.solicitante_nome),
+    area: str(row.area),
+    cargo: str(row.solicitante_cargo),
+    email: str(row.solicitante_email),
+    tipoNecessidade: str(row.tipo_necessidade),
+    tipoNecessidadeOutro: str(row.tipo_necessidade_outro),
+
+    processoAtual: str(row.processo_atual),
+    problemas: Array.isArray(row.problemas) ? row.problemas : [],
+    problemasOutroCheck: row.problemas_outro != null,
+    problemasOutro: str(row.problemas_outro),
+    horasSemana: str(row.horas_semana),
+    pessoasEnvolvidas: str(row.pessoas_envolvidas),
+    custoAtual: str(row.custo_atual),
+
+    objetivo: str(row.title),
+    resultado: str(row.resultado_esperado),
+
+    tipoResultado: Array.isArray(row.tipos_resultado) ? row.tipos_resultado : [],
+    tipoResultadoOutroCheck: row.tipos_resultado_outro != null,
+    tipoResultadoOutro: str(row.tipos_resultado_outro),
+    pergunta1: str(row.perguntas),
+    minimoEntregavel: str(row.minimo_entregavel),
+
+    dataNecessaria: str(row.data_necessaria),
+    motivoPrazo: str(row.motivo_prazo),
+    motivoPrazoOutro: str(row.motivo_prazo_outro),
+
+    observacoes: str(row.observacoes),
+  };
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -263,12 +307,67 @@ function AIHint({
   );
 }
 
+/**
+ * useSearchParams() exige uma fronteira de Suspense: sem ela o Next falha o
+ * prerender da rota. O conteúdo real fica em SolicitacaoForm.
+ */
 export default function SolicitacaoPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-4">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-96 w-full" />
+        </div>
+      }
+    >
+      <SolicitacaoForm />
+    </Suspense>
+  );
+}
+
+function SolicitacaoForm() {
   const { user, profile } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(defaultForm);
-  const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
+  // Áreas/departamentos vêm da tabela `sectors` (Configurações → Estrutura),
+  // mesma fonte usada em AddProjectDialog e no cadastro de usuários.
+  // O hook devolve uma referência estável para a lista vazia — não usar
+  // `= []` aqui, pois um literal novo a cada render reexecutaria o effect
+  // que pré-preenche a área.
+  const { sectors, isLoading: sectorsLoading } = useSectors();
+
+  // ?id=… → modo edição de uma solicitação já enviada.
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("id");
+
+  const { data: itemEdicao, isLoading: carregandoItem } = useQuery({
+    queryKey: ["roadmap_item", editId],
+    enabled: !!editId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("roadmap_items" as any)
+        .select("*")
+        .eq("id", editId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as Record<string, any> | null;
+    },
+  });
+
+  /**
+   * A janela de edição fecha quando alguém começa a avaliar: mudar horas ou
+   * custo depois da priorização invalidaria a nota sem deixar rastro. Espelha
+   * a policy de RLS — aqui é só para a UI não oferecer o que o banco recusa.
+   */
+  const podeEditar =
+    !!itemEdicao &&
+    itemEdicao.created_by === user?.id &&
+    itemEdicao.origem === "formulario" &&
+    itemEdicao.status === "backlog" &&
+    itemEdicao.classificado_em == null;
   const [errors, setErrors] = useState<Errors>({});
   const [step, setStep] = useState(0);
   // Passos já visitados (habilitam clique direto no stepper).
@@ -330,30 +429,69 @@ export default function SolicitacaoPage() {
     return linhas.join("\n");
   };
 
-  // Áreas/departamentos vêm da tabela `sectors` (Configurações → Estrutura),
-  // mesma fonte usada em AddProjectDialog e no cadastro de usuários.
+  // Área do perfil casada com a lista de setores. Calculado no render (não em
+  // effect) porque na navegação client-side `profile` e `sectors` já vêm
+  // prontos e estáveis — um effect com [profile, sectors] nunca dispararia,
+  // deixando o campo vazio (só funcionava no reload, quando as referências
+  // ainda mudavam depois da montagem).
+  const areaCorrespondente = useMemo(() => {
+    // profiles.sector é texto livre e pode divergir de sectors.name (acento,
+    // caixa, espaços). Casa de forma tolerante para não perder o pré-preenchimento.
+    const normalize = (v: string) =>
+      v.trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/\p{Diacritic}/gu, "");
+    const perfilSector = String(profile?.sector || "").trim();
+    if (!perfilSector) return undefined;
+    return sectors.find((s) => normalize(s.name) === normalize(perfilSector))?.name;
+  }, [profile?.sector, sectors]);
+
+  // Em modo edição, carrega a solicitação no formulário — uma vez por item,
+  // para não descartar o que o usuário já editou.
+  //
+  // O marcador é o id hidratado, não um ref booleano: com reactStrictMode o
+  // React monta, desmonta e remonta em desenvolvimento. O useState volta ao
+  // default nesse ciclo, mas um ref sobrevive — então a segunda montagem via
+  // "já hidratei" e deixava o formulário vazio.
+  const [idHidratado, setIdHidratado] = useState<string | null>(null);
   useEffect(() => {
-    supabase
-      .from("sectors")
-      .select("id, name")
-      .order("name")
-      .then(({ data }) => {
-        if (data) setSectors(data);
-      });
-  }, []);
+    // Espera os setores: o <Select> de área descarta um value que não case com
+    // nenhum SelectItem montado, e enquanto a lista não chega ele nem existe
+    // (fica o skeleton no lugar).
+    if (sectorsLoading) return;
+    if (!itemEdicao || idHidratado === itemEdicao.id) return;
+    setIdHidratado(itemEdicao.id);
+    setForm(rowParaForm(itemEdicao));
+    // Todos os passos ficam acessíveis: quem edita costuma ir direto ao campo
+    // que quer mudar, em vez de percorrer o formulário do início.
+    setVisited(new Set(STEPS.map((_, i) => i)));
+  }, [itemEdicao, idHidratado, sectorsLoading]);
 
   // Pré-preenche identificação com os dados do usuário logado (sem sobrescrever
   // o que já foi digitado). Setor/área vem de profiles.sector.
+  //
+  // Roda a cada render em vez de depender de [profile, sectors] mudarem: na
+  // navegação client-side ambos já estão carregados quando a página monta, e
+  // um effect por dependência não dispararia. Os `prev.x ||` abaixo garantem
+  // idempotência — quando não há nada a preencher, o retorno é o mesmo objeto
+  // e o React não re-renderiza.
   useEffect(() => {
+    // Em modo edição os dados vêm da solicitação, não do perfil.
+    if (editId) return;
     if (!profile) return;
-    setForm((prev) => ({
-      ...prev,
-      nome: prev.nome || profile.full_name || "",
-      email: prev.email || profile.email || "",
-      cargo: prev.cargo || profile.role_title || "",
-      area: prev.area || profile.sector || "",
-    }));
-  }, [profile]);
+
+    setForm((prev) => {
+      const next = {
+        ...prev,
+        nome: prev.nome || profile.full_name || "",
+        email: prev.email || profile.email || "",
+        cargo: prev.cargo || profile.role_title || "",
+        area: prev.area || areaCorrespondente || "",
+      };
+      const mudou = (Object.keys(next) as (keyof FormState)[]).some(
+        (k) => next[k] !== prev[k],
+      );
+      return mudou ? next : prev;
+    });
+  });
 
   /** Alterna um valor dentro de um array de checkbox (problemas / tipoResultado). */
   const toggleInArray = (key: "problemas" | "tipoResultado", value: string) => {
@@ -427,10 +565,6 @@ export default function SolicitacaoPage() {
         title: form.objetivo.trim(),
         description: form.resultado.trim() || null,
         theme: "produto",
-        // Toda solicitação entra no primeiro estágio da triagem.
-        status: "backlog",
-        origem: "formulario",
-        created_by: user?.id ?? null,
 
         // 1. Identificação
         solicitante_nome: orNull(form.nome),
@@ -471,16 +605,40 @@ export default function SolicitacaoPage() {
         observacoes: orNull(form.observacoes),
       };
 
+      if (editId) {
+        // status/origem/created_by ficam de fora: reescrevê-los arrastaria o
+        // item de volta ao backlog ou transferiria a posse. O RLS também os
+        // recusaria.
+        const { error } = await supabase
+          .from("roadmap_items" as any)
+          .update(payload as any)
+          .eq("id", editId);
+        if (error) throw error;
+        return;
+      }
+
       const { error } = await supabase
         .from("roadmap_items" as any)
-        .insert(payload as any);
+        .insert({
+          ...payload,
+          // Toda solicitação entra no primeiro estágio da triagem.
+          status: "backlog",
+          origem: "formulario",
+          created_by: user?.id ?? null,
+        } as any);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["roadmap_items"] });
+      
+      if (editId) {
+        queryClient.invalidateQueries({ queryKey: ["roadmap_item", editId] });
+      }
       toast({
-        title: "Solicitação enviada!",
-        description: "Seu pedido foi registrado no Roadmap e será avaliado.",
+        title: editId ? "Solicitação atualizada!" : "Solicitação enviada!",
+        description: editId
+          ? "Suas alterações foram salvas."
+          : "Seu pedido foi registrado no Roadmap e será avaliado.",
       });
       router.push("/roadmap");
     },
@@ -521,6 +679,51 @@ export default function SolicitacaoPage() {
     saveMutation.mutate();
   };
 
+  // ── Modo edição: estados que impedem o formulário de abrir ──
+  if (editId && (carregandoItem || sectorsLoading)) {
+    return (
+      <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  // A recusa vem antes da espera pela hidratação: item inexistente ou sem
+  // permissão nunca hidrata, e o skeleton ficaria eterno.
+  if (editId && !podeEditar) {
+    // Distingue os motivos: some, não é seu, ou a avaliação já começou.
+    const motivo = !itemEdicao
+      ? "Esta solicitação não existe ou você não tem acesso a ela."
+      : itemEdicao.created_by !== user?.id
+        ? "Só quem enviou a solicitação pode editá-la."
+        : "Esta solicitação já entrou em avaliação e não pode mais ser alterada.";
+    return (
+      <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
+        <h1 className="text-2xl font-bold text-foreground">
+          Não é possível editar
+        </h1>
+        <p className="text-sm text-muted-foreground">{motivo}</p>
+        <Button asChild variant="outline">
+          <Link href="/roadmap">Voltar ao Roadmap</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  // Item válido, mas o effect de hidratação ainda não rodou: sem isso o
+  // formulário pisca com os dados do perfil antes de receber os da solicitação.
+  if (editId && idHidratado !== editId) {
+    return (
+      <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <header className="space-y-1">
@@ -529,10 +732,10 @@ export default function SolicitacaoPage() {
           className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" />
-          Voltar ao Roadmap
+          Voltar
         </Link>
         <h1 className="pt-1 text-2xl font-bold text-foreground">
-          Solicitação de Projetos
+          {editId ? "Editar Solicitação" : "Solicitação de Projetos"}
         </h1>
         <p className="text-sm text-muted-foreground">
           Solicitação de relatórios, painéis, análises de dados, BI e desenvolvimento
@@ -669,31 +872,49 @@ export default function SolicitacaoPage() {
                   <Label>
                     Área/Departamento <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={form.area} onValueChange={(v) => set("area", v)}>
-                    <SelectTrigger
-                      aria-invalid={!!errors.area}
-                      className={errors.area ? "border-destructive" : undefined}
-                    >
-                      <SelectValue
-                        placeholder={
-                          sectors.length ? "Selecione..." : "Nenhum setor cadastrado"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sectors.map((s) => (
-                        <SelectItem key={s.id} value={s.name}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {sectorsLoading ? (
+                    // Mesma altura do SelectTrigger (h-10), para o formulário não
+                    // "pular" quando a lista de setores chega.
+                    <Skeleton
+                      className="h-10 w-full"
+                      role="status"
+                      aria-label="Carregando áreas/departamentos"
+                    />
+                  ) : (
+                    <Select value={form.area} onValueChange={(v) => set("area", v)}>
+                      <SelectTrigger
+                        aria-invalid={!!errors.area}
+                        className={errors.area ? "border-destructive" : undefined}
+                      >
+                        <SelectValue
+                          placeholder={
+                            sectors.length ? "Selecione..." : "Nenhum setor cadastrado"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sectors.map((s) => (
+                          <SelectItem key={s.id} value={s.name}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                   {errors.area ? (
                     <p className="text-xs text-destructive mt-1">{errors.area}</p>
+                  ) : sectorsLoading ? null : !sectors.length ? (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Cadastre setores em Configurações → Estrutura.
+                    </p>
                   ) : (
-                    !sectors.length && (
+                    // Sinaliza quando o setor do perfil não existe em `sectors`:
+                    // sem isso o campo só aparece vazio, sem explicar o motivo.
+                    !form.area &&
+                    !!profile?.sector && (
                       <p className="text-xs text-muted-foreground mt-1">
-                        Cadastre setores em Configurações → Estrutura.
+                        Seu setor no perfil ({profile.sector}) não consta na lista.
+                        Selecione a área correspondente.
                       </p>
                     )
                   )}
@@ -1320,7 +1541,13 @@ export default function SolicitacaoPage() {
               ) : (
                 <Send className="mr-2 h-4 w-4" />
               )}
-              {saveMutation.isPending ? "Enviando…" : "Enviar Solicitação"}
+              {saveMutation.isPending
+                ? editId
+                  ? "Salvando…"
+                  : "Enviando…"
+                : editId
+                  ? "Salvar Alterações"
+                  : "Enviar Solicitação"}
             </Button>
           ) : (
             <Button type="button" onClick={next}>

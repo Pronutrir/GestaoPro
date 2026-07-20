@@ -3,6 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +19,8 @@ import type { RoadmapItem } from "@/components/roadmap/types";
 
 
 const Roadmap = () => {
+  // Todos veem o roadmap; priorizar, mover estágio e projetizar são de gestor.
+  const { user, canManage } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editItem, setEditItem] = useState<RoadmapItem | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -149,6 +152,7 @@ const Roadmap = () => {
               <RoadmapTable
                 items={items.filter((i) => i.status === estagio)}
                 isLoading={isLoading}
+                canManage={canManage}
                 onEdit={handleEdit}
                 onProjetizar={(item) => projetizarMutation.mutate(item)}
                 onView={handleView}
@@ -164,6 +168,8 @@ const Roadmap = () => {
           item={detailsItem}
           open={detailsOpen}
           onOpenChange={setDetailsOpen}
+          canManage={canManage}
+          currentUserId={user?.id}
           onEdit={handleEdit}
           onArquivar={(item) =>
             moverEstagioMutation.mutate({ item, status: "descartado" })

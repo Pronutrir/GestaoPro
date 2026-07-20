@@ -11,16 +11,54 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import {
-  ESTAGIOS,
-  classificar,
-  themeLabels,
-} from "@/components/roadmap/criterios";
+import { ESTAGIOS, classificar } from "@/components/roadmap/criterios";
 import type { RoadmapItem } from "@/components/roadmap/types";
+import { dateBR, diasRestantes, moneyValueBR } from "@/components/roadmap/format";
+import { TIPOS_NECESSIDADE } from "@/components/roadmap/solicitacaoLabels";
+
+/** Placeholder de célula sem dado — itens que não vieram do formulário. */
+const vazio = <span className="text-muted-foreground">—</span>;
+
+/**
+ * Valor monetário com "R$" fixo à esquerda e dígitos alinhados à direita.
+ * Renderizar "R$ 12.000" como um texto só e alinhar tudo à direita faz o
+ * símbolo dançar de linha em linha; aqui ele fica ancorado e só o número
+ * se move, então as unidades ficam em coluna.
+ */
+function Moeda({ valor }: { valor?: number | null }) {
+  const n = moneyValueBR(valor);
+  // O traço fica na mesma coluna dos dígitos, não centralizado na célula.
+  if (n === null)
+    return (
+      <span className="inline-grid grid-cols-[1.25rem_4.5rem] gap-1.5">
+        <span />
+        <span className="text-right text-muted-foreground">—</span>
+      </span>
+    );
+  // Colunas de largura constante (1.25rem para o "R$", 4.5rem para os dígitos)
+  // — larguras iguais em todas as linhas fazem as unidades caírem na mesma
+  // vertical. 4.5rem comporta "999.999".
+  return (
+    <span className="inline-grid grid-cols-[1.25rem_4.5rem] items-baseline gap-1.5 tabular-nums">
+      <span className="text-xs text-muted-foreground">R$</span>
+      <span className="text-right">{n}</span>
+    </span>
+  );
+}
+
+/** Mesma resolução de rótulo usada no detalhe, incluindo o caso "outro". */
+const rotuloTipoNecessidade = (item: RoadmapItem) =>
+  item.tipo_necessidade === "outro"
+    ? item.tipo_necessidade_outro
+    : item.tipo_necessidade
+      ? TIPOS_NECESSIDADE[item.tipo_necessidade] ?? item.tipo_necessidade
+      : null;
 
 interface Props {
   items: RoadmapItem[];
   isLoading: boolean;
+  /** admin/gestor: só eles movem estágio, projetizam e priorizam. */
+  canManage: boolean;
   onEdit: (item: RoadmapItem) => void;
   onProjetizar: (item: RoadmapItem) => void;
   /** Abre a visualização completa do item (clique na linha). */
@@ -32,6 +70,7 @@ interface Props {
 export function RoadmapTable({
   items,
   isLoading,
+  canManage,
   onEdit,
   onProjetizar,
   onView,
@@ -41,7 +80,7 @@ export function RoadmapTable({
     return (
       <div className="space-y-2 mt-4">
         {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
+          <Skeleton key={i} className="h-14 w-full" />
         ))}
       </div>
     );
@@ -60,10 +99,24 @@ export function RoadmapTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Título</TableHead>
-            <TableHead className="w-24">Tema</TableHead>
-            <TableHead className="w-40">Prioridade</TableHead>
-            <TableHead className="w-40 text-right">Ações</TableHead>
+            {/* Texto com min-w (cresce em telas largas); números com largura
+                fixa e pr-6, para os valores não colarem na borda direita da
+                célula. whitespace-nowrap impede "Custo atual/mês" e
+                "Expectativa de prazo" de quebrarem em duas linhas. */}
+            <TableHead className="min-w-[17rem]">Tipo de necessidade</TableHead>
+            <TableHead className="min-w-[12rem]">Solicitante</TableHead>
+            <TableHead className="min-w-[8rem]">Área</TableHead>
+            <TableHead className="w-[9rem] whitespace-nowrap pr-6 text-right">
+              Custo atual/mês
+            </TableHead>
+            <TableHead className="w-[8rem] whitespace-nowrap pr-6 text-right">
+              Custo dev.
+            </TableHead>
+            <TableHead className="w-[10rem] whitespace-nowrap pr-6 text-right">
+              Expectativa de prazo
+            </TableHead>
+            <TableHead className="w-[11rem] pl-2">Prioridade</TableHead>
+            <TableHead className="w-[9rem] pr-4 text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -71,33 +124,81 @@ export function RoadmapTable({
             <TableRow
               key={item.id}
               onClick={() => onView(item)}
-              className="cursor-pointer"
+              // Zebra: com 8 colunas, ajuda a seguir a linha até as ações.
+              className="cursor-pointer even:bg-muted/30"
             >
-              <TableCell className="max-w-[520px] py-3 align-top">
-                {/* Objetivo pode ter até 150 caracteres: exibe em até 3 linhas. */}
-                <p className="line-clamp-3 font-medium leading-snug" title={item.title}>
-                  {item.title}
-                </p>
-                {item.origem === "formulario" && (
-                  <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
-                    <Inbox className="h-3 w-3 shrink-0" />
-                    {[item.area, item.solicitante_nome]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
+              {/* O título saiu das colunas, mas continua acessível no hover da
+                  linha e no detalhe aberto pelo clique. */}
+              <TableCell className="py-4 align-middle" title={item.title}>
+                {/* Texto simples em vez de badge: as pílulas tinham larguras
+                    muito diferentes (de "Outro" a 40 caracteres), o que criava
+                    um serrilhado visual ao percorrer a coluna. */}
+                {rotuloTipoNecessidade(item) ? (
+                  <span className="font-medium leading-snug">
+                    {rotuloTipoNecessidade(item)}
+                  </span>
+                ) : (
+                  vazio
                 )}
               </TableCell>
-              <TableCell className="py-3 align-top">
-                <Badge variant="outline">{themeLabels[item.theme] || item.theme}</Badge>
+              <TableCell className="py-4 align-middle">
+                {item.solicitante_nome ? (
+                  <span className="flex items-center gap-1.5">
+                    {item.origem === "formulario" && (
+                      <Inbox className="h-3 w-3 shrink-0 text-muted-foreground" />
+                    )}
+                    <span>{item.solicitante_nome}</span>
+                  </span>
+                ) : (
+                  vazio
+                )}
               </TableCell>
-              <TableCell className="py-3 align-top">
+              <TableCell className="py-4 align-middle">
+                {/* Badge aqui (e não no tipo): valores curtos e repetidos entre
+                    linhas, onde a pílula ajuda a agrupar visualmente. */}
+                {item.area ? (
+                  <Badge variant="secondary" className="font-normal">
+                    {item.area}
+                  </Badge>
+                ) : (
+                  vazio
+                )}
+              </TableCell>
+              {/* Custo atual/mês vem do formulário; custo dev. só é preenchido
+                  na classificação — daí os dois aparecerem separados. */}
+              <TableCell className="py-4 pr-6 text-right align-middle">
+                <Moeda valor={item.custo_atual} />
+              </TableCell>
+              <TableCell className="py-4 pr-6 text-right align-middle">
+                <Moeda valor={item.custo_desenvolvimento} />
+              </TableCell>
+              <TableCell className="py-4 pr-6 text-right align-middle">
+                {(() => {
+                  const data = dateBR(item.data_necessaria);
+                  if (!data) return vazio;
+                  // Mesmo destaque do detalhe: vencido em vermelho, ≤30 dias em âmbar.
+                  const dias = diasRestantes(item.data_necessaria);
+                  return (
+                    <span
+                      className={cn(
+                        "tabular-nums",
+                        dias !== null && dias < 0 && "font-medium text-destructive",
+                        dias !== null && dias >= 0 && dias <= 30 && "font-medium text-amber-600",
+                      )}
+                    >
+                      {data}
+                    </span>
+                  );
+                })()}
+              </TableCell>
+              <TableCell className="py-4 pl-2 align-middle">
                 {(() => {
                   // Sem classificação não há prioridade: mostrar 0%/"Baixa"
                   // sugeriria uma avaliação que ninguém fez.
                   if (item.score == null || !item.classificado_em) {
                     return (
                       <span className="text-xs text-muted-foreground">
-                        — a classificar
+                        — a priorizar
                       </span>
                     );
                   }
@@ -130,10 +231,15 @@ export function RoadmapTable({
                 })()}
               </TableCell>
               {/* stopPropagation: as ações não devem abrir a visualização da linha. */}
-              <TableCell className="py-3 align-top" onClick={(e) => e.stopPropagation()}>
+              <TableCell className="py-4 pr-4 align-middle" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-end gap-1">
-                  {/* Devolve a demanda ao estágio anterior (corrigir engano). */}
-                  {(() => {
+                  {/* Todas as ações da listagem (mover estágio, projetizar,
+                      priorizar) são de gestor. Usuário comum acompanha pela
+                      linha e edita a própria solicitação pelo detalhe. */}
+                  {!canManage && (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                  {canManage && (() => {
                     const estagio = ESTAGIOS.find((e) => e.value === item.status);
                     if (!estagio?.prev) return null;
                     return (
@@ -150,7 +256,7 @@ export function RoadmapTable({
                   })()}
 
                   {/* Ação principal do estágio: avança a demanda no fluxo. */}
-                  {(() => {
+                  {canManage && (() => {
                     const estagio = ESTAGIOS.find((e) => e.value === item.status);
                     if (estagio?.next) {
                       return (
@@ -195,15 +301,20 @@ export function RoadmapTable({
                     return null;
                   })()}
 
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onEdit(item)}
-                    title="Classificar"
-                    className="h-8 w-8"
-                  >
-                    <SlidersHorizontal className="h-4 w-4" />
-                  </Button>
+                  {/* No backlog a única ação é "Analisar": a priorização por
+                      critérios acontece depois, quando a demanda entra em
+                      análise. */}
+                  {canManage && item.status !== "backlog" && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onEdit(item)}
+                      title="Priorizar"
+                      className="h-8 w-8"
+                    >
+                      <SlidersHorizontal className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>

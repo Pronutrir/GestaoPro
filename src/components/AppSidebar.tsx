@@ -45,7 +45,10 @@ const allNavItems = [
   { path: "/timeline", label: "Cronograma", icon: GanttChart, minRole: "user" as const, moduleKey: "timeline" },
   { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, minRole: "user" as const, moduleKey: "blocked" },
   { path: "/investments", label: "Gestão Financeira", icon: DollarSign, minRole: "gestor" as const, moduleKey: "investments" },
-  { path: "/roadmap", label: "Roadmap", icon: Map, minRole: "gestor" as const, moduleKey: "roadmap" },
+  // Visível a todos: qualquer um acompanha as demandas e edita as próprias
+  // solicitações. Priorizar e mover estágio continuam restritos a gestor,
+  // pelas ações dentro da página.
+  { path: "/roadmap", label: "Roadmap", icon: Map, minRole: "user" as const, moduleKey: "roadmap" },
   { path: "/calendario", label: "Calendário", icon: Calendar, minRole: "user" as const, moduleKey: "calendario" },
   { path: "/agent", label: "Agente de IA", icon: Bot, minRole: "user" as const, moduleKey: "agent" },
   { path: "/reports", label: "Relatórios", icon: BarChart3, minRole: "gestor" as const, moduleKey: "reports" },
@@ -111,6 +114,10 @@ export function AppSidebar() {
     if (item.minRole === "user") {
       // Usuários do setor qualidade não veem "Projetos"
       if (item.path === "/projects" && isQualidade) return false;
+      // Roadmap fica fora do controle por módulo: é onde o usuário acompanha e
+      // edita as próprias solicitações, então quem tem allowedModules
+      // configurado ficaria sem acesso aos próprios pedidos.
+      if (item.path === "/roadmap") return true;
       // Check module permissions
       if (allowedModules && !allowedModules.includes(item.moduleKey)) return false;
       return true;
