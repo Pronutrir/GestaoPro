@@ -1,3 +1,6 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,13 +11,32 @@ import {
   Rocket,
   SlidersHorizontal,
   Undo2,
+  X,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { ESTAGIOS, classificar } from "@/components/roadmap/criterios";
 import type { RoadmapItem } from "@/components/roadmap/types";
 import { dateBR, diasRestantes, moneyValueBR } from "@/components/roadmap/format";
-import { TIPOS_NECESSIDADE } from "@/components/roadmap/solicitacaoLabels";
+import {
+  BotaoOrdenar,
+  FiltroFaixa,
+  FiltroPeriodo,
+  FiltroSelecao,
+} from "@/components/roadmap/ColumnFilter";
+import {
+  FAIXA_PRIORIDADE,
+  FILTROS_VAZIOS,
+  aplicarFiltros,
+  aplicarOrdenacao,
+  contarAtivos,
+  opcoesDe,
+  rotuloPrioridade,
+  rotuloTipo,
+  type ColunaOrdenavel,
+  type FiltrosRoadmap,
+  type Ordenacao,
+} from "@/components/roadmap/filtros";
 
 /** Placeholder de célula sem dado — itens que não vieram do formulário. */
 const vazio = <span className="text-muted-foreground">—</span>;
@@ -46,13 +68,6 @@ function Moeda({ valor }: { valor?: number | null }) {
   );
 }
 
-/** Mesma resolução de rótulo usada no detalhe, incluindo o caso "outro". */
-const rotuloTipoNecessidade = (item: RoadmapItem) =>
-  item.tipo_necessidade === "outro"
-    ? item.tipo_necessidade_outro
-    : item.tipo_necessidade
-      ? TIPOS_NECESSIDADE[item.tipo_necessidade] ?? item.tipo_necessidade
-      : null;
 
 interface Props {
   items: RoadmapItem[];
@@ -76,6 +91,50 @@ export function RoadmapTable({
   onView,
   onMover,
 }: Props) {
+  const [filtros, setFiltros] = useState<FiltrosRoadmap>(FILTROS_VAZIOS);
+
+  // Opções saem dos itens do próprio estágio: filtrar por um solicitante que
+  // não tem nenhuma demanda nesta aba só produziria lista vazia.
+  const opcoes = useMemo(
+    () => ({
+      tipo: opcoesDe(items, rotuloTipo),
+      solicitante: opcoesDe(items, (i) => i.solicitante_nome),
+      area: opcoesDe(items, (i) => i.area),
+      prioridade: opcoesDe(items, rotuloPrioridade),
+    }),
+    [items],
+  );
+
+  // Sem ordenação escolhida, mantém a ordem da consulta (prioridade primeiro,
+  // não avaliados no fim) — o padrão que a lista sempre teve.
+  const [ordem, setOrdem] = useState<Ordenacao>(null);
+
+  const visiveis = useMemo(
+    () => aplicarOrdenacao(aplicarFiltros(items, filtros), ordem),
+    [items, filtros, ordem],
+  );
+  const ativos = contarAtivos(filtros);
+
+  /** Ciclo ao clicar no título: crescente → decrescente → padrão. */
+  const alternarOrdem = (coluna: ColunaOrdenavel) =>
+    setOrdem((o) =>
+      o?.coluna !== coluna
+        ? { coluna, asc: true }
+        : o.asc
+          ? { coluna, asc: false }
+          : null,
+    );
+
+  /** Título de coluna com ordenação — os props repetiriam em 7 colunas. */
+  const titulo = (coluna: ColunaOrdenavel, label: string) => (
+    <BotaoOrdenar
+      label={label}
+      ativa={ordem?.coluna === coluna}
+      asc={ordem?.asc ?? true}
+      onClick={() => alternarOrdem(coluna)}
+    />
+  );
+
   if (isLoading) {
     return (
       <div className="space-y-2 mt-4">
@@ -95,7 +154,28 @@ export function RoadmapTable({
   }
 
   return (
-    <div className="rounded-md border mt-4 overflow-x-auto">
+    <div className="mt-4 space-y-2">
+      {/* Resumo dos filtros: sem isso, uma lista curta por causa de um filtro
+          esquecido parece uma lista vazia de verdade. */}
+      {ativos > 0 && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>
+            {visiveis.length} de {items.length}{" "}
+            {items.length === 1 ? "demanda" : "demandas"} ·{" "}
+            {ativos} {ativos === 1 ? "filtro ativo" : "filtros ativos"}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setFiltros(FILTROS_VAZIOS)}
+            className="h-6 px-2 text-xs"
+          >
+            <X className="mr-1 h-3 w-3" />
+            Limpar filtros
+          </Button>
+        </div>
+      )}
+      <div className="rounded-md border overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -103,24 +183,88 @@ export function RoadmapTable({
                 fixa e pr-6, para os valores não colarem na borda direita da
                 célula. whitespace-nowrap impede "Custo atual/mês" e
                 "Expectativa de prazo" de quebrarem em duas linhas. */}
-            <TableHead className="min-w-[17rem]">Tipo de necessidade</TableHead>
-            <TableHead className="min-w-[12rem]">Solicitante</TableHead>
-            <TableHead className="min-w-[8rem]">Área</TableHead>
+            <TableHead className="min-w-[17rem]">
+              <span className="inline-flex items-center">
+                {titulo("tipo", "Tipo de necessidade")}
+                <FiltroSelecao
+                  label="Tipo de necessidade"
+                  opcoes={opcoes.tipo}
+                  selecionados={filtros.tipo}
+                  onChange={(v) => setFiltros({ ...filtros, tipo: v })}
+                />
+              </span>
+            </TableHead>
+            <TableHead className="min-w-[12rem]">
+              <span className="inline-flex items-center">
+                {titulo("solicitante", "Solicitante")}
+                <FiltroSelecao
+                  label="Solicitante"
+                  opcoes={opcoes.solicitante}
+                  selecionados={filtros.solicitante}
+                  onChange={(v) => setFiltros({ ...filtros, solicitante: v })}
+                />
+              </span>
+            </TableHead>
+            <TableHead className="min-w-[8rem]">
+              <span className="inline-flex items-center">
+                {titulo("area", "Área")}
+                <FiltroSelecao
+                  label="Área"
+                  opcoes={opcoes.area}
+                  selecionados={filtros.area}
+                  onChange={(v) => setFiltros({ ...filtros, area: v })}
+                />
+              </span>
+            </TableHead>
             <TableHead className="w-[9rem] whitespace-nowrap pr-6 text-right">
-              Custo atual/mês
+              <span className="inline-flex w-full items-center justify-end">
+                {titulo("custoAtual", "Custo atual/mês")}
+                <FiltroFaixa
+                  label="Custo atual/mês"
+                  prefixo="R$"
+                  valor={filtros.custoAtual}
+                  onChange={(v) => setFiltros({ ...filtros, custoAtual: v })}
+                />
+              </span>
             </TableHead>
             <TableHead className="w-[8rem] whitespace-nowrap pr-6 text-right">
-              Custo dev.
+              <span className="inline-flex w-full items-center justify-end">
+                {titulo("custoDev", "Custo dev.")}
+                <FiltroFaixa
+                  label="Custo do desenvolvimento"
+                  prefixo="R$"
+                  valor={filtros.custoDev}
+                  onChange={(v) => setFiltros({ ...filtros, custoDev: v })}
+                />
+              </span>
             </TableHead>
             <TableHead className="w-[10rem] whitespace-nowrap pr-6 text-right">
-              Expectativa de prazo
+              <span className="inline-flex w-full items-center justify-end">
+                {titulo("prazo", "Expectativa de prazo")}
+                <FiltroPeriodo
+                  label="Expectativa de prazo"
+                  valor={filtros.prazo}
+                  onChange={(v) => setFiltros({ ...filtros, prazo: v })}
+                />
+              </span>
             </TableHead>
-            <TableHead className="w-[11rem] pl-2">Prioridade</TableHead>
+            <TableHead className="w-[11rem] whitespace-nowrap pl-2">
+              <span className="inline-flex items-center">
+                {titulo("prioridade", "Prioridade (%)")}
+                <FiltroSelecao
+                  label="Prioridade"
+                  opcoes={opcoes.prioridade}
+                  selecionados={filtros.prioridade}
+                  onChange={(v) => setFiltros({ ...filtros, prioridade: v })}
+                  descricoes={FAIXA_PRIORIDADE}
+                />
+              </span>
+            </TableHead>
             <TableHead className="w-[9rem] pr-4 text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((item) => (
+          {visiveis.map((item) => (
             <TableRow
               key={item.id}
               onClick={() => onView(item)}
@@ -133,9 +277,9 @@ export function RoadmapTable({
                 {/* Texto simples em vez de badge: as pílulas tinham larguras
                     muito diferentes (de "Outro" a 40 caracteres), o que criava
                     um serrilhado visual ao percorrer a coluna. */}
-                {rotuloTipoNecessidade(item) ? (
+                {rotuloTipo(item) ? (
                   <span className="font-medium leading-snug">
-                    {rotuloTipoNecessidade(item)}
+                    {rotuloTipo(item)}
                   </span>
                 ) : (
                   vazio
@@ -319,8 +463,26 @@ export function RoadmapTable({
               </TableCell>
             </TableRow>
           ))}
+          {visiveis.length === 0 && (
+            <TableRow className="hover:bg-transparent">
+              <TableCell colSpan={8} className="py-12 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma demanda corresponde aos filtros.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFiltros(FILTROS_VAZIOS)}
+                  className="mt-3"
+                >
+                  Limpar filtros
+                </Button>
+              </TableCell>
+            </TableRow>
+          )}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }
