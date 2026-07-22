@@ -333,6 +333,24 @@ export const BacklogSection = ({
       setQuickAddTitle("");
       return;
     }
+    // EAP: se o pai é folha (atividade/marco), promove a "pacote" antes de
+    // inserir, para respeitar a regra de aninhamento imposta pelo trigger.
+    if (parentId) {
+      const parent = backlogActs.find((a) => a.id === parentId);
+      const parentType = parent?.item_type || "atividade";
+      const parentIsLeaf = !parent || parent.is_milestone || (parentType !== "fase" && parentType !== "pacote");
+      if (parentIsLeaf) {
+        const { error: promoteErr } = await supabase
+          .from("activities")
+          .update({ item_type: "pacote", is_milestone: false } as any)
+          .eq("id", parentId);
+        if (promoteErr) {
+          toast({ title: "Erro ao criar tarefa", variant: "destructive" });
+          return;
+        }
+      }
+    }
+
     const { error } = await supabase.from("activities").insert({
       project_id: projectId,
       title,

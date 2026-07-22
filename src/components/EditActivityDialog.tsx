@@ -706,6 +706,23 @@ export const EditActivityDialog = ({
     if (!ensureProjectUnlocked()) return;
     const act = effectiveActivity;
     if (!newSubTitle.trim() || !act || !projectId) return;
+
+    // EAP: um pai precisa ser agrupador para ter filhos. Se hoje é folha
+    // (atividade/marco), promove a "pacote" antes de inserir — senão o trigger
+    // rejeita. Pacote pode conter pacote, então é sempre seguro em qualquer nível.
+    const parentType = toEapType((act as any).item_type);
+    if (parentType === "atividade" || (act as any).is_milestone) {
+      const { error: promoteErr } = await supabase
+        .from("activities")
+        .update({ item_type: "pacote", is_milestone: false } as any)
+        .eq("id", act.id);
+      if (promoteErr) {
+        toast({ title: "Erro", description: "Não foi possível transformar em pacote.", variant: "destructive" });
+        return;
+      }
+      setFormData((prev) => ({ ...prev, item_type: "pacote", is_milestone: false }));
+    }
+
     await supabase.from("activities").insert({
       project_id: projectId, title: newSubTitle.trim(),
       phase_id: act.phase_id, parent_id: act.id,
@@ -1566,6 +1583,17 @@ export const EditActivityDialog = ({
                       // Marco é um ponto no tempo — não tem intervalo de fim.
                       end_date: kind === "marco" ? "" : formData.end_date,
                     });
+
+                  // Regra de aninhamento EAP por PAPEL (espelha o trigger):
+                  // folha (atividade/marco) não pode ter filhos; agrupador
+                  // (fase/pacote) pode. Fase/Pacote aninham livremente, então
+                  // ter pai não restringe o tipo — só ter filhos restringe.
+                  const isGroupKind = (kind: Kind) => kind === "fase" || kind === "pacote";
+                  const kindDisabledReason = (kind: Kind): string | null => {
+                    if (hasSubActivities && !isGroupKind(kind))
+                      return "Este item tem subitens; escolha Pacote ou Fase.";
+                    return null;
+                  };
                   const KIND_OPTIONS: {
                     kind: Kind;
                     label: string;
@@ -1622,8 +1650,12 @@ export const EditActivityDialog = ({
                         <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30 w-fit">
                           {KIND_OPTIONS.map((opt) => {
                             const active = itemKind === opt.kind;
-                            // Marco não pode ter subitens — desabilita se já houver.
-                            const disabled = opt.kind === "marco" && hasSubActivities;
+                            // Regra de aninhamento EAP: desabilita tipos que
+                            // violariam a hierarquia (folha com filhos, ou nível
+                            // incompatível com o pai). O tipo ativo nunca é
+                            // desabilitado (evita travar o estado atual).
+                            const reason = active ? null : kindDisabledReason(opt.kind);
+                            const disabled = !!reason;
                             return (
                               <button
                                 key={opt.kind}
@@ -1631,7 +1663,7 @@ export const EditActivityDialog = ({
                                 disabled={disabled}
                                 onClick={() => setKind(opt.kind)}
                                 aria-pressed={active}
-                                title={disabled ? "Esta atividade tem subitens e não pode virar marco." : undefined}
+                                title={reason ?? undefined}
                                 className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors border ${
                                   active
                                     ? opt.activeCls
