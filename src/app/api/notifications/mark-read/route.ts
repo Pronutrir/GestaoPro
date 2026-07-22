@@ -1,19 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/integrations/supabase/server';
-import { getSupabaseServerUrl } from '@/integrations/supabase/config';
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from '@/lib/identityMatch';
 
 type NotificationRow = {
   id: string;
   project_id: string | null;
   activity_id: string | null;
-  type: string;
-  title: string;
-  message: string | null;
-  is_read: boolean;
-  created_at: string;
-  read_at: string | null;
   target_user_id: string | null;
 };
 
@@ -24,7 +17,10 @@ type ActivityRow = {
   participants: string[] | null;
 };
 
-export async function GET() {
+// Marca notificações como lidas usando service role (o RLS bloqueia o update
+// direto do browser, mesmo padrão da leitura em ../route.ts). Body opcional:
+// { ids?: string[] }. Sem ids => marca todas as notificações do usuário.
+export async function POST(request: Request) {
   const userClient = await createClient();
   const {
     data: { user },
@@ -40,6 +36,16 @@ export async function GET() {
 
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json({ error: 'Supabase não configurado' }, { status: 500 });
+  }
+
+  let requestedIds: string[] | null = null;
+  try {
+    const body = await request.json();
+    if (Array.isArray(body?.ids)) {
+      requestedIds = body.ids.filter((id: unknown): id is string => typeof id === 'string');
+    }
+  } catch {
+    // sem body => marca todas
   }
 
   const adminClient = createSupabaseClient(supabaseUrl, serviceRoleKey);
@@ -59,31 +65,11 @@ export async function GET() {
     user.email,
   ]);
 
-  const fetchNotifications = async () => {
-    const withReadAt = await adminClient
-      .from('notifications')
-      .select('id, project_id, activity_id, type, title, message, is_read, created_at, read_at, target_user_id')
-      .order('created_at', { ascending: false })
-      .limit(300);
-
-    // Fallback caso a migration do read_at ainda não tenha sido aplicada.
-    const missingColumn =
-      withReadAt.error &&
-      (withReadAt.error.code === '42703' ||
-        withReadAt.error.code === 'PGRST204' ||
-        /read_at/i.test(withReadAt.error.message));
-
-    if (!missingColumn) return withReadAt;
-
-    return adminClient
-      .from('notifications')
-      .select('id, project_id, activity_id, type, title, message, is_read, created_at, target_user_id')
-      .order('created_at', { ascending: false })
-      .limit(300);
-  };
-
   const [notificationsRes, activitiesRes, membersRes, projectsRes] = await Promise.all([
-    fetchNotifications(),
+    adminClient
+      .from('notifications')
+      .select('id, project_id, activity_id, target_user_id')
+      .eq('is_read', false),
     adminClient
       .from('activities')
       .select('id, project_id, assigned_to, participants')
@@ -98,34 +84,21 @@ export async function GET() {
       .eq('is_trashed', false),
   ]);
 
-  if (notificationsRes.error || activitiesRes.error || membersRes.error || projectsRes.error) {
-    const message =
-      notificationsRes.error?.message ||
-      activitiesRes.error?.message ||
-      membersRes.error?.message ||
-      projectsRes.error?.message ||
-      'Erro ao buscar notificações';
-    return NextResponse.json({ error: message }, { status: 500 });
+  if (notificationsRes.error) {
+    return NextResponse.json({ error: notificationsRes.error.message }, { status: 500 });
   }
 
   const activities = (activitiesRes.data || []) as ActivityRow[];
   const activityById = new Map(activities.map((activity) => [activity.id, activity]));
 
   const accessibleProjectIds = new Set<string>();
-
   for (const member of membersRes.data || []) {
     const status = (member.invitation_status || 'accepted').toLowerCase();
-    if (status !== 'declined') {
-      accessibleProjectIds.add(member.project_id);
-    }
+    if (status !== 'declined') accessibleProjectIds.add(member.project_id);
   }
-
   for (const project of projectsRes.data || []) {
-    if (matchesIdentity(project.owner, userCandidates)) {
-      accessibleProjectIds.add(project.id);
-    }
+    if (matchesIdentity(project.owner, userCandidates)) accessibleProjectIds.add(project.id);
   }
-
   for (const activity of activities) {
     const participants = Array.isArray(activity.participants) ? activity.participants : [];
     if (matchesIdentity(activity.assigned_to, userCandidates) || anyMatchesIdentity(participants, userCandidates)) {
@@ -133,7 +106,7 @@ export async function GET() {
     }
   }
 
-  const notifications = ((notificationsRes.data || []) as NotificationRow[]).filter((notification) => {
+  const canAccess = (notification: NotificationRow) => {
     if (isAdmin) return true;
     if (notification.target_user_id === user.id) return true;
     if (notification.target_user_id) return false;
@@ -150,10 +123,44 @@ export async function GET() {
     if (anyMatchesIdentity(participants, userCandidates)) return true;
 
     return !!notification.project_id && accessibleProjectIds.has(notification.project_id);
-  }).map((notification) => ({
-    ...notification,
-    read_at: notification.read_at ?? null,
-  }));
+  };
 
-  return NextResponse.json({ notifications });
+  const requestedSet = requestedIds ? new Set(requestedIds) : null;
+  const idsToMark = ((notificationsRes.data || []) as NotificationRow[])
+    .filter((n) => (requestedSet ? requestedSet.has(n.id) : true))
+    .filter(canAccess)
+    .map((n) => n.id);
+
+  if (idsToMark.length === 0) {
+    return NextResponse.json({ updated: 0 });
+  }
+
+  const { error: updateError } = await adminClient
+    .from('notifications')
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .in('id', idsToMark);
+
+  // Fallback caso a migration do read_at ainda não tenha sido aplicada no banco
+  // (coluna inexistente => 42703 / PGRST204). O check não pode depender dela.
+  if (updateError) {
+    const missingColumn =
+      updateError.code === '42703' ||
+      updateError.code === 'PGRST204' ||
+      /read_at/i.test(updateError.message);
+
+    if (!missingColumn) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+
+    const { error: retryError } = await adminClient
+      .from('notifications')
+      .update({ is_read: true })
+      .in('id', idsToMark);
+
+    if (retryError) {
+      return NextResponse.json({ error: retryError.message }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json({ updated: idsToMark.length });
 }

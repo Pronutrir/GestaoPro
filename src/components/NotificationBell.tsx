@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Bell, Check, Trash2, AlertTriangle, Clock, Info, BellRing, X, Ban, UserPlus } from "lucide-react";
+import { Bell, Check, AlertTriangle, Clock, Info, BellRing, X, Ban, UserPlus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +18,7 @@ interface Notification {
   message: string | null;
   is_read: boolean;
   created_at: string;
+  read_at: string | null;
   target_user_id: string | null;
   activities?: {
     assigned_to: string | null;
@@ -25,6 +27,7 @@ interface Notification {
 }
 
 export const NotificationBell = () => {
+  const router = useRouter();
   const { user, isAdmin, profile } = useAuth();
   const { accessibleProjectIds, loading: accessLoading } = useProjectAccess();
   const { toast } = useToast();
@@ -114,9 +117,32 @@ export const NotificationBell = () => {
   const unreadCount = notifications.filter((n) => !n.is_read).length;
   const overdueCount = notifications.filter((n) => !n.is_read && n.type === "overdue").length;
 
+  // O update direto do browser é bloqueado pelo RLS (mesma razão da leitura
+  // usar uma rota de API com service role). Por isso o check vai pela API.
   const markAsRead = async (id: string) => {
-    await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+    const response = await fetch("/api/notifications/mark-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [id] }),
+    });
+    if (!response.ok) {
+      toast({ title: "Erro", description: "Não foi possível marcar como lida.", variant: "destructive" });
+      return;
+    }
     fetchNotifications();
+  };
+
+  // Clique na notificação: marca como lida, fecha o popover e abre a demanda
+  // (projeto + atividade via deep-link, quando houver activity_id).
+  const openNotification = (n: Notification) => {
+    if (!n.is_read) void markAsRead(n.id);
+    // Convites são resolvidos pelos botões Aceitar/Recusar, não navegam.
+    if (n.type === "project_invite") return;
+    if (n.project_id) {
+      const query = n.activity_id ? `?activity=${n.activity_id}` : "";
+      setIsOpen(false);
+      router.push(`/project/${n.project_id}${query}`);
+    }
   };
 
   const markAllAsRead = async () => {
@@ -124,12 +150,15 @@ export const NotificationBell = () => {
     if (!uid) return;
     const unreadIds = notifications.filter((n) => !n.is_read).map((n) => n.id);
     if (unreadIds.length === 0) return;
-    await supabase.from("notifications").update({ is_read: true }).in("id", unreadIds);
-    fetchNotifications();
-  };
-
-  const deleteNotification = async (id: string) => {
-    await supabase.from("notifications").delete().eq("id", id);
+    const response = await fetch("/api/notifications/mark-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: unreadIds }),
+    });
+    if (!response.ok) {
+      toast({ title: "Erro", description: "Não foi possível marcar as notificações.", variant: "destructive" });
+      return;
+    }
     fetchNotifications();
   };
 
@@ -220,6 +249,13 @@ export const NotificationBell = () => {
     return `${days}d atrás`;
   };
 
+  const formatReadAt = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const date = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const time = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return `${date} às ${time}`;
+  };
+
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
@@ -293,7 +329,7 @@ export const NotificationBell = () => {
                     }
                     ${!n.is_read && config.pulse ? "animate-pulse-slow" : ""}
                   `}
-                  onClick={() => !n.is_read && markAsRead(n.id)}
+                  onClick={() => openNotification(n)}
                 >
                   {/* Icon */}
                   <div className={`mt-0.5 p-1.5 rounded-lg ${!n.is_read ? config.bg : "bg-muted"} ${config.color} shrink-0`}>
@@ -320,6 +356,12 @@ export const NotificationBell = () => {
                     <p className="text-[10px] text-muted-foreground/70 mt-1 font-medium">
                       {getTimeAgo(n.created_at)}
                     </p>
+                    {n.is_read && n.read_at && (
+                      <p className="flex items-center gap-1 text-[10px] text-success/80 mt-0.5 font-medium">
+                        <Check className="w-2.5 h-2.5" />
+                        Lida em {formatReadAt(n.read_at)}
+                      </p>
+                    )}
 
                     {n.type === "project_invite" && (
                       <div className="mt-2 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -356,8 +398,8 @@ export const NotificationBell = () => {
                   </div>
 
                   {/* Actions (show on hover) */}
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    {!n.is_read && (
+                  {!n.is_read && (
+                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                       <Button
                         size="icon"
                         variant="ghost"
@@ -367,17 +409,8 @@ export const NotificationBell = () => {
                       >
                         <Check className="w-3 h-3" />
                       </Button>
-                    )}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive"
-                      onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
-                      title="Excluir"
-                    >
-                      <X className="w-3 h-3" />
-                    </Button>
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })
