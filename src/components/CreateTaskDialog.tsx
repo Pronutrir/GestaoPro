@@ -120,7 +120,18 @@ export const CreateTaskDialog = ({
         .then(({ data }) => { if (data) setFetchedStages(data as WorkflowStage[]); });
     }
     supabase.from("profiles").select("id, full_name, sector").eq("is_active", true).then(({ data }) => {
-      if (data) setAllProfiles(data.filter((profile): profile is ProfileOption => Boolean(profile.id && profile.full_name)));
+      if (!data) return;
+      const valid = data.filter((profile): profile is ProfileOption => Boolean(profile.id && profile.full_name));
+      // Dedup por full_name: o valor selecionável é o nome, então perfis
+      // distintos com o mesmo nome colidem no <option>/Select. Mantém o 1º.
+      const seen = new Set<string>();
+      const deduped = valid.filter((p) => {
+        const key = p.full_name!.trim().toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setAllProfiles(deduped);
     });
   }, [open, projectId, stagesProp]);
 

@@ -45,6 +45,8 @@ import {
   Link2,
   LayoutGrid,
   User,
+  Layers,
+  Package,
 } from "lucide-react";
 import {
   DndContext,
@@ -500,6 +502,9 @@ function KanbanCard({
   const isOverdue = activity.end_date && parseDate(activity.end_date) < new Date() && activity.status !== "completed";
 
   const isMilestone = !!(activity as any).is_milestone;
+  const eapType = (activity as any).item_type as string | undefined;
+  const isPhase = eapType === "fase";
+  const isPackage = eapType === "pacote";
   const cardBorderClass = isMilestone
     ? "border-amber-500 border-l-[4px] border-l-amber-500 bg-amber-500/5"
     : isBlocked
@@ -601,6 +606,12 @@ function KanbanCard({
                       className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0 mt-0.5"
                       aria-label="Marco"
                     />
+                  )}
+                  {!isMilestone && isPhase && (
+                    <Layers className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" aria-label="Fase" />
+                  )}
+                  {!isMilestone && isPackage && (
+                    <Package className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-label="Pacote de trabalho" />
                   )}
                   <p
                     className={`${d.title} font-medium line-clamp-2 flex-1 min-w-0 ${
@@ -1167,6 +1178,121 @@ function SortableColumn({
 
   const dCol = DENSITY_CLASSES[density];
 
+  // Renderiza um card e, se expandido, seus filhos — RECURSIVAMENTE, de modo que
+  // fase → pacote → atividade (netos e além) apareçam ao expandir. Cada filho
+  // recebe sua contagem real e seu próprio controle de expansão.
+  // `ancestors` protege contra ciclos em parent_id (dado corrompido) — sem isso
+  // um ciclo A↔B travaria a aba num loop infinito de render.
+  const renderActivityNode = (
+    activity: Activity,
+    depth: number,
+    ancestors: Set<string> = new Set(),
+  ): React.ReactNode => {
+    if (ancestors.has(activity.id)) return null;
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(activity.id);
+    const allChildren = childrenByParent.get(activity.id) || [];
+    const inlineChildren = allChildren.filter((child) => stageActivityIds.has(child.id));
+    const externalChildren = allChildren.filter((child) => !stageActivityIds.has(child.id));
+    const subActivityStatusSummary =
+      descendantSummaryById.get(activity.id) || { completed: 0, pending: 0 };
+    const parentProgress = (() => {
+      const deepProgress = descendantProgressById.get(activity.id);
+      const totalSubs = deepProgress?.count || 0;
+      if (totalSubs === 0) {
+        return computeActivityProgress(activity.workflow_stage_id, allStages, activity.last_progress_stage_id);
+      }
+      const percent = Math.max(0, Math.min(100, Math.round((deepProgress!.sum / totalSubs))));
+      return { percent, paused: false, label: progressLabelFromPercent(percent) } as ActivityProgress;
+    })();
+    const expanded = expandedIds.has(activity.id);
+    const isMirrorParent = !stageActivityIds.has(activity.id) && inlineChildren.length > 0;
+    const parentAct = activity.parent_id ? activities.find((p) => p.id === activity.parent_id) : null;
+    const parentBreadcrumb = parentAct && parentAct.workflow_stage_id !== activity.workflow_stage_id
+      ? { id: parentAct.id, title: parentAct.title, wbsCode: parentAct.wbs_code }
+      : null;
+    const blockedStageIds = new Set(allStages.filter((s) => s.is_blocked).map((s) => s.id));
+    const blockedSubsCount = allChildren.filter((c) => c.workflow_stage_id && blockedStageIds.has(c.workflow_stage_id)).length;
+
+    const commonCardProps = {
+      activity,
+      phases,
+      onEdit: () => onEditActivity(activity),
+      onDelete: () => onDeleteActivity(activity.id),
+      onToggle: () => onToggleActivity(activity.id, activity.status),
+      onMoveToBacklog: () => onMoveToBacklog(activity.id),
+      onLinkParent: () => onLinkParent?.(activity.id, activity.parent_id ?? null),
+      isAdmin,
+      isBlocked: stage.is_blocked,
+      hasStory: storyLinkedActivities.has(activity.id),
+      storyCount: storyLinkedActivities.get(activity.id) || 0,
+      onStoryClick: () => onStoryClick(activity.id),
+      onCreateStory: () => onCreateStory(activity),
+      isQualityProject,
+      stageColor: stage.color,
+      dependencyCount: dependencyCounts?.get(activity.id),
+      relationItems: relationCounts?.get(activity.id) || [],
+      onOpenRelated,
+      onRemoveRelation,
+      subActivityCount: allChildren.length,
+      isExpanded: expanded,
+      onToggleExpand: () => toggleExpanded(activity.id),
+      progress: parentProgress,
+      density,
+      parentBreadcrumb,
+      blockedSubsCount,
+      subActivityStatusSummary,
+      hoursStat: hoursStatsByActivity?.get(activity.id),
+      profilesMap,
+      profileAvatarMap,
+    };
+
+    return (
+      <div key={activity.id} className={dCol.colBodyGap}>
+        {isMirrorParent ? (
+          <KanbanCard {...commonCardProps} readOnlyPreview />
+        ) : depth === 0 ? (
+          <SortableKanbanCard {...commonCardProps} />
+        ) : (
+          // Filhos aninhados não são sortable (drag é por raiz de coluna).
+          <KanbanCard {...commonCardProps} />
+        )}
+        {expanded && (inlineChildren.length > 0 || externalChildren.length > 0) && (
+          <div className="ml-4 pl-2 border-l-2 border-primary/30 space-y-1.5">
+            {isMirrorParent && (
+              <div className="px-1">
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/5 text-primary border-primary/20">
+                  Pai agrupador
+                </Badge>
+              </div>
+            )}
+            {inlineChildren.map((child) => renderActivityNode(child, depth + 1, nextAncestors))}
+            {externalChildren.map((child) => {
+              const childStage = allStages.find((s) => s.id === child.workflow_stage_id);
+              return (
+                <div key={child.id} className="space-y-1">
+                  {childStage && (
+                    <div className="flex items-center gap-1.5 px-1">
+                      <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide text-white"
+                        style={{ backgroundColor: childStage.color }}
+                        title={`Esta subtarefa está em "${getStageDisplayTitle(childStage.title)}"`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
+                        {getStageDisplayTitle(childStage.title)}
+                      </span>
+                    </div>
+                  )}
+                  {renderActivityNode(child, depth + 1, nextAncestors)}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -1458,198 +1584,7 @@ function SortableColumn({
               <p className="text-[11px] text-muted-foreground/50">Arraste aqui</p>
             </div>
           ) : (
-            sortedActivities.map((activity) => {
-              const allChildren = childrenByParent.get(activity.id) || [];
-              const inlineChildren = allChildren.filter((child) => stageActivityIds.has(child.id));
-              const externalChildren = allChildren.filter((child) => !stageActivityIds.has(child.id));
-              const subActivityStatusSummary =
-                descendantSummaryById.get(activity.id) || { completed: 0, pending: 0 };
-              const parentProgress = (() => {
-                const deepProgress = descendantProgressById.get(activity.id);
-                const totalSubs = deepProgress?.count || 0;
-                if (totalSubs === 0) {
-                  return computeActivityProgress(activity.workflow_stage_id, allStages, activity.last_progress_stage_id);
-                }
-                const percent = Math.max(
-                  0,
-                  Math.min(100, Math.round((deepProgress!.sum / totalSubs))),
-                );
-                return {
-                  percent,
-                  paused: false,
-                  label: progressLabelFromPercent(percent),
-                } as ActivityProgress;
-              })();
-              const expanded = expandedIds.has(activity.id);
-              const isMirrorParent = !stageActivityIds.has(activity.id) && inlineChildren.length > 0;
-              // Breadcrumb do pai quando esta atividade é uma subtarefa "solta" (pai em outra coluna)
-              const parentAct = activity.parent_id ? activities.find((p) => p.id === activity.parent_id) : null;
-              const parentBreadcrumb = parentAct && parentAct.workflow_stage_id !== activity.workflow_stage_id
-                ? { id: parentAct.id, title: parentAct.title, wbsCode: parentAct.wbs_code }
-                : null;
-              // Contagem de subs em colunas de bloqueio
-              const blockedStageIds = new Set(allStages.filter((s) => s.is_blocked).map((s) => s.id));
-              const blockedSubsCount = allChildren.filter((c) => c.workflow_stage_id && blockedStageIds.has(c.workflow_stage_id)).length;
-              return (
-                <div key={activity.id} className={dCol.colBodyGap}>
-                  {isMirrorParent ? (
-                    <KanbanCard
-                      activity={activity}
-                      phases={phases}
-                      onEdit={() => onEditActivity(activity)}
-                      onDelete={() => onDeleteActivity(activity.id)}
-                      onToggle={() => onToggleActivity(activity.id, activity.status)}
-                      onMoveToBacklog={() => onMoveToBacklog(activity.id)}
-                      onLinkParent={() => onLinkParent?.(activity.id, activity.parent_id ?? null)}
-                      isAdmin={isAdmin}
-                      isBlocked={stage.is_blocked}
-                      hasStory={storyLinkedActivities.has(activity.id)}
-                      storyCount={storyLinkedActivities.get(activity.id) || 0}
-                      onStoryClick={() => onStoryClick(activity.id)}
-                      onCreateStory={() => onCreateStory(activity)}
-                      isQualityProject={isQualityProject}
-                      stageColor={stage.color}
-                      dependencyCount={dependencyCounts?.get(activity.id)}
-                      relationItems={relationCounts?.get(activity.id) || []}
-                      onOpenRelated={onOpenRelated}
-                      onRemoveRelation={onRemoveRelation}
-                      subActivityCount={allChildren.length}
-                      isExpanded={expanded}
-                      onToggleExpand={() => toggleExpanded(activity.id)}
-                      progress={parentProgress}
-                      density={density}
-                      parentBreadcrumb={parentBreadcrumb}
-                      blockedSubsCount={blockedSubsCount}
-                      subActivityStatusSummary={subActivityStatusSummary}
-                      hoursStat={hoursStatsByActivity?.get(activity.id)}
-                      readOnlyPreview
-                      profilesMap={profilesMap}
-                      profileAvatarMap={profileAvatarMap}
-                    />
-                  ) : (
-                    <SortableKanbanCard
-                      activity={activity}
-                      phases={phases}
-                      onEdit={() => onEditActivity(activity)}
-                      onDelete={() => onDeleteActivity(activity.id)}
-                      onToggle={() => onToggleActivity(activity.id, activity.status)}
-                      onMoveToBacklog={() => onMoveToBacklog(activity.id)}
-                      onLinkParent={() => onLinkParent?.(activity.id, activity.parent_id ?? null)}
-                      isAdmin={isAdmin}
-                      isBlocked={stage.is_blocked}
-                      hasStory={storyLinkedActivities.has(activity.id)}
-                      storyCount={storyLinkedActivities.get(activity.id) || 0}
-                      onStoryClick={() => onStoryClick(activity.id)}
-                      onCreateStory={() => onCreateStory(activity)}
-                      isQualityProject={isQualityProject}
-                      stageColor={stage.color}
-                      dependencyCount={dependencyCounts?.get(activity.id)}
-                      relationItems={relationCounts?.get(activity.id) || []}
-                      onOpenRelated={onOpenRelated}
-                      onRemoveRelation={onRemoveRelation}
-                      subActivityCount={allChildren.length}
-                      isExpanded={expanded}
-                      onToggleExpand={() => toggleExpanded(activity.id)}
-                      progress={parentProgress}
-                      density={density}
-                      parentBreadcrumb={parentBreadcrumb}
-                      blockedSubsCount={blockedSubsCount}
-                      subActivityStatusSummary={subActivityStatusSummary}
-                      hoursStat={hoursStatsByActivity?.get(activity.id)}
-                      profilesMap={profilesMap}
-                      profileAvatarMap={profileAvatarMap}
-                    />
-                  )}
-                  {expanded && (inlineChildren.length > 0 || externalChildren.length > 0) && (
-                    <div className="ml-4 pl-2 border-l-2 border-primary/30 space-y-1.5">
-                      {isMirrorParent && (
-                        <div className="px-1">
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/5 text-primary border-primary/20">
-                            Pai agrupador
-                          </Badge>
-                        </div>
-                      )}
-                      {inlineChildren.map((child) => (
-                        <SortableKanbanCard
-                          key={child.id}
-                          activity={child}
-                          phases={phases}
-                          onEdit={() => onEditActivity(child)}
-                          onDelete={() => onDeleteActivity(child.id)}
-                          onToggle={() => onToggleActivity(child.id, child.status)}
-                          onMoveToBacklog={() => onMoveToBacklog(child.id)}
-                          onLinkParent={() => onLinkParent?.(child.id, child.parent_id ?? null)}
-                          isAdmin={isAdmin}
-                          isBlocked={stage.is_blocked}
-                          hasStory={storyLinkedActivities.has(child.id)}
-                          storyCount={storyLinkedActivities.get(child.id) || 0}
-                          onStoryClick={() => onStoryClick(child.id)}
-                          onCreateStory={() => onCreateStory(child)}
-                          isQualityProject={isQualityProject}
-                          stageColor={stage.color}
-                          dependencyCount={dependencyCounts?.get(child.id)}
-                          relationItems={relationCounts?.get(child.id) || []}
-                          onOpenRelated={onOpenRelated}
-                          onRemoveRelation={onRemoveRelation}
-                          subActivityCount={0}
-                          progress={computeActivityProgress(child.workflow_stage_id, allStages, child.last_progress_stage_id)}
-                          density={density}
-                          hoursStat={hoursStatsByActivity?.get(child.id)}
-                          profilesMap={profilesMap}
-                          profileAvatarMap={profileAvatarMap}
-                        />
-                      ))}
-                      {externalChildren.map((child) => {
-                        const childStage = allStages.find((s) => s.id === child.workflow_stage_id);
-                        return (
-                          <div key={child.id} className="space-y-1">
-                            {childStage && (
-                              <div className="flex items-center gap-1.5 px-1">
-                                <span
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide text-white"
-                                  style={{ backgroundColor: childStage.color }}
-                                  title={`Esta subtarefa está em "${getStageDisplayTitle(childStage.title)}"`}
-                                >
-                                  <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
-                                  {getStageDisplayTitle(childStage.title)}
-                                </span>
-                              </div>
-                            )}
-                            <KanbanCard
-                              activity={child}
-                              phases={phases}
-                              onEdit={() => onEditActivity(child)}
-                              onDelete={() => onDeleteActivity(child.id)}
-                              onToggle={() => onToggleActivity(child.id, child.status)}
-                              onMoveToBacklog={() => onMoveToBacklog(child.id)}
-                              onLinkParent={() => onLinkParent?.(child.id, child.parent_id ?? null)}
-                              isAdmin={isAdmin}
-                              isBlocked={!!childStage?.is_blocked}
-                              hasStory={storyLinkedActivities.has(child.id)}
-                              storyCount={storyLinkedActivities.get(child.id) || 0}
-                              onStoryClick={() => onStoryClick(child.id)}
-                              onCreateStory={() => onCreateStory(child)}
-                              isQualityProject={isQualityProject}
-                              stageColor={childStage?.color || stage.color}
-                              dependencyCount={dependencyCounts?.get(child.id)}
-                              relationItems={relationCounts?.get(child.id) || []}
-                              onOpenRelated={onOpenRelated}
-                              onRemoveRelation={onRemoveRelation}
-                              subActivityCount={0}
-                              progress={computeActivityProgress(child.workflow_stage_id, allStages, child.last_progress_stage_id)}
-                              density={density}
-                              hoursStat={hoursStatsByActivity?.get(child.id)}
-                              profilesMap={profilesMap}
-                              profileAvatarMap={profileAvatarMap}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })
+            sortedActivities.map((activity) => renderActivityNode(activity, 0))
           )}
         </SortableContext>
       </DroppableColumn>
@@ -2105,29 +2040,41 @@ export const ActivityKanban = ({
       }
     });
     const map = new Map<string, HoursStat>();
-    activities.forEach((a) => {
+
+    // Rollup recursivo: um nó com filhos agrega planejado/consumido de TODA a
+    // subárvore (fase → pacote → atividade), não só dos filhos diretos. Sem isso,
+    // as horas de um neto não sobem para a fase. Folhas usam as próprias horas.
+    const walk = (a: Activity, seen = new Set<string>()): HoursStat => {
+      if (map.has(a.id)) return map.get(a.id)!;
+      if (seen.has(a.id)) return { planned: 0, consumed: 0, hasSubs: false };
+      const nextSeen = new Set(seen);
+      nextSeen.add(a.id);
+
       const kids = childrenMap.get(a.id) || [];
-      const ownH = toHoursNumber(a.hours);
       if (kids.length > 0) {
-        const subPlanned = kids.reduce((s, c) => s + toHoursNumber(c.hours), 0);
-        const subComputed = kids.reduce((s, c) => {
-          const auto = c.status === "completed" ? toHoursNumber(c.hours) : 0;
-          return s + auto;
-        }, 0);
-        map.set(a.id, {
-          planned: ownH > 0 ? ownH : subPlanned,
-          consumed: subComputed,
-          hasSubs: true,
+        let planned = 0;
+        let consumed = 0;
+        kids.forEach((c) => {
+          const sub = walk(c, nextSeen);
+          planned += sub.planned;
+          consumed += sub.consumed;
         });
-      } else {
-        const ownComputed = a.status === "completed" ? ownH : 0;
-        map.set(a.id, {
-          planned: ownH,
-          consumed: ownComputed,
-          hasSubs: false,
-        });
+        const stat: HoursStat = { planned, consumed, hasSubs: true };
+        map.set(a.id, stat);
+        return stat;
       }
-    });
+
+      const ownH = toHoursNumber(a.hours);
+      const stat: HoursStat = {
+        planned: ownH,
+        consumed: a.status === "completed" ? ownH : 0,
+        hasSubs: false,
+      };
+      map.set(a.id, stat);
+      return stat;
+    };
+
+    activities.forEach((a) => walk(a));
     return map;
   }, [activities]);
 

@@ -8,10 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2 } from "lucide-react";
+import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2, Package } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { endVariance, varianceTone, varianceClasses, formatVariance } from "@/lib/dateVariance";
@@ -50,6 +49,15 @@ const PropertyRow = ({ icon, label, children }: { icon: React.ReactNode; label: 
     <div className="flex-1 min-w-0 flex items-center flex-wrap gap-1.5">{children}</div>
   </div>
 );
+
+// Papéis EAP (PMBOK). O marco não é um item_type — é a flag is_milestone.
+//   fase → Fase/Entrega · pacote → Pacote de Trabalho · atividade → trabalho (folha)
+type EapType = "fase" | "pacote" | "atividade";
+
+// Normaliza qualquer valor legado de item_type (tarefa/subtarefa/atividade/…)
+// para um dos papéis EAP. historia_usuario e desconhecidos caem em "atividade".
+const toEapType = (raw: unknown): EapType =>
+  raw === "fase" ? "fase" : raw === "pacote" ? "pacote" : "atividade";
 
 interface Activity {
   id: string;
@@ -92,7 +100,7 @@ interface PersonOption {
 }
 
 function normalizePersonOptions(options: Array<Partial<PersonOption> | null | undefined>): PersonOption[] {
-  return options
+  const normalized = options
     .filter((option): option is Partial<PersonOption> & { full_name: string } => Boolean(option?.full_name?.trim()))
     .map((option, index) => ({
       id: typeof option.id === "string" && option.id.trim().length > 0
@@ -103,6 +111,17 @@ function normalizePersonOptions(options: Array<Partial<PersonOption> | null | un
       email: option.email ?? null,
       avatar_url: option.avatar_url ?? null,
     }));
+
+  // Dedup por full_name: o nome é o valor selecionável (assigned_to/owner são
+  // strings de nome), então perfis distintos com o mesmo nome são o mesmo valor
+  // — manter os dois quebra o Radix Select (value duplicado). Mantém o 1º.
+  const seenNames = new Set<string>();
+  return normalized.filter((option) => {
+    const key = option.full_name.toLowerCase();
+    if (seenNames.has(key)) return false;
+    seenNames.add(key);
+    return true;
+  });
 }
 
 interface EditActivityDialogProps {
@@ -319,7 +338,7 @@ export const EditActivityDialog = ({
     last_update_date: "",
     ui_color_tag: "" as string,
     is_milestone: false,
-    item_type: "tarefa" as "fase" | "tarefa",
+    item_type: "atividade" as EapType,
     progress_flag: 0 as number,
     wbs_code: "" as string,
   });
@@ -346,13 +365,42 @@ export const EditActivityDialog = ({
     [subActivities]
   );
 
-  // Divergências pai vs subatividades (alerta apenas, sem bloqueio)
+  // Horas do pai: quando há subatividades, o planejado é um rollup automático
+  // (soma dos filhos diretos), somente-leitura — não existe mais divergência
+  // possível entre pai e subs, nem bloqueio ao salvar.
+  const hasSubActivities = subActivities.length > 0;
   const subHoursTotal = subActivities.reduce((sum, s) => sum + (Number((s as any).hours) || 0), 0);
-  const parentHoursNum = parseHoursInput(formData.hours);
-  const hoursDivergence =
-    subActivities.length > 0 &&
-    parentHoursNum > 0 &&
-    Math.abs(parentHoursNum - subHoursTotal) > 0.01;
+  const parentHoursNum = hasSubActivities ? subHoursTotal : parseHoursInput(formData.hours);
+
+  // Rollup no banco: sempre que a soma das subs mudar (add/remover/editar horas
+  // de uma sub, concluir), persiste o total no pai se estiver defasado. Cobre
+  // todos os caminhos de edição de sub deste diálogo num único ponto.
+  useEffect(() => {
+    if (createMode || !effectiveActivity || !hasSubActivities) return;
+    const current = Number((effectiveActivity as any).hours) || 0;
+    if (Math.abs(current - subHoursTotal) <= 0.01) return;
+    void supabase
+      .from("activities")
+      .update({ hours: subHoursTotal } as any)
+      .eq("id", effectiveActivity.id)
+      .then(() => onActivityUpdated());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subHoursTotal, hasSubActivities, effectiveActivity?.id, createMode]);
+
+  // Custo: mesma regra dos 100% — com subs, o custo do pai é a soma das subs
+  // (rollup somente-leitura + persistência no banco).
+  const subCostTotal = subActivities.reduce((sum, s) => sum + (Number((s as any).cost) || 0), 0);
+  useEffect(() => {
+    if (createMode || !effectiveActivity || !hasSubActivities) return;
+    const current = Number((effectiveActivity as any).cost) || 0;
+    if (Math.abs(current - subCostTotal) <= 0.01) return;
+    void supabase
+      .from("activities")
+      .update({ cost: subCostTotal } as any)
+      .eq("id", effectiveActivity.id)
+      .then(() => onActivityUpdated());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subCostTotal, hasSubActivities, effectiveActivity?.id, createMode]);
 
   // Horas: Consumidas (automático por conclusão) e Planejadas
   const subsComputed = subActivities.reduce((sum, s) => {
@@ -596,7 +644,7 @@ export const EditActivityDialog = ({
         last_update_date: (act as any).last_update_date || "",
         ui_color_tag: (act as any).ui_color_tag || "",
         is_milestone: !!(act as any).is_milestone,
-        item_type: ((act as any).item_type === "fase" ? "fase" : "tarefa"),
+        item_type: toEapType((act as any).item_type),
         progress_flag: typeof (act as any).progress_flag === "number" ? (act as any).progress_flag : 0,
         wbs_code: (act as any).wbs_code || "",
       });
@@ -661,6 +709,7 @@ export const EditActivityDialog = ({
     await supabase.from("activities").insert({
       project_id: projectId, title: newSubTitle.trim(),
       phase_id: act.phase_id, parent_id: act.id,
+      item_type: "atividade",
       workflow_stage_id: (act as any).workflow_stage_id || null,
       display_order: subActivities.length,
     });
@@ -823,14 +872,6 @@ export const EditActivityDialog = ({
       });
       return;
     }
-    if (hoursDivergence) {
-      toast({
-        title: "Divergência de horas",
-        description: `Pai: ${formatHoursDisplay(parentHoursNum)} | Subatividades: ${formatHoursDisplay(subHoursTotal)}. Ajuste antes de salvar.`,
-        variant: "destructive",
-      });
-      return;
-    }
     const previousEndDate = act.end_date;
     try {
       // EAP automática para subatividades sem código manual
@@ -860,8 +901,9 @@ export const EditActivityDialog = ({
         actual_start_date: formData.actual_start_date || null,
         actual_end_date: formData.actual_end_date || null,
         end_date: formData.end_date || null,
-        cost: parseFloat(formData.cost) || 0,
-        hours: parseHoursInput(formData.hours),
+        cost: hasSubActivities ? subCostTotal : (parseFloat(formData.cost) || 0),
+        // Rollup: com subatividades, o planejado do pai é a soma dos filhos.
+        hours: hasSubActivities ? subHoursTotal : parseHoursInput(formData.hours),
         phase_id: formData.phase_id || null,
         gravity: formData.gravity,
         urgency: formData.urgency,
@@ -1354,53 +1396,48 @@ export const EditActivityDialog = ({
                 {!formData.is_milestone && (
                   <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <Input
-                        list="hours-options"
-                        placeholder="Ex: 2h 30m"
-                        value={formData.hours}
-                        onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
-                        onFocus={(e) => e.currentTarget.select()}
-                        className="h-7 px-2 text-xs w-[140px] cursor-pointer"
-                      />
-                      <datalist id="hours-options">
-                        <option value="15m" label="15 minutos" />
-                        <option value="30m" label="30 minutos" />
-                        <option value="45m" label="45 minutos" />
-                        {Array.from({ length: 80 }, (_, i) => i + 1).map((h) => (
-                          <option key={h} value={`${h}h`} label={h === 1 ? "1 hora" : `${h} horas`} />
-                        ))}
-                      </datalist>
-                      {hoursDivergence && (
+                      {hasSubActivities ? (
+                        // Com subatividades: horas do pai = soma das subs (rollup,
+                        // somente-leitura). Sem campo concorrente => sem divergência.
                         <TooltipProvider delayDuration={150}>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <button type="button" className="inline-flex items-center justify-center text-amber-600 dark:text-amber-400 hover:opacity-80">
-                                <AlertTriangle className="w-4 h-4" />
-                              </button>
+                              <div className="h-7 px-2 text-xs w-[140px] flex items-center rounded-md border border-input bg-muted/40 text-muted-foreground cursor-default">
+                                {formatHoursDisplay(subHoursTotal) || "0h"}
+                              </div>
                             </TooltipTrigger>
-                            <TooltipContent side="right" className="max-w-[260px] text-xs">
-                              Horas do pai (<strong>{formatHoursDisplay(parentHoursNum)}</strong>) diferem da soma das subatividades (<strong>{formatHoursDisplay(subHoursTotal)}</strong>). Evite duplicidade — registre no pai <em>ou</em> nas subs.
+                            <TooltipContent side="right" className="max-w-[240px] text-xs">
+                              Somado automaticamente das subatividades. Edite as horas em cada subatividade.
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
-                      )}
-                      {hoursDivergence && (
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, hours: formatHoursDisplay(subHoursTotal) })}
-                          className="text-[10px] px-1.5 py-0.5 rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20"
-                          title="Ajustar horas do pai para a soma das subatividades"
-                        >
-                          Divergência ({formatHoursDisplay(parentHoursNum)} vs {formatHoursDisplay(subHoursTotal)}) · Ajustar
-                        </button>
+                      ) : (
+                        <>
+                          <Input
+                            list="hours-options"
+                            placeholder="Ex: 2h 30m"
+                            value={formData.hours}
+                            onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
+                            onFocus={(e) => e.currentTarget.select()}
+                            className="h-7 px-2 text-xs w-[140px] cursor-pointer"
+                          />
+                          <datalist id="hours-options">
+                            <option value="15m" label="15 minutos" />
+                            <option value="30m" label="30 minutos" />
+                            <option value="45m" label="45 minutos" />
+                            {Array.from({ length: 80 }, (_, i) => i + 1).map((h) => (
+                              <option key={h} value={`${h}h`} label={h === 1 ? "1 hora" : `${h} horas`} />
+                            ))}
+                          </datalist>
+                        </>
                       )}
                       {(plannedHours > 0 || consumedHours > 0) && (
                         <span
                           className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${
-                            consumedHours > plannedHours
+                            // Vermelho só quando o consumo ESTOURA o planejado.
+                            // Consumir menos ou igual é normal => neutro.
+                            plannedHours > 0 && consumedHours > plannedHours
                               ? "text-destructive border-destructive/40 bg-destructive/10"
-                              : consumedHours > 0
-                              ? "text-emerald-700 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/10"
                               : "text-muted-foreground border-border bg-muted/30"
                           }`}
                           title={
@@ -1421,13 +1458,28 @@ export const EditActivityDialog = ({
                 {/* Custo */}
                 {!formData.is_milestone && (
                   <PropertyRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Custo">
-                    <CurrencyInput
-                      step="0.01"
-                      min="0"
-                      value={formData.cost}
-                      onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                      className="h-7 pl-8 pr-2 py-0 text-xs w-[140px]"
-                    />
+                    {hasSubActivities ? (
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="h-7 px-2 text-xs w-[140px] flex items-center rounded-md border border-input bg-muted/40 text-muted-foreground cursor-default">
+                              {subCostTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-[240px] text-xs">
+                            Somado automaticamente das subatividades. Edite o custo em cada subatividade.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <CurrencyInput
+                        step="0.01"
+                        min="0"
+                        value={formData.cost}
+                        onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+                        className="h-7 pl-8 pr-2 py-0 text-xs w-[140px]"
+                      />
+                    )}
                   </PropertyRow>
                 )}
                 {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
@@ -1500,43 +1552,105 @@ export const EditActivityDialog = ({
                   </div>
                 </PropertyRow>
 
-                {/* Marco */}
-                <PropertyRow icon={<Diamond className={`w-3.5 h-3.5 ${formData.is_milestone ? "fill-amber-500 text-amber-500" : ""}`} />} label="Marco">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={formData.is_milestone}
-                      onCheckedChange={(checked) =>
-                        setFormData({
-                          ...formData,
-                          is_milestone: checked,
-                          // Marcos não têm data de fim — limpa ao ativar
-                          end_date: checked ? "" : formData.end_date,
-                        })
+                {/* Tipo do item (papéis EAP/PMBOK): Atividade | Pacote | Fase | Marco.
+                    Mutuamente exclusivo. Substitui os antigos switches. */}
+                {(() => {
+                  type Kind = "atividade" | "pacote" | "fase" | "marco";
+                  const itemKind: Kind = formData.is_milestone ? "marco" : formData.item_type;
+                  const setKind = (kind: Kind) =>
+                    setFormData({
+                      ...formData,
+                      is_milestone: kind === "marco",
+                      // Marco grava como 'atividade' no item_type (o tipo é a flag is_milestone).
+                      item_type: kind === "marco" ? "atividade" : kind,
+                      // Marco é um ponto no tempo — não tem intervalo de fim.
+                      end_date: kind === "marco" ? "" : formData.end_date,
+                    });
+                  const KIND_OPTIONS: {
+                    kind: Kind;
+                    label: string;
+                    icon: React.ReactNode;
+                    hint: string;
+                    activeCls: string;
+                  }[] = [
+                    {
+                      kind: "atividade",
+                      label: "Atividade",
+                      icon: <Circle className="w-3.5 h-3.5" />,
+                      hint: "Trabalho executável (folha da EAP), com estimativa e intervalo de datas próprios.",
+                      activeCls: "border-primary bg-primary/10 text-primary",
+                    },
+                    {
+                      kind: "pacote",
+                      label: "Pacote",
+                      icon: <Package className="w-3.5 h-3.5" />,
+                      hint: "Pacote de trabalho: agrupa atividades. Prazo, horas e custo vêm dos itens que ele contém.",
+                      activeCls: "border-amber-600 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                    },
+                    {
+                      kind: "fase",
+                      label: "Fase",
+                      icon: <Layers className="w-3.5 h-3.5" />,
+                      hint: "Fase/entrega: agrupa pacotes e atividades. Datas e valores derivam dos filhos.",
+                      activeCls: "border-primary bg-primary/10 text-primary",
+                    },
+                    {
+                      kind: "marco",
+                      label: "Marco",
+                      icon: <Diamond className={`w-3.5 h-3.5 ${itemKind === "marco" ? "fill-amber-500" : ""}`} />,
+                      hint: "Ponto único no tempo (uma data, sem intervalo). Não tem horas nem custo.",
+                      activeCls: "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                    },
+                  ];
+                  const activeHint = KIND_OPTIONS.find((o) => o.kind === itemKind)?.hint;
+                  return (
+                    <PropertyRow
+                      icon={
+                        itemKind === "marco" ? (
+                          <Diamond className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                        ) : itemKind === "fase" ? (
+                          <Layers className="w-3.5 h-3.5 text-primary" />
+                        ) : itemKind === "pacote" ? (
+                          <Package className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                        ) : (
+                          <Circle className="w-3.5 h-3.5" />
+                        )
                       }
-                      className="data-[state=checked]:bg-amber-500"
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {formData.is_milestone ? "É um marco" : "Não é marco"}
-                    </span>
-                  </div>
-                </PropertyRow>
-
-                {/* É uma fase? */}
-                <PropertyRow icon={<Layers className={`w-3.5 h-3.5 ${formData.item_type === "fase" ? "text-primary" : ""}`} />} label="É uma fase">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={formData.item_type === "fase"}
-                      onCheckedChange={(checked) =>
-                        setFormData({ ...formData, item_type: checked ? "fase" : "tarefa" })
-                      }
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {formData.item_type === "fase"
-                        ? "Esta tarefa agrupa subtarefas como uma fase"
-                        : "Tarefa comum"}
-                    </span>
-                  </div>
-                </PropertyRow>
+                      label="Tipo"
+                    >
+                      <div className="flex flex-col gap-1.5 w-full">
+                        <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30 w-fit">
+                          {KIND_OPTIONS.map((opt) => {
+                            const active = itemKind === opt.kind;
+                            // Marco não pode ter subitens — desabilita se já houver.
+                            const disabled = opt.kind === "marco" && hasSubActivities;
+                            return (
+                              <button
+                                key={opt.kind}
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => setKind(opt.kind)}
+                                aria-pressed={active}
+                                title={disabled ? "Esta atividade tem subitens e não pode virar marco." : undefined}
+                                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors border ${
+                                  active
+                                    ? opt.activeCls
+                                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                                } ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+                              >
+                                {opt.icon}
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {activeHint && (
+                          <span className="text-[11px] text-muted-foreground">{activeHint}</span>
+                        )}
+                      </div>
+                    </PropertyRow>
+                  );
+                })()}
 
                 {/* Código EAP/WBS */}
                 <PropertyRow icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
@@ -1547,7 +1661,7 @@ export const EditActivityDialog = ({
                       placeholder={(formData.parent_id || (act as any)?.parent_id) ? "Em branco = gerado automaticamente ao salvar" : ""}
                       className={cn(
                         "h-7 text-xs font-mono",
-                        formData.wbs_code && !/^\d+(\.\d+){0,3}$/.test(formData.wbs_code.trim()) && "border-destructive"
+                        formData.wbs_code && !/^\d+(\.\d+){0,6}$/.test(formData.wbs_code.trim()) && "border-destructive"
                       )}
                     />
                     <span className="text-[10px] text-muted-foreground leading-tight">
@@ -1787,10 +1901,9 @@ export const EditActivityDialog = ({
                     return sum + auto;
                   }, 0);
                 const consumed = computed;
-                const planejadoSubs = subHoursTotal;
                 const pct = planned > 0 ? Math.min(100, (consumed / planned) * 100) : 0;
                 const excedeu = planned > 0 && consumed > planned;
-                if (planned === 0 && planejadoSubs === 0) return null;
+                if (planned === 0 && subHoursTotal === 0) return null;
                 return (
                   <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
                     <div className="flex items-center justify-between text-xs">
@@ -1812,14 +1925,6 @@ export const EditActivityDialog = ({
                           className={`h-full transition-all ${excedeu ? "bg-destructive" : "bg-primary"}`}
                           style={{ width: `${pct}%` }}
                         />
-                      </div>
-                    )}
-                    {planejadoSubs > 0 && (
-                      <div className="text-[11px] text-muted-foreground">
-                        Soma planejada das subatividades: <strong>{formatHoursDisplay(planejadoSubs)}</strong>
-                        {planned > 0 && Math.abs(planejadoSubs - planned) > 0.01 && (
-                          <span className="text-amber-600 dark:text-amber-400"> · diverge do pai</span>
-                        )}
                       </div>
                     )}
                     {excedeu && (

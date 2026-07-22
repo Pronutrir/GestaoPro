@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,7 @@ import { DocumentManager } from "@/components/DocumentManager";
 import { ProjectCharter } from "@/components/ProjectCharter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
-import { ProjectFlatList } from "@/components/ProjectFlatList";
+import { BacklogSection } from "@/components/BacklogSection";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 import { MeetingsManager } from "@/components/MeetingsManager";
@@ -152,6 +152,7 @@ export default function ProjectDetailsPage() {
   const params = useParams();
   const id = params?.id as string | undefined;
   const router = useRouter();
+  const searchParams = useSearchParams();
   const appConfirm = useAppConfirm();
   const { isAdmin: isRealAdmin, canManage: isAdmin, user: currentUser, profile, loading: authLoading } = useAuth();
   const [accessDenied, setAccessDenied] = useState(false);
@@ -264,6 +265,31 @@ export default function ProjectDetailsPage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  // Deep-link vindo de uma notificação: /project/{id}?activity={activityId}
+  // abre o EditActivityDialog da atividade assim que ela estiver carregada.
+  // Abre direto (sem passar por openEditActivity) para não esbarrar na guarda
+  // de permissão de edição — a notificação pode ser de uma atividade de outra
+  // pessoa, e o usuário precisa ao menos visualizá-la. O próprio dialog cuida
+  // do que é editável.
+  const openedDeepLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    const activityParam = searchParams?.get("activity");
+    if (!activityParam || activities.length === 0) return;
+    if (openedDeepLinkRef.current === activityParam) return;
+
+    const target = activities.find((a) => a.id === activityParam);
+    if (!target) {
+      openedDeepLinkRef.current = activityParam;
+      toast.error("Atividade da notificação não encontrada (pode ter sido arquivada ou você não tem acesso).");
+      return;
+    }
+
+    openedDeepLinkRef.current = activityParam;
+    setEditActivityInitialTab("details");
+    setEditingActivity(target);
+    setEditActivityDialogOpen(true);
+  }, [activities, searchParams]);
 
   const fetchPendingChangeRequests = useCallback(async () => {
     if (!id) return;
@@ -1564,7 +1590,7 @@ export default function ProjectDetailsPage() {
                 </div>
               </div>
 
-              <ProjectFlatList
+              <BacklogSection
                 projectId={id!}
                 activities={activities.filter((a: any) => {
                   if (listSearch && !a.title?.toLowerCase().includes(listSearch.toLowerCase())) return false;
@@ -1573,7 +1599,8 @@ export default function ProjectDetailsPage() {
                   return true;
                 })}
                 phases={phases}
-                onEditActivity={(activity) => openEditActivity(activity)}
+                onEditActivity={(activity) => openEditActivity(activity as any)}
+                onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
                 isAdmin={canDelete}

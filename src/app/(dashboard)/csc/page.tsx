@@ -692,9 +692,14 @@ const CSC = () => {
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="_none">Nenhum</SelectItem>
-                          {profiles.filter(p => p.full_name).map((p) => (
-                            <SelectItem key={p.id} value={p.full_name!}>{p.full_name}</SelectItem>
-                          ))}
+                          {/* Dedup por nome: o value do Select é o full_name, então
+                              perfis distintos com nome igual colidem no Radix. */}
+                          {profiles
+                            .filter((p) => p.full_name)
+                            .filter((p, i, arr) => arr.findIndex((o) => o.full_name === p.full_name) === i)
+                            .map((p) => (
+                              <SelectItem key={p.id} value={p.full_name!}>{p.full_name}</SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>

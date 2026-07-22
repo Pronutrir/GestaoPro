@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
-  ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed,
+  ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Package, Diamond,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -49,6 +49,7 @@ interface Activity {
   parent_id?: string | null;
   workflow_stage_id?: string | null;
   item_type?: string | null;
+  is_milestone?: boolean | null;
 }
 
 interface BacklogSectionProps {
@@ -232,11 +233,16 @@ export const BacklogSection = ({
   const stageById = new Map<string, WorkflowStage>();
   allStages.forEach((s) => stageById.set(s.id, s));
 
-  // Build hierarchy
+  // Build hierarchy. Quando filtros (busca/status/prioridade) escondem o PAI mas
+  // mantêm um FILHO, o filho seria órfão (nem raiz, nem sob o pai) e sumiria da
+  // tela. Para evitar isso, um item cujo parent_id não está no conjunto visível
+  // é promovido a raiz.
+  const visibleIds = new Set(backlogActs.map((a) => a.id));
   const childrenByParent = new Map<string, Activity[]>();
   const topLevelByPhase = new Map<string | "none", Activity[]>();
   backlogActs.forEach((a) => {
-    if (a.parent_id) {
+    const parentVisible = a.parent_id ? visibleIds.has(a.parent_id) : false;
+    if (a.parent_id && parentVisible) {
       const arr = childrenByParent.get(a.parent_id) || [];
       arr.push(a);
       childrenByParent.set(a.parent_id, arr);
@@ -335,6 +341,7 @@ export const BacklogSection = ({
       workflow_stage_id: backlogStageId,
       status: "pending",
       priority: "medium",
+      item_type: "atividade",
     });
     if (error) {
       toast({ title: "Erro ao criar tarefa", variant: "destructive" });
@@ -413,6 +420,13 @@ export const BacklogSection = ({
             title={`Prioridade: ${priorityLabels[prio] || prio}`}
             aria-hidden
           />
+
+          {/* Ícone do papel EAP: marco / pacote de trabalho */}
+          {activity.is_milestone ? (
+            <Diamond className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0" aria-label="Marco" />
+          ) : activity.item_type === "pacote" ? (
+            <Package className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" aria-label="Pacote de trabalho" />
+          ) : null}
 
           <div className="flex-1 min-w-0">
             {isEditingTitle ? (
