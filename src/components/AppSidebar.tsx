@@ -130,8 +130,8 @@ export function AppSidebar() {
     <Sidebar side="left" collapsible="icon">
       <div className={`py-3 ${collapsed ? "px-2" : "px-3"}`}>
         <div className={`flex items-center ${collapsed ? "justify-center" : "gap-2"}`}>
-          <SidebarTrigger className="h-9 w-9 border border-border bg-background hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors shrink-0" />
-          {!collapsed && <BrandLogo size={28} showLabel labelClassName="text-lg font-semibold text-foreground" />}
+          <SidebarTrigger className="h-9 w-9 border border-sidebar-border bg-sidebar-accent/40 text-sidebar-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground hover:border-sidebar-primary transition-colors shrink-0" />
+          {!collapsed && <BrandLogo size={28} showLabel labelClassName="text-lg font-bold text-sidebar-foreground" />}
         </div>
       </div>
 
@@ -145,8 +145,8 @@ export function AppSidebar() {
                     <NavLink
                       href={item.path}
                       end
-                      className="hover:bg-muted/50"
-                      activeClassName="bg-primary text-primary-foreground font-medium"
+                      className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-semibold hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
                     >
                       <item.icon className="h-4 w-4 shrink-0" />
                       {!collapsed && <span className="ml-2">{item.label}</span>}
