@@ -30,6 +30,14 @@ interface SearchSelectProps {
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
+// Realce sutil no item ativo (accent + guia) no lugar do azul sólido base.
+const ITEM_CLASS =
+  "gap-2 py-1.5 relative aria-selected:!bg-accent aria-selected:!text-foreground " +
+  "data-[selected=true]:!bg-accent data-[selected=true]:!text-foreground " +
+  "data-[selected=true]:before:content-[''] data-[selected=true]:before:absolute " +
+  "data-[selected=true]:before:left-0 data-[selected=true]:before:top-1.5 data-[selected=true]:before:bottom-1.5 " +
+  "data-[selected=true]:before:w-[2.5px] data-[selected=true]:before:rounded-full data-[selected=true]:before:bg-primary";
+
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query) return <>{text}</>;
   const i = norm(text).indexOf(norm(query));
@@ -75,9 +83,9 @@ export function SearchSelect({
         align="start"
         side="bottom"
         sideOffset={4}
-        avoidCollisions={false}
+        collisionPadding={12}
       >
-        <Command shouldFilter={false} className="max-h-[min(320px,var(--radix-popover-content-available-height))]">
+        <Command shouldFilter={false} className="max-h-[min(340px,var(--radix-popover-content-available-height))]">
           <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
           <CommandList
             className="max-h-[260px] overflow-y-auto overscroll-contain"
@@ -86,7 +94,7 @@ export function SearchSelect({
             <CommandEmpty>{emptyText}</CommandEmpty>
             {selected && onClear && (
               <CommandItem value="__clear__" onSelect={() => { onClear(); setOpen(false); }}
-                className="text-muted-foreground">
+                className={cn(ITEM_CLASS, "text-muted-foreground")}>
                 Limpar seleção
               </CommandItem>
             )}
@@ -95,7 +103,7 @@ export function SearchSelect({
                 key={o.value}
                 value={o.value}
                 onSelect={() => { onSelect(o.value); setOpen(false); setQuery(""); }}
-                className="gap-2"
+                className={cn(ITEM_CLASS, value === o.value && "font-semibold")}
               >
                 <span className="flex-1 truncate"><Highlight text={o.label} query={query.trim()} /></span>
                 {value === o.value && <Check className="w-4 h-4 text-primary shrink-0" />}

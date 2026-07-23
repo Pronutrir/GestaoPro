@@ -38,6 +38,15 @@ const initials = (name: string) =>
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
+// Item da lista: realce sutil (accent + guia à esquerda) no lugar do azul
+// sólido do CommandItem base, mais denso. Reaproveitado por todos os itens.
+const ITEM_CLASS =
+  "gap-2 py-1.5 relative aria-selected:!bg-accent aria-selected:!text-foreground " +
+  "data-[selected=true]:!bg-accent data-[selected=true]:!text-foreground " +
+  "data-[selected=true]:before:content-[''] data-[selected=true]:before:absolute " +
+  "data-[selected=true]:before:left-0 data-[selected=true]:before:top-1.5 data-[selected=true]:before:bottom-1.5 " +
+  "data-[selected=true]:before:w-[2.5px] data-[selected=true]:before:rounded-full data-[selected=true]:before:bg-primary";
+
 // Destaca o trecho que casou com a busca.
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query) return <>{text}</>;
@@ -103,9 +112,9 @@ export function PersonCombobox({
         align="start"
         side="bottom"
         sideOffset={4}
-        avoidCollisions={false}
+        collisionPadding={12}
       >
-        <Command shouldFilter={false} className="max-h-[min(320px,var(--radix-popover-content-available-height))]">
+        <Command shouldFilter={false} className="max-h-[min(340px,var(--radix-popover-content-available-height))]">
           <CommandInput
             placeholder="Nome, setor ou função..."
             value={query}
@@ -120,7 +129,7 @@ export function PersonCombobox({
               <CommandItem
                 value="__clear__"
                 onSelect={() => { onClear?.(); setOpen(false); }}
-                className="text-muted-foreground"
+                className={cn(ITEM_CLASS, "text-muted-foreground")}
               >
                 Remover seleção
               </CommandItem>
@@ -130,7 +139,7 @@ export function PersonCombobox({
                 key={p.id}
                 value={p.id}
                 onSelect={() => { onSelect(p); setOpen(false); setQuery(""); }}
-                className="gap-2"
+                className={cn(ITEM_CLASS, variant === "single" && selected?.id === p.id && "font-semibold")}
               >
                 <Avatar className="h-6 w-6 shrink-0">
                   {p.avatar_url ? <AvatarImage src={p.avatar_url} alt={p.full_name} /> : null}
