@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { PersonCombobox } from "@/components/PersonCombobox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import {
@@ -81,16 +82,15 @@ export const EditProjectDialog = ({
   const { toast } = useToast();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null; avatar_url?: string | null }[]>([]);
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null; role_title?: string | null; avatar_url?: string | null }[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [team, setTeam] = useState<MemberRow[]>([]);
-  const [pickedUserId, setPickedUserId] = useState<string>("");
   const [createdByLabel, setCreatedByLabel] = useState<string>("—");
 
   useEffect(() => {
     const fetchProfiles = async () => {
       const [{ data: profileData }, { data: adminRoles }, { data: sectorData }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, sector, avatar_url").not("full_name", "is", null).order("full_name"),
+        supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url").not("full_name", "is", null).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
         supabase.from("sectors").select("id, name").order("name"),
       ]);
@@ -112,7 +112,7 @@ export const EditProjectDialog = ({
       if (!members) { setTeam([]); return; }
       const ids = members.map((m: any) => m.user_id);
       const { data: profs } = ids.length
-        ? await supabase.from("profiles").select("id, full_name, sector, avatar_url").in("id", ids)
+        ? await supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url").in("id", ids)
         : { data: [] as any[] };
       const profMap = new Map((profs || []).map((p: any) => [p.id, p]));
       setTeam(
@@ -129,7 +129,6 @@ export const EditProjectDialog = ({
           };
         })
       );
-      setPickedUserId("");
     };
     loadTeam();
   }, [project?.id, open]);
@@ -666,54 +665,19 @@ export const EditProjectDialog = ({
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>Líder do Projeto *</Label>
-                <Select
-                  value={formData.owner || "_none"}
-                  onValueChange={(v) => {
-                    const owner = v === "_none" ? "" : v;
-                    const leader = profiles.find((p) => p.full_name === owner);
+                <PersonCombobox
+                  people={profiles}
+                  value={profiles.find((p) => p.full_name === formData.owner)?.id ?? null}
+                  placeholder="Selecione o líder"
+                  onSelect={(p) =>
                     setFormData({
                       ...formData,
-                      owner,
-                      sector: formData.sector || leader?.sector || "",
-                    });
-                  }}
-                >
-                  <SelectTrigger>
-                    {(() => {
-                      const leader = profiles.find((p) => p.full_name === formData.owner);
-                      if (!leader && !formData.owner) return <span className="text-muted-foreground">Selecione o líder</span>;
-                      if (!leader && formData.owner) return <span>{formData.owner}</span>;
-                      return (
-                        <span className="inline-flex items-center gap-2 min-w-0 w-full">
-                          <Avatar className="h-5 w-5 shrink-0">
-                            {leader?.avatar_url ? <AvatarImage src={leader.avatar_url} alt={leader.full_name} /> : null}
-                            <AvatarFallback className="text-[9px]">{(leader?.full_name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <span className="truncate">{leader?.full_name}{leader?.sector ? ` — ${leader.sector}` : ""}</span>
-                        </span>
-                      );
-                    })()}
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Sem líder</SelectItem>
-                    {formData.owner && !profiles.some((p) => p.full_name === formData.owner) && (
-                      <SelectItem value={formData.owner}>
-                        {formData.owner}{formData.sector ? ` — ${formData.sector}` : ""}
-                      </SelectItem>
-                    )}
-                    {profiles.map((p) => (
-                      <SelectItem key={p.id} value={p.full_name!}>
-                        <span className="inline-flex items-center gap-2 min-w-0 w-full">
-                          <Avatar className="h-5 w-5 shrink-0">
-                            {p.avatar_url ? <AvatarImage src={p.avatar_url} alt={p.full_name} /> : null}
-                            <AvatarFallback className="text-[9px]">{p.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <span className="truncate">{p.full_name}{p.sector ? ` — ${p.sector}` : ""}</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      owner: p.full_name,
+                      sector: formData.sector || p.sector || "",
+                    })
+                  }
+                  onClear={() => setFormData({ ...formData, owner: "" })}
+                />
               </div>
               <div className="grid gap-2">
                 <Label>Setor do Projeto (Responsável) *</Label>
@@ -785,53 +749,27 @@ export const EditProjectDialog = ({
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-border/60">
-                <Select value={pickedUserId} onValueChange={setPickedUserId}>
-                  <SelectTrigger className="h-9 text-sm flex-1">
-                    <SelectValue placeholder="Selecionar membro..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {profiles
-                      .filter((p) => !team.some((t) => t.user_id === p.id))
-                      .map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          <span className="inline-flex items-center gap-2 min-w-0 w-full">
-                            <Avatar className="h-5 w-5 shrink-0">
-                              {p.avatar_url ? <AvatarImage src={p.avatar_url} alt={p.full_name} /> : null}
-                              <AvatarFallback className="text-[9px]">{p.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                            <span className="truncate">{p.full_name}{p.sector ? ` — ${p.sector}` : ""}</span>
-                          </span>
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-9 gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
-                  disabled={!pickedUserId}
-                  onClick={() => {
-                    if (!pickedUserId) return;
-                    const p = profiles.find((x) => x.id === pickedUserId);
-                    if (!p) return;
+              <div className="pt-3 border-t border-border/60">
+                <PersonCombobox
+                  variant="add"
+                  people={profiles.filter((p) => !team.some((t) => t.user_id === p.id))}
+                  placeholder="Adicionar membro por nome, setor ou função..."
+                  onSelect={(p) => {
+                    if (team.some((t) => t.user_id === p.id)) return;
                     setTeam((prev) => [
                       ...prev,
                       {
                         id: `tmp-${p.id}-${Date.now()}`,
                         user_id: p.id,
                         full_name: p.full_name,
-                        sector: p.sector,
+                        sector: p.sector ?? null,
                         avatar_url: p.avatar_url || null,
                         invitation_status: "pending",
                         persisted: false,
                       },
                     ]);
-                    setPickedUserId("");
                   }}
-                >
-                  <UserPlus className="w-4 h-4" /> Adicionar
-                </Button>
+                />
               </div>
             </div>
             </fieldset>

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PersonCombobox } from "@/components/PersonCombobox";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -43,15 +44,14 @@ interface AddProjectDialogProps {
 
 export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProjectDialogProps) => {
   const { user } = useAuth();
-  const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null; avatar_url?: string | null }[]>([]);
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null; role_title?: string | null; avatar_url?: string | null }[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [team, setTeam] = useState<PendingMember[]>([]);
-  const [pickedUserId, setPickedUserId] = useState<string>("");
 
   useEffect(() => {
     const fetchProfiles = async () => {
       const [{ data: profileData }, { data: adminRoles }, { data: sectorData }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, sector, avatar_url").not("full_name", "is", null).order("full_name"),
+        supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url").not("full_name", "is", null).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
         supabase.from("sectors").select("id, name").order("name"),
       ]);
@@ -231,7 +231,6 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         root_cause: "",
       });
       setTeam([]);
-      setPickedUserId("");
       setOpen(false);
       onProjectAdded();
 
@@ -297,15 +296,12 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     }
   };
 
-  const addTeamMember = () => {
-    if (!pickedUserId) return;
-    const p = profiles.find((x) => x.id === pickedUserId);
-    if (!p) return;
+  const addTeamMember = (p: { id: string; full_name: string; sector?: string | null; avatar_url?: string | null }) => {
+    if (team.some((t) => t.user_id === p.id)) return;
     setTeam((prev) => [
       ...prev,
-      { user_id: p.id, full_name: p.full_name, sector: p.sector, avatar_url: p.avatar_url || null },
+      { user_id: p.id, full_name: p.full_name, sector: p.sector ?? null, avatar_url: p.avatar_url || null },
     ]);
-    setPickedUserId("");
   };
 
   const removeTeamMember = (uid: string) =>
@@ -468,49 +464,19 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>Líder do Projeto</Label>
-                <Select
-                  value={formData.owner || "_none"}
-                  onValueChange={(v) => {
-                    const owner = v === "_none" ? "" : v;
-                    const leader = profiles.find((p) => p.full_name === owner);
+                <PersonCombobox
+                  people={profiles}
+                  value={profiles.find((p) => p.full_name === formData.owner)?.id ?? null}
+                  placeholder="Selecione o líder"
+                  onSelect={(p) =>
                     setFormData({
                       ...formData,
-                      owner,
-                      sector: formData.sector || leader?.sector || "",
-                    });
-                  }}
-                >
-                  <SelectTrigger>
-                    {(() => {
-                      const leader = profiles.find((p) => p.full_name === formData.owner);
-                      if (!leader && !formData.owner) return <span className="text-muted-foreground">Selecione o líder</span>;
-                      if (!leader && formData.owner) return <span className="truncate">{formData.owner}</span>;
-                      return (
-                        <div className="flex items-center gap-2 min-w-0 w-full pr-1">
-                          <Avatar className="h-5 w-5 shrink-0">
-                            {leader?.avatar_url ? <AvatarImage src={leader.avatar_url} alt={leader.full_name} /> : null}
-                            <AvatarFallback className="text-[9px]">{(leader?.full_name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <span className="truncate">{leader?.full_name}{leader?.sector ? ` — ${leader.sector}` : ""}</span>
-                        </div>
-                      );
-                    })()}
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Sem líder</SelectItem>
-                    {profiles.map((p) => (
-                      <SelectItem key={`ld-${p.id}`} value={p.full_name!}>
-                        <span className="inline-flex items-center gap-2 min-w-0 w-full">
-                          <Avatar className="h-5 w-5 shrink-0">
-                            {p.avatar_url ? <AvatarImage src={p.avatar_url} alt={p.full_name} /> : null}
-                            <AvatarFallback className="text-[9px]">{p.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <span className="truncate">{p.full_name}{p.sector ? ` — ${p.sector}` : ""}</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      owner: p.full_name,
+                      sector: formData.sector || p.sector || "",
+                    })
+                  }
+                  onClear={() => setFormData({ ...formData, owner: "" })}
+                />
               </div>
               <div className="grid gap-2">
                 <Label>Setor do Projeto (Responsável) *</Label>
@@ -559,29 +525,12 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Select value={pickedUserId} onValueChange={setPickedUserId}>
-                  <SelectTrigger className="h-9 text-sm flex-1">
-                    <SelectValue placeholder="Selecionar membro..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableForTeam.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        <span className="inline-flex items-center gap-2 min-w-0 w-full">
-                          <Avatar className="h-5 w-5 shrink-0">
-                            {p.avatar_url ? <AvatarImage src={p.avatar_url} alt={p.full_name} /> : null}
-                            <AvatarFallback className="text-[9px]">{p.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <span className="truncate">{p.full_name}{p.sector ? ` — ${p.sector}` : ""}</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button type="button" size="sm" variant="outline" className="h-9 gap-1" onClick={addTeamMember} disabled={!pickedUserId}>
-                  <UserPlus className="w-4 h-4" /> Adicionar
-                </Button>
-              </div>
+              <PersonCombobox
+                variant="add"
+                people={availableForTeam}
+                placeholder="Adicionar membro por nome, setor ou função..."
+                onSelect={(p) => addTeamMember(p)}
+              />
             </div>
           </div>
           <DialogFooter>

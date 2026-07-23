@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DateChip } from "@/components/DateChip";
+import { PersonCombobox } from "@/components/PersonCombobox";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -96,6 +97,7 @@ interface PersonOption {
   id: string;
   full_name: string;
   sector: string | null;
+  role_title?: string | null;
   email?: string | null;
   avatar_url?: string | null;
 }
@@ -109,6 +111,7 @@ function normalizePersonOptions(options: Array<Partial<PersonOption> | null | un
         : `person-${option.full_name.trim()}-${option.sector ?? "no-sector"}-${index}`,
       full_name: option.full_name.trim(),
       sector: option.sector ?? null,
+      role_title: option.role_title ?? null,
       email: option.email ?? null,
       avatar_url: option.avatar_url ?? null,
     }));
@@ -552,7 +555,7 @@ export const EditActivityDialog = ({
     }
 
     // Fetch all active profiles for participants dropdown
-    supabase.from("profiles").select("id, full_name, sector, email, avatar_url").eq("is_active", true).then(({ data }) => {
+    supabase.from("profiles").select("id, full_name, sector, role_title, email, avatar_url").eq("is_active", true).then(({ data }) => {
       if (data) setAllProfiles(normalizePersonOptions(data));
     });
 
@@ -636,7 +639,7 @@ export const EditActivityDialog = ({
       supabase.from("project_members").select("user_id").eq("project_id", projectId).then(({ data: memberData }) => {
         if (memberData && memberData.length > 0) {
           const userIds = memberData.map(m => m.user_id);
-          supabase.from("profiles").select("id, full_name, sector, email, avatar_url").in("id", userIds).then(({ data: profiles }) => {
+          supabase.from("profiles").select("id, full_name, sector, role_title, email, avatar_url").in("id", userIds).then(({ data: profiles }) => {
             if (profiles) setMembers(normalizePersonOptions(profiles));
           });
         }
@@ -1542,60 +1545,16 @@ export const EditActivityDialog = ({
                 )}
                 {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
                 <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
-                  <Select
-                    value={formData.assigned_to || "_none"}
-                    onValueChange={(value) => setFormData({ ...formData, assigned_to: value === "_none" ? "" : value })}
-                  >
-                    <SelectTrigger className="h-8 text-xs w-full max-w-[320px]">
-                      {(() => {
-                        const selected = allProfiles.find((m) => m.full_name === formData.assigned_to);
-                        if (!selected && !formData.assigned_to) {
-                          return <div className="text-muted-foreground">Sem líder</div>;
-                        }
-                        if (!selected && formData.assigned_to) {
-                          return (
-                            <div className="flex items-center gap-1.5 min-w-0 w-full pr-1">
-                              <Avatar className="h-5 w-5 shrink-0">
-                                <AvatarFallback className="text-[9px]">{getAvatarInitials(formData.assigned_to)}</AvatarFallback>
-                              </Avatar>
-                              <span className="truncate leading-none">{formData.assigned_to}</span>
-                            </div>
-                          );
-                        }
-                        return (
-                          <div className="flex items-center gap-1.5 min-w-0 w-full pr-1">
-                            <Avatar className="h-5 w-5 shrink-0">
-                              {selected?.avatar_url ? <AvatarImage src={selected.avatar_url} alt={selected.full_name} /> : null}
-                              <AvatarFallback className="text-[9px]">{getAvatarInitials(selected?.full_name)}</AvatarFallback>
-                            </Avatar>
-                            <span className="truncate leading-none">
-                              {selected?.full_name}{selected?.sector ? ` — ${selected.sector}` : ""}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </SelectTrigger>
-                    <SelectContent
-                      position="popper"
-                      side="bottom"
-                      align="start"
-                      sideOffset={6}
-                      className="max-h-[min(320px,calc(100vh-180px))] overflow-y-auto"
-                    >
-                      <SelectItem value="_none">Sem líder</SelectItem>
-                      {allProfiles.map((m) => (
-                        <SelectItem key={m.id} value={m.full_name}>
-                          <div className="flex items-center gap-2 min-w-0 w-full">
-                            <Avatar className="h-5 w-5 shrink-0">
-                              {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
-                              <AvatarFallback className="text-[9px]">{getAvatarInitials(m.full_name)}</AvatarFallback>
-                            </Avatar>
-                            <span className="truncate leading-none">{m.full_name}{m.sector ? ` — ${m.sector}` : ""}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="w-full max-w-[320px]">
+                    <PersonCombobox
+                      people={allProfiles}
+                      value={allProfiles.find((m) => m.full_name === formData.assigned_to)?.id ?? null}
+                      placeholder="Sem líder"
+                      onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
+                      onClear={() => setFormData({ ...formData, assigned_to: "" })}
+                      className="h-8 text-xs"
+                    />
+                  </div>
                 </PropertyRow>
 
                 {/* Prioridade — método GUT */}
