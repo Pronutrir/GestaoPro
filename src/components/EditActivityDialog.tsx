@@ -721,17 +721,18 @@ export const EditActivityDialog = ({
     // EAP: um pai precisa ser agrupador para ter filhos. Se hoje é folha
     // (atividade/marco), promove a "pacote" antes de inserir — senão o trigger
     // rejeita. Pacote pode conter pacote, então é sempre seguro em qualquer nível.
+    // TOLERANTE: se o banco ainda não aceita 'pacote' (CHECK antigo, migration
+    // mínima pendente), a promoção falha silenciosamente e seguimos criando o
+    // subitem — o pai já funciona como agrupador por ter filhos.
     const parentType = toEapType((act as any).item_type);
     if (parentType === "atividade" || (act as any).is_milestone) {
       const { error: promoteErr } = await supabase
         .from("activities")
         .update({ item_type: "pacote", is_milestone: false } as any)
         .eq("id", act.id);
-      if (promoteErr) {
-        toast({ title: "Erro", description: "Não foi possível transformar em pacote.", variant: "destructive" });
-        return;
+      if (!promoteErr) {
+        setFormData((prev) => ({ ...prev, item_type: "pacote", is_milestone: false }));
       }
-      setFormData((prev) => ({ ...prev, item_type: "pacote", is_milestone: false }));
     }
 
     await supabase.from("activities").insert({

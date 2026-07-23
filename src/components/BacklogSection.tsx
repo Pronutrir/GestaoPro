@@ -334,20 +334,19 @@ export const BacklogSection = ({
       return;
     }
     // EAP: se o pai é folha (atividade/marco), promove a "pacote" antes de
-    // inserir, para respeitar a regra de aninhamento imposta pelo trigger.
+    // inserir. TOLERANTE: se o banco ainda não aceita 'pacote' (CHECK antigo,
+    // migration mínima pendente), NÃO aborta — segue criando o subitem. O pai
+    // continua funcionando como agrupador por ter filhos; o tipo é ajustado
+    // quando a migration entrar.
     if (parentId) {
       const parent = backlogActs.find((a) => a.id === parentId);
       const parentType = parent?.item_type || "atividade";
       const parentIsLeaf = !parent || parent.is_milestone || (parentType !== "fase" && parentType !== "pacote");
       if (parentIsLeaf) {
-        const { error: promoteErr } = await supabase
+        await supabase
           .from("activities")
           .update({ item_type: "pacote", is_milestone: false } as any)
-          .eq("id", parentId);
-        if (promoteErr) {
-          toast({ title: "Erro ao criar tarefa", variant: "destructive" });
-          return;
-        }
+          .eq("id", parentId); // erro ignorado de propósito (ver comentário acima)
       }
     }
 
