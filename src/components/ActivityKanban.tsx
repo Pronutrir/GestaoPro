@@ -46,6 +46,11 @@ import {
   ChevronsRight,
   ChevronsLeft,
   SlidersHorizontal,
+  Flag,
+  Building2,
+  Tag as TagIcon,
+  Calendar as CalendarIcon,
+  Users,
   Link2,
   LayoutGrid,
   User,
@@ -382,6 +387,8 @@ interface ActivityKanbanProps {
   profilesMap?: Record<string, string>;
   /** Mapa de id de perfil → avatar_url */
   profileAvatarMap?: Record<string, string>;
+  /** Mapa de id/nome de perfil → setor (para raia por setor) */
+  profileSectorMap?: Record<string, string>;
 }
 
 type HoursStat = {
@@ -1869,6 +1876,7 @@ export const ActivityKanban = ({
   onOpenCreateTask,
   profilesMap = {},
   profileAvatarMap = {},
+  profileSectorMap = {},
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -1982,7 +1990,62 @@ export const ActivityKanban = ({
   }, [onlyMine, onlyMineKey]);
 
   // Agrupamento em raias (swimlanes): nenhum / por fase / por responsável.
-  const [groupBy, setGroupBy] = useState<"none" | "phase" | "assignee">("none");
+  const [groupBy, setGroupBy] = useState<"none" | "phase" | "assignee" | "priority" | "sector" | "tag" | "blocked" | "due" | "customGroup">("none");
+  // Times de raia (nível B): grupos nomeados de pessoas, por projeto,
+  // compartilhados via banco. Alimentam a "Raia por time" quando o usuário
+  // escolhe agrupar por time — não alteram o comportamento padrão do Kanban.
+  type LaneTeam = { id: string; name: string; members: string[] };
+  const [laneGroups, setLaneGroups] = useState<LaneTeam[]>([]);
+  const [manageGroupsOpen, setManageGroupsOpen] = useState(false);
+  const [teamsUnavailable, setTeamsUnavailable] = useState(false); // migration ainda não aplicada
+
+  const fetchTeams = useCallback(async () => {
+    const { data, error } = await (supabase as any)
+      .from("kanban_teams")
+      .select("id, name, members")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true });
+    if (error) {
+      // Tabela ausente na VM: mantém o recurso desabilitado sem quebrar o board.
+      if (/kanban_teams|relation|does not exist|schema cache/i.test(error.message)) {
+        setTeamsUnavailable(true);
+      }
+      return;
+    }
+    setTeamsUnavailable(false);
+    setLaneGroups((data as LaneTeam[]) || []);
+  }, [projectId]);
+
+  useEffect(() => { fetchTeams(); }, [fetchTeams]);
+
+  const createTeam = useCallback(async () => {
+    const { data, error } = await (supabase as any)
+      .from("kanban_teams")
+      .insert({ project_id: projectId, name: "", members: [] })
+      .select("id, name, members")
+      .single();
+    if (error) {
+      if (/kanban_teams|relation|does not exist|schema cache/i.test(error.message)) {
+        setTeamsUnavailable(true);
+        toast({ title: "Times indisponíveis", description: "Aplique a migration kanban_teams na VM para habilitar.", variant: "destructive" });
+      }
+      return;
+    }
+    setLaneGroups((gs) => [...gs, data as LaneTeam]);
+  }, [projectId, toast]);
+
+  const saveTeam = useCallback(async (team: LaneTeam) => {
+    setLaneGroups((gs) => gs.map((x) => x.id === team.id ? team : x)); // otimista
+    await (supabase as any)
+      .from("kanban_teams")
+      .update({ name: team.name, members: team.members, updated_at: new Date().toISOString() })
+      .eq("id", team.id);
+  }, []);
+
+  const deleteTeam = useCallback(async (id: string) => {
+    setLaneGroups((gs) => gs.filter((x) => x.id !== id));
+    await (supabase as any).from("kanban_teams").delete().eq("id", id);
+  }, []);
 
   // Filtros do board: busca textual + responsável + fase + prioridade.
   const filtersKey = `kanban-filters:${projectId}`;
@@ -1991,10 +2054,14 @@ export const ActivityKanban = ({
   const [filterAssignees, setFilterAssignees] = useState<Set<string>>(new Set());
   const [filterPhases, setFilterPhases] = useState<Set<string>>(new Set());
   const [filterPriorities, setFilterPriorities] = useState<Set<string>>(new Set());
-  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "completed">("all");
-  const [filterDue, setFilterDue] = useState<"all" | "overdue" | "week">("all");
+  // Prazo: intervalo de datas (YYYY-MM-DD). Vazio = qualquer prazo.
+  const [filterDueRange, setFilterDueRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
+  const [filterTags, setFilterTags] = useState<Set<string>>(new Set());
+  const [filterBlocked, setFilterBlocked] = useState(false);
   // Busca local dentro do painel de filtros (só para a lista de responsáveis).
   const [assigneeQuery, setAssigneeQuery] = useState("");
+  // Seção aberta no painel de filtros (accordion). null = todas fechadas.
+  const [filterOpenSection, setFilterOpenSection] = useState<string | null>(null);
 
   // Carrega filtros salvos ao montar.
   useEffect(() => {
@@ -2006,8 +2073,9 @@ export const ActivityKanban = ({
       if (Array.isArray(f.assignees)) setFilterAssignees(new Set(f.assignees));
       if (Array.isArray(f.phases)) setFilterPhases(new Set(f.phases));
       if (Array.isArray(f.priorities)) setFilterPriorities(new Set(f.priorities));
-      if (typeof f.status === "string") setFilterStatus(f.status);
-      if (typeof f.due === "string") setFilterDue(f.due);
+      if (f.dueRange && typeof f.dueRange.from === "string" && typeof f.dueRange.to === "string") setFilterDueRange(f.dueRange);
+      if (Array.isArray(f.tags)) setFilterTags(new Set(f.tags));
+      if (typeof f.blocked === "boolean") setFilterBlocked(f.blocked);
     } catch { /* ignore */ }
   }, [filtersKey]);
   // Persiste os filtros (nao a busca textual, que e efemera).
@@ -2018,19 +2086,23 @@ export const ActivityKanban = ({
         assignees: Array.from(filterAssignees),
         phases: Array.from(filterPhases),
         priorities: Array.from(filterPriorities),
-        status: filterStatus, due: filterDue,
+        dueRange: filterDueRange,
+        tags: Array.from(filterTags),
+        blocked: filterBlocked,
       }));
     } catch { /* quota */ }
-  }, [filtersKey, filterAssignees, filterPhases, filterPriorities, filterStatus, filterDue]);
+  }, [filtersKey, filterAssignees, filterPhases, filterPriorities, filterDueRange, filterTags, filterBlocked]);
 
+  const dueActive = !!(filterDueRange.from || filterDueRange.to);
   const hasActiveFilters =
     search.trim() !== "" ||
     filterAssignees.size > 0 || filterPhases.size > 0 || filterPriorities.size > 0 ||
-    filterStatus !== "all" || filterDue !== "all";
+    dueActive || filterTags.size > 0 || filterBlocked;
   const clearFilters = () => {
     setSearch("");
     setFilterAssignees(new Set()); setFilterPhases(new Set()); setFilterPriorities(new Set());
-    setFilterStatus("all"); setFilterDue("all");
+    setFilterDueRange({ from: "", to: "" });
+    setFilterTags(new Set()); setFilterBlocked(false);
   };
   // Helper para alternar um valor num Set de filtro.
   const toggleInSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, value: string) =>
@@ -2040,6 +2112,12 @@ export const ActivityKanban = ({
       return next;
     });
 
+  // Colunas de bloqueio (para o filtro "Bloqueadas").
+  const blockedStageIdSet = useMemo(
+    () => new Set(stages.filter((s) => s.is_blocked).map((s) => s.id)),
+    [stages],
+  );
+
   const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   const matchesFilters = useCallback((a: Activity) => {
     if (filterAssignees.size > 0 && !filterAssignees.has(a.assigned_to || "")) return false;
@@ -2048,18 +2126,20 @@ export const ActivityKanban = ({
       if (!filterPhases.has(key)) return false;
     }
     if (filterPriorities.size > 0 && !filterPriorities.has(normalizeGut(a.priority))) return false;
-    if (filterStatus === "completed" && a.status !== "completed") return false;
-    if (filterStatus === "pending" && a.status === "completed") return false;
-    if (filterDue !== "all") {
-      const end = a.end_date ? new Date(a.end_date) : null;
-      const done = a.status === "completed";
-      if (filterDue === "overdue") {
-        if (done || !end || end >= new Date(new Date().toDateString())) return false;
-      } else if (filterDue === "week") {
-        if (done || !end) return false;
-        const in7 = new Date(); in7.setDate(in7.getDate() + 7);
-        if (end < new Date(new Date().toDateString()) || end > in7) return false;
-      }
+    if (filterDueRange.from || filterDueRange.to) {
+      // Sem prazo definido não entra num filtro por período.
+      const end = a.end_date ? a.end_date.slice(0, 10) : null;
+      if (!end) return false;
+      if (filterDueRange.from && end < filterDueRange.from) return false;
+      if (filterDueRange.to && end > filterDueRange.to) return false;
+    }
+    if (filterTags.size > 0) {
+      const tags = a.tags || [];
+      if (!tags.some((t) => filterTags.has(t))) return false;
+    }
+    if (filterBlocked) {
+      const stageBlocked = a.workflow_stage_id ? blockedStageIdSet.has(a.workflow_stage_id) : false;
+      if (!stageBlocked && !a.blocked_since) return false;
     }
     const q = normalize(search.trim());
     if (q) {
@@ -2067,12 +2147,19 @@ export const ActivityKanban = ({
       if (!hay.includes(q)) return false;
     }
     return true;
-  }, [filterAssignees, filterPhases, filterPriorities, filterStatus, filterDue, search]);
+  }, [filterAssignees, filterPhases, filterPriorities, filterDueRange, filterTags, filterBlocked, blockedStageIdSet, search]);
 
   // Opções de responsável (nomes distintos presentes nas atividades).
   const assigneeOptions = useMemo(() => {
     const set = new Set<string>();
     activities.forEach((a) => { if (a.assigned_to) set.add(a.assigned_to); });
+    return Array.from(set).sort((x, y) => x.localeCompare(y));
+  }, [activities]);
+
+  // Tags distintas presentes nas atividades (para o filtro de etiquetas).
+  const tagOptions = useMemo(() => {
+    const set = new Set<string>();
+    activities.forEach((a) => (a.tags || []).forEach((t) => { if (t) set.add(t); }));
     return Array.from(set).sort((x, y) => x.localeCompare(y));
   }, [activities]);
 
@@ -2093,8 +2180,91 @@ export const ActivityKanban = ({
       list.push({ id: "__none__", label: "Sem responsável", match: (a: Activity) => !a.assigned_to });
       return list;
     }
+    if (groupBy === "priority") {
+      const order: { id: GutLevel; label: string }[] = [
+        { id: "urgente", label: "Urgente" },
+        { id: "critica", label: "Crítica" },
+        { id: "alta", label: "Alta" },
+        { id: "media", label: "Média" },
+        { id: "baixa", label: "Baixa" },
+        { id: "pendente", label: "Sem prioridade" },
+      ];
+      return order.map((o) => ({
+        id: o.id, label: o.label, match: (a: Activity) => normalizeGut(a.priority) === o.id,
+      }));
+    }
+    if (groupBy === "sector") {
+      // Resolve o setor de uma atividade a partir do responsável.
+      const sectorOf = (a: Activity) => {
+        const who = a.assigned_to || "";
+        return (who && profileSectorMap[who]) ? profileSectorMap[who] : "";
+      };
+      const set = new Set<string>();
+      activities.forEach((a) => { const s = sectorOf(a); if (s) set.add(s); });
+      const list = Array.from(set).sort((x, y) => x.localeCompare(y)).map((s) => ({
+        id: s, label: s, match: (a: Activity) => sectorOf(a) === s,
+      }));
+      list.push({ id: "__none__", label: "Sem setor", match: (a: Activity) => !sectorOf(a) });
+      return list;
+    }
+    if (groupBy === "tag") {
+      const list = tagOptions.map((t) => ({
+        id: t, label: t, match: (a: Activity) => (a.tags || []).includes(t),
+      }));
+      list.push({ id: "__none__", label: "Sem etiqueta", match: (a: Activity) => !(a.tags && a.tags.length > 0) });
+      return list;
+    }
+    if (groupBy === "blocked") {
+      const isBlk = (a: Activity) => {
+        const stageBlocked = a.workflow_stage_id ? blockedStageIdSet.has(a.workflow_stage_id) : false;
+        return stageBlocked || !!a.blocked_since;
+      };
+      return [
+        { id: "blocked", label: "Bloqueadas", match: (a: Activity) => isBlk(a) },
+        { id: "flowing", label: "Fluindo", match: (a: Activity) => !isBlk(a) },
+      ];
+    }
+    if (groupBy === "due") {
+      const startOfToday = new Date(new Date().toDateString());
+      const endOfWeek = new Date(startOfToday); endOfWeek.setDate(endOfWeek.getDate() + (7 - startOfToday.getDay()));
+      const endOfNextWeek = new Date(endOfWeek); endOfNextWeek.setDate(endOfNextWeek.getDate() + 7);
+      const dueBucket = (a: Activity): string => {
+        if (!a.end_date) return "nodate";
+        const end = new Date(a.end_date.slice(0, 10) + "T12:00:00");
+        if (end < startOfToday) return "overdue";
+        if (end <= endOfWeek) return "week";
+        if (end <= endOfNextWeek) return "next";
+        return "later";
+      };
+      const order: { id: string; label: string }[] = [
+        { id: "overdue", label: "Atrasadas" },
+        { id: "week", label: "Esta semana" },
+        { id: "next", label: "Próxima semana" },
+        { id: "later", label: "Depois" },
+        { id: "nodate", label: "Sem prazo" },
+      ];
+      return order.map((o) => ({
+        id: o.id, label: o.label, match: (a: Activity) => dueBucket(a) === o.id,
+      }));
+    }
+    if (groupBy === "customGroup") {
+      const valid = laneGroups.filter((g) => g.members.length > 0);
+      const list = valid.map((g) => {
+        const memberSet = new Set(g.members);
+        return {
+          id: g.id, label: g.name || "Grupo",
+          match: (a: Activity) => !!a.assigned_to && memberSet.has(a.assigned_to),
+        };
+      });
+      const allGrouped = new Set(valid.flatMap((g) => g.members));
+      list.push({
+        id: "__none__", label: "Outros",
+        match: (a: Activity) => !a.assigned_to || !allGrouped.has(a.assigned_to),
+      });
+      return list;
+    }
     return [];
-  }, [groupBy, phases, assigneeOptions]);
+  }, [groupBy, phases, assigneeOptions, activities, profileSectorMap, tagOptions, blockedStageIdSet, laneGroups]);
 
   const isMineActivity = useCallback(
     (a: Activity) => {
@@ -3071,7 +3241,7 @@ export const ActivityKanban = ({
         {(() => {
           const activeCount =
             filterAssignees.size + filterPhases.size + filterPriorities.size +
-            (filterStatus !== "all" ? 1 : 0) + (filterDue !== "all" ? 1 : 0);
+            (dueActive ? 1 : 0) + filterTags.size + (filterBlocked ? 1 : 0);
 
           const PRIORITIES: [string, string, string][] = [
             ["urgente", "Urgente", "bg-red-500"],
@@ -3080,8 +3250,12 @@ export const ActivityKanban = ({
             ["media", "Média", "bg-sky-500"],
             ["baixa", "Baixa", "bg-emerald-500"],
           ];
-          const STATUS: [string, string][] = [["all", "Todos"], ["pending", "Pendentes"], ["completed", "Concluídas"]];
-          const DUE: [string, string][] = [["all", "Qualquer"], ["overdue", "Atrasadas"], ["week", "≤ 7 dias"]];
+          // Formata YYYY-MM-DD -> dd/mm (sem drift de fuso).
+          const fmtBr = (ymd: string) => {
+            if (!ymd) return "";
+            const [y, m, d] = ymd.split("-");
+            return `${d}/${m}`;
+          };
 
           // Chip de escolha (toggle). `dot` opcional colore uma bolinha à esquerda.
           const Chip = ({ active, onClick, children, dot }: { active: boolean; onClick: () => void; children: React.ReactNode; dot?: string }) => (
@@ -3101,21 +3275,52 @@ export const ActivityKanban = ({
             </button>
           );
 
-          const SectionLabel = ({ children, count }: { children: React.ReactNode; count?: number }) => (
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</span>
-              {!!count && count > 0 && (
-                <span className="min-w-[15px] h-[15px] px-1 rounded-full bg-primary/15 text-primary text-[9px] font-bold flex items-center justify-center">{count}</span>
-              )}
-            </div>
-          );
-
           const filteredAssignees = assigneeQuery.trim()
             ? assigneeOptions.filter((n) => normalize(n).includes(normalize(assigneeQuery.trim())))
             : assigneeOptions;
 
+          // Resumo textual do que está selecionado em cada seção (mostrado quando fechada).
+          const priorityLabelMap: Record<string, string> = { urgente: "Urgente", critica: "Crítica", alta: "Alta", media: "Média", baixa: "Baixa" };
+          const summaryAssignee = filterAssignees.size === 0 ? "Todos"
+            : filterAssignees.size === 1 ? (profilesMap[[...filterAssignees][0]] ?? [...filterAssignees][0])
+            : `${filterAssignees.size} selecionados`;
+          const summaryPriority = filterPriorities.size === 0 ? "Todas"
+            : filterPriorities.size === 1 ? priorityLabelMap[[...filterPriorities][0]]
+            : `${filterPriorities.size} selecionadas`;
+          const summaryDue = !dueActive ? "Qualquer"
+            : filterDueRange.from && filterDueRange.to ? `${fmtBr(filterDueRange.from)} – ${fmtBr(filterDueRange.to)}`
+            : filterDueRange.from ? `A partir de ${fmtBr(filterDueRange.from)}`
+            : `Até ${fmtBr(filterDueRange.to)}`;
+          const summaryPhase = filterPhases.size === 0 ? "Todas" : `${filterPhases.size} selecionada${filterPhases.size > 1 ? "s" : ""}`;
+          const summaryTags = filterTags.size === 0 ? "Todas"
+            : filterTags.size === 1 ? [...filterTags][0]
+            : `${filterTags.size} selecionadas`;
+
+          // Cabeçalho clicável de cada seção do accordion.
+          const AccordionSection = ({ id, label, summary, active, children }: {
+            id: string; label: string; summary: string; active: boolean; children: React.ReactNode;
+          }) => {
+            const open = filterOpenSection === id;
+            return (
+              <div className="border-b last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => setFilterOpenSection(open ? null : id)}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                >
+                  <span className="text-[13px] font-medium text-foreground">{label}</span>
+                  <span className={cn("ml-auto text-xs truncate max-w-[140px]", active ? "text-primary font-medium" : "text-muted-foreground")}>
+                    {summary}
+                  </span>
+                  <ChevronDown className={cn("w-4 h-4 text-muted-foreground shrink-0 transition-transform", open && "rotate-180")} />
+                </button>
+                {open && <div className="px-4 pb-3 pt-0.5">{children}</div>}
+              </div>
+            );
+          };
+
           return (
-            <Popover onOpenChange={(o) => { if (!o) setAssigneeQuery(""); }}>
+            <Popover onOpenChange={(o) => { if (!o) { setAssigneeQuery(""); setFilterOpenSection(null); } }}>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className={cn("h-7 gap-1.5 text-xs", activeCount > 0 && "border-primary text-primary")}>
                   <Filter className="w-3.5 h-3.5" />
@@ -3127,15 +3332,12 @@ export const ActivityKanban = ({
                   )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent align="start" className="w-[min(560px,calc(100vw-2rem))] p-0" collisionPadding={12}>
+              <PopoverContent align="start" className="w-[300px] p-0" collisionPadding={12}>
                 {/* Cabeçalho */}
                 <div className="flex items-center justify-between px-4 py-2.5 border-b">
                   <div className="flex items-center gap-2">
                     <Filter className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-sm font-semibold">Filtros</span>
-                    {activeCount > 0 && (
-                      <span className="text-[11px] text-muted-foreground">{activeCount} ativo{activeCount > 1 ? "s" : ""}</span>
-                    )}
                   </div>
                   {activeCount > 0 && (
                     <button
@@ -3143,105 +3345,143 @@ export const ActivityKanban = ({
                       onClick={clearFilters}
                       className="text-xs text-muted-foreground hover:text-destructive inline-flex items-center gap-1 transition-colors"
                     >
-                      <XIcon className="w-3.5 h-3.5" /> Limpar tudo
+                      <XIcon className="w-3.5 h-3.5" /> Limpar
                     </button>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,220px)_1fr] divide-y sm:divide-y-0 sm:divide-x">
-                  {/* Coluna esquerda: Responsável (busca + lista com avatares) */}
-                  <div className="p-3 min-w-0">
-                    <SectionLabel count={filterAssignees.size}>Responsável</SectionLabel>
-                    <div className="relative mb-2">
-                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                {/* Seções recolhíveis */}
+                <AccordionSection id="assignee" label="Responsável" summary={summaryAssignee} active={filterAssignees.size > 0}>
+                  <div className="relative mb-2">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={assigneeQuery}
+                      onChange={(e) => setAssigneeQuery(e.target.value)}
+                      placeholder="Buscar pessoa..."
+                      className="h-8 pl-8 text-xs"
+                    />
+                  </div>
+                  <div className="max-h-[220px] overflow-y-auto -mx-1 px-1 space-y-0.5">
+                    {filteredAssignees.length === 0 && (
+                      <div className="px-2 py-6 text-center text-xs text-muted-foreground">Nenhuma pessoa</div>
+                    )}
+                    {filteredAssignees.map((name) => {
+                      const active = filterAssignees.has(name);
+                      const resolved = profilesMap[name] ?? name;
+                      const avatar = resolveAvatarFromLookup(name, resolved, profileAvatarMap);
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => toggleInSet(setFilterAssignees, name)}
+                          className={cn(
+                            "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-left transition-colors",
+                            active ? "bg-primary/10 text-primary" : "hover:bg-muted/60",
+                          )}
+                        >
+                          <Avatar className="h-4 w-4 shrink-0">
+                            {avatar ? <AvatarImage src={avatar} alt={resolved} /> : null}
+                            <AvatarFallback className="text-[7px] font-semibold">{getAvatarInitials(resolved)}</AvatarFallback>
+                          </Avatar>
+                          <span className="truncate flex-1">{resolved}</span>
+                          {active && <Check className="w-3.5 h-3.5 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </AccordionSection>
+
+                <AccordionSection id="priority" label="Prioridade" summary={summaryPriority} active={filterPriorities.size > 0}>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PRIORITIES.map(([v, label, dot]) => (
+                      <Chip key={v} active={filterPriorities.has(v)} onClick={() => toggleInSet(setFilterPriorities, v)} dot={dot}>
+                        {label}
+                      </Chip>
+                    ))}
+                  </div>
+                </AccordionSection>
+
+                <AccordionSection id="due" label="Prazo" summary={summaryDue} active={dueActive}>
+                  {/* Campos De/Até com date-picker nativo do navegador (localizado, digitável).
+                      Compactos e empilhados para nunca estourar a largura do painel. */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="w-8 text-xs text-muted-foreground shrink-0">De</label>
                       <Input
-                        value={assigneeQuery}
-                        onChange={(e) => setAssigneeQuery(e.target.value)}
-                        placeholder="Buscar pessoa..."
-                        className="h-8 pl-8 text-xs"
+                        type="date"
+                        value={filterDueRange.from}
+                        max={filterDueRange.to || undefined}
+                        onChange={(e) => setFilterDueRange((r) => ({ ...r, from: e.target.value }))}
+                        className="h-8 text-xs flex-1"
                       />
                     </div>
-                    <div className="max-h-[240px] overflow-y-auto -mx-1 px-1 space-y-0.5">
-                      {filteredAssignees.length === 0 && (
-                        <div className="px-2 py-6 text-center text-xs text-muted-foreground">Nenhuma pessoa</div>
-                      )}
-                      {filteredAssignees.map((name) => {
-                        const active = filterAssignees.has(name);
-                        const resolved = profilesMap[name] ?? name;
-                        const avatar = resolveAvatarFromLookup(name, resolved, profileAvatarMap);
-                        return (
-                          <button
-                            key={name}
-                            type="button"
-                            onClick={() => toggleInSet(setFilterAssignees, name)}
-                            className={cn(
-                              "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-left transition-colors",
-                              active ? "bg-primary/10 text-primary" : "hover:bg-muted/60",
-                            )}
-                          >
-                            <Avatar className="h-5 w-5 shrink-0">
-                              {avatar ? <AvatarImage src={avatar} alt={resolved} /> : null}
-                              <AvatarFallback className="text-[8px] font-semibold">{getAvatarInitials(resolved)}</AvatarFallback>
-                            </Avatar>
-                            <span className="truncate flex-1">{resolved}</span>
-                            {active && <Check className="w-3.5 h-3.5 shrink-0" />}
-                          </button>
-                        );
-                      })}
+                    <div className="flex items-center gap-2">
+                      <label className="w-8 text-xs text-muted-foreground shrink-0">Até</label>
+                      <Input
+                        type="date"
+                        value={filterDueRange.to}
+                        min={filterDueRange.from || undefined}
+                        onChange={(e) => setFilterDueRange((r) => ({ ...r, to: e.target.value }))}
+                        className="h-8 text-xs flex-1"
+                      />
                     </div>
-                  </div>
-
-                  {/* Coluna direita: chips de baixa cardinalidade */}
-                  <div className="p-3 space-y-4">
-                    <div>
-                      <SectionLabel count={filterPriorities.size}>Prioridade</SectionLabel>
-                      <div className="flex flex-wrap gap-1.5">
-                        {PRIORITIES.map(([v, label, dot]) => (
-                          <Chip key={v} active={filterPriorities.has(v)} onClick={() => toggleInSet(setFilterPriorities, v)} dot={dot}>
-                            {label}
-                          </Chip>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <SectionLabel count={filterStatus !== "all" ? 1 : 0}>Status</SectionLabel>
-                      <div className="flex flex-wrap gap-1.5">
-                        {STATUS.map(([v, label]) => (
-                          <Chip key={v} active={filterStatus === v && v !== "all"} onClick={() => setFilterStatus(v as typeof filterStatus)}>
-                            {label}
-                          </Chip>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <SectionLabel count={filterDue !== "all" ? 1 : 0}>Prazo</SectionLabel>
-                      <div className="flex flex-wrap gap-1.5">
-                        {DUE.map(([v, label]) => (
-                          <Chip key={v} active={filterDue === v && v !== "all"} onClick={() => setFilterDue(v as typeof filterDue)}>
-                            {label}
-                          </Chip>
-                        ))}
-                      </div>
-                    </div>
-
-                    {(phases.length > 0) && (
-                      <div>
-                        <SectionLabel count={filterPhases.size}>Fase</SectionLabel>
-                        <div className="flex flex-wrap gap-1.5">
-                          {phases.map((p) => (
-                            <Chip key={p.id} active={filterPhases.has(p.id)} onClick={() => toggleInSet(setFilterPhases, p.id)}>
-                              {p.title}
-                            </Chip>
-                          ))}
-                          <Chip active={filterPhases.has("__none__")} onClick={() => toggleInSet(setFilterPhases, "__none__")}>
-                            Sem fase
-                          </Chip>
-                        </div>
-                      </div>
+                    {dueActive && (
+                      <button
+                        type="button"
+                        onClick={() => setFilterDueRange({ from: "", to: "" })}
+                        className="text-[11px] text-muted-foreground hover:text-destructive inline-flex items-center gap-1"
+                      >
+                        <XIcon className="w-3 h-3" /> Limpar período
+                      </button>
                     )}
                   </div>
+                </AccordionSection>
+
+                {phases.length > 0 && (
+                  <AccordionSection id="phase" label="Fase" summary={summaryPhase} active={filterPhases.size > 0}>
+                    <div className="flex flex-wrap gap-1.5">
+                      {phases.map((p) => (
+                        <Chip key={p.id} active={filterPhases.has(p.id)} onClick={() => toggleInSet(setFilterPhases, p.id)}>
+                          {p.title}
+                        </Chip>
+                      ))}
+                      <Chip active={filterPhases.has("__none__")} onClick={() => toggleInSet(setFilterPhases, "__none__")}>
+                        Sem fase
+                      </Chip>
+                    </div>
+                  </AccordionSection>
+                )}
+
+                {tagOptions.length > 0 && (
+                  <AccordionSection id="tags" label="Etiquetas" summary={summaryTags} active={filterTags.size > 0}>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tagOptions.map((t) => (
+                        <Chip key={t} active={filterTags.has(t)} onClick={() => toggleInSet(setFilterTags, t)}>
+                          {t}
+                        </Chip>
+                      ))}
+                    </div>
+                  </AccordionSection>
+                )}
+
+                {/* Bloqueadas: toggle simples direto no cabeçalho da seção */}
+                <div className="border-b last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => setFilterBlocked((v) => !v)}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                  >
+                    <span className="text-[13px] font-medium text-foreground">Apenas bloqueadas</span>
+                    <span className={cn(
+                      "ml-auto w-9 h-5 rounded-full relative transition-colors shrink-0",
+                      filterBlocked ? "bg-primary" : "bg-muted-foreground/30",
+                    )}>
+                      <span className={cn(
+                        "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-background transition-transform",
+                        filterBlocked && "translate-x-4",
+                      )} />
+                    </span>
+                  </button>
                 </div>
 
                 {/* Rodapé: contador de resultado */}
@@ -3265,18 +3505,58 @@ export const ActivityKanban = ({
         )}
 
         <div className="ml-auto flex items-center gap-2">
-        {/* Agrupar em raias (swimlanes) */}
-        <Select value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)}>
-          <SelectTrigger className="h-7 w-auto min-w-[120px] text-xs gap-1" title="Agrupar cards em raias horizontais">
-            <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Sem raias</SelectItem>
-            <SelectItem value="phase">Raias por fase</SelectItem>
-            <SelectItem value="assignee">Raias por responsável</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Agrupar em raias (swimlanes) — menu clicável de critérios */}
+        {(() => {
+          const laneOptions: { id: typeof groupBy; label: string; icon: React.ReactNode }[] = [
+            { id: "none", label: "Sem raias", icon: <XIcon className="w-3.5 h-3.5" /> },
+            { id: "phase", label: "Por fase", icon: <Layers className="w-3.5 h-3.5" /> },
+            { id: "assignee", label: "Por responsável", icon: <User className="w-3.5 h-3.5" /> },
+            { id: "sector", label: "Por setor", icon: <Building2 className="w-3.5 h-3.5" /> },
+            { id: "priority", label: "Por prioridade", icon: <Flag className="w-3.5 h-3.5" /> },
+            { id: "tag", label: "Por etiqueta", icon: <TagIcon className="w-3.5 h-3.5" /> },
+            { id: "due", label: "Por prazo", icon: <CalendarIcon className="w-3.5 h-3.5" /> },
+            { id: "blocked", label: "Por bloqueio", icon: <AlertCircle className="w-3.5 h-3.5" /> },
+            { id: "customGroup", label: "Por time", icon: <Users className="w-3.5 h-3.5" /> },
+          ];
+          const current = laneOptions.find((o) => o.id === groupBy) ?? laneOptions[0];
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={groupBy !== "none" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  title="Agrupar cards em raias horizontais"
+                >
+                  <Layers className="w-3.5 h-3.5 shrink-0" />
+                  {groupBy === "none" ? "Raias" : current.label}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Agrupar em raias
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {laneOptions.map((o) => (
+                  <DropdownMenuItem
+                    key={o.id}
+                    onSelect={() => setGroupBy(o.id)}
+                    className="gap-2 text-xs"
+                  >
+                    <span className="text-muted-foreground">{o.icon}</span>
+                    <span className="flex-1">{o.label}</span>
+                    {groupBy === o.id && <Check className="w-3.5 h-3.5 text-primary" />}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setManageGroupsOpen(true)} className="gap-2 text-xs">
+                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="flex-1">Gerenciar times…</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        })()}
         <Button
           variant={onlyMine ? "default" : "outline"}
           size="sm"
@@ -3556,7 +3836,14 @@ export const ActivityKanban = ({
                 return (
                   <div key={lane.id} className="rounded-lg border border-border/60 bg-background/40">
                     <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/60 bg-muted/40 rounded-t-lg sticky left-0">
-                      {groupBy === "phase" ? <Layers className="w-3.5 h-3.5 text-primary" /> : <User className="w-3.5 h-3.5 text-muted-foreground" />}
+                      {groupBy === "phase" ? <Layers className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "priority" ? <Flag className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "sector" ? <Building2 className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "tag" ? <TagIcon className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "due" ? <CalendarIcon className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "blocked" ? <AlertCircle className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "customGroup" ? <Users className="w-3.5 h-3.5 text-primary" />
+                        : <User className="w-3.5 h-3.5 text-muted-foreground" />}
                       <span className="text-xs font-semibold">{lane.label}</span>
                       <span className="text-[10px] text-muted-foreground">{laneCount} {laneCount === 1 ? "card" : "cards"}</span>
                     </div>
@@ -3683,6 +3970,96 @@ export const ActivityKanban = ({
             <Button variant="outline" onClick={() => setCreateStoryActivity(null)}>Cancelar</Button>
             <Button onClick={handleCreateStory} disabled={!createStoryTitle.trim() || createStoryLoading}>
               {createStoryLoading ? "Criando..." : "Criar História"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Gerenciar grupos de raia (estilo Jira: uma raia agrega vários responsáveis) */}
+      <Dialog open={manageGroupsOpen} onOpenChange={setManageGroupsOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Times</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-1">
+            Crie times de pessoas (compartilhados com o projeto). Ao usar “Raias por time”, cada time vira uma raia com as atividades de qualquer um dos seus membros.
+          </p>
+
+          {teamsUnavailable && (
+            <div className="text-xs text-warning bg-warning/10 border border-warning/30 rounded-md px-3 py-2">
+              Os times ainda não estão disponíveis: aplique a migration <span className="font-mono">kanban_teams</span> no banco (VM) para habilitar.
+            </div>
+          )}
+
+          <div className="space-y-3 max-h-[55vh] overflow-y-auto py-1">
+            {laneGroups.length === 0 && !teamsUnavailable && (
+              <div className="text-center text-xs text-muted-foreground py-6 border border-dashed rounded-lg">
+                Nenhum time ainda. Clique em “Novo time” para começar.
+              </div>
+            )}
+            {laneGroups.map((g) => (
+              <div key={g.id} className="border rounded-lg p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={g.name}
+                    placeholder="Nome do time (ex.: Time TI)"
+                    onChange={(e) => setLaneGroups((gs) => gs.map((x) => x.id === g.id ? { ...x, name: e.target.value } : x))}
+                    onBlur={() => saveTeam(g)}
+                    className="h-8 text-sm flex-1"
+                  />
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                    {g.members.length} {g.members.length === 1 ? "membro" : "membros"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => deleteTeam(g.id)}
+                    className="h-8 w-8 flex items-center justify-center rounded text-destructive hover:bg-destructive/10 shrink-0"
+                    title="Remover time"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {assigneeOptions.length === 0 && <span className="text-xs text-muted-foreground">Nenhuma pessoa nas atividades.</span>}
+                  {assigneeOptions.map((name) => {
+                    const inGroup = g.members.includes(name);
+                    const resolved = profilesMap[name] ?? name;
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => saveTeam({
+                          ...g,
+                          members: inGroup ? g.members.filter((m) => m !== name) : [...g.members, name],
+                        })}
+                        className={cn(
+                          "inline-flex items-center gap-1 h-7 rounded-full border px-2.5 text-xs transition-colors",
+                          inGroup ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted/60",
+                        )}
+                      >
+                        {inGroup && <Check className="w-3 h-3" />}
+                        {resolved}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={createTeam}
+              disabled={teamsUnavailable}
+              className="gap-1.5"
+            >
+              <Plus className="w-4 h-4" /> Novo time
+            </Button>
+            <Button
+              onClick={() => { setManageGroupsOpen(false); setGroupBy("customGroup"); }}
+              disabled={laneGroups.filter((g) => g.members.length > 0).length === 0}
+            >
+              Aplicar raias por time
             </Button>
           </DialogFooter>
         </DialogContent>

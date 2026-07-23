@@ -196,6 +196,8 @@ export default function ProjectDetailsPage() {
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
   const [profilesMap, setProfilesMap] = useState<Record<string, string>>({});
   const [profileAvatarMap, setProfileAvatarMap] = useState<Record<string, string>>({});
+  // Mapa nome/id da pessoa -> setor, para a raia "por setor" do Kanban.
+  const [profileSectorMap, setProfileSectorMap] = useState<Record<string, string>>({});
   const [userPerms, setUserPerms] = useState<{ can_create: boolean; can_edit: boolean; can_delete: boolean; can_move: boolean } | null>(null);
   const [pendingChangeRequests, setPendingChangeRequests] = useState(0);
 
@@ -743,18 +745,25 @@ export default function ProjectDetailsPage() {
     setMembers(profiles.filter((p) => p.full_name) as { full_name: string; sector: string | null }[]);
 
     const map: Record<string, string> = {};
+    const sectorMap: Record<string, string> = {};
     const avatarMap = buildAvatarLookupMap(profiles);
 
     profiles.forEach((profile) => {
       const fullName = typeof profile.full_name === "string" ? profile.full_name.trim() : "";
+      const sector = typeof profile.sector === "string" ? profile.sector.trim() : "";
 
       if (profile.id && fullName) {
         map[profile.id] = fullName;
+      }
+      if (sector) {
+        if (profile.id) sectorMap[profile.id] = sector;
+        if (fullName) sectorMap[fullName] = sector;
       }
     });
 
     setProfilesMap(map);
     setProfileAvatarMap(avatarMap);
+    setProfileSectorMap(sectorMap);
   };
 
   const fetchActiveSprint = async () => {
@@ -1374,6 +1383,7 @@ export default function ProjectDetailsPage() {
                 projectLocked={isProjectConcluded}
                 isQualityProject={isQualityProject}
                 profilesMap={profilesMap}
+                profileSectorMap={profileSectorMap}
                 profileAvatarMap={profileAvatarMap}
                 onOpenCreateTask={(stageId) => {
                   if (isProjectConcluded) {
