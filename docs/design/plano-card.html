@@ -1,0 +1,273 @@
+<title>Plano — Card configurável do Kanban</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --surface: #ffffff; --surface-2: #f1f2f5;
+    --border: #e2e4ea; --border-strong: #cfd2db;
+    --ink: #1c1f26; --ink-2: #565b66; --ink-3: #868b96;
+    --accent: #5b5bd6; --accent-soft: #ecebfb;
+    --ok: #17915b; --ok-soft: #e2f4ea; --warn: #b3730a; --warn-soft: #fbeed6;
+    --bad: #cc3340; --bad-soft: #fbe4e6;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141619; --surface: #1c1f24; --surface-2: #23262c;
+      --border: #2e323a; --border-strong: #3b4048;
+      --ink: #e7e9ee; --ink-2: #a6abb5; --ink-3: #757b86;
+      --accent: #8b8bf0; --accent-soft: #262640;
+      --ok: #43c98a; --ok-soft: #16301f; --warn: #e0a44a; --warn-soft: #302716;
+      --bad: #f0737f; --bad-soft: #331a1d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141619; --surface: #1c1f24; --surface-2: #23262c;
+    --border: #2e323a; --border-strong: #3b4048;
+    --ink: #e7e9ee; --ink-2: #a6abb5; --ink-3: #757b86;
+    --accent: #8b8bf0; --accent-soft: #262640;
+    --ok: #43c98a; --ok-soft: #16301f; --warn: #e0a44a; --warn-soft: #302716;
+    --bad: #f0737f; --bad-soft: #331a1d;
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f8fa; --surface: #ffffff; --surface-2: #f1f2f5;
+    --border: #e2e4ea; --border-strong: #cfd2db;
+    --ink: #1c1f26; --ink-2: #565b66; --ink-3: #868b96;
+    --accent: #5b5bd6; --accent-soft: #ecebfb;
+    --ok: #17915b; --ok-soft: #e2f4ea; --warn: #b3730a; --warn-soft: #fbeed6;
+    --bad: #cc3340; --bad-soft: #fbe4e6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  h1 { font-size: 30px; line-height: 1.15; margin: 6px 0 10px; text-wrap: balance; letter-spacing: -.01em; }
+  .lede { color: var(--ink-2); font-size: 15px; max-width: 64ch; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .pill { font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--ink-2); background: var(--surface); }
+  .pill.no { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+
+  section { margin-top: 46px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 2px solid var(--ink); padding-bottom: 8px; margin-bottom: 4px; }
+  .sec-num { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent); }
+  .sec-head h2 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+  .sec-sub { color: var(--ink-2); font-size: 14px; margin: 12px 0 20px; }
+
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 720px) { .ba { grid-template-columns: 1fr; } }
+  .ba-col { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: var(--surface); }
+  .ba-col .label { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+  .ba-col.after .label { color: var(--accent); }
+  .ba-col .label::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: var(--ink-3); }
+  .ba-col.after .label::before { background: var(--accent); }
+  .ba-note { color: var(--ink-2); font-size: 13px; margin-top: 14px; }
+
+  /* ---- Card mockup ---- */
+  .kc { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  .kc.busy { border-color: var(--border-strong); }
+  .kc-bc { font-size: 10px; color: var(--ink-3); margin-bottom: 6px; }
+  .kc-head { display: flex; align-items: flex-start; gap: 6px; }
+  .kc-badge-type { width: 16px; height: 16px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-size: 9px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none; margin-top: 1px; }
+  .kc-wbs { font-family: var(--mono); font-size: 9px; color: var(--ink-3); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+  .kc-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .kc-desc { font-size: 11px; color: var(--ink-2); margin: 6px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kc-prog { display: flex; align-items: center; gap: 6px; margin: 8px 0; }
+  .kc-prog .bar { flex: 1; height: 4px; border-radius: 999px; background: var(--border); overflow: hidden; }
+  .kc-prog .bar > i { display: block; height: 100%; background: var(--accent); }
+  .kc-prog .pct { font-size: 10px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .kc-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .chip { font-size: 10px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border-strong); color: var(--ink-2); background: var(--surface); display: inline-flex; align-items: center; gap: 3px; }
+  .chip.pri { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); font-weight: 600; }
+  .av { width: 16px; height: 16px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 8px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .kc-subs { font-size: 11px; color: var(--accent); margin-top: 8px; }
+  .kc-subsummary { font-size: 10px; color: var(--ink-3); margin-top: 4px; background: var(--surface-2); border-radius: 5px; padding: 2px 6px; display: inline-block; }
+
+  /* ---- Config panel mockup ---- */
+  .cfg { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; max-width: 340px; }
+  .cfg-head { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .cfg-head b { font-size: 13px; }
+  .cfg-head .reset { font-size: 11px; color: var(--ink-3); }
+  .cfg-presets { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .preset { flex: 1; text-align: center; font-size: 11px; padding: 5px 0; border-radius: 7px; border: 1px solid var(--border); color: var(--ink-2); }
+  .preset.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .cfg-group-label { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); padding: 10px 14px 4px; }
+  .cfg-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 14px; font-size: 13px; }
+  .cfg-row .lbl { display: flex; align-items: center; gap: 8px; }
+  .cfg-row .ico { width: 15px; text-align: center; color: var(--ink-3); }
+  .tgl { width: 30px; height: 17px; border-radius: 999px; background: var(--border-strong); position: relative; flex: none; }
+  .tgl.on { background: var(--accent); }
+  .tgl::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 999px; background: #fff; transition: left .15s; }
+  .tgl.on::after { left: 15px; }
+  .cfg-row.off .lbl { color: var(--ink-3); }
+
+  table.fields { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 13px; }
+  table.fields th, table.fields td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.fields th { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  table.fields td:first-child { font-weight: 500; white-space: nowrap; }
+  .badge-def { font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: 4px; }
+  .badge-def.on { background: var(--ok-soft); color: var(--ok); }
+  .badge-def.off { background: var(--surface-2); color: var(--ink-3); }
+  .badge-def.lock { background: var(--accent-soft); color: var(--accent); }
+  .file { font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
+
+  .note { margin-top: 18px; border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 13.5px; }
+  .note b { font-weight: 700; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .q { margin-top: 50px; border: 1px solid var(--border); border-radius: 12px; padding: 22px 24px; background: var(--surface); }
+  .q h2 { font-size: 17px; margin: 0 0 8px; }
+  .q ul { margin: 10px 0 0; padding-left: 18px; color: var(--ink); font-size: 14px; }
+  .q li { margin-bottom: 8px; }
+  .q b { color: var(--accent); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">GestaoPro · Kanban · Card configurável</div>
+    <h1>O que aparece no card, quem decide é o usuário</h1>
+    <p class="lede">Hoje o card mostra tudo de uma vez e a única forma de reduzir é a densidade S/M/G — que corta blocos inteiros sem escolha. A proposta: um layout base mais limpo + um painel onde cada informação é um interruptor. Nada implementado — plano para você decidir.</p>
+    <div class="meta-row">
+      <span class="pill">Base: densidade S/M/G já existe</span>
+      <span class="pill no">Sem migration</span>
+      <span class="pill">Persistido por projeto</span>
+    </div>
+  </header>
+
+  <!-- ===== 1. LAYOUT VALIDADO ===== -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Layout base — mais limpo</h2></div>
+    <p class="sec-sub">Mesma informação, hierarquia melhor: título em destaque, metadados agrupados numa linha só de chips, e o resumo de subtarefas some quando o card está recolhido. É o ponto de partida sobre o qual os toggles agem.</p>
+    <div class="ba">
+      <div class="ba-col before">
+        <div class="label">Hoje (da sua imagem)</div>
+        <div class="kc busy">
+          <div class="kc-bc">↳ [EAP] 1. Implantação Tasy</div>
+          <div class="kc-head">
+            <span class="kc-badge-type">A</span>
+            <div>
+              <div style="margin-bottom:2px"><span class="kc-wbs">[EAP] 1.1</span></div>
+              <div class="kc-title">Levantamento</div>
+            </div>
+          </div>
+          <div class="kc-desc">Pacote de levantamento de requisito…</div>
+          <div class="kc-prog"><div class="bar"><i style="width:17%"></i></div><span class="pct">17%</span></div>
+          <div class="kc-chips">
+            <span class="chip"><span class="av">AC</span> Antonio Carlos</span>
+            <span class="chip">👥 +1</span>
+          </div>
+          <div class="kc-chips">
+            <span class="chip">📅 15/08/2026</span>
+            <span class="chip">0h/16h</span>
+          </div>
+          <div class="kc-subs">› ⑃ 2 subtarefas</div>
+          <div class="kc-subsummary">Subs: 0 concluídas / 2 pendentes</div>
+        </div>
+        <p class="ba-note">Muitas linhas: 2 fileiras de chips, breadcrumb sempre visível, e dois textos de subtarefas (link + resumo) empilhados. Ocupa altura mesmo quando você só quer varrer os títulos.</p>
+      </div>
+      <div class="ba-col after">
+        <div class="label">Proposto (base)</div>
+        <div class="kc">
+          <div class="kc-head">
+            <span class="kc-badge-type">A</span>
+            <div style="flex:1">
+              <div class="kc-title">1.1 · Levantamento</div>
+            </div>
+            <span class="chip pri">Alta</span>
+          </div>
+          <div class="kc-prog"><div class="bar"><i style="width:17%"></i></div><span class="pct">17%</span></div>
+          <div class="kc-chips">
+            <span class="chip"><span class="av">AC</span></span>
+            <span class="chip">👥 +1</span>
+            <span class="chip">📅 15/08</span>
+            <span class="chip">0/16h</span>
+            <span class="chip">⑃ 2</span>
+          </div>
+        </div>
+        <p class="ba-note">Título com o código embutido, prioridade alinhada à direita, e <b>uma linha só</b> de chips compactos (responsável vira avatar sem nome, datas curtas). Breadcrumb, descrição e resumo de subs viram <b>opcionais</b> — ligados via config. Passar o mouse mostra os detalhes (tooltip).</p>
+      </div>
+    </div>
+    <div class="note">Esse layout é só a <b>base</b>. Cada elemento acima pode ser ligado/desligado individualmente na seção 02. A densidade S/M/G continua existindo como atalho (presets).</div>
+  </section>
+
+  <!-- ===== 2. PAINEL DE CONFIG ===== -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>Painel de configuração do card</h2></div>
+    <p class="sec-sub">Botão “⚙ Card” na barra do Kanban abre este painel. Presets no topo (Compacto / Padrão / Completo) aplicam um conjunto de toggles de uma vez; abaixo, cada campo é um interruptor. Salvo por projeto.</p>
+    <div class="grid2">
+      <div>
+        <div class="cfg">
+          <div class="cfg-head"><b>Exibição do card</b><span class="reset">Restaurar</span></div>
+          <div class="cfg-presets">
+            <div class="preset">Compacto</div>
+            <div class="preset active">Padrão</div>
+            <div class="preset">Completo</div>
+          </div>
+          <div class="cfg-group-label">Conteúdo</div>
+          <div class="cfg-row"><span class="lbl"><span class="ico">☰</span> Descrição</span><span class="tgl"></span></div>
+          <div class="cfg-row"><span class="lbl"><span class="ico">▭</span> Barra de progresso</span><span class="tgl on"></span></div>
+          <div class="cfg-row"><span class="lbl"><span class="ico">↳</span> Caminho do pai (EAP)</span><span class="tgl"></span></div>
+          <div class="cfg-group-label">Pessoas</div>
+          <div class="cfg-row"><span class="lbl"><span class="ico">◉</span> Responsável</span><span class="tgl on"></span></div>
+          <div class="cfg-row"><span class="lbl"><span class="ico">👥</span> Participantes</span><span class="tgl on"></span></div>
+          <div class="cfg-group-label">Metadados</div>
+          <div class="cfg-row"><span class="lbl"><span class="ico">⚑</span> Prioridade</span><span class="tgl on"></span></div>
+          <div class="cfg-row"><span class="lbl"><span class="ico">📅</span> Prazo</span><span class="tgl on"></span></div>
+          <div class="cfg-row"><span class="lbl"><span class="ico">◷</span> Horas</span><span class="tgl on"></span></div>
+          <div class="cfg-row off"><span class="lbl"><span class="ico">#</span> Tags / etiquetas</span><span class="tgl"></span></div>
+          <div class="cfg-row off"><span class="lbl"><span class="ico">🔗</span> Dependências</span><span class="tgl"></span></div>
+          <div class="cfg-group-label">Subtarefas</div>
+          <div class="cfg-row"><span class="lbl"><span class="ico">⑃</span> Contador de subtarefas</span><span class="tgl on"></span></div>
+          <div class="cfg-row off"><span class="lbl"><span class="ico">▤</span> Resumo (X feitas / Y abertas)</span><span class="tgl"></span></div>
+        </div>
+      </div>
+      <div>
+        <p style="font-size:14px; color:var(--ink-2); margin-top:0">Como funciona:</p>
+        <ul style="font-size:13.5px; color:var(--ink); padding-left:18px; line-height:1.7">
+          <li><b>Presets</b> = atalhos. “Compacto” desliga descrição/progresso/tags; “Completo” liga tudo. Mexer num toggle individual muda o preset para “Personalizado”.</li>
+          <li>Alguns campos são <b>sempre visíveis</b> e não entram como toggle: título, código EAP, ícone de tipo, bloqueio e alerta de subs impedidas (sinais críticos).</li>
+          <li>Vale <b>por projeto</b> — cada quadro lembra sua configuração (localStorage), igual densidade e filtros.</li>
+          <li>Substitui a limitação atual: hoje a densidade “S” apaga <b>todos</b> os badges de uma vez, sem escolha. Aqui você decide item a item.</li>
+        </ul>
+        <div class="note" style="margin-top:16px">Decisão em aberto: manter os 3 presets <b>+</b> toggles finos (recomendado), ou só os toggles finos sem preset? Ver seção 04.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 3. CAMPOS ===== -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Campos configuráveis — inventário</h2></div>
+    <p class="sec-sub">Tudo que o card renderiza hoje, mapeado. “Trava” = sempre visível (sinal crítico ou identidade do card). Os demais viram toggle, com um default sugerido.</p>
+    <table class="fields">
+      <tr><th>Campo</th><th>Default</th><th>Observação</th></tr>
+      <tr><td>Título + código EAP</td><td><span class="badge-def lock">trava</span></td><td>identidade do card</td></tr>
+      <tr><td>Ícone de tipo (A/fase/pacote/marco)</td><td><span class="badge-def lock">trava</span></td><td>distingue nível da EAP</td></tr>
+      <tr><td>Bloqueada 🚫 / subs impedidas ⚠</td><td><span class="badge-def lock">trava</span></td><td>alerta crítico, nunca some</td></tr>
+      <tr><td>Prioridade (U/C/A/M/B)</td><td><span class="badge-def on">ligado</span></td><td>badge 3 — <span class="file">:614</span></td></tr>
+      <tr><td>Barra de progresso + %</td><td><span class="badge-def on">ligado</span></td><td>hoje ligado por densidade — <span class="file">:674</span></td></tr>
+      <tr><td>Responsável (avatar + nome)</td><td><span class="badge-def on">ligado</span></td><td>badge 15 — <span class="file">:729</span></td></tr>
+      <tr><td>Participantes (👥 +N)</td><td><span class="badge-def on">ligado</span></td><td>badge 16 — <span class="file">:742</span></td></tr>
+      <tr><td>Prazo (📅)</td><td><span class="badge-def on">ligado</span></td><td>badge 17 — <span class="file">:747</span></td></tr>
+      <tr><td>Horas (0/16h)</td><td><span class="badge-def on">ligado</span></td><td>badge 20 — <span class="file">:774</span></td></tr>
+      <tr><td>Contador de subtarefas (⑃ N)</td><td><span class="badge-def on">ligado</span></td><td>link 23 — <span class="file">:876</span></td></tr>
+      <tr><td>Descrição</td><td><span class="badge-def off">desligado</span></td><td>bloco 8 — <span class="file">:657</span></td></tr>
+      <tr><td>Caminho do pai (breadcrumb EAP)</td><td><span class="badge-def off">desligado</span></td><td>bloco 2 — <span class="file">:594</span></td></tr>
+      <tr><td>Resumo de subs (X feitas/Y abertas)</td><td><span class="badge-def off">desligado</span></td><td>bloco 24 — <span class="file">:888</span></td></tr>
+      <tr><td>Tags / etiquetas</td><td><span class="badge-def off">desligado</span></td><td>bloco 9 — <span class="file">:663</span></td></tr>
+      <tr><td>Dependências (🔗) / vínculos</td><td><span class="badge-def off">desligado</span></td><td>blocos 21-22 — <span class="file">:797</span></td></tr>
+    </table>
+    <div class="note"><b>Nota:</b> os campos exclusivos de projeto “Qualidade” (deadline_flag 🟢🟠🔴, 🔄 última atualização, 📖 história) seguem a regra atual (só aparecem em projeto de qualidade) e podem entrar como toggles extras só nesse contexto — para não poluir o painel dos demais projetos.</div>
+  </section>
+
+  <!-- ===== 4. DECISÕES ===== -->
+  <div class="q">
+    <h2>O que preciso que você decida</h2>
+    <ul>
+      <li><b>Layout base:</b> aprova o card “limpo” da seção 01 (uma linha de chips, código no título, avatar sem nome) como novo padrão — ou prefere manter o layout atual e só adicionar os toggles por cima?</li>
+      <li><b>Presets:</b> manter os 3 presets (Compacto/Padrão/Completo) + toggles finos, ou só os toggles?</li>
+      <li><b>Defaults:</b> concorda com a coluna “Default” da seção 03 (descrição, breadcrumb, resumo de subs, tags e dependências <b>desligados</b> por padrão)? Ajusto o que quiser antes de codar.</li>
+      <li><b>Onde fica o botão:</b> um botão “⚙ Card” separado na barra, ou dentro do mesmo menu onde hoje está a densidade S/M/G?</li>
+    </ul>
+    <p style="margin:14px 0 0; font-size:13px; color:var(--ink-2)">Tudo isto é <b>front-end puro</b> (sem migration). Reaproveita a cadeia de props da densidade e uma nova chave <span class="file">kanban-card-fields:{projeto}</span>. Depois que você decidir, implemento sem commit.</p>
+  </div>
+</div>
