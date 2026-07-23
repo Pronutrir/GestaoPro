@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -42,11 +43,16 @@ import {
   Diamond,
   ChevronRight,
   ChevronDown,
+  ChevronsRight,
+  ChevronsLeft,
+  SlidersHorizontal,
   Link2,
   LayoutGrid,
   User,
   Layers,
   Package,
+  Search,
+  Filter,
 } from "lucide-react";
 import {
   DndContext,
@@ -76,6 +82,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuCheckboxItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
@@ -95,6 +102,7 @@ import { normalizeGut, GUT_META, type GutLevel } from "@/lib/gutPriority";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
 import { inferStagePreset } from "@/lib/workflowStageRules";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { cn } from "@/lib/utils";
 
 const formatHours = (hours: number): string => {
   if (!hours || hours <= 0) return "";
@@ -135,6 +143,24 @@ const STAGE_PRESET_COLORS = [
   "hsl(340, 82%, 52%)",
 ];
 
+// Cor estável para uma etiqueta (mesmo texto -> mesma cor). Paleta suave que
+// funciona em tema claro e escuro.
+const TAG_TONES = [
+  "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30",
+  "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+  "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30",
+  "bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/30",
+  "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30",
+  "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-500/30",
+  "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-500/30",
+  "bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30",
+];
+const tagColorClass = (tag: string) => {
+  let h = 0;
+  for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) >>> 0;
+  return TAG_TONES[h % TAG_TONES.length];
+};
+
 const getProgressBarColor = (percent: number, paused: boolean) => {
   if (paused) return "bg-muted-foreground/30";
   if (percent >= 100) return "bg-emerald-500";
@@ -167,6 +193,66 @@ const getStageDisplayTitle = (title: string) => {
 };
 
 export type KanbanDensity = "sm" | "md" | "lg";
+
+// Campos configuráveis do card. O usuário liga/desliga cada um pelo painel
+// "⚙ Card". Alguns elementos (título, código EAP, ícone de tipo, bloqueio e
+// alerta de subs impedidas) são sinais críticos e NÃO entram aqui — sempre
+// aparecem.
+export type CardFields = {
+  priority: boolean;
+  progress: boolean;
+  assignee: boolean;
+  participants: boolean;
+  dueDate: boolean;
+  hours: boolean;
+  subCount: boolean;
+  description: boolean;
+  breadcrumb: boolean;
+  subSummary: boolean;
+  tags: boolean;
+  dependencies: boolean;
+};
+
+// Defaults enxutos: extras (descrição, breadcrumb, resumo de subs, tags,
+// dependências) começam desligados.
+export const DEFAULT_CARD_FIELDS: CardFields = {
+  priority: true,
+  progress: true,
+  assignee: true,
+  participants: true,
+  dueDate: true,
+  hours: true,
+  subCount: true,
+  description: false,
+  breadcrumb: false,
+  subSummary: false,
+  tags: false,
+  dependencies: false,
+};
+
+// Ordem + rótulos + agrupamento para o painel de configuração.
+export const CARD_FIELD_GROUPS: { group: string; items: { key: keyof CardFields; label: string }[] }[] = [
+  { group: "Conteúdo", items: [
+    { key: "description", label: "Descrição" },
+    { key: "progress", label: "Barra de progresso" },
+    { key: "breadcrumb", label: "Caminho do pai (EAP)" },
+  ]},
+  { group: "Pessoas", items: [
+    { key: "assignee", label: "Responsável" },
+    { key: "participants", label: "Participantes" },
+  ]},
+  { group: "Metadados", items: [
+    { key: "priority", label: "Prioridade" },
+    { key: "dueDate", label: "Prazo" },
+    { key: "hours", label: "Horas" },
+    { key: "tags", label: "Tags / etiquetas" },
+    { key: "dependencies", label: "Dependências" },
+  ]},
+  { group: "Subtarefas", items: [
+    { key: "subCount", label: "Contador de subtarefas" },
+    { key: "subSummary", label: "Resumo (feitas / abertas)" },
+  ]},
+];
 
 const DENSITY_CLASSES: Record<KanbanDensity, {
   card: string;
@@ -237,6 +323,7 @@ interface WorkflowStage {
   is_visible: boolean;
   progress_percent?: number | null;
   contributes_to_progress?: boolean;
+  wip_limit?: number | null;
 }
 
 interface Phase {
@@ -333,6 +420,7 @@ function SortableKanbanCard({
   onToggleExpand,
   progress,
   density,
+  cardFields,
   parentBreadcrumb,
   blockedSubsCount,
   subActivityStatusSummary,
@@ -364,6 +452,7 @@ function SortableKanbanCard({
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
   density?: KanbanDensity;
+  cardFields?: CardFields;
   parentBreadcrumb?: { id: string; title: string; wbsCode?: string | null } | null;
   blockedSubsCount?: number;
   subActivityStatusSummary?: SubActivityStatusSummary;
@@ -408,6 +497,7 @@ function SortableKanbanCard({
         onToggleExpand={onToggleExpand}
         progress={progress}
         density={density}
+        cardFields={cardFields}
         parentBreadcrumb={parentBreadcrumb}
         blockedSubsCount={blockedSubsCount}
         subActivityStatusSummary={subActivityStatusSummary}
@@ -445,6 +535,7 @@ function KanbanCard({
   onToggleExpand,
   progress,
   density = "md",
+  cardFields = DEFAULT_CARD_FIELDS,
   parentBreadcrumb,
   blockedSubsCount,
   subActivityStatusSummary,
@@ -478,6 +569,7 @@ function KanbanCard({
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
   density?: KanbanDensity;
+  cardFields?: CardFields;
   parentBreadcrumb?: { id: string; title: string; wbsCode?: string | null } | null;
   blockedSubsCount?: number;
   subActivityStatusSummary?: SubActivityStatusSummary;
@@ -566,7 +658,7 @@ function KanbanCard({
                 </button>
               ) : null}
               <div className="flex-1 min-w-0 overflow-hidden">
-                {parentBreadcrumb && (
+                {parentBreadcrumb && cardFields.breadcrumb && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -587,20 +679,6 @@ function KanbanCard({
                   </button>
                 )}
                 <div className="flex items-start gap-1.5 mb-1">
-                  {(() => {
-                    const lvl = normalizeGut(activity.priority);
-                    if (lvl === "pendente") return null;
-                    const meta = GUT_META[lvl];
-                    return (
-                      <span
-                        className={`shrink-0 mt-0.5 ml-1 inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold leading-none ${meta.badgeClass} ${meta.pulse ? "animate-pulse-strong" : ""}`}
-                        title={`Prioridade: ${meta.label}${activity.priority_score ? ` (${activity.priority_score})` : ""}`}
-                        aria-label={`Prioridade ${meta.label}`}
-                      >
-                        {meta.shortLabel}
-                      </span>
-                    );
-                  })()}
                   {isMilestone && (
                     <Diamond
                       className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0 mt-0.5"
@@ -627,16 +705,42 @@ function KanbanCard({
                     ) : null}
                     <span>{activity.title}</span>
                   </p>
+                  {/* Prioridade alinhada à direita do título (layout limpo) */}
+                  {cardFields.priority && (() => {
+                    const lvl = normalizeGut(activity.priority);
+                    if (lvl === "pendente") return null;
+                    const meta = GUT_META[lvl];
+                    return (
+                      <span
+                        className={`shrink-0 mt-0.5 inline-flex items-center h-4 px-1.5 rounded text-[9px] font-bold leading-none ${meta.badgeClass} ${meta.pulse ? "animate-pulse-strong" : ""}`}
+                        title={`Prioridade: ${meta.label}${activity.priority_score ? ` (${activity.priority_score})` : ""}`}
+                        aria-label={`Prioridade ${meta.label}`}
+                      >
+                        {meta.label}
+                      </span>
+                    );
+                  })()}
                 </div>
 
-                {d.showDesc && activity.description && (
+                {cardFields.description && activity.description && (
                   <p className={`${d.desc} text-muted-foreground ${d.descClamp} mb-1.5 leading-relaxed`}>
                     {activity.description}
                   </p>
                 )}
 
+                {/* Etiquetas (tags) — coloridas de forma estável por texto */}
+                {cardFields.tags && Array.isArray(activity.tags) && activity.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-1.5">
+                    {activity.tags.slice(0, 6).map((tag) => (
+                      <span key={tag} className={cn("px-1.5 py-0 rounded text-[10px] font-medium border", tagColorClass(tag))}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 {/* Barra de andamento (calculada pelo Kanban) */}
-                {d.showProgress && !isQualityProject && (
+                {cardFields.progress && !isQualityProject && (
                 <div
                   className="mb-1.5 flex items-center gap-1.5"
                   title={progressTooltip}
@@ -653,7 +757,6 @@ function KanbanCard({
                 </div>
                 )}
 
-                {d.showBadges && (
                 <div className="flex flex-wrap gap-1">
                   {!!blockedSubsCount && blockedSubsCount > 0 && (
                     <Badge
@@ -690,25 +793,22 @@ function KanbanCard({
                        activity.deadline_flag === "red" ? "🔴 Vencido" : ""}
                     </Badge>
                   )}
-                  {activity.assigned_to && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                      <span className="inline-flex items-center gap-1 max-w-[180px]">
-                        <Avatar className="h-3.5 w-3.5 shrink-0">
-                          {assigneeAvatar ? <AvatarImage src={assigneeAvatar} alt={assigneeName || "Responsável"} /> : null}
-                          <AvatarFallback className="text-[7px] font-semibold">
-                            {getAvatarInitials(assigneeName)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="truncate">{assigneeName}</span>
-                      </span>
+                  {cardFields.assignee && activity.assigned_to && (
+                    <Badge variant="outline" className="text-[10px] px-1 py-0" title={assigneeName || "Responsável"}>
+                      <Avatar className="h-4 w-4 shrink-0">
+                        {assigneeAvatar ? <AvatarImage src={assigneeAvatar} alt={assigneeName || "Responsável"} /> : null}
+                        <AvatarFallback className="text-[7px] font-semibold">
+                          {getAvatarInitials(assigneeName)}
+                        </AvatarFallback>
+                      </Avatar>
                     </Badge>
                   )}
-                  {activity.participants && activity.participants.length > 0 && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/30">
+                  {cardFields.participants && activity.participants && activity.participants.length > 0 && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/30" title={`Participantes: ${activity.participants.join(", ")}`}>
                       👥 +{activity.participants.length}
                     </Badge>
                   )}
-                  {activity.end_date && (
+                  {cardFields.dueDate && activity.end_date && (
                     <Badge
                       variant="outline"
                       className={`text-[10px] px-1.5 py-0 ${
@@ -716,9 +816,10 @@ function KanbanCard({
                           ? "border-destructive bg-destructive/10 text-destructive font-semibold"
                           : ""
                       }`}
+                      title={`Prazo: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}`}
                     >
                       {isOverdue && <AlertCircle className="w-2.5 h-2.5 mr-0.5" />}
-                      📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR")}
+                      📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                     </Badge>
                   )}
                   {isQualityProject && activity.last_update_date && (
@@ -735,7 +836,7 @@ function KanbanCard({
                       📖 {storyCount && storyCount > 1 ? `${storyCount} Histórias` : "História"}
                     </Badge>
                   )}
-                  {hoursStat && (hoursStat.planned > 0 || hoursStat.consumed > 0) ? (
+                  {cardFields.hours && hoursStat && (hoursStat.planned > 0 || hoursStat.consumed > 0) ? (
                     <Badge
                       variant="secondary"
                       className={`text-[10px] px-1.5 py-0 ${
@@ -753,12 +854,12 @@ function KanbanCard({
                     >
                       {formatHours(hoursStat.consumed) || "0h"}/{formatHours(hoursStat.planned) || "0h"}
                     </Badge>
-                  ) : toHoursNumber(activity.hours) > 0 ? (
+                  ) : cardFields.hours && toHoursNumber(activity.hours) > 0 ? (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                       {formatHours(toHoursNumber(activity.hours))}
                     </Badge>
                   ) : null}
-                  {dependencyCount && (dependencyCount.pred > 0 || dependencyCount.succ > 0) && (
+                  {cardFields.dependencies && dependencyCount && (dependencyCount.pred > 0 || dependencyCount.succ > 0) && (
                     <Badge
                       variant="outline"
                       className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30 font-semibold"
@@ -769,7 +870,7 @@ function KanbanCard({
                       {dependencyCount.succ > 0 && `→${dependencyCount.succ}`}
                     </Badge>
                   )}
-                  {relationItems && relationItems.length > 0 ? (
+                  {cardFields.dependencies && relationItems && relationItems.length > 0 ? (
                     <Popover>
                       <PopoverTrigger asChild>
                         <button
@@ -836,8 +937,7 @@ function KanbanCard({
                     </Popover>
                   ) : null}
                 </div>
-                )}
-                {subActivityCount && subActivityCount > 0 ? (
+                {cardFields.subCount && subActivityCount && subActivityCount > 0 ? (
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}
@@ -849,7 +949,7 @@ function KanbanCard({
                     <span>{subActivityCount} {subActivityCount === 1 ? "subtarefa" : "subtarefas"}</span>
                   </button>
                 ) : null}
-                {subActivityStatusSummary && (subActivityStatusSummary.completed > 0 || subActivityStatusSummary.pending > 0) ? (
+                {cardFields.subSummary && subActivityStatusSummary && (subActivityStatusSummary.completed > 0 || subActivityStatusSummary.pending > 0) ? (
                   <Badge
                     variant="outline"
                     className="mt-1 text-[10px] px-1.5 py-0 bg-muted/40 border-border/60 text-muted-foreground"
@@ -949,17 +1049,25 @@ function SortableColumn({
   onDeleteStage,
   onChangeStageColor,
   onSetStageProgress,
+  onSetStageWipLimit,
   onToggleStageContributes,
   onToggleStageFinal,
   onToggleStageBlocked,
   onToggleStageVisible,
   allStages,
   density,
+  cardFields,
   profilesMap = {},
   profileAvatarMap = {},
+  laneId,
+  collapsed = false,
+  onToggleCollapse,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
+  laneId?: string;
+  collapsed?: boolean;
+  onToggleCollapse?: (id: string) => void;
   activities: Activity[];
   phases: Phase[];
   widthPct: number;
@@ -988,12 +1096,14 @@ function SortableColumn({
   onDeleteStage: (id: string) => Promise<void>;
   onChangeStageColor: (id: string, color: string) => Promise<void>;
   onSetStageProgress: (id: string, current: number | null | undefined) => Promise<void>;
+  onSetStageWipLimit: (id: string, current: number | null | undefined) => Promise<void>;
   onToggleStageContributes: (id: string, current: boolean | undefined) => Promise<void>;
   onToggleStageFinal: (id: string, current: boolean) => Promise<void>;
   onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
   onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
   allStages: WorkflowStage[];
   density: KanbanDensity;
+  cardFields: CardFields;
   hoursStatsByActivity?: Map<string, HoursStat>;
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
@@ -1102,7 +1212,9 @@ function SortableColumn({
   }, [activities, childrenByParent, allStages]);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: `col-${stage.id}` });
+    // Em raias (laneId presente) a coluna nao e reordenavel — evita ids de dnd
+    // duplicados no mesmo contexto (a mesma coluna aparece em cada raia).
+    useSortable({ id: `col-${stage.id}`, disabled: !!laneId });
 
   // Visual ClickUp-like: colunas com fundo claro neutro e uma fina faixa colorida no topo
   const style = {
@@ -1239,6 +1351,7 @@ function SortableColumn({
       onToggleExpand: () => toggleExpanded(activity.id),
       progress: parentProgress,
       density,
+      cardFields,
       parentBreadcrumb,
       blockedSubsCount,
       subActivityStatusSummary,
@@ -1293,6 +1406,35 @@ function SortableColumn({
     );
   };
 
+  if (collapsed) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={{ ...style, flex: "0 0 auto", width: 44 }}
+        {...attributes}
+        className={`relative rounded-lg border flex flex-col items-center overflow-hidden shadow-sm cursor-pointer hover:bg-muted/40 transition-colors ${
+          stage.is_blocked ? "bg-orange-500/10 border-orange-500/40" : "bg-card border-border"
+        }`}
+        onClick={() => onToggleCollapse?.(stage.id)}
+        title={`${getStageDisplayTitle(stage.title)} · ${visibleCardCount} card(s) — clique para expandir`}
+      >
+        <div className="flex flex-col items-center gap-2 py-2 h-full w-full">
+          <ChevronsRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
+          <Badge variant="secondary" className="text-[10px] px-1 py-0 min-w-[18px] text-center shrink-0">
+            {visibleCardCount}
+          </Badge>
+          <div
+            className="text-[11px] font-semibold text-muted-foreground mt-1 whitespace-nowrap"
+            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            {getStageDisplayTitle(stage.title)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={setNodeRef}
@@ -1343,15 +1485,49 @@ function SortableColumn({
                 {getStageDisplayTitle(stage.title)}
               </h3>
             )}
-            <Badge
-              variant="secondary"
-              className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0"
-              title={`${visibleCardCount} card(s) visível(is) nesta coluna`}
-            >
-              {visibleCardCount}
-            </Badge>
+            {stage.wip_limit != null && stage.wip_limit > 0 ? (
+              <Badge
+                variant="outline"
+                className={`text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0 font-semibold ${
+                  visibleCardCount > stage.wip_limit
+                    ? "bg-destructive/15 text-destructive border-destructive/40"
+                    : visibleCardCount === stage.wip_limit
+                    ? "bg-orange-500/15 text-orange-600 border-orange-500/40"
+                    : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/40"
+                }`}
+                title={
+                  visibleCardCount > stage.wip_limit
+                    ? `Limite de WIP excedido: ${visibleCardCount} de ${stage.wip_limit}`
+                    : `${visibleCardCount} de ${stage.wip_limit} (limite de WIP)`
+                }
+              >
+                {visibleCardCount} / {stage.wip_limit}
+              </Badge>
+            ) : (
+              <Badge
+                variant="secondary"
+                className="text-[10px] px-1.5 py-0 min-w-[20px] text-center shrink-0"
+                title={`${visibleCardCount} card(s) visível(is) nesta coluna`}
+              >
+                {visibleCardCount}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {onToggleCollapse && (
+              <button
+                type="button"
+                className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleCollapse(stage.id);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                title="Recolher coluna"
+              >
+                <ChevronsLeft className="w-3.5 h-3.5" />
+              </button>
+            )}
             {canCreate && (
               <button
                 type="button"
@@ -1456,6 +1632,19 @@ function SortableColumn({
                     {stage.progress_percent == null
                       ? "Definir progresso (%)"
                       : `Editar progresso (${stage.progress_percent}%)`}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="focus:bg-muted/60 focus:text-foreground"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      onSetStageWipLimit(stage.id, stage.wip_limit ?? null);
+                    }}
+                    title="Limite de cards em andamento (WIP). Em branco = sem limite."
+                  >
+                    <Layers className="w-3.5 h-3.5 mr-2" />
+                    {stage.wip_limit == null
+                      ? "Definir limite (WIP)"
+                      : `Editar limite WIP (${stage.wip_limit})`}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     className="focus:bg-muted/60 focus:text-foreground"
@@ -1574,7 +1763,7 @@ function SortableColumn({
       )}
 
       {/* Droppable Column Body */}
-      <DroppableColumn stage={stage} density={density}>
+      <DroppableColumn stage={stage} density={density} laneId={laneId}>
         <SortableContext
           items={stageActivities.map((a) => a.id)}
           strategy={verticalListSortingStrategy}
@@ -1607,12 +1796,16 @@ function DroppableColumn({
   stage,
   children,
   density = "md",
+  laneId,
 }: {
   stage: WorkflowStage;
   children: React.ReactNode;
   density?: KanbanDensity;
+  laneId?: string;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `stage-${stage.id}` });
+  // Em raias, o id do droppable inclui a raia p/ nao colidir entre raias; o
+  // handleDragEnd extrai o stageId (parte antes de "--").
+  const { setNodeRef, isOver } = useDroppable({ id: laneId ? `stage-${stage.id}--${laneId}` : `stage-${stage.id}` });
   const d = DENSITY_CLASSES[density];
   return (
     <div
@@ -1689,7 +1882,38 @@ export const ActivityKanban = ({
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const columnWidthsKey = `kanban-col-widths:${projectId}`;
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.localStorage.getItem(`kanban-col-widths:${projectId}`);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+  // Colunas recolhidas (só front-end, persistido por projeto).
+  const collapsedStagesKey = `kanban-collapsed-stages:${projectId}`;
+  const [collapsedStages, setCollapsedStages] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem(`kanban-collapsed-stages:${projectId}`);
+      return raw ? new Set<string>(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const toggleCollapsedStage = useCallback((stageId: string) => {
+    setCollapsedStages((prev) => {
+      const next = new Set(prev);
+      if (next.has(stageId)) next.delete(stageId);
+      else next.add(stageId);
+      try {
+        window.localStorage.setItem(collapsedStagesKey, JSON.stringify([...next]));
+      } catch { /* quota */ }
+      return next;
+    });
+  }, [collapsedStagesKey]);
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Map<string, number>>(new Map());
   const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
   const [relationCounts, setRelationCounts] = useState<
@@ -1721,6 +1945,27 @@ export const ActivityKanban = ({
     }
   }, [density, densityKey]);
 
+  // Campos visíveis do card (⚙ Card), persistido por projeto. Faz merge com os
+  // defaults para tolerar chaves novas adicionadas em versões futuras.
+  const cardFieldsKey = `kanban-card-fields:${projectId}`;
+  const [cardFields, setCardFields] = useState<CardFields>(() => {
+    if (typeof window === "undefined") return DEFAULT_CARD_FIELDS;
+    try {
+      const raw = window.localStorage.getItem(`kanban-card-fields:${projectId}`);
+      return raw ? { ...DEFAULT_CARD_FIELDS, ...JSON.parse(raw) } : DEFAULT_CARD_FIELDS;
+    } catch {
+      return DEFAULT_CARD_FIELDS;
+    }
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try { window.localStorage.setItem(cardFieldsKey, JSON.stringify(cardFields)); } catch { /* quota */ }
+    }
+  }, [cardFields, cardFieldsKey]);
+  const toggleCardField = useCallback((key: keyof CardFields) => {
+    setCardFields((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
   // Filtro "Apenas minhas tarefas" — persistido por projeto
   const { user, profile } = useAuth();
   const myName = (profile?.full_name || "").trim().toLowerCase();
@@ -1735,6 +1980,121 @@ export const ActivityKanban = ({
       window.localStorage.setItem(onlyMineKey, onlyMine ? "1" : "0");
     }
   }, [onlyMine, onlyMineKey]);
+
+  // Agrupamento em raias (swimlanes): nenhum / por fase / por responsável.
+  const [groupBy, setGroupBy] = useState<"none" | "phase" | "assignee">("none");
+
+  // Filtros do board: busca textual + responsável + fase + prioridade.
+  const filtersKey = `kanban-filters:${projectId}`;
+  const [search, setSearch] = useState("");
+  // Multi-seleção: cada filtro é um Set de valores; vazio = "todos".
+  const [filterAssignees, setFilterAssignees] = useState<Set<string>>(new Set());
+  const [filterPhases, setFilterPhases] = useState<Set<string>>(new Set());
+  const [filterPriorities, setFilterPriorities] = useState<Set<string>>(new Set());
+  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "completed">("all");
+  const [filterDue, setFilterDue] = useState<"all" | "overdue" | "week">("all");
+  // Busca local dentro do painel de filtros (só para a lista de responsáveis).
+  const [assigneeQuery, setAssigneeQuery] = useState("");
+
+  // Carrega filtros salvos ao montar.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(filtersKey);
+      if (!raw) return;
+      const f = JSON.parse(raw);
+      if (Array.isArray(f.assignees)) setFilterAssignees(new Set(f.assignees));
+      if (Array.isArray(f.phases)) setFilterPhases(new Set(f.phases));
+      if (Array.isArray(f.priorities)) setFilterPriorities(new Set(f.priorities));
+      if (typeof f.status === "string") setFilterStatus(f.status);
+      if (typeof f.due === "string") setFilterDue(f.due);
+    } catch { /* ignore */ }
+  }, [filtersKey]);
+  // Persiste os filtros (nao a busca textual, que e efemera).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(filtersKey, JSON.stringify({
+        assignees: Array.from(filterAssignees),
+        phases: Array.from(filterPhases),
+        priorities: Array.from(filterPriorities),
+        status: filterStatus, due: filterDue,
+      }));
+    } catch { /* quota */ }
+  }, [filtersKey, filterAssignees, filterPhases, filterPriorities, filterStatus, filterDue]);
+
+  const hasActiveFilters =
+    search.trim() !== "" ||
+    filterAssignees.size > 0 || filterPhases.size > 0 || filterPriorities.size > 0 ||
+    filterStatus !== "all" || filterDue !== "all";
+  const clearFilters = () => {
+    setSearch("");
+    setFilterAssignees(new Set()); setFilterPhases(new Set()); setFilterPriorities(new Set());
+    setFilterStatus("all"); setFilterDue("all");
+  };
+  // Helper para alternar um valor num Set de filtro.
+  const toggleInSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, value: string) =>
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value); else next.add(value);
+      return next;
+    });
+
+  const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const matchesFilters = useCallback((a: Activity) => {
+    if (filterAssignees.size > 0 && !filterAssignees.has(a.assigned_to || "")) return false;
+    if (filterPhases.size > 0) {
+      const key = a.phase_id || "__none__";
+      if (!filterPhases.has(key)) return false;
+    }
+    if (filterPriorities.size > 0 && !filterPriorities.has(normalizeGut(a.priority))) return false;
+    if (filterStatus === "completed" && a.status !== "completed") return false;
+    if (filterStatus === "pending" && a.status === "completed") return false;
+    if (filterDue !== "all") {
+      const end = a.end_date ? new Date(a.end_date) : null;
+      const done = a.status === "completed";
+      if (filterDue === "overdue") {
+        if (done || !end || end >= new Date(new Date().toDateString())) return false;
+      } else if (filterDue === "week") {
+        if (done || !end) return false;
+        const in7 = new Date(); in7.setDate(in7.getDate() + 7);
+        if (end < new Date(new Date().toDateString()) || end > in7) return false;
+      }
+    }
+    const q = normalize(search.trim());
+    if (q) {
+      const hay = normalize([a.title, a.assigned_to || "", (a.tags || []).join(" ")].join(" "));
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }, [filterAssignees, filterPhases, filterPriorities, filterStatus, filterDue, search]);
+
+  // Opções de responsável (nomes distintos presentes nas atividades).
+  const assigneeOptions = useMemo(() => {
+    const set = new Set<string>();
+    activities.forEach((a) => { if (a.assigned_to) set.add(a.assigned_to); });
+    return Array.from(set).sort((x, y) => x.localeCompare(y));
+  }, [activities]);
+
+  // Raias (swimlanes) derivadas do groupBy. Cada raia agrupa os cards por fase
+  // ou responsável; o board renderiza as mesmas colunas dentro de cada raia.
+  const lanes = useMemo(() => {
+    if (groupBy === "phase") {
+      const list = phases.map((p) => ({
+        id: p.id, label: p.title, match: (a: Activity) => a.phase_id === p.id,
+      }));
+      list.push({ id: "__none__", label: "Sem fase", match: (a: Activity) => !a.phase_id });
+      return list;
+    }
+    if (groupBy === "assignee") {
+      const list = assigneeOptions.map((name) => ({
+        id: name, label: name, match: (a: Activity) => (a.assigned_to || "") === name,
+      }));
+      list.push({ id: "__none__", label: "Sem responsável", match: (a: Activity) => !a.assigned_to });
+      return list;
+    }
+    return [];
+  }, [groupBy, phases, assigneeOptions]);
 
   const isMineActivity = useCallback(
     (a: Activity) => {
@@ -1807,13 +2167,18 @@ export const ActivityKanban = ({
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      // Persiste a largura ao soltar (nao a cada pixel).
+      setColumnWidths((prev) => {
+        try { window.localStorage.setItem(columnWidthsKey, JSON.stringify(prev)); } catch { /* quota */ }
+        return prev;
+      });
     };
 
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-  }, []);
+  }, [columnWidthsKey]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -2082,7 +2447,8 @@ export const ActivityKanban = ({
     const map: Record<string, Activity[]> = {};
     stages.forEach((s) => (map[s.id] = []));
 
-    const source = onlyMine ? activities.filter(isMineActivity) : activities;
+    let source = onlyMine ? activities.filter(isMineActivity) : activities;
+    if (hasActiveFilters) source = source.filter(matchesFilters);
     source.forEach((a) => {
       // Use optimistic override if available
       const stageId = optimisticMoves[a.id] || a.workflow_stage_id;
@@ -2111,7 +2477,7 @@ export const ActivityKanban = ({
     });
 
     return map;
-  }, [activities, stages, phases, optimisticMoves, onlyMine, isMineActivity]);
+  }, [activities, stages, phases, optimisticMoves, onlyMine, isMineActivity, hasActiveFilters, matchesFilters]);
 
   const handleCreateStory = async () => {
     if (projectLocked) {
@@ -2228,9 +2594,10 @@ export const ActivityKanban = ({
     let targetStageId: string | null = null;
 
     if (overId.startsWith("stage-")) {
-      targetStageId = overId.replace("stage-", "");
+      // Em raias o id e "stage-{id}--{laneId}" — pega so o stageId.
+      targetStageId = overId.replace("stage-", "").split("--")[0];
     } else if (overId.startsWith("col-")) {
-      targetStageId = overId.replace("col-", "");
+      targetStageId = overId.replace("col-", "").split("--")[0];
     } else {
       const overActivity = activities.find((a) => a.id === overId);
       if (overActivity) {
@@ -2592,6 +2959,46 @@ export const ActivityKanban = ({
     fetchStages();
   }, [toast]);
 
+  const handleSetStageWipLimit = useCallback(async (id: string, current: number | null | undefined) => {
+    const initial = current == null ? "" : String(current);
+    const input = window.prompt(
+      "Defina o limite de cards (WIP) desta coluna. Deixe em branco para remover o limite.",
+      initial,
+    );
+    if (input === null) return;
+
+    const raw = input.trim();
+    let limit: number | null = null;
+    if (raw.length > 0) {
+      const parsed = Number(raw.replace(",", "."));
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        toast({ title: "Limite inválido", description: "Informe um número inteiro ≥ 0.", variant: "destructive" });
+        return;
+      }
+      limit = Math.max(0, Math.round(parsed));
+    }
+
+    const { error } = await supabase
+      .from("workflow_stages")
+      .update({ wip_limit: limit } as never)
+      .eq("id", id);
+
+    if (error) {
+      // Coluna wip_limit ainda não aplicada na VM: avisa sem quebrar.
+      if (/wip_limit/i.test(error.message)) {
+        toast({
+          title: "Limite de WIP indisponível",
+          description: "A migration wip_limit ainda não foi aplicada no banco. Rode-a na VM para habilitar.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Erro ao salvar limite", description: error.message, variant: "destructive" });
+      return;
+    }
+    fetchStages();
+  }, [toast]);
+
   const handleToggleStageContributes = useCallback(async (id: string, current: boolean | undefined) => {
     const next = current === false;
     const { error } = await supabase
@@ -2638,8 +3045,238 @@ export const ActivityKanban = ({
 
   return (
     <div className="space-y-1.5 mt-2">
-      {/* Toolbar - densidade dos cards */}
-      <div className="flex items-center justify-end gap-2 px-2">
+      {/* Toolbar — filtros + densidade */}
+      <div className="flex items-center gap-2 px-2 flex-wrap">
+        {/* Busca */}
+        <div className="relative w-full max-w-[240px]">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar tarefa..."
+            className="h-7 pl-8 pr-7 text-xs"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <XIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* FILTROS — um único painel com tudo */}
+        {(() => {
+          const activeCount =
+            filterAssignees.size + filterPhases.size + filterPriorities.size +
+            (filterStatus !== "all" ? 1 : 0) + (filterDue !== "all" ? 1 : 0);
+
+          const PRIORITIES: [string, string, string][] = [
+            ["urgente", "Urgente", "bg-red-500"],
+            ["critica", "Crítica", "bg-orange-500"],
+            ["alta", "Alta", "bg-amber-500"],
+            ["media", "Média", "bg-sky-500"],
+            ["baixa", "Baixa", "bg-emerald-500"],
+          ];
+          const STATUS: [string, string][] = [["all", "Todos"], ["pending", "Pendentes"], ["completed", "Concluídas"]];
+          const DUE: [string, string][] = [["all", "Qualquer"], ["overdue", "Atrasadas"], ["week", "≤ 7 dias"]];
+
+          // Chip de escolha (toggle). `dot` opcional colore uma bolinha à esquerda.
+          const Chip = ({ active, onClick, children, dot }: { active: boolean; onClick: () => void; children: React.ReactNode; dot?: string }) => (
+            <button
+              type="button"
+              onClick={onClick}
+              className={cn(
+                "inline-flex items-center gap-1.5 h-7 rounded-full border px-3 text-xs font-medium transition-colors",
+                active
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              )}
+            >
+              {dot && <span className={cn("w-2 h-2 rounded-full", dot)} />}
+              {children}
+              {active && <XIcon className="w-3 h-3 opacity-70" />}
+            </button>
+          );
+
+          const SectionLabel = ({ children, count }: { children: React.ReactNode; count?: number }) => (
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</span>
+              {!!count && count > 0 && (
+                <span className="min-w-[15px] h-[15px] px-1 rounded-full bg-primary/15 text-primary text-[9px] font-bold flex items-center justify-center">{count}</span>
+              )}
+            </div>
+          );
+
+          const filteredAssignees = assigneeQuery.trim()
+            ? assigneeOptions.filter((n) => normalize(n).includes(normalize(assigneeQuery.trim())))
+            : assigneeOptions;
+
+          return (
+            <Popover onOpenChange={(o) => { if (!o) setAssigneeQuery(""); }}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className={cn("h-7 gap-1.5 text-xs", activeCount > 0 && "border-primary text-primary")}>
+                  <Filter className="w-3.5 h-3.5" />
+                  Filtros
+                  {activeCount > 0 && (
+                    <span className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+                      {activeCount}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-[min(560px,calc(100vw-2rem))] p-0" collisionPadding={12}>
+                {/* Cabeçalho */}
+                <div className="flex items-center justify-between px-4 py-2.5 border-b">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-sm font-semibold">Filtros</span>
+                    {activeCount > 0 && (
+                      <span className="text-[11px] text-muted-foreground">{activeCount} ativo{activeCount > 1 ? "s" : ""}</span>
+                    )}
+                  </div>
+                  {activeCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="text-xs text-muted-foreground hover:text-destructive inline-flex items-center gap-1 transition-colors"
+                    >
+                      <XIcon className="w-3.5 h-3.5" /> Limpar tudo
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,220px)_1fr] divide-y sm:divide-y-0 sm:divide-x">
+                  {/* Coluna esquerda: Responsável (busca + lista com avatares) */}
+                  <div className="p-3 min-w-0">
+                    <SectionLabel count={filterAssignees.size}>Responsável</SectionLabel>
+                    <div className="relative mb-2">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={assigneeQuery}
+                        onChange={(e) => setAssigneeQuery(e.target.value)}
+                        placeholder="Buscar pessoa..."
+                        className="h-8 pl-8 text-xs"
+                      />
+                    </div>
+                    <div className="max-h-[240px] overflow-y-auto -mx-1 px-1 space-y-0.5">
+                      {filteredAssignees.length === 0 && (
+                        <div className="px-2 py-6 text-center text-xs text-muted-foreground">Nenhuma pessoa</div>
+                      )}
+                      {filteredAssignees.map((name) => {
+                        const active = filterAssignees.has(name);
+                        const resolved = profilesMap[name] ?? name;
+                        const avatar = resolveAvatarFromLookup(name, resolved, profileAvatarMap);
+                        return (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => toggleInSet(setFilterAssignees, name)}
+                            className={cn(
+                              "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-left transition-colors",
+                              active ? "bg-primary/10 text-primary" : "hover:bg-muted/60",
+                            )}
+                          >
+                            <Avatar className="h-5 w-5 shrink-0">
+                              {avatar ? <AvatarImage src={avatar} alt={resolved} /> : null}
+                              <AvatarFallback className="text-[8px] font-semibold">{getAvatarInitials(resolved)}</AvatarFallback>
+                            </Avatar>
+                            <span className="truncate flex-1">{resolved}</span>
+                            {active && <Check className="w-3.5 h-3.5 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Coluna direita: chips de baixa cardinalidade */}
+                  <div className="p-3 space-y-4">
+                    <div>
+                      <SectionLabel count={filterPriorities.size}>Prioridade</SectionLabel>
+                      <div className="flex flex-wrap gap-1.5">
+                        {PRIORITIES.map(([v, label, dot]) => (
+                          <Chip key={v} active={filterPriorities.has(v)} onClick={() => toggleInSet(setFilterPriorities, v)} dot={dot}>
+                            {label}
+                          </Chip>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <SectionLabel count={filterStatus !== "all" ? 1 : 0}>Status</SectionLabel>
+                      <div className="flex flex-wrap gap-1.5">
+                        {STATUS.map(([v, label]) => (
+                          <Chip key={v} active={filterStatus === v && v !== "all"} onClick={() => setFilterStatus(v as typeof filterStatus)}>
+                            {label}
+                          </Chip>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <SectionLabel count={filterDue !== "all" ? 1 : 0}>Prazo</SectionLabel>
+                      <div className="flex flex-wrap gap-1.5">
+                        {DUE.map(([v, label]) => (
+                          <Chip key={v} active={filterDue === v && v !== "all"} onClick={() => setFilterDue(v as typeof filterDue)}>
+                            {label}
+                          </Chip>
+                        ))}
+                      </div>
+                    </div>
+
+                    {(phases.length > 0) && (
+                      <div>
+                        <SectionLabel count={filterPhases.size}>Fase</SectionLabel>
+                        <div className="flex flex-wrap gap-1.5">
+                          {phases.map((p) => (
+                            <Chip key={p.id} active={filterPhases.has(p.id)} onClick={() => toggleInSet(setFilterPhases, p.id)}>
+                              {p.title}
+                            </Chip>
+                          ))}
+                          <Chip active={filterPhases.has("__none__")} onClick={() => toggleInSet(setFilterPhases, "__none__")}>
+                            Sem fase
+                          </Chip>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Rodapé: contador de resultado */}
+                <div className="px-4 py-2 border-t bg-muted/30 text-[11px] text-muted-foreground">
+                  {activities.filter((a) => matchesFilters(a) && (!onlyMine || isMineActivity(a))).length} de {activities.length} atividades
+                </div>
+              </PopoverContent>
+            </Popover>
+          );
+        })()}
+
+        {hasActiveFilters && (
+          <>
+            <span className="text-[11px] text-muted-foreground">
+              {activities.filter((a) => matchesFilters(a) && (!onlyMine || isMineActivity(a))).length} de {activities.length}
+            </span>
+            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={clearFilters}>
+              <XIcon className="w-3.5 h-3.5" /> Limpar
+            </Button>
+          </>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+        {/* Agrupar em raias (swimlanes) */}
+        <Select value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)}>
+          <SelectTrigger className="h-7 w-auto min-w-[120px] text-xs gap-1" title="Agrupar cards em raias horizontais">
+            <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Sem raias</SelectItem>
+            <SelectItem value="phase">Raias por fase</SelectItem>
+            <SelectItem value="assignee">Raias por responsável</SelectItem>
+          </SelectContent>
+        </Select>
         <Button
           variant={onlyMine ? "default" : "outline"}
           size="sm"
@@ -2681,6 +3318,51 @@ export const ActivityKanban = ({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Configuração do card: liga/desliga cada informação exibida */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" title="Configurar o que aparece nos cards">
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Card
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-64 p-0" collisionPadding={12}>
+            <div className="flex items-center justify-between px-3 py-2.5 border-b">
+              <span className="text-sm font-semibold">Exibição do card</span>
+              <button
+                type="button"
+                onClick={() => setCardFields(DEFAULT_CARD_FIELDS)}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                title="Restaurar padrão"
+              >
+                Restaurar
+              </button>
+            </div>
+            <div className="max-h-[min(420px,60vh)] overflow-y-auto py-1">
+              {CARD_FIELD_GROUPS.map((grp) => (
+                <div key={grp.group}>
+                  <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {grp.group}
+                  </div>
+                  {grp.items.map((it) => (
+                    <label
+                      key={it.key}
+                      className="flex items-center justify-between px-3 py-1.5 text-[13px] cursor-pointer hover:bg-muted/50"
+                    >
+                      <span className={cardFields[it.key] ? "" : "text-muted-foreground"}>{it.label}</span>
+                      <Switch
+                        checked={cardFields[it.key]}
+                        onCheckedChange={() => toggleCardField(it.key)}
+                      />
+                    </label>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+        </div>
       </div>
       <DndContext
         sensors={sensors}
@@ -2743,6 +3425,7 @@ export const ActivityKanban = ({
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
                       progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id)}
                       density={density}
+                      cardFields={cardFields}
                       hoursStat={hoursStatsByActivity.get(activity.id)}
                       profilesMap={profilesMap}
                       profileAvatarMap={profileAvatarMap}
@@ -2752,12 +3435,17 @@ export const ActivityKanban = ({
               </div>
             </div>
           )}
-          {visibleStages.map((stage, idx) => {
-            const stageActivities = activitiesByStage[stage.id] || [];
+          {(() => {
+          const renderColumn = (stage: WorkflowStage, idx: number, laneMatch?: (a: Activity) => boolean, laneId?: string) => {
+            const base = activitiesByStage[stage.id] || [];
+            const stageActivities = laneMatch ? base.filter(laneMatch) : base;
             const widthPct = columnWidths[stage.id] || (100 / visibleStages.length);
             return (
               <SortableColumn
-                key={stage.id}
+                key={laneId ? `${laneId}-${stage.id}` : stage.id}
+                laneId={laneId}
+                collapsed={collapsedStages.has(stage.id)}
+                onToggleCollapse={toggleCollapsedStage}
                 stage={stage}
                 stageActivities={stageActivities}
                 activities={activities}
@@ -2830,20 +3518,57 @@ export const ActivityKanban = ({
                 onDeleteStage={handleDeleteStage}
                 onChangeStageColor={handleChangeStageColor}
                 onSetStageProgress={handleSetStageProgress}
+                onSetStageWipLimit={handleSetStageWipLimit}
                 onToggleStageContributes={handleToggleStageContributes}
                 onToggleStageFinal={handleToggleStageFinal}
                 onToggleStageBlocked={handleToggleStageBlocked}
                 onToggleStageVisible={handleToggleStageVisible}
                 allStages={stages}
                 density={density}
+                cardFields={cardFields}
                 profilesMap={profilesMap}
                 profileAvatarMap={profileAvatarMap}
               />
             );
-          })}
-          {(isAdmin || canCreate) && (
-            <AddStageColumn projectId={projectId} onChanged={fetchStages} />
-          )}
+          };
+
+          // Sem raias: colunas lado a lado (comportamento padrão).
+          if (groupBy === "none" || lanes.length === 0) {
+            return (
+              <>
+                {visibleStages.map((stage, idx) => renderColumn(stage, idx))}
+                {(isAdmin || canCreate) && (
+                  <AddStageColumn projectId={projectId} onChanged={fetchStages} />
+                )}
+              </>
+            );
+          }
+
+          // Com raias: cada raia é uma faixa horizontal com todas as colunas,
+          // filtradas para os cards daquela raia. Raias vazias são omitidas.
+          return (
+            <div className="flex flex-col gap-3 w-full">
+              {lanes.map((lane) => {
+                const laneCount = visibleStages.reduce(
+                  (n, s) => n + (activitiesByStage[s.id] || []).filter(lane.match).length, 0,
+                );
+                if (laneCount === 0) return null;
+                return (
+                  <div key={lane.id} className="rounded-lg border border-border/60 bg-background/40">
+                    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/60 bg-muted/40 rounded-t-lg sticky left-0">
+                      {groupBy === "phase" ? <Layers className="w-3.5 h-3.5 text-primary" /> : <User className="w-3.5 h-3.5 text-muted-foreground" />}
+                      <span className="text-xs font-semibold">{lane.label}</span>
+                      <span className="text-[10px] text-muted-foreground">{laneCount} {laneCount === 1 ? "card" : "cards"}</span>
+                    </div>
+                    <div className="flex p-2">
+                      {visibleStages.map((stage, idx) => renderColumn(stage, idx, lane.match, lane.id))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+          })()}
         </div>
       </SortableContext>
 
@@ -2860,6 +3585,7 @@ export const ActivityKanban = ({
               hasStory={storyLinkedActivities.has(activeActivity.id)}
               progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id)}
               density={density}
+              cardFields={cardFields}
               profilesMap={profilesMap}
               profileAvatarMap={profileAvatarMap}
             />
