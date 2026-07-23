@@ -484,15 +484,15 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                     {(() => {
                       const leader = profiles.find((p) => p.full_name === formData.owner);
                       if (!leader && !formData.owner) return <span className="text-muted-foreground">Selecione o líder</span>;
-                      if (!leader && formData.owner) return <span>{formData.owner}</span>;
+                      if (!leader && formData.owner) return <span className="truncate">{formData.owner}</span>;
                       return (
-                        <span className="inline-flex items-center gap-2 min-w-0 w-full">
+                        <div className="flex items-center gap-2 min-w-0 w-full pr-1">
                           <Avatar className="h-5 w-5 shrink-0">
                             {leader?.avatar_url ? <AvatarImage src={leader.avatar_url} alt={leader.full_name} /> : null}
                             <AvatarFallback className="text-[9px]">{(leader?.full_name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
                           </Avatar>
                           <span className="truncate">{leader?.full_name}{leader?.sector ? ` — ${leader.sector}` : ""}</span>
-                        </span>
+                        </div>
                       );
                     })()}
                   </SelectTrigger>
