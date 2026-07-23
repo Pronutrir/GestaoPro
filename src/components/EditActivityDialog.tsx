@@ -368,8 +368,14 @@ export const EditActivityDialog = ({
   // Horas do pai: quando há subatividades, o planejado é um rollup automático
   // (soma dos filhos diretos), somente-leitura — não existe mais divergência
   // possível entre pai e subs, nem bloqueio ao salvar.
-  const hasSubActivities = subActivities.length > 0;
-  const subHoursTotal = subActivities.reduce((sum, s) => sum + (Number((s as any).hours) || 0), 0);
+  // Só considera subatividades que realmente pertencem ao card aberto. Protege
+  // contra estado transitório (subs do card anterior) que corromperia o rollup.
+  const ownSubActivities = useMemo(
+    () => (effectiveActivity ? subActivities.filter((s) => s.parent_id === effectiveActivity.id) : []),
+    [subActivities, effectiveActivity],
+  );
+  const hasSubActivities = ownSubActivities.length > 0;
+  const subHoursTotal = ownSubActivities.reduce((sum, s) => sum + (Number((s as any).hours) || 0), 0);
   const parentHoursNum = hasSubActivities ? subHoursTotal : parseHoursInput(formData.hours);
 
   // Rollup no banco: sempre que a soma das subs mudar (add/remover/editar horas
@@ -389,7 +395,7 @@ export const EditActivityDialog = ({
 
   // Custo: mesma regra dos 100% — com subs, o custo do pai é a soma das subs
   // (rollup somente-leitura + persistência no banco).
-  const subCostTotal = subActivities.reduce((sum, s) => sum + (Number((s as any).cost) || 0), 0);
+  const subCostTotal = ownSubActivities.reduce((sum, s) => sum + (Number((s as any).cost) || 0), 0);
   useEffect(() => {
     if (createMode || !effectiveActivity || !hasSubActivities) return;
     const current = Number((effectiveActivity as any).cost) || 0;
@@ -649,6 +655,11 @@ export const EditActivityDialog = ({
         wbs_code: (act as any).wbs_code || "",
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
+      // Limpa as subs do card anterior ANTES do fetch async. Sem isso, há uma
+      // janela em que o rollup roda com os filhos do card anterior aplicados ao
+      // card atual — corrompendo hours/cost (ex.: abrir uma folha logo após um
+      // agrupador gravava a soma do agrupador na folha).
+      setSubActivities([]);
       fetchSubActivities(act.id);
     }
   }, [activity, draftActivity, createMode]);
