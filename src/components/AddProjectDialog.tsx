@@ -284,12 +284,18 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         })();
       }
     } catch (error) {
-      console.error("Erro ao criar projeto:", error);
       const maybe = error as { message?: string; details?: string; hint?: string; code?: string };
       const detail = [maybe?.message, maybe?.details, maybe?.hint, maybe?.code].filter(Boolean).join(" | ");
+      // O PostgrestError tem props nao-enumeraveis (loga {}); serializa manual.
+      console.error("Erro ao criar projeto:", detail || error);
+      // 42501 = violacao de RLS: falta a policy de INSERT no banco (migration
+      // pendente na VM). Mensagem amigavel em vez do texto tecnico.
+      const isRls = maybe?.code === "42501" || /row-level security/i.test(maybe?.message || "");
       toast({
         title: "Erro ao criar projeto",
-        description: detail || "Não foi possível criar o projeto. Tente novamente.",
+        description: isRls
+          ? "Permissão insuficiente no banco para criar projetos. É necessário aplicar a migration de permissão (RLS) no servidor. Avise o administrador."
+          : detail || "Não foi possível criar o projeto. Tente novamente.",
         variant: "destructive",
       });
     } finally {
