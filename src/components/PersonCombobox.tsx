@@ -99,13 +99,16 @@ export function PersonCombobox({
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQuery(""); }}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent className="p-0 w-[--radix-popover-trigger-width] min-w-[280px]" align="start">
-        <Command shouldFilter={false}>
+        <Command shouldFilter={false} className="max-h-[320px]">
           <CommandInput
             placeholder="Nome, setor ou função..."
             value={query}
             onValueChange={setQuery}
           />
-          <CommandList>
+          <CommandList
+            className="max-h-[260px] overflow-y-auto overscroll-contain"
+            onWheel={(e) => e.stopPropagation()}
+          >
             <CommandEmpty>Ninguém encontrado.</CommandEmpty>
             {variant === "single" && selected && (
               <CommandItem

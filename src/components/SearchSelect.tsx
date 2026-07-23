@@ -71,9 +71,12 @@ export function SearchSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="p-0 w-[--radix-popover-trigger-width] min-w-[240px]" align="start">
-        <Command shouldFilter={false}>
+        <Command shouldFilter={false} className="max-h-[320px]">
           <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
-          <CommandList>
+          <CommandList
+            className="max-h-[260px] overflow-y-auto overscroll-contain"
+            onWheel={(e) => e.stopPropagation()}
+          >
             <CommandEmpty>{emptyText}</CommandEmpty>
             {selected && onClear && (
               <CommandItem value="__clear__" onSelect={() => { onClear(); setOpen(false); }}
