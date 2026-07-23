@@ -1180,7 +1180,7 @@ export function ProjectCronogramaPanel({
               <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-primary/10 text-primary border-primary/30 shrink-0">
                 Fase
               </Badge>
-            ) : a.item_type === "pacote" ? (
+            ) : (a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0) ? (
               <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-amber-500/10 text-amber-700 border-amber-500/40 shrink-0 gap-1">
                 <Package className="h-2.5 w-2.5" />
                 Pacote
@@ -1590,14 +1590,16 @@ export function ProjectCronogramaPanel({
                 const projTitle = projectsMap[a.project_id];
                 const depth = depthById.get(a.id) ?? 0;
                 const isPhase = a.item_type === "fase";
-                const isPackage = a.item_type === "pacote";
+                const hasChildren = (childrenByParent.get(a.id) || []).length > 0;
+                // Pacote explícito OU inferido (tem filhos, não é fase/marco).
+                const isPackage = !a.is_milestone && !isPhase &&
+                  (a.item_type === "pacote" || hasChildren);
                 const isGroup = isPhase || isPackage;
                 const isSubactivity = !isGroup && !!a.parent_id;
                 const isMilestone = !!a.is_milestone;
                 const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
                 const isCompleted = stageInfo?.is_final || a.status === "completed";
                 const isOverdue = isOverdueByRule(a, !!isCompleted);
-                const hasChildren = (childrenByParent.get(a.id) || []).length > 0;
                 const collapsed = collapsedPhases.has(a.id);
                 return (
                   <div key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`}
@@ -1770,7 +1772,9 @@ export function ProjectCronogramaPanel({
                   const progress = progressFor(a);
                   const responsible = resolveResponsible(a.assigned_to);
                   const isPhase = a.item_type === "fase";
-                  const isPackage = a.item_type === "pacote";
+                  // Pacote explícito OU inferido (tem filhos, não é fase/marco).
+                  const isPackage = !a.is_milestone && !isPhase &&
+                    (a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0);
                   const isGroup = isPhase || isPackage;
                   const isSubactivity = !isGroup && !!a.parent_id;
 

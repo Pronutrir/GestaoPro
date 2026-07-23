@@ -1584,7 +1584,16 @@ export const EditActivityDialog = ({
                     Mutuamente exclusivo. Substitui os antigos switches. */}
                 {(() => {
                   type Kind = "atividade" | "pacote" | "fase" | "marco";
-                  const itemKind: Kind = formData.is_milestone ? "marco" : formData.item_type;
+                  // Papel exibido: marco/fase explícitos; senão 'pacote' quando o
+                  // item tem subitens (inferido pela árvore, mesmo sem o tipo
+                  // 'pacote' gravado no banco); caso contrário, o tipo gravado.
+                  const itemKind: Kind = formData.is_milestone
+                    ? "marco"
+                    : formData.item_type === "fase"
+                    ? "fase"
+                    : hasSubActivities
+                    ? "pacote"
+                    : formData.item_type;
                   const setKind = (kind: Kind) =>
                     setFormData({
                       ...formData,

@@ -439,10 +439,13 @@ export const BacklogSection = ({
             aria-hidden
           />
 
-          {/* Ícone do papel EAP: marco / pacote de trabalho */}
+          {/* Ícone do papel EAP: marco / pacote de trabalho. Trata como Pacote
+              tanto o item_type='pacote' explícito quanto qualquer agrupador (tem
+              filhos, não é fase/marco) — o papel é inferido pela posição na
+              árvore, como no resto do sistema, mesmo sem o tipo gravado. */}
           {activity.is_milestone ? (
             <Diamond className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0" aria-label="Marco" />
-          ) : activity.item_type === "pacote" ? (
+          ) : (activity.item_type === "pacote" || (hasChildren && activity.item_type !== "fase")) ? (
             <Package className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" aria-label="Pacote de trabalho" />
           ) : null}
 
