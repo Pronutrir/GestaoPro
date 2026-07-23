@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2, Package } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
-import { endVariance, varianceTone, varianceClasses, formatVariance } from "@/lib/dateVariance";
+import { endVariance, varianceTone, varianceClasses } from "@/lib/dateVariance";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
 import { ActivityAttachments } from "@/components/ActivityAttachments";
 import { ActivityComments } from "@/components/ActivityComments";
@@ -347,6 +347,7 @@ export const EditActivityDialog = ({
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
   const [editingSubActivity, setEditingSubActivity] = useState<Activity | null>(null);
   const [editingSubOpen, setEditingSubOpen] = useState(false);
+  const [showRealDates, setShowRealDates] = useState(false);
   const [members, setMembers] = useState<PersonOption[]>([]);
   const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
   const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
@@ -655,6 +656,7 @@ export const EditActivityDialog = ({
         wbs_code: (act as any).wbs_code || "",
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
+      setShowRealDates(false);
       // Limpa as subs do card anterior ANTES do fetch async. Sem isso, há uma
       // janela em que o rollup roda com os filhos do card anterior aplicados ao
       // card atual — corrompendo hours/cost (ex.: abrir uma folha logo após um
@@ -1290,122 +1292,133 @@ export const EditActivityDialog = ({
                   </PropertyRow>
                 )}
 
-                {/* Datas inline */}
-                <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Datas"}>
-                  <div className="flex flex-wrap items-end gap-2 text-xs">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                        {formData.is_milestone ? "Fim" : "Início"}
-                      </span>
-                      <Input
-                        type="date"
-                        value={formData.is_milestone ? formData.end_date : formData.start_date}
-                        onChange={(e) =>
-                          setFormData(
-                            formData.is_milestone
-                              ? { ...formData, end_date: e.target.value }
-                              : { ...formData, start_date: e.target.value }
-                          )
-                        }
-                        className={`h-7 px-1.5 text-xs w-[130px] ${dateRangeInvalid ? "border-destructive focus-visible:ring-destructive" : ""}`}
-                      />
-                    </div>
-                    {!formData.is_milestone && (
+                {/* Datas — planejado em destaque; execução real recolhida */}
+                <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Prazo"}>
+                  <div className="flex flex-col gap-2.5 w-full">
+                    {/* PLANEJADO */}
+                    <div className="flex flex-wrap items-end gap-2 text-xs">
                       <div className="flex flex-col gap-1">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Fim</span>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                          {formData.is_milestone ? "Data do marco" : "Início planejado"}
+                        </span>
                         <Input
                           type="date"
-                          value={formData.end_date}
-                          onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                          value={formData.is_milestone ? formData.end_date : formData.start_date}
+                          onChange={(e) =>
+                            setFormData(
+                              formData.is_milestone
+                                ? { ...formData, end_date: e.target.value }
+                                : { ...formData, start_date: e.target.value }
+                            )
+                          }
                           className={`h-7 px-1.5 text-xs w-[130px] ${dateRangeInvalid ? "border-destructive focus-visible:ring-destructive" : ""}`}
                         />
                       </div>
-                    )}
-                    {!formData.is_milestone && (
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Início real</span>
-                        <Input
-                          type="date"
-                          value={formData.actual_start_date}
-                          onChange={(e) => setFormData({ ...formData, actual_start_date: e.target.value })}
-                          className="h-7 px-1.5 text-xs w-[130px]"
-                        />
-                      </div>
-                    )}
-                    {!formData.is_milestone && (
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Término real</span>
-                        <Input
-                          type="date"
-                          value={formData.actual_end_date}
-                          onChange={(e) => setFormData({ ...formData, actual_end_date: e.target.value })}
-                          className="h-7 px-1.5 text-xs w-[130px]"
-                        />
-                      </div>
-                    )}
-                    {dateRangeInvalid && (
-                      <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center justify-center text-destructive">
-                              <AlertTriangle className="w-4 h-4" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-[260px] text-xs">
-                            Datas inconsistentes: a data de início é posterior à data de término.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                    {(startDivergence || endDivergence) && (
-                      <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button type="button" className="inline-flex items-center justify-center text-amber-600 dark:text-amber-400 hover:opacity-80">
-                              <AlertTriangle className="w-4 h-4" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-[260px] text-xs">
-                            Divergência com subatividades:
-                            {startDivergence && minSubStart && (
-                              <div>• sub começa em <strong>{minSubStart.split("-").reverse().join("/")}</strong> (antes do pai)</div>
+                      {!formData.is_milestone && (
+                        <>
+                          <ArrowRight className="w-3.5 h-3.5 text-muted-foreground mb-1.5" />
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Fim planejado</span>
+                            <Input
+                              type="date"
+                              value={formData.end_date}
+                              onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                              className={`h-7 px-1.5 text-xs w-[130px] ${dateRangeInvalid ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                            />
+                          </div>
+                        </>
+                      )}
+                      {dateRangeInvalid && (
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center justify-center text-destructive mb-1.5">
+                                <AlertTriangle className="w-4 h-4" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="max-w-[260px] text-xs">
+                              Datas inconsistentes: a data de início é posterior à data de término.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {(startDivergence || endDivergence) && (
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button type="button" className="inline-flex items-center justify-center text-amber-600 dark:text-amber-400 hover:opacity-80 mb-1.5">
+                                <AlertTriangle className="w-4 h-4" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="max-w-[260px] text-xs">
+                              Divergência com subatividades:
+                              {startDivergence && minSubStart && (
+                                <div>• sub começa em <strong>{minSubStart.split("-").reverse().join("/")}</strong> (antes do pai)</div>
+                              )}
+                              {endDivergence && maxSubEnd && (
+                                <div>• sub termina em <strong>{maxSubEnd.split("-").reverse().join("/")}</strong> (depois do pai)</div>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
+
+                    {/* EXECUÇÃO REAL — acompanhamento (não para milestone) */}
+                    {!formData.is_milestone && (() => {
+                      const hasReal = !!(formData.actual_start_date || formData.actual_end_date);
+                      const expanded = showRealDates || hasReal;
+                      if (!expanded) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setShowRealDates(true)}
+                            className="self-start inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                          >
+                            <Plus className="w-3 h-3" /> Registrar datas reais
+                          </button>
+                        );
+                      }
+                      const v = endVariance(formData.actual_end_date || null, (act as any)?.baseline_end_date, formData.end_date);
+                      const tone = v !== null ? varianceTone(v) : null;
+                      return (
+                        <div className="pt-2.5 border-t border-dashed border-border/70 flex flex-col gap-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Execução real</span>
+                            {v !== null && tone && (
+                              <span className={cn("px-1.5 py-0 rounded border text-[10px] font-mono", varianceClasses(tone))}
+                                    title={(act as any)?.baseline_end_date ? "Real − Linha de Base" : "Real − Planejado"}>
+                                {v > 0 ? `${Math.abs(v)}d de atraso` : v < 0 ? `${Math.abs(v)}d adiantado` : "no prazo"}
+                              </span>
                             )}
-                            {endDivergence && maxSubEnd && (
-                              <div>• sub termina em <strong>{maxSubEnd.split("-").reverse().join("/")}</strong> (depois do pai)</div>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
+                            <span className="text-[10px] text-muted-foreground/70">preenchido ao concluir</span>
+                          </div>
+                          <div className="flex flex-wrap items-end gap-2 text-xs">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] text-muted-foreground/80">Início real</span>
+                              <Input
+                                type="date"
+                                value={formData.actual_start_date}
+                                onChange={(e) => setFormData({ ...formData, actual_start_date: e.target.value })}
+                                className="h-7 px-1.5 text-xs w-[130px]"
+                              />
+                            </div>
+                            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground mb-1.5" />
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] text-muted-foreground/80">Término real</span>
+                              <Input
+                                type="date"
+                                value={formData.actual_end_date}
+                                onChange={(e) => setFormData({ ...formData, actual_end_date: e.target.value })}
+                                className="h-7 px-1.5 text-xs w-[130px]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </PropertyRow>
-
-                {/* Datas Reais (somente leitura) + chip de Desvio — não se aplica a Qualidade */}
-                {!isQualityProject && (act?.actual_start_date || act?.actual_end_date) && !formData.is_milestone && (
-                  <PropertyRow icon={<Calendar className="w-3.5 h-3.5 text-muted-foreground" />} label="Real">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="font-mono">
-                        {(act?.actual_start_date || "—").split("-").reverse().join("/")}
-                      </span>
-                      <ArrowRight className="w-3 h-3" />
-                      <span className="font-mono">
-                        {((act?.actual_end_date || "—") + "").split("-").reverse().join("/")}
-                      </span>
-                      {(() => {
-                        const real = act?.actual_end_date || null;
-                        const v = endVariance(real, (act as any)?.baseline_end_date, act?.end_date);
-                        if (v === null) return null;
-                        const tone = varianceTone(v);
-                        return (
-                          <span className={cn("ml-1 px-1.5 py-0 rounded border text-[10px] font-mono", varianceClasses(tone))}
-                                title={(act as any)?.baseline_end_date ? "Real − Linha de Base" : "Real − Previsto"}>
-                            Desvio {formatVariance(v)}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  </PropertyRow>
-                )}
 
                 {/* Relacionamentos inline */}
                 {projectId && (
