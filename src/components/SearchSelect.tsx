@@ -81,14 +81,13 @@ export function SearchSelect({
       <PopoverContent
         className="p-0 w-[--radix-popover-trigger-width] min-w-[240px]"
         align="start"
-        side="bottom"
         sideOffset={4}
-        collisionPadding={12}
+        collisionPadding={16}
       >
-        <Command shouldFilter={false} className="max-h-[min(340px,var(--radix-popover-content-available-height))]">
+        <Command shouldFilter={false}>
           <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
           <CommandList
-            className="max-h-[260px] overflow-y-auto overscroll-contain"
+            className="max-h-[min(300px,var(--radix-popover-content-available-height,300px))] overflow-y-auto overscroll-contain"
             onWheel={(e) => e.stopPropagation()}
           >
             <CommandEmpty>{emptyText}</CommandEmpty>
