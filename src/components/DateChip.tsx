@@ -81,7 +81,7 @@ export function DateChip({ value, onChange, placeholder, tooltip, invalid, disab
           chip
         )}
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent className="w-auto p-0" align="start" side="bottom" sideOffset={4} collisionPadding={12}>
         <Calendar
           mode="single"
           selected={toDate(value)}

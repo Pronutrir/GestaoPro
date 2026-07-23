@@ -98,8 +98,14 @@ export function PersonCombobox({
   return (
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQuery(""); }}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent className="p-0 w-[--radix-popover-trigger-width] min-w-[280px]" align="start">
-        <Command shouldFilter={false} className="max-h-[320px]">
+      <PopoverContent
+        className="p-0 w-[--radix-popover-trigger-width] min-w-[280px]"
+        align="start"
+        side="bottom"
+        sideOffset={4}
+        avoidCollisions={false}
+      >
+        <Command shouldFilter={false} className="max-h-[min(320px,var(--radix-popover-content-available-height))]">
           <CommandInput
             placeholder="Nome, setor ou função..."
             value={query}

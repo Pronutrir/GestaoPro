@@ -70,8 +70,14 @@ export function SearchSelect({
           <ChevronsUpDown className="w-4 h-4 opacity-50 shrink-0" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="p-0 w-[--radix-popover-trigger-width] min-w-[240px]" align="start">
-        <Command shouldFilter={false} className="max-h-[320px]">
+      <PopoverContent
+        className="p-0 w-[--radix-popover-trigger-width] min-w-[240px]"
+        align="start"
+        side="bottom"
+        sideOffset={4}
+        avoidCollisions={false}
+      >
+        <Command shouldFilter={false} className="max-h-[min(320px,var(--radix-popover-content-available-height))]">
           <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
           <CommandList
             className="max-h-[260px] overflow-y-auto overscroll-contain"
