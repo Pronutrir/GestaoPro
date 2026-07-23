@@ -6,5 +6,6 @@ implementação. Abra os HTML no navegador.
 - **plano-kanban.html** — Controle de fluxo (WIP + contadores) e card informativo do Kanban.
 - **plano-card.html** — Card configurável do Kanban (toggles por informação).
 - **plano-backlog.html** — Layout do Backlog em colunas (referências Jira/Linear/Asana).
+- **plano-times.html** — Onde os grupos/times vivem na gestão (visão Kanban vs entidade no banco).
 
 São material de referência de design; não fazem parte do build da aplicação.
