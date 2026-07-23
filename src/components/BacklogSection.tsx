@@ -21,6 +21,9 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -113,6 +116,39 @@ export const BacklogSection = ({
   const [editingTitleValue, setEditingTitleValue] = useState("");
   // Modo de seleção em lote: quando ativo, exibe checkboxes nas linhas
   const [selectMode, setSelectMode] = useState(false);
+
+  // Colunas selecionáveis do backlog (o usuário escolhe o que ver). Persistido
+  // por projeto, mesmo padrão da tabela de subatividades.
+  const BACKLOG_COLS: { id: string; label: string; width: string; align?: "center" | "left" }[] = [
+    { id: "priority", label: "Prioridade", width: "132px", align: "left" },
+    { id: "status", label: "Status", width: "148px", align: "left" },
+    { id: "assigned_to", label: "Responsável", width: "180px", align: "left" },
+    { id: "end_date", label: "Prazo", width: "116px", align: "left" },
+    { id: "hours", label: "Horas", width: "96px", align: "left" },
+  ];
+  const BACKLOG_COLS_DEFAULT = ["priority", "status", "assigned_to", "end_date"];
+  const backlogColsKey = `backlog-cols:${projectId}`;
+  const [visibleCols, setVisibleCols] = useState<string[]>(() => {
+    if (typeof window === "undefined") return BACKLOG_COLS_DEFAULT;
+    try {
+      const stored = localStorage.getItem(`backlog-cols:${projectId}`);
+      if (!stored) return BACKLOG_COLS_DEFAULT;
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : BACKLOG_COLS_DEFAULT;
+    } catch {
+      return BACKLOG_COLS_DEFAULT;
+    }
+  });
+  const toggleCol = (id: string) => {
+    setVisibleCols((prev) => {
+      const next = prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id];
+      try { localStorage.setItem(backlogColsKey, JSON.stringify(next)); } catch { /* quota */ }
+      return next;
+    });
+  };
+  const activeCols = BACKLOG_COLS.filter((c) => visibleCols.includes(c.id));
+  // Grid: [expand 20][check 26][tarefa flex][...colunas][ações 68]
+  const backlogGrid = `20px 26px minmax(220px,1fr) ${activeCols.map((c) => c.width).join(" ")} 68px`;
 
   useEffect(() => {
     const ids = activities.map((a) => a.id);
@@ -418,6 +454,61 @@ export const BacklogSection = ({
     onDataChanged();
   };
 
+  // Conta itens e concluídos de um grupo (raízes + toda a subárvore visível).
+  const groupProgress = (roots: Activity[]): { total: number; done: number } => {
+    let total = 0, done = 0;
+    const walk = (a: Activity) => {
+      total += 1;
+      if (a.status === "completed") done += 1;
+      (childrenByParent.get(a.id) || []).forEach(walk);
+    };
+    roots.forEach(walk);
+    return { total, done };
+  };
+
+  // Cabeçalho de colunas alinhado com o grid das linhas.
+  const ColumnHeader = () => (
+    <div
+      className="grid items-center gap-3 px-3 py-2 bg-muted/40 border-b border-border text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+      style={{ gridTemplateColumns: backlogGrid }}
+    >
+      <span /><span />
+      <span>Tarefa</span>
+      {activeCols.map((c) => (
+        <span key={c.id}>{c.label}</span>
+      ))}
+      <span className="flex justify-end">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="h-5 w-5 inline-flex items-center justify-center rounded border border-muted-foreground/30 text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors"
+              title="Escolher colunas"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-52 p-2" align="end">
+            <div className="text-[11px] font-semibold text-muted-foreground mb-1.5 normal-case">
+              Colunas visíveis
+            </div>
+            <div className="space-y-0.5">
+              {BACKLOG_COLS.map((col) => (
+                <label
+                  key={col.id}
+                  className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-muted cursor-pointer text-xs normal-case font-normal"
+                >
+                  <Checkbox checked={visibleCols.includes(col.id)} onCheckedChange={() => toggleCol(col.id)} />
+                  <span>{col.label}</span>
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      </span>
+    </div>
+  );
+
   const renderActivityRow = (activity: Activity, depth: number = 0) => {
     const isSelected = selectedIds.has(activity.id);
     const prio = activity.priority || "medium";
@@ -427,28 +518,105 @@ export const BacklogSection = ({
     const isEditingTitle = editingTitleId === activity.id;
     const quickAddOpen = quickAddKey === `parent:${activity.id}`;
 
+    const kind = resolveKind(activity, hasChildren);
+    const kindMeta = KIND_META[kind];
+    const isTopLevel = !activity.parent_id;
+    const typeOptions: Kind[] = hasChildren ? ["pacote"] : ["atividade", "marco", "pacote"];
+    if (isTopLevel) typeOptions.push("fase");
+    const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
+    const dc = dependencyCounts.get(activity.id);
+    const hasDeps = !!dc && (dc.pred > 0 || dc.succ > 0);
+
+    const renderCol = (colId: string) => {
+      if (colId === "priority") {
+        return (
+          <span key="priority" className="min-w-0" title={`Prioridade: ${priorityLabels[prio] || prio}`}>
+            <span className={`inline-flex items-center gap-1.5 h-6 px-2.5 rounded-md border text-xs font-medium ${priorityColors[prio] || priorityColors.medium}`}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityDot[prio] || priorityDot.medium}`} aria-hidden />
+              {priorityLabels[prio] || prio}
+            </span>
+          </span>
+        );
+      }
+      if (colId === "status") {
+        return (
+          <span key="status" className="min-w-0">
+            {stg ? (
+              <span
+                className="inline-block max-w-full truncate text-xs font-medium px-2.5 py-1 rounded-md border"
+                style={{ borderColor: stg.color, color: stg.color, backgroundColor: `${stg.color}18` }}
+                title={`Status: ${stg.title}`}
+              >
+                {stg.title}
+              </span>
+            ) : <span className="text-xs text-muted-foreground/40">—</span>}
+          </span>
+        );
+      }
+      if (colId === "assigned_to") {
+        return (
+          <span key="assigned_to" className="flex items-center gap-2 min-w-0">
+            {activity.assigned_to ? (() => {
+              const rawAssignee = activity.assigned_to || "";
+              const resolvedName = profileNameMap[rawAssignee] || rawAssignee;
+              const avatar = resolveAvatarFromLookup(rawAssignee, resolvedName, profileAvatarMap);
+              return (
+                <>
+                  <Avatar className="h-6 w-6 shrink-0">
+                    {avatar ? <AvatarImage src={avatar} alt={resolvedName} /> : null}
+                    <AvatarFallback className="text-[9px] font-semibold">{getAvatarInitials(resolvedName)}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-[13px] text-foreground/90 truncate">{resolvedName}</span>
+                </>
+              );
+            })() : (
+              <span className="text-[13px] text-muted-foreground/40">Sem responsável</span>
+            )}
+          </span>
+        );
+      }
+      if (colId === "end_date") {
+        const overdue = activity.end_date && activity.status !== "completed" && new Date(activity.end_date) < new Date(new Date().toDateString());
+        return (
+          <span key="end_date" className={`text-[13px] tabular-nums ${overdue ? "text-destructive font-semibold" : "text-foreground/80"}`}>
+            {activity.end_date ? new Date(activity.end_date).toLocaleDateString("pt-BR") : <span className="text-muted-foreground/40">—</span>}
+          </span>
+        );
+      }
+      if (colId === "hours") {
+        const h = Number(activity.hours) || 0;
+        return (
+          <span key="hours" className="text-[13px] tabular-nums text-foreground/80">
+            {h > 0 ? `${h % 1 === 0 ? h : h.toFixed(1)}h` : <span className="text-muted-foreground/40">—</span>}
+          </span>
+        );
+      }
+      return <span key={colId} />;
+    };
+
     return (
-      <div key={activity.id} className="space-y-1">
+      <div key={activity.id}>
         <div
-          className={`flex items-center gap-2 bg-card border rounded-lg px-3 py-2.5 hover:shadow-sm transition-all cursor-pointer group ${
-            isSelected ? "border-primary/50 bg-primary/5" : "border-border"
+          className={`grid items-center gap-3 border-b px-3 py-2.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
+            isSelected ? "bg-primary/5" : ""
           }`}
-          style={{ marginLeft: depth * 24 }}
+          style={{ gridTemplateColumns: backlogGrid, paddingLeft: 12 + depth * 22 }}
           onClick={() => { if (!isEditingTitle) onEditActivity(activity); }}
         >
+          {/* col: expand */}
           {hasChildren ? (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-5 w-5 shrink-0"
+            <button
+              type="button"
+              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
               onClick={(e) => { e.stopPropagation(); toggleParent(activity.id); }}
             >
-              {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </Button>
+              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
           ) : (
-            <span className="w-5 shrink-0" />
+            <span className="w-5" />
           )}
 
+          {/* col: checkbox (modo seleção) ou concluir */}
           {selectMode ? (
             <Checkbox
               checked={isSelected}
@@ -457,10 +625,9 @@ export const BacklogSection = ({
               aria-label={`Selecionar ${activity.title}`}
             />
           ) : (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 shrink-0"
+            <button
+              type="button"
+              className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted shrink-0"
               onClick={(e) => { e.stopPropagation(); onToggleActivity(activity.id, activity.status); }}
               title={activity.status === "completed" ? "Reabrir tarefa" : "Concluir tarefa"}
             >
@@ -469,55 +636,37 @@ export const BacklogSection = ({
               ) : (
                 <Circle className="w-4 h-4 text-muted-foreground" />
               )}
-            </Button>
+            </button>
           )}
 
-          {/* Color dot for priority */}
-          <span
-            className={`w-2 h-2 rounded-full shrink-0 ${priorityDot[prio] || priorityDot.medium}`}
-            title={`Prioridade: ${priorityLabels[prio] || prio}`}
-            aria-hidden
-          />
-
-          {/* Etiqueta de tipo EAP — clicável para trocar (automático + override). */}
-          {(() => {
-            const kind = resolveKind(activity, hasChildren);
-            const meta = KIND_META[kind];
-            const isTopLevel = !activity.parent_id;
-            // Com filhos: só agrupadores. Fase só faz sentido no topo (sem pai).
-            let options: Kind[] = hasChildren ? ["pacote"] : ["atividade", "marco", "pacote"];
-            if (isTopLevel) options.push("fase");
-            return (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={(e) => e.stopPropagation()}
-                    title="Clique para mudar o tipo (Fase / Pacote / Atividade / Marco)"
-                    className={`shrink-0 inline-flex items-center gap-1 px-1.5 h-5 rounded-md border text-[10px] font-semibold uppercase tracking-wide transition-colors hover:brightness-95 ${meta.cls}`}
+          {/* col: ícone de tipo (clicável) + título + código EAP + deps */}
+          <div className="flex items-center gap-2 min-w-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
+                  title={`${kindMeta.label} — clique para mudar o tipo`}
+                  className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md border transition-colors hover:brightness-95 ${kindMeta.cls}`}
+                >
+                  {kindMeta.icon}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                {typeOptions.map((k) => (
+                  <DropdownMenuItem
+                    key={k}
+                    onClick={(e) => { e.stopPropagation(); if (k !== kind) handleChangeType(activity, k, hasChildren); }}
+                    className={k === kind ? "font-semibold" : ""}
                   >
-                    {meta.icon}
-                    <span className="hidden sm:inline">{meta.label}</span>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-                  {options.map((k) => (
-                    <DropdownMenuItem
-                      key={k}
-                      onClick={(e) => { e.stopPropagation(); if (k !== kind) handleChangeType(activity, k, hasChildren); }}
-                      className={k === kind ? "font-semibold" : ""}
-                    >
-                      <span className="mr-2 inline-flex">{KIND_META[k].icon}</span>
-                      {KIND_META[k].label}
-                      {k === kind && <span className="ml-auto text-[10px] text-muted-foreground">atual</span>}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            );
-          })()}
+                    <span className="mr-2 inline-flex">{KIND_META[k].icon}</span>
+                    {KIND_META[k].label}
+                    {k === kind && <span className="ml-auto text-[10px] text-muted-foreground">atual</span>}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          <div className="flex-1 min-w-0">
             {isEditingTitle ? (
               <Input
                 autoFocus
@@ -533,86 +682,45 @@ export const BacklogSection = ({
                 className="h-7 text-sm"
               />
             ) : (
-              <p
-                className={`text-sm font-medium truncate ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  setEditingTitleId(activity.id);
-                  setEditingTitleValue(activity.title);
-                }}
-                title="Duplo-clique para editar"
-              >
-                {activity.title}
-                {hasChildren && <span className="ml-2 text-xs text-muted-foreground font-normal">({subs.length})</span>}
-              </p>
-            )}
-            {activity.description && (
-              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{activity.description}</p>
+              <span className="min-w-0 flex items-center gap-2">
+                {!!(activity as any).wbs_code && (
+                  <span className="inline-flex items-center h-5 px-1.5 rounded border border-border bg-muted/50 text-[11px] font-mono text-muted-foreground shrink-0" title="Código EAP">
+                    {(activity as any).wbs_code}
+                  </span>
+                )}
+                <span
+                  className={`text-sm font-normal truncate ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setEditingTitleId(activity.id);
+                    setEditingTitleValue(activity.title);
+                  }}
+                  title={activity.description || "Duplo-clique para editar"}
+                >
+                  {activity.title}
+                </span>
+                {hasChildren && <span className="text-xs text-muted-foreground font-normal shrink-0">({subs.length})</span>}
+                {hasDeps && (
+                  <span
+                    className="shrink-0 text-[11px] text-primary/80"
+                    title={`${dc!.pred} predecessora(s) · ${dc!.succ} sucessora(s)`}
+                  >
+                    🔗{dc!.pred > 0 ? `←${dc!.pred}` : ""}{dc!.succ > 0 ? `→${dc!.succ}` : ""}
+                  </span>
+                )}
+              </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <Badge variant="outline" className={`text-[10px] ${priorityColors[prio]}`}>
-              {priorityLabels[prio] || prio}
-            </Badge>
-            {(() => {
-              const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
-              if (!stg) return null;
-              return (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] font-medium"
-                  style={{
-                    borderColor: stg.color,
-                    color: stg.color,
-                    backgroundColor: `${stg.color}15`,
-                  }}
-                  title={`Status: ${stg.title}`}
-                >
-                  {stg.title}
-                </Badge>
-              );
-            })()}
-            {activity.assigned_to && (
-              <Badge variant="secondary" className="text-[10px]">
-                <span className="inline-flex items-center gap-1 max-w-[180px]">
-                  {(() => {
-                    const rawAssignee = activity.assigned_to || "";
-                    const resolvedName = profileNameMap[rawAssignee] || rawAssignee;
-                    const avatar = resolveAvatarFromLookup(rawAssignee, resolvedName, profileAvatarMap);
-                    return (
-                      <>
-                        <Avatar className="h-3.5 w-3.5 shrink-0">
-                          {avatar ? <AvatarImage src={avatar} alt={resolvedName} /> : null}
-                          <AvatarFallback className="text-[7px] font-semibold">
-                            {getAvatarInitials(resolvedName)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="truncate">{resolvedName}</span>
-                      </>
-                    );
-                  })()}
-                </span>
-              </Badge>
-            )}
-            {(() => {
-              const dc = dependencyCounts.get(activity.id);
-              if (!dc || (dc.pred === 0 && dc.succ === 0)) return null;
-              return (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] bg-primary/10 text-primary border-primary/30 font-semibold"
-                  title={`${dc.pred} predecessora(s) · ${dc.succ} sucessora(s)`}
-                >
-                  🔗 {dc.pred > 0 ? `←${dc.pred}` : ""}{dc.pred > 0 && dc.succ > 0 ? " " : ""}{dc.succ > 0 ? `→${dc.succ}` : ""}
-                </Badge>
-              );
-            })()}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 px-1.5 text-[11px] gap-1 text-muted-foreground hover:text-primary opacity-60 group-hover:opacity-100 transition-opacity"
-              title="Adicionar um subitem dentro deste (torna-o um Pacote)"
+          {/* colunas selecionáveis, na ordem de BACKLOG_COLS */}
+          {activeCols.map((c) => renderCol(c.id))}
+
+          {/* col: ações (aparecem no hover) */}
+          <span className="flex items-center gap-0.5 justify-end shrink-0">
+            <button
+              type="button"
+              className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Adicionar subitem (torna-o um Pacote)"
               onClick={(e) => {
                 e.stopPropagation();
                 setQuickAddKey(`parent:${activity.id}`);
@@ -620,29 +728,29 @@ export const BacklogSection = ({
                 setCollapsedParents((prev) => { const n = new Set(prev); n.delete(activity.id); return n; });
               }}
             >
-              <Plus className="w-3.5 h-3.5" /> Subitem
-            </Button>
+              <Plus className="w-3.5 h-3.5" />
+            </button>
             {isAdmin && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+              <button
+                type="button"
+                className="h-6 w-6 flex items-center justify-center rounded text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={(e) => { e.stopPropagation(); onDeleteActivity(activity.id); }}
+                title="Excluir"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-              </Button>
+              </button>
             )}
-          </div>
+          </span>
         </div>
 
         {hasChildren && !isCollapsed && (
-          <div className="space-y-1">
+          <div>
             {subs.map((sub) => renderActivityRow(sub, depth + 1))}
           </div>
         )}
 
         {quickAddOpen && (
-          <div style={{ marginLeft: (depth + 1) * 24 }} className="flex items-center gap-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+          <div style={{ marginLeft: 8 + (depth + 1) * 20 }} className="flex items-center gap-2 px-3 py-2 my-1 border border-dashed border-primary/40 rounded-lg bg-primary/5">
             <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
             <Input
               autoFocus
@@ -672,43 +780,49 @@ export const BacklogSection = ({
     );
     const quickAddPhaseKey = `phase:${key}`;
     const quickAddOpen = quickAddKey === quickAddPhaseKey;
+    const { total: progTotal, done: progDone } = groupProgress(acts);
+    const progPct = progTotal > 0 ? Math.round((progDone / progTotal) * 100) : 0;
 
     return (
-      <Card key={key} className="p-3 bg-muted/40 border-border">
-        <div className="flex items-center gap-2 mb-2">
-          {phaseId && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6 shrink-0"
+      <div key={key}>
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50">
+          {phaseId ? (
+            <button
+              type="button"
+              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
               onClick={() => togglePhase(phaseId)}
             >
               {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </Button>
-          )}
-          {phaseId ? (
-            <Layers className="w-4 h-4 text-primary shrink-0" />
+            </button>
           ) : (
-            <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+            <span className="w-5 shrink-0" />
           )}
-          <h4 className="text-sm font-semibold text-foreground flex-1">
-            {phaseTitle}
-            <span className="ml-2 text-xs text-muted-foreground font-normal">
-              {totalCount} {totalCount === 1 ? "item" : "itens"}
-            </span>
-          </h4>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs gap-1"
-            onClick={() => { setQuickAddKey(quickAddPhaseKey); setQuickAddTitle(""); }}
-          >
-            <Plus className="w-3.5 h-3.5" /> Tarefa
-          </Button>
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-primary/10 text-primary shrink-0">
+            {phaseId ? <Layers className="w-3.5 h-3.5" /> : <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />}
+          </span>
+          <h4 className="text-[13px] font-semibold text-foreground">{phaseTitle}</h4>
+          <div className="flex items-center gap-3 ml-auto">
+            {progTotal > 0 && (
+              <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
+                <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
+                  <span className="block h-full rounded-full bg-success transition-all" style={{ width: `${progPct}%` }} />
+                </span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{progDone}/{progTotal}</span>
+              </span>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs gap-1"
+              onClick={() => { setQuickAddKey(quickAddPhaseKey); setQuickAddTitle(""); }}
+            >
+              <Plus className="w-3.5 h-3.5" /> Tarefa
+            </Button>
+          </div>
         </div>
 
         {!isCollapsed && (
-          <div className="space-y-1">
+          <div>
             {acts.length === 0 && !quickAddOpen ? (
               <p className="text-xs text-muted-foreground/70 italic px-2 py-3 text-center">
                 Nenhuma tarefa. Clique em "+ Tarefa" para começar.
@@ -717,7 +831,7 @@ export const BacklogSection = ({
               acts.map((a) => renderActivityRow(a, 0))
             )}
             {quickAddOpen && (
-              <div className="flex items-center gap-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+              <div className="flex items-center gap-2 mx-2 my-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
                 <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                 <Input
                   autoFocus
@@ -735,7 +849,7 @@ export const BacklogSection = ({
             )}
           </div>
         )}
-      </Card>
+      </div>
     );
   };
 
@@ -747,20 +861,23 @@ export const BacklogSection = ({
     const quickAddPhaseKey = `parent:${phaseAct.id}`;
     const quickAddOpen = quickAddKey === quickAddPhaseKey;
     const isEditingTitle = editingTitleId === phaseAct.id;
+    const { total: progTotal, done: progDone } = groupProgress(subs);
+    const progPct = progTotal > 0 ? Math.round((progDone / progTotal) * 100) : 0;
 
     return (
-      <Card key={phaseAct.id} className="p-3 bg-muted/40 border-border">
-        <div className="flex items-center gap-2 mb-2">
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 shrink-0"
+      <div key={phaseAct.id}>
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50">
+          <button
+            type="button"
+            className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
             onClick={() => toggleParent(phaseAct.id)}
           >
             {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </Button>
-          <Layers className="w-4 h-4 text-primary shrink-0" />
-          <div className="flex-1 min-w-0">
+          </button>
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-primary/10 text-primary shrink-0">
+            <Layers className="w-3.5 h-3.5" />
+          </span>
+          <div className="min-w-0">
             {isEditingTitle ? (
               <Input
                 autoFocus
@@ -777,7 +894,7 @@ export const BacklogSection = ({
               />
             ) : (
               <h4
-                className="text-sm font-semibold text-foreground cursor-pointer"
+                className="text-[13px] font-semibold text-foreground cursor-pointer truncate"
                 onClick={() => onEditActivity(phaseAct)}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
@@ -787,39 +904,45 @@ export const BacklogSection = ({
                 title="Clique para editar · duplo-clique para renomear"
               >
                 {phaseAct.title}
-                <span className="ml-2 text-xs text-muted-foreground font-normal">
-                  {totalCount} {totalCount === 1 ? "tarefa" : "tarefas"}
-                </span>
               </h4>
             )}
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs gap-1"
-            onClick={() => {
-              setQuickAddKey(quickAddPhaseKey);
-              setQuickAddTitle("");
-              setCollapsedParents((prev) => { const n = new Set(prev); n.delete(phaseAct.id); return n; });
-            }}
-          >
-            <Plus className="w-3.5 h-3.5" /> Tarefa
-          </Button>
-          {isAdmin && (
+          <div className="flex items-center gap-3 ml-auto">
+            {progTotal > 0 && (
+              <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
+                <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
+                  <span className="block h-full rounded-full bg-success transition-all" style={{ width: `${progPct}%` }} />
+                </span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{progDone}/{progTotal}</span>
+              </span>
+            )}
             <Button
-              size="icon"
+              size="sm"
               variant="ghost"
-              className="h-7 w-7 text-destructive"
-              title="Excluir fase"
-              onClick={(e) => { e.stopPropagation(); onDeleteActivity(phaseAct.id); }}
+              className="h-7 text-xs gap-1"
+              onClick={() => {
+                setQuickAddKey(quickAddPhaseKey);
+                setQuickAddTitle("");
+                setCollapsedParents((prev) => { const n = new Set(prev); n.delete(phaseAct.id); return n; });
+              }}
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5" /> Tarefa
             </Button>
-          )}
+            {isAdmin && (
+              <button
+                type="button"
+                className="h-7 w-7 flex items-center justify-center rounded text-destructive hover:bg-destructive/10"
+                title="Excluir fase"
+                onClick={(e) => { e.stopPropagation(); onDeleteActivity(phaseAct.id); }}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {!isCollapsed && (
-          <div className="space-y-1">
+          <div>
             {subs.length === 0 && !quickAddOpen ? (
               <p className="text-xs text-muted-foreground/70 italic px-2 py-3 text-center">
                 Nenhuma tarefa nesta fase. Clique em "+ Tarefa" para começar.
@@ -828,7 +951,7 @@ export const BacklogSection = ({
               subs.map((s) => renderActivityRow(s, 0))
             )}
             {quickAddOpen && (
-              <div className="flex items-center gap-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+              <div className="flex items-center gap-2 mx-2 my-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
                 <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                 <Input
                   autoFocus
@@ -846,12 +969,12 @@ export const BacklogSection = ({
             )}
           </div>
         )}
-      </Card>
+      </div>
     );
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Toolbar */}
       {backlogActs.length > 0 && (
         <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -885,19 +1008,25 @@ export const BacklogSection = ({
             </p>
           </div>
           <div className="flex items-center gap-1">
+            {selectMode && selectedIds.size > 0 && (
+              <Button size="sm" className="h-7 text-xs gap-1.5 mr-1" onClick={() => setMoveDialogOpen(true)}>
+                <ArrowRight className="w-3.5 h-3.5" />
+                Mudar status ({selectedIds.size})
+              </Button>
+            )}
             <Button
-              size="sm"
+              size="icon"
               variant="ghost"
-              className="h-7 px-2 text-xs gap-1"
+              className="h-7 w-7 text-muted-foreground"
               onClick={() => { setCollapsedPhases(new Set()); setCollapsedParents(new Set()); }}
               title="Expandir tudo"
             >
-              <ChevronsUpDown className="w-3.5 h-3.5" /> Expandir
+              <ChevronsUpDown className="w-4 h-4" />
             </Button>
             <Button
-              size="sm"
+              size="icon"
               variant="ghost"
-              className="h-7 px-2 text-xs gap-1"
+              className="h-7 w-7 text-muted-foreground"
               onClick={() => {
                 const allPhaseIds = phases.map(p => p.id);
                 const parentIds = backlogActs.filter(a => (childrenByParent.get(a.id) || []).length > 0).map(a => a.id);
@@ -906,29 +1035,25 @@ export const BacklogSection = ({
               }}
               title="Recolher tudo"
             >
-              <ChevronsDownUp className="w-3.5 h-3.5" /> Recolher
+              <ChevronsDownUp className="w-4 h-4" />
             </Button>
-            {selectMode && selectedIds.size > 0 && (
-              <Button size="sm" className="h-7 text-xs gap-1.5 ml-1" onClick={() => setMoveDialogOpen(true)}>
-                <ArrowRight className="w-3.5 h-3.5" />
-                Mudar status ({selectedIds.size})
-              </Button>
-            )}
           </div>
         </div>
       )}
 
-      {/* Phase groups */}
-      <div className="space-y-3">
+      {/* Phase groups — tabela única com cabeçalho de colunas no topo */}
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
         {phases.length === 0 && backlogActs.length === 0 && (
-          <Card className="p-8 text-center">
+          <div className="p-8 text-center">
             <Inbox className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
             <p className="text-muted-foreground text-sm">Nenhuma fase ou atividade ainda</p>
             <p className="text-muted-foreground/60 text-xs mt-1">
               Crie uma fase para começar a organizar pacotes e atividades
             </p>
-          </Card>
+          </div>
         )}
+
+        {backlogActs.length > 0 && <ColumnHeader />}
 
         {phases.map((p) => renderPhaseGroup(p.id, p.title))}
 
@@ -939,31 +1064,41 @@ export const BacklogSection = ({
         {(() => {
           const orphanTop = topLevelByPhase.get("none") || [];
           const looseTasks = orphanTop;
+          const { total: progTotal, done: progDone } = groupProgress(looseTasks);
+          const progPct = progTotal > 0 ? Math.round((progDone / progTotal) * 100) : 0;
           return (
             <>
               {looseTasks.length > 0 && (
-                <Card className="p-3 bg-muted/40 border-border">
-                  <div className="flex items-center gap-2 mb-2">
-                    <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <h4 className="text-sm font-semibold text-foreground flex-1">
-                      Sem fase
-                      <span className="ml-2 text-xs text-muted-foreground font-normal">
-                        {looseTasks.length} {looseTasks.length === 1 ? "tarefa" : "tarefas"}
-                      </span>
-                    </h4>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => { setQuickAddKey(`phase:none`); setQuickAddTitle(""); }}
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Tarefa
-                    </Button>
+                <div>
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50">
+                    <span className="w-5 shrink-0" />
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-muted text-muted-foreground shrink-0">
+                      <FolderOpen className="w-3.5 h-3.5" />
+                    </span>
+                    <h4 className="text-[13px] font-semibold text-muted-foreground">Sem fase</h4>
+                    <div className="flex items-center gap-3 ml-auto">
+                      {progTotal > 0 && (
+                        <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
+                          <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
+                            <span className="block h-full rounded-full bg-success transition-all" style={{ width: `${progPct}%` }} />
+                          </span>
+                          <span className="text-[11px] text-muted-foreground tabular-nums">{progDone}/{progTotal}</span>
+                        </span>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => { setQuickAddKey(`phase:none`); setQuickAddTitle(""); }}
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Tarefa
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-1">
+                  <div>
                     {looseTasks.map((a) => renderActivityRow(a, 0))}
                     {quickAddKey === "phase:none" && (
-                      <div className="flex items-center gap-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+                      <div className="flex items-center gap-2 mx-2 my-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
                         <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                         <Input
                           autoFocus
@@ -980,7 +1115,7 @@ export const BacklogSection = ({
                       </div>
                     )}
                   </div>
-                </Card>
+                </div>
               )}
             </>
           );
