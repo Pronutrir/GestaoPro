@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { PersonCombobox } from "@/components/PersonCombobox";
+import { SearchSelect } from "@/components/SearchSelect";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import {
@@ -681,20 +682,15 @@ export const EditProjectDialog = ({
               </div>
               <div className="grid gap-2">
                 <Label>Setor do Projeto (Responsável) *</Label>
-                <Select
-                  value={formData.sector || "_none"}
-                  onValueChange={(v) => setFormData({ ...formData, sector: v === "_none" ? "" : v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o setor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Selecione</SelectItem>
-                    {sectors.map((s) => (
-                      <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchSelect
+                  options={sectors.map((s) => ({ value: s.name, label: s.name }))}
+                  value={formData.sector || null}
+                  onSelect={(v) => setFormData({ ...formData, sector: v })}
+                  onClear={() => setFormData({ ...formData, sector: "" })}
+                  placeholder="Selecione o setor"
+                  searchPlaceholder="Buscar setor..."
+                  emptyText="Nenhum setor encontrado."
+                />
                 <p className="text-[11px] text-muted-foreground">Define o setor do projeto. Pode ser diferente do setor do líder.</p>
               </div>
             </div>
