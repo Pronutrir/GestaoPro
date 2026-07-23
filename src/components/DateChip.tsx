@@ -19,10 +19,18 @@ interface DateChipProps {
   disabled?: boolean;
 }
 
-// YYYY-MM-DD -> Date local (meio-dia, evita drift de fuso)
+// Normaliza qualquer valor de data para "YYYY-MM-DD": aceita tanto uma data
+// pura (colunas `date`) quanto um timestamp ISO (colunas `timestamptz`, ex.:
+// "2026-07-23T00:00:00+00:00") — pega so a parte da data antes do "T".
+function ymd(v: string): string {
+  if (!v) return "";
+  return v.slice(0, 10);
+}
+// -> Date local (meio-dia, evita drift de fuso)
 function toDate(v: string): Date | undefined {
-  if (!v) return undefined;
-  const [y, m, d] = v.split("-").map(Number);
+  const s = ymd(v);
+  if (!s) return undefined;
+  const [y, m, d] = s.split("-").map(Number);
   if (!y || !m || !d) return undefined;
   return new Date(y, m - 1, d, 12, 0, 0);
 }
@@ -33,8 +41,11 @@ function toStr(d: Date): string {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
 }
-// YYYY-MM-DD -> dd/mm/aaaa
-const br = (v: string) => (v ? v.split("-").reverse().join("/") : "");
+// -> dd/mm/aaaa (tolera timestamp)
+const br = (v: string) => {
+  const s = ymd(v);
+  return s ? s.split("-").reverse().join("/") : "";
+};
 
 export function DateChip({ value, onChange, placeholder, tooltip, invalid, disabled }: DateChipProps) {
   const hasValue = !!value;
