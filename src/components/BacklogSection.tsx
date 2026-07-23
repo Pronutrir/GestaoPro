@@ -18,6 +18,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -377,6 +380,44 @@ export const BacklogSection = ({
     onDataChanged();
   };
 
+  // Papel EAP exibido: automático pela posição na árvore (marco > fase explícita
+  // > pacote se tem filhos > atividade), a menos que o tipo esteja gravado.
+  type Kind = "atividade" | "pacote" | "fase" | "marco";
+  const resolveKind = (a: Activity, hasChildren: boolean): Kind => {
+    if (a.is_milestone) return "marco";
+    if (a.item_type === "fase") return "fase";
+    if (a.item_type === "pacote" || hasChildren) return "pacote";
+    return "atividade";
+  };
+  const KIND_META: Record<Kind, { label: string; icon: JSX.Element; cls: string }> = {
+    fase: { label: "Fase", icon: <Layers className="w-3 h-3" />, cls: "text-primary bg-primary/10 border-primary/30" },
+    pacote: { label: "Pacote", icon: <Package className="w-3 h-3" />, cls: "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/40" },
+    atividade: { label: "Atividade", icon: <Circle className="w-3 h-3" />, cls: "text-muted-foreground bg-muted border-border" },
+    marco: { label: "Marco", icon: <Diamond className="w-3 h-3 fill-amber-500 text-amber-500" />, cls: "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/40" },
+  };
+  // Muda o tipo de um item. Tolerante: se o banco ainda não aceita 'pacote'
+  // (migration pendente), avisa mas não quebra.
+  const handleChangeType = async (activity: Activity, kind: Kind, hasChildren: boolean) => {
+    // Folha (atividade/marco) não pode ter filhos.
+    if ((kind === "atividade" || kind === "marco") && hasChildren) {
+      toast({ title: "Não é possível", description: "Este item tem subitens; só Pacote ou Fase agrupam.", variant: "destructive" });
+      return;
+    }
+    const patch = kind === "marco"
+      ? { is_milestone: true, item_type: "atividade" }
+      : { is_milestone: false, item_type: kind };
+    const { error } = await supabase.from("activities").update(patch as any).eq("id", activity.id);
+    if (error) {
+      if (kind === "pacote") {
+        toast({ title: "Pacote indisponível", description: "Aplique a migration para gravar o tipo Pacote. O item já agrupa por ter subitens.", variant: "destructive" });
+      } else {
+        toast({ title: "Erro ao mudar tipo", variant: "destructive" });
+      }
+      return;
+    }
+    onDataChanged();
+  };
+
   const renderActivityRow = (activity: Activity, depth: number = 0) => {
     const isSelected = selectedIds.has(activity.id);
     const prio = activity.priority || "medium";
@@ -438,12 +479,43 @@ export const BacklogSection = ({
             aria-hidden
           />
 
-          {/* Ícone do papel EAP: marco / fase / pacote — pelo tipo gravado. */}
-          {activity.is_milestone ? (
-            <Diamond className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0" aria-label="Marco" />
-          ) : activity.item_type === "pacote" ? (
-            <Package className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" aria-label="Pacote de trabalho" />
-          ) : null}
+          {/* Etiqueta de tipo EAP — clicável para trocar (automático + override). */}
+          {(() => {
+            const kind = resolveKind(activity, hasChildren);
+            const meta = KIND_META[kind];
+            const isTopLevel = !activity.parent_id;
+            // Com filhos: só agrupadores. Fase só faz sentido no topo (sem pai).
+            let options: Kind[] = hasChildren ? ["pacote"] : ["atividade", "marco", "pacote"];
+            if (isTopLevel) options.push("fase");
+            return (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => e.stopPropagation()}
+                    title="Clique para mudar o tipo (Fase / Pacote / Atividade / Marco)"
+                    className={`shrink-0 inline-flex items-center gap-1 px-1.5 h-5 rounded-md border text-[10px] font-semibold uppercase tracking-wide transition-colors hover:brightness-95 ${meta.cls}`}
+                  >
+                    {meta.icon}
+                    <span className="hidden sm:inline">{meta.label}</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                  {options.map((k) => (
+                    <DropdownMenuItem
+                      key={k}
+                      onClick={(e) => { e.stopPropagation(); if (k !== kind) handleChangeType(activity, k, hasChildren); }}
+                      className={k === kind ? "font-semibold" : ""}
+                    >
+                      <span className="mr-2 inline-flex">{KIND_META[k].icon}</span>
+                      {KIND_META[k].label}
+                      {k === kind && <span className="ml-auto text-[10px] text-muted-foreground">atual</span>}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            );
+          })()}
 
           <div className="flex-1 min-w-0">
             {isEditingTitle ? (
@@ -574,7 +646,7 @@ export const BacklogSection = ({
             <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
             <Input
               autoFocus
-              placeholder="Nova subtarefa (Enter para salvar, Esc para fechar)"
+              placeholder="Título do subitem — Enter cria e continua · Esc fecha"
               value={quickAddTitle}
               onChange={(e) => setQuickAddTitle(e.target.value)}
               onKeyDown={(e) => {
@@ -649,7 +721,7 @@ export const BacklogSection = ({
                 <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                 <Input
                   autoFocus
-                  placeholder="Nova tarefa (Enter para salvar, Esc para fechar)"
+                  placeholder="Título — Enter cria e continua · Esc fecha"
                   value={quickAddTitle}
                   onChange={(e) => setQuickAddTitle(e.target.value)}
                   onKeyDown={(e) => {
@@ -760,7 +832,7 @@ export const BacklogSection = ({
                 <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                 <Input
                   autoFocus
-                  placeholder="Nova tarefa (Enter para salvar, Esc para fechar)"
+                  placeholder="Título — Enter cria e continua · Esc fecha"
                   value={quickAddTitle}
                   onChange={(e) => setQuickAddTitle(e.target.value)}
                   onKeyDown={(e) => {
@@ -895,7 +967,7 @@ export const BacklogSection = ({
                         <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                         <Input
                           autoFocus
-                          placeholder="Nova tarefa (Enter para salvar, Esc para fechar)"
+                          placeholder="Título — Enter cria e continua · Esc fecha"
                           value={quickAddTitle}
                           onChange={(e) => setQuickAddTitle(e.target.value)}
                           onKeyDown={(e) => {

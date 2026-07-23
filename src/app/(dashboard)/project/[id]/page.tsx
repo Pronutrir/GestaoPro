@@ -21,6 +21,7 @@ import { ProjectCharter } from "@/components/ProjectCharter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { BacklogSection } from "@/components/BacklogSection";
+import { QuickCreateActivity } from "@/components/QuickCreateActivity";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 import { MeetingsManager } from "@/components/MeetingsManager";
@@ -180,6 +181,7 @@ export default function ProjectDetailsPage() {
   const [listStatusFilter, setListStatusFilter] = useState("all");
   const [listPriorityFilter, setListPriorityFilter] = useState("all");
   const [showAddActivity, setShowAddActivity] = useState(false);
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [createTaskStageId, setCreateTaskStageId] = useState<string | null>(null);
   const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
   const [createTaskParentId, setCreateTaskParentId] = useState<string | null>(null);
@@ -1483,12 +1485,7 @@ export default function ProjectDetailsPage() {
             <TabsContent value="backlog" className="mt-3 space-y-4">
               {canCreate && (
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="default" onClick={() => {
-                    setCreateTaskStageId(null);
-                    setCreateTaskPhaseId(null);
-                    setCreateTaskParentId(null);
-                    setShowAddActivity(true);
-                  }} className="gap-2">
+                  <Button size="sm" variant="default" onClick={() => setShowQuickCreate(true)} className="gap-2">
                     <Plus className="w-4 h-4" /> Nova Atividade
                   </Button>
                   <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
@@ -1662,6 +1659,20 @@ export default function ProjectDetailsPage() {
           projectId={id!}
           existingPhasesCount={phases.length}
           onCreated={() => fetchProjectData()}
+        />
+        <QuickCreateActivity
+          open={showQuickCreate}
+          onOpenChange={setShowQuickCreate}
+          projectId={id!}
+          parentOptions={activities as any}
+          disabledReason={isProjectConcluded ? "Projeto concluído. Reabra para criar atividades." : null}
+          onCreated={fetchProjectData}
+          onOpenDetails={async (activityId) => {
+            await fetchProjectData();
+            const created = activities.find((a) => a.id === activityId)
+              || (await supabase.from("activities").select("*").eq("id", activityId).maybeSingle()).data;
+            if (created) openEditActivity(created as any);
+          }}
         />
     </main>
   );
