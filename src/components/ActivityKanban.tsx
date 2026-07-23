@@ -504,10 +504,7 @@ function KanbanCard({
   const isMilestone = !!(activity as any).is_milestone;
   const eapType = (activity as any).item_type as string | undefined;
   const isPhase = eapType === "fase";
-  // Pacote explícito, OU inferido: tem subitens e não é fase/marco (papel pela
-  // posição na árvore — coerente mesmo sem o tipo 'pacote' gravado no banco).
-  const isPackage = !isMilestone && !isPhase &&
-    (eapType === "pacote" || (!!subActivityCount && subActivityCount > 0));
+  const isPackage = eapType === "pacote";
   const cardBorderClass = isMilestone
     ? "border-amber-500 border-l-[4px] border-l-amber-500 bg-amber-500/5"
     : isBlocked

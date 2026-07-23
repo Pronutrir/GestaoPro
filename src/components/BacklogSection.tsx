@@ -439,13 +439,10 @@ export const BacklogSection = ({
             aria-hidden
           />
 
-          {/* Ícone do papel EAP: marco / pacote de trabalho. Trata como Pacote
-              tanto o item_type='pacote' explícito quanto qualquer agrupador (tem
-              filhos, não é fase/marco) — o papel é inferido pela posição na
-              árvore, como no resto do sistema, mesmo sem o tipo gravado. */}
+          {/* Ícone do papel EAP: marco / fase / pacote — pelo tipo gravado. */}
           {activity.is_milestone ? (
             <Diamond className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0" aria-label="Marco" />
-          ) : (activity.item_type === "pacote" || (hasChildren && activity.item_type !== "fase")) ? (
+          ) : activity.item_type === "pacote" ? (
             <Package className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" aria-label="Pacote de trabalho" />
           ) : null}
 
@@ -541,10 +538,10 @@ export const BacklogSection = ({
               );
             })()}
             <Button
-              size="icon"
+              size="sm"
               variant="ghost"
-              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Adicionar subtarefa"
+              className="h-6 px-1.5 text-[11px] gap-1 text-muted-foreground hover:text-primary opacity-60 group-hover:opacity-100 transition-opacity"
+              title="Adicionar um subitem dentro deste (torna-o um Pacote)"
               onClick={(e) => {
                 e.stopPropagation();
                 setQuickAddKey(`parent:${activity.id}`);
@@ -552,7 +549,7 @@ export const BacklogSection = ({
                 setCollapsedParents((prev) => { const n = new Set(prev); n.delete(activity.id); return n; });
               }}
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5" /> Subitem
             </Button>
             {isAdmin && (
               <Button

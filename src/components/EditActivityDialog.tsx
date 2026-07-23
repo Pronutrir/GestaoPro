@@ -1584,16 +1584,8 @@ export const EditActivityDialog = ({
                     Mutuamente exclusivo. Substitui os antigos switches. */}
                 {(() => {
                   type Kind = "atividade" | "pacote" | "fase" | "marco";
-                  // Papel exibido: marco/fase explícitos; senão 'pacote' quando o
-                  // item tem subitens (inferido pela árvore, mesmo sem o tipo
-                  // 'pacote' gravado no banco); caso contrário, o tipo gravado.
-                  const itemKind: Kind = formData.is_milestone
-                    ? "marco"
-                    : formData.item_type === "fase"
-                    ? "fase"
-                    : hasSubActivities
-                    ? "pacote"
-                    : formData.item_type;
+                  // Tipo manual: reflete exatamente o item_type gravado.
+                  const itemKind: Kind = formData.is_milestone ? "marco" : formData.item_type;
                   const setKind = (kind: Kind) =>
                     setFormData({
                       ...formData,
@@ -1698,6 +1690,12 @@ export const EditActivityDialog = ({
                         </div>
                         {activeHint && (
                           <span className="text-[11px] text-muted-foreground">{activeHint}</span>
+                        )}
+                        {hasSubActivities && (
+                          <span className="text-[11px] text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                            <Package className="w-3 h-3 shrink-0" />
+                            Este item agrupa {ownSubActivities.length} subitem(ns) — por isso é um Pacote. Horas e custo são somados dos filhos (veja a aba Subatividades).
+                          </span>
                         )}
                       </div>
                     </PropertyRow>
