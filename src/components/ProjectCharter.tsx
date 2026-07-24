@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  FileText, Save, ClipboardList, CheckCircle2, Ban,
+  FileText, Save, ClipboardList, CheckCircle2, Ban, FileDown,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -90,21 +90,25 @@ interface ProjectCharterProps {
 
 interface CharterData {
   sponsor: string;
+  manager: string;            // gerente do projeto (PMBOK)
+  authority: string;          // nível de autoridade do gerente
   start_date: string;
   justification: string;
-  deliverables: string;
-  assumptions: string;
-  approval_requirements: string;
-  // novos
+  assumptions: string;        // premissas (recuperado)
+  constraints: string;        // restrições (premissas & restrições)
+  // objetivo SMART
   smart_specific?: string;
   smart_measurable?: string;
   smart_achievable?: string;
   smart_relevant?: string;
   smart_temporal?: string;
-  success_criteria?: string;
   approvals?: { role: string; name: string; date: string }[];
   code?: string;
   benefits_table?: { benefit: string; indicator: string; goal: string; deadline: string }[];
+  // aprovação formal (trava)
+  approved_at?: string | null;
+  approved_by?: string | null;
+  approved_by_name?: string | null;
 }
 
 /* -------- TextField -------- */
@@ -166,7 +170,7 @@ const SectionBlock = ({ n, title, children }: { n: number; title: string; childr
 /* ============================================================ */
 export const ProjectCharter = ({ projectId, project, phases, members, onMembersChanged }: ProjectCharterProps) => {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, canManage } = useAuth();
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -177,11 +181,12 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
   const [addingMember, setAddingMember] = useState(false);
 
   const [data, setData] = useState<CharterData>({
-    sponsor: "", start_date: "", justification: "", deliverables: "",
-    assumptions: "", approval_requirements: "",
+    sponsor: "", manager: "", authority: "", start_date: "", justification: "",
+    assumptions: "", constraints: "",
     smart_specific: "", smart_measurable: "", smart_achievable: "",
-    smart_relevant: "", smart_temporal: "", success_criteria: "",
+    smart_relevant: "", smart_temporal: "",
     approvals: [], code: "", benefits_table: [],
+    approved_at: null, approved_by: null, approved_by_name: null,
   });
 
   const [form, setForm] = useState({
@@ -189,7 +194,6 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     problem_statement: project.problem_statement || "",
     scope: project.scope || "",
     out_of_scope: project.out_of_scope || "",
-    restrictions: project.restrictions || "",
     expected_benefits: project.expected_benefits || "",
   });
 
@@ -199,7 +203,6 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       problem_statement: project.problem_statement || "",
       scope: project.scope || "",
       out_of_scope: project.out_of_scope || "",
-      restrictions: project.restrictions || "",
       expected_benefits: project.expected_benefits || "",
     });
     try {
@@ -213,21 +216,34 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       if (parsed && (parsed.__charter || (project as any).charter_data)) {
           setData((prev) => ({
             ...prev,
-            sponsor: parsed.sponsor || "",
+            // Sponsor/Manager: fonte única = charter_data; migra da coluna nativa
+            // do projeto quando o jsonb estiver vazio (não duplica mais).
+            sponsor: parsed.sponsor || (project as any).sponsor || "",
+            manager: parsed.manager || (project as any).manager || "",
+            authority: parsed.authority || "",
             start_date: parsed.start_date || "",
             justification: parsed.justification || "",
-            deliverables: parsed.deliverables || "",
             assumptions: parsed.assumptions || "",
-            approval_requirements: parsed.approval_requirements || "",
+            constraints: parsed.constraints || (project as any).restrictions || "",
             smart_specific: parsed.smart_specific || "",
             smart_measurable: parsed.smart_measurable || "",
             smart_achievable: parsed.smart_achievable || "",
             smart_relevant: parsed.smart_relevant || "",
             smart_temporal: parsed.smart_temporal || "",
-            success_criteria: parsed.success_criteria || "",
             approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
             code: parsed.code || "",
             benefits_table: Array.isArray(parsed.benefits_table) ? parsed.benefits_table : [],
+            approved_at: parsed.approved_at || null,
+            approved_by: parsed.approved_by || null,
+            approved_by_name: parsed.approved_by_name || null,
+          }));
+      } else {
+          // Sem charter salvo ainda: semeia sponsor/manager das colunas nativas.
+          setData((prev) => ({
+            ...prev,
+            sponsor: (project as any).sponsor || "",
+            manager: (project as any).manager || "",
+            constraints: (project as any).restrictions || "",
           }));
       }
     } catch {}
@@ -324,8 +340,13 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       problem_statement: form.problem_statement || null,
       scope: form.scope || null,
       out_of_scope: form.out_of_scope || null,
-      restrictions: form.restrictions || null,
+      // Restrições: fonte única = charter_data.constraints; espelha na coluna
+      // nativa para quem lê `restrictions` fora do TAP.
+      restrictions: data.constraints || null,
       expected_benefits: form.expected_benefits || null,
+      // Sponsor/Manager: espelha nas colunas nativas (fonte de leitura externa).
+      sponsor: data.sponsor || null,
+      manager: data.manager || null,
     };
     // Limpa qualquer JSON do TAP que ainda esteja em description (legado)
     if (project.description?.startsWith("{")) {
@@ -336,6 +357,46 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     if (error) { toast({ title: "Erro ao salvar TAP", description: error.message, variant: "destructive" }); return; }
     setEditing(false);
     toast({ title: "TAP salvo com sucesso!" });
+  };
+
+  const isApproved = !!data.approved_at;
+
+  // Aprovar = trava o TAP (carimbo quem/quando). Só gestor/admin.
+  const handleApprove = async () => {
+    setSaving(true);
+    const stamp = {
+      ...data,
+      approved_at: new Date().toISOString(),
+      approved_by: user?.id || null,
+      approved_by_name: (user as any)?.user_metadata?.full_name || user?.email || null,
+    };
+    const { error } = await supabase
+      .from("projects")
+      .update({ charter_data: { __charter: true, ...stamp } } as any)
+      .eq("id", projectId);
+    setSaving(false);
+    if (error) { toast({ title: "Erro ao aprovar TAP", description: error.message, variant: "destructive" }); return; }
+    setData(stamp);
+    setEditing(false);
+    toast({ title: "TAP aprovado!", description: "O termo foi bloqueado para edição." });
+  };
+
+  const handleReopen = async () => {
+    setSaving(true);
+    const reopened = { ...data, approved_at: null, approved_by: null, approved_by_name: null };
+    const { error } = await supabase
+      .from("projects")
+      .update({ charter_data: { __charter: true, ...reopened } } as any)
+      .eq("id", projectId);
+    setSaving(false);
+    if (error) { toast({ title: "Erro ao reabrir TAP", description: error.message, variant: "destructive" }); return; }
+    setData(reopened);
+    toast({ title: "TAP reaberto para edição." });
+  };
+
+  const handleExportPDF = () => {
+    // Usa o diálogo de impressão do navegador (com CSS @media print já aplicado).
+    window.print();
   };
 
   const formatDate = (d: string | null | undefined) => {
@@ -378,8 +439,26 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
   return (
     <div className="space-y-4 print:space-y-2">
       {/* Toolbar (oculta na impressão) */}
-      <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
-        <div className="flex gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+        {/* Selo de aprovação à esquerda */}
+        <div>
+          {isApproved ? (
+            <Badge variant="outline" className="gap-1.5 border-success/40 bg-success/10 text-success">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Aprovado{data.approved_by_name ? ` por ${data.approved_by_name}` : ""} · {formatDate(data.approved_at)}
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="gap-1.5 text-muted-foreground">
+              <ClipboardList className="w-3.5 h-3.5" /> Rascunho
+            </Badge>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="ghost" onClick={handleExportPDF} className="gap-1">
+            <FileDown className="w-4 h-4" /> PDF
+          </Button>
+
           {editing ? (
             <>
               <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1">
@@ -387,10 +466,21 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
               </Button>
               <Button size="sm" variant="outline" onClick={() => setEditing(false)}>Cancelar</Button>
             </>
-          ) : (
-            <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="gap-1">
-              <ClipboardList className="w-4 h-4" /> Editar campos
+          ) : !canManage ? (
+            <span className="text-xs text-muted-foreground self-center">Somente leitura</span>
+          ) : isApproved ? (
+            <Button size="sm" variant="outline" onClick={handleReopen} disabled={saving} className="gap-1">
+              <ClipboardList className="w-4 h-4" /> Reabrir para editar
             </Button>
+          ) : (
+            <>
+              <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="gap-1">
+                <ClipboardList className="w-4 h-4" /> Editar campos
+              </Button>
+              <Button size="sm" onClick={handleApprove} disabled={saving} className="gap-1">
+                <CheckCircle2 className="w-4 h-4" /> Aprovar TAP
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -424,6 +514,12 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           </Field>
           <Field label="Patrocinador (Sponsor)">
             <TextField editing={editing} value={data.sponsor} onChange={(v) => setData({ ...data, sponsor: v })} placeholder="Nome do patrocinador" multiline={false} />
+          </Field>
+          <Field label="Gerente do Projeto">
+            <TextField editing={editing} value={data.manager} onChange={(v) => setData({ ...data, manager: v })} placeholder="Nome do gerente" multiline={false} />
+          </Field>
+          <Field label="Nível de Autoridade">
+            <TextField editing={editing} value={data.authority} onChange={(v) => setData({ ...data, authority: v })} placeholder="Ex.: aprova mudanças até R$ 10 mil" multiline={false} />
           </Field>
           <Field label="Líder do Projeto">
             <p className="text-sm">{project.owner || <span className="italic text-muted-foreground">Não definido</span>}</p>
@@ -526,6 +622,34 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             </div>
           </div>
         )}
+      </SectionBlock>
+
+      {/* 5. PREMISSAS E RESTRIÇÕES (recuperado do PMBOK) */}
+      <SectionBlock n={5} title="Premissas e Restrições">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Premissas</div>
+            <p className="text-[11px] text-muted-foreground mb-2">Condições assumidas como verdadeiras para o planejamento (ex.: verba aprovada, equipe disponível).</p>
+            <TextField
+              value={data.assumptions}
+              onChange={(v) => setData({ ...data, assumptions: v })}
+              placeholder="Ex.: A infraestrutura de TI estará disponível até o início da fase de execução."
+              editing={editing}
+              rows={4}
+            />
+          </div>
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Restrições</div>
+            <p className="text-[11px] text-muted-foreground mb-2">Limites impostos ao projeto (prazo, orçamento, recursos, tecnologia, normas).</p>
+            <TextField
+              value={data.constraints}
+              onChange={(v) => setData({ ...data, constraints: v })}
+              placeholder="Ex.: Orçamento máximo de R$ 50 mil; entrega obrigatória antes do fim do ano fiscal."
+              editing={editing}
+              rows={4}
+            />
+          </div>
+        </div>
       </SectionBlock>
 
       {/* 6. BENEFÍCIOS E CRITÉRIOS DE SUCESSO */}
