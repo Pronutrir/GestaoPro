@@ -6,34 +6,36 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 215 25% 12%;
+    /* Branco vívido e limpo (estilo ClickUp): fundo branco puro, cinzas de
+       apoio bem claros e neutros (sem matiz azul, sem "apagar" a tela). */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 13%;
 
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 12%;
+    --card-foreground: 0 0% 13%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 12%;
+    --popover-foreground: 0 0% 13%;
 
     --primary: 221 83% 53%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 214 32% 91%;
-    --secondary-foreground: 215 25% 15%;
+    --secondary: 0 0% 96.5%;
+    --secondary-foreground: 0 0% 18%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 0 0% 97.5%;
+    --muted-foreground: 0 0% 46%;
 
     /* Accent é usado em hover/focus de muitos campos (Select, menus, itens). */
     /* Mantemos primary azul para CTAs e deixamos accent neutro para leitura. */
-    --accent: 214 32% 91%;
-    --accent-foreground: 215 25% 15%;
+    --accent: 0 0% 95%;
+    --accent-foreground: 0 0% 18%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
+    --border: 0 0% 91%;
+    --input: 0 0% 91%;
     --ring: 221 83% 53%;
 
     --radius: 0.5rem;
@@ -47,18 +49,24 @@
     --info: 199 89% 48%;
     --info-foreground: 0 0% 100%;
 
-    /* Sidebar escura neutra (destaque, estilo ClickUp) mesmo no tema claro */
-    --sidebar-background: 222 24% 12%;
-    --sidebar-foreground: 210 24% 92%;
-    --sidebar-primary: 221 83% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 20% 24%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 222 18% 22%;
-    --sidebar-ring: 221 83% 60%;
+    /* Fundo das colunas do Kanban — cinza NEUTRO (sem o matiz azul do --muted),
+       levemente mais escuro que os cards (que são brancos). */
+    --kanban-col-bg: 0 0% 96%;
+    --kanban-col-head: 0 0% 93%;
 
-    --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
-    --card-shadow-hover: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+    /* Sidebar branca limpa (estilo ClickUp): fundo quase branco, ícones/labels
+       escuros, item ativo na cor primária. Borda direita sutil separa do app. */
+    --sidebar-background: 0 0% 99%;
+    --sidebar-foreground: 0 0% 30%;
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 95%;
+    --sidebar-accent-foreground: 221 83% 53%;
+    --sidebar-border: 0 0% 91%;
+    --sidebar-ring: 221 83% 53%;
+
+    --card-shadow: 0 1px 2px 0 rgb(16 24 40 / 0.05), 0 1px 3px 0 rgb(16 24 40 / 0.09);
+    --card-shadow-hover: 0 4px 8px -2px rgb(16 24 40 / 0.10), 0 2px 4px -2px rgb(16 24 40 / 0.07);
   }
 
   .dark {
@@ -99,6 +107,10 @@
     --info: 199 89% 52%;
     --info-foreground: 0 0% 100%;
 
+    /* Fundo das colunas do Kanban — cinza neutro escuro (dark) */
+    --kanban-col-bg: 0 0% 12%;
+    --kanban-col-head: 0 0% 15%;
+
     --sidebar-background: 222 47% 8%;
     --sidebar-foreground: 210 40% 95%;
     --sidebar-primary: 217 91% 60%;
@@ -126,14 +138,12 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Títulos em Roboto bold, escala consistente (estilo ClickUp/mercado) */
+  /* Títulos: só peso/cor. O TAMANHO fica por conta de cada componente (via
+     classes) — não forçamos text-2xl/lg globalmente, senão infla os h3/h4
+     que os componentes já dimensionam menores. */
   h1, h2, h3, h4, h5, h6 {
-    @apply font-bold tracking-tight text-foreground;
+    @apply font-semibold tracking-tight text-foreground;
   }
-  h1 { @apply text-2xl; }
-  h2 { @apply text-xl; }
-  h3 { @apply text-lg; }
-  h4 { @apply text-base; }
 
   p, span, label {
     @apply leading-relaxed;

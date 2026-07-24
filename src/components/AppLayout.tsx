@@ -320,7 +320,9 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
               </div>
             </div>
           </header>
-          <main className="flex-1">{children}</main>
+          {/* Área de trabalho levemente cinza (fundo vívido) para os cards
+              brancos das páginas saltarem, mantendo o branco limpo. */}
+          <main className="flex-1 bg-muted/40 dark:bg-background">{children}</main>
           <StickyNotes />
         </div>
       </div>
