@@ -484,7 +484,7 @@ const TeamView = () => {
               return (
                 <div className="space-y-1.5 max-h-64 overflow-y-auto">
                   {summaryFilter === "members" && teamMembers.map(m => (
-                    <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md cursor-pointer hover:bg-muted/50"
+                    <div key={m.name} className="flex items-center justify-between p-2 bg-card border rounded-md cursor-pointer hover:bg-muted/50"
                       onClick={() => { setSummaryFilter(null); setSelectedMember(m.name); }}>
                       <div className="flex items-center gap-2">
                         <Avatar className="w-7 h-7">
@@ -506,7 +506,7 @@ const TeamView = () => {
                       {filteredAssigned.map(a => {
                         const proj = projects.find(p => p.id === a.project_id);
                         return (
-                          <div key={a.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                          <div key={a.id} className="flex items-center justify-between p-2 bg-card border rounded-md">
                             <div className="flex-1 min-w-0">
                               <span className="text-sm font-medium truncate block">{a.title}</span>
                               <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground max-w-[260px]">
@@ -551,7 +551,7 @@ const TeamView = () => {
                     <>
                       <p className="text-xs text-muted-foreground">{filteredHoursMembers.length} membro(s)</p>
                       {filteredHoursMembers.map(m => (
-                        <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                        <div key={m.name} className="flex items-center justify-between p-2 bg-card border rounded-md">
                           <span className="text-sm font-medium">{m.name}</span>
                           <div className="flex items-center gap-3 text-xs text-muted-foreground">
                             <span>Estimado: {m.hoursEstimated.toFixed(0)}h</span>
@@ -569,7 +569,7 @@ const TeamView = () => {
                     <>
                       <p className="text-xs text-muted-foreground">{filteredPlannedMembers.length} membro(s)</p>
                       {filteredPlannedMembers.map(m => (
-                        <div key={m.name} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                        <div key={m.name} className="flex items-center justify-between p-2 bg-card border rounded-md">
                           <span className="text-sm font-medium">{m.name}</span>
                           <div className="flex items-center gap-3 text-xs text-muted-foreground">
                             <span className="font-semibold text-foreground">Planejado: {m.hoursEstimated.toFixed(1)}h</span>
@@ -692,7 +692,7 @@ const TeamView = () => {
                     <h3 className="text-sm font-semibold text-foreground mb-2">Projetos ({selectedMemberData.memberProjects.length})</h3>
                     <div className="space-y-1.5">
                       {selectedMemberData.memberProjects.map(p => (
-                        <div key={p.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded-md cursor-pointer hover:bg-muted/50"
+                        <div key={p.id} className="flex items-center gap-2 p-2 bg-card border rounded-md cursor-pointer hover:bg-muted/50"
                           onClick={() => { setSelectedMember(null); router.push(`/project/${p.id}`); }}>
                           <Briefcase className="w-4 h-4 text-muted-foreground" />
                           <span className="text-sm font-medium">{p.title}</span>
@@ -721,7 +721,7 @@ const TeamView = () => {
                     <h3 className="text-sm font-semibold text-foreground mb-2">Em andamento ({selectedMemberData.inProgress.length})</h3>
                     <div className="space-y-1.5">
                       {selectedMemberData.inProgress.map(a => (
-                        <div key={a.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                        <div key={a.id} className="flex items-center justify-between p-2 bg-card border rounded-md">
                           <span className="text-sm truncate flex-1">{a.title}</span>
                           <Badge variant="outline" className="text-[10px] ml-2">
                             {a.priority === "high" ? "Alta" : a.priority === "medium" ? "Média" : "Baixa"}

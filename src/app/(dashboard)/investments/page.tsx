@@ -340,7 +340,7 @@ const Investments = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border bg-muted/30">
+                    <tr className="border-b border-border bg-card">
                       <th className="text-left p-3 font-medium text-muted-foreground">Projeto</th>
                       <th className="text-right p-3 font-medium text-muted-foreground">Planejado</th>
                       <th className="text-right p-3 font-medium text-muted-foreground">Utilizado</th>
@@ -412,7 +412,7 @@ const Investments = () => {
                       const act = activityMap.get(inv.activity_id);
                       const proj = act ? projects.find(p => p.id === act.project_id) : null;
                       return (
-                        <div key={inv.id} className="flex items-center justify-between p-2.5 bg-muted/30 rounded-md">
+                        <div key={inv.id} className="flex items-center justify-between p-2.5 bg-card border rounded-md">
                           <div className="flex-1 min-w-0">
                             <span className="text-sm font-medium truncate block text-foreground">{inv.description || "Sem descrição"}</span>
                             <div className="flex items-center gap-2 mt-0.5">
@@ -497,7 +497,7 @@ const Investments = () => {
                         <p className="text-sm text-muted-foreground text-center py-4">Nenhum investimento neste projeto.</p>
                       ) : (
                         selectedProjectData.investments.map(inv => (
-                          <div key={inv.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
+                          <div key={inv.id} className="flex items-center justify-between p-2 bg-card border rounded-md">
                             <div className="flex-1 min-w-0">
                               <span className="text-sm truncate block">{inv.description || "Sem descrição"}</span>
                               <div className="flex gap-2 mt-0.5">
