@@ -50,6 +50,7 @@ interface WorkflowStage {
   is_blocked: boolean;
   is_visible: boolean;
   is_exception?: boolean;
+  wip_limit?: number | null;
 }
 
 interface Profile {

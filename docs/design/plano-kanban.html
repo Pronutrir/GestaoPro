@@ -1,0 +1,421 @@
+<title>Plano Kanban — Fluxo & Card informativo</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --surface-2: #f1f2f5;
+    --border: #e2e4ea;
+    --border-strong: #cfd2db;
+    --ink: #1c1f26;
+    --ink-2: #565b66;
+    --ink-3: #868b96;
+    --accent: #5b5bd6;
+    --accent-soft: #ecebfb;
+    --ok: #17915b;
+    --ok-soft: #e2f4ea;
+    --warn: #b3730a;
+    --warn-soft: #fbeed6;
+    --bad: #cc3340;
+    --bad-soft: #fbe4e6;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141619; --surface: #1c1f24; --surface-2: #23262c;
+      --border: #2e323a; --border-strong: #3b4048;
+      --ink: #e7e9ee; --ink-2: #a6abb5; --ink-3: #757b86;
+      --accent: #8b8bf0; --accent-soft: #262640;
+      --ok: #43c98a; --ok-soft: #16301f; --warn: #e0a44a; --warn-soft: #302716;
+      --bad: #f0737f; --bad-soft: #331a1d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141619; --surface: #1c1f24; --surface-2: #23262c;
+    --border: #2e323a; --border-strong: #3b4048;
+    --ink: #e7e9ee; --ink-2: #a6abb5; --ink-3: #757b86;
+    --accent: #8b8bf0; --accent-soft: #262640;
+    --ok: #43c98a; --ok-soft: #16301f; --warn: #e0a44a; --warn-soft: #302716;
+    --bad: #f0737f; --bad-soft: #331a1d;
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f8fa; --surface: #ffffff; --surface-2: #f1f2f5;
+    --border: #e2e4ea; --border-strong: #cfd2db;
+    --ink: #1c1f26; --ink-2: #565b66; --ink-3: #868b96;
+    --accent: #5b5bd6; --accent-soft: #ecebfb;
+    --ok: #17915b; --ok-soft: #e2f4ea; --warn: #b3730a; --warn-soft: #fbeed6;
+    --bad: #cc3340; --bad-soft: #fbe4e6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  header.top { margin-bottom: 8px; }
+  .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--accent); font-weight: 600;
+  }
+  h1 { font-size: 30px; line-height: 1.15; margin: 6px 0 10px; text-wrap: balance; letter-spacing: -.01em; }
+  .lede { color: var(--ink-2); font-size: 15px; max-width: 62ch; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .pill {
+    font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--border-strong); color: var(--ink-2); background: var(--surface);
+  }
+  .pill.mig { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+  .pill.front { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+  section.front { margin-top: 44px; }
+  .front-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 2px solid var(--ink); padding-bottom: 8px; margin-bottom: 4px; }
+  .front-num { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent); }
+  .front-head h2 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+  .front-sub { color: var(--ink-2); font-size: 14px; margin: 12px 0 20px; }
+
+  .feat { margin: 26px 0; }
+  .feat h3 { font-size: 15px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .feat h3 .tag {
+    font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .04em;
+    padding: 2px 6px; border-radius: 4px; text-transform: uppercase;
+  }
+  .tag.front { background: var(--accent-soft); color: var(--accent); }
+  .tag.mig { background: var(--warn-soft); color: var(--warn); }
+  .feat p.desc { color: var(--ink-2); font-size: 14px; margin: 4px 0 14px; }
+
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 680px) { .ba { grid-template-columns: 1fr; } }
+  .ba-col { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: var(--surface); }
+  .ba-col .label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+  }
+  .ba-col.after .label { color: var(--accent); }
+  .ba-col .label::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: var(--ink-3); }
+  .ba-col.after .label::before { background: var(--accent); }
+
+  /* ---- Kanban mockup primitives ---- */
+  .kcol { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .kcol-head { padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .kcol-top { display: flex; align-items: center; gap: 7px; }
+  .dot { width: 9px; height: 9px; border-radius: 999px; flex: none; }
+  .kcol-title { font-size: 13px; font-weight: 600; }
+  .kbadge {
+    font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--ink-2);
+  }
+  .kbadge.hrs { border: none; background: none; color: var(--ink-3); padding: 0; }
+  .kbadge.wip-ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+  .kbadge.wip-warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+  .kbadge.wip-bad { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); font-weight: 700; }
+  .kbadge.sp { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .kmeta { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .kbar { height: 4px; border-radius: 999px; background: var(--border); margin-top: 8px; overflow: hidden; }
+  .kbar > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+  .kspace { margin-left: auto; display: flex; gap: 3px; }
+  .kdot-btn { width: 15px; height: 15px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border); }
+
+  /* card */
+  .kcard { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 9px 10px; margin: 8px; }
+  .kcard-title { font-size: 12.5px; font-weight: 500; margin-bottom: 7px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip {
+    font-size: 10px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border-strong);
+    color: var(--ink-2); background: var(--surface); display: inline-flex; align-items: center; gap: 3px;
+  }
+  .chip.sp { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-family: var(--mono); font-weight: 600; }
+  .chip.due { }
+  .chip.due.over { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); font-weight: 600; }
+  .av {
+    width: 18px; height: 18px; border-radius: 999px; background: var(--accent);
+    color: #fff; font-size: 8px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+    border: 1.5px solid var(--surface); font-family: var(--sans);
+  }
+  .av.a2 { background: #d97706; } .av.a3 { background: #0891b2; } .av.a4 { background: var(--ink-3); }
+  .avstack { display: inline-flex; }
+  .avstack .av + .av { margin-left: -6px; }
+  .chip.plus { padding: 1px 6px 1px 4px; }
+
+  /* collapsed column */
+  .kcol.collapsed { width: 46px; }
+  .kcol.collapsed .kcol-head { padding: 8px 4px; }
+  .kcol-vert { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 12px; font-weight: 600; margin: 8px auto; color: var(--ink-2); }
+
+  table.dec { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+  table.dec th, table.dec td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.dec th { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  table.dec td:first-child { font-weight: 500; white-space: nowrap; }
+  table.dec .yes { color: var(--warn); font-weight: 600; }
+  table.dec .no { color: var(--ok); font-weight: 600; }
+  .file { font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
+
+  .note {
+    margin-top: 18px; border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 13.5px; color: var(--ink);
+  }
+  .note.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .note b { font-weight: 700; }
+
+  .plan-order { margin-top: 48px; border: 1px solid var(--border); border-radius: 12px; padding: 22px 24px; background: var(--surface); }
+  .plan-order h2 { font-size: 17px; margin: 0 0 14px; }
+  ol.steps { margin: 0; padding-left: 0; list-style: none; counter-reset: s; }
+  ol.steps li { counter-increment: s; padding: 8px 0 8px 40px; position: relative; border-bottom: 1px dashed var(--border); font-size: 14px; }
+  ol.steps li:last-child { border-bottom: none; }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 8px; width: 26px; height: 26px;
+    border-radius: 999px; background: var(--accent-soft); color: var(--accent);
+    font-family: var(--mono); font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center;
+  }
+  ol.steps li b { font-weight: 600; }
+  ol.steps li .m { font-family: var(--mono); font-size: 11px; color: var(--warn); margin-left: 6px; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="kicker">GestaoPro · Kanban · Proposta para aprovação</div>
+    <h1>Controle de fluxo &amp; Card mais informativo</h1>
+    <p class="lede">Duas frentes desenhadas antes de codar. Cada bloco mostra o estado atual, o proposto e se exige alteração no banco. Nada abaixo foi implementado ainda — aguardando seu aval.</p>
+    <div class="meta-row">
+      <span class="pill front">Frente 1 · Fluxo</span>
+      <span class="pill front">Frente 2 · Card</span>
+      <span class="pill mig">1 migration necessária (WIP)</span>
+      <span class="pill">Sem commit — só working tree</span>
+    </div>
+  </header>
+
+  <!-- ============ FRENTE 1 ============ -->
+  <section class="front">
+    <div class="front-head">
+      <span class="front-num">F1</span>
+      <h2>Controle de fluxo</h2>
+    </div>
+    <p class="front-sub">Tornar visível quando uma coluna está sobrecarregada (WIP) e enriquecer o cabeçalho com métricas que hoje existem no dado mas não aparecem.</p>
+
+    <!-- 1a WIP -->
+    <div class="feat">
+      <h3>1a · Limite de WIP por coluna <span class="tag mig">migration</span></h3>
+      <p class="desc">Cada coluna ganha um limite opcional de cards em andamento. O contador vira um semáforo: verde dentro do limite, âmbar cheio, vermelho quando excede. O gestor define pelo menu da coluna (mesmo padrão do "Definir progresso %").</p>
+      <div class="ba">
+        <div class="ba-col before">
+          <div class="label">Hoje</div>
+          <div class="kcol">
+            <div class="kcol-head">
+              <div class="kcol-top">
+                <span class="dot" style="background:#5b5bd6"></span>
+                <span class="kcol-title">Em execução</span>
+                <span class="kbadge">7</span>
+                <span class="kbadge hrs">32h</span>
+              </div>
+            </div>
+          </div>
+          <p class="desc" style="margin-top:10px">Contador é sempre neutro — 7 cards e 70 cards têm a mesma aparência. Nada sinaliza sobrecarga.</p>
+        </div>
+        <div class="ba-col after">
+          <div class="label">Proposto</div>
+          <div class="kcol">
+            <div class="kcol-head">
+              <div class="kcol-top">
+                <span class="dot" style="background:#5b5bd6"></span>
+                <span class="kcol-title">Em execução</span>
+                <span class="kbadge wip-bad">7 / 5</span>
+                <span class="kbadge hrs">32h</span>
+              </div>
+            </div>
+          </div>
+          <div class="kcol" style="margin-top:8px">
+            <div class="kcol-head">
+              <div class="kcol-top">
+                <span class="dot" style="background:#17915b"></span>
+                <span class="kcol-title">Revisão</span>
+                <span class="kbadge wip-ok">3 / 5</span>
+              </div>
+            </div>
+          </div>
+          <p class="desc" style="margin-top:10px"><b style="color:var(--bad)">7 / 5</b> = excedeu (vermelho). <b style="color:var(--ok)">3 / 5</b> = dentro (verde). Colunas sem limite seguem como hoje.</p>
+        </div>
+      </div>
+      <table class="dec">
+        <tr><th>Item</th><th>Migration?</th><th>Onde</th></tr>
+        <tr><td>Coluna <span class="file">wip_limit</span></td><td class="yes">Sim</td><td class="file">ALTER TABLE workflow_stages + 2 interfaces TS</td></tr>
+        <tr><td>Badge semáforo</td><td class="no">Não</td><td class="file">ActivityKanban.tsx:1392</td></tr>
+        <tr><td>Definir limite (UI)</td><td class="no">Não</td><td class="file">menu da coluna :1498 (modelo "progresso %")</td></tr>
+      </table>
+    </div>
+
+    <!-- 1b metricas header -->
+    <div class="feat">
+      <h3>1b · Métricas no cabeçalho <span class="tag front">só front-end</span></h3>
+      <p class="desc">Somar no header o que já está no dado de cada card: story points totais e % concluído da coluna. Zero migration — os campos já existem e já são computados dentro da coluna.</p>
+      <div class="ba">
+        <div class="ba-col before">
+          <div class="label">Hoje</div>
+          <div class="kcol">
+            <div class="kcol-head">
+              <div class="kcol-top">
+                <span class="dot" style="background:#5b5bd6"></span>
+                <span class="kcol-title">Em execução</span>
+                <span class="kbadge">7</span>
+                <span class="kbadge hrs">32h</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ba-col after">
+          <div class="label">Proposto</div>
+          <div class="kcol">
+            <div class="kcol-head">
+              <div class="kcol-top">
+                <span class="dot" style="background:#5b5bd6"></span>
+                <span class="kcol-title">Em execução</span>
+                <span class="kbadge wip-bad">7 / 5</span>
+              </div>
+              <div class="kmeta">
+                <span class="kbadge sp">⚡ 21 SP</span>
+                <span class="kbadge hrs">32h</span>
+                <span class="kbadge hrs">40% concluído</span>
+              </div>
+              <div class="kbar"><i style="width:40%"></i></div>
+            </div>
+          </div>
+          <p class="desc" style="margin-top:10px">Story points somados, % concluído com micro-barra. Tudo derivado dos cards já carregados.</p>
+        </div>
+      </div>
+      <table class="dec">
+        <tr><th>Métrica</th><th>Migration?</th><th>Fonte</th></tr>
+        <tr><td>Story points ⚡</td><td class="no">Não</td><td class="file">soma Activity.story_points (:291)</td></tr>
+        <tr><td>% concluído + barra</td><td class="no">Não</td><td class="file">computeActivityProgress / status==="completed"</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ FRENTE 2 ============ -->
+  <section class="front">
+    <div class="front-head">
+      <span class="front-num">F2</span>
+      <h2>Card mais informativo</h2>
+    </div>
+    <p class="front-sub">Ler o card em 1 segundo: quem está envolvido (avatares reais), o peso (story points) e poder minimizar colunas que não estão em foco.</p>
+
+    <!-- 2a avatares -->
+    <div class="feat">
+      <h3>2a · Avatares dos participantes <span class="tag front">só front-end</span></h3>
+      <p class="desc">Hoje o card mostra o avatar do responsável e um genérico "👥 +3". Proposto: stack de avatares reais dos participantes (com iniciais/foto), reusando o mesmo resolvedor de avatar já usado no responsável.</p>
+      <div class="ba">
+        <div class="ba-col before">
+          <div class="label">Hoje</div>
+          <div class="kcard" style="margin:0">
+            <div class="kcard-title">Configurar pipeline de deploy</div>
+            <div class="chips">
+              <span class="chip"><span class="av">RT</span> Raphael</span>
+              <span class="chip">👥 +3</span>
+              <span class="chip due">📅 25/07</span>
+            </div>
+          </div>
+        </div>
+        <div class="ba-col after">
+          <div class="label">Proposto</div>
+          <div class="kcard" style="margin:0">
+            <div class="kcard-title">Configurar pipeline de deploy</div>
+            <div class="chips">
+              <span class="chip"><span class="av">RT</span> Raphael</span>
+              <span class="chip plus">
+                <span class="avstack"><span class="av a2">MC</span><span class="av a3">JS</span><span class="av a4">+1</span></span>
+              </span>
+              <span class="chip due">📅 25/07</span>
+            </div>
+          </div>
+          <p class="desc" style="margin-top:10px">Stack de até 3 avatares + "+N". Passar o mouse mostra os nomes. Fotos quando o perfil tem <span class="file">avatar_url</span>.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2b story points -->
+    <div class="feat">
+      <h3>2b · Story points no card <span class="tag front">só front-end</span></h3>
+      <p class="desc">O campo <span class="file">story_points</span> já existe no banco há tempo, mas nunca é mostrado no card. Adicionar um chip discreto quando &gt; 0.</p>
+      <div class="ba">
+        <div class="ba-col before">
+          <div class="label">Hoje</div>
+          <div class="kcard" style="margin:0">
+            <div class="kcard-title">Migrar autenticação para OAuth</div>
+            <div class="chips">
+              <span class="chip"><span class="av">RT</span> Raphael</span>
+              <span class="chip due over">📅 20/07 vencido</span>
+              <span class="chip">8h / 12h</span>
+            </div>
+          </div>
+        </div>
+        <div class="ba-col after">
+          <div class="label">Proposto</div>
+          <div class="kcard" style="margin:0">
+            <div class="kcard-title">Migrar autenticação para OAuth</div>
+            <div class="chips">
+              <span class="chip sp">⚡ 5</span>
+              <span class="chip"><span class="av">RT</span> Raphael</span>
+              <span class="chip due over">📅 20/07 vencido</span>
+              <span class="chip">8h / 12h</span>
+            </div>
+          </div>
+          <p class="desc" style="margin-top:10px">Chip <b style="color:var(--accent)">⚡ 5</b> só aparece quando há pontos. Respeita a densidade (some no modo compacto).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2c colapsar -->
+    <div class="feat">
+      <h3>2c · Colapsar coluna <span class="tag front">só front-end</span></h3>
+      <p class="desc">Minimizar uma coluna para uma faixa fina vertical — foco no que importa sem esconder totalmente (diferente de "ocultar"). Estado guardado por projeto (localStorage), sem migration.</p>
+      <div class="ba">
+        <div class="ba-col before">
+          <div class="label">Hoje</div>
+          <div style="display:flex; gap:8px">
+            <div class="kcol" style="flex:1">
+              <div class="kcol-head"><div class="kcol-top"><span class="dot" style="background:#868b96"></span><span class="kcol-title">Backlog</span><span class="kbadge">18</span></div></div>
+              <div class="kcard"><div class="kcard-title">Item arquivado…</div></div>
+            </div>
+            <div class="kcol" style="flex:1">
+              <div class="kcol-head"><div class="kcol-top"><span class="dot" style="background:#5b5bd6"></span><span class="kcol-title">Execução</span><span class="kbadge">7</span></div></div>
+              <div class="kcard"><div class="kcard-title">Deploy…</div></div>
+            </div>
+          </div>
+          <p class="desc" style="margin-top:10px">"Backlog" com 18 itens ocupa metade da tela mesmo sem foco.</p>
+        </div>
+        <div class="ba-col after">
+          <div class="label">Proposto</div>
+          <div style="display:flex; gap:8px">
+            <div class="kcol collapsed">
+              <div class="kcol-head"><span class="dot" style="background:#868b96; margin:0 auto"></span></div>
+              <div class="kcol-vert">Backlog · 18</div>
+            </div>
+            <div class="kcol" style="flex:1">
+              <div class="kcol-head"><div class="kcol-top"><span class="dot" style="background:#5b5bd6"></span><span class="kcol-title">Execução</span><span class="kbadge wip-ok">7 / 8</span><span class="kspace"><span class="kdot-btn"></span></span></div></div>
+              <div class="kcard"><div class="kcard-title">Deploy…</div></div>
+              <div class="kcard"><div class="kcard-title">Revisar PR…</div></div>
+            </div>
+          </div>
+          <p class="desc" style="margin-top:10px">Colapsada vira faixa fina com título vertical + contador. Um clique reabre. Convive com o resize de largura existente.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ORDEM ============ -->
+  <div class="plan-order">
+    <h2>Ordem de execução proposta</h2>
+    <ol class="steps">
+      <li><b>2b · Story points no card</b> — menor, sem dependência, valida o padrão de chip. <span class="m">sem migration</span></li>
+      <li><b>2a · Avatares dos participantes</b> — reusa resolvedor existente. <span class="m">sem migration</span></li>
+      <li><b>1b · Métricas no header</b> (SP + % concluído) — dados já computados. <span class="m">sem migration</span></li>
+      <li><b>2c · Colapsar coluna</b> — estado no componente pai + localStorage. <span class="m">sem migration</span></li>
+      <li><b>1a · WIP limit</b> — por último: precisa da migration <span class="file">wip_limit</span> rodar na VM antes do badge funcionar de verdade. Escrevo a migration + o código; o badge fica inerte até você aplicar na VM.</li>
+    </ol>
+    <div class="note warn">
+      <b>Único ponto de banco:</b> o WIP limit (1a) exige uma coluna nova em <span class="file">workflow_stages</span>. Sigo o padrão idempotente já usado (<span class="file">20260522110000_add_stage_progress_config.sql</span>) e adiciono à regex de compat, então o código não quebra mesmo antes de aplicar. Tudo o mais (2a, 2b, 1b, 2c) roda 100% sem tocar no banco.
+    </div>
+    <div class="note">
+      <b>Atenção técnica:</b> a interface <span class="file">WorkflowStage</span> está duplicada e divergente entre <span class="file">ActivityKanban.tsx:251</span> e <span class="file">WorkflowStageManager.tsx:43</span> — o campo <span class="file">wip_limit</span> entra nas duas. Sem commit em nada: acumulo tudo no working tree, como combinado.
+    </div>
+  </div>
+</div>

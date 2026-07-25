@@ -987,12 +987,8 @@ export default function ProjectDetailsPage() {
         updatePayload.workflow_stage_id = reopenStageId;
       }
 
-      if (newStatus === "completed") {
-        updatePayload.actual_start_date = act?.actual_start_date || today;
-        updatePayload.actual_end_date = today;
-      } else {
-        updatePayload.actual_end_date = null;
-      }
+      // Datas reais (actual_start/end) sao SEMPRE manuais — o sistema nao as
+      // preenche nem limpa automaticamente ao concluir/reabrir.
 
       if (newStatus === "pending" && !reopenStageId) {
         toast.error("Não foi possível identificar a coluna de reabertura (A Fazer).");
@@ -1051,7 +1047,6 @@ export default function ProjectDetailsPage() {
       const completePayload: any = {
         status: "completed",
         completed_at: new Date().toISOString(),
-        actual_end_date: today,
       };
       if (finalStageId) completePayload.workflow_stage_id = finalStageId;
       const { error: completeAncestorsError } = await (supabase.from("activities").update(completePayload) as any).in("id", ancestorsToComplete);
@@ -1482,67 +1477,69 @@ export default function ProjectDetailsPage() {
               />
             </TabsContent>
 
-            <TabsContent value="backlog" className="mt-3 space-y-4">
-              {canCreate && (
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="default" onClick={() => setShowQuickCreate(true)} className="gap-2">
-                    <Plus className="w-4 h-4" /> Nova Atividade
-                  </Button>
-                  <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="sm" variant="outline" className="gap-2">
-                        <Settings2 className="w-4 h-4" /> Opções
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {phases.length > 0 && (
-                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          const ok = await appConfirm({
-                            title: "Arquivar fases",
-                            description: `Arquivar TODAS as ${phases.length} fases? Elas podem ser restauradas no Arquivo.`,
-                            confirmText: "Arquivar",
-                            destructive: true,
-                          });
-                          if (!ok) return;
-                          await (supabase.from("phases").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id));
-                          toast.success(`${phases.length} fases arquivadas!`); fetchProjectData();
-                        }}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as fases
-                        </DropdownMenuItem>
-                      )}
-                      {activities.length > 0 && (
-                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          const ok = await appConfirm({
-                            title: "Arquivar atividades",
-                            description: `Arquivar TODAS as ${activities.length} atividades? Elas podem ser restauradas no Arquivo.`,
-                            confirmText: "Arquivar",
-                            destructive: true,
-                          });
-                          if (!ok) return;
-                          await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id) as any).eq("is_trashed", false);
-                          toast.success(`${activities.length} atividades arquivadas!`); fetchProjectData();
-                        }}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as atividades
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )}
+            <TabsContent value="backlog" className="mt-3 space-y-3">
+              {/* Barra única: ações + busca + filtros numa linha só */}
+              <div className="flex flex-wrap items-center gap-2">
+                {canCreate && (
+                  <>
+                    <Button size="sm" variant="default" onClick={() => setShowQuickCreate(true)} className="gap-1.5 h-9">
+                      <Plus className="w-4 h-4" /> Nova Atividade
+                    </Button>
+                    <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="gap-1.5 h-9">
+                          <Settings2 className="w-4 h-4" /> Opções
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        {phases.length > 0 && (
+                          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
+                            const ok = await appConfirm({
+                              title: "Arquivar fases",
+                              description: `Arquivar TODAS as ${phases.length} fases? Elas podem ser restauradas no Arquivo.`,
+                              confirmText: "Arquivar",
+                              destructive: true,
+                            });
+                            if (!ok) return;
+                            await (supabase.from("phases").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id));
+                            toast.success(`${phases.length} fases arquivadas!`); fetchProjectData();
+                          }}>
+                            <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as fases
+                          </DropdownMenuItem>
+                        )}
+                        {activities.length > 0 && (
+                          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
+                            const ok = await appConfirm({
+                              title: "Arquivar atividades",
+                              description: `Arquivar TODAS as ${activities.length} atividades? Elas podem ser restauradas no Arquivo.`,
+                              confirmText: "Arquivar",
+                              destructive: true,
+                            });
+                            if (!ok) return;
+                            await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id) as any).eq("is_trashed", false);
+                            toast.success(`${activities.length} atividades arquivadas!`); fetchProjectData();
+                          }}>
+                            <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as atividades
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <span className="w-px h-6 bg-border mx-0.5" />
+                  </>
+                )}
 
-              <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/30 rounded-lg border border-border">
-                <div className="relative flex-1 min-w-[220px] max-w-[320px]">
+                <div className="relative flex-1 min-w-[180px] max-w-[280px]">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     value={listSearch}
                     onChange={(e) => setListSearch(e.target.value)}
                     placeholder="Buscar tarefa..."
-                    className="pl-8 h-9 bg-background"
+                    className="pl-8 h-9"
                   />
                 </div>
                 <Select value={listStatusFilter} onValueChange={setListStatusFilter}>
-                  <SelectTrigger className="w-[180px] h-9 bg-background"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-[150px] h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos os status</SelectItem>
                     <SelectItem value="pending">Pendente</SelectItem>
@@ -1551,7 +1548,7 @@ export default function ProjectDetailsPage() {
                   </SelectContent>
                 </Select>
                 <Select value={listPriorityFilter} onValueChange={setListPriorityFilter}>
-                  <SelectTrigger className="w-[200px] h-9 bg-background"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas as prioridades</SelectItem>
                     <SelectItem value="urgente">Urgente</SelectItem>
@@ -1571,20 +1568,6 @@ export default function ProjectDetailsPage() {
                     <X className="w-3.5 h-3.5" /> Limpar
                   </Button>
                 )}
-                <div className="ml-auto">
-                  <Badge variant="outline" className="text-xs">
-                    {(() => {
-                      const total = activities.length;
-                      const filteredCount = activities.filter((a: any) => {
-                        if (listSearch && !a.title?.toLowerCase().includes(listSearch.toLowerCase())) return false;
-                        if (listStatusFilter !== "all" && a.status !== listStatusFilter) return false;
-                        if (listPriorityFilter !== "all" && a.priority !== listPriorityFilter) return false;
-                        return true;
-                      }).length;
-                      return `${filteredCount} de ${total} tarefas`;
-                    })()}
-                  </Badge>
-                </div>
               </div>
 
               <BacklogSection
