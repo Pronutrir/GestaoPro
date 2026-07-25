@@ -369,6 +369,9 @@ export const EditActivityDialog = ({
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
   const [editingSubActivity, setEditingSubActivity] = useState<Activity | null>(null);
   const [editingSubOpen, setEditingSubOpen] = useState(false);
+  // Popover de responsável por subatividade: guarda o id da sub com o popover
+  // aberto (controlado) para que ele feche ao escolher uma opção.
+  const [openAssigneeSubId, setOpenAssigneeSubId] = useState<string | null>(null);
   const [showRealDates, setShowRealDates] = useState(false);
   const [members, setMembers] = useState<PersonOption[]>([]);
   const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
@@ -800,8 +803,7 @@ export const EditActivityDialog = ({
       completed_at: newStatus === "completed" ? new Date().toISOString() : null,
     };
     if (newStatus === "completed") {
-      updateData.actual_start_date = (sub as any).actual_start_date || new Date().toISOString().slice(0, 10);
-      updateData.actual_end_date = new Date().toISOString().slice(0, 10);
+      // Datas reais sao manuais — nao preenche automaticamente ao concluir.
       if (finalStage?.id) {
         updateData.workflow_stage_id = finalStage.id;
       }
@@ -862,8 +864,6 @@ export const EditActivityDialog = ({
           const parentUpdate: any = {
             status: "completed",
             completed_at: new Date().toISOString(),
-            actual_start_date: (parent as any).actual_start_date || new Date().toISOString().slice(0, 10),
-            actual_end_date: new Date().toISOString().slice(0, 10),
           };
           if (finalStage?.id) parentUpdate.workflow_stage_id = finalStage.id;
           if (parent.workflow_stage_id && parent.workflow_stage_id !== finalStage?.id) {
@@ -1283,17 +1283,13 @@ export const EditActivityDialog = ({
                                 if (!ensureProjectUnlocked()) return;
                                 const today = new Date().toISOString().slice(0, 10);
                                 const updateData: any = { workflow_stage_id: stage.id };
+                                // Datas reais sao manuais — nao mexe em actual_*.
                                 if (stage.is_final) {
                                   updateData.status = "completed";
                                   updateData.completed_at = new Date().toISOString();
-                                  updateData.actual_start_date = (act as any).actual_start_date || today;
-                                  updateData.actual_end_date = today;
                                 } else if (act.status === "completed") {
                                   updateData.status = "pending";
                                   updateData.completed_at = null;
-                                  updateData.actual_end_date = null;
-                                } else if (!(act as any).actual_start_date && stage.display_order > 0) {
-                                  updateData.actual_start_date = today;
                                 }
                                 const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
                                 if (error) throw error;
@@ -1314,9 +1310,9 @@ export const EditActivityDialog = ({
                   </PropertyRow>
                 )}
 
-                {/* Datas — planejado em destaque; execução real na lateral */}
+                {/* Datas — planejado e execução real na MESMA linha */}
                 <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Prazo"}>
-                  <div className="flex flex-wrap items-start gap-x-4 gap-y-2.5 w-full">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 w-full">
                     {/* PLANEJADO — chips compactos com calendário */}
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
                       <DateChip
@@ -1380,7 +1376,7 @@ export const EditActivityDialog = ({
                       )}
                     </div>
 
-                    {/* EXECUÇÃO REAL — acompanhamento (não para milestone) */}
+                    {/* EXECUÇÃO REAL — na MESMA linha, à direita do planejado */}
                     {!formData.is_milestone && (() => {
                       const hasReal = !!(formData.actual_start_date || formData.actual_end_date);
                       const expanded = showRealDates || hasReal;
@@ -1389,7 +1385,7 @@ export const EditActivityDialog = ({
                           <button
                             type="button"
                             onClick={() => setShowRealDates(true)}
-                            className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline pl-4 border-l border-dashed border-border/70 h-7"
+                            className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline shrink-0 pl-4 border-l border-dashed border-border/70"
                           >
                             <Plus className="w-3 h-3" /> Registrar datas reais
                           </button>
@@ -1397,32 +1393,40 @@ export const EditActivityDialog = ({
                       }
                       const v = endVariance(formData.actual_end_date || null, (act as any)?.baseline_end_date, formData.end_date);
                       const tone = v !== null ? varianceTone(v) : null;
+                      const closeReal = () => {
+                        setFormData((prev) => ({ ...prev, actual_start_date: "", actual_end_date: "" }));
+                        setShowRealDates(false);
+                      };
                       return (
-                        <div className="flex flex-col gap-1 pl-4 border-l border-dashed border-border/70">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-wide" title="Preenchido ao concluir a atividade">Execução real</span>
-                            {v !== null && tone && (
-                              <span className={cn("px-1.5 py-0 rounded border text-[10px] font-mono", varianceClasses(tone))}
-                                    title={(act as any)?.baseline_end_date ? "Real − Linha de Base" : "Real − Planejado"}>
-                                {v > 0 ? `${Math.abs(v)}d de atraso` : v < 0 ? `${Math.abs(v)}d adiantado` : "no prazo"}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <DateChip
-                              value={formData.actual_start_date}
-                              onChange={(v) => setFormData({ ...formData, actual_start_date: v })}
-                              placeholder="Início real"
-                              tooltip="Definir início real"
-                            />
-                            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
-                            <DateChip
-                              value={formData.actual_end_date}
-                              onChange={(v) => setFormData({ ...formData, actual_end_date: v })}
-                              placeholder="Término real"
-                              tooltip="Definir término real"
-                            />
-                          </div>
+                        <div className="flex items-center gap-1.5 text-xs pl-4 border-l border-dashed border-border/70">
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">Real</span>
+                          <DateChip
+                            value={formData.actual_start_date}
+                            onChange={(v) => setFormData({ ...formData, actual_start_date: v })}
+                            placeholder="Início real"
+                            tooltip="Definir início real"
+                          />
+                          <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          <DateChip
+                            value={formData.actual_end_date}
+                            onChange={(v) => setFormData({ ...formData, actual_end_date: v })}
+                            placeholder="Término real"
+                            tooltip="Definir término real"
+                          />
+                          {v !== null && tone && (
+                            <span className={cn("px-1.5 py-0 rounded border text-[10px] font-mono shrink-0", varianceClasses(tone))}
+                                  title={(act as any)?.baseline_end_date ? "Real − Linha de Base" : "Real − Planejado"}>
+                              {v > 0 ? `${Math.abs(v)}d de atraso` : v < 0 ? `${Math.abs(v)}d adiantado` : "no prazo"}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={closeReal}
+                            title="Fechar e limpar datas reais"
+                            className="text-muted-foreground hover:text-foreground shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       );
                     })()}
@@ -2106,7 +2110,11 @@ export const EditActivityDialog = ({
                           };
                           if (colId === "assigned_to") {
                             return (
-                              <Popover key={colId}>
+                              <Popover
+                                key={colId}
+                                open={openAssigneeSubId === sub.id}
+                                onOpenChange={(o) => setOpenAssigneeSubId(o ? sub.id : null)}
+                              >
                                 <PopoverTrigger asChild>
                                   <button
                                     type="button"
@@ -2135,7 +2143,7 @@ export const EditActivityDialog = ({
                                     <button
                                       type="button"
                                       className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted"
-                                      onClick={() => updateField(null)}
+                                      onClick={() => { setOpenAssigneeSubId(null); updateField(null); }}
                                     >
                                       Sem responsável
                                     </button>
@@ -2146,7 +2154,7 @@ export const EditActivityDialog = ({
                                         className={`w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted ${
                                           sub.assigned_to === m.full_name ? "bg-primary/10 text-primary font-medium" : ""
                                         }`}
-                                        onClick={() => updateField(m.full_name)}
+                                        onClick={() => { setOpenAssigneeSubId(null); updateField(m.full_name); }}
                                       >
                                         {m.full_name}
                                         {m.sector && <span className="text-muted-foreground"> — {m.sector}</span>}
@@ -2499,8 +2507,6 @@ export const EditActivityDialog = ({
                     const updateData: any = {
                       status: "completed",
                       completed_at: new Date().toISOString(),
-                      actual_start_date: (act as any).actual_start_date || new Date().toISOString().slice(0, 10),
-                      actual_end_date: new Date().toISOString().slice(0, 10),
                     };
                     if (finalStage) {
                       updateData.workflow_stage_id = finalStage.id;

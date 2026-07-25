@@ -714,11 +714,11 @@ export const EditProjectDialog = ({
                     return (
                     <div
                       key={m.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-border/80 hover:bg-muted/40 transition-colors group"
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-md border border-border hover:border-border/80 hover:bg-muted/40 transition-colors group"
                     >
-                      <Avatar className="h-10 w-10 shrink-0">
+                      <Avatar className="h-6 w-6 shrink-0">
                         {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
-                        <AvatarFallback className="text-sm">{initials || "?"}</AvatarFallback>
+                        <AvatarFallback className="text-[9px]">{initials || "?"}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-foreground truncate">{m.full_name}</span>

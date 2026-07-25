@@ -284,12 +284,18 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         })();
       }
     } catch (error) {
-      console.error("Erro ao criar projeto:", error);
       const maybe = error as { message?: string; details?: string; hint?: string; code?: string };
       const detail = [maybe?.message, maybe?.details, maybe?.hint, maybe?.code].filter(Boolean).join(" | ");
+      // O PostgrestError tem props nao-enumeraveis (loga {}); serializa manual.
+      console.error("Erro ao criar projeto:", detail || error);
+      // 42501 = violacao de RLS: falta a policy de INSERT no banco (migration
+      // pendente na VM). Mensagem amigavel em vez do texto tecnico.
+      const isRls = maybe?.code === "42501" || /row-level security/i.test(maybe?.message || "");
       toast({
         title: "Erro ao criar projeto",
-        description: detail || "Não foi possível criar o projeto. Tente novamente.",
+        description: isRls
+          ? "Permissão insuficiente no banco para criar projetos. É necessário aplicar a migration de permissão (RLS) no servidor. Avise o administrador."
+          : detail || "Não foi possível criar o projeto. Tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -504,14 +510,14 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
               {team.length > 0 && (
                 <div className="space-y-1.5">
                   {team.map((m) => (
-                    <div key={m.user_id} className="flex items-center gap-2 p-2 rounded-md bg-muted/40 border border-border">
-                      <Avatar className="h-8 w-8 shrink-0">
+                    <div key={m.user_id} className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-muted/40 border border-border">
+                      <Avatar className="h-6 w-6 shrink-0">
                         {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
-                        <AvatarFallback className="text-[10px]">{m.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
+                        <AvatarFallback className="text-[9px]">{m.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}</AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{m.full_name}</p>
-                        {m.sector && <p className="text-[11px] text-muted-foreground truncate">{m.sector}</p>}
+                      <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
+                        <span className="text-sm font-medium truncate">{m.full_name}</span>
+                        {m.sector && <span className="text-[11px] text-muted-foreground truncate shrink-0">· {m.sector}</span>}
                       </div>
                       <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeTeamMember(m.user_id)}>
                         <X className="w-3.5 h-3.5" />
