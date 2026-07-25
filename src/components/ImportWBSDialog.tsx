@@ -1,18 +1,22 @@
 'use client';
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Upload, Layers, ListTodo, AlertCircle } from "lucide-react";
+import { Upload, Layers, Package, Circle, Diamond, ClipboardList, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
-interface ParsedItem {
-  code: string;
+/* ------------------------------------------------------------------ */
+/*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
+/* ------------------------------------------------------------------ */
+type EapRole = "fase" | "pacote" | "atividade" | "marco";
+interface TreeNode {
+  code: string;          // 1, 1.1, 1.1.2...
   title: string;
-  level: "phase" | "activity" | "subactivity";
-  levelLabel: string;
+  depth: number;         // 1 = topo
+  role: EapRole;         // resolvido por posição + palavra-chave
   parentCode: string | null;
 }
 
@@ -21,188 +25,272 @@ interface ImportWBSDialogProps {
   onDataChanged: () => void;
 }
 
-const getLevelLabel = (depth: number, phaseDepth: number): string => {
-  const relativeDepth = depth - phaseDepth;
-  switch (relativeDepth) {
-    case 0: return "Fase/Entregável";
-    case 1: return "Subentrega";
-    case 2: return "Pacote de Trabalho";
-    case 3: return "Atividade";
-    default: return relativeDepth < 0 ? "Projeto" : "Atividade";
-  }
+const ROLE_META: Record<EapRole, { label: string; short: string; icon: JSX.Element; cls: string }> = {
+  fase:      { label: "Fase",      short: "Fase",  icon: <Layers className="w-3 h-3" />,  cls: "bg-primary/10 text-primary border-primary/30" },
+  pacote:    { label: "Pacote",    short: "Pacote", icon: <Package className="w-3 h-3" />, cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
+  atividade: { label: "Atividade", short: "Ativ.", icon: <Circle className="w-3 h-3" />,  cls: "bg-muted text-muted-foreground border-border" },
+  marco:     { label: "Marco",     short: "Marco", icon: <Diamond className="w-3 h-3" />,  cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
 };
 
-const parseWBS = (text: string): ParsedItem[] => {
-  const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-  const rawItems: { code: string; title: string }[] = [];
+const isMilestoneTitle = (t: string) =>
+  /(^|\s)(marco|milestone)(\s|:|$)/i.test(t) || /🏁|\[m\]/i.test(t);
 
-  for (const line of lines) {
-    const match = line.match(/^(\d+(?:\.\d+)*)\.?\s+(.+)$/);
-    if (!match) continue;
-    rawItems.push({ code: match[1], title: match[2].trim() });
+/* ------------------------------------------------------------------ */
+/*  Parser FLEXÍVEL: aceita código numérico (1.2.3), bullets (• - – *)  */
+/*  e indentação por espaços/tabs. Sempre produz uma hierarquia com     */
+/*  códigos normalizados (1, 1.1, 1.1.2...).                            */
+/* ------------------------------------------------------------------ */
+const parseFlexible = (text: string): TreeNode[] => {
+  const rawLines = text.split("\n").map((l) => l.replace(/\t/g, "  ")).filter((l) => l.trim().length > 0);
+  if (rawLines.length === 0) return [];
+
+  // 1) Se a MAIORIA das linhas tem código numérico, usa o modo "código".
+  const numRe = /^\s*(\d+(?:\.\d+)*)\.?\s+(.+)$/;
+  const numbered = rawLines.filter((l) => numRe.test(l));
+  const useNumbered = numbered.length >= Math.ceil(rawLines.length * 0.6);
+
+  type Raw = { indent: number; title: string; explicitCode: string | null };
+  const raws: Raw[] = rawLines.map((line) => {
+    const indent = line.length - line.trimStart().length;
+    let body = line.trim();
+    let explicitCode: string | null = null;
+    const m = body.match(/^(\d+(?:\.\d+)*)\.?\s+(.+)$/);
+    if (m) { explicitCode = m[1]; body = m[2].trim(); }
+    // remove marcadores de bullet no início
+    body = body.replace(/^[•\-–—*•]+\s*/, "").trim();
+    return { indent, title: body, explicitCode };
+  }).filter((r) => r.title.length > 0);
+
+  const nodes: TreeNode[] = [];
+
+  if (useNumbered) {
+    // Modo código: a profundidade vem do número de segmentos do código.
+    for (const r of raws) {
+      if (!r.explicitCode) continue; // ignora linhas sem código neste modo
+      const parts = r.explicitCode.split(".");
+      const depth = parts.length;
+      const parentCode = depth > 1 ? parts.slice(0, depth - 1).join(".") : null;
+      nodes.push({ code: r.explicitCode, title: r.title, depth, role: "atividade", parentCode });
+    }
+  } else {
+    // Modo indentação/bullets: a profundidade vem do recuo. Gera códigos.
+    // Pilha de ancestrais: cada nível guarda { indent, count, code }.
+    // count = quantos filhos diretos já saíram naquele ancestral.
+    type Level = { indent: number; count: number; code: string };
+    const stack: Level[] = [];
+
+    for (const r of raws) {
+      // Sobe (dedent) enquanto a indentação atual for MENOR OU IGUAL à do topo,
+      // exceto quando a pilha está vazia. Assim itens no mesmo recuo são irmãos.
+      while (stack.length > 0 && r.indent <= stack[stack.length - 1].indent) {
+        stack.pop();
+      }
+      const parent = stack[stack.length - 1] || null;
+      const parentCode = parent ? parent.code : null;
+      // incrementa o contador de filhos do pai (ou raiz)
+      if (parent) parent.count += 1;
+      else {
+        // nível raiz: usa um contador virtual na base da pilha
+        // (representado por um Level "sentinela" com indent -1)
+      }
+      // contador do próprio nível: precisamos de um contador por PAI.
+      // Reusa o count do pai como índice; para a raiz, conta itens de topo.
+      const siblingIndex = parent ? parent.count : (nodes.filter((n) => n.parentCode === null).length + 1);
+      const code = parentCode ? `${parentCode}.${siblingIndex}` : String(siblingIndex);
+      const level = stack.length + 1;
+      nodes.push({ code, title: r.title, depth: level, role: "atividade", parentCode });
+      // empilha este item como possível ancestral dos próximos mais indentados
+      stack.push({ indent: r.indent, count: 0, code });
+    }
   }
 
-  if (rawItems.length === 0) return [];
-
-  const depths = rawItems.map(i => i.code.split(".").length);
-  const minDepth = Math.min(...depths);
-
-  const hasZeroPattern = rawItems.some(i => {
-    const p = i.code.split(".");
-    return p.length === 2 && p[1] === "0";
-  });
-
-  const phaseDepth = hasZeroPattern ? 2 : (minDepth === 1 ? 2 : minDepth);
-  const activityDepth = phaseDepth + 1;
-
-  const result: ParsedItem[] = [];
-
-  for (const item of rawItems) {
-    const dotParts = item.code.split(".");
-    const depth = dotParts.length;
-
-    if (depth < phaseDepth) continue;
-
-    if (hasZeroPattern && depth === 2 && dotParts[1] === "0") {
-      result.push({ code: item.code, title: item.title, level: "phase", levelLabel: getLevelLabel(depth, phaseDepth), parentCode: null });
-      continue;
-    }
-
-    if (depth === phaseDepth && !hasZeroPattern) {
-      result.push({ code: item.code, title: item.title, level: "phase", levelLabel: getLevelLabel(depth, phaseDepth), parentCode: null });
-    } else if (depth === activityDepth || (hasZeroPattern && depth === 2)) {
-      const parentCode = hasZeroPattern
-        ? dotParts[0] + ".0"
-        : dotParts.slice(0, phaseDepth).join(".");
-      result.push({ code: item.code, title: item.title, level: "activity", levelLabel: getLevelLabel(depth, phaseDepth), parentCode });
-    } else {
-      const parentCode = dotParts.slice(0, depth - 1).join(".");
-      result.push({ code: item.code, title: item.title, level: "subactivity", levelLabel: getLevelLabel(depth, phaseDepth), parentCode });
-    }
+  // 2) Resolve o PAPEL EAP de cada nó (posição + palavra-chave):
+  //    - topo (depth 1) = fase
+  //    - tem filhos = pacote
+  //    - folha = atividade; se o título indicar, marco
+  const hasChildren = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
+  for (const n of nodes) {
+    if (n.depth === 1) n.role = "fase";
+    else if (hasChildren.has(n.code)) n.role = "pacote";
+    else if (isMilestoneTitle(n.title)) n.role = "marco";
+    else n.role = "atividade";
   }
 
-  return result;
+  return nodes;
 };
+
+/* ------------------------------------------------------------------ */
+/*  Modelos por tipo de projeto (para quem não tem EAP pronta).        */
+/* ------------------------------------------------------------------ */
+const TEMPLATES: { id: string; emoji: string; name: string; desc: string; text: string }[] = [
+  {
+    id: "sistema", emoji: "💻", name: "Implantação de sistema",
+    desc: "Descoberta · Desenvolvimento · Homologação · Go-live",
+    text: `1. Descoberta e Requisitos
+1.1 Levantamento de requisitos
+1.1.1 Entrevistar áreas
+1.1.2 Mapear processos atuais
+1.1.3 Marco: Requisitos aprovados
+2. Desenvolvimento
+2.1 Modelagem e arquitetura
+2.2 Construção
+2.2.1 Desenvolver módulo principal
+2.2.2 Integrações
+3. Homologação
+3.1 Testes com usuários
+3.2 Ajustes finais
+4. Go-live
+4.1 Plano de implantação
+4.2 Treinamento
+4.3 Marco: Sistema em produção`,
+  },
+  {
+    id: "campanha", emoji: "📣", name: "Campanha de marketing",
+    desc: "Briefing · Criação · Veiculação · Análise",
+    text: `1. Briefing e Planejamento
+1.1 Definir objetivo e público
+1.2 Definir orçamento
+1.3 Marco: Briefing aprovado
+2. Criação
+2.1 Conceito e mensagem
+2.2 Produção de peças
+3. Veiculação
+3.1 Configurar canais
+3.2 Publicar e monitorar
+4. Análise
+4.1 Coletar métricas
+4.2 Relatório de resultados`,
+  },
+  {
+    id: "processo", emoji: "🔧", name: "Melhoria de processo",
+    desc: "Diagnóstico · Redesenho · Piloto · Rollout",
+    text: `1. Diagnóstico
+1.1 Mapear processo atual (AS-IS)
+1.2 Identificar gargalos
+2. Redesenho
+2.1 Desenhar processo futuro (TO-BE)
+2.2 Validar com áreas
+2.3 Marco: Novo processo aprovado
+3. Piloto
+3.1 Executar piloto
+3.2 Avaliar resultados
+4. Rollout
+4.1 Treinar equipes
+4.2 Implantar em toda a operação`,
+  },
+];
 
 export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogProps) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"paste" | "template">("paste");
   const [text, setText] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
-  const parsed = text ? parseWBS(text) : [];
-  const phases = parsed.filter(i => i.level === "phase");
-  const activities = parsed.filter(i => i.level === "activity");
-  const subactivities = parsed.filter(i => i.level === "subactivity");
+  const tree = useMemo(() => parseFlexible(text), [text]);
+  const counts = useMemo(() => {
+    const c = { fase: 0, pacote: 0, atividade: 0, marco: 0 };
+    tree.forEach((n) => { c[n.role]++; });
+    return c;
+  }, [tree]);
+
+  const resetAndClose = () => { setText(""); setSelectedTemplate(null); setTab("paste"); setOpen(false); };
+
+  const pickTemplate = (id: string) => {
+    const t = TEMPLATES.find((x) => x.id === id);
+    if (!t) return;
+    setSelectedTemplate(id);
+    setText(t.text);
+  };
 
   const handleImport = async () => {
-    if (parsed.length === 0) return;
+    if (tree.length === 0) return;
     setImporting(true);
-
     try {
-      // Get current max display_order for phases
-      const { data: existingPhases } = await supabase
-        .from("phases")
-        .select("display_order")
-        .eq("project_id", projectId)
-        .order("display_order", { ascending: false })
-        .limit(1);
+      const phases = tree.filter((n) => n.role === "fase");
+      const nonPhase = tree.filter((n) => n.role !== "fase");
 
+      const { data: existingPhases } = await supabase
+        .from("phases").select("display_order")
+        .eq("project_id", projectId).order("display_order", { ascending: false }).limit(1);
       let phaseOrder = (existingPhases?.[0]?.display_order ?? 0) + 1;
 
-      // Create phases and track their IDs by code
+      // Coluna "Backlog" do fluxo (display_order 0): itens importados nascem lá,
+      // como os criados manualmente — assim seguem o mesmo fluxo (Kanban/status).
+      const { data: stagesData } = await supabase
+        .from("workflow_stages").select("id, display_order")
+        .eq("project_id", projectId).order("display_order", { ascending: true });
+      const backlogStageId =
+        stagesData?.find((s) => s.display_order === 0)?.id ?? stagesData?.[0]?.id ?? null;
+
       const phaseIdMap: Record<string, string> = {};
-
       for (const phase of phases) {
-        const { data, error } = await supabase
-          .from("phases")
-          .insert({
-            project_id: projectId,
-            title: `${phase.code} ${phase.title}`,
-            display_order: phaseOrder++,
-            wbs_code: phase.code,
-          })
-          .select("id")
-          .single();
-
+        const { data, error } = await supabase.from("phases").insert({
+          project_id: projectId,
+          title: `${phase.code} ${phase.title}`,
+          display_order: phaseOrder++,
+          wbs_code: phase.code,
+        }).select("id").single();
         if (error) throw error;
         phaseIdMap[phase.code] = data.id;
       }
 
-      // Create all non-phase items in order, tracking IDs for parent chaining
       const codeIdMap: Record<string, string> = {};
       const phaseOrderCounter: Record<string, number> = {};
-      const nonPhaseItems = parsed.filter(i => i.level !== "phase");
-
-      // Helper: find the phase_id for any item by walking up the parent chain
-      const findPhaseId = (item: ParsedItem): string | null => {
-        if (item.parentCode && phaseIdMap[item.parentCode]) return phaseIdMap[item.parentCode];
-        // Walk up to find the phase
-        const dotParts = item.code.split(".");
-        for (let len = dotParts.length - 1; len >= 1; len--) {
-          const ancestor = dotParts.slice(0, len).join(".");
+      const findPhaseId = (node: TreeNode): string | null => {
+        const parts = node.code.split(".");
+        for (let len = parts.length - 1; len >= 1; len--) {
+          const ancestor = parts.slice(0, len).join(".");
           if (phaseIdMap[ancestor]) return phaseIdMap[ancestor];
         }
         return null;
       };
 
-      // Alinhamento com o modelo EAP do sistema (fase / pacote / atividade / marco):
-      // - item que TEM filhos entre os importados  -> "pacote" (agrupador)
-      // - item folha                                -> "atividade"
-      // - título com marca de marco ("marco", "milestone", 🏁, [M]) -> is_milestone
-      const codesWithChildren = new Set(
-        nonPhaseItems.map((i) => i.parentCode).filter(Boolean) as string[],
-      );
-      const isMilestoneTitle = (t: string) =>
-        /(^|\s)(marco|milestone)(\s|:|$)/i.test(t) || /🏁|\[m\]/i.test(t);
-
-      let pacoteUnsupported = false; // banco pode rejeitar item_type='pacote'
-      for (const item of nonPhaseItems) {
-        const phaseId = findPhaseId(item);
-        const parentId = item.parentCode ? codeIdMap[item.parentCode] || null : null;
+      let pacoteUnsupported = false;
+      // Ordena por código para inserir pais antes dos filhos.
+      const ordered = [...nonPhase].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+      for (const node of ordered) {
+        const phaseId = findPhaseId(node);
+        const parentId = node.parentCode ? codeIdMap[node.parentCode] || null : null;
         const phaseKey = phaseId || "__none__";
         if (!(phaseKey in phaseOrderCounter)) phaseOrderCounter[phaseKey] = 0;
 
-        const hasChildren = codesWithChildren.has(item.code);
-        const milestone = isMilestoneTitle(item.title);
-        // Marco é uma folha; se tiver filhos, prevalece o papel de agrupador.
-        const itemType = hasChildren ? "pacote" : "atividade";
-
+        const itemType = node.role === "pacote" ? "pacote" : "atividade";
         const basePayload: any = {
           project_id: projectId,
-          title: `${item.code} ${item.title}`,
+          title: `${node.code} ${node.title}`,
           phase_id: phaseId,
           parent_id: parentId,
           display_order: phaseOrderCounter[phaseKey]++,
-          wbs_code: item.code,
+          wbs_code: node.code,
           item_type: itemType,
-          is_milestone: milestone && !hasChildren,
+          is_milestone: node.role === "marco",
+          // Nasce no Backlog, pendente — igual a criação manual (segue o fluxo).
+          workflow_stage_id: backlogStageId,
+          status: "pending",
         };
 
         let res = await supabase.from("activities").insert(basePayload).select("id").single();
-        // Tolerância: se o banco ainda não aceita 'pacote' (migration pendente),
-        // regrava como 'atividade' — vira pacote pelo app por ter filhos.
         if (res.error && /item_type/i.test(res.error.message) && itemType === "pacote") {
           pacoteUnsupported = true;
           res = await supabase.from("activities").insert({ ...basePayload, item_type: "atividade" }).select("id").single();
         }
         if (res.error) throw res.error;
-        codeIdMap[item.code] = res.data.id;
+        codeIdMap[node.code] = res.data.id;
       }
+
       if (pacoteUnsupported) {
         toast({
           title: "Tipo 'Pacote' pendente no banco",
-          description: "Os agrupadores foram importados como atividade (viram pacote por terem subitens). Aplique a migration de item_type na VM para gravar o tipo Pacote.",
+          description: "Os agrupadores viraram atividade (ainda agrupam por terem subitens). Aplique a migration de item_type na VM para gravar o tipo Pacote.",
         });
       }
-
       toast({
         title: "EAP importada!",
-        description: `${phases.length} fase(s)/entregável(is), ${activities.length} subentrega(s) e ${subactivities.length} pacote(s)/atividade(s) criados.`,
+        description: `${counts.fase} fase(s), ${counts.pacote} pacote(s), ${counts.atividade} atividade(s) e ${counts.marco} marco(s) criados.`,
       });
-
-      setText("");
-      setOpen(false);
+      resetAndClose();
       onDataChanged();
     } catch (error) {
       console.error("Erro ao importar EAP:", error);
@@ -212,89 +300,149 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     }
   };
 
+  const CountBadge = ({ role, n }: { role: EapRole; n: number }) => (
+    <span className={cn("inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full border", ROLE_META[role].cls)}>
+      {ROLE_META[role].icon} {n} {ROLE_META[role].label.toLowerCase()}{n === 1 ? "" : "s"}
+    </span>
+  );
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : resetAndClose())}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="gap-2">
-          <Upload className="w-4 h-4" />
-          Importar EAP
+        <Button size="sm" variant="outline" className="gap-2 h-9">
+          <Upload className="w-4 h-4" /> Importar EAP
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Importar Estrutura Analítica do Projeto</DialogTitle>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b">
+          <DialogTitle className="text-base">Importar Estrutura Analítica do Projeto</DialogTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Cole a EAP (em qualquer formato) ou comece de um modelo. Fase agrupa pacotes; pacote agrupa atividades;
+            itens folha são atividades. Escreva “marco” no título para criar um marco.
+          </p>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div>
-            <p className="text-sm text-muted-foreground mb-2">
-              Cole a estrutura EAP abaixo. Cada nível vira o tipo correspondente do projeto:
-              a raiz é <strong>Fase</strong>; itens que agrupam subitens viram <strong>Pacote</strong>;
-              itens folha viram <strong>Atividade</strong>. Para criar um <strong>Marco</strong>, inclua
-              “marco” no título (ex.: <em>1.2.3 Marco: Kickoff aprovado</em>).
-            </p>
-            <Textarea
-              placeholder={`Exemplo:\n1.0 Gestão do Projeto\n1.1 Planejamento\n1.1.1 Elaborar cronograma\n1.1.2 Marco: Plano aprovado\n1.2 Execução\n1.2.1 Desenvolver módulo A`}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={10}
-              className="font-mono text-sm"
-            />
+        {/* Abas de origem */}
+        <div className="flex gap-1 px-5 pt-3">
+          {([["paste", "Colar texto", <ClipboardList key="i" className="w-3.5 h-3.5" />],
+             ["template", "Usar modelo", <FileText key="i" className="w-3.5 h-3.5" />]] as const).map(([id, label, icon]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={cn(
+                "flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors",
+                tab === id ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:bg-muted/50",
+              )}
+            >
+              {icon} {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border-t mt-3 min-h-[300px] max-h-[52vh]">
+          {/* Entrada */}
+          <div className="p-5 md:border-r overflow-y-auto">
+            {tab === "paste" ? (
+              <>
+                <div className="text-[11px] font-mono uppercase tracking-wide text-muted-foreground mb-2">Cole aqui — qualquer formato</div>
+                <Textarea
+                  value={text}
+                  onChange={(e) => { setText(e.target.value); setSelectedTemplate(null); }}
+                  rows={12}
+                  className="font-mono text-xs"
+                  placeholder={`Aceita qualquer um destes:\n\n1. Gestão do Projeto\n1.1 Planejamento\n1.1.2 Marco: Plano aprovado\n\n— ou com bullets/indentação —\n• Gestão do Projeto\n   - Planejamento\n      - Elaborar cronograma`}
+                />
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {["código 1.2.3", "bullets • - –", "indentação", "colado do Excel"].map((f) => (
+                    <span key={f} className="text-[10px] font-mono bg-success/10 text-success px-2 py-0.5 rounded-full">✓ {f}</span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-[11px] font-mono uppercase tracking-wide text-muted-foreground mb-2">Escolha um modelo</div>
+                <div className="space-y-2">
+                  {TEMPLATES.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => pickTemplate(t.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 text-left border rounded-lg p-3 transition-colors",
+                        selectedTemplate === t.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
+                      )}
+                    >
+                      <span className="w-9 h-9 rounded-md bg-muted flex items-center justify-center text-lg shrink-0">{t.emoji}</span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold">{t.name}</span>
+                        <span className="block text-[11px] text-muted-foreground truncate">{t.desc}</span>
+                      </span>
+                      {selectedTemplate === t.id && <span className="ml-auto text-primary text-sm">✓</span>}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => { setTab("paste"); setText(""); setSelectedTemplate(null); resetAndClose(); }}
+                    className="w-full flex items-center gap-3 text-left border border-dashed rounded-lg p-3 hover:bg-muted/50"
+                  >
+                    <span className="w-9 h-9 rounded-md bg-muted flex items-center justify-center text-lg shrink-0">📄</span>
+                    <span>
+                      <span className="block text-sm font-semibold">EAP em branco</span>
+                      <span className="block text-[11px] text-muted-foreground">Fechar e montar item a item no Backlog</span>
+                    </span>
+                  </button>
+                </div>
+                {selectedTemplate && (
+                  <p className="text-[11px] text-muted-foreground mt-3">
+                    Modelo carregado — revise a árvore à direita, edite na aba “Colar texto” se quiser, e importe.
+                  </p>
+                )}
+              </>
+            )}
           </div>
 
-          {parsed.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="gap-1">
-                  <Layers className="w-3 h-3" />
-                  {phases.length} Fases/Entregáveis
-                </Badge>
-                <Badge variant="outline" className="gap-1">
-                  <ListTodo className="w-3 h-3" />
-                  {activities.length} Subentregas
-                </Badge>
-                <Badge variant="outline" className="gap-1">
-                  <ListTodo className="w-3 h-3" />
-                  {subactivities.length} Pacotes/Atividades
-                </Badge>
-              </div>
-
-              <div className="border border-border rounded-lg p-3 max-h-[200px] overflow-y-auto bg-muted/30">
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Pré-visualização:</p>
-                {parsed.map((item, idx) => {
-                  const indent = item.level === "phase" ? "" : item.level === "activity" ? "pl-5" : "pl-10";
-                  return (
-                    <div key={idx} className={`flex items-center gap-2 py-1 ${indent}`}>
-                      {item.level === "phase" ? (
-                        <Layers className="w-3 h-3 text-primary shrink-0" />
-                      ) : (
-                        <ListTodo className="w-3 h-3 text-muted-foreground shrink-0" />
-                      )}
-                      <span className="text-xs font-mono text-muted-foreground">{item.code}</span>
-                      <span className={`text-sm ${item.level === "phase" ? "font-medium text-foreground" : "text-muted-foreground"}`}>
-                        {item.title}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/60 ml-auto shrink-0">{item.levelLabel}</span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {activities.some(a => !a.parentCode || !phases.find(p => p.code === a.parentCode)) && (
-                <div className="flex items-center gap-2 text-sm text-amber-600">
-                  <AlertCircle className="w-4 h-4" />
-                  Algumas atividades não têm fase correspondente e ficarão sem vínculo.
-                </div>
-              )}
+          {/* Pré-visualização em árvore */}
+          <div className="p-5 overflow-y-auto">
+            <div className="text-[11px] font-mono uppercase tracking-wide text-muted-foreground mb-2">
+              Pré-visualização <span className="text-muted-foreground/60">interpretado ao vivo</span>
             </div>
-          )}
+            {tree.length === 0 ? (
+              <div className="border border-dashed rounded-lg py-10 text-center text-xs text-muted-foreground">
+                A árvore aparece aqui conforme você cola o texto ou escolhe um modelo.
+              </div>
+            ) : (
+              <div className="space-y-0.5">
+                {tree.map((n) => (
+                  <div key={n.code} className="flex items-center gap-2 py-1" style={{ paddingLeft: (n.depth - 1) * 18 }}>
+                    <span className={cn("inline-flex items-center gap-1 text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0", ROLE_META[n.role].cls)}>
+                      {ROLE_META[n.role].short}
+                    </span>
+                    <span className="text-[10px] font-mono text-muted-foreground shrink-0">{n.code}</span>
+                    <span className="text-xs truncate">{n.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleImport} disabled={parsed.length === 0 || importing}>
-              {importing ? "Importando..." : `Importar ${parsed.length} itens`}
+        {/* Rodapé: contadores + ações */}
+        <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-t bg-muted/30">
+          {tree.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              <CountBadge role="fase" n={counts.fase} />
+              <CountBadge role="pacote" n={counts.pacote} />
+              <CountBadge role="atividade" n={counts.atividade} />
+              {counts.marco > 0 && <CountBadge role="marco" n={counts.marco} />}
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">Nada para importar ainda.</span>
+          )}
+          <div className="ml-auto flex gap-2">
+            <Button variant="outline" size="sm" onClick={resetAndClose}>Cancelar</Button>
+            <Button size="sm" onClick={handleImport} disabled={tree.length === 0 || importing}>
+              {importing ? "Importando..." : `Importar ${tree.length} ${tree.length === 1 ? "item" : "itens"}`}
             </Button>
           </div>
         </div>
