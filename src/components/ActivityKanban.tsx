@@ -5,13 +5,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -32,6 +25,8 @@ import {
   AlertCircle,
   Inbox,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Plus,
   BookOpen,
   GitFork,
@@ -46,6 +41,11 @@ import {
   ChevronsRight,
   ChevronsLeft,
   SlidersHorizontal,
+  Flag,
+  Building2,
+  Tag as TagIcon,
+  Calendar as CalendarIcon,
+  Users,
   Link2,
   LayoutGrid,
   User,
@@ -364,6 +364,32 @@ interface Activity {
   created_by?: string | null;
 }
 
+// Filtro por coluna (Frente B): mesmos campos do filtro geral, exceto
+// "Coluna/Status" (não faz sentido dentro da própria coluna). Serializável
+// (arrays em vez de Sets) para persistir por projeto.
+interface ColumnFilter {
+  assignees: string[];
+  priorities: string[];
+  sectors: string[];
+  types: string[];
+  participants: string[];
+  tags: string[];
+  dueRange: { from: string; to: string };
+  startRange: { from: string; to: string };
+  hoursRange: { min: string; max: string };
+  blocked: boolean;
+}
+const EMPTY_COLUMN_FILTER: ColumnFilter = {
+  assignees: [], priorities: [], sectors: [], types: [], participants: [], tags: [],
+  dueRange: { from: "", to: "" }, startRange: { from: "", to: "" }, hoursRange: { min: "", max: "" },
+  blocked: false,
+};
+const columnFilterActive = (f: ColumnFilter): boolean =>
+  f.assignees.length > 0 || f.priorities.length > 0 || f.sectors.length > 0 ||
+  f.types.length > 0 || f.participants.length > 0 || f.tags.length > 0 ||
+  !!(f.dueRange.from || f.dueRange.to) || !!(f.startRange.from || f.startRange.to) ||
+  !!(f.hoursRange.min || f.hoursRange.max) || f.blocked;
+
 interface ActivityKanbanProps {
   projectId: string;
   activities: Activity[];
@@ -382,6 +408,8 @@ interface ActivityKanbanProps {
   profilesMap?: Record<string, string>;
   /** Mapa de id de perfil → avatar_url */
   profileAvatarMap?: Record<string, string>;
+  /** Mapa de id/nome de perfil → setor (para raia por setor) */
+  profileSectorMap?: Record<string, string>;
 }
 
 type HoursStat = {
@@ -1017,6 +1045,238 @@ function KanbanCard({
   );
 }
 
+// Lista de opções em linhas compactas com checkbox (padrão Linear/Notion).
+// Substitui os chips grandes; mostra busca quando há muitas opções.
+function FilterOptionList({
+  options, selected, onToggle, dot, searchable, searchPlaceholder = "Buscar...",
+}: {
+  options: { value: string; label: string }[];
+  selected: (v: string) => boolean;
+  onToggle: (v: string) => void;
+  dot?: (v: string) => string | undefined;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+}) {
+  const [q, setQ] = useState("");
+  const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const showSearch = searchable ?? options.length > 8;
+  const filtered = q.trim() ? options.filter((o) => norm(o.label).includes(norm(q.trim()))) : options;
+  return (
+    <div className="space-y-1">
+      {showSearch && (
+        <div className="relative mb-1">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={searchPlaceholder} className="h-8 pl-8 text-xs" />
+        </div>
+      )}
+      <div className="max-h-[200px] overflow-y-auto -mx-1 px-1">
+        {filtered.length === 0 && <div className="px-2 py-4 text-center text-xs text-muted-foreground">Nada encontrado</div>}
+        {filtered.map((o) => {
+          const on = selected(o.value);
+          const d = dot?.(o.value);
+          return (
+            <button key={o.value} type="button" onClick={() => onToggle(o.value)}
+              className={cn("w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-left transition-colors",
+                on ? "bg-primary/10 text-primary" : "hover:bg-muted/60")}>
+              <span className={cn("w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0",
+                on ? "bg-primary border-primary" : "border-input")}>
+                {on && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+              </span>
+              {d && <span className={cn("w-2 h-2 rounded-full shrink-0", d)} />}
+              <span className="truncate flex-1">{o.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Painel de filtro POR COLUNA (Frente B). Reaproveita o mesmo layout accordion
+// do filtro geral, sem "Coluna/Status". Estado vem por props (do pai).
+function ColumnFilterPanel({
+  stageId, filter, onChange,
+  assigneeOptions, sectorOptions, participantOptions, tagOptions,
+  profilesMap,
+}: {
+  stageId: string;
+  filter: ColumnFilter;
+  onChange: (stageId: string, next: ColumnFilter) => void;
+  assigneeOptions: string[];
+  sectorOptions: string[];
+  participantOptions: string[];
+  tagOptions: string[];
+  profilesMap: Record<string, string>;
+}) {
+  const [openSection, setOpenSection] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const active = columnFilterActive(filter);
+  const activeCount =
+    filter.assignees.length + filter.priorities.length + filter.sectors.length +
+    filter.types.length + filter.participants.length + filter.tags.length +
+    (filter.dueRange.from || filter.dueRange.to ? 1 : 0) +
+    (filter.startRange.from || filter.startRange.to ? 1 : 0) +
+    (filter.hoursRange.min || filter.hoursRange.max ? 1 : 0) +
+    (filter.blocked ? 1 : 0);
+
+  const toggleArr = (arr: string[], v: string) => arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
+  const set = (patch: Partial<ColumnFilter>) => onChange(stageId, { ...filter, ...patch });
+
+  const PRIORITIES: [string, string, string][] = [
+    ["urgente", "Urgente", "bg-red-500"], ["critica", "Crítica", "bg-orange-500"],
+    ["alta", "Alta", "bg-amber-500"], ["media", "Média", "bg-sky-500"], ["baixa", "Baixa", "bg-emerald-500"],
+  ];
+  const EAP: [string, string][] = [["atividade", "Atividade"], ["pacote", "Pacote"], ["fase", "Fase"], ["marco", "Marco"]];
+
+  const Section = ({ id, label, summary, on, children }: { id: string; label: string; summary: string; on: boolean; children: React.ReactNode }) => {
+    const open = openSection === id;
+    return (
+      <div className="border-b last:border-b-0">
+        <button type="button" onClick={() => setOpenSection(open ? null : id)}
+          className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors">
+          <span className="text-[13px] font-medium text-foreground">{label}</span>
+          <span className={cn("ml-auto text-xs truncate max-w-[120px]", on ? "text-primary font-medium" : "text-muted-foreground")}>{summary}</span>
+          <ChevronDown className={cn("w-4 h-4 text-muted-foreground shrink-0 transition-transform", open && "rotate-180")} />
+        </button>
+        {open && <div className="px-4 pb-3 pt-0.5">{children}</div>}
+      </div>
+    );
+  };
+  const sumSet = (a: string[], all = "Todos") => a.length === 0 ? all : a.length === 1 ? a[0] : `${a.length} selecionados`;
+
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setOpenSection(null); }}>
+      <PopoverTrigger asChild>
+        <button type="button"
+          className={cn("h-5 w-5 flex items-center justify-center rounded hover:bg-accent transition-colors",
+            active ? "text-primary" : "text-muted-foreground hover:text-foreground")}
+          // dnd-kit sequestra o pointerdown do header: paramos só na fase de
+          // captura para o drag não iniciar, mas deixamos o Radix (via onClick do
+          // PopoverTrigger) alternar a abertura normalmente.
+          onPointerDownCapture={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          title="Filtrar apenas esta coluna">
+          <Filter className="w-3.5 h-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[290px] p-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b">
+          <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-sm font-semibold">Filtros</span>
+          <span className="text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent-soft text-primary bg-primary/10">só esta coluna</span>
+          {active && (
+            <button type="button" onClick={() => onChange(stageId, EMPTY_COLUMN_FILTER)}
+              className="ml-auto text-xs text-muted-foreground hover:text-destructive inline-flex items-center gap-1">
+              <XIcon className="w-3.5 h-3.5" /> Limpar
+            </button>
+          )}
+        </div>
+
+        <Section id="assignee" label="Responsável" summary={filter.assignees.length === 0 ? "Todos" : filter.assignees.length === 1 ? (profilesMap[filter.assignees[0]] ?? filter.assignees[0]) : `${filter.assignees.length} selecionados`} on={filter.assignees.length > 0}>
+          <FilterOptionList
+            options={assigneeOptions.map((n) => ({ value: n, label: profilesMap[n] ?? n }))}
+            selected={(v) => filter.assignees.includes(v)}
+            onToggle={(v) => set({ assignees: toggleArr(filter.assignees, v) })}
+            searchPlaceholder="Buscar pessoa..."
+          />
+        </Section>
+
+        <Section id="priority" label="Prioridade" summary={sumSet(filter.priorities, "Todas")} on={filter.priorities.length > 0}>
+          <FilterOptionList
+            options={PRIORITIES.map(([v, label]) => ({ value: v, label }))}
+            selected={(v) => filter.priorities.includes(v)}
+            onToggle={(v) => set({ priorities: toggleArr(filter.priorities, v) })}
+            dot={(v) => PRIORITIES.find((p) => p[0] === v)?.[2]}
+          />
+        </Section>
+
+        {sectorOptions.length > 0 && (
+          <Section id="sector" label="Setor" summary={sumSet(filter.sectors)} on={filter.sectors.length > 0}>
+            <FilterOptionList
+              options={[...sectorOptions.map((s) => ({ value: s, label: s })), { value: "__none__", label: "Sem setor" }]}
+              selected={(v) => filter.sectors.includes(v)}
+              onToggle={(v) => set({ sectors: toggleArr(filter.sectors, v) })}
+            />
+          </Section>
+        )}
+
+        <Section id="type" label="Tipo (EAP)" summary={sumSet(filter.types)} on={filter.types.length > 0}>
+          <FilterOptionList
+            options={EAP.map(([v, label]) => ({ value: v, label }))}
+            selected={(v) => filter.types.includes(v)}
+            onToggle={(v) => set({ types: toggleArr(filter.types, v) })}
+          />
+        </Section>
+
+        {participantOptions.length > 0 && (
+          <Section id="participant" label="Participante" summary={sumSet(filter.participants)} on={filter.participants.length > 0}>
+            <FilterOptionList
+              options={participantOptions.map((p) => ({ value: p, label: profilesMap[p] ?? p }))}
+              selected={(v) => filter.participants.includes(v)}
+              onToggle={(v) => set({ participants: toggleArr(filter.participants, v) })}
+              searchPlaceholder="Buscar participante..."
+            />
+          </Section>
+        )}
+
+        {tagOptions.length > 0 && (
+          <Section id="tags" label="Etiquetas" summary={sumSet(filter.tags, "Todas")} on={filter.tags.length > 0}>
+            <FilterOptionList
+              options={tagOptions.map((t) => ({ value: t, label: t }))}
+              selected={(v) => filter.tags.includes(v)}
+              onToggle={(v) => set({ tags: toggleArr(filter.tags, v) })}
+              searchPlaceholder="Buscar etiqueta..."
+            />
+          </Section>
+        )}
+
+        <Section id="due" label="Prazo" summary={filter.dueRange.from || filter.dueRange.to ? "Definido" : "Qualquer"} on={!!(filter.dueRange.from || filter.dueRange.to)}>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2"><label className="w-8 text-xs text-muted-foreground shrink-0">De</label>
+              <Input type="date" value={filter.dueRange.from} onChange={(e) => set({ dueRange: { ...filter.dueRange, from: e.target.value } })} className="h-8 text-xs flex-1" /></div>
+            <div className="flex items-center gap-2"><label className="w-8 text-xs text-muted-foreground shrink-0">Até</label>
+              <Input type="date" value={filter.dueRange.to} onChange={(e) => set({ dueRange: { ...filter.dueRange, to: e.target.value } })} className="h-8 text-xs flex-1" /></div>
+          </div>
+        </Section>
+
+        <Section id="start" label="Início" summary={filter.startRange.from || filter.startRange.to ? "Definido" : "Qualquer"} on={!!(filter.startRange.from || filter.startRange.to)}>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2"><label className="w-8 text-xs text-muted-foreground shrink-0">De</label>
+              <Input type="date" value={filter.startRange.from} onChange={(e) => set({ startRange: { ...filter.startRange, from: e.target.value } })} className="h-8 text-xs flex-1" /></div>
+            <div className="flex items-center gap-2"><label className="w-8 text-xs text-muted-foreground shrink-0">Até</label>
+              <Input type="date" value={filter.startRange.to} onChange={(e) => set({ startRange: { ...filter.startRange, to: e.target.value } })} className="h-8 text-xs flex-1" /></div>
+          </div>
+        </Section>
+
+        <Section id="hours" label="Horas" summary={filter.hoursRange.min || filter.hoursRange.max ? "Definido" : "Qualquer"} on={!!(filter.hoursRange.min || filter.hoursRange.max)}>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2"><label className="w-10 text-xs text-muted-foreground shrink-0">Mín</label>
+              <Input type="number" min="0" value={filter.hoursRange.min} onChange={(e) => set({ hoursRange: { ...filter.hoursRange, min: e.target.value } })} className="h-8 text-xs flex-1" /></div>
+            <div className="flex items-center gap-2"><label className="w-10 text-xs text-muted-foreground shrink-0">Máx</label>
+              <Input type="number" min="0" value={filter.hoursRange.max} onChange={(e) => set({ hoursRange: { ...filter.hoursRange, max: e.target.value } })} className="h-8 text-xs flex-1" /></div>
+          </div>
+        </Section>
+
+        <div className="border-b last:border-b-0">
+          <button type="button" onClick={() => set({ blocked: !filter.blocked })}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors">
+            <span className="text-[13px] font-medium text-foreground">Apenas bloqueadas</span>
+            <span className={cn("ml-auto w-9 h-5 rounded-full relative transition-colors shrink-0", filter.blocked ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-background transition-transform", filter.blocked && "translate-x-4")} />
+            </span>
+          </button>
+        </div>
+
+        {active && (
+          <div className="px-4 py-2 border-t bg-muted/30 text-[11px] text-muted-foreground">
+            {activeCount} filtro{activeCount > 1 ? "s" : ""} nesta coluna
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function SortableColumn({
   stage,
   stageActivities,
@@ -1062,12 +1322,14 @@ function SortableColumn({
   laneId,
   collapsed = false,
   onToggleCollapse,
+  columnFilterSlot,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
   laneId?: string;
   collapsed?: boolean;
   onToggleCollapse?: (id: string) => void;
+  columnFilterSlot?: React.ReactNode;
   activities: Activity[];
   phases: Phase[];
   widthPct: number;
@@ -1108,7 +1370,7 @@ function SortableColumn({
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
 }) {
-  const [colSort, setColSort] = useState<string>("updated_desc");
+  const [colSort, setColSort] = useState<string>("updated:desc");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickTitle, setQuickTitle] = useState("");
   const [quickPhase, setQuickPhase] = useState("");
@@ -1224,6 +1486,8 @@ function SortableColumn({
     flex: `1 1 ${widthPct}%`,
     marginRight: isLast ? 0 : 8,
     borderTop: stage.is_blocked ? undefined : `3px solid ${stage.color}`,
+    // Fundo cinza neutro (token dedicado, sem o matiz azul do --muted).
+    backgroundColor: stage.is_blocked ? undefined : "hsl(var(--kanban-col-bg))",
   };
 
   const phaseOrderMap: Record<string, number> = {};
@@ -1232,38 +1496,37 @@ function SortableColumn({
   const stageActivityIds = useMemo(() => new Set(stageActivities.map((a) => a.id)), [stageActivities]);
 
   const sortStageItems = useCallback((list: Activity[]) => {
-    const sorted = [...list];
-    sorted.sort((a, b) => {
-      switch (colSort) {
-        case "wbs_asc": {
+    // colSort = "criterio:dir" (ex.: "due:asc"). Cada critério define uma ordem
+    // base ascendente; a direção só inverte o resultado.
+    const [criterion, dir = "asc"] = colSort.split(":");
+    const cmp = (a: Activity, b: Activity): number => {
+      switch (criterion) {
+        case "wbs": {
           const pA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
           const pB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
           if (pA !== pB) return pA - pB;
           return (a.display_order ?? 9999) - (b.display_order ?? 9999);
         }
-        case "wbs_desc": {
-          const pA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? -1) : -1;
-          const pB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? -1) : -1;
-          if (pA !== pB) return pB - pA;
-          return (b.display_order ?? -1) - (a.display_order ?? -1);
-        }
-        case "updated_desc":
-          return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
-        case "updated_asc":
+        case "updated":
           return new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime();
         case "priority":
           return (priorityWeight[normalizeGut(a.priority)] ?? 5) - (priorityWeight[normalizeGut(b.priority)] ?? 5);
-        case "due_date": {
+        case "due": {
           const da = a.end_date ? new Date(a.end_date).getTime() : Infinity;
           const db = b.end_date ? new Date(b.end_date).getTime() : Infinity;
           return da - db;
         }
         case "assigned":
           return (a.assigned_to || "zzz").localeCompare(b.assigned_to || "zzz");
+        case "hours":
+          return (Number(a.hours) || 0) - (Number(b.hours) || 0);
+        case "title":
+          return (a.title || "").localeCompare(b.title || "");
         default:
           return 0;
       }
-    });
+    };
+    const sorted = [...list].sort((a, b) => (dir === "desc" ? -cmp(a, b) : cmp(a, b)));
     return sorted;
   }, [colSort, phases]);
 
@@ -1443,11 +1706,11 @@ function SortableColumn({
       className={`relative min-w-0 rounded-lg border flex flex-col overflow-hidden shadow-sm ${
         stage.is_blocked
           ? "bg-orange-500/10 border-orange-500/40"
-          : "bg-card border-border"
+          : "border-border"
       }`}
     >
       {/* Column Header - drag handle for column reordering */}
-      <div className={`${dCol.colHeaderPad} border-b border-border/60 bg-muted/30`}>
+      <div className={`${dCol.colHeaderPad} border-b border-border/60`} style={stage.is_blocked ? undefined : { backgroundColor: "hsl(var(--kanban-col-head))" }}>
         <div className="flex items-center justify-between cursor-grab active:cursor-grabbing" {...listeners}>
           <div className="flex items-center gap-2 min-w-0">
             <div
@@ -1514,6 +1777,64 @@ function SortableColumn({
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {/* Filtro por coluna (Frente B) — construído no pai, injetado aqui */}
+            {columnFilterSlot}
+            {/* Ordenar cards desta coluna — ícone discreto (era um select de largura total) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "h-5 w-5 flex items-center justify-center rounded hover:bg-accent transition-colors",
+                    colSort === "updated:desc" ? "text-muted-foreground hover:text-foreground" : "text-primary",
+                  )}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title="Ordenar cards desta coluna"
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-44"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onCloseAutoFocus={(e) => e.preventDefault()}
+              >
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">Ordenar por</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {(() => {
+                  const [activeCrit, activeDir = "asc"] = colSort.split(":");
+                  // Padrão Linear/Notion: lista enxuta só com nomes; a direção é a
+                  // seta no item ativo — clicar no ativo inverte.
+                  const criteria: { id: string; label: string; defaultDir: "asc" | "desc" }[] = [
+                    { id: "updated", label: "Atualização", defaultDir: "desc" },
+                    { id: "priority", label: "Prioridade", defaultDir: "asc" },
+                    { id: "due", label: "Prazo", defaultDir: "asc" },
+                    { id: "assigned", label: "Responsável", defaultDir: "asc" },
+                    { id: "hours", label: "Horas", defaultDir: "desc" },
+                    { id: "title", label: "Título", defaultDir: "asc" },
+                  ];
+                  return criteria.map((c) => {
+                    const isActive = activeCrit === c.id;
+                    const nextDir = isActive ? (activeDir === "asc" ? "desc" : "asc") : c.defaultDir;
+                    return (
+                      <DropdownMenuItem
+                        key={c.id}
+                        onSelect={() => setColSort(`${c.id}:${nextDir}`)}
+                        className="gap-2 text-xs"
+                      >
+                        <span className={cn("flex-1", isActive && "font-medium text-primary")}>{c.label}</span>
+                        {isActive && (activeDir === "asc"
+                          ? <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                          : <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />)}
+                      </DropdownMenuItem>
+                    );
+                  });
+                })()}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {onToggleCollapse && (
               <button
                 type="button"
@@ -1684,24 +2005,6 @@ function SortableColumn({
             )}
           </div>
         </div>
-        <div className="-mt-[3.5px]" onClick={(e) => e.stopPropagation()}>
-            <Select value={colSort} onValueChange={setColSort}>
-              <SelectTrigger className="h-6 text-[10px] w-full border-border/40 bg-background/50">
-                <div className="flex items-center gap-1">
-                  <ArrowUpDown className="w-3 h-3 shrink-0" />
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="updated_desc">Recente</SelectItem>
-                <SelectItem value="updated_asc">Antiga</SelectItem>
-                <SelectItem value="priority">Prioridade</SelectItem>
-                <SelectItem value="due_date">Prazo</SelectItem>
-                <SelectItem value="assigned">Responsável</SelectItem>
-                
-              </SelectContent>
-            </Select>
-        </div>
       </div>
 
       {/* Quick Add Form */}
@@ -1869,6 +2172,7 @@ export const ActivityKanban = ({
   onOpenCreateTask,
   profilesMap = {},
   profileAvatarMap = {},
+  profileSectorMap = {},
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -1982,7 +2286,62 @@ export const ActivityKanban = ({
   }, [onlyMine, onlyMineKey]);
 
   // Agrupamento em raias (swimlanes): nenhum / por fase / por responsável.
-  const [groupBy, setGroupBy] = useState<"none" | "phase" | "assignee">("none");
+  const [groupBy, setGroupBy] = useState<"none" | "phase" | "assignee" | "priority" | "sector" | "tag" | "blocked" | "due" | "customGroup">("none");
+  // Times de raia (nível B): grupos nomeados de pessoas, por projeto,
+  // compartilhados via banco. Alimentam a "Raia por time" quando o usuário
+  // escolhe agrupar por time — não alteram o comportamento padrão do Kanban.
+  type LaneTeam = { id: string; name: string; members: string[] };
+  const [laneGroups, setLaneGroups] = useState<LaneTeam[]>([]);
+  const [manageGroupsOpen, setManageGroupsOpen] = useState(false);
+  const [teamsUnavailable, setTeamsUnavailable] = useState(false); // migration ainda não aplicada
+
+  const fetchTeams = useCallback(async () => {
+    const { data, error } = await (supabase as any)
+      .from("kanban_teams")
+      .select("id, name, members")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true });
+    if (error) {
+      // Tabela ausente na VM: mantém o recurso desabilitado sem quebrar o board.
+      if (/kanban_teams|relation|does not exist|schema cache/i.test(error.message)) {
+        setTeamsUnavailable(true);
+      }
+      return;
+    }
+    setTeamsUnavailable(false);
+    setLaneGroups((data as LaneTeam[]) || []);
+  }, [projectId]);
+
+  useEffect(() => { fetchTeams(); }, [fetchTeams]);
+
+  const createTeam = useCallback(async () => {
+    const { data, error } = await (supabase as any)
+      .from("kanban_teams")
+      .insert({ project_id: projectId, name: "", members: [] })
+      .select("id, name, members")
+      .single();
+    if (error) {
+      if (/kanban_teams|relation|does not exist|schema cache/i.test(error.message)) {
+        setTeamsUnavailable(true);
+        toast({ title: "Times indisponíveis", description: "Aplique a migration kanban_teams na VM para habilitar.", variant: "destructive" });
+      }
+      return;
+    }
+    setLaneGroups((gs) => [...gs, data as LaneTeam]);
+  }, [projectId, toast]);
+
+  const saveTeam = useCallback(async (team: LaneTeam) => {
+    setLaneGroups((gs) => gs.map((x) => x.id === team.id ? team : x)); // otimista
+    await (supabase as any)
+      .from("kanban_teams")
+      .update({ name: team.name, members: team.members, updated_at: new Date().toISOString() })
+      .eq("id", team.id);
+  }, []);
+
+  const deleteTeam = useCallback(async (id: string) => {
+    setLaneGroups((gs) => gs.filter((x) => x.id !== id));
+    await (supabase as any).from("kanban_teams").delete().eq("id", id);
+  }, []);
 
   // Filtros do board: busca textual + responsável + fase + prioridade.
   const filtersKey = `kanban-filters:${projectId}`;
@@ -1991,10 +2350,45 @@ export const ActivityKanban = ({
   const [filterAssignees, setFilterAssignees] = useState<Set<string>>(new Set());
   const [filterPhases, setFilterPhases] = useState<Set<string>>(new Set());
   const [filterPriorities, setFilterPriorities] = useState<Set<string>>(new Set());
-  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "completed">("all");
-  const [filterDue, setFilterDue] = useState<"all" | "overdue" | "week">("all");
+  // Prazo: intervalo de datas (YYYY-MM-DD). Vazio = qualquer prazo.
+  const [filterDueRange, setFilterDueRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
+  const [filterTags, setFilterTags] = useState<Set<string>>(new Set());
+  const [filterBlocked, setFilterBlocked] = useState(false);
+  // Filtros adicionais (Frente A): aproveitam campos que já existem no card.
+  const [filterStages, setFilterStages] = useState<Set<string>>(new Set());     // workflow_stage_id
+  const [filterSectors, setFilterSectors] = useState<Set<string>>(new Set());   // setor do responsável
+  const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set());       // item_type/marco
+  const [filterParticipants, setFilterParticipants] = useState<Set<string>>(new Set());
+  const [filterStartRange, setFilterStartRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
+  const [filterHoursRange, setFilterHoursRange] = useState<{ min: string; max: string }>({ min: "", max: "" });
+  // Filtro por coluna (Frente B): map stageId -> ColumnFilter, persistido por projeto.
+  const columnFiltersKey = `kanban-col-filters:${projectId}`;
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilter>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.localStorage.getItem(`kanban-col-filters:${projectId}`);
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try { window.localStorage.setItem(columnFiltersKey, JSON.stringify(columnFilters)); } catch { /* quota */ }
+    }
+  }, [columnFilters, columnFiltersKey]);
+  const setColumnFilter = useCallback((stageId: string, next: ColumnFilter) => {
+    setColumnFilters((prev) => {
+      // Remove a chave quando o filtro fica vazio (mantém o map enxuto).
+      if (!columnFilterActive(next)) {
+        const { [stageId]: _drop, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [stageId]: next };
+    });
+  }, []);
   // Busca local dentro do painel de filtros (só para a lista de responsáveis).
   const [assigneeQuery, setAssigneeQuery] = useState("");
+  // Seção aberta no painel de filtros (accordion). null = todas fechadas.
+  const [filterOpenSection, setFilterOpenSection] = useState<string | null>(null);
 
   // Carrega filtros salvos ao montar.
   useEffect(() => {
@@ -2006,8 +2400,15 @@ export const ActivityKanban = ({
       if (Array.isArray(f.assignees)) setFilterAssignees(new Set(f.assignees));
       if (Array.isArray(f.phases)) setFilterPhases(new Set(f.phases));
       if (Array.isArray(f.priorities)) setFilterPriorities(new Set(f.priorities));
-      if (typeof f.status === "string") setFilterStatus(f.status);
-      if (typeof f.due === "string") setFilterDue(f.due);
+      if (f.dueRange && typeof f.dueRange.from === "string" && typeof f.dueRange.to === "string") setFilterDueRange(f.dueRange);
+      if (Array.isArray(f.tags)) setFilterTags(new Set(f.tags));
+      if (typeof f.blocked === "boolean") setFilterBlocked(f.blocked);
+      if (Array.isArray(f.stages)) setFilterStages(new Set(f.stages));
+      if (Array.isArray(f.sectors)) setFilterSectors(new Set(f.sectors));
+      if (Array.isArray(f.types)) setFilterTypes(new Set(f.types));
+      if (Array.isArray(f.participants)) setFilterParticipants(new Set(f.participants));
+      if (f.startRange && typeof f.startRange.from === "string" && typeof f.startRange.to === "string") setFilterStartRange(f.startRange);
+      if (f.hoursRange && typeof f.hoursRange.min === "string" && typeof f.hoursRange.max === "string") setFilterHoursRange(f.hoursRange);
     } catch { /* ignore */ }
   }, [filtersKey]);
   // Persiste os filtros (nao a busca textual, que e efemera).
@@ -2018,19 +2419,35 @@ export const ActivityKanban = ({
         assignees: Array.from(filterAssignees),
         phases: Array.from(filterPhases),
         priorities: Array.from(filterPriorities),
-        status: filterStatus, due: filterDue,
+        dueRange: filterDueRange,
+        tags: Array.from(filterTags),
+        blocked: filterBlocked,
+        stages: Array.from(filterStages),
+        sectors: Array.from(filterSectors),
+        types: Array.from(filterTypes),
+        participants: Array.from(filterParticipants),
+        startRange: filterStartRange,
+        hoursRange: filterHoursRange,
       }));
     } catch { /* quota */ }
-  }, [filtersKey, filterAssignees, filterPhases, filterPriorities, filterStatus, filterDue]);
+  }, [filtersKey, filterAssignees, filterPhases, filterPriorities, filterDueRange, filterTags, filterBlocked, filterStages, filterSectors, filterTypes, filterParticipants, filterStartRange, filterHoursRange]);
 
+  const dueActive = !!(filterDueRange.from || filterDueRange.to);
+  const startActive = !!(filterStartRange.from || filterStartRange.to);
+  const hoursActive = !!(filterHoursRange.min || filterHoursRange.max);
   const hasActiveFilters =
     search.trim() !== "" ||
     filterAssignees.size > 0 || filterPhases.size > 0 || filterPriorities.size > 0 ||
-    filterStatus !== "all" || filterDue !== "all";
+    dueActive || filterTags.size > 0 || filterBlocked ||
+    filterStages.size > 0 || filterSectors.size > 0 || filterTypes.size > 0 ||
+    filterParticipants.size > 0 || startActive || hoursActive;
   const clearFilters = () => {
     setSearch("");
     setFilterAssignees(new Set()); setFilterPhases(new Set()); setFilterPriorities(new Set());
-    setFilterStatus("all"); setFilterDue("all");
+    setFilterDueRange({ from: "", to: "" });
+    setFilterTags(new Set()); setFilterBlocked(false);
+    setFilterStages(new Set()); setFilterSectors(new Set()); setFilterTypes(new Set());
+    setFilterParticipants(new Set()); setFilterStartRange({ from: "", to: "" }); setFilterHoursRange({ min: "", max: "" });
   };
   // Helper para alternar um valor num Set de filtro.
   const toggleInSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, value: string) =>
@@ -2040,6 +2457,21 @@ export const ActivityKanban = ({
       return next;
     });
 
+  // Colunas de bloqueio (para o filtro "Bloqueadas").
+  const blockedStageIdSet = useMemo(
+    () => new Set(stages.filter((s) => s.is_blocked).map((s) => s.id)),
+    [stages],
+  );
+
+  // Tipo EAP de uma atividade (marco > fase > pacote > atividade).
+  const activityEapType = useCallback((a: Activity): string => {
+    if ((a as any).is_milestone) return "marco";
+    const t = (a as any).item_type as string | undefined;
+    if (t === "fase") return "fase";
+    if (t === "pacote") return "pacote";
+    return "atividade";
+  }, []);
+
   const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   const matchesFilters = useCallback((a: Activity) => {
     if (filterAssignees.size > 0 && !filterAssignees.has(a.assigned_to || "")) return false;
@@ -2048,18 +2480,44 @@ export const ActivityKanban = ({
       if (!filterPhases.has(key)) return false;
     }
     if (filterPriorities.size > 0 && !filterPriorities.has(normalizeGut(a.priority))) return false;
-    if (filterStatus === "completed" && a.status !== "completed") return false;
-    if (filterStatus === "pending" && a.status === "completed") return false;
-    if (filterDue !== "all") {
-      const end = a.end_date ? new Date(a.end_date) : null;
-      const done = a.status === "completed";
-      if (filterDue === "overdue") {
-        if (done || !end || end >= new Date(new Date().toDateString())) return false;
-      } else if (filterDue === "week") {
-        if (done || !end) return false;
-        const in7 = new Date(); in7.setDate(in7.getDate() + 7);
-        if (end < new Date(new Date().toDateString()) || end > in7) return false;
-      }
+    if (filterDueRange.from || filterDueRange.to) {
+      // Sem prazo definido não entra num filtro por período.
+      const end = a.end_date ? a.end_date.slice(0, 10) : null;
+      if (!end) return false;
+      if (filterDueRange.from && end < filterDueRange.from) return false;
+      if (filterDueRange.to && end > filterDueRange.to) return false;
+    }
+    if (filterTags.size > 0) {
+      const tags = a.tags || [];
+      if (!tags.some((t) => filterTags.has(t))) return false;
+    }
+    if (filterBlocked) {
+      const stageBlocked = a.workflow_stage_id ? blockedStageIdSet.has(a.workflow_stage_id) : false;
+      if (!stageBlocked && !a.blocked_since) return false;
+    }
+    // --- Filtros adicionais (Frente A) ---
+    if (filterStages.size > 0) {
+      if (!a.workflow_stage_id || !filterStages.has(a.workflow_stage_id)) return false;
+    }
+    if (filterSectors.size > 0) {
+      const s = a.assigned_to ? (profileSectorMap[a.assigned_to] || "") : "";
+      if (!filterSectors.has(s || "__none__")) return false;
+    }
+    if (filterTypes.size > 0 && !filterTypes.has(activityEapType(a))) return false;
+    if (filterParticipants.size > 0) {
+      const parts = a.participants || [];
+      if (!parts.some((p) => filterParticipants.has(p))) return false;
+    }
+    if (filterStartRange.from || filterStartRange.to) {
+      const start = a.start_date ? a.start_date.slice(0, 10) : null;
+      if (!start) return false;
+      if (filterStartRange.from && start < filterStartRange.from) return false;
+      if (filterStartRange.to && start > filterStartRange.to) return false;
+    }
+    if (filterHoursRange.min || filterHoursRange.max) {
+      const h = Number(a.hours) || 0;
+      if (filterHoursRange.min && h < Number(filterHoursRange.min)) return false;
+      if (filterHoursRange.max && h > Number(filterHoursRange.max)) return false;
     }
     const q = normalize(search.trim());
     if (q) {
@@ -2067,7 +2525,49 @@ export const ActivityKanban = ({
       if (!hay.includes(q)) return false;
     }
     return true;
-  }, [filterAssignees, filterPhases, filterPriorities, filterStatus, filterDue, search]);
+  }, [filterAssignees, filterPhases, filterPriorities, filterDueRange, filterTags, filterBlocked, blockedStageIdSet, filterStages, filterSectors, filterTypes, filterParticipants, filterStartRange, filterHoursRange, profileSectorMap, activityEapType, search]);
+
+  // Matcher do filtro POR COLUNA (Frente B). Mesmos critérios do geral, menos
+  // Coluna/Status e busca textual. Usa arrays (do ColumnFilter serializável).
+  const matchColumnFilter = useCallback((a: Activity, f: ColumnFilter): boolean => {
+    if (f.assignees.length > 0 && !f.assignees.includes(a.assigned_to || "")) return false;
+    if (f.priorities.length > 0 && !f.priorities.includes(normalizeGut(a.priority))) return false;
+    if (f.sectors.length > 0) {
+      const s = a.assigned_to ? (profileSectorMap[a.assigned_to] || "") : "";
+      if (!f.sectors.includes(s || "__none__")) return false;
+    }
+    if (f.types.length > 0 && !f.types.includes(activityEapType(a))) return false;
+    if (f.participants.length > 0) {
+      const parts = a.participants || [];
+      if (!parts.some((p) => f.participants.includes(p))) return false;
+    }
+    if (f.tags.length > 0) {
+      const tags = a.tags || [];
+      if (!tags.some((t) => f.tags.includes(t))) return false;
+    }
+    if (f.dueRange.from || f.dueRange.to) {
+      const end = a.end_date ? a.end_date.slice(0, 10) : null;
+      if (!end) return false;
+      if (f.dueRange.from && end < f.dueRange.from) return false;
+      if (f.dueRange.to && end > f.dueRange.to) return false;
+    }
+    if (f.startRange.from || f.startRange.to) {
+      const start = a.start_date ? a.start_date.slice(0, 10) : null;
+      if (!start) return false;
+      if (f.startRange.from && start < f.startRange.from) return false;
+      if (f.startRange.to && start > f.startRange.to) return false;
+    }
+    if (f.hoursRange.min || f.hoursRange.max) {
+      const h = Number(a.hours) || 0;
+      if (f.hoursRange.min && h < Number(f.hoursRange.min)) return false;
+      if (f.hoursRange.max && h > Number(f.hoursRange.max)) return false;
+    }
+    if (f.blocked) {
+      const stageBlocked = a.workflow_stage_id ? blockedStageIdSet.has(a.workflow_stage_id) : false;
+      if (!stageBlocked && !a.blocked_since) return false;
+    }
+    return true;
+  }, [profileSectorMap, activityEapType, blockedStageIdSet]);
 
   // Opções de responsável (nomes distintos presentes nas atividades).
   const assigneeOptions = useMemo(() => {
@@ -2075,6 +2575,31 @@ export const ActivityKanban = ({
     activities.forEach((a) => { if (a.assigned_to) set.add(a.assigned_to); });
     return Array.from(set).sort((x, y) => x.localeCompare(y));
   }, [activities]);
+
+  // Tags distintas presentes nas atividades (para o filtro de etiquetas).
+  const tagOptions = useMemo(() => {
+    const set = new Set<string>();
+    activities.forEach((a) => (a.tags || []).forEach((t) => { if (t) set.add(t); }));
+    return Array.from(set).sort((x, y) => x.localeCompare(y));
+  }, [activities]);
+
+  // Setores distintos (via responsável) presentes nas atividades.
+  const sectorOptions = useMemo(() => {
+    const set = new Set<string>();
+    activities.forEach((a) => {
+      const s = a.assigned_to ? profileSectorMap[a.assigned_to] : "";
+      if (s) set.add(s);
+    });
+    return Array.from(set).sort((x, y) => x.localeCompare(y));
+  }, [activities, profileSectorMap]);
+
+  // Participantes distintos presentes nas atividades.
+  const participantOptions = useMemo(() => {
+    const set = new Set<string>();
+    activities.forEach((a) => (a.participants || []).forEach((p) => { if (p) set.add(p); }));
+    return Array.from(set).sort((x, y) => x.localeCompare(y));
+  }, [activities]);
+
 
   // Raias (swimlanes) derivadas do groupBy. Cada raia agrupa os cards por fase
   // ou responsável; o board renderiza as mesmas colunas dentro de cada raia.
@@ -2093,8 +2618,91 @@ export const ActivityKanban = ({
       list.push({ id: "__none__", label: "Sem responsável", match: (a: Activity) => !a.assigned_to });
       return list;
     }
+    if (groupBy === "priority") {
+      const order: { id: GutLevel; label: string }[] = [
+        { id: "urgente", label: "Urgente" },
+        { id: "critica", label: "Crítica" },
+        { id: "alta", label: "Alta" },
+        { id: "media", label: "Média" },
+        { id: "baixa", label: "Baixa" },
+        { id: "pendente", label: "Sem prioridade" },
+      ];
+      return order.map((o) => ({
+        id: o.id, label: o.label, match: (a: Activity) => normalizeGut(a.priority) === o.id,
+      }));
+    }
+    if (groupBy === "sector") {
+      // Resolve o setor de uma atividade a partir do responsável.
+      const sectorOf = (a: Activity) => {
+        const who = a.assigned_to || "";
+        return (who && profileSectorMap[who]) ? profileSectorMap[who] : "";
+      };
+      const set = new Set<string>();
+      activities.forEach((a) => { const s = sectorOf(a); if (s) set.add(s); });
+      const list = Array.from(set).sort((x, y) => x.localeCompare(y)).map((s) => ({
+        id: s, label: s, match: (a: Activity) => sectorOf(a) === s,
+      }));
+      list.push({ id: "__none__", label: "Sem setor", match: (a: Activity) => !sectorOf(a) });
+      return list;
+    }
+    if (groupBy === "tag") {
+      const list = tagOptions.map((t) => ({
+        id: t, label: t, match: (a: Activity) => (a.tags || []).includes(t),
+      }));
+      list.push({ id: "__none__", label: "Sem etiqueta", match: (a: Activity) => !(a.tags && a.tags.length > 0) });
+      return list;
+    }
+    if (groupBy === "blocked") {
+      const isBlk = (a: Activity) => {
+        const stageBlocked = a.workflow_stage_id ? blockedStageIdSet.has(a.workflow_stage_id) : false;
+        return stageBlocked || !!a.blocked_since;
+      };
+      return [
+        { id: "blocked", label: "Bloqueadas", match: (a: Activity) => isBlk(a) },
+        { id: "flowing", label: "Fluindo", match: (a: Activity) => !isBlk(a) },
+      ];
+    }
+    if (groupBy === "due") {
+      const startOfToday = new Date(new Date().toDateString());
+      const endOfWeek = new Date(startOfToday); endOfWeek.setDate(endOfWeek.getDate() + (7 - startOfToday.getDay()));
+      const endOfNextWeek = new Date(endOfWeek); endOfNextWeek.setDate(endOfNextWeek.getDate() + 7);
+      const dueBucket = (a: Activity): string => {
+        if (!a.end_date) return "nodate";
+        const end = new Date(a.end_date.slice(0, 10) + "T12:00:00");
+        if (end < startOfToday) return "overdue";
+        if (end <= endOfWeek) return "week";
+        if (end <= endOfNextWeek) return "next";
+        return "later";
+      };
+      const order: { id: string; label: string }[] = [
+        { id: "overdue", label: "Atrasadas" },
+        { id: "week", label: "Esta semana" },
+        { id: "next", label: "Próxima semana" },
+        { id: "later", label: "Depois" },
+        { id: "nodate", label: "Sem prazo" },
+      ];
+      return order.map((o) => ({
+        id: o.id, label: o.label, match: (a: Activity) => dueBucket(a) === o.id,
+      }));
+    }
+    if (groupBy === "customGroup") {
+      const valid = laneGroups.filter((g) => g.members.length > 0);
+      const list = valid.map((g) => {
+        const memberSet = new Set(g.members);
+        return {
+          id: g.id, label: g.name || "Grupo",
+          match: (a: Activity) => !!a.assigned_to && memberSet.has(a.assigned_to),
+        };
+      });
+      const allGrouped = new Set(valid.flatMap((g) => g.members));
+      list.push({
+        id: "__none__", label: "Outros",
+        match: (a: Activity) => !a.assigned_to || !allGrouped.has(a.assigned_to),
+      });
+      return list;
+    }
     return [];
-  }, [groupBy, phases, assigneeOptions]);
+  }, [groupBy, phases, assigneeOptions, activities, profileSectorMap, tagOptions, blockedStageIdSet, laneGroups]);
 
   const isMineActivity = useCallback(
     (a: Activity) => {
@@ -2447,8 +3055,8 @@ export const ActivityKanban = ({
     const map: Record<string, Activity[]> = {};
     stages.forEach((s) => (map[s.id] = []));
 
-    let source = onlyMine ? activities.filter(isMineActivity) : activities;
-    if (hasActiveFilters) source = source.filter(matchesFilters);
+    // "onlyMine" sempre se aplica; o filtro geral/coluna é decidido POR coluna.
+    const source = onlyMine ? activities.filter(isMineActivity) : activities;
     source.forEach((a) => {
       // Use optimistic override if available
       const stageId = optimisticMoves[a.id] || a.workflow_stage_id;
@@ -2456,6 +3064,17 @@ export const ActivityKanban = ({
         map[stageId].push(a);
       } else if (stages.length > 0) {
         map[stages[0].id].push(a);
+      }
+    });
+
+    // Filtro por coluna SUBSTITUI o geral: se a coluna tem filtro próprio,
+    // aplica só ele; caso contrário, aplica o filtro geral do quadro.
+    Object.keys(map).forEach((stageId) => {
+      const colFilter = columnFilters[stageId];
+      if (colFilter && columnFilterActive(colFilter)) {
+        map[stageId] = map[stageId].filter((a) => matchColumnFilter(a, colFilter));
+      } else if (hasActiveFilters) {
+        map[stageId] = map[stageId].filter(matchesFilters);
       }
     });
 
@@ -2477,7 +3096,7 @@ export const ActivityKanban = ({
     });
 
     return map;
-  }, [activities, stages, phases, optimisticMoves, onlyMine, isMineActivity, hasActiveFilters, matchesFilters]);
+  }, [activities, stages, phases, optimisticMoves, onlyMine, isMineActivity, hasActiveFilters, matchesFilters, columnFilters, matchColumnFilter]);
 
   const handleCreateStory = async () => {
     if (projectLocked) {
@@ -3071,7 +3690,9 @@ export const ActivityKanban = ({
         {(() => {
           const activeCount =
             filterAssignees.size + filterPhases.size + filterPriorities.size +
-            (filterStatus !== "all" ? 1 : 0) + (filterDue !== "all" ? 1 : 0);
+            (dueActive ? 1 : 0) + filterTags.size + (filterBlocked ? 1 : 0) +
+            filterStages.size + filterSectors.size + filterTypes.size +
+            filterParticipants.size + (startActive ? 1 : 0) + (hoursActive ? 1 : 0);
 
           const PRIORITIES: [string, string, string][] = [
             ["urgente", "Urgente", "bg-red-500"],
@@ -3080,42 +3701,81 @@ export const ActivityKanban = ({
             ["media", "Média", "bg-sky-500"],
             ["baixa", "Baixa", "bg-emerald-500"],
           ];
-          const STATUS: [string, string][] = [["all", "Todos"], ["pending", "Pendentes"], ["completed", "Concluídas"]];
-          const DUE: [string, string][] = [["all", "Qualquer"], ["overdue", "Atrasadas"], ["week", "≤ 7 dias"]];
+          // Formata YYYY-MM-DD -> dd/mm (sem drift de fuso).
+          const fmtBr = (ymd: string) => {
+            if (!ymd) return "";
+            const [y, m, d] = ymd.split("-");
+            return `${d}/${m}`;
+          };
 
-          // Chip de escolha (toggle). `dot` opcional colore uma bolinha à esquerda.
-          const Chip = ({ active, onClick, children, dot }: { active: boolean; onClick: () => void; children: React.ReactNode; dot?: string }) => (
-            <button
-              type="button"
-              onClick={onClick}
-              className={cn(
-                "inline-flex items-center gap-1.5 h-7 rounded-full border px-3 text-xs font-medium transition-colors",
-                active
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              {dot && <span className={cn("w-2 h-2 rounded-full", dot)} />}
-              {children}
-              {active && <XIcon className="w-3 h-3 opacity-70" />}
-            </button>
-          );
-
-          const SectionLabel = ({ children, count }: { children: React.ReactNode; count?: number }) => (
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</span>
-              {!!count && count > 0 && (
-                <span className="min-w-[15px] h-[15px] px-1 rounded-full bg-primary/15 text-primary text-[9px] font-bold flex items-center justify-center">{count}</span>
-              )}
-            </div>
-          );
 
           const filteredAssignees = assigneeQuery.trim()
             ? assigneeOptions.filter((n) => normalize(n).includes(normalize(assigneeQuery.trim())))
             : assigneeOptions;
 
+          // Resumo textual do que está selecionado em cada seção (mostrado quando fechada).
+          const priorityLabelMap: Record<string, string> = { urgente: "Urgente", critica: "Crítica", alta: "Alta", media: "Média", baixa: "Baixa" };
+          const summaryAssignee = filterAssignees.size === 0 ? "Todos"
+            : filterAssignees.size === 1 ? (profilesMap[[...filterAssignees][0]] ?? [...filterAssignees][0])
+            : `${filterAssignees.size} selecionados`;
+          const summaryPriority = filterPriorities.size === 0 ? "Todas"
+            : filterPriorities.size === 1 ? priorityLabelMap[[...filterPriorities][0]]
+            : `${filterPriorities.size} selecionadas`;
+          const summaryDue = !dueActive ? "Qualquer"
+            : filterDueRange.from && filterDueRange.to ? `${fmtBr(filterDueRange.from)} – ${fmtBr(filterDueRange.to)}`
+            : filterDueRange.from ? `A partir de ${fmtBr(filterDueRange.from)}`
+            : `Até ${fmtBr(filterDueRange.to)}`;
+          const summaryPhase = filterPhases.size === 0 ? "Todas" : `${filterPhases.size} selecionada${filterPhases.size > 1 ? "s" : ""}`;
+          const summaryTags = filterTags.size === 0 ? "Todas"
+            : filterTags.size === 1 ? [...filterTags][0]
+            : `${filterTags.size} selecionadas`;
+          // Resumo genérico para Sets multi-seleção.
+          const summarySet = (s: Set<string>, one?: string, all = "Todos") =>
+            s.size === 0 ? all : s.size === 1 ? (one ?? [...s][0]) : `${s.size} selecionados`;
+          const stageTitleOf = (id: string) => stages.find((st) => st.id === id)?.title ?? id;
+          const summaryStage = filterStages.size === 0 ? "Todas"
+            : filterStages.size === 1 ? stageTitleOf([...filterStages][0])
+            : `${filterStages.size} selecionadas`;
+          const summarySector = summarySet(filterSectors);
+          const summaryParticipant = summarySet(filterParticipants);
+          const EAP_LABELS: Record<string, string> = { atividade: "Atividade", pacote: "Pacote", fase: "Fase", marco: "Marco" };
+          const summaryType = filterTypes.size === 0 ? "Todos"
+            : filterTypes.size === 1 ? EAP_LABELS[[...filterTypes][0]]
+            : `${filterTypes.size} selecionados`;
+          const summaryStart = !startActive ? "Qualquer"
+            : filterStartRange.from && filterStartRange.to ? `${fmtBr(filterStartRange.from)} – ${fmtBr(filterStartRange.to)}`
+            : filterStartRange.from ? `A partir de ${fmtBr(filterStartRange.from)}`
+            : `Até ${fmtBr(filterStartRange.to)}`;
+          const summaryHours = !hoursActive ? "Qualquer"
+            : filterHoursRange.min && filterHoursRange.max ? `${filterHoursRange.min}–${filterHoursRange.max}h`
+            : filterHoursRange.min ? `≥ ${filterHoursRange.min}h`
+            : `≤ ${filterHoursRange.max}h`;
+
+          // Cabeçalho clicável de cada seção do accordion.
+          const AccordionSection = ({ id, label, summary, active, children }: {
+            id: string; label: string; summary: string; active: boolean; children: React.ReactNode;
+          }) => {
+            const open = filterOpenSection === id;
+            return (
+              <div className="border-b last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => setFilterOpenSection(open ? null : id)}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                >
+                  <span className="text-[13px] font-medium text-foreground">{label}</span>
+                  <span className={cn("ml-auto text-xs truncate max-w-[140px]", active ? "text-primary font-medium" : "text-muted-foreground")}>
+                    {summary}
+                  </span>
+                  <ChevronDown className={cn("w-4 h-4 text-muted-foreground shrink-0 transition-transform", open && "rotate-180")} />
+                </button>
+                {open && <div className="px-4 pb-3 pt-0.5">{children}</div>}
+              </div>
+            );
+          };
+
           return (
-            <Popover onOpenChange={(o) => { if (!o) setAssigneeQuery(""); }}>
+            <Popover onOpenChange={(o) => { if (!o) { setAssigneeQuery(""); setFilterOpenSection(null); } }}>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className={cn("h-7 gap-1.5 text-xs", activeCount > 0 && "border-primary text-primary")}>
                   <Filter className="w-3.5 h-3.5" />
@@ -3127,15 +3787,12 @@ export const ActivityKanban = ({
                   )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent align="start" className="w-[min(560px,calc(100vw-2rem))] p-0" collisionPadding={12}>
+              <PopoverContent align="start" className="w-[300px] p-0" collisionPadding={12}>
                 {/* Cabeçalho */}
                 <div className="flex items-center justify-between px-4 py-2.5 border-b">
                   <div className="flex items-center gap-2">
                     <Filter className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-sm font-semibold">Filtros</span>
-                    {activeCount > 0 && (
-                      <span className="text-[11px] text-muted-foreground">{activeCount} ativo{activeCount > 1 ? "s" : ""}</span>
-                    )}
                   </div>
                   {activeCount > 0 && (
                     <button
@@ -3143,105 +3800,239 @@ export const ActivityKanban = ({
                       onClick={clearFilters}
                       className="text-xs text-muted-foreground hover:text-destructive inline-flex items-center gap-1 transition-colors"
                     >
-                      <XIcon className="w-3.5 h-3.5" /> Limpar tudo
+                      <XIcon className="w-3.5 h-3.5" /> Limpar
                     </button>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,220px)_1fr] divide-y sm:divide-y-0 sm:divide-x">
-                  {/* Coluna esquerda: Responsável (busca + lista com avatares) */}
-                  <div className="p-3 min-w-0">
-                    <SectionLabel count={filterAssignees.size}>Responsável</SectionLabel>
-                    <div className="relative mb-2">
-                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                {/* Aviso: colunas com filtro próprio ignoram este filtro geral */}
+                {Object.keys(columnFilters).length > 0 && (
+                  <div className="flex items-start gap-2 px-4 py-2 bg-warning/10 border-b border-warning/20 text-[11px] text-warning">
+                    <Filter className="w-3 h-3 mt-0.5 shrink-0" />
+                    <span>
+                      {Object.keys(columnFilters).length} coluna(s) com filtro próprio — nelas vale só o filtro da coluna, não este.
+                    </span>
+                  </div>
+                )}
+
+                {/* Seções recolhíveis */}
+                <AccordionSection id="assignee" label="Responsável" summary={summaryAssignee} active={filterAssignees.size > 0}>
+                  <div className="relative mb-2">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={assigneeQuery}
+                      onChange={(e) => setAssigneeQuery(e.target.value)}
+                      placeholder="Buscar pessoa..."
+                      className="h-8 pl-8 text-xs"
+                    />
+                  </div>
+                  <div className="max-h-[220px] overflow-y-auto -mx-1 px-1 space-y-0.5">
+                    {filteredAssignees.length === 0 && (
+                      <div className="px-2 py-6 text-center text-xs text-muted-foreground">Nenhuma pessoa</div>
+                    )}
+                    {filteredAssignees.map((name) => {
+                      const active = filterAssignees.has(name);
+                      const resolved = profilesMap[name] ?? name;
+                      const avatar = resolveAvatarFromLookup(name, resolved, profileAvatarMap);
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => toggleInSet(setFilterAssignees, name)}
+                          className={cn(
+                            "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-left transition-colors",
+                            active ? "bg-primary/10 text-primary" : "hover:bg-muted/60",
+                          )}
+                        >
+                          <Avatar className="h-4 w-4 shrink-0">
+                            {avatar ? <AvatarImage src={avatar} alt={resolved} /> : null}
+                            <AvatarFallback className="text-[7px] font-semibold">{getAvatarInitials(resolved)}</AvatarFallback>
+                          </Avatar>
+                          <span className="truncate flex-1">{resolved}</span>
+                          {active && <Check className="w-3.5 h-3.5 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </AccordionSection>
+
+                <AccordionSection id="priority" label="Prioridade" summary={summaryPriority} active={filterPriorities.size > 0}>
+                  <FilterOptionList
+                    options={PRIORITIES.map(([v, label]) => ({ value: v, label }))}
+                    selected={(v) => filterPriorities.has(v)}
+                    onToggle={(v) => toggleInSet(setFilterPriorities, v)}
+                    dot={(v) => PRIORITIES.find((p) => p[0] === v)?.[2]}
+                  />
+                </AccordionSection>
+
+                <AccordionSection id="due" label="Prazo" summary={summaryDue} active={dueActive}>
+                  {/* Campos De/Até com date-picker nativo do navegador (localizado, digitável).
+                      Compactos e empilhados para nunca estourar a largura do painel. */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="w-8 text-xs text-muted-foreground shrink-0">De</label>
                       <Input
-                        value={assigneeQuery}
-                        onChange={(e) => setAssigneeQuery(e.target.value)}
-                        placeholder="Buscar pessoa..."
-                        className="h-8 pl-8 text-xs"
+                        type="date"
+                        value={filterDueRange.from}
+                        max={filterDueRange.to || undefined}
+                        onChange={(e) => setFilterDueRange((r) => ({ ...r, from: e.target.value }))}
+                        className="h-8 text-xs flex-1"
                       />
                     </div>
-                    <div className="max-h-[240px] overflow-y-auto -mx-1 px-1 space-y-0.5">
-                      {filteredAssignees.length === 0 && (
-                        <div className="px-2 py-6 text-center text-xs text-muted-foreground">Nenhuma pessoa</div>
-                      )}
-                      {filteredAssignees.map((name) => {
-                        const active = filterAssignees.has(name);
-                        const resolved = profilesMap[name] ?? name;
-                        const avatar = resolveAvatarFromLookup(name, resolved, profileAvatarMap);
-                        return (
-                          <button
-                            key={name}
-                            type="button"
-                            onClick={() => toggleInSet(setFilterAssignees, name)}
-                            className={cn(
-                              "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-left transition-colors",
-                              active ? "bg-primary/10 text-primary" : "hover:bg-muted/60",
-                            )}
-                          >
-                            <Avatar className="h-5 w-5 shrink-0">
-                              {avatar ? <AvatarImage src={avatar} alt={resolved} /> : null}
-                              <AvatarFallback className="text-[8px] font-semibold">{getAvatarInitials(resolved)}</AvatarFallback>
-                            </Avatar>
-                            <span className="truncate flex-1">{resolved}</span>
-                            {active && <Check className="w-3.5 h-3.5 shrink-0" />}
-                          </button>
-                        );
-                      })}
+                    <div className="flex items-center gap-2">
+                      <label className="w-8 text-xs text-muted-foreground shrink-0">Até</label>
+                      <Input
+                        type="date"
+                        value={filterDueRange.to}
+                        min={filterDueRange.from || undefined}
+                        onChange={(e) => setFilterDueRange((r) => ({ ...r, to: e.target.value }))}
+                        className="h-8 text-xs flex-1"
+                      />
                     </div>
-                  </div>
-
-                  {/* Coluna direita: chips de baixa cardinalidade */}
-                  <div className="p-3 space-y-4">
-                    <div>
-                      <SectionLabel count={filterPriorities.size}>Prioridade</SectionLabel>
-                      <div className="flex flex-wrap gap-1.5">
-                        {PRIORITIES.map(([v, label, dot]) => (
-                          <Chip key={v} active={filterPriorities.has(v)} onClick={() => toggleInSet(setFilterPriorities, v)} dot={dot}>
-                            {label}
-                          </Chip>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <SectionLabel count={filterStatus !== "all" ? 1 : 0}>Status</SectionLabel>
-                      <div className="flex flex-wrap gap-1.5">
-                        {STATUS.map(([v, label]) => (
-                          <Chip key={v} active={filterStatus === v && v !== "all"} onClick={() => setFilterStatus(v as typeof filterStatus)}>
-                            {label}
-                          </Chip>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <SectionLabel count={filterDue !== "all" ? 1 : 0}>Prazo</SectionLabel>
-                      <div className="flex flex-wrap gap-1.5">
-                        {DUE.map(([v, label]) => (
-                          <Chip key={v} active={filterDue === v && v !== "all"} onClick={() => setFilterDue(v as typeof filterDue)}>
-                            {label}
-                          </Chip>
-                        ))}
-                      </div>
-                    </div>
-
-                    {(phases.length > 0) && (
-                      <div>
-                        <SectionLabel count={filterPhases.size}>Fase</SectionLabel>
-                        <div className="flex flex-wrap gap-1.5">
-                          {phases.map((p) => (
-                            <Chip key={p.id} active={filterPhases.has(p.id)} onClick={() => toggleInSet(setFilterPhases, p.id)}>
-                              {p.title}
-                            </Chip>
-                          ))}
-                          <Chip active={filterPhases.has("__none__")} onClick={() => toggleInSet(setFilterPhases, "__none__")}>
-                            Sem fase
-                          </Chip>
-                        </div>
-                      </div>
+                    {dueActive && (
+                      <button
+                        type="button"
+                        onClick={() => setFilterDueRange({ from: "", to: "" })}
+                        className="text-[11px] text-muted-foreground hover:text-destructive inline-flex items-center gap-1"
+                      >
+                        <XIcon className="w-3 h-3" /> Limpar período
+                      </button>
                     )}
                   </div>
+                </AccordionSection>
+
+                {phases.length > 0 && (
+                  <AccordionSection id="phase" label="Fase" summary={summaryPhase} active={filterPhases.size > 0}>
+                    <FilterOptionList
+                      options={[...phases.map((p) => ({ value: p.id, label: p.title })), { value: "__none__", label: "Sem fase" }]}
+                      selected={(v) => filterPhases.has(v)}
+                      onToggle={(v) => toggleInSet(setFilterPhases, v)}
+                      searchPlaceholder="Buscar fase..."
+                    />
+                  </AccordionSection>
+                )}
+
+                {tagOptions.length > 0 && (
+                  <AccordionSection id="tags" label="Etiquetas" summary={summaryTags} active={filterTags.size > 0}>
+                    <FilterOptionList
+                      options={tagOptions.map((t) => ({ value: t, label: t }))}
+                      selected={(v) => filterTags.has(v)}
+                      onToggle={(v) => toggleInSet(setFilterTags, v)}
+                      searchPlaceholder="Buscar etiqueta..."
+                    />
+                  </AccordionSection>
+                )}
+
+                {/* Coluna / Status do fluxo */}
+                {stages.filter((s) => s.display_order > 0).length > 0 && (
+                  <AccordionSection id="stage" label="Coluna / Status" summary={summaryStage} active={filterStages.size > 0}>
+                    <FilterOptionList
+                      options={stages.filter((s) => s.display_order > 0).map((s) => ({ value: s.id, label: s.title }))}
+                      selected={(v) => filterStages.has(v)}
+                      onToggle={(v) => toggleInSet(setFilterStages, v)}
+                      searchPlaceholder="Buscar coluna..."
+                    />
+                  </AccordionSection>
+                )}
+
+                {/* Setor */}
+                {sectorOptions.length > 0 && (
+                  <AccordionSection id="sector" label="Setor" summary={summarySector} active={filterSectors.size > 0}>
+                    <FilterOptionList
+                      options={[...sectorOptions.map((s) => ({ value: s, label: s })), { value: "__none__", label: "Sem setor" }]}
+                      selected={(v) => filterSectors.has(v)}
+                      onToggle={(v) => toggleInSet(setFilterSectors, v)}
+                    />
+                  </AccordionSection>
+                )}
+
+                {/* Tipo EAP */}
+                <AccordionSection id="type" label="Tipo (EAP)" summary={summaryType} active={filterTypes.size > 0}>
+                  <FilterOptionList
+                    options={(["atividade", "pacote", "fase", "marco"] as const).map((t) => ({ value: t, label: EAP_LABELS[t] }))}
+                    selected={(v) => filterTypes.has(v)}
+                    onToggle={(v) => toggleInSet(setFilterTypes, v)}
+                  />
+                </AccordionSection>
+
+                {/* Participante */}
+                {participantOptions.length > 0 && (
+                  <AccordionSection id="participant" label="Participante" summary={summaryParticipant} active={filterParticipants.size > 0}>
+                    <FilterOptionList
+                      options={participantOptions.map((p) => ({ value: p, label: profilesMap[p] ?? p }))}
+                      selected={(v) => filterParticipants.has(v)}
+                      onToggle={(v) => toggleInSet(setFilterParticipants, v)}
+                      searchPlaceholder="Buscar participante..."
+                    />
+                  </AccordionSection>
+                )}
+
+                {/* Início (intervalo De/Até) */}
+                <AccordionSection id="start" label="Início" summary={summaryStart} active={startActive}>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="w-8 text-xs text-muted-foreground shrink-0">De</label>
+                      <Input type="date" value={filterStartRange.from} max={filterStartRange.to || undefined}
+                        onChange={(e) => setFilterStartRange((r) => ({ ...r, from: e.target.value }))}
+                        className="h-8 text-xs flex-1" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="w-8 text-xs text-muted-foreground shrink-0">Até</label>
+                      <Input type="date" value={filterStartRange.to} min={filterStartRange.from || undefined}
+                        onChange={(e) => setFilterStartRange((r) => ({ ...r, to: e.target.value }))}
+                        className="h-8 text-xs flex-1" />
+                    </div>
+                    {startActive && (
+                      <button type="button" onClick={() => setFilterStartRange({ from: "", to: "" })}
+                        className="text-[11px] text-muted-foreground hover:text-destructive inline-flex items-center gap-1">
+                        <XIcon className="w-3 h-3" /> Limpar
+                      </button>
+                    )}
+                  </div>
+                </AccordionSection>
+
+                {/* Horas (faixa mín/máx) */}
+                <AccordionSection id="hours" label="Horas" summary={summaryHours} active={hoursActive}>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="w-10 text-xs text-muted-foreground shrink-0">Mín</label>
+                      <Input type="number" min="0" placeholder="0" value={filterHoursRange.min}
+                        onChange={(e) => setFilterHoursRange((r) => ({ ...r, min: e.target.value }))}
+                        className="h-8 text-xs flex-1" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="w-10 text-xs text-muted-foreground shrink-0">Máx</label>
+                      <Input type="number" min="0" placeholder="—" value={filterHoursRange.max}
+                        onChange={(e) => setFilterHoursRange((r) => ({ ...r, max: e.target.value }))}
+                        className="h-8 text-xs flex-1" />
+                    </div>
+                    {hoursActive && (
+                      <button type="button" onClick={() => setFilterHoursRange({ min: "", max: "" })}
+                        className="text-[11px] text-muted-foreground hover:text-destructive inline-flex items-center gap-1">
+                        <XIcon className="w-3 h-3" /> Limpar
+                      </button>
+                    )}
+                  </div>
+                </AccordionSection>
+
+                {/* Bloqueadas: toggle simples direto no cabeçalho da seção */}
+                <div className="border-b last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => setFilterBlocked((v) => !v)}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                  >
+                    <span className="text-[13px] font-medium text-foreground">Apenas bloqueadas</span>
+                    <span className={cn(
+                      "ml-auto w-9 h-5 rounded-full relative transition-colors shrink-0",
+                      filterBlocked ? "bg-primary" : "bg-muted-foreground/30",
+                    )}>
+                      <span className={cn(
+                        "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-background transition-transform",
+                        filterBlocked && "translate-x-4",
+                      )} />
+                    </span>
+                  </button>
                 </div>
 
                 {/* Rodapé: contador de resultado */}
@@ -3265,18 +4056,58 @@ export const ActivityKanban = ({
         )}
 
         <div className="ml-auto flex items-center gap-2">
-        {/* Agrupar em raias (swimlanes) */}
-        <Select value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)}>
-          <SelectTrigger className="h-7 w-auto min-w-[120px] text-xs gap-1" title="Agrupar cards em raias horizontais">
-            <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Sem raias</SelectItem>
-            <SelectItem value="phase">Raias por fase</SelectItem>
-            <SelectItem value="assignee">Raias por responsável</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Agrupar em raias (swimlanes) — menu clicável de critérios */}
+        {(() => {
+          const laneOptions: { id: typeof groupBy; label: string; icon: React.ReactNode }[] = [
+            { id: "none", label: "Sem raias", icon: <XIcon className="w-3.5 h-3.5" /> },
+            { id: "phase", label: "Por fase", icon: <Layers className="w-3.5 h-3.5" /> },
+            { id: "assignee", label: "Por responsável", icon: <User className="w-3.5 h-3.5" /> },
+            { id: "sector", label: "Por setor", icon: <Building2 className="w-3.5 h-3.5" /> },
+            { id: "priority", label: "Por prioridade", icon: <Flag className="w-3.5 h-3.5" /> },
+            { id: "tag", label: "Por etiqueta", icon: <TagIcon className="w-3.5 h-3.5" /> },
+            { id: "due", label: "Por prazo", icon: <CalendarIcon className="w-3.5 h-3.5" /> },
+            { id: "blocked", label: "Por bloqueio", icon: <AlertCircle className="w-3.5 h-3.5" /> },
+            { id: "customGroup", label: "Por time", icon: <Users className="w-3.5 h-3.5" /> },
+          ];
+          const current = laneOptions.find((o) => o.id === groupBy) ?? laneOptions[0];
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={groupBy !== "none" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  title="Agrupar cards em raias horizontais"
+                >
+                  <Layers className="w-3.5 h-3.5 shrink-0" />
+                  {groupBy === "none" ? "Raias" : current.label}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Agrupar em raias
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {laneOptions.map((o) => (
+                  <DropdownMenuItem
+                    key={o.id}
+                    onSelect={() => setGroupBy(o.id)}
+                    className="gap-2 text-xs"
+                  >
+                    <span className="text-muted-foreground">{o.icon}</span>
+                    <span className="flex-1">{o.label}</span>
+                    {groupBy === o.id && <Check className="w-3.5 h-3.5 text-primary" />}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setManageGroupsOpen(true)} className="gap-2 text-xs">
+                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="flex-1">Gerenciar times…</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        })()}
         <Button
           variant={onlyMine ? "default" : "outline"}
           size="sm"
@@ -3446,6 +4277,18 @@ export const ActivityKanban = ({
                 laneId={laneId}
                 collapsed={collapsedStages.has(stage.id)}
                 onToggleCollapse={toggleCollapsedStage}
+                columnFilterSlot={
+                  <ColumnFilterPanel
+                    stageId={stage.id}
+                    filter={columnFilters[stage.id] ?? EMPTY_COLUMN_FILTER}
+                    onChange={setColumnFilter}
+                    assigneeOptions={assigneeOptions}
+                    sectorOptions={sectorOptions}
+                    participantOptions={participantOptions}
+                    tagOptions={tagOptions}
+                    profilesMap={profilesMap}
+                  />
+                }
                 stage={stage}
                 stageActivities={stageActivities}
                 activities={activities}
@@ -3556,7 +4399,14 @@ export const ActivityKanban = ({
                 return (
                   <div key={lane.id} className="rounded-lg border border-border/60 bg-background/40">
                     <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/60 bg-muted/40 rounded-t-lg sticky left-0">
-                      {groupBy === "phase" ? <Layers className="w-3.5 h-3.5 text-primary" /> : <User className="w-3.5 h-3.5 text-muted-foreground" />}
+                      {groupBy === "phase" ? <Layers className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "priority" ? <Flag className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "sector" ? <Building2 className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "tag" ? <TagIcon className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "due" ? <CalendarIcon className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "blocked" ? <AlertCircle className="w-3.5 h-3.5 text-primary" />
+                        : groupBy === "customGroup" ? <Users className="w-3.5 h-3.5 text-primary" />
+                        : <User className="w-3.5 h-3.5 text-muted-foreground" />}
                       <span className="text-xs font-semibold">{lane.label}</span>
                       <span className="text-[10px] text-muted-foreground">{laneCount} {laneCount === 1 ? "card" : "cards"}</span>
                     </div>
@@ -3683,6 +4533,96 @@ export const ActivityKanban = ({
             <Button variant="outline" onClick={() => setCreateStoryActivity(null)}>Cancelar</Button>
             <Button onClick={handleCreateStory} disabled={!createStoryTitle.trim() || createStoryLoading}>
               {createStoryLoading ? "Criando..." : "Criar História"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Gerenciar grupos de raia (estilo Jira: uma raia agrega vários responsáveis) */}
+      <Dialog open={manageGroupsOpen} onOpenChange={setManageGroupsOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Times</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-1">
+            Crie times de pessoas (compartilhados com o projeto). Ao usar “Raias por time”, cada time vira uma raia com as atividades de qualquer um dos seus membros.
+          </p>
+
+          {teamsUnavailable && (
+            <div className="text-xs text-warning bg-warning/10 border border-warning/30 rounded-md px-3 py-2">
+              Os times ainda não estão disponíveis: aplique a migration <span className="font-mono">kanban_teams</span> no banco (VM) para habilitar.
+            </div>
+          )}
+
+          <div className="space-y-3 max-h-[55vh] overflow-y-auto py-1">
+            {laneGroups.length === 0 && !teamsUnavailable && (
+              <div className="text-center text-xs text-muted-foreground py-6 border border-dashed rounded-lg">
+                Nenhum time ainda. Clique em “Novo time” para começar.
+              </div>
+            )}
+            {laneGroups.map((g) => (
+              <div key={g.id} className="border rounded-lg p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={g.name}
+                    placeholder="Nome do time (ex.: Time TI)"
+                    onChange={(e) => setLaneGroups((gs) => gs.map((x) => x.id === g.id ? { ...x, name: e.target.value } : x))}
+                    onBlur={() => saveTeam(g)}
+                    className="h-8 text-sm flex-1"
+                  />
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                    {g.members.length} {g.members.length === 1 ? "membro" : "membros"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => deleteTeam(g.id)}
+                    className="h-8 w-8 flex items-center justify-center rounded text-destructive hover:bg-destructive/10 shrink-0"
+                    title="Remover time"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {assigneeOptions.length === 0 && <span className="text-xs text-muted-foreground">Nenhuma pessoa nas atividades.</span>}
+                  {assigneeOptions.map((name) => {
+                    const inGroup = g.members.includes(name);
+                    const resolved = profilesMap[name] ?? name;
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => saveTeam({
+                          ...g,
+                          members: inGroup ? g.members.filter((m) => m !== name) : [...g.members, name],
+                        })}
+                        className={cn(
+                          "inline-flex items-center gap-1 h-7 rounded-full border px-2.5 text-xs transition-colors",
+                          inGroup ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted/60",
+                        )}
+                      >
+                        {inGroup && <Check className="w-3 h-3" />}
+                        {resolved}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={createTeam}
+              disabled={teamsUnavailable}
+              className="gap-1.5"
+            >
+              <Plus className="w-4 h-4" /> Novo time
+            </Button>
+            <Button
+              onClick={() => { setManageGroupsOpen(false); setGroupBy("customGroup"); }}
+              disabled={laneGroups.filter((g) => g.members.length > 0).length === 0}
+            >
+              Aplicar raias por time
             </Button>
           </DialogFooter>
         </DialogContent>

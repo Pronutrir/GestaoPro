@@ -146,23 +146,54 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         return null;
       };
 
+      // Alinhamento com o modelo EAP do sistema (fase / pacote / atividade / marco):
+      // - item que TEM filhos entre os importados  -> "pacote" (agrupador)
+      // - item folha                                -> "atividade"
+      // - título com marca de marco ("marco", "milestone", 🏁, [M]) -> is_milestone
+      const codesWithChildren = new Set(
+        nonPhaseItems.map((i) => i.parentCode).filter(Boolean) as string[],
+      );
+      const isMilestoneTitle = (t: string) =>
+        /(^|\s)(marco|milestone)(\s|:|$)/i.test(t) || /🏁|\[m\]/i.test(t);
+
+      let pacoteUnsupported = false; // banco pode rejeitar item_type='pacote'
       for (const item of nonPhaseItems) {
         const phaseId = findPhaseId(item);
         const parentId = item.parentCode ? codeIdMap[item.parentCode] || null : null;
         const phaseKey = phaseId || "__none__";
         if (!(phaseKey in phaseOrderCounter)) phaseOrderCounter[phaseKey] = 0;
 
-        const { data, error } = await supabase.from("activities").insert({
+        const hasChildren = codesWithChildren.has(item.code);
+        const milestone = isMilestoneTitle(item.title);
+        // Marco é uma folha; se tiver filhos, prevalece o papel de agrupador.
+        const itemType = hasChildren ? "pacote" : "atividade";
+
+        const basePayload: any = {
           project_id: projectId,
           title: `${item.code} ${item.title}`,
           phase_id: phaseId,
           parent_id: parentId,
           display_order: phaseOrderCounter[phaseKey]++,
           wbs_code: item.code,
-        }).select("id").single();
+          item_type: itemType,
+          is_milestone: milestone && !hasChildren,
+        };
 
-        if (error) throw error;
-        codeIdMap[item.code] = data.id;
+        let res = await supabase.from("activities").insert(basePayload).select("id").single();
+        // Tolerância: se o banco ainda não aceita 'pacote' (migration pendente),
+        // regrava como 'atividade' — vira pacote pelo app por ter filhos.
+        if (res.error && /item_type/i.test(res.error.message) && itemType === "pacote") {
+          pacoteUnsupported = true;
+          res = await supabase.from("activities").insert({ ...basePayload, item_type: "atividade" }).select("id").single();
+        }
+        if (res.error) throw res.error;
+        codeIdMap[item.code] = res.data.id;
+      }
+      if (pacoteUnsupported) {
+        toast({
+          title: "Tipo 'Pacote' pendente no banco",
+          description: "Os agrupadores foram importados como atividade (viram pacote por terem subitens). Aplique a migration de item_type na VM para gravar o tipo Pacote.",
+        });
       }
 
       toast({
@@ -197,11 +228,13 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         <div className="space-y-4">
           <div>
             <p className="text-sm text-muted-foreground mb-2">
-              Cole a estrutura EAP abaixo. Hierarquia: <strong>X.0</strong> = Fase/Entregável, <strong>X.Y</strong> = Subentrega, 
-              <strong>X.Y.Z</strong> = Pacote de Trabalho, <strong>X.Y.Z.W</strong> = Atividade.
+              Cole a estrutura EAP abaixo. Cada nível vira o tipo correspondente do projeto:
+              a raiz é <strong>Fase</strong>; itens que agrupam subitens viram <strong>Pacote</strong>;
+              itens folha viram <strong>Atividade</strong>. Para criar um <strong>Marco</strong>, inclua
+              “marco” no título (ex.: <em>1.2.3 Marco: Kickoff aprovado</em>).
             </p>
             <Textarea
-              placeholder={`Exemplo:\n1.0 Gestão do Projeto\n1.1 Iniciação do Projeto\n1.1.1 Elaboração do Termo de Abertura\n1.1.1.1 Definir escopo preliminar\n1.1.1.1.1 Reunião com stakeholders`}
+              placeholder={`Exemplo:\n1.0 Gestão do Projeto\n1.1 Planejamento\n1.1.1 Elaborar cronograma\n1.1.2 Marco: Plano aprovado\n1.2 Execução\n1.2.1 Desenvolver módulo A`}
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={10}
