@@ -214,9 +214,10 @@ export const NotificationBell = () => {
       return;
     }
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
-    await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
+    // Via API (service role): o UPDATE direto daqui e bloqueado pelo RLS, entao
+    // o convite aceito ficava marcado como nao lido. markAsRead ja refaz o fetch.
+    await markAsRead(n.id);
     toast({ title: "Convite aceito!" });
-    fetchNotifications();
   };
 
   const declineInvite = async (n: Notification) => {
@@ -231,11 +232,11 @@ export const NotificationBell = () => {
       return;
     }
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
-    await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
+    // Via API (service role) — ver comentario em acceptInvite.
+    await markAsRead(n.id);
     setDeclineFor(null);
     setDeclineReason("");
     toast({ title: "Convite recusado" });
-    fetchNotifications();
   };
 
   const getTimeAgo = (dateStr: string) => {

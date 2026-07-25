@@ -1419,8 +1419,17 @@ export const EditActivityDialog = ({
                       }
                       const v = endVariance(formData.actual_end_date || null, (act as any)?.baseline_end_date, formData.end_date);
                       const tone = v !== null ? varianceTone(v) : null;
+                      // Sem datas preenchidas o X apenas recolhe. Com datas, ele
+                      // seria a unica forma de destruir o dado (o preenchimento
+                      // automatico foi removido), entao confirma antes.
                       const closeReal = () => {
-                        setFormData((prev) => ({ ...prev, actual_start_date: "", actual_end_date: "" }));
+                        if (hasReal) {
+                          const ok = window.confirm(
+                            "Limpar as datas reais preenchidas? Esta acao apaga inicio e termino reais."
+                          );
+                          if (!ok) return;
+                          setFormData((prev) => ({ ...prev, actual_start_date: "", actual_end_date: "" }));
+                        }
                         setShowRealDates(false);
                       };
                       return (
@@ -1448,7 +1457,7 @@ export const EditActivityDialog = ({
                           <button
                             type="button"
                             onClick={closeReal}
-                            title="Fechar e limpar datas reais"
+                            title={hasReal ? "Limpar datas reais" : "Fechar"}
                             className="text-muted-foreground hover:text-foreground shrink-0"
                           >
                             <X className="w-3.5 h-3.5" />
