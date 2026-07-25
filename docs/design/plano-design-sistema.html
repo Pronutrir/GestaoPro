@@ -1,0 +1,197 @@
+<title>Proposta de Design — GestãoPro</title>
+<style>
+  :root{--bg:#fbfbfc;--surface:#ffffff;--surface-2:#f4f5f7;--border:#e7e8ec;--border-strong:#d6d8de;--ink:#1a1c22;--ink-2:#565b66;--ink-3:#8a8f9a;--accent:#4f46e5;--accent-soft:#eef0fe;--ok:#16a34a;--ok-soft:#e7f6ec;--warn:#d97706;--warn-soft:#fdf0dc;--bad:#dc2626;--bad-soft:#fce9e9;--mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  @media(prefers-color-scheme:dark){:root{--bg:#131417;--surface:#1b1d22;--surface-2:#23262c;--border:#2c2f36;--border-strong:#3a3d45;--ink:#eceef2;--ink-2:#a6abb5;--ink-3:#767b85;--accent:#8b87f5;--accent-soft:#23233a;--ok:#4ade80;--ok-soft:#14301f;--warn:#e0a44a;--warn-soft:#31260f;--bad:#f87171;--bad-soft:#331819;}}
+  :root[data-theme="dark"]{--bg:#131417;--surface:#1b1d22;--surface-2:#23262c;--border:#2c2f36;--border-strong:#3a3d45;--ink:#eceef2;--ink-2:#a6abb5;--ink-3:#767b85;--accent:#8b87f5;--accent-soft:#23233a;--ok:#4ade80;--ok-soft:#14301f;--warn:#e0a44a;--warn-soft:#31260f;--bad:#f87171;--bad-soft:#331819;}
+  :root[data-theme="light"]{--bg:#fbfbfc;--surface:#ffffff;--surface-2:#f4f5f7;--border:#e7e8ec;--border-strong:#d6d8de;--ink:#1a1c22;--ink-2:#565b66;--ink-3:#8a8f9a;--accent:#4f46e5;--accent-soft:#eef0fe;--ok:#16a34a;--ok-soft:#e7f6ec;--warn:#d97706;--warn-soft:#fdf0dc;--bad:#dc2626;--bad-soft:#fce9e9;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:44px 24px 96px;}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:600;}
+  h1{font-size:32px;line-height:1.12;margin:8px 0 12px;letter-spacing:-.02em;text-wrap:balance;}
+  .lede{color:var(--ink-2);font-size:16px;max-width:66ch;}
+  .who{margin-top:14px;font-size:13px;color:var(--ink-3);border-left:2px solid var(--accent);padding-left:12px;}
+  section{margin-top:52px;}
+  .sec-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:9px;margin-bottom:20px;}
+  .sec-num{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);}
+  .sec-head h2{font-size:21px;margin:0;letter-spacing:-.01em;}
+  .sec-sub{color:var(--ink-2);font-size:14.5px;margin:-8px 0 22px;max-width:70ch;}
+  /* findings */
+  .finds{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:720px){.finds{grid-template-columns:1fr;}}
+  .find{border:1px solid var(--border);border-radius:11px;padding:14px 16px;background:var(--surface);}
+  .find .sev{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:999px;font-weight:700;}
+  .sev.hi{background:var(--bad-soft);color:var(--bad);} .sev.md{background:var(--warn-soft);color:var(--warn);}
+  .find h3{font-size:14.5px;margin:8px 0 4px;} .find p{font-size:13px;color:var(--ink-2);margin:0;}
+  .find code{font-family:var(--mono);font-size:11px;background:var(--surface-2);padding:1px 5px;border-radius:4px;color:var(--ink-2);}
+  /* prescription cards */
+  .rx{border:1px solid var(--border);border-radius:14px;padding:20px;background:var(--surface);margin-bottom:18px;}
+  .rx-top{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+  .rx-badge{width:34px;height:34px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-family:var(--mono);flex:none;}
+  .rx-top h3{font-size:17px;margin:0;} .rx-top .tag{margin-left:auto;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:3px 9px;border-radius:999px;background:var(--ok-soft);color:var(--ok);font-weight:700;}
+  .rx>p{font-size:14px;color:var(--ink-2);margin:6px 0 14px;}
+  .rx-tokens{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+  .tok{font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:6px;border:1px solid var(--border);color:var(--ink-2);background:var(--surface-2);}
+  /* type scale sample */
+  .scale{display:flex;flex-direction:column;gap:2px;border:1px solid var(--border);border-radius:10px;padding:16px;background:var(--surface);}
+  .scale .row{display:flex;align-items:baseline;gap:14px;padding:5px 0;border-bottom:1px dashed var(--border);}
+  .scale .row:last-child{border-bottom:none;}
+  .scale .spec{font-family:var(--mono);font-size:11px;color:var(--ink-3);width:120px;flex:none;}
+  /* priority swatches */
+  .prio-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:4px 10px;border-radius:7px;border:1px solid;}
+  .dot{width:8px;height:8px;border-radius:999px;}
+  /* before/after mini */
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;}
+  @media(max-width:680px){.ba{grid-template-columns:1fr;}}
+  .bcol{border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--surface);}
+  .bcol .lbl{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin-bottom:10px;}
+  .bcol.after .lbl{color:var(--accent);}
+  .pg-head-old{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--ink-3);padding:8px;border:1px dashed var(--border-strong);border-radius:8px;}
+  .pg-head-new{border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .pg-head-new .top{padding:10px 12px;border-bottom:1px solid var(--border);}
+  .pg-head-new .t1{font-size:15px;font-weight:700;} .pg-head-new .t2{font-size:11px;color:var(--ink-3);}
+  .pg-head-new .body{padding:12px;background:var(--surface-2);font-size:11px;color:var(--ink-3);}
+  .empty-demo{border:1.5px dashed var(--border-strong);border-radius:10px;padding:20px;text-align:center;}
+  .empty-demo .ic{width:34px;height:34px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;margin-bottom:8px;}
+  .empty-demo .t{font-size:13px;font-weight:600;} .empty-demo .s{font-size:11px;color:var(--ink-3);margin:2px 0 10px;}
+  .empty-demo .cta{display:inline-block;font-size:11px;background:var(--accent);color:#fff;padding:5px 12px;border-radius:7px;}
+  .skel{display:flex;flex-direction:column;gap:8px;}
+  .skel .bar{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--surface-2),var(--border),var(--surface-2));}
+  /* roadmap */
+  .road{border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+  .road .r{display:grid;grid-template-columns:40px 1fr 90px 90px;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);font-size:13.5px;}
+  .road .r:last-child{border-bottom:none;}
+  .road .r.head{background:var(--surface-2);font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);}
+  .road .n{font-family:var(--mono);font-weight:700;color:var(--accent);}
+  .road .r b{font-weight:600;} .road .r .d{font-size:12px;color:var(--ink-3);}
+  .pill{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:999px;text-align:center;}
+  .pill.s{background:var(--ok-soft);color:var(--ok);} .pill.m{background:var(--warn-soft);color:var(--warn);} .pill.l{background:var(--bad-soft);color:var(--bad);}
+  .pill.hi{background:var(--accent-soft);color:var(--accent);font-weight:700;}
+  .note{margin-top:22px;border-left:3px solid var(--accent);background:var(--accent-soft);padding:14px 18px;border-radius:0 10px 10px 0;font-size:14px;}
+  .note b{font-weight:700;}
+  .q{margin-top:50px;border:1px solid var(--border);border-radius:14px;padding:24px 26px;background:var(--surface);}
+  .q h2{font-size:18px;margin:0 0 12px;} .q ol{margin:0;padding-left:20px;font-size:14.5px;} .q li{margin-bottom:9px;} .q b{color:var(--accent);}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">GestãoPro · Proposta de Design de Sistema</div>
+    <h1>De telas montadas à mão para um sistema coeso</h1>
+    <p class="lede">Auditei as telas de trabalho (Kanban, Backlog, projeto, dialogs) e os tokens. O diagnóstico é claro: o produto é funcional e rico, mas cada tela foi montada com números próprios — sem escala tipográfica, sem container de página, sem estados vazios/loading compartilhados. A boa notícia: a raiz de ~80% das inconsistências são <b>3 componentes que não existem</b>. Criá-los conserta dezenas de telas de uma vez.</p>
+    <p class="who">Escrevo como design lead: recomendações priorizadas por impacto ÷ esforço, para você aprovar por partes — não um "refaz tudo".</p>
+  </header>
+
+  <!-- DIAGNÓSTICO -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>O que encontrei</h2></div>
+    <p class="sec-sub">Achados reais da auditoria, dos mais graves aos estruturais. Cada um tem evidência no código.</p>
+    <div class="finds">
+      <div class="find"><span class="sev hi">alto</span><h3>Sem título/header de página</h3><p>O <code>h1</code> do topo quase nunca é usado; cada página inventa seu gutter (<code>px-4 py-4</code> vs container centralizado vs <code>py-6</code>). O usuário não tem âncora de "onde estou".</p></div>
+      <div class="find"><span class="sev hi">alto</span><h3>Prioridade com 2 escalas</h3><p>Backlog usa 3 níveis (high/medium/low, cores-token); Kanban usa 5 (urgente→baixa, cores cruas). "Média" é âmbar no Backlog e azul no Kanban — lado a lado.</p></div>
+      <div class="find"><span class="sev hi">alto</span><h3>Loading sem padrão</h3><p>Skeletons existem mas quase ninguém usa. ~10 telas têm "Carregando…" solto, cada uma diferente (com/sem card, com/sem spinner).</p></div>
+      <div class="find"><span class="sev md">médio</span><h3>Sem escala tipográfica</h3><p><code>text-[9px]</code>, <code>text-[10px]</code>, <code>text-[11px]</code>, <code>text-[13px]</code> espalhados sem regra. A mesma entidade (atividade) tem corpos de texto diferentes no Kanban e no Backlog.</p></div>
+      <div class="find"><span class="sev md">médio</span><h3>Alturas de botão em conflito</h3><p>Na aba Backlog, toolbar <code>h-9</code> logo acima de outra <code>h-7</code>; cards em <code>h-6</code>. O primitivo <code>Button</code> (h-9/h-10) é quase sempre sobrescrito — não há "tamanho de ação" canônico.</p></div>
+      <div class="find"><span class="sev md">médio</span><h3>Superfícies misturadas</h3><p>Sombra de card vem de 2 fontes (token vs <code>shadow-md</code>); cantos <code>rounded-lg/xl/2xl</code>; fundos <code>bg-muted/40|50|60</code> sem semântica fixa.</p></div>
+      <div class="find"><span class="sev md">médio</span><h3>Empty states desiguais</h3><p>Do padrão-ouro (ícone+título+CTA em OKRs) ao "só texto itálico". Não há <code>&lt;EmptyState&gt;</code> compartilhado.</p></div>
+      <div class="find"><span class="sev md">médio</span><h3>Desktop-only</h3><p>Kanban tem 5 breakpoints em 4.600 linhas; Backlog usa grid de colunas em pixels dentro de <code>overflow-hidden</code> — quebra abaixo de ~700px.</p></div>
+    </div>
+  </section>
+
+  <!-- PRESCRIÇÃO -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>A prescrição — 3 fundações + 3 unificações</h2></div>
+    <p class="sec-sub">A ordem importa: as fundações (tokens) destravam as unificações (componentes). Cada bloco é independente e aprovável sozinho.</p>
+
+    <!-- F1 tipografia -->
+    <div class="rx">
+      <div class="rx-top"><span class="rx-badge">F1</span><h3>Escala tipográfica única</h3><span class="tag">fundação</span></div>
+      <p>Uma escala fixa, aplicada em todo lugar. Acaba com os <code>text-[Npx]</code> avulsos. Fonte já é Roboto.</p>
+      <div class="scale">
+        <div class="row"><span class="spec">Título página · 20/700</span><span style="font-size:20px;font-weight:700">Gestão de Atividades</span></div>
+        <div class="row"><span class="spec">Seção · 16/600</span><span style="font-size:16px;font-weight:600">Sub-atividades</span></div>
+        <div class="row"><span class="spec">Corpo · 14/400</span><span style="font-size:14px">Levantamento de requisitos do módulo</span></div>
+        <div class="row"><span class="spec">Apoio · 13/400</span><span style="font-size:13px;color:var(--ink-2)">Antonio Carlos · vence 15/08</span></div>
+        <div class="row"><span class="spec">Label · 11/600 caps</span><span style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)">Responsável</span></div>
+      </div>
+    </div>
+
+    <!-- F2 cor -->
+    <div class="rx">
+      <div class="rx-top"><span class="rx-badge">F2</span><h3>Cor semântica canônica</h3><span class="tag">fundação</span></div>
+      <p>Uma única fonte de verdade para prioridade, status e semânticos — sempre via token, nunca cor crua. Prioridade unificada em <b>5 níveis</b> (Backlog adota os mesmos do Kanban).</p>
+      <div class="prio-row">
+        <span class="chip" style="border-color:var(--bad);background:var(--bad-soft);color:var(--bad)"><span class="dot" style="background:var(--bad)"></span>Urgente</span>
+        <span class="chip" style="border-color:#ea580c;background:#fdecdf;color:#c2410c"><span class="dot" style="background:#ea580c"></span>Crítica</span>
+        <span class="chip" style="border-color:var(--warn);background:var(--warn-soft);color:var(--warn)"><span class="dot" style="background:var(--warn)"></span>Alta</span>
+        <span class="chip" style="border-color:#0284c7;background:#e0f2fe;color:#0369a1"><span class="dot" style="background:#0284c7"></span>Média</span>
+        <span class="chip" style="border-color:var(--ok);background:var(--ok-soft);color:var(--ok)"><span class="dot" style="background:var(--ok)"></span>Baixa</span>
+      </div>
+      <p style="margin-top:10px;font-size:13px;color:var(--ink-3)">Mesmo verde de "sucesso" em todo o app; deadline/progresso via <code>--success/--warning/--destructive</code>.</p>
+    </div>
+
+    <!-- F3 superfície/espaçamento -->
+    <div class="rx">
+      <div class="rx-top"><span class="rx-badge">F3</span><h3>Superfície + densidade padrão</h3><span class="tag">fundação</span></div>
+      <p>Um estilo de card e um de painel; uma régua de espaçamento (4/8/12/16) e altura de controle canônica.</p>
+      <div class="rx-tokens">
+        <span class="tok">card: rounded-lg + 1px border + shadow-token</span>
+        <span class="tok">painel: rounded-lg + border, sem shadow</span>
+        <span class="tok">controle: h-8 (input/botão/select)</span>
+        <span class="tok">ação-compacta: h-7</span>
+        <span class="tok">raio: 8px (fim do rounded-xl/2xl)</span>
+      </div>
+    </div>
+
+    <!-- U1 PageShell -->
+    <div class="rx">
+      <div class="rx-top"><span class="rx-badge">U1</span><h3>&lt;PageHeader&gt; + &lt;PageContainer&gt;</h3><span class="tag">unifica ~20 telas</span></div>
+      <p>Todas as páginas passam a ter o mesmo cabeçalho (título + subtítulo + ações) e o mesmo gutter/largura. Fim do "cada tela parece um app".</p>
+      <div class="ba">
+        <div class="bcol"><div class="lbl">hoje</div><div class="pg-head-old">⌀ sem título · gutter varia por página</div></div>
+        <div class="bcol after"><div class="lbl">proposto</div>
+          <div class="pg-head-new"><div class="top"><div class="t1">Equipe do Projeto</div><div class="t2">12 membros · 3 setores</div></div><div class="body">conteúdo com gutter e largura consistentes</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- U2 EmptyState -->
+    <div class="rx">
+      <div class="rx-top"><span class="rx-badge">U2</span><h3>&lt;EmptyState&gt; compartilhado</h3><span class="tag">unifica vazios</span></div>
+      <p>Um componente: ícone + título + apoio + CTA. Aplicado em colunas do Kanban, fases do Backlog, listas vazias.</p>
+      <div class="empty-demo"><div class="ic">▦</div><div class="t">Nenhuma tarefa nesta fase</div><div class="s">Crie a primeira para começar a planejar</div><span class="cta">+ Nova tarefa</span></div>
+    </div>
+
+    <!-- U3 PageLoader -->
+    <div class="rx">
+      <div class="rx-top"><span class="rx-badge">U3</span><h3>&lt;PageLoader&gt; / skeletons</h3><span class="tag">unifica loading</span></div>
+      <p>Troca os "Carregando…" soltos por skeletons do próprio layout. Percepção imediata de qualidade e velocidade.</p>
+      <div class="skel"><div class="bar" style="width:40%"></div><div class="bar" style="width:100%"></div><div class="bar" style="width:85%"></div><div class="bar" style="width:70%"></div></div>
+    </div>
+  </section>
+
+  <!-- ROADMAP -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Roadmap sugerido</h2></div>
+    <p class="sec-sub">Ordem por impacto e dependência. Cada linha é um passo aprovável e verificável isoladamente — sem migration, tudo front-end.</p>
+    <div class="road">
+      <div class="r head"><span>#</span><span>Entrega</span><span>Esforço</span><span>Impacto</span></div>
+      <div class="r"><span class="n">1</span><span><b>F2 · Prioridade unificada (5 níveis, token)</b><div class="d">Backlog adota a escala do Kanban. Corrige o sinal mais crítico.</div></span><span class="pill s">baixo</span><span class="pill hi">alto</span></div>
+      <div class="r"><span class="n">2</span><span><b>U3 · PageLoader + skeletons</b><div class="d">Substitui os "Carregando…" soltos. Ganho de percepção imediato.</div></span><span class="pill s">baixo</span><span class="pill hi">alto</span></div>
+      <div class="r"><span class="n">3</span><span><b>U1 · PageHeader + PageContainer</b><div class="d">Cabeçalho e gutter consistentes em todas as páginas.</div></span><span class="pill m">médio</span><span class="pill hi">alto</span></div>
+      <div class="r"><span class="n">4</span><span><b>U2 · EmptyState compartilhado</b><div class="d">Vazios com ícone + CTA em Kanban, Backlog e listas.</div></span><span class="pill s">baixo</span><span class="d">médio</span></div>
+      <div class="r"><span class="n">5</span><span><b>F1 · Escala tipográfica + F3 superfícies</b><div class="d">Passe varrendo os text-[Npx], raios e sombras avulsos.</div></span><span class="pill l">alto</span><span class="d">médio</span></div>
+      <div class="r"><span class="n">6</span><span><b>Responsividade do Backlog/Kanban</b><div class="d">overflow-x correto + colunas fluidas abaixo de 700px.</div></span><span class="pill m">médio</span><span class="d">médio</span></div>
+    </div>
+    <div class="note"><b>Minha recomendação de arranque:</b> passos <b>1 e 2</b> juntos — baixo esforço, alto impacto visível, e não dependem de nada. Depois o <b>3</b> (PageHeader), que é o de maior alcance estrutural. O resto entra conforme a prioridade do negócio.</div>
+  </section>
+
+  <div class="q">
+    <h2>Como quer conduzir?</h2>
+    <ol>
+      <li><b>Começar pelo topo do roadmap</b> (Prioridade unificada + PageLoader) — recomendado.</li>
+      <li><b>Escolher um bloco específico</b> (ex.: só o PageHeader, ou só os empty states).</li>
+      <li><b>Outra prioridade</b> que eu não listei — me diga o que mais te incomoda hoje.</li>
+    </ol>
+    <p style="margin:14px 0 0;font-size:13px;color:var(--ink-2)">Faço cada bloco de forma isolada, com verificação, sem quebrar o que já existe. Nada de "refatorar tudo de uma vez".</p>
+  </div>
+</div>

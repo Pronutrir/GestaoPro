@@ -7,5 +7,10 @@ implementação. Abra os HTML no navegador.
 - **plano-card.html** — Card configurável do Kanban (toggles por informação).
 - **plano-backlog.html** — Layout do Backlog em colunas (referências Jira/Linear/Asana).
 - **plano-times.html** — Onde os grupos/times vivem na gestão (visão Kanban vs entidade no banco).
+- **plano-filtros.html** — Filtros expandidos + filtro por coluna (comparado a Jira/Linear).
+- **plano-filtro-coluna.html** — Filtro completo por coluna do Kanban.
+- **plano-cor-colunas.html** / **plano-fundo-coluna.html** — Estudos de cor/fundo das colunas.
+- **plano-design-sistema.html** — Auditoria de design do sistema + roadmap de melhorias.
+- **plano-tap.html** — TAP enxuto alinhado ao PMBOK (diagnóstico + estrutura proposta).
 
 São material de referência de design; não fazem parte do build da aplicação.

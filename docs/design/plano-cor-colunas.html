@@ -1,0 +1,125 @@
+<title>Plano — Cor das colunas do Kanban</title>
+<style>
+  :root{--bg:#f7f8fa;--surface:#ffffff;--surface-2:#f1f2f5;--border:#e2e4ea;--border-strong:#cfd2db;--ink:#1c1f26;--ink-2:#565b66;--ink-3:#868b96;--accent:#5b5bd6;--accent-soft:#ecebfb;--ok:#17915b;--warn:#b3730a;--bad:#cc3340;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  @media(prefers-color-scheme:dark){:root{--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--warn:#e0a44a;--bad:#f0737f;}}
+  :root[data-theme="dark"]{--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--warn:#e0a44a;--bad:#f0737f;}
+  :root[data-theme="light"]{--bg:#f7f8fa;--surface:#ffffff;--surface-2:#f1f2f5;--border:#e2e4ea;--border-strong:#cfd2db;--ink:#1c1f26;--ink-2:#565b66;--ink-3:#868b96;--accent:#5b5bd6;--accent-soft:#ecebfb;--ok:#17915b;--warn:#b3730a;--bad:#cc3340;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px;}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600;}
+  h1{font-size:30px;line-height:1.15;margin:6px 0 10px;text-wrap:balance;letter-spacing:-.01em;}
+  .lede{color:var(--ink-2);font-size:15px;max-width:64ch;}
+  section{margin-top:44px;}
+  .sec-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:16px;}
+  .sec-num{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);}
+  .sec-head h2{font-size:20px;margin:0;letter-spacing:-.01em;}
+  .sec-sub{color:var(--ink-2);font-size:14px;margin:0 0 20px;}
+  .board{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;}
+  /* coluna base */
+  .col{flex:0 0 150px;border-radius:10px;border:1px solid var(--border);overflow:hidden;display:flex;flex-direction:column;min-height:220px;}
+  .col-head{padding:8px 10px;border-bottom:1px solid var(--border);}
+  .col-top{display:flex;align-items:center;gap:6px;}
+  .dot{width:9px;height:9px;border-radius:999px;flex:none;}
+  .col-title{font-size:12px;font-weight:600;}
+  .col-cnt{font-family:var(--mono);font-size:9px;padding:0 5px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border-strong);color:var(--ink-2);}
+  .col-body{flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px;font-size:11px;box-shadow:0 1px 2px rgba(0,0,0,.05);}
+  .empty{flex:1;display:flex;align-items:center;justify-content:center;border:1.5px dashed var(--border-strong);border-radius:8px;margin:4px;color:var(--ink-3);font-size:10px;}
+  /* HOJE: fundo card fixo, corpo vazio mostra o mesmo */
+  .col.hoje{background:var(--surface);border-top:3px solid;}
+  /* PROPOSTA A: tint da cor no fundo inteiro */
+  .col.tint{border-top:3px solid;}
+  /* PROPOSTA B: cabeçalho colorido, corpo neutro */
+  .colB-head{color:#fff;}
+  .ba{display:grid;grid-template-columns:1fr;gap:20px;}
+  .opt-row{display:grid;grid-template-columns:180px 1fr;gap:16px;align-items:start;border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface);}
+  @media(max-width:680px){.opt-row{grid-template-columns:1fr;}}
+  .opt-row h3{font-size:15px;margin:0 0 6px;} .opt-row .rec{font-size:10px;font-family:var(--mono);text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:1px 6px;border-radius:4px;}
+  .opt-row p{font-size:13px;color:var(--ink-2);margin:6px 0 0;}
+  .miniboard{display:flex;gap:8px;}
+  .miniboard .col{flex:0 0 120px;min-height:170px;}
+  .note{margin-top:18px;border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 8px 8px 0;font-size:13.5px;}
+  .note b{font-weight:700;}
+  .q{margin-top:44px;border:1px solid var(--border);border-radius:12px;padding:22px 24px;background:var(--surface);}
+  .q h2{font-size:17px;margin:0 0 10px;} .q ul{margin:0;padding-left:18px;font-size:14px;} .q li{margin-bottom:8px;} .q b{color:var(--accent);}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">GestãoPro · Kanban · Cor das colunas</div>
+    <h1>Cada coluna com identidade de cor — cheia ou vazia</h1>
+    <p class="lede">Hoje a cor da coluna aparece só numa faixa fina no topo; o fundo é branco e, quando a coluna está vazia, o miolo tracejado parece “mais escuro/apagado” que as cheias. A proposta: usar a cor da coluna de forma sutil e consistente, para dar identidade sem poluir — e o vazio deixar de destoar.</p>
+  </header>
+
+  <!-- ANTES -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Como está hoje</h2></div>
+    <p class="sec-sub">Faixa de cor só no topo; fundo branco. Colunas vazias mostram o miolo tracejado, que contrasta com as cheias (cheias de cards brancos).</p>
+    <div class="board">
+      <div class="col hoje" style="border-top-color:#f43f5e"><div class="col-head"><div class="col-top"><span class="dot" style="background:#f43f5e"></span><span class="col-title">Teste</span><span class="col-cnt">0</span></div></div><div class="col-body"><div class="empty">Arraste aqui</div></div></div>
+      <div class="col hoje" style="border-top-color:#f59e0b"><div class="col-head"><div class="col-top"><span class="dot" style="background:#f59e0b"></span><span class="col-title">A Fazer</span><span class="col-cnt">6</span></div></div><div class="col-body"><div class="card">1.1 Levantamento</div><div class="card">Modelar banco</div></div></div>
+      <div class="col hoje" style="border-top-color:#f43f5e"><div class="col-head"><div class="col-top"><span class="dot" style="background:#f43f5e"></span><span class="col-title">Pendências</span><span class="col-cnt">3</span></div></div><div class="col-body"><div class="card">treinamento</div></div></div>
+      <div class="col hoje" style="border-top-color:#3b82f6"><div class="col-head"><div class="col-top"><span class="dot" style="background:#3b82f6"></span><span class="col-title">Em Andam.</span><span class="col-cnt">0</span></div></div><div class="col-body"><div class="empty">Arraste aqui</div></div></div>
+      <div class="col hoje" style="border-top-color:#22c55e"><div class="col-head"><div class="col-top"><span class="dot" style="background:#22c55e"></span><span class="col-title">Concluída</span><span class="col-cnt">0</span></div></div><div class="col-body"><div class="empty">Arraste aqui</div></div></div>
+    </div>
+    <div class="note">O “escurece quando vazia” é o miolo tracejado + o branco puro do fundo destoando dos cards. A cor da coluna quase não participa da identidade — só a faixa fina.</div>
+  </section>
+
+  <!-- OPÇÕES -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>Três formas de resolver</h2></div>
+    <div class="ba">
+
+      <!-- A -->
+      <div class="opt-row">
+        <div>
+          <h3>A · Tint sutil no fundo <span class="rec">recomendado</span></h3>
+          <p>O fundo inteiro da coluna recebe a cor bem diluída (~6%). Cheia ou vazia, a coluna tem a mesma identidade. Faixa no topo mais forte. O vazio deixa de destoar.</p>
+        </div>
+        <div class="miniboard">
+          <div class="col tint" style="border-top-color:#f43f5e;background:#f43f5e14"><div class="col-head" style="background:#f43f5e0f"><div class="col-top"><span class="dot" style="background:#f43f5e"></span><span class="col-title">Teste</span><span class="col-cnt">0</span></div></div><div class="col-body"><div class="empty" style="border-color:#f43f5e40;color:#f43f5e">Arraste aqui</div></div></div>
+          <div class="col tint" style="border-top-color:#f59e0b;background:#f59e0b14"><div class="col-head" style="background:#f59e0b0f"><div class="col-top"><span class="dot" style="background:#f59e0b"></span><span class="col-title">A Fazer</span><span class="col-cnt">6</span></div></div><div class="col-body"><div class="card">Levantamento</div><div class="card">Modelar banco</div></div></div>
+          <div class="col tint" style="border-top-color:#3b82f6;background:#3b82f614"><div class="col-head" style="background:#3b82f60f"><div class="col-top"><span class="dot" style="background:#3b82f6"></span><span class="col-title">Em Andam.</span><span class="col-cnt">0</span></div></div><div class="col-body"><div class="empty" style="border-color:#3b82f640;color:#3b82f6">Arraste aqui</div></div></div>
+        </div>
+      </div>
+
+      <!-- B -->
+      <div class="opt-row">
+        <div>
+          <h3>B · Cabeçalho colorido</h3>
+          <p>Só o cabeçalho ganha a cor cheia (fundo colorido, texto branco); o corpo fica neutro. Identidade forte no topo, corpo limpo. Estilo Trello clássico.</p>
+        </div>
+        <div class="miniboard">
+          <div class="col" style="border-top:none"><div class="col-head colB-head" style="background:#f43f5e"><div class="col-top"><span class="dot" style="background:#fff"></span><span class="col-title">Teste</span><span class="col-cnt" style="background:#ffffff30;border-color:#ffffff50;color:#fff">0</span></div></div><div class="col-body"><div class="empty">Arraste aqui</div></div></div>
+          <div class="col" style="border-top:none"><div class="col-head colB-head" style="background:#f59e0b"><div class="col-top"><span class="dot" style="background:#fff"></span><span class="col-title">A Fazer</span><span class="col-cnt" style="background:#ffffff30;border-color:#ffffff50;color:#fff">6</span></div></div><div class="col-body"><div class="card">Levantamento</div><div class="card">Modelar banco</div></div></div>
+          <div class="col" style="border-top:none"><div class="col-head colB-head" style="background:#3b82f6"><div class="col-top"><span class="dot" style="background:#fff"></span><span class="col-title">Em Andam.</span><span class="col-cnt" style="background:#ffffff30;border-color:#ffffff50;color:#fff">0</span></div></div><div class="col-body"><div class="empty">Arraste aqui</div></div></div>
+        </div>
+      </div>
+
+      <!-- C -->
+      <div class="opt-row">
+        <div>
+          <h3>C · Só corrigir o vazio</h3>
+          <p>Mudança mínima: mantém o layout de hoje, mas o miolo vazio deixa de “escurecer” — fica igual às cheias (mesmo fundo claro, tracejado bem suave). Não adiciona cor nova.</p>
+        </div>
+        <div class="miniboard">
+          <div class="col hoje" style="border-top-color:#f43f5e"><div class="col-head"><div class="col-top"><span class="dot" style="background:#f43f5e"></span><span class="col-title">Teste</span><span class="col-cnt">0</span></div></div><div class="col-body"><div class="empty" style="border-color:var(--border);color:var(--ink-3)">Arraste aqui</div></div></div>
+          <div class="col hoje" style="border-top-color:#f59e0b"><div class="col-head"><div class="col-top"><span class="dot" style="background:#f59e0b"></span><span class="col-title">A Fazer</span><span class="col-cnt">6</span></div></div><div class="col-body"><div class="card">Levantamento</div><div class="card">Modelar banco</div></div></div>
+          <div class="col hoje" style="border-top-color:#3b82f6"><div class="col-head"><div class="col-top"><span class="dot" style="background:#3b82f6"></span><span class="col-title">Em Andam.</span><span class="col-cnt">0</span></div></div><div class="col-body"><div class="empty" style="border-color:var(--border);color:var(--ink-3)">Arraste aqui</div></div></div>
+        </div>
+      </div>
+
+    </div>
+    <div class="note"><b>Recomendo a A:</b> dá identidade real de cor a cada coluna (útil com muitas colunas), resolve o vazio destoante e é sutil o bastante para não competir com os cards. Funciona com qualquer cor de coluna e nos dois temas (claro/escuro) — a cor entra por opacidade sobre o fundo.</div>
+  </section>
+
+  <div class="q">
+    <h2>Qual você quer?</h2>
+    <ul>
+      <li><b>A — Tint sutil</b> (recomendado): cor diluída no fundo inteiro, cheia ou vazia igual.</li>
+      <li><b>B — Cabeçalho colorido</b>: cor cheia só no topo, corpo neutro (estilo Trello).</li>
+      <li><b>C — Só corrigir o vazio</b>: mudança mínima, sem cor nova.</li>
+    </ul>
+    <p style="margin:14px 0 0;font-size:13px;color:var(--ink-2)">Tudo front-end, sem migration. Uso a <b>cor que cada coluna já tem</b> (stage.color). Escolha e eu implemento.</p>
+  </div>
+</div>

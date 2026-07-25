@@ -1,0 +1,129 @@
+<title>Plano — Fundo das colunas do Kanban</title>
+<style>
+  /* Cores REAIS do tema light do GestãoPro (index.css) */
+  :root{
+    --background:hsl(210 40% 98%);
+    --card:hsl(0 0% 100%);
+    --muted:hsl(210 40% 96%);
+    --secondary:hsl(214 32% 91%);
+    --border:hsl(214 32% 91%);
+    --ink:hsl(215 25% 12%);
+    --ink-2:hsl(215 16% 42%);
+    --ink-3:hsl(215 14% 58%);
+    --accent:#5b5bd6;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;} body{margin:0;background:var(--background);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px;}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600;}
+  h1{font-size:28px;line-height:1.15;margin:6px 0 10px;letter-spacing:-.01em;}
+  .lede{color:var(--ink-2);font-size:15px;max-width:64ch;}
+  .diag{margin-top:18px;border:1px solid var(--border);border-radius:10px;padding:14px 16px;background:var(--card);font-size:13.5px;}
+  .diag b{color:var(--accent);}
+  .diag code{font-family:var(--mono);font-size:12px;background:var(--muted);padding:1px 5px;border-radius:4px;}
+  section{margin-top:40px;}
+  .sec-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:16px;}
+  .sec-num{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);}
+  .sec-head h2{font-size:19px;margin:0;}
+  .opt{display:grid;grid-template-columns:200px 1fr;gap:16px;align-items:start;border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--card);margin-bottom:16px;}
+  @media(max-width:680px){.opt{grid-template-columns:1fr;}}
+  .opt h3{font-size:15px;margin:0 0 6px;} .opt .rec{font-size:10px;font-family:var(--mono);text-transform:uppercase;color:#fff;background:var(--accent);padding:1px 6px;border-radius:4px;margin-left:6px;}
+  .opt p{font-size:13px;color:var(--ink-2);margin:6px 0 0;}
+  .opt .spec{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:6px;}
+  /* mini board */
+  .mb{display:flex;gap:8px;}
+  .col{flex:0 0 130px;border-radius:10px;border:1px solid var(--border);overflow:hidden;display:flex;flex-direction:column;min-height:200px;}
+  .ch{padding:7px 9px;border-bottom:1px solid var(--border);}
+  .ct{display:flex;align-items:center;gap:6px;} .dot{width:8px;height:8px;border-radius:999px;flex:none;} .cn{font-size:11px;font-weight:600;}
+  .cc{font-family:var(--mono);font-size:9px;padding:0 5px;border-radius:999px;border:1px solid var(--border);color:var(--ink-2);margin-left:auto;}
+  .cb{flex:1;padding:7px;display:flex;flex-direction:column;gap:6px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:7px;font-size:10px;box-shadow:0 1px 2px rgba(20,30,50,.06);}
+  .empty{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--ink-3);}
+  .note{margin-top:16px;border-left:3px solid var(--accent);background:hsl(240 60% 97%);padding:12px 16px;border-radius:0 8px 8px 0;font-size:13px;}
+  .q{margin-top:40px;border:1px solid var(--border);border-radius:12px;padding:22px 24px;background:var(--card);}
+  .q h2{font-size:16px;margin:0 0 10px;} .q ul{margin:0;padding-left:18px;font-size:14px;} .q li{margin-bottom:8px;} .q b{color:var(--accent);}
+</style>
+
+<div class="wrap">
+  <div class="kicker">GestãoPro · Kanban · Fundo das colunas</div>
+  <h1>Fundo neutro real, sem o azulado — cards bem legíveis</h1>
+  <p class="lede">Você tem razão: ficou azul. O motivo é técnico, não é só percepção.</p>
+
+  <div class="diag">
+    <b>Por que ficou azul:</b> os cinzas do tema não são neutros — têm matiz azul embutido. O <code>--muted</code> é <code>hsl(210 40% 96%)</code> (hue 210 = azul) e o fundo geral <code>hsl(210 40% 98%)</code>. Quando pus o fundo da coluna em <code>muted</code>, esse azul apareceu. Os cards são <code>branco puro</code>, o que reforça o contraste azul/branco. As opções abaixo <b>fogem desse azulado</b>, mantendo letras e formato.
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Opções de fundo (com as cores reais do tema)</h2></div>
+
+    <!-- A -->
+    <div class="opt">
+      <div>
+        <h3>A · Fundo cinza-neutro <span class="rec">recomendado</span></h3>
+        <p>Fundo da coluna num cinza <b>sem matiz</b> (hue neutro), só um pouco mais escuro que os cards. Some o azul; o contraste card-vs-fundo fica limpo e sóbrio.</p>
+        <div class="spec">bg: hsl(0 0% 96%) · card: branco</div>
+      </div>
+      <div class="mb">
+        <div class="col" style="background:hsl(0 0% 96%);border-top:3px solid #f43f5e"><div class="ch" style="background:hsl(0 0% 94%)"><div class="ct"><span class="dot" style="background:#f43f5e"></span><span class="cn">Teste</span><span class="cc">0</span></div></div><div class="cb"><div class="empty">Arraste aqui</div></div></div>
+        <div class="col" style="background:hsl(0 0% 96%);border-top:3px solid #f59e0b"><div class="ch" style="background:hsl(0 0% 94%)"><div class="ct"><span class="dot" style="background:#f59e0b"></span><span class="cn">A Fazer</span><span class="cc">6</span></div></div><div class="cb"><div class="card">Levantamento</div><div class="card">Modelar banco</div></div></div>
+        <div class="col" style="background:hsl(0 0% 96%);border-top:3px solid #3b82f6"><div class="ch" style="background:hsl(0 0% 94%)"><div class="ct"><span class="dot" style="background:#3b82f6"></span><span class="cn">Em Andam.</span><span class="cc">0</span></div></div><div class="cb"><div class="empty">Arraste aqui</div></div></div>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div class="opt">
+      <div>
+        <h3>B · Fundo branco-suave + card com sombra</h3>
+        <p>A coluna quase branca (não escurece), e os <b>cards ganham sombra/borda</b> para “subir” do fundo. A separação vem da elevação, não da cor. Estilo Linear.</p>
+        <div class="spec">bg: hsl(0 0% 99%) · card: branco + shadow</div>
+      </div>
+      <div class="mb">
+        <div class="col" style="background:hsl(0 0% 99%);border-top:3px solid #f43f5e"><div class="ch"><div class="ct"><span class="dot" style="background:#f43f5e"></span><span class="cn">Teste</span><span class="cc">0</span></div></div><div class="cb"><div class="empty">Arraste aqui</div></div></div>
+        <div class="col" style="background:hsl(0 0% 99%);border-top:3px solid #f59e0b"><div class="ch"><div class="ct"><span class="dot" style="background:#f59e0b"></span><span class="cn">A Fazer</span><span class="cc">6</span></div></div><div class="cb"><div class="card" style="box-shadow:0 2px 6px rgba(20,30,50,.10)">Levantamento</div><div class="card" style="box-shadow:0 2px 6px rgba(20,30,50,.10)">Modelar banco</div></div></div>
+        <div class="col" style="background:hsl(0 0% 99%);border-top:3px solid #3b82f6"><div class="ch"><div class="ct"><span class="dot" style="background:#3b82f6"></span><span class="cn">Em Andam.</span><span class="cc">0</span></div></div><div class="cb"><div class="empty">Arraste aqui</div></div></div>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div class="opt">
+      <div>
+        <h3>C · Fundo cinza-quente (grafite claro)</h3>
+        <p>Cinza levemente <b>quente</b> (um toque de bege/grafite em vez de azul). Sensação mais “papel”, sóbria e profissional. Cards brancos contrastam bem.</p>
+        <div class="spec">bg: hsl(40 6% 95%) · card: branco</div>
+      </div>
+      <div class="mb">
+        <div class="col" style="background:hsl(40 6% 95%);border-top:3px solid #f43f5e"><div class="ch" style="background:hsl(40 6% 93%)"><div class="ct"><span class="dot" style="background:#f43f5e"></span><span class="cn">Teste</span><span class="cc">0</span></div></div><div class="cb"><div class="empty">Arraste aqui</div></div></div>
+        <div class="col" style="background:hsl(40 6% 95%);border-top:3px solid #f59e0b"><div class="ch" style="background:hsl(40 6% 93%)"><div class="ct"><span class="dot" style="background:#f59e0b"></span><span class="cn">A Fazer</span><span class="cc">6</span></div></div><div class="cb"><div class="card">Levantamento</div><div class="card">Modelar banco</div></div></div>
+        <div class="col" style="background:hsl(40 6% 95%);border-top:3px solid #3b82f6"><div class="ch" style="background:hsl(40 6% 93%)"><div class="ct"><span class="dot" style="background:#3b82f6"></span><span class="cn">Em Andam.</span><span class="cc">0</span></div></div><div class="cb"><div class="empty">Arraste aqui</div></div></div>
+      </div>
+    </div>
+
+    <!-- D -->
+    <div class="opt">
+      <div>
+        <h3>D · Sem fundo, só separadores</h3>
+        <p>Colunas sem caixa/fundo — separadas por linhas verticais finas. Máxima limpeza, tudo respira. Os cards são a única “matéria”. Estilo GitHub Projects.</p>
+        <div class="spec">bg: transparente · divisória entre colunas</div>
+      </div>
+      <div class="mb" style="background:var(--background);border-radius:8px;padding:2px">
+        <div class="col" style="background:transparent;border:none;border-right:1px solid var(--border);border-radius:0"><div class="ch" style="border:none"><div class="ct"><span class="dot" style="background:#f43f5e"></span><span class="cn">Teste</span><span class="cc">0</span></div></div><div class="cb"><div class="empty">—</div></div></div>
+        <div class="col" style="background:transparent;border:none;border-right:1px solid var(--border);border-radius:0"><div class="ch" style="border:none"><div class="ct"><span class="dot" style="background:#f59e0b"></span><span class="cn">A Fazer</span><span class="cc">6</span></div></div><div class="cb"><div class="card">Levantamento</div><div class="card">Modelar banco</div></div></div>
+        <div class="col" style="background:transparent;border:none;border-radius:0"><div class="ch" style="border:none"><div class="ct"><span class="dot" style="background:#3b82f6"></span><span class="cn">Em Andam.</span><span class="cc">0</span></div></div><div class="cb"><div class="empty">—</div></div></div>
+      </div>
+    </div>
+
+    <div class="note"><b>Recomendo a A</b> (cinza-neutro sem matiz): resolve exatamente o problema do azul, mantém o contraste “fundo mais escuro / cards claros” que você descreveu, e é a mudança mais segura. A <b>C</b> (cinza-quente) é a alternativa se quiser um ar mais “papel/sóbrio”.</div>
+  </section>
+
+  <div class="q">
+    <h2>Qual esquema você quer?</h2>
+    <ul>
+      <li><b>A</b> — Cinza-neutro (sem azul), fundo levemente escuro, cards claros. <i>Recomendado.</i></li>
+      <li><b>B</b> — Fundo quase branco, cards com sombra (separação por elevação).</li>
+      <li><b>C</b> — Cinza-quente (grafite/papel), ar mais sóbrio.</li>
+      <li><b>D</b> — Sem caixa, só separadores verticais (máxima limpeza).</li>
+    </ul>
+    <p style="margin:14px 0 0;font-size:13px;color:var(--ink-2)">Nenhuma muda cor de letra nem formato — só o fundo/estrutura da coluna. Escolha e eu implemento (e ajusto o tema dark junto).</p>
+  </div>
+</div>

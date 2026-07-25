@@ -1,0 +1,179 @@
+<title>Plano — Filtros expandidos + filtro por coluna</title>
+<style>
+  :root{--bg:#f7f8fa;--surface:#ffffff;--surface-2:#f1f2f5;--border:#e2e4ea;--border-strong:#cfd2db;--ink:#1c1f26;--ink-2:#565b66;--ink-3:#868b96;--accent:#5b5bd6;--accent-soft:#ecebfb;--ok:#17915b;--ok-soft:#e2f4ea;--warn:#b3730a;--warn-soft:#fbeed6;--bad:#cc3340;--bad-soft:#fbe4e6;--mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  @media(prefers-color-scheme:dark){:root{--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}}
+  :root[data-theme="dark"]{--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}
+  :root[data-theme="light"]{--bg:#f7f8fa;--surface:#ffffff;--surface-2:#f1f2f5;--border:#e2e4ea;--border-strong:#cfd2db;--ink:#1c1f26;--ink-2:#565b66;--ink-3:#868b96;--accent:#5b5bd6;--accent-soft:#ecebfb;--ok:#17915b;--ok-soft:#e2f4ea;--warn:#b3730a;--warn-soft:#fbeed6;--bad:#cc3340;--bad-soft:#fbe4e6;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px;}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600;}
+  h1{font-size:30px;line-height:1.15;margin:6px 0 10px;text-wrap:balance;letter-spacing:-.01em;}
+  .lede{color:var(--ink-2);font-size:15px;max-width:64ch;}
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
+  .pill{font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--border-strong);color:var(--ink-2);background:var(--surface);}
+  .pill.no{color:var(--ok);border-color:var(--ok);background:var(--ok-soft);}
+  section{margin-top:46px;}
+  .sec-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:16px;}
+  .sec-num{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);}
+  .sec-head h2{font-size:20px;margin:0;letter-spacing:-.01em;}
+  .sec-sub{color:var(--ink-2);font-size:14px;margin:0 0 20px;}
+  table.mkt{width:100%;border-collapse:collapse;font-size:13px;}
+  table.mkt th,table.mkt td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+  table.mkt th{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);}
+  table.mkt td:first-child{font-weight:600;white-space:nowrap;}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+  @media(max-width:720px){.ba{grid-template-columns:1fr;}}
+  .ba-col{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface);}
+  .ba-col .label{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+  .ba-col.after .label{color:var(--accent);}
+  .ba-col .label::before{content:"";width:6px;height:6px;border-radius:999px;background:var(--ink-3);}
+  .ba-col.after .label::before{background:var(--accent);}
+  .ba-note{color:var(--ink-2);font-size:13px;margin-top:12px;}
+  /* mock painel filtros */
+  .fp{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface);max-width:300px;}
+  .fp-head{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;}
+  .fp-row{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);font-size:13px;}
+  .fp-row .lbl{font-weight:500;} .fp-row .sum{margin-left:auto;color:var(--ink-3);font-size:12px;} .fp-row .chev{color:var(--ink-3);font-size:11px;}
+  .fp-row.new{background:var(--accent-soft);} .fp-row.new .lbl{color:var(--accent);}
+  .fp-foot{padding:7px 14px;font-size:11px;color:var(--ink-3);background:var(--surface-2);}
+  .tgl{width:30px;height:17px;border-radius:999px;background:var(--border-strong);position:relative;flex:none;margin-left:auto;}
+  .tgl::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:999px;background:#fff;}
+  /* mock coluna */
+  .kcol{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .kcol-head{padding:8px 10px;border-bottom:1px solid var(--border);background:var(--surface);}
+  .kcol-top{display:flex;align-items:center;gap:7px;}
+  .dot{width:9px;height:9px;border-radius:999px;flex:none;} .kcol-title{font-size:13px;font-weight:600;}
+  .kbadge{font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border-strong);color:var(--ink-2);}
+  .kbtns{margin-left:auto;display:flex;gap:3px;} .kbtn{width:16px;height:16px;border-radius:4px;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--ink-3);}
+  .kbtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);}
+  .filterbar{margin-top:6px;display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--accent-soft);border-radius:6px;font-size:10px;color:var(--accent);}
+  .callouts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;}
+  @media(max-width:680px){.callouts{grid-template-columns:1fr;}}
+  .call{border:1px solid var(--border);border-radius:10px;padding:14px 16px;background:var(--surface);}
+  .call h3{font-size:13px;margin:0 0 6px;display:flex;align-items:center;gap:8px;} .call h3::before{content:"";width:8px;height:8px;border-radius:999px;background:var(--accent);}
+  .call p{font-size:13px;color:var(--ink-2);margin:0;}
+  .note{margin-top:18px;border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 8px 8px 0;font-size:13.5px;} .note b{font-weight:700;}
+  table.dec{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;}
+  table.dec th,table.dec td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);}
+  table.dec th{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);}
+  table.dec td:first-child{font-weight:500;} .file{font-family:var(--mono);font-size:11px;color:var(--ink-2);}
+  .q{margin-top:46px;border:1px solid var(--border);border-radius:12px;padding:22px 24px;background:var(--surface);}
+  .q h2{font-size:17px;margin:0 0 10px;} .q ul{margin:0;padding-left:18px;font-size:14px;} .q li{margin-bottom:8px;} .q b{color:var(--accent);}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">GestãoPro · Kanban · Filtros</div>
+    <h1>Mais filtros no quadro + filtro por coluna</h1>
+    <p class="lede">O card tem muita informação, mas o painel só filtra por 4 coisas. E o filtro é sempre do quadro inteiro. Proposta em duas frentes: expandir os filtros globais (aproveitando os campos do card) e adicionar um filtro que refina só uma coluna — como Jira e Linear fazem. Nada implementado; plano para decidir.</p>
+    <div class="meta-row">
+      <span class="pill no">Sem migration</span>
+      <span class="pill">Padrão Jira / Linear</span>
+      <span class="pill">Persistido por projeto</span>
+    </div>
+  </header>
+
+  <!-- 1. MERCADO -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Como o mercado resolve</h2></div>
+    <p class="sec-sub">As duas frentes existem nos líderes — não estou inventando. Cada uma tem um papel distinto.</p>
+    <table class="mkt">
+      <tr><th>Sistema</th><th>Filtro global do quadro</th><th>Refino por coluna/grupo</th></tr>
+      <tr><td>Jira</td><td>Barra de filtros + JQL; "quick filters"</td><td>Colunas com contagem; filtros aplicam ao board todo</td></tr>
+      <tr><td>Linear</td><td>Filtro por view (múltiplos atributos combináveis)</td><td>Sub-grupos com filtro próprio</td></tr>
+      <tr><td>ClickUp</td><td>Filtros por qualquer campo (Group by + Filter)</td><td>Filtro por grupo/coluna independente</td></tr>
+      <tr><td>Trello</td><td>Filtro de cards por membro/label/data</td><td>—</td></tr>
+    </table>
+    <div class="note">Convergência: <b>filtro global combinando vários campos</b> + (nos mais avançados) <b>refino local por coluna</b>. É exatamente a divisão das frentes 02 e 03.</div>
+  </section>
+
+  <!-- 2. FILTROS GLOBAIS EXPANDIDOS -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>Frente A — Mais filtros no painel do quadro</h2></div>
+    <p class="sec-sub">Mesmo painel accordion de hoje, com novas seções aproveitando os campos que o card já tem. Cada uma no estilo que já existe (chips ou intervalo De/Até).</p>
+    <div class="ba">
+      <div class="ba-col before">
+        <div class="label">Hoje — 4 filtros</div>
+        <div class="fp">
+          <div class="fp-head">▼ Filtros</div>
+          <div class="fp-row"><span class="lbl">Responsável</span><span class="sum">Todos</span><span class="chev">▾</span></div>
+          <div class="fp-row"><span class="lbl">Prioridade</span><span class="sum">Todas</span><span class="chev">▾</span></div>
+          <div class="fp-row"><span class="lbl">Prazo</span><span class="sum">Qualquer</span><span class="chev">▾</span></div>
+          <div class="fp-row"><span class="lbl">Apenas bloqueadas</span><span class="tgl"></span></div>
+          <div class="fp-foot">24 de 24 atividades</div>
+        </div>
+      </div>
+      <div class="ba-col after">
+        <div class="label">Proposto — campos do card</div>
+        <div class="fp">
+          <div class="fp-head">▼ Filtros</div>
+          <div class="fp-row"><span class="lbl">Responsável</span><span class="sum">Todos</span><span class="chev">▾</span></div>
+          <div class="fp-row new"><span class="lbl">Coluna / Status</span><span class="sum">Todas</span><span class="chev">▾</span></div>
+          <div class="fp-row new"><span class="lbl">Setor</span><span class="sum">Todos</span><span class="chev">▾</span></div>
+          <div class="fp-row"><span class="lbl">Prioridade</span><span class="sum">Todas</span><span class="chev">▾</span></div>
+          <div class="fp-row"><span class="lbl">Prazo</span><span class="sum">Qualquer</span><span class="chev">▾</span></div>
+          <div class="fp-row new"><span class="lbl">Início</span><span class="sum">Qualquer</span><span class="chev">▾</span></div>
+          <div class="fp-row new"><span class="lbl">Horas</span><span class="sum">Qualquer</span><span class="chev">▾</span></div>
+          <div class="fp-row new"><span class="lbl">Tipo (EAP)</span><span class="sum">Todos</span><span class="chev">▾</span></div>
+          <div class="fp-row new"><span class="lbl">Participante</span><span class="sum">Todos</span><span class="chev">▾</span></div>
+          <div class="fp-row"><span class="lbl">Etiquetas</span><span class="sum">Todas</span><span class="chev">▾</span></div>
+          <div class="fp-row"><span class="lbl">Apenas bloqueadas</span><span class="tgl"></span></div>
+          <div class="fp-foot">24 de 24 atividades</div>
+        </div>
+        <p class="ba-note">Seções novas em <b style="color:var(--accent)">destaque</b>. Continua accordion (uma aberta por vez), então o painel não fica gigante — cada uma abre só quando você clica.</p>
+      </div>
+    </div>
+    <table class="dec">
+      <tr><th>Novo filtro</th><th>Formato</th><th>Fonte (já existe)</th></tr>
+      <tr><td>Coluna / Status</td><td>chips (colunas do fluxo)</td><td class="file">stages / workflow_stage_id</td></tr>
+      <tr><td>Setor</td><td>chips</td><td class="file">profileSectorMap</td></tr>
+      <tr><td>Início</td><td>intervalo De/Até</td><td class="file">start_date</td></tr>
+      <tr><td>Horas</td><td>faixa mín/máx</td><td class="file">hours</td></tr>
+      <tr><td>Tipo EAP</td><td>chips (Atividade/Pacote/Fase/Marco)</td><td class="file">item_type / is_milestone</td></tr>
+      <tr><td>Participante</td><td>chips (multi)</td><td class="file">participants[]</td></tr>
+    </table>
+  </section>
+
+  <!-- 3. FILTRO POR COLUNA -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Frente B — Filtro por coluna (o "individualizado")</h2></div>
+    <p class="sec-sub">Além do filtro global, cada coluna ganha um ícone de filtro discreto (ao lado do de ordenar) que refina só aquela coluna — sem afetar as outras. Estado isolado por coluna, como já é a ordenação.</p>
+    <div class="ba">
+      <div class="ba-col before">
+        <div class="label">Hoje</div>
+        <div class="kcol">
+          <div class="kcol-head"><div class="kcol-top"><span class="dot" style="background:#5b5bd6"></span><span class="kcol-title">Em execução</span><span class="kbadge">7</span><span class="kbtns"><span class="kbtn">↕</span><span class="kbtn">‹‹</span><span class="kbtn">+</span></span></div></div>
+        </div>
+        <p class="ba-note">A coluna só tem ordenar/recolher/criar. Para ver "só as do Fulano em execução", você tem que filtrar o quadro inteiro.</p>
+      </div>
+      <div class="ba-col after">
+        <div class="label">Proposto</div>
+        <div class="kcol">
+          <div class="kcol-head">
+            <div class="kcol-top"><span class="dot" style="background:#5b5bd6"></span><span class="kcol-title">Em execução</span><span class="kbadge">3 / 7</span><span class="kbtns"><span class="kbtn on">▽</span><span class="kbtn">↕</span><span class="kbtn">‹‹</span><span class="kbtn">+</span></span></div>
+            <div class="filterbar">▽ Filtrando: Alta · Fulano <span style="margin-left:auto">✕</span></div>
+          </div>
+        </div>
+        <p class="ba-note">Ícone <b style="color:var(--accent)">▽</b> abre um mini-filtro só dessa coluna. O contador mostra <b>3 / 7</b> (filtrados / total) e uma faixa indica o filtro ativo. As outras colunas ficam intactas.</p>
+      </div>
+    </div>
+    <div class="callouts">
+      <div class="call"><h3>Isolado por coluna</h3><p>Cada coluna tem seu próprio filtro; um não afeta o outro. Estado local, mesmo padrão da ordenação.</p></div>
+      <div class="call"><h3>Combina com o global</h3><p>O filtro do quadro reduz tudo; o da coluna refina ainda mais só ali. Somam-se.</p></div>
+      <div class="call"><h3>Discreto</h3><p>Só um ícone no header; fica azul e mostra faixa quando ativo. Header não incha.</p></div>
+      <div class="call"><h3>Campos enxutos</h3><p>No filtro por coluna, só o essencial (responsável, prioridade) — não repito o painel inteiro.</p></div>
+    </div>
+  </section>
+
+  <!-- 4. DECISÕES -->
+  <div class="q">
+    <h2>O que preciso que você decida</h2>
+    <ul>
+      <li><b>Frente A (filtros globais):</b> adiciono as 6 seções novas (Coluna/Status, Setor, Início, Horas, Tipo EAP, Participante)? Ou só algumas — quais cortar?</li>
+      <li><b>Frente B (filtro por coluna):</b> implemento agora, ou faço a Frente A primeiro e a B depois?</li>
+      <li><b>Filtro por coluna — profundidade:</b> só responsável + prioridade (rápido), ou os mesmos campos do global?</li>
+      <li><b>Ordem:</b> sugiro <b>A primeiro</b> (mais impacto, mexe só no painel) e <b>B em seguida</b>. Concorda?</li>
+    </ul>
+    <p style="margin:14px 0 0;font-size:13px;color:var(--ink-2)">Tudo <b>front-end</b>, sem migration. Persistência por projeto no mesmo esquema atual.</p>
+  </div>
+</div>

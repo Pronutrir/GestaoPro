@@ -1,0 +1,150 @@
+<title>Proposta — TAP enxuto</title>
+<style>
+  :root{--bg:#fbfbfc;--surface:#ffffff;--surface-2:#f4f5f7;--border:#e7e8ec;--border-strong:#d6d8de;--ink:#1a1c22;--ink-2:#565b66;--ink-3:#8a8f9a;--accent:#4f46e5;--accent-soft:#eef0fe;--ok:#16a34a;--ok-soft:#e7f6ec;--warn:#d97706;--warn-soft:#fdf0dc;--bad:#dc2626;--bad-soft:#fce9e9;--mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  @media(prefers-color-scheme:dark){:root{--bg:#131417;--surface:#1b1d22;--surface-2:#23262c;--border:#2c2f36;--border-strong:#3a3d45;--ink:#eceef2;--ink-2:#a6abb5;--ink-3:#767b85;--accent:#8b87f5;--accent-soft:#23233a;--ok:#4ade80;--ok-soft:#14301f;--warn:#e0a44a;--warn-soft:#31260f;--bad:#f87171;--bad-soft:#331819;}}
+  :root[data-theme="dark"]{--bg:#131417;--surface:#1b1d22;--surface-2:#23262c;--border:#2c2f36;--border-strong:#3a3d45;--ink:#eceef2;--ink-2:#a6abb5;--ink-3:#767b85;--accent:#8b87f5;--accent-soft:#23233a;--ok:#4ade80;--ok-soft:#14301f;--warn:#e0a44a;--warn-soft:#31260f;--bad:#f87171;--bad-soft:#331819;}
+  :root[data-theme="light"]{--bg:#fbfbfc;--surface:#ffffff;--surface-2:#f4f5f7;--border:#e7e8ec;--border-strong:#d6d8de;--ink:#1a1c22;--ink-2:#565b66;--ink-3:#8a8f9a;--accent:#4f46e5;--accent-soft:#eef0fe;--ok:#16a34a;--ok-soft:#e7f6ec;--warn:#d97706;--warn-soft:#fdf0dc;--bad:#dc2626;--bad-soft:#fce9e9;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:44px 24px 96px;}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:600;}
+  h1{font-size:31px;line-height:1.12;margin:8px 0 12px;letter-spacing:-.02em;text-wrap:balance;}
+  .lede{color:var(--ink-2);font-size:16px;max-width:68ch;}
+  section{margin-top:50px;}
+  .sec-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:9px;margin-bottom:20px;}
+  .sec-num{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);}
+  .sec-head h2{font-size:21px;margin:0;letter-spacing:-.01em;}
+  .sec-sub{color:var(--ink-2);font-size:14.5px;margin:-8px 0 22px;max-width:72ch;}
+  .diag{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:720px){.diag{grid-template-columns:1fr;}}
+  .dcard{border:1px solid var(--border);border-left:3px solid var(--bad);border-radius:10px;padding:13px 15px;background:var(--surface);}
+  .dcard.warn{border-left-color:var(--warn);}
+  .dcard h3{font-size:14px;margin:0 0 4px;} .dcard p{font-size:13px;color:var(--ink-2);margin:0;}
+  .dcard code{font-family:var(--mono);font-size:11px;background:var(--surface-2);padding:1px 5px;border-radius:4px;}
+  /* comparativo table */
+  table.cmp{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:4px;}
+  table.cmp th,table.cmp td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+  table.cmp th{font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);}
+  table.cmp td:first-child{font-weight:600;white-space:nowrap;}
+  .tag{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:999px;font-weight:700;white-space:nowrap;}
+  .t-keep{background:var(--ok-soft);color:var(--ok);} .t-cut{background:var(--bad-soft);color:var(--bad);} .t-merge{background:var(--warn-soft);color:var(--warn);} .t-add{background:var(--accent-soft);color:var(--accent);} .t-fix{background:var(--surface-2);color:var(--ink-2);}
+  /* proposed structure */
+  .charter{border:1px solid var(--border-strong);border-radius:14px;overflow:hidden;background:var(--surface);box-shadow:0 1px 3px rgba(16,24,40,.08);}
+  .ch-head{padding:16px 20px;border-bottom:1px solid var(--border);}
+  .ch-head .t1{font-size:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--accent);}
+  .ch-head .t2{font-size:18px;font-weight:700;margin-top:2px;}
+  .ch-sec{border-bottom:1px solid var(--border);padding:14px 20px;}
+  .ch-sec:last-child{border-bottom:none;}
+  .ch-sec .n{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-family:var(--mono);font-weight:700;font-size:11px;margin-right:8px;}
+  .ch-sec .title{font-size:14px;font-weight:600;display:flex;align-items:center;}
+  .ch-sec .fields{font-size:12.5px;color:var(--ink-3);margin:6px 0 0 30px;}
+  .ch-sec .auto{font-family:var(--mono);font-size:10px;color:var(--ok);background:var(--ok-soft);padding:1px 6px;border-radius:4px;margin-left:6px;}
+  .note{margin-top:22px;border-left:3px solid var(--accent);background:var(--accent-soft);padding:14px 18px;border-radius:0 10px 10px 0;font-size:14px;} .note b{font-weight:700;}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;} @media(max-width:760px){.cols{grid-template-columns:1fr;}}
+  .col-lbl{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin-bottom:10px;}
+  ul.plain{margin:0;padding-left:0;list-style:none;font-size:13.5px;}
+  ul.plain li{padding:5px 0 5px 20px;position:relative;color:var(--ink-2);}
+  ul.plain li::before{content:"—";position:absolute;left:0;color:var(--ink-3);}
+  .q{margin-top:50px;border:1px solid var(--border);border-radius:14px;padding:24px 26px;background:var(--surface);}
+  .q h2{font-size:18px;margin:0 0 12px;} .q ul{margin:0;padding-left:20px;font-size:14.5px;} .q li{margin-bottom:9px;} .q b{color:var(--accent);}
+  .pill-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">GestãoPro · Módulo TAP · Proposta</div>
+    <h1>Um Termo de Abertura enxuto, coerente e alinhado ao PMBOK</h1>
+    <p class="lede">Inventariei o TAP atual e cruzei com o PMBOK e com o que ClickUp/Asana/Notion adotam. O módulo tem boas ideias (SMART, benefícios, aprovações), mas está <b>inconsistente</b>: seção numérica sumida, campos salvos que nunca aparecem na tela, colunas de banco órfãs e migração de legado inacabada. A proposta: <b>corrigir, enxugar e fechar</b> num charter de 1 tela que autoriza o projeto sem repetir o que já vive no Cronograma/EAP.</p>
+  </header>
+
+  <!-- DIAGNÓSTICO -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>O que está quebrado hoje</h2></div>
+    <div class="diag">
+      <div class="dcard"><h3>Seção 5 sumiu</h3><p>As seções vão 1, 2, 3, 4, <b>6</b>, 7 — a numeração pulou a 5. Refatoração deixada pela metade.</p></div>
+      <div class="dcard"><h3>Campos-fantasma</h3><p><code>deliverables</code>, <code>assumptions</code>, <code>approval_requirements</code>, <code>success_criteria</code> são salvos no banco mas <b>não têm campo na tela</b>. "Premissas" do PMBOK desapareceu.</p></div>
+      <div class="dcard"><h3>Colunas órfãs</h3><p><code>restrictions</code>, <code>objective</code>, <code>root_cause</code>, <code>manager</code>, <code>sponsor</code> (nativa) existem no banco mas <b>o TAP não as edita/mostra</b>. Sponsor até é duplicado (jsonb vs coluna).</p></div>
+      <div class="dcard warn"><h3>Sem validação nem trava</h3><p>Salva vazio sem checar nada; qualquer um edita (não há "só gestor"); a "aprovação" é texto livre, <b>sem assinatura nem trava de status</b>.</p></div>
+      <div class="dcard warn"><h3>Sem exportação real</h3><p>Não há PDF — só depende do "Imprimir" do navegador. Um TAP precisa virar documento compartilhável.</p></div>
+      <div class="dcard warn"><h3>Legado coexistindo</h3><p>Ainda há código lendo o TAP de <code>project.description</code> como JSON. Migração para <code>charter_data</code> não foi concluída.</p></div>
+    </div>
+  </section>
+
+  <!-- COMPARATIVO -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>Seu TAP × PMBOK × decisão</h2></div>
+    <p class="sec-sub">O PMBOK diz que o charter é curto (1–2 páginas) e <b>não</b> repete o plano do projeto. Como vocês já têm Cronograma, EAP, Riscos e Equipe em módulos próprios, o TAP deve <b>referenciá-los</b>, não recadastrá-los.</p>
+    <table class="cmp">
+      <tr><th>Elemento</th><th>Hoje</th><th>PMBOK</th><th>Decisão</th></tr>
+      <tr><td>Identificação (título, código, líder, datas, orçamento, status)</td><td>✓ tem</td><td>✓ núcleo</td><td><span class="tag t-keep">manter</span> puxar auto do projeto</td></tr>
+      <tr><td>Patrocinador (Sponsor)</td><td>duplicado (jsonb + coluna)</td><td>✓ obrigatório</td><td><span class="tag t-fix">unificar</span> uma fonte só</td></tr>
+      <tr><td>Gerente do projeto + autoridade</td><td>coluna <code>manager</code> sem UI</td><td>✓ obrigatório</td><td><span class="tag t-add">adicionar</span> campo real</td></tr>
+      <tr><td>Problema / Justificativa</td><td>✓ tem</td><td>✓ propósito</td><td><span class="tag t-keep">manter</span></td></tr>
+      <tr><td>Objetivo SMART (5 linhas)</td><td>✓ tem</td><td>objetivos mensuráveis</td><td><span class="tag t-keep">manter</span> é um diferencial bom</td></tr>
+      <tr><td>Escopo incluído / excluído</td><td>✓ tem</td><td>✓ escopo de alto nível</td><td><span class="tag t-keep">manter</span></td></tr>
+      <tr><td>Premissas &amp; Restrições</td><td>fantasma / sem UI</td><td>✓ obrigatório</td><td><span class="tag t-add">recuperar</span> 1 card enxuto</td></tr>
+      <tr><td>Benefícios + Critérios de sucesso (tabela)</td><td>✓ tem</td><td>✓ critérios de sucesso</td><td><span class="tag t-keep">manter</span></td></tr>
+      <tr><td>Marcos principais</td><td>ausente</td><td>✓ cronograma resumido</td><td><span class="tag t-merge">referenciar</span> do Cronograma (não recadastrar)</td></tr>
+      <tr><td>Riscos iniciais</td><td>✓ (lê do módulo Riscos)</td><td>✓ riscos de alto nível</td><td><span class="tag t-keep">manter</span> como referência</td></tr>
+      <tr><td>Stakeholders / Equipe</td><td>✓ (gestão embutida)</td><td>✓ partes interessadas</td><td><span class="tag t-merge">enxugar</span> mostrar equipe, gerir no módulo Equipe</td></tr>
+      <tr><td>Aprovação formal</td><td>tabela de texto</td><td>✓ assinatura do sponsor</td><td><span class="tag t-fix">melhorar</span> aprovar = trava + carimbo de data/autor</td></tr>
+      <tr><td>Causa raiz / Req. regulatórios / Entregáveis textuais</td><td>colunas órfãs</td><td>—</td><td><span class="tag t-cut">cortar</span> do TAP (vivem em outro lugar)</td></tr>
+    </table>
+  </section>
+
+  <!-- ESTRUTURA PROPOSTA -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>A estrutura enxuta proposta</h2></div>
+    <p class="sec-sub">7 seções coerentes e numeradas, 1 tela. O que já existe em outro módulo entra como <span class="auto" style="margin:0">automático</span> (só leitura, referenciado) — não se recadastra.</p>
+    <div class="charter">
+      <div class="ch-head"><div class="t1">Termo de Abertura do Projeto</div><div class="t2">Agente de IA Tasy — Pops</div></div>
+      <div class="ch-sec"><div class="title"><span class="n">1</span>Identificação<span class="auto">auto do projeto</span></div><div class="fields">Título · Código · Líder · Patrocinador · Gerente + autoridade · Datas · Orçamento · Status</div></div>
+      <div class="ch-sec"><div class="title"><span class="n">2</span>Problema &amp; Justificativa</div><div class="fields">Situação atual / problema · Justificativa estratégica (com apoio de IA)</div></div>
+      <div class="ch-sec"><div class="title"><span class="n">3</span>Objetivo SMART</div><div class="fields">Específico · Mensurável · Atingível · Relevante · Temporal</div></div>
+      <div class="ch-sec"><div class="title"><span class="n">4</span>Escopo</div><div class="fields">Incluído · Excluído · Fases/entregáveis <span class="auto">auto da EAP</span></div></div>
+      <div class="ch-sec"><div class="title"><span class="n">5</span>Premissas &amp; Restrições</div><div class="fields">Premissas assumidas · Restrições (prazo, custo, recursos) — <b>recuperado</b></div></div>
+      <div class="ch-sec"><div class="title"><span class="n">6</span>Benefícios, Sucesso, Riscos &amp; Equipe</div><div class="fields">Tabela de benefícios/indicadores/metas · Marcos <span class="auto">auto do Cronograma</span> · Riscos <span class="auto">auto do módulo Riscos</span> · Equipe <span class="auto">auto</span></div></div>
+      <div class="ch-sec"><div class="title"><span class="n">7</span>Aprovação</div><div class="fields">Aprovar TAP = trava a edição + carimbo (quem/quando) · só gestor/admin aprova · exportar PDF</div></div>
+    </div>
+    <div class="note"><b>Diferença central:</b> hoje o TAP tenta ser um mini-plano com campos soltos; a proposta o transforma no que ele deve ser — <b>alinhamento + autorização</b>. Marcos, Riscos, EAP e Equipe são <b>puxados</b> dos módulos que já os gerenciam. Menos digitação, mais consistência.</p></div>
+  </section>
+
+  <!-- MELHORIAS FUNCIONAIS -->
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>Além de enxugar — o que fecha o módulo</h2></div>
+    <div class="cols">
+      <div>
+        <div class="col-lbl">Correções (dívida técnica)</div>
+        <ul class="plain">
+          <li>Renumerar seções (fim do "pula a 5")</li>
+          <li>Remover campos-fantasma ou dar UI a eles</li>
+          <li>Unificar Sponsor (uma fonte só)</li>
+          <li>Concluir migração de <code>description</code> → <code>charter_data</code></li>
+          <li>Gating: só gestor/admin edita/aprova</li>
+        </ul>
+      </div>
+      <div>
+        <div class="col-lbl">Novos (valor)</div>
+        <ul class="plain">
+          <li>Premissas &amp; Restrições de volta</li>
+          <li>Gerente + nível de autoridade</li>
+          <li>Aprovar = trava + carimbo quem/quando</li>
+          <li>Marcos referenciados do Cronograma</li>
+          <li>Exportar PDF do TAP (documento real)</li>
+          <li>Indicador de completude do charter</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- DECISÕES -->
+  <div class="q">
+    <h2>O que preciso que você decida</h2>
+    <ul>
+      <li><b>Aprova a estrutura de 7 seções</b> (seção 03)? Alguma seção a mais/a menos para a realidade de vocês?</li>
+      <li><b>Referências automáticas:</b> ok puxar Marcos (Cronograma), Riscos, Fases (EAP) e Equipe como só-leitura no TAP, em vez de recadastrar?</li>
+      <li><b>Aprovação com trava:</b> ao aprovar, o TAP fica bloqueado para edição (só gestor reabre) — quer esse comportamento?</li>
+      <li><b>Escopo do 1º passo:</b> começo pelas <b>correções</b> (renumerar, tirar fantasmas, unificar sponsor, gating) — que deixam o módulo consistente sem mudar a cara — e depois os <b>novos</b> (premissas, aprovação-trava, PDF)? Recomendado.</li>
+    </ul>
+    <p style="margin:14px 0 0;font-size:13px;color:var(--ink-2)">As correções e a maioria dos novos são <b>front-end</b>. A trava de aprovação e o PDF podem precisar de 1 coluna nova (<code>charter_approved_at</code>) — te aviso se for o caso, com a migration tolerante.</p>
+  </div>
+</div>
