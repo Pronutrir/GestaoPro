@@ -21,13 +21,16 @@
 
 -- Um item é "agrupador" se pode ter filhos (fase ou pacote). Caso contrário,
 -- é folha (atividade, marco, historia_usuario).
+-- historia_usuario esta FORA da EAP (contexto agil) e a 150000 preserva o tipo
+-- de proposito. Como ela pode ter subitens (a base tem 9 casos reais), conta
+-- como agrupador aqui — senao a propria base existente violaria a regra.
 CREATE OR REPLACE FUNCTION public.eap_is_group(_item_type text, _is_milestone boolean)
 RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
 AS $$
   SELECT (NOT COALESCE(_is_milestone, false))
-     AND _item_type IN ('fase', 'pacote');
+     AND _item_type IN ('fase', 'pacote', 'historia_usuario');
 $$;
 
 CREATE OR REPLACE FUNCTION public.validate_activity_hierarchy()
