@@ -390,6 +390,11 @@ export const EditActivityDialog = ({
     () => sortByWbsThenDisplayOrder(subActivities),
     [subActivities]
   );
+  // Marco não tem aba Subatividades; se o item virar marco enquanto ela estiver
+  // aberta, volta para Detalhes (evita ficar numa aba invisível).
+  useEffect(() => {
+    if (formData.is_milestone && activeTab === "subtasks") setActiveTab("details");
+  }, [formData.is_milestone, activeTab]);
 
   // Horas do pai: quando há subatividades, o planejado é um rollup automático
   // (soma dos filhos diretos), somente-leitura — não existe mais divergência
@@ -1765,7 +1770,9 @@ export const EditActivityDialog = ({
                   <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{formData.participants.filter(Boolean).length}</span>
                 )}
               </TabsTrigger>
-              {act && projectId && (
+              {/* Subatividades: só para itens que AGRUPAM na EAP. Marco é um ponto
+                  no tempo (folha) — nunca tem subitens, então a aba é ocultada. */}
+              {act && projectId && !formData.is_milestone && (
                 <TabsTrigger value="subtasks" className="text-xs gap-1.5 data-[state=active]:bg-background">
                   <ListTree className="w-3.5 h-3.5" /> Subatividades
                   {subActivities.length > 0 && (
