@@ -28,6 +28,17 @@ import { useProjectAccess } from '@/hooks/useProjectAccess';
 
 type PeriodKey = '30d' | '90d' | '180d' | '365d';
 
+// Tipos mínimos das entidades usadas neste dashboard. Documentam os campos
+// realmente acessados; o index signature preserva os acessos dinâmicos
+// existentes sem quebrar (pragmático, sem gerar tipos completos do Supabase).
+interface IndProject { id: string; title?: string | null; status?: string | null; owner?: string | null; manager?: string | null; budget_planned?: number | null; budget_used?: number | null; [k: string]: any }
+interface IndActivity { id: string; project_id?: string | null; status?: string | null; assigned_to?: string | null; created_at?: string | null; completed_at?: string | null; end_date?: string | null; hours?: number | null; workflow_stage_id?: string | null; title?: string | null; participants?: string[] | null; [k: string]: any }
+interface IndTimeEntry { project_id?: string | null; activity_id?: string | null; duration_minutes?: number | null; created_at?: string | null; [k: string]: any }
+interface IndChangeRequest { project_id?: string | null; status?: string | null; created_at?: string | null; updated_at?: string | null; [k: string]: any }
+interface IndWorkflowStage { id: string; project_id?: string | null; title?: string | null; color?: string | null; display_order?: number | null; is_visible?: boolean | null; is_final?: boolean | null; is_blocked?: boolean | null; [k: string]: any }
+interface IndProfile { id: string; full_name?: string | null; sector?: string | null; [k: string]: any }
+interface IndProjectMember { project_id?: string | null; user_id?: string | null; sector?: string | null; [k: string]: any }
+
 const PERIOD_LABEL: Record<PeriodKey, string> = {
   '30d': 'Últimos 30 dias',
   '90d': 'Últimos 90 dias',
@@ -73,13 +84,13 @@ export default function IndicadoresLabPage() {
 
   const [period, setPeriod] = useState<PeriodKey>('90d');
   const [loading, setLoading] = useState(true);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [activities, setActivities] = useState<any[]>([]);
-  const [timeEntries, setTimeEntries] = useState<any[]>([]);
-  const [changeRequests, setChangeRequests] = useState<any[]>([]);
-  const [workflowStages, setWorkflowStages] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<any[]>([]);
-  const [projectMembers, setProjectMembers] = useState<any[]>([]);
+  const [projects, setProjects] = useState<IndProject[]>([]);
+  const [activities, setActivities] = useState<IndActivity[]>([]);
+  const [timeEntries, setTimeEntries] = useState<IndTimeEntry[]>([]);
+  const [changeRequests, setChangeRequests] = useState<IndChangeRequest[]>([]);
+  const [workflowStages, setWorkflowStages] = useState<IndWorkflowStage[]>([]);
+  const [profiles, setProfiles] = useState<IndProfile[]>([]);
+  const [projectMembers, setProjectMembers] = useState<IndProjectMember[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filterSector, setFilterSector] = useState<string>('all');
   const [filterManager, setFilterManager] = useState<string>('all');
@@ -158,29 +169,22 @@ export default function IndicadoresLabPage() {
   useEffect(() => {
     if (accessLoading) return;
 
-    const channel = supabase
-      .channel('indicadores-lab-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
-        void fetchAll();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, () => {
-        void fetchAll();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' }, () => {
-        void fetchAll();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'change_requests' }, () => {
-        void fetchAll();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_members' }, () => {
-        void fetchAll();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        void fetchAll();
-      })
-      .subscribe();
+    // Debounce do refetch: várias mudanças em sequência (ex.: import em lote,
+    // várias tabelas afetadas) viram UM fetchAll, evitando "refetch storm".
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefetch = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void fetchAll(); }, 800);
+    };
+    const tables = ['projects', 'activities', 'time_entries', 'change_requests', 'project_members', 'profiles'];
+    let channel = supabase.channel('indicadores-lab-realtime');
+    tables.forEach((table) => {
+      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRefetch);
+    });
+    channel.subscribe();
 
     return () => {
+      if (timer) clearTimeout(timer);
       supabase.removeChannel(channel);
     };
   }, [accessLoading, fetchAll]);
@@ -292,8 +296,17 @@ export default function IndicadoresLabPage() {
       return completedAt <= due;
     }).length;
 
+    // Índice atividades-do-período por projeto: evita .filter O(n) dentro do
+    // loop de projetos (era O(projetos × atividades)).
+    const periodActivitiesByProject = new Map<string, IndActivity[]>();
+    periodActivities.forEach((a) => {
+      const key = a.project_id || '';
+      const arr = periodActivitiesByProject.get(key);
+      if (arr) arr.push(a); else periodActivitiesByProject.set(key, [a]);
+    });
+
     const projectHealth = projectsPeriodScoped.map((p) => {
-      const pa = periodActivities.filter((a) => a.project_id === p.id);
+      const pa = periodActivitiesByProject.get(p.id) || [];
       const pOverdue = pa.filter((a) => {
         const due = toDate(a.end_date);
         if (!due) return false;
@@ -967,7 +980,10 @@ export default function IndicadoresLabPage() {
         atividade: activity.title || 'Atividade',
         projeto: projectById.get(activity.project_id)?.title || 'Projeto sem título',
         status: STATUS_LABELS[activity.status] || activity.status || 'Sem status',
-        prazo: activity.end_date ? format(parseISO(activity.end_date), 'dd/MM/yyyy') : 'Sem data',
+        prazo: (() => {
+          const d = toDate(activity.end_date);
+          return d ? format(d, 'dd/MM/yyyy', { locale: ptBR }) : 'Sem data';
+        })(),
       }))
       .sort((a, b) => a.projeto.localeCompare(b.projeto))
       .slice(0, 60);
@@ -978,6 +994,12 @@ export default function IndicadoresLabPage() {
     const stillExists = strategicSectorOptions.includes(strategicSectorFilter);
     if (!stillExists) setStrategicSectorFilter('all');
   }, [strategicSectorFilter, strategicSectorOptions]);
+  // Fecha o drill-down se o setor congelado sumir do recorte atual.
+  useEffect(() => {
+    if (strategicDrilldown && !strategicSectorOptions.includes(strategicDrilldown.sector)) {
+      setStrategicDrilldown(null);
+    }
+  }, [strategicDrilldown, strategicSectorOptions]);
 
   const strategicDrilldownTitle = useMemo(() => {
     if (!strategicDrilldown) return '';
@@ -1076,6 +1098,15 @@ export default function IndicadoresLabPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [projects]);
 
+  // Ao trocar período/escopo, um filtro selecionado pode sumir das opções —
+  // reseta para "all" em vez de zerar o dashboard silenciosamente.
+  useEffect(() => {
+    if (filterSector !== 'all' && !sectorOptions.includes(filterSector)) setFilterSector('all');
+  }, [filterSector, sectorOptions]);
+  useEffect(() => {
+    if (filterManager !== 'all' && !managerOptions.includes(filterManager)) setFilterManager('all');
+  }, [filterManager, managerOptions]);
+
   const kpiTone = (value: number, target: number, type: 'min' | 'max') => {
     if (type === 'min') {
       if (value >= target) return 'text-emerald-700 bg-emerald-500/10 border-emerald-500/40';
@@ -1100,29 +1131,39 @@ export default function IndicadoresLabPage() {
     ];
     const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
+    link.href = url;
     link.download = `indicadores_executivos_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
+    URL.revokeObjectURL(url); // evita leak de mem\u00F3ria
   };
 
   return (
     <main className={`px-4 py-6 ${presentationMode ? 'space-y-8' : 'space-y-6'}`}>
-      <section className="rounded-2xl border bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-900 text-white p-6 shadow-lg">
+      <section
+        className="rounded-2xl border text-white p-6 shadow-lg"
+        style={{
+          // Gradiente alinhado à marca (cor primária do tema), não mais slate/cyan crus.
+          backgroundImage:
+            'linear-gradient(120deg, hsl(var(--primary) / 0.95), hsl(var(--primary) / 0.75) 55%, hsl(221 60% 30%))',
+          borderColor: 'hsl(var(--primary) / 0.4)',
+        }}
+      >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium mb-3">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-medium mb-3">
               <Sparkles className="w-3.5 h-3.5" />
               Página de Teste para Validação Executiva
             </div>
             <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Indicadores LAB</h1>
-            <p className="text-sm text-cyan-100/90 mt-1">
+            <p className="text-sm text-white/85 mt-1">
               Visão consolidada para reuniões de diretoria e gerência. Versão piloto antes da oficialização.
             </p>
           </div>
 
           <div className="w-full sm:w-[620px]">
-            <label className="text-xs text-cyan-100/90 mb-1 block">Período de análise</label>
+            <label className="text-xs text-white/85 mb-1 block">Período de análise</label>
             <div className="flex gap-2">
               <Select value={period} onValueChange={(value) => setPeriod(value as PeriodKey)}>
                 <SelectTrigger className="bg-white/10 border-white/20 text-white">
@@ -1168,11 +1209,40 @@ export default function IndicadoresLabPage() {
       </section>
 
       {loading ? (
-        <Card className="p-8 text-center text-muted-foreground">Carregando indicadores...</Card>
+        <div className="space-y-6" aria-busy="true" aria-label="Carregando indicadores">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} className="p-4">
+                <div className="h-3 w-16 rounded bg-muted animate-pulse" />
+                <div className="mt-3 h-7 w-20 rounded bg-muted animate-pulse" />
+                <div className="mt-2 h-3 w-28 rounded bg-muted/70 animate-pulse" />
+              </Card>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Card key={i} className="p-5">
+                <div className="h-4 w-40 rounded bg-muted animate-pulse" />
+                <div className="mt-4 h-[180px] rounded-lg bg-muted/50 animate-pulse" />
+              </Card>
+            ))}
+          </div>
+        </div>
       ) : loadError ? (
         <Alert className="p-4 border-destructive/40 text-destructive">
           Erro ao carregar indicadores: {loadError}
         </Alert>
+      ) : projects.length === 0 ? (
+        <Card className="p-10 text-center">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
+            <Target className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-semibold text-foreground">Sem projetos para exibir indicadores</h3>
+          <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+            Os indicadores aparecem quando você participa de projetos com atividades no período selecionado.
+            Ajuste o período acima ou verifique seu acesso aos projetos.
+          </p>
+        </Card>
       ) : (
         <>
           <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -1774,7 +1844,7 @@ export default function IndicadoresLabPage() {
 
               <div className="space-y-3 mb-4">
                 {dashboardData.decisionItems.map((item) => (
-                  <div key={item.title} className="p-3 rounded-lg border bg-muted/30 flex items-start justify-between gap-3">
+                  <div key={item.title} className="p-3 rounded-lg border bg-card flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">{item.title}</p>
                       <p className="text-xs text-muted-foreground">{item.action}</p>

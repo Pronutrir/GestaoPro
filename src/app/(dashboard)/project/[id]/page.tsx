@@ -1176,7 +1176,7 @@ export default function ProjectDetailsPage() {
 
 
   return (
-    <main className="px-4 py-4 bg-muted/40 dark:bg-background min-h-[calc(100vh-3.5rem)]">
+    <main className="px-4 py-4 bg-muted/70 dark:bg-background min-h-[calc(100vh-3.5rem)]">
         <div className="space-y-6">
           {/* Project Info Card */}
           <Card className="px-5 py-3">

@@ -191,7 +191,7 @@ const Reports = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 bg-muted/30 rounded-lg">
+                <div className="p-4 bg-card border rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <DollarSign className="w-4 h-4 text-primary" />
                     <span className="text-sm font-medium text-foreground">Investimento Total</span>
@@ -199,7 +199,7 @@ const Reports = () => {
                   <p className="text-2xl font-bold text-foreground">R$ {totalBudgetPlanned.toLocaleString("pt-BR")}</p>
                   <p className="text-sm text-muted-foreground">Utilizado: R$ {totalBudgetUsed.toLocaleString("pt-BR")} ({totalBudgetPlanned > 0 ? ((totalBudgetUsed / totalBudgetPlanned) * 100).toFixed(0) : 0}%)</p>
                 </div>
-                <div className="p-4 bg-muted/30 rounded-lg">
+                <div className="p-4 bg-card border rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <Clock className="w-4 h-4 text-info" />
                     <span className="text-sm font-medium text-foreground">Horas</span>

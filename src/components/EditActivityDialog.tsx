@@ -976,6 +976,7 @@ export const EditActivityDialog = ({
 
       const compatPayload: Record<string, any> = { ...updatePayload };
       const droppedColumns: string[] = [];
+      let downgradedItemType = false;
       let error: any = null;
       for (let i = 0; i < 8; i += 1) {
         const result = await supabase
@@ -986,6 +987,22 @@ export const EditActivityDialog = ({
         if (!error) break;
 
         const errorText = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`;
+
+        // CHECK de item_type ainda sem 'pacote'/'fase' (migration pendente):
+        // regrava como 'atividade' em vez de abortar o save inteiro — o papel
+        // é inferido pela árvore até a migration entrar.
+        const isItemTypeCheck =
+          error?.code === "23514" && /item_type/i.test(errorText);
+        if (
+          isItemTypeCheck &&
+          !downgradedItemType &&
+          (compatPayload.item_type === "pacote" || compatPayload.item_type === "fase")
+        ) {
+          compatPayload.item_type = "atividade";
+          downgradedItemType = true;
+          continue;
+        }
+
         const missingMatch =
           errorText.match(/Could not find the '([a-zA-Z0-9_]+)' column/i) ||
           errorText.match(/column\s+"?([a-zA-Z0-9_]+)"?\s+of relation/i) ||
@@ -1006,6 +1023,15 @@ export const EditActivityDialog = ({
         toast({
           title: "Atividade salva com aviso",
           description: `Alguns campos não foram salvos neste ambiente: ${droppedColumns.join(", ")}`,
+          variant: "destructive",
+        });
+      }
+
+      if (downgradedItemType) {
+        toast({
+          title: "Atividade salva com aviso",
+          description:
+            "Este ambiente ainda não aceita o tipo Pacote/Fase; o item foi salvo como Atividade. Aplique a migration do item_type na VM.",
           variant: "destructive",
         });
       }
