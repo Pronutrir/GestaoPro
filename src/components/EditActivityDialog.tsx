@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DateChip } from "@/components/DateChip";
+import { PersonCombobox } from "@/components/PersonCombobox";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2, Package } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
-import { endVariance, varianceTone, varianceClasses, formatVariance } from "@/lib/dateVariance";
+import { endVariance, varianceTone, varianceClasses } from "@/lib/dateVariance";
 import { AuditLogPanel } from "@/components/AuditLogPanel";
 import { ActivityAttachments } from "@/components/ActivityAttachments";
 import { ActivityComments } from "@/components/ActivityComments";
@@ -95,6 +97,7 @@ interface PersonOption {
   id: string;
   full_name: string;
   sector: string | null;
+  role_title?: string | null;
   email?: string | null;
   avatar_url?: string | null;
 }
@@ -108,6 +111,7 @@ function normalizePersonOptions(options: Array<Partial<PersonOption> | null | un
         : `person-${option.full_name.trim()}-${option.sector ?? "no-sector"}-${index}`,
       full_name: option.full_name.trim(),
       sector: option.sector ?? null,
+      role_title: option.role_title ?? null,
       email: option.email ?? null,
       avatar_url: option.avatar_url ?? null,
     }));
@@ -151,13 +155,20 @@ interface EditActivityDialogProps {
 
 /** Parse hours as decimal from "Xh Ym" or plain number */
 function parseHoursInput(val: string): number {
-  const hm = val.match(/(\d+)\s*h\s*(\d+)\s*m/i);
+  const s = (val || "").trim();
+  // Formato h:mm (ex.: 2:05 = 2 horas 5 minutos)
+  const hmm = s.match(/^(\d+)\s*:\s*([0-5]?\d)$/);
+  if (hmm) return parseInt(hmm[1]) + parseInt(hmm[2]) / 60;
+  // Formato "2h 30m"
+  const hm = s.match(/(\d+)\s*h\s*(\d+)\s*m/i);
   if (hm) return parseInt(hm[1]) + parseInt(hm[2]) / 60;
-  const hOnly = val.match(/^(\d+(?:\.\d+)?)\s*h?$/i);
-  if (hOnly) return parseFloat(hOnly[1]);
-  const mOnly = val.match(/^(\d+)\s*m$/i);
+  // Só horas: "2h", "2", "1.5" ou "1,5"
+  const hOnly = s.match(/^(\d+(?:[.,]\d+)?)\s*h?$/i);
+  if (hOnly) return parseFloat(hOnly[1].replace(",", "."));
+  // Só minutos: "90m"
+  const mOnly = s.match(/^(\d+)\s*m$/i);
   if (mOnly) return parseInt(mOnly[1]) / 60;
-  return parseFloat(val) || 0;
+  return parseFloat(s.replace(",", ".")) || 0;
 }
 
 /** Format decimal hours to "Xh Ym" */
@@ -169,6 +180,17 @@ function formatHoursDisplay(hours: number): string {
   if (h > 0) return `${h}h`;
   if (m > 0) return `${m}m`;
   return "0h";
+}
+
+/** Format decimal hours to natural language "2 horas 5 minutos" */
+function formatHoursNatural(hours: number): string {
+  if (!hours || hours <= 0) return "";
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h} ${h === 1 ? "hora" : "horas"}`);
+  if (m > 0) parts.push(`${m} ${m === 1 ? "minuto" : "minutos"}`);
+  return parts.join(" e ");
 }
 
 function parseWbsSegments(code: string | null | undefined): number[] | null {
@@ -347,6 +369,7 @@ export const EditActivityDialog = ({
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
   const [editingSubActivity, setEditingSubActivity] = useState<Activity | null>(null);
   const [editingSubOpen, setEditingSubOpen] = useState(false);
+  const [showRealDates, setShowRealDates] = useState(false);
   const [members, setMembers] = useState<PersonOption[]>([]);
   const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
   const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
@@ -532,7 +555,7 @@ export const EditActivityDialog = ({
     }
 
     // Fetch all active profiles for participants dropdown
-    supabase.from("profiles").select("id, full_name, sector, email, avatar_url").eq("is_active", true).then(({ data }) => {
+    supabase.from("profiles").select("id, full_name, sector, role_title, email, avatar_url").eq("is_active", true).then(({ data }) => {
       if (data) setAllProfiles(normalizePersonOptions(data));
     });
 
@@ -616,7 +639,7 @@ export const EditActivityDialog = ({
       supabase.from("project_members").select("user_id").eq("project_id", projectId).then(({ data: memberData }) => {
         if (memberData && memberData.length > 0) {
           const userIds = memberData.map(m => m.user_id);
-          supabase.from("profiles").select("id, full_name, sector, email, avatar_url").in("id", userIds).then(({ data: profiles }) => {
+          supabase.from("profiles").select("id, full_name, sector, role_title, email, avatar_url").in("id", userIds).then(({ data: profiles }) => {
             if (profiles) setMembers(normalizePersonOptions(profiles));
           });
         }
@@ -655,6 +678,7 @@ export const EditActivityDialog = ({
         wbs_code: (act as any).wbs_code || "",
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
+      setShowRealDates(false);
       // Limpa as subs do card anterior ANTES do fetch async. Sem isso, há uma
       // janela em que o rollup roda com os filhos do card anterior aplicados ao
       // card atual — corrompendo hours/cost (ex.: abrir uma folha logo após um
@@ -1290,122 +1314,120 @@ export const EditActivityDialog = ({
                   </PropertyRow>
                 )}
 
-                {/* Datas inline */}
-                <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Datas"}>
-                  <div className="flex flex-wrap items-end gap-2 text-xs">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                        {formData.is_milestone ? "Fim" : "Início"}
-                      </span>
-                      <Input
-                        type="date"
+                {/* Datas — planejado em destaque; execução real na lateral */}
+                <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Prazo"}>
+                  <div className="flex flex-wrap items-start gap-x-4 gap-y-2.5 w-full">
+                    {/* PLANEJADO — chips compactos com calendário */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <DateChip
                         value={formData.is_milestone ? formData.end_date : formData.start_date}
-                        onChange={(e) =>
+                        onChange={(v) =>
                           setFormData(
                             formData.is_milestone
-                              ? { ...formData, end_date: e.target.value }
-                              : { ...formData, start_date: e.target.value }
+                              ? { ...formData, end_date: v }
+                              : { ...formData, start_date: v }
                           )
                         }
-                        className={`h-7 px-1.5 text-xs w-[130px] ${dateRangeInvalid ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                        placeholder={formData.is_milestone ? "Data do marco" : "Início"}
+                        tooltip={formData.is_milestone ? "Definir data do marco" : "Definir data de início"}
+                        invalid={dateRangeInvalid}
                       />
+                      {!formData.is_milestone && (
+                        <>
+                          <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+                          <DateChip
+                            value={formData.end_date}
+                            onChange={(v) => setFormData({ ...formData, end_date: v })}
+                            placeholder="Vencimento"
+                            tooltip="Definir data de vencimento"
+                            invalid={dateRangeInvalid}
+                          />
+                        </>
+                      )}
+                      {dateRangeInvalid && (
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center justify-center text-destructive">
+                                <AlertTriangle className="w-4 h-4" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="max-w-[260px] text-xs">
+                              Datas inconsistentes: a data de início é posterior à data de término.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {(startDivergence || endDivergence) && (
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button type="button" className="inline-flex items-center justify-center text-amber-600 dark:text-amber-400 hover:opacity-80">
+                                <AlertTriangle className="w-4 h-4" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="max-w-[260px] text-xs">
+                              Divergência com subatividades:
+                              {startDivergence && minSubStart && (
+                                <div>• sub começa em <strong>{minSubStart.split("-").reverse().join("/")}</strong> (antes do pai)</div>
+                              )}
+                              {endDivergence && maxSubEnd && (
+                                <div>• sub termina em <strong>{maxSubEnd.split("-").reverse().join("/")}</strong> (depois do pai)</div>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                     </div>
-                    {!formData.is_milestone && (
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Fim</span>
-                        <Input
-                          type="date"
-                          value={formData.end_date}
-                          onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                          className={`h-7 px-1.5 text-xs w-[130px] ${dateRangeInvalid ? "border-destructive focus-visible:ring-destructive" : ""}`}
-                        />
-                      </div>
-                    )}
-                    {!formData.is_milestone && (
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Início real</span>
-                        <Input
-                          type="date"
-                          value={formData.actual_start_date}
-                          onChange={(e) => setFormData({ ...formData, actual_start_date: e.target.value })}
-                          className="h-7 px-1.5 text-xs w-[130px]"
-                        />
-                      </div>
-                    )}
-                    {!formData.is_milestone && (
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Término real</span>
-                        <Input
-                          type="date"
-                          value={formData.actual_end_date}
-                          onChange={(e) => setFormData({ ...formData, actual_end_date: e.target.value })}
-                          className="h-7 px-1.5 text-xs w-[130px]"
-                        />
-                      </div>
-                    )}
-                    {dateRangeInvalid && (
-                      <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center justify-center text-destructive">
-                              <AlertTriangle className="w-4 h-4" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-[260px] text-xs">
-                            Datas inconsistentes: a data de início é posterior à data de término.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                    {(startDivergence || endDivergence) && (
-                      <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button type="button" className="inline-flex items-center justify-center text-amber-600 dark:text-amber-400 hover:opacity-80">
-                              <AlertTriangle className="w-4 h-4" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-[260px] text-xs">
-                            Divergência com subatividades:
-                            {startDivergence && minSubStart && (
-                              <div>• sub começa em <strong>{minSubStart.split("-").reverse().join("/")}</strong> (antes do pai)</div>
+
+                    {/* EXECUÇÃO REAL — acompanhamento (não para milestone) */}
+                    {!formData.is_milestone && (() => {
+                      const hasReal = !!(formData.actual_start_date || formData.actual_end_date);
+                      const expanded = showRealDates || hasReal;
+                      if (!expanded) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setShowRealDates(true)}
+                            className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline pl-4 border-l border-dashed border-border/70 h-7"
+                          >
+                            <Plus className="w-3 h-3" /> Registrar datas reais
+                          </button>
+                        );
+                      }
+                      const v = endVariance(formData.actual_end_date || null, (act as any)?.baseline_end_date, formData.end_date);
+                      const tone = v !== null ? varianceTone(v) : null;
+                      return (
+                        <div className="flex flex-col gap-1 pl-4 border-l border-dashed border-border/70">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-wide" title="Preenchido ao concluir a atividade">Execução real</span>
+                            {v !== null && tone && (
+                              <span className={cn("px-1.5 py-0 rounded border text-[10px] font-mono", varianceClasses(tone))}
+                                    title={(act as any)?.baseline_end_date ? "Real − Linha de Base" : "Real − Planejado"}>
+                                {v > 0 ? `${Math.abs(v)}d de atraso` : v < 0 ? `${Math.abs(v)}d adiantado` : "no prazo"}
+                              </span>
                             )}
-                            {endDivergence && maxSubEnd && (
-                              <div>• sub termina em <strong>{maxSubEnd.split("-").reverse().join("/")}</strong> (depois do pai)</div>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <DateChip
+                              value={formData.actual_start_date}
+                              onChange={(v) => setFormData({ ...formData, actual_start_date: v })}
+                              placeholder="Início real"
+                              tooltip="Definir início real"
+                            />
+                            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+                            <DateChip
+                              value={formData.actual_end_date}
+                              onChange={(v) => setFormData({ ...formData, actual_end_date: v })}
+                              placeholder="Término real"
+                              tooltip="Definir término real"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </PropertyRow>
-
-                {/* Datas Reais (somente leitura) + chip de Desvio — não se aplica a Qualidade */}
-                {!isQualityProject && (act?.actual_start_date || act?.actual_end_date) && !formData.is_milestone && (
-                  <PropertyRow icon={<Calendar className="w-3.5 h-3.5 text-muted-foreground" />} label="Real">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="font-mono">
-                        {(act?.actual_start_date || "—").split("-").reverse().join("/")}
-                      </span>
-                      <ArrowRight className="w-3 h-3" />
-                      <span className="font-mono">
-                        {((act?.actual_end_date || "—") + "").split("-").reverse().join("/")}
-                      </span>
-                      {(() => {
-                        const real = act?.actual_end_date || null;
-                        const v = endVariance(real, (act as any)?.baseline_end_date, act?.end_date);
-                        if (v === null) return null;
-                        const tone = varianceTone(v);
-                        return (
-                          <span className={cn("ml-1 px-1.5 py-0 rounded border text-[10px] font-mono", varianceClasses(tone))}
-                                title={(act as any)?.baseline_end_date ? "Real − Linha de Base" : "Real − Previsto"}>
-                            Desvio {formatVariance(v)}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  </PropertyRow>
-                )}
 
                 {/* Relacionamentos inline */}
                 {projectId && (
@@ -1444,7 +1466,7 @@ export const EditActivityDialog = ({
                         <>
                           <Input
                             list="hours-options"
-                            placeholder="Ex: 2h 30m"
+                            placeholder="Ex: 2:05, 2h 30m, 90m"
                             value={formData.hours}
                             onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
                             onFocus={(e) => e.currentTarget.select()}
@@ -1458,6 +1480,16 @@ export const EditActivityDialog = ({
                               <option key={h} value={`${h}h`} label={h === 1 ? "1 hora" : `${h} horas`} />
                             ))}
                           </datalist>
+                          {/* Confirmação em linguagem natural do que foi digitado */}
+                          {(() => {
+                            const natural = formatHoursNatural(parseHoursInput(formData.hours));
+                            if (!natural) return null;
+                            return (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-1.5 py-0.5">
+                                <CheckCircle2 className="w-3 h-3" /> {natural}
+                              </span>
+                            );
+                          })()}
                         </>
                       )}
                       {(plannedHours > 0 || consumedHours > 0) && (
@@ -1513,60 +1545,16 @@ export const EditActivityDialog = ({
                 )}
                 {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
                 <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
-                  <Select
-                    value={formData.assigned_to || "_none"}
-                    onValueChange={(value) => setFormData({ ...formData, assigned_to: value === "_none" ? "" : value })}
-                  >
-                    <SelectTrigger className="h-8 text-xs w-full max-w-[320px]">
-                      {(() => {
-                        const selected = allProfiles.find((m) => m.full_name === formData.assigned_to);
-                        if (!selected && !formData.assigned_to) {
-                          return <div className="text-muted-foreground">Sem líder</div>;
-                        }
-                        if (!selected && formData.assigned_to) {
-                          return (
-                            <div className="flex items-center gap-1.5 min-w-0 w-full pr-1">
-                              <Avatar className="h-5 w-5 shrink-0">
-                                <AvatarFallback className="text-[9px]">{getAvatarInitials(formData.assigned_to)}</AvatarFallback>
-                              </Avatar>
-                              <span className="truncate leading-none">{formData.assigned_to}</span>
-                            </div>
-                          );
-                        }
-                        return (
-                          <div className="flex items-center gap-1.5 min-w-0 w-full pr-1">
-                            <Avatar className="h-5 w-5 shrink-0">
-                              {selected?.avatar_url ? <AvatarImage src={selected.avatar_url} alt={selected.full_name} /> : null}
-                              <AvatarFallback className="text-[9px]">{getAvatarInitials(selected?.full_name)}</AvatarFallback>
-                            </Avatar>
-                            <span className="truncate leading-none">
-                              {selected?.full_name}{selected?.sector ? ` — ${selected.sector}` : ""}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </SelectTrigger>
-                    <SelectContent
-                      position="popper"
-                      side="bottom"
-                      align="start"
-                      sideOffset={6}
-                      className="max-h-[min(320px,calc(100vh-180px))] overflow-y-auto"
-                    >
-                      <SelectItem value="_none">Sem líder</SelectItem>
-                      {allProfiles.map((m) => (
-                        <SelectItem key={m.id} value={m.full_name}>
-                          <div className="flex items-center gap-2 min-w-0 w-full">
-                            <Avatar className="h-5 w-5 shrink-0">
-                              {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
-                              <AvatarFallback className="text-[9px]">{getAvatarInitials(m.full_name)}</AvatarFallback>
-                            </Avatar>
-                            <span className="truncate leading-none">{m.full_name}{m.sector ? ` — ${m.sector}` : ""}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="w-full max-w-[320px]">
+                    <PersonCombobox
+                      people={allProfiles}
+                      value={allProfiles.find((m) => m.full_name === formData.assigned_to)?.id ?? null}
+                      placeholder="Sem líder"
+                      onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
+                      onClear={() => setFormData({ ...formData, assigned_to: "" })}
+                      className="h-8 text-xs"
+                    />
+                  </div>
                 </PropertyRow>
 
                 {/* Prioridade — método GUT */}
