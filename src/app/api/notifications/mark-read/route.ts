@@ -66,10 +66,20 @@ export async function POST(request: Request) {
   ]);
 
   const [notificationsRes, activitiesRes, membersRes, projectsRes] = await Promise.all([
-    adminClient
-      .from('notifications')
-      .select('id, project_id, activity_id, target_user_id')
-      .eq('is_read', false),
+    // Quando o cliente diz QUAIS notificações marcar (caso comum: clique numa
+    // notificação), restringe já na consulta em vez de carregar todas as não
+    // lidas do sistema para filtrar em memória. canAccess continua sendo o
+    // guarda de permissão — isto é só escopo.
+    (requestedIds && requestedIds.length > 0
+      ? adminClient
+          .from('notifications')
+          .select('id, project_id, activity_id, target_user_id')
+          .eq('is_read', false)
+          .in('id', requestedIds)
+      : adminClient
+          .from('notifications')
+          .select('id, project_id, activity_id, target_user_id')
+          .eq('is_read', false)),
     adminClient
       .from('activities')
       .select('id, project_id, assigned_to, participants')
