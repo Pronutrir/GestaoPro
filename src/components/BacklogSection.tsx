@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
-  ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed,
+  ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Package, Diamond,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -18,6 +18,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -49,6 +52,7 @@ interface Activity {
   parent_id?: string | null;
   workflow_stage_id?: string | null;
   item_type?: string | null;
+  is_milestone?: boolean | null;
 }
 
 interface BacklogSectionProps {
@@ -232,11 +236,16 @@ export const BacklogSection = ({
   const stageById = new Map<string, WorkflowStage>();
   allStages.forEach((s) => stageById.set(s.id, s));
 
-  // Build hierarchy
+  // Build hierarchy. Quando filtros (busca/status/prioridade) escondem o PAI mas
+  // mantêm um FILHO, o filho seria órfão (nem raiz, nem sob o pai) e sumiria da
+  // tela. Para evitar isso, um item cujo parent_id não está no conjunto visível
+  // é promovido a raiz.
+  const visibleIds = new Set(backlogActs.map((a) => a.id));
   const childrenByParent = new Map<string, Activity[]>();
   const topLevelByPhase = new Map<string | "none", Activity[]>();
   backlogActs.forEach((a) => {
-    if (a.parent_id) {
+    const parentVisible = a.parent_id ? visibleIds.has(a.parent_id) : false;
+    if (a.parent_id && parentVisible) {
       const arr = childrenByParent.get(a.parent_id) || [];
       arr.push(a);
       childrenByParent.set(a.parent_id, arr);
@@ -327,6 +336,23 @@ export const BacklogSection = ({
       setQuickAddTitle("");
       return;
     }
+    // EAP: se o pai é folha (atividade/marco), promove a "pacote" antes de
+    // inserir. TOLERANTE: se o banco ainda não aceita 'pacote' (CHECK antigo,
+    // migration mínima pendente), NÃO aborta — segue criando o subitem. O pai
+    // continua funcionando como agrupador por ter filhos; o tipo é ajustado
+    // quando a migration entrar.
+    if (parentId) {
+      const parent = backlogActs.find((a) => a.id === parentId);
+      const parentType = parent?.item_type || "atividade";
+      const parentIsLeaf = !parent || parent.is_milestone || (parentType !== "fase" && parentType !== "pacote");
+      if (parentIsLeaf) {
+        await supabase
+          .from("activities")
+          .update({ item_type: "pacote", is_milestone: false } as any)
+          .eq("id", parentId); // erro ignorado de propósito (ver comentário acima)
+      }
+    }
+
     const { error } = await supabase.from("activities").insert({
       project_id: projectId,
       title,
@@ -335,6 +361,7 @@ export const BacklogSection = ({
       workflow_stage_id: backlogStageId,
       status: "pending",
       priority: "medium",
+      item_type: "atividade",
     });
     if (error) {
       toast({ title: "Erro ao criar tarefa", variant: "destructive" });
@@ -350,6 +377,44 @@ export const BacklogSection = ({
     if (!newTitle) { setEditingTitleId(null); return; }
     await supabase.from("activities").update({ title: newTitle }).eq("id", activityId);
     setEditingTitleId(null);
+    onDataChanged();
+  };
+
+  // Papel EAP exibido: automático pela posição na árvore (marco > fase explícita
+  // > pacote se tem filhos > atividade), a menos que o tipo esteja gravado.
+  type Kind = "atividade" | "pacote" | "fase" | "marco";
+  const resolveKind = (a: Activity, hasChildren: boolean): Kind => {
+    if (a.is_milestone) return "marco";
+    if (a.item_type === "fase") return "fase";
+    if (a.item_type === "pacote" || hasChildren) return "pacote";
+    return "atividade";
+  };
+  const KIND_META: Record<Kind, { label: string; icon: JSX.Element; cls: string }> = {
+    fase: { label: "Fase", icon: <Layers className="w-3 h-3" />, cls: "text-primary bg-primary/10 border-primary/30" },
+    pacote: { label: "Pacote", icon: <Package className="w-3 h-3" />, cls: "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/40" },
+    atividade: { label: "Atividade", icon: <Circle className="w-3 h-3" />, cls: "text-muted-foreground bg-muted border-border" },
+    marco: { label: "Marco", icon: <Diamond className="w-3 h-3 fill-amber-500 text-amber-500" />, cls: "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/40" },
+  };
+  // Muda o tipo de um item. Tolerante: se o banco ainda não aceita 'pacote'
+  // (migration pendente), avisa mas não quebra.
+  const handleChangeType = async (activity: Activity, kind: Kind, hasChildren: boolean) => {
+    // Folha (atividade/marco) não pode ter filhos.
+    if ((kind === "atividade" || kind === "marco") && hasChildren) {
+      toast({ title: "Não é possível", description: "Este item tem subitens; só Pacote ou Fase agrupam.", variant: "destructive" });
+      return;
+    }
+    const patch = kind === "marco"
+      ? { is_milestone: true, item_type: "atividade" }
+      : { is_milestone: false, item_type: kind };
+    const { error } = await supabase.from("activities").update(patch as any).eq("id", activity.id);
+    if (error) {
+      if (kind === "pacote") {
+        toast({ title: "Pacote indisponível", description: "Aplique a migration para gravar o tipo Pacote. O item já agrupa por ter subitens.", variant: "destructive" });
+      } else {
+        toast({ title: "Erro ao mudar tipo", variant: "destructive" });
+      }
+      return;
+    }
     onDataChanged();
   };
 
@@ -413,6 +478,44 @@ export const BacklogSection = ({
             title={`Prioridade: ${priorityLabels[prio] || prio}`}
             aria-hidden
           />
+
+          {/* Etiqueta de tipo EAP — clicável para trocar (automático + override). */}
+          {(() => {
+            const kind = resolveKind(activity, hasChildren);
+            const meta = KIND_META[kind];
+            const isTopLevel = !activity.parent_id;
+            // Com filhos: só agrupadores. Fase só faz sentido no topo (sem pai).
+            let options: Kind[] = hasChildren ? ["pacote"] : ["atividade", "marco", "pacote"];
+            if (isTopLevel) options.push("fase");
+            return (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => e.stopPropagation()}
+                    title="Clique para mudar o tipo (Fase / Pacote / Atividade / Marco)"
+                    className={`shrink-0 inline-flex items-center gap-1 px-1.5 h-5 rounded-md border text-[10px] font-semibold uppercase tracking-wide transition-colors hover:brightness-95 ${meta.cls}`}
+                  >
+                    {meta.icon}
+                    <span className="hidden sm:inline">{meta.label}</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                  {options.map((k) => (
+                    <DropdownMenuItem
+                      key={k}
+                      onClick={(e) => { e.stopPropagation(); if (k !== kind) handleChangeType(activity, k, hasChildren); }}
+                      className={k === kind ? "font-semibold" : ""}
+                    >
+                      <span className="mr-2 inline-flex">{KIND_META[k].icon}</span>
+                      {KIND_META[k].label}
+                      {k === kind && <span className="ml-auto text-[10px] text-muted-foreground">atual</span>}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            );
+          })()}
 
           <div className="flex-1 min-w-0">
             {isEditingTitle ? (
@@ -506,10 +609,10 @@ export const BacklogSection = ({
               );
             })()}
             <Button
-              size="icon"
+              size="sm"
               variant="ghost"
-              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Adicionar subtarefa"
+              className="h-6 px-1.5 text-[11px] gap-1 text-muted-foreground hover:text-primary opacity-60 group-hover:opacity-100 transition-opacity"
+              title="Adicionar um subitem dentro deste (torna-o um Pacote)"
               onClick={(e) => {
                 e.stopPropagation();
                 setQuickAddKey(`parent:${activity.id}`);
@@ -517,7 +620,7 @@ export const BacklogSection = ({
                 setCollapsedParents((prev) => { const n = new Set(prev); n.delete(activity.id); return n; });
               }}
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5" /> Subitem
             </Button>
             {isAdmin && (
               <Button
@@ -543,7 +646,7 @@ export const BacklogSection = ({
             <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
             <Input
               autoFocus
-              placeholder="Nova subtarefa (Enter para salvar, Esc para fechar)"
+              placeholder="Título do subitem — Enter cria e continua · Esc fecha"
               value={quickAddTitle}
               onChange={(e) => setQuickAddTitle(e.target.value)}
               onKeyDown={(e) => {
@@ -618,7 +721,7 @@ export const BacklogSection = ({
                 <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                 <Input
                   autoFocus
-                  placeholder="Nova tarefa (Enter para salvar, Esc para fechar)"
+                  placeholder="Título — Enter cria e continua · Esc fecha"
                   value={quickAddTitle}
                   onChange={(e) => setQuickAddTitle(e.target.value)}
                   onKeyDown={(e) => {
@@ -729,7 +832,7 @@ export const BacklogSection = ({
                 <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                 <Input
                   autoFocus
-                  placeholder="Nova tarefa (Enter para salvar, Esc para fechar)"
+                  placeholder="Título — Enter cria e continua · Esc fecha"
                   value={quickAddTitle}
                   onChange={(e) => setQuickAddTitle(e.target.value)}
                   onKeyDown={(e) => {
@@ -864,7 +967,7 @@ export const BacklogSection = ({
                         <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                         <Input
                           autoFocus
-                          placeholder="Nova tarefa (Enter para salvar, Esc para fechar)"
+                          placeholder="Título — Enter cria e continua · Esc fecha"
                           value={quickAddTitle}
                           onChange={(e) => setQuickAddTitle(e.target.value)}
                           onKeyDown={(e) => {

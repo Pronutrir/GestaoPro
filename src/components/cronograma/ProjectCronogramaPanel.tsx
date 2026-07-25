@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import {
   Table2, GanttChart, ExternalLink, AlertTriangle, AlertCircle, CalendarOff,
   CalendarDays, Settings2, Filter, FolderKanban, Search, X,
-  ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, ChevronDown, Layers, Diamond, GripVertical,
+  ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, ChevronDown, Layers, Diamond, GripVertical, Package,
 } from "lucide-react";
 import {
   DndContext,
@@ -777,7 +777,8 @@ export function ProjectCronogramaPanel({
     };
 
     activities.forEach((a) => {
-      if (a.item_type !== "fase") return;
+      // Fase E pacote de trabalho são agrupadores: datas derivadas dos filhos.
+      if (a.item_type !== "fase" && a.item_type !== "pacote") return;
       const descendants = collectDescendants(a.id);
       const starts = descendants
         .filter((d) => d.start_date)
@@ -822,7 +823,7 @@ export function ProjectCronogramaPanel({
   const isHiddenByCollapse = useCallback((a: any): boolean => {
     let current = a.parent_id ? activityById.get(a.parent_id) : null;
     while (current) {
-      if (current.item_type === "fase" && collapsedPhases.has(current.id)) return true;
+      if ((current.item_type === "fase" || current.item_type === "pacote") && collapsedPhases.has(current.id)) return true;
       current = current.parent_id ? activityById.get(current.parent_id) : null;
     }
     return false;
@@ -1041,11 +1042,14 @@ export function ProjectCronogramaPanel({
       .map(r => {
         let s: Date | null = null;
         let e: Date | null = null;
-        if (r.a.item_type === "fase") {
-          const derived = phaseDerivedDates.get(r.a.id);
+        const isGroup = r.a.item_type === "fase" || r.a.item_type === "pacote";
+        const derived = isGroup ? phaseDerivedDates.get(r.a.id) : null;
+        if (isGroup && (derived?.start || derived?.end)) {
+          // Agrupador (fase/pacote) com filhos datados: deriva do intervalo deles.
           s = derived?.start ?? null;
           e = derived?.end ?? (s ? addDays(s, 1) : null);
         } else {
+          // Atividade, ou agrupador sem filhos datados: usa datas próprias.
           s = r.a.start_date ? parseISO(r.a.start_date) : null;
           e = r.a.end_date ? parseISO(r.a.end_date) : (s ? addDays(s, 1) : null);
         }
@@ -1055,9 +1059,12 @@ export function ProjectCronogramaPanel({
 
     const undated = visibleRows
       .filter(r => {
-        if (r.a.item_type === "fase") {
+        const isGroup = r.a.item_type === "fase" || r.a.item_type === "pacote";
+        if (isGroup) {
           const d = phaseDerivedDates.get(r.a.id);
-          return !(d?.start && d?.end);
+          // Agrupador só é "sem data" se nem os filhos nem ele próprio têm datas.
+          if (d?.start && d?.end) return false;
+          return !(r.a.start_date && r.a.end_date);
         }
         return !(r.a.start_date && r.a.end_date);
       })
@@ -1172,6 +1179,11 @@ export function ProjectCronogramaPanel({
             ) : a.item_type === "fase" ? (
               <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-primary/10 text-primary border-primary/30 shrink-0">
                 Fase
+              </Badge>
+            ) : a.item_type === "pacote" ? (
+              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-amber-500/10 text-amber-700 border-amber-500/40 shrink-0 gap-1">
+                <Package className="h-2.5 w-2.5" />
+                Pacote
               </Badge>
             ) : a.parent_id ? (
               <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-amber-500/10 text-amber-700 border-amber-500/30 shrink-0">
@@ -1578,7 +1590,9 @@ export function ProjectCronogramaPanel({
                 const projTitle = projectsMap[a.project_id];
                 const depth = depthById.get(a.id) ?? 0;
                 const isPhase = a.item_type === "fase";
-                const isSubactivity = !isPhase && !!a.parent_id;
+                const isPackage = a.item_type === "pacote";
+                const isGroup = isPhase || isPackage;
+                const isSubactivity = !isGroup && !!a.parent_id;
                 const isMilestone = !!a.is_milestone;
                 const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
                 const isCompleted = stageInfo?.is_final || a.status === "completed";
@@ -1592,21 +1606,23 @@ export function ProjectCronogramaPanel({
                       isOverdue && "animate-pulse-overdue"
                     )}
                     style={{ height: ROW_H, paddingLeft: 12 + depth * 14 }}>
-                    {isPhase && hasChildren ? (
+                    {isGroup && hasChildren ? (
                       <button
                         type="button"
                         onClick={() => togglePhase(a.id)}
                         className="shrink-0 p-0.5 -ml-1 rounded hover:bg-muted"
-                        title={collapsed ? "Expandir fase" : "Recolher fase"}
+                        title={collapsed ? "Expandir" : "Recolher"}
                       >
                         {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                       </button>
                     ) : isPhase ? (
                       <Layers className="h-3.5 w-3.5 text-primary shrink-0" />
+                    ) : isPackage ? (
+                      <Package className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                     ) : null}
                     <span className="text-[10px] font-mono text-muted-foreground w-[52px] shrink-0">#{id}</span>
                     <div className="flex-1 min-w-0">
-                      <div className={cn("text-xs flex items-center gap-1", (isCritical || isPhase) && "font-semibold", isPhase && "text-primary uppercase tracking-wide")}>
+                      <div className={cn("text-xs flex items-center gap-1", (isCritical || isGroup) && "font-semibold", isPhase && "text-primary uppercase tracking-wide", isPackage && "text-amber-700 dark:text-amber-400")}>
                         {isMilestone ? (
                           <Badge variant="outline" className="text-[9px] py-0 px-1 bg-orange-500/15 text-orange-700 border-orange-500/40 shrink-0 gap-1">
                             <Diamond className="h-2.5 w-2.5 fill-orange-500 text-orange-500" />
@@ -1615,6 +1631,10 @@ export function ProjectCronogramaPanel({
                         ) : isPhase ? (
                           <Badge variant="outline" className="text-[9px] py-0 px-1 bg-primary/10 text-primary border-primary/30 shrink-0">
                             Fase
+                          </Badge>
+                        ) : isPackage ? (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-amber-500/10 text-amber-700 border-amber-500/40 shrink-0">
+                            Pacote
                           </Badge>
                         ) : isSubactivity ? (
                           <Badge variant="outline" className="text-[9px] py-0 px-1 bg-amber-500/10 text-amber-700 border-amber-500/30 shrink-0">
@@ -1750,7 +1770,9 @@ export function ProjectCronogramaPanel({
                   const progress = progressFor(a);
                   const responsible = resolveResponsible(a.assigned_to);
                   const isPhase = a.item_type === "fase";
-                  const isSubactivity = !isPhase && !!a.parent_id;
+                  const isPackage = a.item_type === "pacote";
+                  const isGroup = isPhase || isPackage;
+                  const isSubactivity = !isGroup && !!a.parent_id;
 
                   return (
                     <div key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`} className="relative border-b" style={{ height: ROW_H }}>
@@ -1768,7 +1790,7 @@ export function ProjectCronogramaPanel({
                                   isOverdue && "animate-pulse-overdue"
                                 )} />
                               </div>
-                            ) : isPhase ? (
+                            ) : isGroup ? (
                               <div
                                 className={cn(
                                   "absolute top-1/2 -translate-y-1/2",
@@ -1851,6 +1873,7 @@ export function ProjectCronogramaPanel({
                               <div>📊 {progress}% {isCritical && <span className="text-red-400 font-semibold ml-1">• Caminho crítico</span>}</div>
                               {a.is_milestone && <div>🎯 Marco</div>}
                               {isPhase && <div>📚 Fase — datas derivadas dos filhos</div>}
+                              {isPackage && <div>📦 Pacote de trabalho — datas derivadas dos filhos</div>}
                             </div>
                           </TooltipContent>
                         </Tooltip>

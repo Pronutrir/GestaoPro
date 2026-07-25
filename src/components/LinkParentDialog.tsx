@@ -149,13 +149,15 @@ export const LinkParentDialog = ({
           return;
         }
 
-        if ((validatedParent.item_type || "tarefa") === "fase") {
-          toast({
-            title: "Pai invalido",
-            description: "Fases nao podem ser usadas como atividade pai.",
-            variant: "destructive",
-          });
-          return;
+        // EAP: se o pai é folha (atividade), promove a "pacote" para respeitar
+        // a regra de aninhamento (folha não pode ter filhos).
+        const parentType = validatedParent.item_type || "atividade";
+        if (parentType !== "fase" && parentType !== "pacote") {
+          const { error: promoteErr } = await supabase
+            .from("activities")
+            .update({ item_type: "pacote" } as any)
+            .eq("id", validatedParent.id);
+          if (promoteErr) throw promoteErr;
         }
       }
 
