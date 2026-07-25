@@ -180,6 +180,11 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   const [addingMember, setAddingMember] = useState(false);
 
+  // Guarda o charter_data cru vindo do banco. O formulário só conhece um
+  // subconjunto das chaves; sem esta base, salvar apagaria as demais (ex.:
+  // deliverables/approval_requirements/success_criteria de versões anteriores).
+  const rawCharterRef = useRef<Record<string, any>>({});
+
   const [data, setData] = useState<CharterData>({
     sponsor: "", manager: "", authority: "", start_date: "", justification: "",
     assumptions: "", constraints: "",
@@ -213,6 +218,8 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           : project.description?.startsWith("{")
           ? JSON.parse(project.description)
           : null;
+      rawCharterRef.current =
+        parsed && typeof parsed === "object" ? { ...parsed } : {};
       if (parsed && (parsed.__charter || (project as any).charter_data)) {
           setData((prev) => ({
             ...prev,
@@ -333,7 +340,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
 
   const handleSave = async () => {
     setSaving(true);
-    const charterPayload: any = { __charter: true, ...data };
+    const charterPayload: any = { ...rawCharterRef.current, __charter: true, ...data };
     const updatePayload: any = {
       charter_data: charterPayload,
       objective: form.objective || null,
@@ -372,7 +379,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     };
     const { error } = await supabase
       .from("projects")
-      .update({ charter_data: { __charter: true, ...stamp } } as any)
+      .update({ charter_data: { ...rawCharterRef.current, __charter: true, ...stamp } } as any)
       .eq("id", projectId);
     setSaving(false);
     if (error) { toast({ title: "Erro ao aprovar TAP", description: error.message, variant: "destructive" }); return; }
@@ -386,7 +393,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     const reopened = { ...data, approved_at: null, approved_by: null, approved_by_name: null };
     const { error } = await supabase
       .from("projects")
-      .update({ charter_data: { __charter: true, ...reopened } } as any)
+      .update({ charter_data: { ...rawCharterRef.current, __charter: true, ...reopened } } as any)
       .eq("id", projectId);
     setSaving(false);
     if (error) { toast({ title: "Erro ao reabrir TAP", description: error.message, variant: "destructive" }); return; }
