@@ -313,25 +313,25 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           <Upload className="w-4 h-4" /> Importar EAP
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden p-0 gap-0">
-        <DialogHeader className="px-5 pt-5 pb-3 border-b">
-          <DialogTitle className="text-base">Importar Estrutura Analítica do Projeto</DialogTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            Cole a EAP (em qualquer formato) ou comece de um modelo. Fase agrupa pacotes; pacote agrupa atividades;
-            itens folha são atividades. Escreva “marco” no título para criar um marco.
+      <DialogContent className="max-w-4xl w-[94vw] h-[82vh] overflow-hidden p-0 gap-0 flex flex-col">
+        {/* Cabeçalho enxuto */}
+        <DialogHeader className="px-6 py-4 border-b shrink-0">
+          <DialogTitle className="text-base font-semibold">Importar EAP</DialogTitle>
+          <p className="text-[13px] text-muted-foreground mt-0.5">
+            Cole sua estrutura em qualquer formato ou comece de um modelo.
           </p>
         </DialogHeader>
 
-        {/* Abas de origem */}
-        <div className="flex gap-1 px-5 pt-3">
-          {([["paste", "Colar texto", <ClipboardList key="i" className="w-3.5 h-3.5" />],
-             ["template", "Usar modelo", <FileText key="i" className="w-3.5 h-3.5" />]] as const).map(([id, label, icon]) => (
+        {/* Abas segmentadas */}
+        <div className="flex items-center gap-1 px-6 pt-3 shrink-0">
+          {([["paste", "Colar texto", <ClipboardList key="i" className="w-4 h-4" />],
+             ["template", "Usar modelo", <FileText key="i" className="w-4 h-4" />]] as const).map(([id, label, icon]) => (
             <button
               key={id}
               type="button"
               onClick={() => setTab(id)}
               className={cn(
-                "flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors",
+                "flex items-center gap-2 text-[13px] px-3 py-1.5 rounded-md transition-colors",
                 tab === id ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:bg-muted/50",
               )}
             >
@@ -340,86 +340,70 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           ))}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border-t mt-3 min-h-[300px] max-h-[52vh]">
+        {/* Corpo: cresce e rola internamente; footer fica ancorado */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border-t mt-3 flex-1 min-h-0">
           {/* Entrada */}
-          <div className="p-5 md:border-r overflow-y-auto">
+          <div className="p-6 md:border-r flex flex-col min-h-0">
             {tab === "paste" ? (
-              <>
-                <div className="text-[11px] font-mono uppercase tracking-wide text-muted-foreground mb-2">Cole aqui — qualquer formato</div>
-                <Textarea
-                  value={text}
-                  onChange={(e) => { setText(e.target.value); setSelectedTemplate(null); }}
-                  rows={12}
-                  className="font-mono text-xs"
-                  placeholder={`Aceita qualquer um destes:\n\n1. Gestão do Projeto\n1.1 Planejamento\n1.1.2 Marco: Plano aprovado\n\n— ou com bullets/indentação —\n• Gestão do Projeto\n   - Planejamento\n      - Elaborar cronograma`}
-                />
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {["código 1.2.3", "bullets • - –", "indentação", "colado do Excel"].map((f) => (
-                    <span key={f} className="text-[10px] font-mono bg-success/10 text-success px-2 py-0.5 rounded-full">✓ {f}</span>
-                  ))}
-                </div>
-              </>
+              <Textarea
+                value={text}
+                onChange={(e) => { setText(e.target.value); setSelectedTemplate(null); }}
+                className="flex-1 min-h-0 resize-none font-mono text-[13px] leading-relaxed"
+                placeholder={"1. Fase\n1.1 Pacote\n1.1.1 Atividade\n\nou com bullets e recuo:\n• Fase\n   - Atividade"}
+              />
             ) : (
-              <>
-                <div className="text-[11px] font-mono uppercase tracking-wide text-muted-foreground mb-2">Escolha um modelo</div>
-                <div className="space-y-2">
-                  {TEMPLATES.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => pickTemplate(t.id)}
-                      className={cn(
-                        "w-full flex items-center gap-3 text-left border rounded-lg p-3 transition-colors",
-                        selectedTemplate === t.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
-                      )}
-                    >
-                      <span className="w-9 h-9 rounded-md bg-muted flex items-center justify-center text-lg shrink-0">{t.emoji}</span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold">{t.name}</span>
-                        <span className="block text-[11px] text-muted-foreground truncate">{t.desc}</span>
-                      </span>
-                      {selectedTemplate === t.id && <span className="ml-auto text-primary text-sm">✓</span>}
-                    </button>
-                  ))}
+              <div className="overflow-y-auto space-y-2 -mx-1 px-1">
+                {TEMPLATES.map((t) => (
                   <button
+                    key={t.id}
                     type="button"
-                    onClick={() => { setTab("paste"); setText(""); setSelectedTemplate(null); resetAndClose(); }}
-                    className="w-full flex items-center gap-3 text-left border border-dashed rounded-lg p-3 hover:bg-muted/50"
+                    onClick={() => pickTemplate(t.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 text-left border rounded-lg p-3 transition-colors",
+                      selectedTemplate === t.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
+                    )}
                   >
-                    <span className="w-9 h-9 rounded-md bg-muted flex items-center justify-center text-lg shrink-0">📄</span>
-                    <span>
-                      <span className="block text-sm font-semibold">EAP em branco</span>
-                      <span className="block text-[11px] text-muted-foreground">Fechar e montar item a item no Backlog</span>
+                    <span className="w-9 h-9 rounded-md bg-muted flex items-center justify-center text-lg shrink-0">{t.emoji}</span>
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">{t.name}</span>
+                      <span className="block text-xs text-muted-foreground truncate">{t.desc}</span>
                     </span>
+                    {selectedTemplate === t.id && <span className="ml-auto text-primary text-sm">✓</span>}
                   </button>
-                </div>
-                {selectedTemplate && (
-                  <p className="text-[11px] text-muted-foreground mt-3">
-                    Modelo carregado — revise a árvore à direita, edite na aba “Colar texto” se quiser, e importe.
-                  </p>
-                )}
-              </>
+                ))}
+                <button
+                  type="button"
+                  onClick={resetAndClose}
+                  className="w-full flex items-center gap-3 text-left border border-dashed rounded-lg p-3 hover:bg-muted/50"
+                >
+                  <span className="w-9 h-9 rounded-md bg-muted flex items-center justify-center text-lg shrink-0">📄</span>
+                  <span>
+                    <span className="block text-[13px] font-medium">EAP em branco</span>
+                    <span className="block text-xs text-muted-foreground">Montar item a item no Backlog</span>
+                  </span>
+                </button>
+              </div>
             )}
           </div>
 
           {/* Pré-visualização em árvore */}
-          <div className="p-5 overflow-y-auto">
-            <div className="text-[11px] font-mono uppercase tracking-wide text-muted-foreground mb-2">
-              Pré-visualização <span className="text-muted-foreground/60">interpretado ao vivo</span>
+          <div className="p-6 flex flex-col min-h-0">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 shrink-0">
+              Pré-visualização
             </div>
             {tree.length === 0 ? (
-              <div className="border border-dashed rounded-lg py-10 text-center text-xs text-muted-foreground">
+              <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg text-center text-[13px] text-muted-foreground px-6">
                 A árvore aparece aqui conforme você cola o texto ou escolhe um modelo.
               </div>
             ) : (
-              <div className="space-y-0.5">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-1 -mx-1 px-1">
                 {tree.map((n) => (
-                  <div key={n.code} className="flex items-center gap-2 py-1" style={{ paddingLeft: (n.depth - 1) * 18 }}>
-                    <span className={cn("inline-flex items-center gap-1 text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0", ROLE_META[n.role].cls)}>
+                  <div key={n.code} className="flex items-center gap-2.5 py-1" style={{ paddingLeft: (n.depth - 1) * 20 }}>
+                    <span className={cn("inline-flex items-center text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0", ROLE_META[n.role].cls)}>
                       {ROLE_META[n.role].short}
                     </span>
-                    <span className="text-[10px] font-mono text-muted-foreground shrink-0">{n.code}</span>
-                    <span className="text-xs truncate">{n.title}</span>
+                    <span className="text-[11px] font-mono text-muted-foreground shrink-0">{n.code}</span>
+                    <span className="text-[13px] truncate">{n.title}</span>
                   </div>
                 ))}
               </div>
@@ -427,21 +411,22 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           </div>
         </div>
 
-        {/* Rodapé: contadores + ações */}
-        <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-t bg-muted/30">
+        {/* Rodapé: contadores + ações (sempre visível) */}
+        <div className="flex flex-wrap items-center gap-3 px-6 py-3.5 border-t bg-muted/30 shrink-0">
           {tree.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-2">
               <CountBadge role="fase" n={counts.fase} />
               <CountBadge role="pacote" n={counts.pacote} />
               <CountBadge role="atividade" n={counts.atividade} />
               {counts.marco > 0 && <CountBadge role="marco" n={counts.marco} />}
             </div>
           ) : (
-            <span className="text-xs text-muted-foreground">Nada para importar ainda.</span>
+            <span className="text-[13px] text-muted-foreground">Nada para importar ainda.</span>
           )}
           <div className="ml-auto flex gap-2">
             <Button variant="outline" size="sm" onClick={resetAndClose}>Cancelar</Button>
-            <Button size="sm" onClick={handleImport} disabled={tree.length === 0 || importing}>
+            <Button size="sm" onClick={handleImport} disabled={tree.length === 0 || importing} className="gap-1.5">
+              <Upload className="w-4 h-4" />
               {importing ? "Importando..." : `Importar ${tree.length} ${tree.length === 1 ? "item" : "itens"}`}
             </Button>
           </div>
