@@ -78,20 +78,13 @@ export function DateChip({ value, onChange, placeholder, tooltip, invalid, disab
     </button>
   );
 
-  return (
+  // Popover é o elemento âncora do clique — precisa envolver o chip diretamente
+  // (PopoverTrigger asChild → chip). O Tooltip fica POR FORA para não interceptar
+  // a ref/props que o Popover injeta no botão; do contrário o clique não abre o
+  // calendário (bug que afetava os chips vazios, que exibem tooltip).
+  const popover = (
     <Popover>
-      <PopoverTrigger asChild>
-        {tooltip && !hasValue ? (
-          <TooltipProvider delayDuration={150}>
-            <Tooltip>
-              <TooltipTrigger asChild>{chip}</TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">{tooltip}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          chip
-        )}
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{chip}</PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start" side="bottom" sideOffset={4} collisionPadding={12}>
         <Calendar
           mode="single"
@@ -103,4 +96,16 @@ export function DateChip({ value, onChange, placeholder, tooltip, invalid, disab
       </PopoverContent>
     </Popover>
   );
+
+  if (tooltip && !hasValue) {
+    return (
+      <TooltipProvider delayDuration={150}>
+        <Tooltip>
+          <TooltipTrigger asChild>{popover}</TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">{tooltip}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+  return popover;
 }
