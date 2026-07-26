@@ -108,7 +108,7 @@ export function PersonCombobox({
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQuery(""); }}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
-        className="p-0 w-[--radix-popover-trigger-width] min-w-[280px]"
+        className="p-0 w-[--radix-popover-trigger-width] min-w-[280px] overflow-hidden"
         align="start"
         sideOffset={4}
         collisionPadding={16}
@@ -119,8 +119,11 @@ export function PersonCombobox({
             value={query}
             onValueChange={setQuery}
           />
+          {/* Único elemento rolável: o CommandList base já traz max-h + overflow.
+              Aqui só limitamos a altura ao espaço disponível (sem novo overflow),
+              evitando a barra de rolagem dupla. */}
           <CommandList
-            className="max-h-[min(300px,var(--radix-popover-content-available-height,300px))] overflow-y-auto overscroll-contain"
+            className="max-h-[min(300px,var(--radix-popover-content-available-height,300px))] overscroll-contain"
             onWheel={(e) => e.stopPropagation()}
           >
             <CommandEmpty>Ninguém encontrado.</CommandEmpty>

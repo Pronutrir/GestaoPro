@@ -79,15 +79,16 @@ export function SearchSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="p-0 w-[--radix-popover-trigger-width] min-w-[240px]"
+        className="p-0 w-[--radix-popover-trigger-width] min-w-[240px] overflow-hidden"
         align="start"
         sideOffset={4}
         collisionPadding={16}
       >
         <Command shouldFilter={false}>
           <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
+          {/* Único elemento rolável: o CommandList base já traz overflow. */}
           <CommandList
-            className="max-h-[min(300px,var(--radix-popover-content-available-height,300px))] overflow-y-auto overscroll-contain"
+            className="max-h-[min(300px,var(--radix-popover-content-available-height,300px))] overscroll-contain"
             onWheel={(e) => e.stopPropagation()}
           >
             <CommandEmpty>{emptyText}</CommandEmpty>
