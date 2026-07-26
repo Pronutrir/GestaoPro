@@ -37,7 +37,7 @@ import { ProjectDocuments } from "@/components/documents/ProjectDocuments";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, GanttChart, BookOpen, FileText, Flag,
-  ChevronRight, Settings2, Kanban, Users, AlertTriangle,
+  ChevronRight, MoreHorizontal, Kanban, Users, AlertTriangle,
   Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
   NotebookPen, Search, X,
 } from "lucide-react";
@@ -1488,7 +1488,7 @@ export default function ProjectDetailsPage() {
             </TabsContent>
 
             <TabsContent value="backlog" className="mt-3 space-y-3">
-              {/* Barra única: ações + busca + filtros numa linha só */}
+              {/* Barra única: ações à esquerda · busca/filtros/opções à direita */}
               <div className="flex flex-wrap items-center gap-2">
                 {canCreate && (
                   <>
@@ -1496,71 +1496,33 @@ export default function ProjectDetailsPage() {
                       <Plus className="w-4 h-4" /> Nova Atividade
                     </Button>
                     <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="outline" className="gap-1.5 h-9">
-                          <Settings2 className="w-4 h-4" /> Opções
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        {phases.length > 0 && (
-                          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                            const ok = await appConfirm({
-                              title: "Arquivar fases",
-                              description: `Arquivar TODAS as ${phases.length} fases? Elas podem ser restauradas no Arquivo.`,
-                              confirmText: "Arquivar",
-                              destructive: true,
-                            });
-                            if (!ok) return;
-                            await (supabase.from("phases").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id));
-                            toast.success(`${phases.length} fases arquivadas!`); fetchProjectData();
-                          }}>
-                            <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as fases
-                          </DropdownMenuItem>
-                        )}
-                        {activities.length > 0 && (
-                          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                            const ok = await appConfirm({
-                              title: "Arquivar atividades",
-                              description: `Arquivar TODAS as ${activities.length} atividades? Elas podem ser restauradas no Arquivo.`,
-                              confirmText: "Arquivar",
-                              destructive: true,
-                            });
-                            if (!ok) return;
-                            await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id) as any).eq("is_trashed", false);
-                            toast.success(`${activities.length} atividades arquivadas!`); fetchProjectData();
-                          }}>
-                            <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as atividades
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <span className="w-px h-6 bg-border mx-0.5" />
                   </>
                 )}
 
-                <div className="relative flex-1 min-w-[180px] max-w-[280px]">
+                <span className="flex-1" />
+
+                <div className="relative w-[200px]">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     value={listSearch}
                     onChange={(e) => setListSearch(e.target.value)}
-                    placeholder="Buscar tarefa..."
+                    placeholder="Buscar..."
                     className="pl-8 h-9"
                   />
                 </div>
                 <Select value={listStatusFilter} onValueChange={setListStatusFilter}>
-                  <SelectTrigger className="w-[150px] h-9"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-[128px] h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos os status</SelectItem>
+                    <SelectItem value="all">Status: todos</SelectItem>
                     <SelectItem value="pending">Pendente</SelectItem>
                     <SelectItem value="in_progress">Em andamento</SelectItem>
                     <SelectItem value="completed">Concluída</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={listPriorityFilter} onValueChange={setListPriorityFilter}>
-                  <SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todas as prioridades</SelectItem>
+                    <SelectItem value="all">Prioridade: todas</SelectItem>
                     <SelectItem value="urgente">Urgente</SelectItem>
                     <SelectItem value="critica">Crítica</SelectItem>
                     <SelectItem value="alta">Alta</SelectItem>
@@ -1577,6 +1539,48 @@ export default function ProjectDetailsPage() {
                   >
                     <X className="w-3.5 h-3.5" /> Limpar
                   </Button>
+                )}
+
+                {canCreate && (phases.length > 0 || activities.length > 0) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="icon" variant="outline" className="h-9 w-9" title="Mais opções">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {phases.length > 0 && (
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
+                          const ok = await appConfirm({
+                            title: "Arquivar fases",
+                            description: `Arquivar TODAS as ${phases.length} fases? Elas podem ser restauradas no Arquivo.`,
+                            confirmText: "Arquivar",
+                            destructive: true,
+                          });
+                          if (!ok) return;
+                          await (supabase.from("phases").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id));
+                          toast.success(`${phases.length} fases arquivadas!`); fetchProjectData();
+                        }}>
+                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as fases
+                        </DropdownMenuItem>
+                      )}
+                      {activities.length > 0 && (
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
+                          const ok = await appConfirm({
+                            title: "Arquivar atividades",
+                            description: `Arquivar TODAS as ${activities.length} atividades? Elas podem ser restauradas no Arquivo.`,
+                            confirmText: "Arquivar",
+                            destructive: true,
+                          });
+                          if (!ok) return;
+                          await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id) as any).eq("is_trashed", false);
+                          toast.success(`${activities.length} atividades arquivadas!`); fetchProjectData();
+                        }}>
+                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as atividades
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </div>
 

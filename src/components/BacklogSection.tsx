@@ -8,6 +8,7 @@ import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Package, Diamond,
+  Rows3, MoreHorizontal,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -116,6 +117,25 @@ export const BacklogSection = ({
   const [editingTitleValue, setEditingTitleValue] = useState("");
   // Modo de seleção em lote: quando ativo, exibe checkboxes nas linhas
   const [selectMode, setSelectMode] = useState(false);
+  // Agrupar em raias (como no Kanban). "phase" preserva a árvore EAP atual;
+  // as demais exibem grupos planos por dimensão. Persistido por projeto.
+  type GroupBy = "phase" | "assignee" | "priority" | "status" | "type";
+  const groupByKey = `backlog-groupby:${projectId}`;
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => {
+    if (typeof window === "undefined") return "phase";
+    try {
+      const stored = localStorage.getItem(`backlog-groupby:${projectId}`);
+      return (stored as GroupBy) || "phase";
+    } catch { return "phase"; }
+  });
+  const changeGroupBy = (v: GroupBy) => {
+    setGroupBy(v);
+    try { localStorage.setItem(groupByKey, v); } catch { /* quota */ }
+  };
+  // Chaves de grupos colapsados no modo "raia" (plano), separado do da árvore.
+  const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
+  const toggleLane = (id: string) =>
+    setCollapsedLanes((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   // Colunas selecionáveis do backlog (o usuário escolhe o que ver). Persistido
   // por projeto, mesmo padrão da tabela de subatividades.
@@ -315,6 +335,58 @@ export const BacklogSection = ({
   });
   sortByOrder(virtualPhaseActs);
 
+  // ------------------------------------------------------------------
+  // Raias (modo "Agrupar por" ≠ fase): grupos PLANOS por dimensão.
+  // Cada raia = { id, label, items[] }. Todos os itens (pais e filhos)
+  // entram planos — sem árvore — para a dimensão escolhida.
+  // ------------------------------------------------------------------
+  const buildLanes = (): { id: string; label: string; items: Activity[] }[] => {
+    const acts = backlogActs.filter((a) => !isPhaseLikeActivity(a));
+    if (groupBy === "assignee") {
+      const map = new Map<string, Activity[]>();
+      acts.forEach((a) => {
+        const who = a.assigned_to || "";
+        (map.get(who) || map.set(who, []).get(who)!).push(a);
+      });
+      const named = Array.from(map.entries())
+        .filter(([k]) => k)
+        .map(([k, items]) => ({ id: k, label: profileNameMap[k] || k, items }))
+        .sort((x, y) => x.label.localeCompare(y.label));
+      if (map.has("")) named.push({ id: "__none__", label: "Sem responsável", items: map.get("")! });
+      return named;
+    }
+    if (groupBy === "priority") {
+      const order: { id: string; label: string }[] = [
+        { id: "high", label: "Alta" }, { id: "medium", label: "Média" }, { id: "low", label: "Baixa" },
+      ];
+      return order.map((o) => ({ id: o.id, label: o.label, items: acts.filter((a) => (a.priority || "medium") === o.id) }))
+        .filter((l) => l.items.length > 0);
+    }
+    if (groupBy === "status") {
+      const lanes = allStages.map((s) => ({ id: s.id, label: s.title, items: acts.filter((a) => a.workflow_stage_id === s.id) }));
+      const noStage = acts.filter((a) => !a.workflow_stage_id);
+      if (noStage.length) lanes.push({ id: "__none__", label: "Sem status", items: noStage });
+      return lanes.filter((l) => l.items.length > 0);
+    }
+    if (groupBy === "type") {
+      const order: { id: string; label: string; match: (a: Activity) => boolean }[] = [
+        { id: "pacote", label: "Pacotes", match: (a) => (childrenByParent.get(a.id)?.length || 0) > 0 || a.item_type === "pacote" },
+        { id: "marco", label: "Marcos", match: (a) => !!a.is_milestone && !(childrenByParent.get(a.id)?.length) },
+        { id: "atividade", label: "Atividades", match: (a) => !a.is_milestone && !(childrenByParent.get(a.id)?.length) && a.item_type !== "pacote" },
+      ];
+      const used = new Set<string>();
+      const lanes: { id: string; label: string; items: Activity[] }[] = [];
+      order.forEach((o) => {
+        const items = acts.filter((a) => !used.has(a.id) && o.match(a));
+        items.forEach((a) => used.add(a.id));
+        if (items.length) lanes.push({ id: o.id, label: o.label, items });
+      });
+      return lanes;
+    }
+    return [];
+  };
+  const lanes = groupBy === "phase" ? [] : buildLanes();
+
   const togglePhase = (id: string) => {
     setCollapsedPhases((prev) => {
       const n = new Set(prev);
@@ -509,10 +581,10 @@ export const BacklogSection = ({
     </div>
   );
 
-  const renderActivityRow = (activity: Activity, depth: number = 0) => {
+  const renderActivityRow = (activity: Activity, depth: number = 0, flat: boolean = false) => {
     const isSelected = selectedIds.has(activity.id);
     const prio = activity.priority || "medium";
-    const subs = childrenByParent.get(activity.id) || [];
+    const subs = flat ? [] : (childrenByParent.get(activity.id) || []);
     const hasChildren = subs.length > 0;
     const isCollapsed = collapsedParents.has(activity.id);
     const isEditingTitle = editingTitleId === activity.id;
@@ -973,70 +1045,111 @@ export const BacklogSection = ({
     );
   };
 
+  // Contagem por tipo para a legenda de contexto (informação útil, não fantasma).
+  const typeCounts = (() => {
+    const real = backlogActs;
+    let fase = 0, pacote = 0, marco = 0, atividade = 0;
+    real.forEach((a) => {
+      const hasKids = (childrenByParent.get(a.id)?.length || 0) > 0;
+      if (a.item_type === "fase") fase++;
+      else if (hasKids || a.item_type === "pacote") pacote++;
+      else if (a.is_milestone) marco++;
+      else atividade++;
+    });
+    return { total: real.length, fase, pacote, marco, atividade };
+  })();
+
   return (
-    <div className="space-y-3">
-      {/* Toolbar */}
+    <div className="space-y-2.5">
+      {/* Barra de visão: legenda de contexto (esq.) + controles (dir.) */}
       {backlogActs.length > 0 && (
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-3">
-            <Button
-              size="sm"
-              variant={selectMode ? "default" : "outline"}
-              className="h-7 px-2 text-xs gap-1.5"
-              onClick={() => {
-                setSelectMode((v) => {
-                  if (v) setSelectedIds(new Set());
-                  return !v;
-                });
-              }}
-              title="Modo de seleção em lote"
-            >
-              <MousePointerSquareDashed className="w-3.5 h-3.5" />
-              {selectMode ? "Sair da seleção" : "Selecionar"}
-            </Button>
-            {selectMode && (
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={toggleSelectAll}
-                aria-label="Selecionar todas"
-              />
+        <div className="flex items-center justify-between gap-3 flex-wrap px-0.5">
+          {/* Legenda de contexto — total + quebra por tipo */}
+          <p className="text-[13px] text-muted-foreground flex items-center gap-2 flex-wrap">
+            {selectMode && selectedIds.size > 0 ? (
+              <span className="text-foreground font-medium">{selectedIds.size} de {typeCounts.total} selecionada(s)</span>
+            ) : (
+              <>
+                <span><span className="text-foreground font-semibold">{typeCounts.total}</span> tarefas</span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="text-muted-foreground/90">
+                  {[
+                    typeCounts.fase && `${typeCounts.fase} fase${typeCounts.fase > 1 ? "s" : ""}`,
+                    typeCounts.pacote && `${typeCounts.pacote} pacote${typeCounts.pacote > 1 ? "s" : ""}`,
+                    typeCounts.atividade && `${typeCounts.atividade} atividade${typeCounts.atividade > 1 ? "s" : ""}`,
+                    typeCounts.marco && `${typeCounts.marco} marco${typeCounts.marco > 1 ? "s" : ""}`,
+                  ].filter(Boolean).join(" · ")}
+                </span>
+              </>
             )}
-            <p className="text-sm text-muted-foreground">
-              {selectMode && selectedIds.size > 0
-                ? `${selectedIds.size} de ${backlogActs.length} selecionada(s)`
-                : `${backlogActs.length} tarefa(s) no projeto`}
-            </p>
-          </div>
-          <div className="flex items-center gap-1">
+          </p>
+
+          {/* Controles de visão */}
+          <div className="flex items-center gap-1.5">
             {selectMode && selectedIds.size > 0 && (
-              <Button size="sm" className="h-7 text-xs gap-1.5 mr-1" onClick={() => setMoveDialogOpen(true)}>
-                <ArrowRight className="w-3.5 h-3.5" />
-                Mudar status ({selectedIds.size})
-              </Button>
+              <>
+                <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} aria-label="Selecionar todas" className="ml-1" />
+                <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => setMoveDialogOpen(true)}>
+                  <ArrowRight className="w-3.5 h-3.5" /> Mudar status ({selectedIds.size})
+                </Button>
+              </>
             )}
+            {/* Agrupar em raias — mesmo modelo do Kanban */}
+            <Select value={groupBy} onValueChange={(v) => changeGroupBy(v as GroupBy)}>
+              <SelectTrigger className="h-7 w-[136px] text-[13px] gap-1.5">
+                <Rows3 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="phase">Fase</SelectItem>
+                <SelectItem value="assignee">Responsável</SelectItem>
+                <SelectItem value="priority">Prioridade</SelectItem>
+                <SelectItem value="status">Status</SelectItem>
+                <SelectItem value="type">Tipo</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
-              size="icon"
-              variant="ghost"
+              size="icon" variant="ghost"
               className="h-7 w-7 text-muted-foreground"
-              onClick={() => { setCollapsedPhases(new Set()); setCollapsedParents(new Set()); }}
+              onClick={() => {
+                if (groupBy === "phase") { setCollapsedPhases(new Set()); setCollapsedParents(new Set()); }
+                else setCollapsedLanes(new Set());
+              }}
               title="Expandir tudo"
             >
               <ChevronsUpDown className="w-4 h-4" />
             </Button>
             <Button
-              size="icon"
-              variant="ghost"
+              size="icon" variant="ghost"
               className="h-7 w-7 text-muted-foreground"
               onClick={() => {
-                const allPhaseIds = phases.map(p => p.id);
-                const parentIds = backlogActs.filter(a => (childrenByParent.get(a.id) || []).length > 0).map(a => a.id);
-                setCollapsedPhases(new Set(allPhaseIds));
-                setCollapsedParents(new Set(parentIds));
+                if (groupBy === "phase") {
+                  const allPhaseIds = phases.map(p => p.id);
+                  const parentIds = backlogActs.filter(a => (childrenByParent.get(a.id) || []).length > 0).map(a => a.id);
+                  setCollapsedPhases(new Set(allPhaseIds));
+                  setCollapsedParents(new Set(parentIds));
+                } else {
+                  setCollapsedLanes(new Set(lanes.map((l) => l.id)));
+                }
               }}
               title="Recolher tudo"
             >
               <ChevronsDownUp className="w-4 h-4" />
             </Button>
+            {/* Menu de ações secundárias */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" title="Mais ações">
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setSelectMode((v) => { if (v) setSelectedIds(new Set()); return !v; })}>
+                  <MousePointerSquareDashed className="w-4 h-4 mr-2" />
+                  {selectMode ? "Sair da seleção" : "Selecionar em lote"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       )}
@@ -1055,13 +1168,58 @@ export const BacklogSection = ({
 
         {backlogActs.length > 0 && <ColumnHeader />}
 
-        {phases.map((p) => renderPhaseGroup(p.id, p.title))}
+        {/* Modo raia (Agrupar por ≠ Fase): grupos planos por dimensão */}
+        {groupBy !== "phase" && lanes.map((lane) => {
+          const isCollapsed = collapsedLanes.has(lane.id);
+          // Modo raia: itens já são planos — conta direto, sem recursão.
+          const progTotal = lane.items.length;
+          const progDone = lane.items.filter((a) => a.status === "completed").length;
+          const progPct = progTotal > 0 ? Math.round((progDone / progTotal) * 100) : 0;
+          return (
+            <div key={lane.id}>
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50">
+                <button
+                  type="button"
+                  className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
+                  onClick={() => toggleLane(lane.id)}
+                >
+                  {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+                <h4 className="text-[13px] font-semibold text-foreground truncate">{lane.label}</h4>
+                <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{lane.items.length}</span>
+                <div className="flex items-center gap-3 ml-auto">
+                  {progTotal > 0 && (
+                    <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
+                      <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
+                        <span className="block h-full rounded-full bg-success transition-all" style={{ width: `${progPct}%` }} />
+                      </span>
+                      <span className="text-[11px] text-muted-foreground tabular-nums">{progDone}/{progTotal}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+              {!isCollapsed && (
+                <div>
+                  {lane.items.map((a) => renderActivityRow(a, 0, true))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {groupBy !== "phase" && lanes.length === 0 && (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            Nenhuma tarefa para agrupar por esta dimensão.
+          </div>
+        )}
+
+        {/* Modo Fase (padrão): árvore EAP completa */}
+        {groupBy === "phase" && phases.map((p) => renderPhaseGroup(p.id, p.title))}
 
         {/* Atividades-fase (item_type='fase') em qualquer nível top-level viram cards de fase virtuais */}
-        {virtualPhaseActs.map((vp) => renderVirtualPhase(vp))}
+        {groupBy === "phase" && virtualPhaseActs.map((vp) => renderVirtualPhase(vp))}
 
         {/* Atividades top-level sem phase_id que não são fases viram grupo "Sem fase" */}
-        {(() => {
+        {groupBy === "phase" && (() => {
           const orphanTop = topLevelByPhase.get("none") || [];
           const looseTasks = orphanTop;
           const { total: progTotal, done: progDone } = groupProgress(looseTasks);
