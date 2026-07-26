@@ -25,7 +25,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { GutPriorityField } from "@/components/GutPriorityField";
 import { GutPrioritySelector } from "@/components/GutPrioritySelector";
 import { GUT_META, gutLabel, gutScore, normalizeGut, type GutLevel } from "@/lib/gutPriority";
-import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon } from "lucide-react";
+import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon, Wand2 } from "lucide-react";
 import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -389,6 +389,7 @@ export const EditActivityDialog = ({
   const [openAssigneeSubId, setOpenAssigneeSubId] = useState<string | null>(null);
   const [showRealDates, setShowRealDates] = useState(false);
   const [hoursPopoverOpen, setHoursPopoverOpen] = useState(false);
+  const [generatingWbs, setGeneratingWbs] = useState(false);
   const [members, setMembers] = useState<PersonOption[]>([]);
   const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
   const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
@@ -932,6 +933,53 @@ export const EditActivityDialog = ({
     !!formData.end_date &&
     !formData.is_milestone &&
     formData.start_date > formData.end_date;
+
+  // Gera o próximo código EAP com base no contexto (pai → fase → topo) e nos
+  // irmãos existentes. Preenche o campo; o usuário ainda pode editar.
+  const handleAutoWbs = async () => {
+    if (!projectId) return;
+    setGeneratingWbs(true);
+    try {
+      const { getNextSubWbs, getNextTopWbs } = await import("@/lib/wbsAuto");
+      const currentId = (createMode ? draftActivity : activity)?.id;
+      const parentId = formData.parent_id || (activity as any)?.parent_id || null;
+
+      if (parentId) {
+        // Sob um item pai: código = pai + próximo sufixo entre irmãos.
+        const { data: parent } = await supabase
+          .from("activities").select("wbs_code").eq("id", parentId).maybeSingle();
+        const parentWbs = (parent as any)?.wbs_code as string | null | undefined;
+        const { data: siblings } = await supabase
+          .from("activities").select("id, wbs_code")
+          .eq("project_id", projectId).eq("parent_id", parentId);
+        const others = (siblings || []).filter((s: any) => s.id !== currentId).map((s: any) => s.wbs_code);
+        const next = getNextSubWbs(parentWbs || null, others);
+        if (next) { setFormData((f) => ({ ...f, wbs_code: next })); return; }
+      }
+
+      // Topo: deriva da fase (se houver) + próximo nº entre os irmãos do nível.
+      const phaseId = formData.phase_id || null;
+      let phaseWbs: string | null = null;
+      if (phaseId) {
+        const { data: ph } = await supabase
+          .from("phases").select("wbs_code").eq("id", phaseId).maybeSingle();
+        phaseWbs = (ph as any)?.wbs_code || null;
+      }
+      // Irmãos de topo: itens sem pai, na mesma fase (ou sem fase).
+      const { data: tops } = await supabase
+        .from("activities").select("id, wbs_code, phase_id, parent_id")
+        .eq("project_id", projectId).is("parent_id", null);
+      const sameLevel = (tops || []).filter((t: any) =>
+        t.id !== currentId && (phaseId ? t.phase_id === phaseId : !t.phase_id));
+      const next = getNextTopWbs(phaseWbs, sameLevel.map((t: any) => t.wbs_code));
+      setFormData((f) => ({ ...f, wbs_code: next }));
+    } catch (e) {
+      console.error("Erro ao gerar código EAP:", e);
+      toast({ title: "Não foi possível gerar o código EAP", variant: "destructive" });
+    } finally {
+      setGeneratingWbs(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1779,19 +1827,34 @@ export const EditActivityDialog = ({
                 {/* Código EAP/WBS */}
                 <PropertyRow icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
                   <div className="flex flex-col gap-1 w-full max-w-[680px]">
-                    <Input
-                      value={formData.wbs_code}
-                      onChange={(e) => setFormData({ ...formData, wbs_code: e.target.value })}
-                      placeholder={(formData.parent_id || (act as any)?.parent_id) ? "Em branco = gerado automaticamente ao salvar" : ""}
-                      className={cn(
-                        "h-7 text-xs font-mono",
-                        formData.wbs_code && !/^\d+(\.\d+){0,6}$/.test(formData.wbs_code.trim()) && "border-destructive"
-                      )}
-                    />
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        value={formData.wbs_code}
+                        onChange={(e) => setFormData({ ...formData, wbs_code: e.target.value })}
+                        placeholder="Digite ou gere automaticamente"
+                        className={cn(
+                          "h-7 text-xs font-mono flex-1",
+                          formData.wbs_code && !/^\d+(\.\d+){0,6}$/.test(formData.wbs_code.trim()) && "border-destructive"
+                        )}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={formData.wbs_code.trim() ? "ghost" : "outline"}
+                        onClick={handleAutoWbs}
+                        disabled={generatingWbs}
+                        className={cn(
+                          "h-7 px-2.5 text-xs gap-1.5 shrink-0",
+                          !formData.wbs_code.trim() && "text-primary border-primary/40 bg-primary/5 hover:bg-primary/10"
+                        )}
+                        title="Gerar o próximo código com base no item pai (ou fase) e nos irmãos"
+                      >
+                        <Wand2 className="w-3.5 h-3.5" />
+                        {formData.wbs_code.trim() ? "Regerar" : "Gerar"}
+                      </Button>
+                    </div>
                     <span className="text-[10px] text-muted-foreground leading-tight">
-                      {(formData.parent_id || (act as any)?.parent_id)
-                        ? <>Subatividade: a EAP é <strong>preenchida automaticamente</strong> a partir da atividade pai. Você pode sobrescrever.</>
-                        : <>Padrões: <strong>X.0</strong> Fase/Entregável • <strong>X.Y</strong> Subentrega • <strong>X.Y.Z</strong> Pacote • <strong>X.Y.Z.W</strong> Atividade</>}
+                      Digite manualmente ou clique em <strong>{formData.wbs_code.trim() ? "Regerar" : "Gerar"}</strong>. Níveis: <strong>1</strong> Fase • <strong>1.1</strong> Pacote • <strong>1.1.1</strong> Atividade • Marco em qualquer nível.
                     </span>
                   </div>
                 </PropertyRow>
