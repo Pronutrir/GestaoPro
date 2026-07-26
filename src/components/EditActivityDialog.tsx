@@ -182,6 +182,21 @@ function formatHoursDisplay(hours: number): string {
   return "0h";
 }
 
+/** Presets de tempo (curtos, realistas) para o menu rolável do campo Tempo. */
+const HOURS_PRESETS: { value: string; label: string }[] = [
+  { value: "15m", label: "15 minutos" },
+  { value: "30m", label: "30 minutos" },
+  { value: "45m", label: "45 minutos" },
+  { value: "1h", label: "1 hora" },
+  { value: "2h", label: "2 horas" },
+  { value: "3h", label: "3 horas" },
+  { value: "4h", label: "4 horas" },
+  { value: "6h", label: "6 horas" },
+  { value: "8h", label: "8 horas (1 dia)" },
+  { value: "16h", label: "16 horas (2 dias)" },
+  { value: "40h", label: "40 horas (1 semana)" },
+];
+
 /** Format decimal hours to natural language "2 horas 5 minutos" */
 function formatHoursNatural(hours: number): string {
   if (!hours || hours <= 0) return "";
@@ -373,6 +388,7 @@ export const EditActivityDialog = ({
   // aberto (controlado) para que ele feche ao escolher uma opção.
   const [openAssigneeSubId, setOpenAssigneeSubId] = useState<string | null>(null);
   const [showRealDates, setShowRealDates] = useState(false);
+  const [hoursPopoverOpen, setHoursPopoverOpen] = useState(false);
   const [members, setMembers] = useState<PersonOption[]>([]);
   const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
   const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
@@ -1508,22 +1524,47 @@ export const EditActivityDialog = ({
                         </TooltipProvider>
                       ) : (
                         <>
-                          <Input
-                            list="hours-options"
-                            placeholder="Ex: 2:05, 2h 30m, 90m"
-                            value={formData.hours}
-                            onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
-                            onFocus={(e) => e.currentTarget.select()}
-                            className="h-7 px-2 text-xs w-[140px] cursor-pointer"
-                          />
-                          <datalist id="hours-options">
-                            <option value="15m" label="15 minutos" />
-                            <option value="30m" label="30 minutos" />
-                            <option value="45m" label="45 minutos" />
-                            {Array.from({ length: 80 }, (_, i) => i + 1).map((h) => (
-                              <option key={h} value={`${h}h`} label={h === 1 ? "1 hora" : `${h} horas`} />
-                            ))}
-                          </datalist>
+                          {/* Input livre (2:05 / 2h 30m / 90m) + menu compacto rolável */}
+                          <div className="relative w-[140px]">
+                            <Input
+                              placeholder="Ex: 2:05, 2h 30m, 90m"
+                              value={formData.hours}
+                              onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
+                              onFocus={(e) => e.currentTarget.select()}
+                              className="h-7 pl-2 pr-7 text-xs"
+                            />
+                            <Popover open={hoursPopoverOpen} onOpenChange={setHoursPopoverOpen}>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label="Escolher tempo"
+                                  className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:bg-muted"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent align="end" sideOffset={4} className="w-[180px] p-1">
+                                <div className="max-h-56 overflow-y-auto">
+                                  {HOURS_PRESETS.map((p) => {
+                                    const active = parseHoursInput(formData.hours) === parseHoursInput(p.value);
+                                    return (
+                                      <button
+                                        key={p.value}
+                                        type="button"
+                                        onClick={() => { setFormData({ ...formData, hours: p.value }); setHoursPopoverOpen(false); }}
+                                        className={`w-full flex items-baseline justify-between gap-2 px-2.5 py-1.5 rounded-md text-left transition-colors ${
+                                          active ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                                        }`}
+                                      >
+                                        <span className="text-xs font-medium tabular-nums">{p.value}</span>
+                                        <span className="text-[11px] text-muted-foreground">{p.label}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
                           {/* Confirmação em linguagem natural do que foi digitado */}
                           {(() => {
                             const natural = formatHoursNatural(parseHoursInput(formData.hours));
