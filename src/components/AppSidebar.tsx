@@ -22,6 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { BrandLogo } from "@/components/BrandLogo";
+import { DEFAULT_MODULES } from "@/lib/modules";
 
 import {
   Sidebar,
@@ -58,25 +59,31 @@ const allNavItems = [
   { path: "/settings", label: "Configurações", icon: Settings, minRole: "admin" as const, moduleKey: "settings" },
 ];
 
-const DEFAULT_MODULES = ["overview", "projects", "team", "timeline", "blocked", "agent"];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const { isAdmin, canManage, user, profile } = useAuth();
+  const { isAdmin, isGestor, canManage, user, profile } = useAuth();
   const userSector = profile?.sector?.toLowerCase() || "";
   const isQualidade = userSector === "qualidade";
   const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
 
   useEffect(() => {
-    if (!user?.id || canManage) return;
+    // Admin sempre tem acesso total → não precisa buscar módulos.
+    // Gestor e usuário comum respeitam allowedModules SE houver linha gravada.
+    if (!user?.id || isAdmin) return;
     const fetchModules = async () => {
       const { data } = await supabase
         .from("user_module_permissions")
         .select("allowed_modules")
         .eq("user_id", user.id)
         .maybeSingle();
-      setAllowedModules(data?.allowed_modules || DEFAULT_MODULES);
+      // Sem linha configurada:
+      //  - Gestor → null (sem restrição; preserva o "vê tudo" atual até o
+      //    admin configurar explicitamente).
+      //  - Usuário comum → DEFAULT_MODULES (conjunto essencial).
+      const fallback = isGestor ? null : DEFAULT_MODULES;
+      setAllowedModules(data?.allowed_modules ?? fallback);
     };
     fetchModules();
 
@@ -91,39 +98,32 @@ export function AppSidebar() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user?.id, canManage]);
+  }, [user?.id, isAdmin, isGestor]);
+
+  // Papel permite ver este item? (independente de módulo)
+  const roleAllows = (minRole: string) => {
+    if (minRole === "admin") return isAdmin;
+    if (minRole === "gestor" || minRole === "qualidade") return canManage;
+    return true; // "user": qualquer autenticado
+  };
 
   const navItems = allNavItems.filter(item => {
-    // Settings is always admin-only
-    if (item.minRole === "admin") return isAdmin;
+    // 1) Barreira de PAPEL.
+    if (!roleAllows(item.minRole)) return false;
 
-    // Admin/Gestor always see everything their role allows
-    if (canManage) {
-      if (item.minRole === "qualidade") return true;
-      if (item.minRole === "gestor") return true;
-      if (item.minRole === "user") return true;
-      return false;
-    }
+    // 2) Admin sempre vê tudo que o papel permite (sem checar módulos).
+    if (isAdmin) return true;
 
-    // For regular users, check module permissions
-    if (item.minRole === "qualidade") {
-      if (allowedModules && !allowedModules.includes(item.moduleKey)) return false;
-      return true;
-    }
+    // 3) Regras específicas por rota (independem de módulo).
+    // Usuários do setor qualidade não veem "Projetos".
+    if (item.path === "/projects" && isQualidade) return false;
+    // Roadmap é onde o usuário acompanha/edita as próprias solicitações —
+    // fica fora do controle por módulo para não bloquear os próprios pedidos.
+    if (item.path === "/roadmap") return true;
 
-    if (item.minRole === "user") {
-      // Usuários do setor qualidade não veem "Projetos"
-      if (item.path === "/projects" && isQualidade) return false;
-      // Roadmap fica fora do controle por módulo: é onde o usuário acompanha e
-      // edita as próprias solicitações, então quem tem allowedModules
-      // configurado ficaria sem acesso aos próprios pedidos.
-      if (item.path === "/roadmap") return true;
-      // Check module permissions
-      if (allowedModules && !allowedModules.includes(item.moduleKey)) return false;
-      return true;
-    }
-
-    return false;
+    // 4) Barreira de MÓDULO (aplica a gestor E usuário comum agora).
+    if (allowedModules && !allowedModules.includes(item.moduleKey)) return false;
+    return true;
   });
 
   return (
