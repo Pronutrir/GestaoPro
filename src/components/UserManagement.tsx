@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { ALL_PROJECT_TABS, ALL_TAB_VALUES, normalizeProjectTabs } from "@/lib/projectTabs";
+import { RoleTitleSelect } from "@/components/settings/RoleTitleSelect";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -382,8 +383,8 @@ export const UserManagement = () => {
                       <SectorSelect value={form.sector} onValueChange={(v) => setForm({ ...form, sector: v })} />
                     </div>
                     <div className="grid gap-2">
-                      <Label>Cargo</Label>
-                      <Input value={form.role_title} onChange={(e) => setForm({ ...form, role_title: e.target.value })} placeholder="Gerente" />
+                      <Label>Cargo / Nível</Label>
+                      <RoleTitleSelect value={form.role_title} onValueChange={(v) => setForm({ ...form, role_title: v })} />
                     </div>
                   </div>
                   <div className="grid gap-2">
@@ -393,7 +394,9 @@ export const UserManagement = () => {
                       <SelectContent>
                         <SelectItem value="admin">Administrador</SelectItem>
                         <SelectItem value="gestor">Gestor</SelectItem>
-                        <SelectItem value="user">Usuário</SelectItem>
+                        <SelectItem value="user">Membro</SelectItem>
+                        <SelectItem value="visualizador">Visualizador (só leitura)</SelectItem>
+                        <SelectItem value="convidado">Convidado (externo)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -585,8 +588,8 @@ export const UserManagement = () => {
                           <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} />
                         </div>
                         <div className="grid gap-2">
-                          <Label className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Cargo</Label>
-                          <Input value={editForm.role_title} onChange={(e) => setEditForm({ ...editForm, role_title: e.target.value })} />
+                          <Label className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Cargo / Nível</Label>
+                          <RoleTitleSelect value={editForm.role_title} onValueChange={(v) => setEditForm({ ...editForm, role_title: v })} />
                         </div>
                       </div>
 
@@ -597,7 +600,9 @@ export const UserManagement = () => {
                           <SelectContent>
                             <SelectItem value="admin">Administrador</SelectItem>
                             <SelectItem value="gestor">Gestor</SelectItem>
-                            <SelectItem value="user">Usuário</SelectItem>
+                            <SelectItem value="user">Membro</SelectItem>
+                            <SelectItem value="visualizador">Visualizador (só leitura)</SelectItem>
+                            <SelectItem value="convidado">Convidado (externo)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

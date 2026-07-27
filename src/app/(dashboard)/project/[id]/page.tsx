@@ -155,7 +155,7 @@ export default function ProjectDetailsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const appConfirm = useAppConfirm();
-  const { isAdmin: isRealAdmin, canManage: isAdmin, user: currentUser, profile, loading: authLoading } = useAuth();
+  const { isAdmin: isRealAdmin, canManage: isAdmin, canWrite, user: currentUser, profile, loading: authLoading } = useAuth();
   const [accessDenied, setAccessDenied] = useState(false);
   const [activityScopedAccess, setActivityScopedAccess] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
@@ -219,10 +219,11 @@ export default function ProjectDetailsPage() {
   const baseCanDelete = !permissionsLoading && (isAdmin || (userPerms?.can_delete ?? false));
   const baseCanMove = !permissionsLoading && (isAdmin || (userPerms?.can_move ?? false));
   const isProjectConcluded = project?.status === "concluido";
-  const canCreate = baseCanCreate && !isChangeBlocked && !isProjectConcluded;
-  const canEdit = baseCanEdit && !isChangeBlocked && !isProjectConcluded;
-  const canDelete = baseCanDelete && !isChangeBlocked && !isProjectConcluded;
-  const canMove = baseCanMove && !isChangeBlocked && !isProjectConcluded;
+  // Visualizador (canWrite=false) é só leitura: bloqueia toda escrita no projeto.
+  const canCreate = canWrite && baseCanCreate && !isChangeBlocked && !isProjectConcluded;
+  const canEdit = canWrite && baseCanEdit && !isChangeBlocked && !isProjectConcluded;
+  const canDelete = canWrite && baseCanDelete && !isChangeBlocked && !isProjectConcluded;
+  const canMove = canWrite && baseCanMove && !isChangeBlocked && !isProjectConcluded;
   const isQualityProject = project?.category === "qualidade";
   const showProjectLockedToast = useCallback((action: string) => {
     toast.error("Projeto concluído", { description: `Reabra o projeto para ${action}.` });
