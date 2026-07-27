@@ -9,7 +9,7 @@ import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 
 const AREAS = [
   { href: "/settings/pessoas", eyebrow: "Pessoas", title: "Pessoas & Acessos", icon: UsersIcon, key: "pessoas" },
-  { href: "/settings/estrutura", eyebrow: "Estrutura", title: "Setores", icon: Building2, key: "estrutura" },
+  { href: "/settings/estrutura", eyebrow: "Estrutura", title: "Setores & Cargos", icon: Building2, key: "estrutura" },
   { href: "/settings/calendario", eyebrow: "Calendário", title: "Feriados e Férias", icon: CalendarDays, key: "calendario" },
 ] as const;
 
@@ -29,7 +29,7 @@ const Settings = () => {
 
   const subtitleFor = (key: string) =>
     key === "pessoas" ? "Cadastro, papéis e módulos"
-      : key === "estrutura" ? `${sectorsCount} setor(es) cadastrado(s)`
+      : key === "estrutura" ? `${sectorsCount} setor(es) · cargos & níveis`
       : "Capacidade e disponibilidade";
 
   return (
