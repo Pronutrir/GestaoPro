@@ -15,6 +15,10 @@ import {
   ChevronLeft, Settings2,
 } from "lucide-react";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuShortcut,
+} from "@/components/ui/dropdown-menu";
+import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
@@ -157,6 +161,7 @@ export function PeopleManager() {
   const [deleteConfirm, setDeleteConfirm] = useState<Profile | null>(null);
   const [banConfirm, setBanConfirm] = useState<{ profile: Profile; action: "ban" | "unban" } | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const rowRefs = useRef<Record<string, HTMLElement | null>>({});
   const searchParams = useSearchParams();
   const focusHandled = useRef(false);
@@ -380,6 +385,18 @@ export function PeopleManager() {
       rowRefs.current[target.id]?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 120);
   }, [loading, profiles, searchParams]);
+
+  // Atalho Ctrl/⌘K foca a busca da barra de comando.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const handleSaveTabPermissions = async (userId: string, tabs: string[]) => {
     const normalizedTabs = normalizeProjectTabs(tabs);
@@ -766,39 +783,60 @@ export function PeopleManager() {
 
       {/* ══ Tela única: toolbar + lista (master) | ficha (detail) ══ */}
       <Card className="overflow-hidden">
-        {/* ── Toolbar integrada: título · contagem · ações ── */}
-        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border">
-          <span className="text-[14px] font-semibold">Pessoas</span>
-          <span className="text-[11px] text-muted-foreground bg-muted rounded-full px-2 py-0.5 tabular-nums">
-            {loading ? "…" : profiles.length}
-          </span>
-          {pendingCount > 0 && (
-            <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 rounded-full px-2 py-0.5">
-              {pendingCount} pendente{pendingCount === 1 ? "" : "s"}
-            </span>
-          )}
-          <div className="flex-1" />
-          <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={() => setManageListsDialog("sectors")}>
-            <Settings2 className="w-4 h-4" /> Setores &amp; Cargos
-          </Button>
-          <Button size="sm" className="gap-1.5 h-8" onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4" /> Nova pessoa
-          </Button>
+        {/* ── Barra de comando: buscar + criar num controle só ── */}
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              ref={searchRef}
+              placeholder="Buscar pessoa por nome ou e-mail…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 pr-14 h-9 text-[13px] bg-muted/40 border-transparent focus-visible:bg-background"
+            />
+            <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center gap-0.5 text-[10px] text-muted-foreground border border-border rounded px-1.5 py-0.5 bg-background pointer-events-none">
+              Ctrl K
+            </kbd>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" className="gap-1.5 h-9 shrink-0">
+                <Plus className="w-4 h-4" /> Adicionar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
+                <User className="w-4 h-4 mr-2" /> Nova pessoa
+                <DropdownMenuShortcut>P</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Listas</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setManageListsDialog("sectors")}>
+                <Building2 className="w-4 h-4 mr-2" /> Novo setor
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setManageListsDialog("job_titles")}>
+                <Briefcase className="w-4 h-4 mr-2" /> Novo cargo
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setManageListsDialog("sectors")}>
+                <Settings2 className="w-4 h-4 mr-2" /> Gerenciar setores &amp; cargos
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-[320px_1fr]">
           {/* ── MASTER: lista de pessoas ── */}
           <div className={cn("md:border-r border-border flex flex-col", selectedProfile && "hidden md:flex")}>
-            {/* Ferramentas da lista */}
+            {/* Ferramentas da lista: contagem + filtro de estado + agrupar */}
             <div className="p-3 border-b border-border space-y-2.5">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por nome ou e-mail…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9 h-9 text-[13px]"
-                />
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span className="font-medium text-foreground">{loading ? "…" : profiles.length} pessoa{profiles.length === 1 ? "" : "s"}</span>
+                {pendingCount > 0 && (
+                  <span className="font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 rounded-full px-2 py-0.5">
+                    {pendingCount} pendente{pendingCount === 1 ? "" : "s"}
+                  </span>
+                )}
               </div>
               {/* Filtro de estado — linha própria, chips que quebram se faltar espaço */}
               <div className="flex flex-wrap gap-1">
