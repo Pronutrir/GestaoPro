@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
-  ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Package, Diamond,
+  ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Diamond,
   Rows3, MoreHorizontal,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { resolveEapKind, eapTypeOptions, type EapKind } from "@/lib/eapModel";
 
 interface Phase { id: string; title: string; }
 interface WorkflowStage { id: string; title: string; display_order: number; color: string; }
@@ -369,10 +370,11 @@ export const BacklogSection = ({
       return lanes.filter((l) => l.items.length > 0);
     }
     if (groupBy === "type") {
+      const kindOf = (a: Activity) => resolveEapKind(a, (childrenByParent.get(a.id)?.length || 0) > 0);
       const order: { id: string; label: string; match: (a: Activity) => boolean }[] = [
-        { id: "pacote", label: "Pacotes", match: (a) => (childrenByParent.get(a.id)?.length || 0) > 0 || a.item_type === "pacote" },
-        { id: "marco", label: "Marcos", match: (a) => !!a.is_milestone && !(childrenByParent.get(a.id)?.length) },
-        { id: "atividade", label: "Atividades", match: (a) => !a.is_milestone && !(childrenByParent.get(a.id)?.length) && a.item_type !== "pacote" },
+        { id: "fase", label: "Fases/Entregas", match: (a) => kindOf(a) === "fase" },
+        { id: "atividade", label: "Atividades", match: (a) => kindOf(a) === "atividade" },
+        { id: "marco", label: "Marcos", match: (a) => kindOf(a) === "marco" },
       ];
       const used = new Set<string>();
       const lanes: { id: string; label: string; items: Activity[] }[] = [];
@@ -444,11 +446,9 @@ export const BacklogSection = ({
       setQuickAddTitle("");
       return;
     }
-    // EAP: se o pai é folha (atividade/marco), promove a "pacote" antes de
-    // inserir. TOLERANTE: se o banco ainda não aceita 'pacote' (CHECK antigo,
-    // migration mínima pendente), NÃO aborta — segue criando o subitem. O pai
-    // continua funcionando como agrupador por ter filhos; o tipo é ajustado
-    // quando a migration entrar.
+    // EAP: se o pai é folha (atividade/marco), promove a agrupador (Fase/Entrega)
+    // antes de inserir. Fase agrupa em qualquer nível. Erro ignorado de propósito:
+    // o pai já funciona como agrupador por ter filhos.
     if (parentId) {
       const parent = backlogActs.find((a) => a.id === parentId);
       const parentType = parent?.item_type || "atividade";
@@ -456,8 +456,8 @@ export const BacklogSection = ({
       if (parentIsLeaf) {
         await supabase
           .from("activities")
-          .update({ item_type: "pacote", is_milestone: false } as any)
-          .eq("id", parentId); // erro ignorado de propósito (ver comentário acima)
+          .update({ item_type: "fase", is_milestone: false } as any)
+          .eq("id", parentId);
       }
     }
 
@@ -488,39 +488,28 @@ export const BacklogSection = ({
     onDataChanged();
   };
 
-  // Papel EAP exibido: automático pela posição na árvore (marco > fase explícita
-  // > pacote se tem filhos > atividade), a menos que o tipo esteja gravado.
-  type Kind = "atividade" | "pacote" | "fase" | "marco";
-  const resolveKind = (a: Activity, hasChildren: boolean): Kind => {
-    if (a.is_milestone) return "marco";
-    if (a.item_type === "fase") return "fase";
-    if (a.item_type === "pacote" || hasChildren) return "pacote";
-    return "atividade";
-  };
+  // Papel EAP exibido (fonte única: lib/eapModel). Três papéis: Fase (agrupador,
+  // qualquer nível), Atividade (folha), Marco. 'pacote' legado aparece como Fase.
+  type Kind = EapKind;
+  const resolveKind = (a: Activity, hasChildren: boolean): Kind => resolveEapKind(a, hasChildren);
   const KIND_META: Record<Kind, { label: string; icon: JSX.Element; cls: string }> = {
     fase: { label: "Fase", icon: <Layers className="w-3 h-3" />, cls: "text-primary bg-primary/10 border-primary/30" },
-    pacote: { label: "Pacote", icon: <Package className="w-3 h-3" />, cls: "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/40" },
     atividade: { label: "Atividade", icon: <Circle className="w-3 h-3" />, cls: "text-muted-foreground bg-muted border-border" },
     marco: { label: "Marco", icon: <Diamond className="w-3 h-3 fill-amber-500 text-amber-500" />, cls: "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/40" },
   };
-  // Muda o tipo de um item. Tolerante: se o banco ainda não aceita 'pacote'
-  // (migration pendente), avisa mas não quebra.
+  // Muda o tipo de um item.
   const handleChangeType = async (activity: Activity, kind: Kind, hasChildren: boolean) => {
     // Folha (atividade/marco) não pode ter filhos.
     if ((kind === "atividade" || kind === "marco") && hasChildren) {
-      toast({ title: "Não é possível", description: "Este item tem subitens; só Pacote ou Fase agrupam.", variant: "destructive" });
+      toast({ title: "Não é possível", description: "Este item tem subitens; só Fase/Entrega agrupa.", variant: "destructive" });
       return;
     }
     const patch = kind === "marco"
       ? { is_milestone: true, item_type: "atividade" }
-      : { is_milestone: false, item_type: kind };
+      : { is_milestone: false, item_type: kind }; // 'fase' | 'atividade'
     const { error } = await supabase.from("activities").update(patch as any).eq("id", activity.id);
     if (error) {
-      if (kind === "pacote") {
-        toast({ title: "Pacote indisponível", description: "Aplique a migration para gravar o tipo Pacote. O item já agrupa por ter subitens.", variant: "destructive" });
-      } else {
-        toast({ title: "Erro ao mudar tipo", variant: "destructive" });
-      }
+      toast({ title: "Erro ao mudar tipo", variant: "destructive" });
       return;
     }
     onDataChanged();
@@ -592,9 +581,8 @@ export const BacklogSection = ({
 
     const kind = resolveKind(activity, hasChildren);
     const kindMeta = KIND_META[kind];
-    const isTopLevel = !activity.parent_id;
-    const typeOptions: Kind[] = hasChildren ? ["pacote"] : ["atividade", "marco", "pacote"];
-    if (isTopLevel) typeOptions.push("fase");
+    // Fase disponível em qualquer nível; item com filhos só pode ser Fase.
+    const typeOptions: Kind[] = eapTypeOptions({ hasChildren });
     const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
     const dc = dependencyCounts.get(activity.id);
     const hasDeps = !!dc && (dc.pred > 0 || dc.succ > 0);
@@ -792,7 +780,7 @@ export const BacklogSection = ({
             <button
               type="button"
               className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Adicionar subitem (torna-o um Pacote)"
+              title="Adicionar subitem (torna-o uma Fase/Entrega)"
               onClick={(e) => {
                 e.stopPropagation();
                 setQuickAddKey(`parent:${activity.id}`);
@@ -1048,15 +1036,15 @@ export const BacklogSection = ({
   // Contagem por tipo para a legenda de contexto (informação útil, não fantasma).
   const typeCounts = (() => {
     const real = backlogActs;
-    let fase = 0, pacote = 0, marco = 0, atividade = 0;
+    let fase = 0, marco = 0, atividade = 0;
     real.forEach((a) => {
       const hasKids = (childrenByParent.get(a.id)?.length || 0) > 0;
-      if (a.item_type === "fase") fase++;
-      else if (hasKids || a.item_type === "pacote") pacote++;
-      else if (a.is_milestone) marco++;
+      const k = resolveEapKind(a, hasKids);
+      if (k === "fase") fase++;
+      else if (k === "marco") marco++;
       else atividade++;
     });
-    return { total: real.length, fase, pacote, marco, atividade };
+    return { total: real.length, fase, marco, atividade };
   })();
 
   return (
@@ -1075,7 +1063,6 @@ export const BacklogSection = ({
                 <span className="text-muted-foreground/90">
                   {[
                     typeCounts.fase && `${typeCounts.fase} fase${typeCounts.fase > 1 ? "s" : ""}`,
-                    typeCounts.pacote && `${typeCounts.pacote} pacote${typeCounts.pacote > 1 ? "s" : ""}`,
                     typeCounts.atividade && `${typeCounts.atividade} atividade${typeCounts.atividade > 1 ? "s" : ""}`,
                     typeCounts.marco && `${typeCounts.marco} marco${typeCounts.marco > 1 ? "s" : ""}`,
                   ].filter(Boolean).join(" · ")}

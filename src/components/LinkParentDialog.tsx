@@ -149,13 +149,14 @@ export const LinkParentDialog = ({
           return;
         }
 
-        // EAP: se o pai é folha (atividade), promove a "pacote" para respeitar
-        // a regra de aninhamento (folha não pode ter filhos).
+        // EAP: se o pai é folha (atividade), promove a Fase/Entrega para respeitar
+        // a regra de aninhamento (folha não pode ter filhos). Fase agrupa em
+        // qualquer nível.
         const parentType = validatedParent.item_type || "atividade";
         if (parentType !== "fase" && parentType !== "pacote") {
           const { error: promoteErr } = await supabase
             .from("activities")
-            .update({ item_type: "pacote" } as any)
+            .update({ item_type: "fase" } as any)
             .eq("id", validatedParent.id);
           if (promoteErr) throw promoteErr;
         }

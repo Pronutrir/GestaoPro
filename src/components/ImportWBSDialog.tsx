@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, Layers, Package, Circle, Diamond, ClipboardList, FileText } from "lucide-react";
+import { Upload, Layers, Circle, Diamond, ClipboardList, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
 /* ------------------------------------------------------------------ */
-type EapRole = "fase" | "pacote" | "atividade" | "marco";
+type EapRole = "fase" | "atividade" | "marco";
 interface TreeNode {
   code: string;          // 1, 1.1, 1.1.2...
   title: string;
@@ -26,10 +26,9 @@ interface ImportWBSDialogProps {
 }
 
 const ROLE_META: Record<EapRole, { label: string; short: string; icon: JSX.Element; cls: string }> = {
-  fase:      { label: "Fase",      short: "Fase",  icon: <Layers className="w-3 h-3" />,  cls: "bg-primary/10 text-primary border-primary/30" },
-  pacote:    { label: "Pacote",    short: "Pacote", icon: <Package className="w-3 h-3" />, cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
-  atividade: { label: "Atividade", short: "Ativ.", icon: <Circle className="w-3 h-3" />,  cls: "bg-muted text-muted-foreground border-border" },
-  marco:     { label: "Marco",     short: "Marco", icon: <Diamond className="w-3 h-3" />,  cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
+  fase:      { label: "Fase/Entrega", short: "Fase",  icon: <Layers className="w-3 h-3" />,  cls: "bg-primary/10 text-primary border-primary/30" },
+  atividade: { label: "Atividade",    short: "Ativ.", icon: <Circle className="w-3 h-3" />,  cls: "bg-muted text-muted-foreground border-border" },
+  marco:     { label: "Marco",        short: "Marco", icon: <Diamond className="w-3 h-3" />,  cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
 };
 
 const isMilestoneTitle = (t: string) =>
@@ -104,14 +103,12 @@ const parseFlexible = (text: string): TreeNode[] => {
     }
   }
 
-  // 2) Resolve o PAPEL EAP de cada nó (posição + palavra-chave):
-  //    - topo (depth 1) = fase
-  //    - tem filhos = pacote
-  //    - folha = atividade; se o título indicar, marco
+  // 2) Resolve o PAPEL EAP (modelo unificado, profundidade livre):
+  //    - QUALQUER nó com filhos = Fase/Entrega (agrupa, em qualquer nível)
+  //    - folha: marco se o título indicar; senão atividade
   const hasChildren = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
   for (const n of nodes) {
-    if (n.depth === 1) n.role = "fase";
-    else if (hasChildren.has(n.code)) n.role = "pacote";
+    if (hasChildren.has(n.code)) n.role = "fase";
     else if (isMilestoneTitle(n.title)) n.role = "marco";
     else n.role = "atividade";
   }
@@ -190,7 +187,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
   const tree = useMemo(() => parseFlexible(text), [text]);
   const counts = useMemo(() => {
-    const c = { fase: 0, pacote: 0, atividade: 0, marco: 0 };
+    const c = { fase: 0, atividade: 0, marco: 0 };
     tree.forEach((n) => { c[n.role]++; });
     return c;
   }, [tree]);
@@ -208,8 +205,11 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     if (tree.length === 0) return;
     setImporting(true);
     try {
-      const phases = tree.filter((n) => n.role === "fase");
-      const nonPhase = tree.filter((n) => n.role !== "fase");
+      // Nível 1 agrupador = "fase do projeto" (tabela phases). Agrupadores
+      // ANINHADOS (fase em profundidade > 1) viram activities com item_type='fase'
+      // — Fase/Entrega vive na árvore de atividades em qualquer nível.
+      const phases = tree.filter((n) => n.role === "fase" && n.depth === 1);
+      const nonPhase = tree.filter((n) => !(n.role === "fase" && n.depth === 1));
 
       const { data: existingPhases } = await supabase
         .from("phases").select("display_order")
@@ -256,7 +256,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         const phaseKey = phaseId || "__none__";
         if (!(phaseKey in phaseOrderCounter)) phaseOrderCounter[phaseKey] = 0;
 
-        const itemType = node.role === "pacote" ? "pacote" : "atividade";
+        // Agrupador aninhado = 'fase'; marco/atividade = 'atividade' (folha).
+        const itemType = node.role === "fase" ? "fase" : "atividade";
         const basePayload: any = {
           project_id: projectId,
           title: `${node.code} ${node.title}`,
@@ -272,7 +273,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         };
 
         let res = await supabase.from("activities").insert(basePayload).select("id").single();
-        if (res.error && /item_type/i.test(res.error.message) && itemType === "pacote") {
+        if (res.error && /item_type/i.test(res.error.message) && itemType === "fase") {
           pacoteUnsupported = true;
           res = await supabase.from("activities").insert({ ...basePayload, item_type: "atividade" }).select("id").single();
         }
@@ -282,13 +283,13 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
       if (pacoteUnsupported) {
         toast({
-          title: "Tipo 'Pacote' pendente no banco",
-          description: "Os agrupadores viraram atividade (ainda agrupam por terem subitens). Aplique a migration de item_type na VM para gravar o tipo Pacote.",
+          title: "Tipo 'Fase/Entrega' pendente no banco",
+          description: "Os agrupadores aninhados viraram atividade (ainda agrupam por terem subitens). Aplique a migration de item_type na VM.",
         });
       }
       toast({
         title: "EAP importada!",
-        description: `${counts.fase} fase(s), ${counts.pacote} pacote(s), ${counts.atividade} atividade(s) e ${counts.marco} marco(s) criados.`,
+        description: `${counts.fase} fase(s)/entrega(s), ${counts.atividade} atividade(s) e ${counts.marco} marco(s) criados.`,
       });
       resetAndClose();
       onDataChanged();
@@ -349,7 +350,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 value={text}
                 onChange={(e) => { setText(e.target.value); setSelectedTemplate(null); }}
                 className="flex-1 min-h-0 resize-none font-mono text-[13px] leading-relaxed"
-                placeholder={"1. Fase\n1.1 Pacote\n1.1.1 Atividade\n\nou com bullets e recuo:\n• Fase\n   - Atividade"}
+                placeholder={"1. Fase\n1.1 Entrega\n1.1.1 Atividade\n\nou com bullets e recuo:\n• Fase\n   - Atividade"}
               />
             ) : (
               <div className="overflow-y-auto space-y-2 -mx-1 px-1">
@@ -416,7 +417,6 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           {tree.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               <CountBadge role="fase" n={counts.fase} />
-              <CountBadge role="pacote" n={counts.pacote} />
               <CountBadge role="atividade" n={counts.atividade} />
               {counts.marco > 0 && <CountBadge role="marco" n={counts.marco} />}
             </div>

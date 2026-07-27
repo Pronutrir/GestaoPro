@@ -106,7 +106,7 @@ interface Activity {
   tags?: string[];
   parent_id?: string | null;
   participants?: string[] | null;
-  item_type?: "fase" | "tarefa" | null;
+  item_type?: string | null;
   is_milestone?: boolean | null;
   created_by?: string | null;
 }

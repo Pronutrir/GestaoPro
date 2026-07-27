@@ -11,9 +11,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Circle, Package, Layers, Diamond, Plus } from "lucide-react";
+import { Circle, Layers, Diamond, Plus } from "lucide-react";
 
-type Kind = "atividade" | "pacote" | "fase" | "marco";
+type Kind = "fase" | "atividade" | "marco";
 
 interface ParentOption { id: string; title: string; item_type: string | null; is_milestone?: boolean | null; parent_id?: string | null; }
 
@@ -31,9 +31,8 @@ interface QuickCreateActivityProps {
 }
 
 const KIND_META: Record<Kind, { label: string; icon: JSX.Element; hint: string }> = {
+  fase: { label: "Fase / Entrega", icon: <Layers className="w-3.5 h-3.5" />, hint: "Agrupa outros itens (qualquer nível)." },
   atividade: { label: "Atividade", icon: <Circle className="w-3.5 h-3.5" />, hint: "Trabalho executável (folha)." },
-  pacote: { label: "Pacote", icon: <Package className="w-3.5 h-3.5" />, hint: "Agrupa atividades." },
-  fase: { label: "Fase", icon: <Layers className="w-3.5 h-3.5" />, hint: "Entrega macro; agrupa pacotes." },
   marco: { label: "Marco", icon: <Diamond className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />, hint: "Ponto único no tempo." },
 };
 
@@ -70,13 +69,11 @@ export const QuickCreateActivity = ({
       });
   }, [open, projectId]);
 
-  // Se escolheu um pai, o item não pode ser Fase (fase é de topo).
+  // Fase/Entrega disponível em qualquer nível (mesmas opções com ou sem pai).
   const childrenIds = new Set(parentOptions.map((o) => o.parent_id).filter(Boolean) as string[]);
   const parents = parentOptions.filter((o) => canBeParentWith(o, childrenIds.has(o.id)));
   const hasParent = parentId !== "__root__";
-  const kindOptions: Kind[] = hasParent
-    ? ["atividade", "pacote", "marco"]
-    : ["atividade", "fase", "pacote", "marco"];
+  const kindOptions: Kind[] = ["fase", "atividade", "marco"];
   const effectiveKind: Kind = kindOptions.includes(kind) ? kind : "atividade";
 
   const insert = async (): Promise<string | null> => {
@@ -92,9 +89,9 @@ export const QuickCreateActivity = ({
       is_milestone: effectiveKind === "marco",
       item_type: effectiveKind === "marco" ? "atividade" : effectiveKind,
     };
-    // Tolerante ao CHECK: se o banco não aceita 'pacote'/'fase', tenta 'atividade'.
+    // Tolerante ao CHECK: se o banco não aceita 'fase', tenta 'atividade'.
     let { data, error } = await supabase.from("activities").insert(patch).select("id").single();
-    if (error && (effectiveKind === "pacote" || effectiveKind === "fase")) {
+    if (error && effectiveKind === "fase") {
       const retry = { ...patch, item_type: "atividade" };
       ({ data, error } = await supabase.from("activities").insert(retry).select("id").single());
     }
@@ -162,7 +159,7 @@ export const QuickCreateActivity = ({
                 <SelectItem value="__root__">Nível principal (sem pai)</SelectItem>
                 {parents.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    {p.item_type === "fase" ? "Fase: " : "Pacote: "}{p.title}
+                    {p.title}
                   </SelectItem>
                 ))}
               </SelectContent>

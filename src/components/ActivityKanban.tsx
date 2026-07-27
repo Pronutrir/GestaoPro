@@ -50,7 +50,6 @@ import {
   LayoutGrid,
   User,
   Layers,
-  Package,
   Search,
   Filter,
 } from "lucide-react";
@@ -102,6 +101,7 @@ import { normalizeGut, GUT_META, type GutLevel } from "@/lib/gutPriority";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
 import { inferStagePreset } from "@/lib/workflowStageRules";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { resolveEapKind } from "@/lib/eapModel";
 import { cn } from "@/lib/utils";
 
 const formatHours = (hours: number): string => {
@@ -623,13 +623,10 @@ function KanbanCard({
 
   const isMilestone = !!(activity as any).is_milestone;
   const eapType = (activity as any).item_type as string | undefined;
-  const isPhase = eapType === "fase";
-  // Mesma regra do Backlog (resolveKind): enquanto a normalização do item_type
-  // não roda na base, um agrupador legado continua gravado como 'atividade' —
-  // ter filhos é o que o torna um Pacote. Sem isso o mesmo item aparece como
-  // "Pacote" no Backlog e "Atividade" aqui.
-  const isPackage =
-    !isMilestone && !isPhase && (eapType === "pacote" || (subActivityCount ?? 0) > 0);
+  // Modelo unificado (lib/eapModel): agrupador = Fase/Entrega. Cobre 'fase',
+  // 'pacote' legado e qualquer item com filhos. Exibido sempre como Fase.
+  const isPhase =
+    !isMilestone && (eapType === "fase" || eapType === "pacote" || (subActivityCount ?? 0) > 0);
   const cardBorderClass = isMilestone
     ? "border-amber-500 border-l-[4px] border-l-amber-500 bg-amber-500/5"
     : isBlocked
@@ -719,10 +716,7 @@ function KanbanCard({
                     />
                   )}
                   {!isMilestone && isPhase && (
-                    <Layers className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" aria-label="Fase" />
-                  )}
-                  {!isMilestone && isPackage && (
-                    <Package className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-label="Pacote de trabalho" />
+                    <Layers className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" aria-label="Fase / Entrega" />
                   )}
                   <p
                     className={`${d.title} font-medium line-clamp-2 flex-1 min-w-0 ${
@@ -1131,7 +1125,7 @@ function ColumnFilterPanel({
     ["urgente", "Urgente", "bg-red-500"], ["critica", "Crítica", "bg-orange-500"],
     ["alta", "Alta", "bg-amber-500"], ["media", "Média", "bg-sky-500"], ["baixa", "Baixa", "bg-emerald-500"],
   ];
-  const EAP: [string, string][] = [["atividade", "Atividade"], ["pacote", "Pacote"], ["fase", "Fase"], ["marco", "Marco"]];
+  const EAP: [string, string][] = [["fase", "Fase / Entrega"], ["atividade", "Atividade"], ["marco", "Marco"]];
 
   const Section = ({ id, label, summary, on, children }: { id: string; label: string; summary: string; on: boolean; children: React.ReactNode }) => {
     const open = openSection === id;
@@ -2468,14 +2462,18 @@ export const ActivityKanban = ({
     [stages],
   );
 
-  // Tipo EAP de uma atividade (marco > fase > pacote > atividade).
+  // Ids que são pais de alguém (agrupadores de fato), derivado das atividades.
+  const parentIdsWithChildren = useMemo(() => {
+    const s = new Set<string>();
+    activities.forEach((a) => { const p = (a as any).parent_id; if (p) s.add(p); });
+    return s;
+  }, [activities]);
+
+  // Tipo EAP de uma atividade (fonte única: lib/eapModel). Três papéis:
+  // Fase/Entrega (agrupa; cobre 'pacote' legado e itens com filhos), Atividade, Marco.
   const activityEapType = useCallback((a: Activity): string => {
-    if ((a as any).is_milestone) return "marco";
-    const t = (a as any).item_type as string | undefined;
-    if (t === "fase") return "fase";
-    if (t === "pacote") return "pacote";
-    return "atividade";
-  }, []);
+    return resolveEapKind(a as any, parentIdsWithChildren.has(a.id));
+  }, [parentIdsWithChildren]);
 
   const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   const matchesFilters = useCallback((a: Activity) => {
@@ -3743,7 +3741,7 @@ export const ActivityKanban = ({
             : `${filterStages.size} selecionadas`;
           const summarySector = summarySet(filterSectors);
           const summaryParticipant = summarySet(filterParticipants);
-          const EAP_LABELS: Record<string, string> = { atividade: "Atividade", pacote: "Pacote", fase: "Fase", marco: "Marco" };
+          const EAP_LABELS: Record<string, string> = { fase: "Fase / Entrega", atividade: "Atividade", marco: "Marco", pacote: "Fase / Entrega" };
           const summaryType = filterTypes.size === 0 ? "Todos"
             : filterTypes.size === 1 ? EAP_LABELS[[...filterTypes][0]]
             : `${filterTypes.size} selecionados`;
@@ -3954,7 +3952,7 @@ export const ActivityKanban = ({
                 {/* Tipo EAP */}
                 <AccordionSection id="type" label="Tipo (EAP)" summary={summaryType} active={filterTypes.size > 0}>
                   <FilterOptionList
-                    options={(["atividade", "pacote", "fase", "marco"] as const).map((t) => ({ value: t, label: EAP_LABELS[t] }))}
+                    options={(["fase", "atividade", "marco"] as const).map((t) => ({ value: t, label: EAP_LABELS[t] }))}
                     selected={(v) => filterTypes.has(v)}
                     onToggle={(v) => toggleInSet(setFilterTypes, v)}
                   />

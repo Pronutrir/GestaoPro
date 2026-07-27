@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2, Package } from "lucide-react";
+import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2 } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { endVariance, varianceTone, varianceClasses } from "@/lib/dateVariance";
@@ -52,8 +52,10 @@ const PropertyRow = ({ icon, label, children }: { icon: React.ReactNode; label: 
   </div>
 );
 
-// Papéis EAP (PMBOK). O marco não é um item_type — é a flag is_milestone.
-//   fase → Fase/Entrega · pacote → Pacote de Trabalho · atividade → trabalho (folha)
+// item_type persistido. Marco não é item_type — é a flag is_milestone.
+// A UI usa 3 papéis: Fase/Entrega (agrupa) · Atividade (folha) · Marco.
+// 'pacote' é um agrupador LEGADO no banco: lido e exibido como Fase/Entrega,
+// não é mais oferecido como opção de tipo.
 type EapType = "fase" | "pacote" | "atividade";
 
 // Normaliza qualquer valor legado de item_type (tarefa/subtarefa/atividade/…)
@@ -768,19 +770,17 @@ export const EditActivityDialog = ({
     if (!newSubTitle.trim() || !act || !projectId) return;
 
     // EAP: um pai precisa ser agrupador para ter filhos. Se hoje é folha
-    // (atividade/marco), promove a "pacote" antes de inserir — senão o trigger
-    // rejeita. Pacote pode conter pacote, então é sempre seguro em qualquer nível.
-    // TOLERANTE: se o banco ainda não aceita 'pacote' (CHECK antigo, migration
-    // mínima pendente), a promoção falha silenciosamente e seguimos criando o
-    // subitem — o pai já funciona como agrupador por ter filhos.
+    // (atividade/marco), promove a Fase/Entrega antes de inserir — Fase agrupa
+    // em qualquer nível. TOLERANTE: se a promoção falhar, seguimos criando o
+    // subitem (o pai já funciona como agrupador por ter filhos).
     const parentType = toEapType((act as any).item_type);
     if (parentType === "atividade" || (act as any).is_milestone) {
       const { error: promoteErr } = await supabase
         .from("activities")
-        .update({ item_type: "pacote", is_milestone: false } as any)
+        .update({ item_type: "fase", is_milestone: false } as any)
         .eq("id", act.id);
       if (!promoteErr) {
-        setFormData((prev) => ({ ...prev, item_type: "pacote", is_milestone: false }));
+        setFormData((prev) => ({ ...prev, item_type: "fase", is_milestone: false }));
       }
     }
 
@@ -1100,7 +1100,7 @@ export const EditActivityDialog = ({
         toast({
           title: "Atividade salva com aviso",
           description:
-            "Este ambiente ainda não aceita o tipo Pacote/Fase; o item foi salvo como Atividade. Aplique a migration do item_type na VM.",
+            "Este ambiente ainda não aceita o tipo Fase/Entrega; o item foi salvo como Atividade. Aplique a migration do item_type na VM.",
           variant: "destructive",
         });
       }
@@ -1702,30 +1702,31 @@ export const EditActivityDialog = ({
                   </div>
                 </PropertyRow>
 
-                {/* Tipo do item (papéis EAP/PMBOK): Atividade | Pacote | Fase | Marco.
-                    Mutuamente exclusivo. Substitui os antigos switches. */}
+                {/* Tipo do item (papéis EAP): Fase/Entrega | Atividade | Marco.
+                    Mutuamente exclusivo. Agrupador legado ('pacote') exibe como Fase. */}
                 {(() => {
-                  type Kind = "atividade" | "pacote" | "fase" | "marco";
-                  // Tipo manual: reflete exatamente o item_type gravado.
-                  const itemKind: Kind = formData.is_milestone ? "marco" : formData.item_type;
+                  type Kind = "fase" | "atividade" | "marco";
+                  // Papel EXIBIDO: agrupador legado ('pacote' ou com subitens) vira Fase.
+                  const itemKind: Kind = formData.is_milestone
+                    ? "marco"
+                    : (formData.item_type === "fase" || formData.item_type === "pacote" || hasSubActivities)
+                      ? "fase"
+                      : "atividade";
                   const setKind = (kind: Kind) =>
                     setFormData({
                       ...formData,
                       is_milestone: kind === "marco",
-                      // Marco grava como 'atividade' no item_type (o tipo é a flag is_milestone).
+                      // Marco grava como 'atividade' (o tipo é a flag is_milestone).
+                      // Fase/Entrega grava 'fase'; folha grava 'atividade'.
                       item_type: kind === "marco" ? "atividade" : kind,
                       // Marco é um ponto no tempo — não tem intervalo de fim.
                       end_date: kind === "marco" ? "" : formData.end_date,
                     });
 
-                  // Regra de aninhamento EAP por PAPEL (espelha o trigger):
-                  // folha (atividade/marco) não pode ter filhos; agrupador
-                  // (fase/pacote) pode. Fase/Pacote aninham livremente, então
-                  // ter pai não restringe o tipo — só ter filhos restringe.
-                  const isGroupKind = (kind: Kind) => kind === "fase" || kind === "pacote";
+                  // Só Fase/Entrega agrupa. Item com subitens não pode virar folha.
                   const kindDisabledReason = (kind: Kind): string | null => {
-                    if (hasSubActivities && !isGroupKind(kind))
-                      return "Este item tem subitens; escolha Pacote ou Fase.";
+                    if (hasSubActivities && kind !== "fase")
+                      return "Este item tem subitens; só Fase/Entrega agrupa.";
                     return null;
                   };
                   const KIND_OPTIONS: {
@@ -1736,24 +1737,17 @@ export const EditActivityDialog = ({
                     activeCls: string;
                   }[] = [
                     {
+                      kind: "fase",
+                      label: "Fase / Entrega",
+                      icon: <Layers className="w-3.5 h-3.5" />,
+                      hint: "Agrupa outros itens (em qualquer nível). Datas, horas e custo derivam dos filhos.",
+                      activeCls: "border-primary bg-primary/10 text-primary",
+                    },
+                    {
                       kind: "atividade",
                       label: "Atividade",
                       icon: <Circle className="w-3.5 h-3.5" />,
                       hint: "Trabalho executável (folha da EAP), com estimativa e intervalo de datas próprios.",
-                      activeCls: "border-primary bg-primary/10 text-primary",
-                    },
-                    {
-                      kind: "pacote",
-                      label: "Pacote",
-                      icon: <Package className="w-3.5 h-3.5" />,
-                      hint: "Pacote de trabalho: agrupa atividades. Prazo, horas e custo vêm dos itens que ele contém.",
-                      activeCls: "border-amber-600 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-                    },
-                    {
-                      kind: "fase",
-                      label: "Fase",
-                      icon: <Layers className="w-3.5 h-3.5" />,
-                      hint: "Fase/entrega: agrupa pacotes e atividades. Datas e valores derivam dos filhos.",
                       activeCls: "border-primary bg-primary/10 text-primary",
                     },
                     {
@@ -1772,8 +1766,6 @@ export const EditActivityDialog = ({
                           <Diamond className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
                         ) : itemKind === "fase" ? (
                           <Layers className="w-3.5 h-3.5 text-primary" />
-                        ) : itemKind === "pacote" ? (
-                          <Package className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                         ) : (
                           <Circle className="w-3.5 h-3.5" />
                         )
@@ -1784,10 +1776,6 @@ export const EditActivityDialog = ({
                         <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30 w-fit">
                           {KIND_OPTIONS.map((opt) => {
                             const active = itemKind === opt.kind;
-                            // Regra de aninhamento EAP: desabilita tipos que
-                            // violariam a hierarquia (folha com filhos, ou nível
-                            // incompatível com o pai). O tipo ativo nunca é
-                            // desabilitado (evita travar o estado atual).
                             const reason = active ? null : kindDisabledReason(opt.kind);
                             const disabled = !!reason;
                             return (
@@ -1814,9 +1802,9 @@ export const EditActivityDialog = ({
                           <span className="text-[11px] text-muted-foreground">{activeHint}</span>
                         )}
                         {hasSubActivities && (
-                          <span className="text-[11px] text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                            <Package className="w-3 h-3 shrink-0" />
-                            Este item agrupa {ownSubActivities.length} subitem(ns) — por isso é um Pacote. Horas e custo são somados dos filhos (veja a aba Subatividades).
+                          <span className="text-[11px] text-primary flex items-center gap-1">
+                            <Layers className="w-3 h-3 shrink-0" />
+                            Este item agrupa {ownSubActivities.length} subitem(ns) — por isso é uma Fase/Entrega. Horas e custo são somados dos filhos (veja a aba Subatividades).
                           </span>
                         )}
                       </div>
@@ -1854,7 +1842,7 @@ export const EditActivityDialog = ({
                       </Button>
                     </div>
                     <span className="text-[10px] text-muted-foreground leading-tight">
-                      Digite manualmente ou clique em <strong>{formData.wbs_code.trim() ? "Regerar" : "Gerar"}</strong>. Níveis: <strong>1</strong> Fase • <strong>1.1</strong> Pacote • <strong>1.1.1</strong> Atividade • Marco em qualquer nível.
+                      Digite manualmente ou clique em <strong>{formData.wbs_code.trim() ? "Regerar" : "Gerar"}</strong>. <strong>Fase/Entrega</strong> agrupa (qualquer nível); <strong>Atividade</strong> e <strong>Marco</strong> são folhas. Código por posição: <strong>1</strong>, <strong>1.1</strong>, <strong>1.1.1</strong>…
                     </span>
                   </div>
                 </PropertyRow>

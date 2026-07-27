@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import {
   Table2, GanttChart, ExternalLink, AlertTriangle, AlertCircle, CalendarOff,
   CalendarDays, Settings2, Filter, FolderKanban, Search, X,
-  ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, ChevronDown, Layers, Diamond, GripVertical, Package,
+  ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, ChevronDown, Layers, Diamond, GripVertical,
 } from "lucide-react";
 import {
   DndContext,
@@ -1176,14 +1176,10 @@ export function ProjectCronogramaPanel({
                 <Diamond className="h-2.5 w-2.5 fill-orange-500 text-orange-500" />
                 Marco
               </Badge>
-            ) : a.item_type === "fase" ? (
-              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-primary/10 text-primary border-primary/30 shrink-0">
-                Fase
-              </Badge>
-            ) : a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0 ? (
-              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-amber-500/10 text-amber-700 border-amber-500/40 shrink-0 gap-1">
-                <Package className="h-2.5 w-2.5" />
-                Pacote
+            ) : (a.item_type === "fase" || a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0) ? (
+              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-primary/10 text-primary border-primary/30 shrink-0 gap-1">
+                <Layers className="h-2.5 w-2.5" />
+                Fase / Entrega
               </Badge>
             ) : a.parent_id ? (
               <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-amber-500/10 text-amber-700 border-amber-500/30 shrink-0">
@@ -1589,13 +1585,12 @@ export function ProjectCronogramaPanel({
                 const responsible = resolveResponsible(a.assigned_to);
                 const projTitle = projectsMap[a.project_id];
                 const depth = depthById.get(a.id) ?? 0;
-                const isPhase = a.item_type === "fase";
-                // Mesma regra do Backlog: agrupador legado ainda gravado como
-                // 'atividade' é Pacote por ter filhos (ver resolveKind).
-                const isPackage =
-                  !a.is_milestone && !isPhase &&
-                  (a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0);
-                const isGroup = isPhase || isPackage;
+                // Agrupador = Fase/Entrega (cobre 'fase', 'pacote' legado e itens
+                // com filhos). Modelo unificado (lib/eapModel).
+                const isPhase =
+                  !a.is_milestone &&
+                  (a.item_type === "fase" || a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0);
+                const isGroup = isPhase;
                 const isSubactivity = !isGroup && !!a.parent_id;
                 const isMilestone = !!a.is_milestone;
                 const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
@@ -1621,12 +1616,10 @@ export function ProjectCronogramaPanel({
                       </button>
                     ) : isPhase ? (
                       <Layers className="h-3.5 w-3.5 text-primary shrink-0" />
-                    ) : isPackage ? (
-                      <Package className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                     ) : null}
                     <span className="text-[10px] font-mono text-muted-foreground w-[52px] shrink-0">#{id}</span>
                     <div className="flex-1 min-w-0">
-                      <div className={cn("text-xs flex items-center gap-1", (isCritical || isGroup) && "font-semibold", isPhase && "text-primary uppercase tracking-wide", isPackage && "text-amber-700 dark:text-amber-400")}>
+                      <div className={cn("text-xs flex items-center gap-1", (isCritical || isGroup) && "font-semibold", isPhase && "text-primary uppercase tracking-wide")}>
                         {isMilestone ? (
                           <Badge variant="outline" className="text-[9px] py-0 px-1 bg-orange-500/15 text-orange-700 border-orange-500/40 shrink-0 gap-1">
                             <Diamond className="h-2.5 w-2.5 fill-orange-500 text-orange-500" />
@@ -1634,11 +1627,7 @@ export function ProjectCronogramaPanel({
                           </Badge>
                         ) : isPhase ? (
                           <Badge variant="outline" className="text-[9px] py-0 px-1 bg-primary/10 text-primary border-primary/30 shrink-0">
-                            Fase
-                          </Badge>
-                        ) : isPackage ? (
-                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-amber-500/10 text-amber-700 border-amber-500/40 shrink-0">
-                            Pacote
+                            Fase / Entrega
                           </Badge>
                         ) : isSubactivity ? (
                           <Badge variant="outline" className="text-[9px] py-0 px-1 bg-amber-500/10 text-amber-700 border-amber-500/30 shrink-0">
@@ -1773,12 +1762,11 @@ export function ProjectCronogramaPanel({
                   const isOverdue = isOverdueByRule(a, !!isCompleted);
                   const progress = progressFor(a);
                   const responsible = resolveResponsible(a.assigned_to);
-                  const isPhase = a.item_type === "fase";
-                  // Mesma regra do Backlog (ver resolveKind).
-                  const isPackage =
-                    !a.is_milestone && !isPhase &&
-                    (a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0);
-                  const isGroup = isPhase || isPackage;
+                  // Agrupador = Fase/Entrega (cobre 'fase', 'pacote' legado, filhos).
+                  const isPhase =
+                    !a.is_milestone &&
+                    (a.item_type === "fase" || a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0);
+                  const isGroup = isPhase;
                   const isSubactivity = !isGroup && !!a.parent_id;
 
                   return (
@@ -1879,8 +1867,7 @@ export function ProjectCronogramaPanel({
                               </div>
                               <div>📊 {progress}% {isCritical && <span className="text-red-400 font-semibold ml-1">• Caminho crítico</span>}</div>
                               {a.is_milestone && <div>🎯 Marco</div>}
-                              {isPhase && <div>📚 Fase — datas derivadas dos filhos</div>}
-                              {isPackage && <div>📦 Pacote de trabalho — datas derivadas dos filhos</div>}
+                              {isPhase && <div>📚 Fase / Entrega — datas derivadas dos filhos</div>}
                             </div>
                           </TooltipContent>
                         </Tooltip>
