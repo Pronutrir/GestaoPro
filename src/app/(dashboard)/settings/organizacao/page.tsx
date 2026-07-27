@@ -17,7 +17,6 @@ const SettingsOrganizationPage = () => {
       <SettingsPageHeader
         icon={Building2}
         title="Organização"
-        description="Cadastro e acesso de todas as pessoas — setor, cargo, perfil, módulos e abas, tudo num só lugar."
       />
       <Suspense fallback={null}>
         <PeopleManager />
