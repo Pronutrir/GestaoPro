@@ -793,19 +793,24 @@ export function PeopleManager() {
             />
           </div>
 
-          {/* Gerenciar setores & cargos + Nova pessoa — agrupados */}
-          <div className="flex items-center shrink-0">
-            <Button
-              size="sm" variant="outline"
-              className="h-9 w-9 p-0 rounded-r-none border-r-0"
+          {/* Botão dividido único: [⚙️ | + Nova pessoa] — uma peça coesa */}
+          <div className="inline-flex items-center h-9 shrink-0 rounded-md bg-primary text-primary-foreground overflow-hidden shadow-sm">
+            <button
+              type="button"
               onClick={() => setManageListsDialog("sectors")}
               title="Gerenciar setores e cargos"
+              className="h-full px-2.5 flex items-center justify-center hover:bg-black/10 transition-colors"
             >
               <Settings2 className="w-4 h-4" />
-            </Button>
-            <Button size="sm" className="gap-1.5 h-9 rounded-l-none" onClick={() => setCreateOpen(true)}>
+            </button>
+            <span className="w-px h-5 bg-primary-foreground/25" />
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="h-full pl-2.5 pr-3.5 flex items-center gap-1.5 text-[13px] font-medium hover:bg-black/10 transition-colors"
+            >
               <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nova pessoa</span>
-            </Button>
+            </button>
           </div>
         </div>
 
