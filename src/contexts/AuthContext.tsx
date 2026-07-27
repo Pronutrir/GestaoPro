@@ -9,9 +9,10 @@ interface AuthContextType {
   user: User | null;
   isAdmin: boolean;
   isGestor: boolean;
+  isCoordenador: boolean; // "coordenador" — acesso equivalente a gestor
   isViewer: boolean; // "visualizador" — acesso só leitura
   isGuest: boolean;  // "convidado" — externo, restrito a projetos
-  canManage: boolean; // admin OR gestor — has all permissions except settings
+  canManage: boolean; // admin OR gestor OR coordenador — gerencia área/projetos
   canWrite: boolean;  // pode criar/editar? false para Visualizador (só leitura)
   profile: any | null;
   loading: boolean;
@@ -23,6 +24,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   isAdmin: false,
   isGestor: false,
+  isCoordenador: false,
   isViewer: false,
   isGuest: false,
   canManage: false,
@@ -39,6 +41,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isGestor, setIsGestor] = useState(false);
+  const [isCoordenador, setIsCoordenador] = useState(false);
   const [isViewer, setIsViewer] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
   const [profile, setProfile] = useState<any>(null);
@@ -67,6 +70,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const roles = (rolesData || []).map((r: any) => r.role);
       setIsAdmin(roles.includes("admin"));
       setIsGestor(roles.includes("gestor"));
+      setIsCoordenador(roles.includes("coordenador"));
       setIsViewer(roles.includes("visualizador"));
       setIsGuest(roles.includes("convidado"));
     } catch (error: any) {
@@ -80,6 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setProfile(null);
       setIsAdmin(false);
       setIsGestor(false);
+      setIsCoordenador(false);
       setIsViewer(false);
       setIsGuest(false);
     }
@@ -211,19 +216,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setProfile(null);
     setIsAdmin(false);
     setIsGestor(false);
+    setIsCoordenador(false);
     setIsViewer(false);
     setIsGuest(false);
     await supabase.auth.signOut();
   }, []);
 
-  const canManage = isAdmin || isGestor;
+  // Coordenador tem acesso equivalente ao de gestor.
+  const canManage = isAdmin || isGestor || isCoordenador;
   // Visualizador é só leitura: não cria nem edita. Os demais papéis escrevem
   // (dentro do que seu acesso permite). Telas usam canWrite para esconder ações.
   const canWrite = !isViewer;
 
   return (
     <AuthContext.Provider
-      value={{ session, user, isAdmin, isGestor, isViewer, isGuest, canManage, canWrite, profile, loading, signOut }}
+      value={{ session, user, isAdmin, isGestor, isCoordenador, isViewer, isGuest, canManage, canWrite, profile, loading, signOut }}
     >
       {children}
     </AuthContext.Provider>

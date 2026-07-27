@@ -15,10 +15,7 @@ import {
   ChevronLeft, Settings2,
 } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -32,8 +29,9 @@ import { ALL_MODULES, ALL_MODULE_KEYS, DEFAULT_MODULES } from "@/lib/modules";
 import { ALL_PROJECT_TABS, ALL_TAB_VALUES, normalizeProjectTabs } from "@/lib/projectTabs";
 import { RoleTitleSelect, type JobTitleOption } from "@/components/settings/RoleTitleSelect";
 import { ORG_LEVELS } from "@/lib/orgLevels";
+import { ACCESS_LEVELS, accessLevelKey, roleFromAccessKey, accessLabelForRole } from "@/lib/accessLevels";
 import { SectorSelect } from "@/components/settings/SectorSelect";
-import { TaxonomyList } from "@/components/settings/TaxonomyList";
+import { TaxonomyManager } from "@/components/settings/TaxonomyManager";
 
 interface Profile {
   id: string;
@@ -74,6 +72,51 @@ const GROUP_OPTIONS: { key: GroupBy; label: string }[] = [
   { key: "none", label: "Nenhum" },
 ];
 
+/**
+ * Campo de NÍVEL DE ACESSO — um Select com os níveis (Direção…Externo) e um
+ * interruptor "Administrador" (acesso total). Quando admin está ligado, o nível
+ * fica desabilitado (o acesso total prevalece). Fonte única: lib/accessLevels.
+ */
+function AccessLevelField({
+  accessKey, admin, onAccessKeyChange, onAdminChange,
+}: {
+  accessKey: string;
+  admin: boolean;
+  onAccessKeyChange: (k: string) => void;
+  onAdminChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="space-y-2.5">
+      <Select value={accessKey} onValueChange={onAccessKeyChange} disabled={admin}>
+        <SelectTrigger className={admin ? "opacity-50" : undefined}>
+          <SelectValue placeholder="Selecione o nível" />
+        </SelectTrigger>
+        <SelectContent>
+          {ACCESS_LEVELS.map((l) => (
+            <SelectItem key={accessLevelKey(l)} value={accessLevelKey(l)}>
+              <span className="flex items-center gap-2">
+                <span>{l.label}</span>
+                <span className="text-[11px] text-muted-foreground">· {l.hint}</span>
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2.5">
+        <div className="flex-1 min-w-0">
+          <div className="text-[12.5px] font-medium flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-primary" /> Administrador do sistema
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">
+            Acesso total a Configurações e a todos os módulos, independente do nível.
+          </div>
+        </div>
+        <Switch checked={admin} onCheckedChange={onAdminChange} />
+      </div>
+    </div>
+  );
+}
+
 const STATE_META = {
   active:   { label: "Ativo",    cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" },
   pending:  { label: "Pendente", cls: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
@@ -108,7 +151,6 @@ export function PeopleManager() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<GroupBy>("sector");
-  const [manageOpen, setManageOpen] = useState(false);
   const [manageListsDialog, setManageListsDialog] = useState<"sectors" | "job_titles" | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -119,11 +161,15 @@ export function PeopleManager() {
   const searchParams = useSearchParams();
   const focusHandled = useRef(false);
 
+  // accessKey = chave do nível exibido (ex.: "coordenador"); admin = interruptor
+  // de acesso total. O app_role final é derivado no submit (roleFromForm).
   const [form, setForm] = useState({
-    email: "", password: "", full_name: "", sector: "", role_title: "", role: "user",
+    email: "", password: "", full_name: "", sector: "", role_title: "",
+    accessKey: "colaborador", admin: false,
   });
   const [editForm, setEditForm] = useState({
-    full_name: "", email: "", sector: "", role_title: "", role: "user", new_password: "",
+    full_name: "", email: "", sector: "", role_title: "", new_password: "",
+    accessKey: "colaborador", admin: false,
   });
   const [userAllowedTabs, setUserAllowedTabs] = useState<string[]>(normalizeProjectTabs(ALL_TAB_VALUES));
   const [tabsByUserId, setTabsByUserId] = useState<Record<string, string[]>>({});
@@ -187,7 +233,18 @@ export function PeopleManager() {
 
   const getUserRole = (userId: string) => roles.find((r) => r.user_id === userId)?.role || "user";
   const isAdminUser = (userId: string) => getUserRole(userId) === "admin";
-  const isGestorUser = (userId: string) => getUserRole(userId) === "gestor";
+  // Gestão = gestor OU coordenador (acesso equivalente).
+  const isGestorUser = (userId: string) => ["gestor", "coordenador"].includes(getUserRole(userId));
+
+  // Converte um app_role gravado → estado do formulário (nível + admin).
+  const roleToForm = (role: string) => {
+    if (role === "admin") return { accessKey: "colaborador", admin: true };
+    const level = ACCESS_LEVELS.find((l) => l.value === role);
+    return { accessKey: level ? accessLevelKey(level) : "colaborador", admin: false };
+  };
+  // Deriva o app_role final a partir do formulário (admin vence).
+  const roleFromForm = (f: { accessKey: string; admin: boolean }) =>
+    f.admin ? "admin" : roleFromAccessKey(f.accessKey);
 
   const getInitials = (name: string | null) =>
     name ? name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() : "?";
@@ -283,8 +340,8 @@ export function PeopleManager() {
       email: profile.email || "",
       sector: profile.sector || "",
       role_title: profile.role_title || "",
-      role: getUserRole(profile.id),
       new_password: "",
+      ...roleToForm(getUserRole(profile.id)),
     });
 
     const cachedTabs = tabsByUserId[profile.id];
@@ -370,7 +427,14 @@ export function PeopleManager() {
           "Content-Type": "application/json",
           ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          email: form.email,
+          password: form.password,
+          full_name: form.full_name,
+          sector: form.sector,
+          role_title: form.role_title,
+          role: roleFromForm(form),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao criar usuário");
@@ -382,7 +446,7 @@ export function PeopleManager() {
           ? `${form.full_name} foi adicionado. Senha temporária: ${temporaryPassword}`
           : `${form.full_name} foi adicionado.`,
       });
-      setForm({ email: "", password: "", full_name: "", sector: "", role_title: "", role: "user" });
+      setForm({ email: "", password: "", full_name: "", sector: "", role_title: "", accessKey: "colaborador", admin: false });
       setCreateOpen(false);
       await fetchData({ force: true });
     } catch (error: any) {
@@ -399,7 +463,7 @@ export function PeopleManager() {
         full_name: editForm.full_name,
         sector: editForm.sector,
         role_title: editForm.role_title,
-        role: editForm.role,
+        role: roleFromForm(editForm),
       };
       if (editForm.email.trim() && editForm.email !== profile.email) body.new_email = editForm.email;
       if (editForm.new_password.trim()) body.new_password = editForm.new_password;
@@ -521,9 +585,14 @@ export function PeopleManager() {
             {profile.email} · cadastrado em {new Date(profile.created_at).toLocaleDateString("pt-BR")}
           </div>
         </div>
-        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0", STATE_META[st].cls)}>
-          {STATE_META[st].label}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wide">
+            {accessLabelForRole(getUserRole(profile.id))}
+          </span>
+          <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", STATE_META[st].cls)}>
+            {STATE_META[st].label}
+          </span>
+        </div>
       </div>
 
       {/* ── Identificação ── */}
@@ -552,7 +621,7 @@ export function PeopleManager() {
             <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} sectors={sectors} onSectorsChange={setSectors} />
           </div>
           <div className="grid gap-2">
-            <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Briefcase className="w-3.5 h-3.5" /> Cargo / Nível</Label>
+            <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Briefcase className="w-3.5 h-3.5" /> Cargo <span className="normal-case text-muted-foreground/70">(descritivo, opcional)</span></Label>
             <RoleTitleSelect value={editForm.role_title} onValueChange={(v) => setEditForm({ ...editForm, role_title: v })} titles={titles} onTitlesChange={setTitles} />
           </div>
         </div>
@@ -562,17 +631,13 @@ export function PeopleManager() {
       <section className="space-y-3">
         <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1.5">Acesso</h3>
         <div className="grid gap-2">
-          <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Shield className="w-3.5 h-3.5" /> Perfil de Acesso</Label>
-          <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="admin">Administrador</SelectItem>
-              <SelectItem value="gestor">Gestor</SelectItem>
-              <SelectItem value="user">Membro</SelectItem>
-              <SelectItem value="visualizador">Visualizador (só leitura)</SelectItem>
-              <SelectItem value="convidado">Convidado (externo)</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Shield className="w-3.5 h-3.5" /> Nível de acesso</Label>
+          <AccessLevelField
+            accessKey={editForm.accessKey}
+            admin={editForm.admin}
+            onAccessKeyChange={(k) => setEditForm({ ...editForm, accessKey: k })}
+            onAdminChange={(v) => setEditForm({ ...editForm, admin: v })}
+          />
         </div>
 
         {/* Módulos */}
@@ -662,19 +727,9 @@ export function PeopleManager() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <DropdownMenu open={manageOpen} onOpenChange={setManageOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" className="gap-1.5 h-9"><Settings2 className="w-4 h-4" /> Gerenciar listas</Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setManageListsDialog("sectors"); }}>
-                <Building2 className="w-4 h-4 mr-2" /> Setores
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setManageListsDialog("job_titles"); }}>
-                <Briefcase className="w-4 h-4 mr-2" /> Cargos &amp; Níveis
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button size="sm" variant="outline" className="gap-1.5 h-9" onClick={() => setManageListsDialog("sectors")}>
+            <Settings2 className="w-4 h-4" /> Gerenciar listas
+          </Button>
 
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
@@ -706,17 +761,13 @@ export function PeopleManager() {
                     </div>
                   </div>
                   <div className="grid gap-2">
-                    <Label>Perfil de Acesso</Label>
-                    <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Administrador</SelectItem>
-                        <SelectItem value="gestor">Gestor</SelectItem>
-                        <SelectItem value="user">Membro</SelectItem>
-                        <SelectItem value="visualizador">Visualizador (só leitura)</SelectItem>
-                        <SelectItem value="convidado">Convidado (externo)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Nível de acesso</Label>
+                    <AccessLevelField
+                      accessKey={form.accessKey}
+                      admin={form.admin}
+                      onAccessKeyChange={(k) => setForm({ ...form, accessKey: k })}
+                      onAdminChange={(v) => setForm({ ...form, admin: v })}
+                    />
                   </div>
                 </div>
                 <DialogFooter>
@@ -875,25 +926,16 @@ export function PeopleManager() {
         </div>
       </Card>
 
-      {/* Diálogo: gerenciar listas mestras (Setores / Cargos) */}
+      {/* Diálogo: gerenciar listas mestras (Setores / Cargos) — enxuto, abas */}
       <Dialog open={!!manageListsDialog} onOpenChange={(o) => !o && setManageListsDialog(null)}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{manageListsDialog === "sectors" ? "Setores" : "Cargos & Níveis"}</DialogTitle>
+            <DialogTitle>Gerenciar listas</DialogTitle>
+            <DialogDescription className="text-[12.5px]">
+              Setores e cargos usados para classificar as pessoas. Renomeie, exclua ou limpe os sem uso.
+            </DialogDescription>
           </DialogHeader>
-          {manageListsDialog === "sectors" ? (
-            <TaxonomyList
-              table="sectors" profileField="sector" icon={Building2}
-              addPlaceholder="Nome do setor (ex.: TI, Marketing, RH…)"
-              emptyLabel="Nenhum setor cadastrado ainda." itemNoun="setor" singularLabel="Setor"
-            />
-          ) : manageListsDialog === "job_titles" ? (
-            <TaxonomyList
-              table="job_titles" profileField="role_title" icon={Briefcase}
-              addPlaceholder="Nome do cargo/nível (ex.: Coordenador, Analista…)"
-              emptyLabel="Nenhum cargo cadastrado ainda." itemNoun="cargo" singularLabel="Cargo"
-            />
-          ) : null}
+          {manageListsDialog && <TaxonomyManager defaultTab={manageListsDialog} />}
         </DialogContent>
       </Dialog>
 

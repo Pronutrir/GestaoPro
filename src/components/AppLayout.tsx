@@ -99,7 +99,7 @@ export const AppLayout = ({ children, title }: { children: ReactNode; title?: st
   const effectiveAvatarColor = avatarColorOptions.includes(avatarColor) ? avatarColor : "#2563eb";
   const avatarTextColor = getReadableTextColor(effectiveAvatarColor);
 
-  const roleLabel = isAdmin ? "Master" : canManage ? "Gestor" : "Usuário";
+  const roleLabel = isAdmin ? "Administrador" : canManage ? "Gestão" : "Colaborador";
   const roleClass = isAdmin
     ? "bg-primary/10 text-primary border-primary/20"
     : canManage
