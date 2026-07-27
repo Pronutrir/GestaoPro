@@ -5,14 +5,18 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Plus, Search, ChevronRight, ShieldCheck, User, Mail, Building2, Briefcase,
+  Plus, Search, ShieldCheck, User, Mail, Building2, Briefcase,
   Key, Shield, Ban, CheckCircle2, Trash2, Camera, Users,
+  ChevronLeft, Settings2,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -29,6 +33,7 @@ import { ALL_PROJECT_TABS, ALL_TAB_VALUES, normalizeProjectTabs } from "@/lib/pr
 import { RoleTitleSelect, type JobTitleOption } from "@/components/settings/RoleTitleSelect";
 import { ORG_LEVELS } from "@/lib/orgLevels";
 import { SectorSelect } from "@/components/settings/SectorSelect";
+import { TaxonomyList } from "@/components/settings/TaxonomyList";
 
 interface Profile {
   id: string;
@@ -54,7 +59,7 @@ interface Sector {
 }
 
 type StateFilter = "all" | "active" | "pending" | "inactive";
-type DetailTab = "profile" | "modules" | "tabs";
+type GroupBy = "sector" | "role_title" | "none";
 
 const STATE_FILTERS: { key: StateFilter; label: string }[] = [
   { key: "all", label: "Todos" },
@@ -63,17 +68,17 @@ const STATE_FILTERS: { key: StateFilter; label: string }[] = [
   { key: "inactive", label: "Inativos" },
 ];
 
+const GROUP_OPTIONS: { key: GroupBy; label: string }[] = [
+  { key: "sector", label: "Setor" },
+  { key: "role_title", label: "Cargo" },
+  { key: "none", label: "Nenhum" },
+];
+
 const STATE_META = {
   active:   { label: "Ativo",    cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" },
   pending:  { label: "Pendente", cls: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
   inactive: { label: "Inativo",  cls: "bg-slate-500/10 text-slate-600 dark:text-slate-300" },
 } as const;
-
-const DETAIL_TABS: { key: DetailTab; label: string }[] = [
-  { key: "profile", label: "Perfil & Acesso" },
-  { key: "modules", label: "Módulos" },
-  { key: "tabs", label: "Abas do projeto" },
-];
 
 // Cache compartilhado do fetch (copiado do UserManagement).
 const PEOPLE_MGMT_CACHE_TTL_MS = 60_000;
@@ -101,14 +106,16 @@ export function PeopleManager() {
 
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<DetailTab>("profile");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [groupBy, setGroupBy] = useState<GroupBy>("sector");
+  const [manageOpen, setManageOpen] = useState(false);
+  const [manageListsDialog, setManageListsDialog] = useState<"sectors" | "job_titles" | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<Profile | null>(null);
   const [banConfirm, setBanConfirm] = useState<{ profile: Profile; action: "ban" | "unban" } | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
-  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const rowRefs = useRef<Record<string, HTMLElement | null>>({});
   const searchParams = useSearchParams();
   const focusHandled = useRef(false);
 
@@ -241,6 +248,34 @@ export function PeopleManager() {
     [profiles],
   );
 
+  // Agrupa a lista filtrada em raias por setor/cargo (ou uma raia única).
+  const grouped = useMemo(() => {
+    if (groupBy === "none") {
+      return [{ key: "all", label: "", people: filtered }];
+    }
+    const buckets = new Map<string, Profile[]>();
+    filtered.forEach((p) => {
+      const raw = ((p[groupBy] as string) || "").trim();
+      const label = raw || (groupBy === "sector" ? "Sem setor" : "Sem cargo");
+      if (!buckets.has(label)) buckets.set(label, []);
+      buckets.get(label)!.push(p);
+    });
+    // Ordena as raias por nome; "Sem …" sempre por último.
+    const semLabel = groupBy === "sector" ? "Sem setor" : "Sem cargo";
+    return Array.from(buckets.entries())
+      .sort(([a], [b]) => {
+        if (a === semLabel) return 1;
+        if (b === semLabel) return -1;
+        return a.localeCompare(b);
+      })
+      .map(([label, people]) => ({ key: label, label, people }));
+  }, [filtered, groupBy]);
+
+  const selectedProfile = useMemo(
+    () => profiles.find((p) => p.id === selectedId) || null,
+    [profiles, selectedId],
+  );
+
   // Ao expandir: preencher o form de edição e carregar (lazy) as abas do projeto.
   const openUserDetail = async (profile: Profile) => {
     setEditForm({
@@ -251,7 +286,6 @@ export function PeopleManager() {
       role: getUserRole(profile.id),
       new_password: "",
     });
-    setDetailTab("profile");
 
     const cachedTabs = tabsByUserId[profile.id];
     if (cachedTabs) {
@@ -269,29 +303,24 @@ export function PeopleManager() {
     setUserAllowedTabs(normalizeProjectTabs(normalizedTabs));
   };
 
-  const handleToggleExpand = (profile: Profile) => {
-    if (expandedId === profile.id) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(profile.id);
+  // Seleciona uma pessoa (mostra a ficha na coluna direita).
+  const handleSelect = (profile: Profile) => {
+    setSelectedId(profile.id);
     openUserDetail(profile);
   };
 
-  // Foco vindo da Estrutura ("Abrir ↗"): /settings/pessoas?focus=<id> abre a
-  // pessoa e rola até ela. Roda uma única vez, quando os perfis já carregaram.
+  // Foco vindo de link externo (?focus=<id>) ou seleção inicial automática:
+  // abre a pessoa e rola até ela na lista. Roda uma única vez após carregar.
   useEffect(() => {
-    if (focusHandled.current || loading) return;
-    const focusId = searchParams.get("focus");
-    if (!focusId) return;
-    const target = profiles.find((p) => p.id === focusId);
-    if (!target) return;
+    if (focusHandled.current || loading || profiles.length === 0) return;
     focusHandled.current = true;
-    setExpandedId(focusId);
+    const focusId = searchParams.get("focus");
+    const target = (focusId && profiles.find((p) => p.id === focusId)) || null;
+    if (!target) return;
+    setSelectedId(target.id);
     openUserDetail(target);
-    // Deixa o React pintar a linha expandida antes de rolar até ela.
     setTimeout(() => {
-      rowRefs.current[focusId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      rowRefs.current[target.id]?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 120);
   }, [loading, profiles, searchParams]);
 
@@ -451,7 +480,7 @@ export function PeopleManager() {
       toast({ title: messages[action] });
       setDeleteConfirm(null);
       setBanConfirm(null);
-      if (action === "delete") setExpandedId(null);
+      if (action === "delete") setSelectedId(null);
       await fetchData({ force: true });
     } catch (error: any) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -461,24 +490,196 @@ export function PeopleManager() {
 
   if (!isAdmin) return null;
 
+  // Ficha completa da pessoa (coluna direita) — seções empilhadas, sem sub-abas.
+  const renderDetail = (
+    profile: Profile,
+    { st, admin, gestor, modules, isSelf }: {
+      st: "active" | "pending" | "inactive"; admin: boolean; gestor: boolean;
+      modules: string[]; isSelf: boolean;
+    },
+  ) => (
+    <div className="space-y-5">
+      {/* Cabeçalho da ficha: avatar + nome + estado */}
+      <div className="flex items-center gap-3">
+        <div className="relative group shrink-0">
+          <Avatar className="h-14 w-14">
+            <AvatarImage src={profile.avatar_url || undefined} alt={profile.full_name || ""} />
+            <AvatarFallback className="bg-primary/15 text-primary">{getInitials(profile.full_name)}</AvatarFallback>
+          </Avatar>
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={() => avatarInputRef.current?.click()}
+          >
+            <Camera className="w-4 h-4 text-white" />
+          </button>
+          <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleAvatarUpload(profile, e)} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[16px] font-semibold truncate">{profile.full_name || "Sem nome"}</div>
+          <div className="text-[12px] text-muted-foreground truncate">
+            {profile.email} · cadastrado em {new Date(profile.created_at).toLocaleDateString("pt-BR")}
+          </div>
+        </div>
+        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0", STATE_META[st].cls)}>
+          {STATE_META[st].label}
+        </span>
+      </div>
+
+      {/* ── Identificação ── */}
+      <section className="space-y-3">
+        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1.5">Identificação</h3>
+        <div className="grid gap-2">
+          <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><User className="w-3.5 h-3.5" /> Nome Completo</Label>
+          <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
+        </div>
+        <div className="grid gap-2">
+          <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Mail className="w-3.5 h-3.5" /> E-mail</Label>
+          <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="email@empresa.com" />
+        </div>
+        <div className="grid gap-2">
+          <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Key className="w-3.5 h-3.5" /> Redefinir Senha</Label>
+          <Input type="password" value={editForm.new_password} onChange={(e) => setEditForm({ ...editForm, new_password: e.target.value })} placeholder="Deixe vazio para não alterar" />
+        </div>
+      </section>
+
+      {/* ── Organização ── */}
+      <section className="space-y-3">
+        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1.5">Organização</h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid gap-2">
+            <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Building2 className="w-3.5 h-3.5" /> Setor</Label>
+            <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} sectors={sectors} onSectorsChange={setSectors} />
+          </div>
+          <div className="grid gap-2">
+            <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Briefcase className="w-3.5 h-3.5" /> Cargo / Nível</Label>
+            <RoleTitleSelect value={editForm.role_title} onValueChange={(v) => setEditForm({ ...editForm, role_title: v })} titles={titles} onTitlesChange={setTitles} />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Acesso ── */}
+      <section className="space-y-3">
+        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1.5">Acesso</h3>
+        <div className="grid gap-2">
+          <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Shield className="w-3.5 h-3.5" /> Perfil de Acesso</Label>
+          <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="admin">Administrador</SelectItem>
+              <SelectItem value="gestor">Gestor</SelectItem>
+              <SelectItem value="user">Membro</SelectItem>
+              <SelectItem value="visualizador">Visualizador (só leitura)</SelectItem>
+              <SelectItem value="convidado">Convidado (externo)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Módulos */}
+        <div className="grid gap-2">
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Módulos liberados</Label>
+          {admin ? (
+            <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+              <ShieldCheck className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+              <p className="text-[12.5px] text-foreground">Admin tem acesso completo a todos os módulos.</p>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center gap-2 mb-2 text-[11px]">
+                <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [...ALL_MODULE_KEYS], modules)}>Marcar todos</button>
+                <span className="text-muted-foreground/40">·</span>
+                <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [], modules)}>Limpar</button>
+                <span className="text-muted-foreground/40">·</span>
+                <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [...DEFAULT_MODULES], modules)}>Padrão</button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+                {ALL_MODULES.map((mod) => (
+                  <label key={mod.key} className="flex items-center gap-2 cursor-pointer">
+                    <Switch checked={modules.includes(mod.key)} onCheckedChange={() => toggleModule(profile.id, mod.key)} className="scale-90" />
+                    <span className="text-[12.5px] text-foreground">{mod.label}</span>
+                  </label>
+                ))}
+              </div>
+              {gestor && <p className="text-[11px] text-muted-foreground mt-2">Gestor: a restrição de módulos passa a valer no menu lateral.</p>}
+              {st === "pending" && <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-2">Pré-configurado — passa a valer assim que a pessoa for aprovada.</p>}
+            </div>
+          )}
+        </div>
+
+        {/* Abas do projeto */}
+        <div className="grid gap-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Abas visíveis no projeto</Label>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground">Todas</span>
+              <Switch checked={userAllowedTabs.length === ALL_TAB_VALUES.length} onCheckedChange={toggleAllTabs} />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {ALL_PROJECT_TABS.map((tab) => (
+              <div key={tab.value} className="flex items-center justify-between p-2 rounded-lg border border-border">
+                <span className="text-[12.5px] font-medium text-foreground">{tab.label}</span>
+                <Switch checked={userAllowedTabs.includes(tab.value)} disabled={tab.value === "kanban"} onCheckedChange={() => toggleTab(tab.value)} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Ações */}
+      <div className="space-y-2 border-t border-border pt-4 sticky bottom-0 bg-card">
+        <Button className="w-full" onClick={() => handleUpdate(profile)} disabled={isSaving}>
+          {isSaving ? "Salvando..." : "Salvar alterações"}
+        </Button>
+        {!isSelf && (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+            {profile.is_active === false ? (
+              <Button variant="outline" className="gap-1" onClick={() => setBanConfirm({ profile, action: "unban" })}>
+                <CheckCircle2 className="w-3.5 h-3.5" /> {isOAuthPending(profile) ? "Aprovar" : "Reativar"}
+              </Button>
+            ) : (
+              <Button variant="outline" className="gap-1" onClick={() => setBanConfirm({ profile, action: "ban" })}>
+                <Ban className="w-3.5 h-3.5" /> Desativar
+              </Button>
+            )}
+            <Button variant="destructive" size="icon" onClick={() => setDeleteConfirm(profile)}>
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Users className="w-4 h-4" />
-                Pessoas
-              </CardTitle>
-              <CardDescription className="text-[13px] mt-1">
-                Uma pessoa, um lugar: perfil, acesso, módulos e abas do projeto. Clique numa pessoa para abrir tudo dela.
-              </CardDescription>
-            </div>
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="gap-1.5 h-9 shrink-0"><Plus className="w-4 h-4" /> Nova pessoa</Button>
-              </DialogTrigger>
+      {/* Barra de topo: título, gerenciar listas e nova pessoa */}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="text-[13px] text-muted-foreground">
+          {loading ? "Carregando…" : `${profiles.length} pessoa${profiles.length === 1 ? "" : "s"}`}
+          {pendingCount > 0 && (
+            <span className="ml-2 text-amber-700 dark:text-amber-400 font-medium">· {pendingCount} pendente(s)</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <DropdownMenu open={manageOpen} onOpenChange={setManageOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="gap-1.5 h-9"><Settings2 className="w-4 h-4" /> Gerenciar listas</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setManageListsDialog("sectors"); }}>
+                <Building2 className="w-4 h-4 mr-2" /> Setores
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setManageListsDialog("job_titles"); }}>
+                <Briefcase className="w-4 h-4 mr-2" /> Cargos &amp; Níveis
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1.5 h-9 shrink-0"><Plus className="w-4 h-4" /> Nova pessoa</Button>
+            </DialogTrigger>
               <DialogContent>
                 <DialogHeader><DialogTitle>Criar nova pessoa</DialogTitle></DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -523,344 +724,176 @@ export function PeopleManager() {
                   <Button onClick={handleCreate} disabled={isSaving}>{isSaving ? "Criando..." : "Criar pessoa"}</Button>
                 </DialogFooter>
               </DialogContent>
-            </Dialog>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {/* Toolbar: busca + filtro por estado */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[180px] max-w-[300px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nome ou e-mail…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 h-9"
-              />
-            </div>
-            <div className="flex gap-0.5 bg-muted rounded-lg p-0.5">
-              {STATE_FILTERS.map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setStateFilter(f.key)}
-                  className={cn(
-                    "text-[13px] px-3 py-1.5 rounded-md transition-colors",
-                    stateFilter === f.key ? "bg-background text-foreground font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          </Dialog>
+        </div>
+      </div>
 
-          {stateFilter !== "pending" && pendingCount > 0 && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />
-              <span><b className="text-amber-700 dark:text-amber-400 font-medium">{pendingCount} pendente(s)</b> — dá para pré-configurar tudo antes da aprovação.</span>
-            </p>
-          )}
-
-          {/* Lista densa */}
-          {loading ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Carregando…</p>
-          ) : filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Nenhuma pessoa encontrada.</p>
-          ) : (
-            <div className="rounded-lg border border-border overflow-hidden">
-              {/* Cabeçalho de colunas */}
-              <div className="hidden sm:grid grid-cols-[1fr_84px_120px_28px] gap-3 items-center px-4 py-2 bg-muted/60 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <span>Pessoa</span>
-                <span>Estado</span>
-                <span>Módulos</span>
-                <span />
+      {/* ══ Tela única: lista (master) | ficha (detail) ══ */}
+      <Card className="overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-[300px_1fr]">
+          {/* ── MASTER: lista de pessoas ── */}
+          <div className={cn("md:border-r border-border flex flex-col", selectedProfile && "hidden md:flex")}>
+            {/* Ferramentas da lista */}
+            <div className="p-3 border-b border-border space-y-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome ou e-mail…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 h-9 text-[13px]"
+                />
               </div>
+              <div className="flex items-center gap-2 justify-between">
+                <div className="flex gap-0.5 bg-muted rounded-lg p-0.5">
+                  {STATE_FILTERS.map((f) => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setStateFilter(f.key)}
+                      className={cn(
+                        "text-[11.5px] px-2 py-1 rounded-md transition-colors",
+                        stateFilter === f.key ? "bg-background text-foreground font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <span className="hidden lg:inline">Agrupar:</span>
+                  <div className="flex gap-0.5 bg-muted rounded-lg p-0.5">
+                    {GROUP_OPTIONS.map((g) => (
+                      <button
+                        key={g.key}
+                        type="button"
+                        onClick={() => setGroupBy(g.key)}
+                        className={cn(
+                          "text-[11.5px] px-2 py-1 rounded-md transition-colors",
+                          groupBy === g.key ? "bg-background text-foreground font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {g.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
 
-              {filtered.map((profile) => {
+            {/* Lista agrupada */}
+            <div className="flex-1 overflow-y-auto max-h-[calc(100vh-16rem)] md:max-h-[68vh]">
+              {loading ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Carregando…</p>
+              ) : filtered.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Nenhuma pessoa encontrada.</p>
+              ) : (
+                grouped.map((g) => (
+                  <div key={g.key}>
+                    {g.label && (
+                      <div className="sticky top-0 z-[1] flex items-center gap-1.5 px-3 py-1.5 bg-muted/80 backdrop-blur-sm text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
+                        {groupBy === "sector" ? <Building2 className="w-3 h-3" /> : <Briefcase className="w-3 h-3" />}
+                        <span className="truncate">{g.label}</span>
+                        <span className="ml-auto tabular-nums bg-background/70 rounded-full px-1.5">{g.people.length}</span>
+                      </div>
+                    )}
+                    {g.people.map((profile) => {
+                      const st = userState(profile);
+                      const admin = isAdminUser(profile.id);
+                      const gestor = isGestorUser(profile.id);
+                      const isSel = selectedId === profile.id;
+                      const line2 = groupBy === "role_title"
+                        ? (profile.sector || (st === "pending" ? "aguardando aprovação" : profile.email))
+                        : (profile.role_title || (st === "pending" ? "aguardando aprovação" : profile.email));
+                      return (
+                        <button
+                          key={profile.id}
+                          ref={(el) => { rowRefs.current[profile.id] = el; }}
+                          type="button"
+                          onClick={() => handleSelect(profile)}
+                          className={cn(
+                            "w-full flex items-center gap-2.5 px-3 py-2 text-left border-b border-border/60 transition-colors scroll-mt-16",
+                            isSel ? "bg-primary/10 shadow-[inset_2px_0_0] shadow-primary" : "hover:bg-muted/40",
+                          )}
+                        >
+                          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", st === "active" ? "bg-emerald-500" : st === "pending" ? "bg-amber-500" : "bg-slate-400")} />
+                          <Avatar className="h-7 w-7 shrink-0">
+                            <AvatarImage src={profile.avatar_url || undefined} className={st !== "active" ? "grayscale" : ""} />
+                            <AvatarFallback className="text-[10px]">{getInitials(profile.full_name)}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <div className={cn("text-[13px] truncate", isSel ? "font-semibold" : "font-medium", st !== "active" && "text-muted-foreground")}>
+                              {profile.full_name || "Sem nome"}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground truncate">{line2}</div>
+                          </div>
+                          {admin && <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0" aria-label="Administrador" />}
+                          {gestor && <span className="text-[9px] font-bold text-primary/80 shrink-0">GESTOR</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* ── DETAIL: ficha da pessoa selecionada ── */}
+          <div className={cn("min-h-[420px]", !selectedProfile && "hidden md:block")}>
+            {!selectedProfile ? (
+              <div className="h-full flex flex-col items-center justify-center text-center py-16 text-muted-foreground">
+                <Users className="w-9 h-9 mb-2 opacity-40" />
+                <p className="text-[13px]">Selecione uma pessoa à esquerda para ver e editar tudo dela.</p>
+              </div>
+            ) : (
+              (() => {
+                const profile = selectedProfile;
                 const st = userState(profile);
                 const admin = isAdminUser(profile.id);
                 const gestor = isGestorUser(profile.id);
                 const modules = getUserModules(profile.id);
-                const isOpen = expandedId === profile.id;
                 const isSelf = profile.id === currentUser?.id;
-                const subtitle = [profile.role_title, gestor ? "Gestor" : null].filter(Boolean).join(" · ")
-                  || (st === "pending" ? "aguardando aprovação" : profile.email);
-
                 return (
-                  <div
-                    key={profile.id}
-                    ref={(el) => { rowRefs.current[profile.id] = el; }}
-                    className={cn(
-                      "border-t border-border first:border-t-0 scroll-mt-24 transition-colors",
-                      isOpen && "ring-1 ring-inset ring-primary/30",
-                    )}
-                  >
-                    {/* Linha compacta */}
+                  <div className="p-5">
+                    {/* Voltar (mobile) */}
                     <button
                       type="button"
-                      onClick={() => handleToggleExpand(profile)}
-                      className={cn(
-                        "w-full grid grid-cols-[1fr_84px_120px_28px] gap-3 items-center px-4 py-2.5 text-left transition-colors",
-                        "hover:bg-muted/40 cursor-pointer",
-                        isOpen && "bg-muted/40",
-                      )}
+                      onClick={() => setSelectedId(null)}
+                      className="md:hidden inline-flex items-center gap-1 text-[13px] text-muted-foreground mb-3"
                     >
-                      {/* Pessoa */}
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <Avatar className="h-7 w-7 shrink-0">
-                          <AvatarImage src={profile.avatar_url || undefined} className={st !== "active" ? "grayscale" : ""} />
-                          <AvatarFallback className="text-[10px]">{getInitials(profile.full_name)}</AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <div className={cn("text-[13px] font-medium truncate", st !== "active" && "line-through text-muted-foreground")}>
-                            {profile.full_name || "Sem nome"}
-                          </div>
-                          <div className="text-[11.5px] text-muted-foreground truncate">{subtitle}</div>
-                        </div>
-                      </div>
-                      {/* Estado */}
-                      <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full justify-self-start", STATE_META[st].cls)}>
-                        {STATE_META[st].label}
-                      </span>
-                      {/* Módulos (visão rápida) */}
-                      {admin ? (
-                        <span className="text-[11px] font-semibold text-primary flex items-center gap-1">
-                          <ShieldCheck className="w-3.5 h-3.5" /> Total
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <span className="flex gap-[2px]">
-                            {ALL_MODULE_KEYS.map((k) => (
-                              <span
-                                key={k}
-                                className={cn("w-[7px] h-[7px] rounded-[2px]", modules.includes(k) ? "bg-primary" : "bg-border")}
-                              />
-                            ))}
-                          </span>
-                          <span className="text-[11px] text-muted-foreground tabular-nums">
-                            {modules.length}/{ALL_MODULES.length}
-                          </span>
-                        </span>
-                      )}
-                      {/* Chevron */}
-                      <ChevronRight className={cn("w-4 h-4 text-muted-foreground justify-self-center transition-transform", isOpen && "rotate-90")} />
+                      <ChevronLeft className="w-4 h-4" /> Voltar à lista
                     </button>
-
-                    {/* Painel expandido — detalhe inline com subtabs */}
-                    {isOpen && (
-                      <div className="px-4 pt-3 pb-4 bg-background border-t border-border">
-                        {/* Subtabs leves */}
-                        <div className="flex gap-0.5 bg-muted rounded-lg p-0.5 w-fit mb-4">
-                          {DETAIL_TABS.map((t) => (
-                            <button
-                              key={t.key}
-                              type="button"
-                              onClick={() => setDetailTab(t.key)}
-                              className={cn(
-                                "text-[12.5px] px-3 py-1 rounded-md transition-colors",
-                                detailTab === t.key ? "bg-background text-foreground font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
-                              )}
-                            >
-                              {t.label}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* ── Perfil & Acesso ── */}
-                        {detailTab === "profile" && (
-                          <div className="space-y-4">
-                            <div className="flex items-center gap-3">
-                              <div className="relative group shrink-0">
-                                <Avatar className="h-14 w-14">
-                                  <AvatarImage src={profile.avatar_url || undefined} alt={profile.full_name || ""} />
-                                  <AvatarFallback className="bg-primary/15 text-primary">{getInitials(profile.full_name)}</AvatarFallback>
-                                </Avatar>
-                                <button
-                                  type="button"
-                                  className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => avatarInputRef.current?.click()}
-                                >
-                                  <Camera className="w-4 h-4 text-white" />
-                                </button>
-                                <input
-                                  ref={avatarInputRef}
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={(e) => handleAvatarUpload(profile, e)}
-                                />
-                              </div>
-                              <div className="text-[11px] text-muted-foreground space-y-0.5">
-                                <p>Cadastrado em: {new Date(profile.created_at).toLocaleDateString("pt-BR")}</p>
-                                <p>ID: {profile.id.substring(0, 8)}…</p>
-                              </div>
-                            </div>
-
-                            <div className="grid gap-2">
-                              <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><User className="w-3.5 h-3.5" /> Nome Completo</Label>
-                              <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
-                            </div>
-
-                            <div className="grid gap-2">
-                              <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Mail className="w-3.5 h-3.5" /> E-mail</Label>
-                              <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="email@empresa.com" />
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                              <div className="grid gap-2">
-                                <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Building2 className="w-3.5 h-3.5" /> Setor</Label>
-                                <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} sectors={sectors} onSectorsChange={setSectors} />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Briefcase className="w-3.5 h-3.5" /> Cargo / Nível</Label>
-                                <RoleTitleSelect value={editForm.role_title} onValueChange={(v) => setEditForm({ ...editForm, role_title: v })} titles={titles} onTitlesChange={setTitles} />
-                              </div>
-                            </div>
-
-                            <div className="grid gap-2">
-                              <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Shield className="w-3.5 h-3.5" /> Perfil de Acesso</Label>
-                              <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="admin">Administrador</SelectItem>
-                                  <SelectItem value="gestor">Gestor</SelectItem>
-                                  <SelectItem value="user">Membro</SelectItem>
-                                  <SelectItem value="visualizador">Visualizador (só leitura)</SelectItem>
-                                  <SelectItem value="convidado">Convidado (externo)</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            <div className="grid gap-2">
-                              <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Key className="w-3.5 h-3.5" /> Redefinir Senha</Label>
-                              <Input
-                                type="password"
-                                value={editForm.new_password}
-                                onChange={(e) => setEditForm({ ...editForm, new_password: e.target.value })}
-                                placeholder="Deixe vazio para não alterar"
-                              />
-                            </div>
-
-                            <div className="space-y-2 border-t border-border pt-4">
-                              <Button className="w-full" onClick={() => handleUpdate(profile)} disabled={isSaving}>
-                                {isSaving ? "Salvando..." : "Salvar"}
-                              </Button>
-
-                              {!isSelf && (
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-                                  {profile.is_active === false ? (
-                                    <Button
-                                      variant="outline"
-                                      className="gap-1"
-                                      onClick={() => setBanConfirm({ profile, action: "unban" })}
-                                    >
-                                      <CheckCircle2 className="w-3.5 h-3.5" /> {isOAuthPending(profile) ? "Aprovar" : "Reativar"}
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      variant="outline"
-                                      className="gap-1"
-                                      onClick={() => setBanConfirm({ profile, action: "ban" })}
-                                    >
-                                      <Ban className="w-3.5 h-3.5" /> Desativar
-                                    </Button>
-                                  )}
-                                  <Button variant="destructive" size="icon" onClick={() => setDeleteConfirm(profile)}>
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* ── Módulos ── */}
-                        {detailTab === "modules" && (
-                          admin ? (
-                            <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-3">
-                              <ShieldCheck className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                              <p className="text-[12.5px] text-foreground">
-                                Admin tem acesso completo a todos os módulos.
-                              </p>
-                            </div>
-                          ) : (
-                            <div>
-                              <div className="flex items-center gap-2 mb-2.5">
-                                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Módulos liberados</span>
-                                <div className="ml-auto flex items-center gap-2 text-[11px]">
-                                  <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [...ALL_MODULE_KEYS], modules)}>Marcar todos</button>
-                                  <span className="text-muted-foreground/40">·</span>
-                                  <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [], modules)}>Limpar</button>
-                                  <span className="text-muted-foreground/40">·</span>
-                                  <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [...DEFAULT_MODULES], modules)}>Padrão</button>
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
-                                {ALL_MODULES.map((mod) => (
-                                  <label key={mod.key} className="flex items-center gap-2 cursor-pointer">
-                                    <Switch
-                                      checked={modules.includes(mod.key)}
-                                      onCheckedChange={() => toggleModule(profile.id, mod.key)}
-                                      className="scale-90"
-                                    />
-                                    <span className="text-[12.5px] text-foreground">{mod.label}</span>
-                                  </label>
-                                ))}
-                              </div>
-                              {gestor && (
-                                <p className="text-[11px] text-muted-foreground mt-3">
-                                  Gestor: a restrição de módulos passa a valer no menu lateral.
-                                </p>
-                              )}
-                              {st === "pending" && (
-                                <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-3">
-                                  Pré-configurado — os módulos passam a valer assim que a pessoa for aprovada.
-                                </p>
-                              )}
-                            </div>
-                          )
-                        )}
-
-                        {/* ── Abas do projeto ── */}
-                        {detailTab === "tabs" && (
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Abas visíveis no projeto</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-muted-foreground">Todas</span>
-                                <Switch
-                                  checked={userAllowedTabs.length === ALL_TAB_VALUES.length}
-                                  onCheckedChange={toggleAllTabs}
-                                />
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                              {ALL_PROJECT_TABS.map((tab) => (
-                                <div key={tab.value} className="flex items-center justify-between p-2 rounded-lg border border-border">
-                                  <span className="text-[12.5px] font-medium text-foreground">{tab.label}</span>
-                                  <Switch
-                                    checked={userAllowedTabs.includes(tab.value)}
-                                    disabled={tab.value === "kanban"}
-                                    onCheckedChange={() => toggleTab(tab.value)}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">
-                              As abas são salvas junto com o botão “Salvar” em Perfil &amp; Acesso.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {/* Placeholder — a ficha completa é montada abaixo */}
+                    {renderDetail(profile, { st, admin, gestor, modules, isSelf })}
                   </div>
                 );
-              })}
-            </div>
-          )}
-        </CardContent>
+              })()
+            )}
+          </div>
+        </div>
       </Card>
+
+      {/* Diálogo: gerenciar listas mestras (Setores / Cargos) */}
+      <Dialog open={!!manageListsDialog} onOpenChange={(o) => !o && setManageListsDialog(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{manageListsDialog === "sectors" ? "Setores" : "Cargos & Níveis"}</DialogTitle>
+          </DialogHeader>
+          {manageListsDialog === "sectors" ? (
+            <TaxonomyList
+              table="sectors" profileField="sector" icon={Building2}
+              addPlaceholder="Nome do setor (ex.: TI, Marketing, RH…)"
+              emptyLabel="Nenhum setor cadastrado ainda." itemNoun="setor" singularLabel="Setor"
+            />
+          ) : manageListsDialog === "job_titles" ? (
+            <TaxonomyList
+              table="job_titles" profileField="role_title" icon={Briefcase}
+              addPlaceholder="Nome do cargo/nível (ex.: Coordenador, Analista…)"
+              emptyLabel="Nenhum cargo cadastrado ainda." itemNoun="cargo" singularLabel="Cargo"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
