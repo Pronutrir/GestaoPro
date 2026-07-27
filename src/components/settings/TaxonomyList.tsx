@@ -38,18 +38,40 @@ export function TaxonomyList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
 
-  const load = async () => {
-    // Tolerante: a tabela job_titles pode não existir ainda (migration pendente).
-    const { data } = await (supabase.from(table as any).select("id, name").order("name") as any);
-    if (Array.isArray(data)) setItems(data as TaxItem[]);
+  const [tableMissing, setTableMissing] = useState(false);
 
+  const load = async () => {
+    // Tolerante: a tabela (ex.: job_titles) pode não existir ainda (migration
+    // pendente). Nesse caso, derivamos os itens de profiles[profileField] para
+    // exibir os dados reais mesmo antes da migration.
+    const { data, error } = await (supabase.from(table as any).select("id, name").order("name") as any);
+    const rows: TaxItem[] = Array.isArray(data) ? (data as TaxItem[]) : [];
+
+    // Contagem de pessoas por valor (também alimenta o fallback de itens).
     const { data: profs } = await supabase.from("profiles").select(profileField);
     const map: Record<string, number> = {};
+    const distinctByName = new Map<string, string>(); // lower → nome exibido
     (profs || []).forEach((p: any) => {
-      const v = (p[profileField] || "").trim().toLowerCase();
-      if (v) map[v] = (map[v] || 0) + 1;
+      const raw = (p[profileField] || "").trim();
+      const key = raw.toLowerCase();
+      if (!key) return;
+      map[key] = (map[key] || 0) + 1;
+      if (!distinctByName.has(key)) distinctByName.set(key, raw);
     });
     setCounts(map);
+
+    const missing = !!error || rows.length === 0;
+    setTableMissing(!!error);
+
+    if (missing && distinctByName.size > 0) {
+      // Fallback: itens derivados dos cargos/setores já usados nas pessoas.
+      const derived = Array.from(distinctByName.values())
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => ({ id: `derived:${name}`, name }));
+      setItems(derived);
+    } else {
+      setItems(rows);
+    }
   };
 
   useEffect(() => { load(); }, [table]);
@@ -86,6 +108,15 @@ export function TaxonomyList({
   return (
     <Card>
       <CardContent className="p-4 space-y-3">
+        {tableMissing && (
+          <div className="flex items-start gap-2 text-[12px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+            <span className="mt-0.5">⚠️</span>
+            <span>
+              Mostrando os {itemNoun}s já usados nas pessoas. Para gerenciar (criar/renomear/excluir) aqui,
+              aplique a migration <code className="font-mono">job_titles</code> na VM.
+            </span>
+          </div>
+        )}
         {/* Adicionar */}
         <div className="flex gap-2">
           <Input
