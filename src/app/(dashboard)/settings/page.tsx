@@ -2,15 +2,14 @@
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "@/components/ui/link";
-import { Building2, Settings2, Shield, CalendarDays, Users as UsersIcon, ArrowRight } from "lucide-react";
+import { Building2, Settings2, CalendarDays, Users as UsersIcon, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRouter } from "next/navigation";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 
 const AREAS = [
+  { href: "/settings/pessoas", eyebrow: "Pessoas", title: "Pessoas & Acessos", icon: UsersIcon, key: "pessoas" },
   { href: "/settings/estrutura", eyebrow: "Estrutura", title: "Setores", icon: Building2, key: "estrutura" },
-  { href: "/settings/usuarios", eyebrow: "Pessoas", title: "Usuários", icon: UsersIcon, key: "usuarios" },
-  { href: "/settings/acessos", eyebrow: "Acessos", title: "Permissões", icon: Shield, key: "acessos" },
   { href: "/settings/calendario", eyebrow: "Calendário", title: "Feriados e Férias", icon: CalendarDays, key: "calendario" },
 ] as const;
 
@@ -29,9 +28,8 @@ const Settings = () => {
   }, [router]);
 
   const subtitleFor = (key: string) =>
-    key === "estrutura" ? `${sectorsCount} setor(es) cadastrado(s)`
-      : key === "usuarios" ? "Cadastro e manutenção"
-      : key === "acessos" ? "Módulos e visibilidade"
+    key === "pessoas" ? "Cadastro, papéis e módulos"
+      : key === "estrutura" ? `${sectorsCount} setor(es) cadastrado(s)`
       : "Capacidade e disponibilidade";
 
   return (

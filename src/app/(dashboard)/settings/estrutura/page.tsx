@@ -22,9 +22,19 @@ const SettingsStructurePage = () => {
   const [editingSectorId, setEditingSectorId] = useState<string | null>(null);
   const [editingSectorName, setEditingSectorName] = useState("");
 
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
   const fetchSectors = async () => {
     const { data, error } = await supabase.from("sectors").select("*").order("name");
     if (!error && data) setSectors(data);
+    // Contagem de pessoas por setor (por nome — compat com profiles.sector texto).
+    const { data: profs } = await supabase.from("profiles").select("sector");
+    const map: Record<string, number> = {};
+    (profs || []).forEach((p: any) => {
+      const s = (p.sector || "").trim().toLowerCase();
+      if (s) map[s] = (map[s] || 0) + 1;
+    });
+    setCounts(map);
   };
 
   useEffect(() => {
@@ -132,6 +142,14 @@ const SettingsStructurePage = () => {
                         <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
                       </span>
                       <span className="text-[13px] font-medium text-foreground flex-1 truncate">{sector.name}</span>
+                      {(() => {
+                        const n = counts[sector.name.trim().toLowerCase()] || 0;
+                        return n > 0 ? (
+                          <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 mr-1">
+                            {n} pessoa{n > 1 ? "s" : ""}
+                          </span>
+                        ) : null;
+                      })()}
                       <Button
                         size="icon"
                         variant="ghost"

@@ -1,21 +1,8 @@
-'use client';
+import { redirect } from "next/navigation";
 
-import { ModulePermissions } from "@/components/ModulePermissions";
-import { Shield } from "lucide-react";
-import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
-
-const SettingsAccessPage = () => {
-  return (
-    <div className="px-4 py-6 space-y-4 max-w-5xl mx-auto">
-      <SettingsPageHeader
-        icon={Shield}
-        title="Acessos e Permissões"
-        description="Defina quais módulos do sistema cada pessoa pode acessar."
-      />
-
-      <ModulePermissions />
-    </div>
-  );
-};
-
-export default SettingsAccessPage;
+// Tela unificada: Usuários + Permissões viraram "Pessoas & Acessos".
+// Mantém o link antigo funcionando (abre direto na aba de Módulos seria ideal,
+// mas o redirect simples já leva ao painel unificado).
+export default function SettingsAccessRedirect() {
+  redirect("/settings/pessoas");
+}

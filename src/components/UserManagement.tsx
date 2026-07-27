@@ -13,6 +13,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { ALL_PROJECT_TABS, ALL_TAB_VALUES, normalizeProjectTabs } from "@/lib/projectTabs";
 import { RoleTitleSelect } from "@/components/settings/RoleTitleSelect";
+import { SectorSelect } from "@/components/settings/SectorSelect";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -338,18 +339,6 @@ export const UserManagement = () => {
 
   if (!isAdmin) return null;
 
-  const SectorSelect = ({ value, onValueChange }: { value: string; onValueChange: (v: string) => void }) => (
-    <Select value={value || "_none"} onValueChange={(v) => onValueChange(v === "_none" ? "" : v)}>
-      <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
-      <SelectContent>
-        <SelectItem value="_none">Nenhum</SelectItem>
-        {sectors.map((s) => (
-          <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-
   return (
     <>
       <Card>
@@ -380,7 +369,7 @@ export const UserManagement = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label>Setor</Label>
-                      <SectorSelect value={form.sector} onValueChange={(v) => setForm({ ...form, sector: v })} />
+                      <SectorSelect value={form.sector} onValueChange={(v) => setForm({ ...form, sector: v })} sectors={sectors} onSectorsChange={setSectors} />
                     </div>
                     <div className="grid gap-2">
                       <Label>Cargo / Nível</Label>
@@ -585,7 +574,7 @@ export const UserManagement = () => {
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="grid gap-2">
                           <Label className="flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5" /> Setor</Label>
-                          <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} />
+                          <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} sectors={sectors} onSectorsChange={setSectors} />
                         </div>
                         <div className="grid gap-2">
                           <Label className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Cargo / Nível</Label>
