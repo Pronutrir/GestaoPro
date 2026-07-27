@@ -846,9 +846,20 @@ export function PeopleManager() {
             </PopoverContent>
           </Popover>
 
-          <Button size="sm" className="gap-1.5 h-9 shrink-0" onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nova pessoa</span>
-          </Button>
+          {/* Gerenciar setores & cargos + Nova pessoa — agrupados */}
+          <div className="flex items-center shrink-0">
+            <Button
+              size="sm" variant="outline"
+              className="h-9 w-9 p-0 rounded-r-none border-r-0"
+              onClick={() => setManageListsDialog("sectors")}
+              title="Gerenciar setores e cargos"
+            >
+              <Settings2 className="w-4 h-4" />
+            </Button>
+            <Button size="sm" className="gap-1.5 h-9 rounded-l-none" onClick={() => setCreateOpen(true)}>
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nova pessoa</span>
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-[320px_1fr]">
@@ -872,15 +883,6 @@ export function PeopleManager() {
                   <X className="w-3 h-3" />
                 </button>
               )}
-              <div className="flex-1" />
-              <button
-                type="button"
-                onClick={() => setManageListsDialog("sectors")}
-                className="h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                title="Gerenciar setores e cargos"
-              >
-                <Settings2 className="w-4 h-4" />
-              </button>
             </div>
 
             {/* Lista agrupada */}
