@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Search, ShieldCheck, User, Mail, Building2, Briefcase,
   Key, Shield, Ban, CheckCircle2, Trash2, Camera, Users,
-  ChevronLeft, Settings2, SlidersHorizontal, X,
+  ChevronLeft, ChevronRight, Settings2, SlidersHorizontal, X,
+  Blocks, LayoutGrid, Lock,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -153,6 +154,8 @@ export function PeopleManager() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<GroupBy>("sector");
   const [manageListsDialog, setManageListsDialog] = useState<"sectors" | "job_titles" | null>(null);
+  const [modulesOpen, setModulesOpen] = useState(false);
+  const [tabsOpen, setTabsOpen] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<Profile | null>(null);
@@ -365,6 +368,8 @@ export function PeopleManager() {
   // Seleciona uma pessoa (mostra a ficha na coluna direita).
   const handleSelect = (profile: Profile) => {
     setSelectedId(profile.id);
+    setModulesOpen(false);
+    setTabsOpen(false);
     openUserDetail(profile);
   };
 
@@ -656,55 +661,94 @@ export function PeopleManager() {
           />
         </div>
 
-        {/* Módulos */}
-        <div className="grid gap-2">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Módulos liberados</Label>
-          {admin ? (
-            <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
-              <ShieldCheck className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-              <p className="text-[12.5px] text-foreground">Admin tem acesso completo a todos os módulos.</p>
+        {/* ── Módulos do sistema — resumo que expande ── */}
+        {admin ? (
+          <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+            <ShieldCheck className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+            <p className="text-[12.5px] text-foreground">Admin tem acesso completo a todos os módulos e abas.</p>
+          </div>
+        ) : (
+          <>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setModulesOpen((v) => !v)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
+              >
+                <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", modulesOpen && "rotate-90")} />
+                <span className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><Blocks className="w-4 h-4 text-primary" /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium">Módulos do sistema</span>
+                  <span className="block text-[11px] text-muted-foreground">O que aparece no menu lateral</span>
+                </span>
+                <span className="text-[11px] font-semibold text-primary bg-primary/10 rounded-full px-2 py-0.5 tabular-nums shrink-0">
+                  {modules.length} de {ALL_MODULES.length}
+                </span>
+              </button>
+              {modulesOpen && (
+                <div className="border-t border-border p-3 bg-muted/20">
+                  <div className="flex items-center gap-2 mb-2.5 text-[11px]">
+                    <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [...ALL_MODULE_KEYS], modules)}>Todos</button>
+                    <span className="text-muted-foreground/40">·</span>
+                    <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [], modules)}>Nenhum</button>
+                    <span className="text-muted-foreground/40">·</span>
+                    <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [...DEFAULT_MODULES], modules)}>Padrão</button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+                    {ALL_MODULES.map((mod) => (
+                      <label key={mod.key} className="flex items-center gap-2 cursor-pointer">
+                        <Switch checked={modules.includes(mod.key)} onCheckedChange={() => toggleModule(profile.id, mod.key)} className="scale-90" />
+                        <span className="text-[12.5px] text-foreground truncate">{mod.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {gestor && <p className="text-[11px] text-muted-foreground mt-2.5">Gestor: a restrição de módulos passa a valer no menu lateral.</p>}
+                  {st === "pending" && <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-2.5">Pré-configurado — passa a valer assim que a pessoa for aprovada.</p>}
+                </div>
+              )}
             </div>
-          ) : (
-            <div>
-              <div className="flex items-center gap-2 mb-2 text-[11px]">
-                <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [...ALL_MODULE_KEYS], modules)}>Marcar todos</button>
-                <span className="text-muted-foreground/40">·</span>
-                <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [], modules)}>Limpar</button>
-                <span className="text-muted-foreground/40">·</span>
-                <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [...DEFAULT_MODULES], modules)}>Padrão</button>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
-                {ALL_MODULES.map((mod) => (
-                  <label key={mod.key} className="flex items-center gap-2 cursor-pointer">
-                    <Switch checked={modules.includes(mod.key)} onCheckedChange={() => toggleModule(profile.id, mod.key)} className="scale-90" />
-                    <span className="text-[12.5px] text-foreground">{mod.label}</span>
-                  </label>
-                ))}
-              </div>
-              {gestor && <p className="text-[11px] text-muted-foreground mt-2">Gestor: a restrição de módulos passa a valer no menu lateral.</p>}
-              {st === "pending" && <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-2">Pré-configurado — passa a valer assim que a pessoa for aprovada.</p>}
-            </div>
-          )}
-        </div>
 
-        {/* Abas do projeto */}
-        <div className="grid gap-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Abas visíveis no projeto</Label>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground">Todas</span>
-              <Switch checked={userAllowedTabs.length === ALL_TAB_VALUES.length} onCheckedChange={toggleAllTabs} />
+            {/* ── Abas do projeto — resumo que expande ── */}
+            <div className="rounded-lg border border-border overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setTabsOpen((v) => !v)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
+              >
+                <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", tabsOpen && "rotate-90")} />
+                <span className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><LayoutGrid className="w-4 h-4 text-primary" /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium">Abas do projeto</span>
+                  <span className="block text-[11px] text-muted-foreground">O que aparece dentro de cada projeto</span>
+                </span>
+                <span className="text-[11px] font-semibold text-primary bg-primary/10 rounded-full px-2 py-0.5 tabular-nums shrink-0">
+                  {userAllowedTabs.length} de {ALL_TAB_VALUES.length}
+                </span>
+              </button>
+              {tabsOpen && (
+                <div className="border-t border-border p-3 bg-muted/20">
+                  <div className="flex items-center gap-2 mb-2.5 text-[11px]">
+                    <button type="button" className="text-primary hover:underline" onClick={() => toggleAllTabs(true)}>Todas</button>
+                    <span className="text-muted-foreground/40">·</span>
+                    <button type="button" className="text-primary hover:underline" onClick={() => toggleAllTabs(false)}>Nenhuma</button>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {ALL_PROJECT_TABS.map((tab) => (
+                      <div key={tab.value} className="flex items-center justify-between p-2 rounded-lg border border-border">
+                        <span className="text-[12.5px] font-medium text-foreground flex items-center gap-1.5">
+                          {tab.value === "kanban" && <Lock className="w-3 h-3 text-muted-foreground" />}
+                          {tab.label}
+                        </span>
+                        <Switch checked={userAllowedTabs.includes(tab.value)} disabled={tab.value === "kanban"} onCheckedChange={() => toggleTab(tab.value)} />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-2.5">Kanban fica sempre ativo — é a visão base do projeto.</p>
+                </div>
+              )}
             </div>
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {ALL_PROJECT_TABS.map((tab) => (
-              <div key={tab.value} className="flex items-center justify-between p-2 rounded-lg border border-border">
-                <span className="text-[12.5px] font-medium text-foreground">{tab.label}</span>
-                <Switch checked={userAllowedTabs.includes(tab.value)} disabled={tab.value === "kanban"} onCheckedChange={() => toggleTab(tab.value)} />
-              </div>
-            ))}
-          </div>
-        </div>
+          </>
+        )}
       </section>
 
       {/* Ações */}
