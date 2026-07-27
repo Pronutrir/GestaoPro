@@ -61,6 +61,20 @@ interface Sector {
 type StateFilter = "all" | "active" | "pending" | "inactive";
 type GroupBy = "sector" | "role_title" | "none";
 
+/**
+ * Escala tipográfica da tela — FONTE ÚNICA. Em vez de dezenas de tamanhos
+ * "quase iguais" espalhados, 5 degraus com propósito claro (evita o mosaico
+ * de 10/10.5/11/11.5/12/12.5/13… que se acumulou nas iterações).
+ */
+const TYPO = {
+  title: "text-[15px] font-semibold",      // nome da pessoa
+  section: "text-[11px] font-semibold uppercase tracking-wider text-muted-foreground", // eyebrow de seção
+  label: "text-xs font-medium text-muted-foreground", // rótulo de campo
+  body: "text-[13px]",                      // conteúdo / itens
+  meta: "text-[11px] text-muted-foreground", // metadados / descrições
+  badge: "text-[10px] font-semibold uppercase tracking-wide", // pílulas
+} as const;
+
 const STATE_FILTERS: { key: StateFilter; label: string }[] = [
   { key: "all", label: "Todos" },
   { key: "active", label: "Ativos" },
@@ -106,7 +120,7 @@ function AccessLevelField({
       </Select>
       <div className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2.5">
         <div className="flex-1 min-w-0">
-          <div className="text-[12.5px] font-medium flex items-center gap-1.5">
+          <div className="text-[13px] font-medium flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-primary" /> Administrador do sistema
           </div>
           <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -599,16 +613,16 @@ export function PeopleManager() {
           <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleAvatarUpload(profile, e)} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[16px] font-semibold truncate">{profile.full_name || "Sem nome"}</div>
-          <div className="text-[12px] text-muted-foreground truncate">
-            {profile.email} · cadastrado em {new Date(profile.created_at).toLocaleDateString("pt-BR")}
+          <div className={cn(TYPO.title, "truncate")}>{profile.full_name || "Sem nome"}</div>
+          <div className={cn(TYPO.meta, "truncate")}>
+            {profile.email} · desde {new Date(profile.created_at).toLocaleDateString("pt-BR")}
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wide">
+          <span className={cn(TYPO.badge, "px-2 py-0.5 rounded-full bg-primary/10 text-primary")}>
             {accessLabelForRole(getUserRole(profile.id))}
           </span>
-          <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", STATE_META[st].cls)}>
+          <span className={cn(TYPO.badge, "px-2 py-0.5 rounded-full", STATE_META[st].cls)}>
             {STATE_META[st].label}
           </span>
         </div>
@@ -616,33 +630,33 @@ export function PeopleManager() {
 
       {/* ── Identificação ── */}
       <section className="space-y-3">
-        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1.5">Identificação</h3>
+        <h3 className={cn(TYPO.section, "border-b border-border pb-1.5")}>Identificação</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="grid gap-2">
-            <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><User className="w-3.5 h-3.5" /> Nome Completo</Label>
+            <Label className={cn("flex items-center gap-1.5", TYPO.label)}><User className="w-3.5 h-3.5" /> Nome completo</Label>
             <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
           </div>
           <div className="grid gap-2">
-            <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Mail className="w-3.5 h-3.5" /> E-mail</Label>
+            <Label className={cn("flex items-center gap-1.5", TYPO.label)}><Mail className="w-3.5 h-3.5" /> E-mail</Label>
             <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="email@empresa.com" />
           </div>
         </div>
         <div className="grid gap-2">
-          <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Key className="w-3.5 h-3.5" /> Redefinir Senha</Label>
+          <Label className={cn("flex items-center gap-1.5", TYPO.label)}><Key className="w-3.5 h-3.5" /> Redefinir senha</Label>
           <Input type="password" value={editForm.new_password} onChange={(e) => setEditForm({ ...editForm, new_password: e.target.value })} placeholder="Deixe vazio para não alterar" />
         </div>
       </section>
 
       {/* ── Organização ── */}
       <section className="space-y-3">
-        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1.5">Organização</h3>
+        <h3 className={cn(TYPO.section, "border-b border-border pb-1.5")}>Organização</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="grid gap-2">
-            <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Building2 className="w-3.5 h-3.5" /> Setor</Label>
+            <Label className={cn("flex items-center gap-1.5", TYPO.label)}><Building2 className="w-3.5 h-3.5" /> Setor</Label>
             <SectorSelect value={editForm.sector} onValueChange={(v) => setEditForm({ ...editForm, sector: v })} sectors={sectors} onSectorsChange={setSectors} />
           </div>
           <div className="grid gap-2">
-            <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Briefcase className="w-3.5 h-3.5" /> Cargo <span className="normal-case text-muted-foreground/70">(descritivo, opcional)</span></Label>
+            <Label className={cn("flex items-center gap-1.5", TYPO.label)}><Briefcase className="w-3.5 h-3.5" /> Cargo <span className="normal-case text-muted-foreground/70">(descritivo, opcional)</span></Label>
             <RoleTitleSelect value={editForm.role_title} onValueChange={(v) => setEditForm({ ...editForm, role_title: v })} titles={titles} onTitlesChange={setTitles} />
           </div>
         </div>
@@ -650,9 +664,9 @@ export function PeopleManager() {
 
       {/* ── Acesso ── */}
       <section className="space-y-3">
-        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1.5">Acesso</h3>
+        <h3 className={cn(TYPO.section, "border-b border-border pb-1.5")}>Acesso</h3>
         <div className="grid gap-2">
-          <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Shield className="w-3.5 h-3.5" /> Nível de acesso</Label>
+          <Label className={cn("flex items-center gap-1.5", TYPO.label)}><Shield className="w-3.5 h-3.5" /> Nível de acesso</Label>
           <AccessLevelField
             accessKey={editForm.accessKey}
             admin={editForm.admin}
@@ -665,7 +679,7 @@ export function PeopleManager() {
         {admin ? (
           <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
             <ShieldCheck className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-            <p className="text-[12.5px] text-foreground">Admin tem acesso completo a todos os módulos e abas.</p>
+            <p className="text-[13px] text-foreground">Admin tem acesso completo a todos os módulos e abas.</p>
           </div>
         ) : (
           <>
@@ -678,8 +692,8 @@ export function PeopleManager() {
                 <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", modulesOpen && "rotate-90")} />
                 <span className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><Blocks className="w-4 h-4 text-primary" /></span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-medium">Módulos do sistema</span>
-                  <span className="block text-[11px] text-muted-foreground">O que aparece no menu lateral</span>
+                  <span className={cn("block", TYPO.body, "font-medium")}>Módulos do sistema</span>
+                  <span className={cn("block", TYPO.meta)}>O que aparece no menu lateral</span>
                 </span>
                 <span className="text-[11px] font-semibold text-primary bg-primary/10 rounded-full px-2 py-0.5 tabular-nums shrink-0">
                   {modules.length} de {ALL_MODULES.length}
@@ -698,7 +712,7 @@ export function PeopleManager() {
                     {ALL_MODULES.map((mod) => (
                       <label key={mod.key} className="flex items-center gap-2 cursor-pointer">
                         <Switch checked={modules.includes(mod.key)} onCheckedChange={() => toggleModule(profile.id, mod.key)} className="scale-90" />
-                        <span className="text-[12.5px] text-foreground truncate">{mod.label}</span>
+                        <span className="text-[13px] text-foreground truncate">{mod.label}</span>
                       </label>
                     ))}
                   </div>
@@ -718,8 +732,8 @@ export function PeopleManager() {
                 <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", tabsOpen && "rotate-90")} />
                 <span className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><LayoutGrid className="w-4 h-4 text-primary" /></span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-medium">Abas do projeto</span>
-                  <span className="block text-[11px] text-muted-foreground">O que aparece dentro de cada projeto</span>
+                  <span className={cn("block", TYPO.body, "font-medium")}>Abas do projeto</span>
+                  <span className={cn("block", TYPO.meta)}>O que aparece dentro de cada projeto</span>
                 </span>
                 <span className="text-[11px] font-semibold text-primary bg-primary/10 rounded-full px-2 py-0.5 tabular-nums shrink-0">
                   {userAllowedTabs.length} de {ALL_TAB_VALUES.length}
@@ -735,7 +749,7 @@ export function PeopleManager() {
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {ALL_PROJECT_TABS.map((tab) => (
                       <div key={tab.value} className="flex items-center justify-between p-2 rounded-lg border border-border">
-                        <span className="text-[12.5px] font-medium text-foreground flex items-center gap-1.5">
+                        <span className="text-[13px] font-medium text-foreground flex items-center gap-1.5">
                           {tab.value === "kanban" && <Lock className="w-3 h-3 text-muted-foreground" />}
                           {tab.label}
                         </span>
@@ -886,7 +900,7 @@ export function PeopleManager() {
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex items-center gap-1.5 text-[11.5px] px-2 py-1 rounded-md border transition-colors",
+                      "inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border transition-colors",
                       stateFilter !== "all" || groupBy !== "sector"
                         ? "border-primary/30 text-primary bg-primary/5"
                         : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
@@ -905,7 +919,7 @@ export function PeopleManager() {
                           type="button"
                           onClick={() => setStateFilter(f.key)}
                           className={cn(
-                            "text-[11.5px] px-2.5 py-1 rounded-md border transition-colors",
+                            "text-[11px] px-2.5 py-1 rounded-md border transition-colors",
                             stateFilter === f.key
                               ? "bg-primary/10 border-primary/30 text-primary font-medium"
                               : "bg-transparent border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
@@ -925,7 +939,7 @@ export function PeopleManager() {
                           type="button"
                           onClick={() => setGroupBy(g.key)}
                           className={cn(
-                            "flex-1 text-[11.5px] px-2 py-1 rounded-md transition-colors",
+                            "flex-1 text-[11px] px-2 py-1 rounded-md transition-colors",
                             groupBy === g.key ? "bg-background text-foreground font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
                           )}
                         >
@@ -948,7 +962,7 @@ export function PeopleManager() {
                 grouped.map((g) => (
                   <div key={g.key}>
                     {g.label && (
-                      <div className="sticky top-0 z-[1] flex items-center gap-1.5 px-3 py-2 bg-muted text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
+                      <div className="sticky top-0 z-[1] flex items-center gap-1.5 px-3 py-2 bg-muted text-[11px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
                         {groupBy === "sector" ? <Building2 className="w-3 h-3" /> : <Briefcase className="w-3 h-3" />}
                         <span className="truncate">{g.label}</span>
                         <span className="ml-auto tabular-nums bg-background rounded-full px-1.5 py-0.5">{g.people.length}</span>
@@ -992,7 +1006,7 @@ export function PeopleManager() {
                             <div className="text-[11px] text-muted-foreground truncate">{line2}</div>
                           </div>
                           <span className={cn(
-                            "text-[9px] font-bold uppercase tracking-wide rounded-full px-1.5 py-0.5 shrink-0",
+                            "text-[10px] font-bold uppercase tracking-wide rounded-full px-1.5 py-0.5 shrink-0",
                             levelLabel === "Administrador" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
                           )}>
                             {levelLabel === "Administrador" ? "Admin" : levelLabel === "Colaborador" ? "Colab" : levelLabel === "Coordenador" ? "Coord" : levelLabel === "Visualizador" ? "Leitura" : levelLabel}
@@ -1014,7 +1028,7 @@ export function PeopleManager() {
                   <Users className="w-6 h-6 opacity-50" />
                 </span>
                 <p className="text-[14px] font-medium text-foreground">Nenhuma pessoa selecionada</p>
-                <p className="text-[12.5px] mt-0.5">Escolha alguém à esquerda para ver e editar tudo dela.</p>
+                <p className="text-[13px] mt-0.5">Escolha alguém à esquerda para ver e editar tudo dela.</p>
               </div>
             ) : (
               (() => {
@@ -1049,7 +1063,7 @@ export function PeopleManager() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Gerenciar listas</DialogTitle>
-            <DialogDescription className="text-[12.5px]">
+            <DialogDescription className="text-[13px]">
               Setores e cargos usados para classificar as pessoas. Renomeie, exclua ou limpe os sem uso.
             </DialogDescription>
           </DialogHeader>
