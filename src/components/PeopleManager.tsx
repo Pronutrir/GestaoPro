@@ -977,10 +977,13 @@ export function PeopleManager() {
                               <AvatarImage src={profile.avatar_url || undefined} className={st !== "active" ? "grayscale" : ""} />
                               <AvatarFallback className="text-[11px]">{getInitials(profile.full_name)}</AvatarFallback>
                             </Avatar>
-                            <span className={cn(
-                              "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-card",
-                              st === "active" ? "bg-emerald-500" : st === "pending" ? "bg-amber-500" : "bg-slate-400",
-                            )} />
+                            <span
+                              title={st === "active" ? "Ativa" : st === "pending" ? "Pendente de aprovação" : "Inativa"}
+                              className={cn(
+                                "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-card",
+                                st === "active" ? "bg-emerald-500" : st === "pending" ? "bg-amber-500" : "bg-red-500",
+                              )}
+                            />
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className={cn("text-[13px] truncate", isSel ? "font-semibold" : "font-medium", st !== "active" && "text-muted-foreground")}>
