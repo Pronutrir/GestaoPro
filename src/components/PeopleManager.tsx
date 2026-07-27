@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -107,6 +108,9 @@ export function PeopleManager() {
   const [deleteConfirm, setDeleteConfirm] = useState<Profile | null>(null);
   const [banConfirm, setBanConfirm] = useState<{ profile: Profile; action: "ban" | "unban" } | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const searchParams = useSearchParams();
+  const focusHandled = useRef(false);
 
   const [form, setForm] = useState({
     email: "", password: "", full_name: "", sector: "", role_title: "", role: "user",
@@ -273,6 +277,23 @@ export function PeopleManager() {
     setExpandedId(profile.id);
     openUserDetail(profile);
   };
+
+  // Foco vindo da Estrutura ("Abrir ↗"): /settings/pessoas?focus=<id> abre a
+  // pessoa e rola até ela. Roda uma única vez, quando os perfis já carregaram.
+  useEffect(() => {
+    if (focusHandled.current || loading) return;
+    const focusId = searchParams.get("focus");
+    if (!focusId) return;
+    const target = profiles.find((p) => p.id === focusId);
+    if (!target) return;
+    focusHandled.current = true;
+    setExpandedId(focusId);
+    openUserDetail(target);
+    // Deixa o React pintar a linha expandida antes de rolar até ela.
+    setTimeout(() => {
+      rowRefs.current[focusId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+  }, [loading, profiles, searchParams]);
 
   const handleSaveTabPermissions = async (userId: string, tabs: string[]) => {
     const normalizedTabs = normalizeProjectTabs(tabs);
@@ -567,7 +588,14 @@ export function PeopleManager() {
                   || (st === "pending" ? "aguardando aprovação" : profile.email);
 
                 return (
-                  <div key={profile.id} className="border-t border-border first:border-t-0">
+                  <div
+                    key={profile.id}
+                    ref={(el) => { rowRefs.current[profile.id] = el; }}
+                    className={cn(
+                      "border-t border-border first:border-t-0 scroll-mt-24 transition-colors",
+                      isOpen && "ring-1 ring-inset ring-primary/30",
+                    )}
+                  >
                     {/* Linha compacta */}
                     <button
                       type="button"

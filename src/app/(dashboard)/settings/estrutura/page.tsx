@@ -15,7 +15,7 @@ const SettingsStructurePage = () => {
   const [tab, setTab] = useState<"setores" | "cargos">("setores");
 
   return (
-    <div className="px-4 py-6 max-w-4xl mx-auto">
+    <div className="px-4 py-6 max-w-5xl mx-auto">
       <SettingsPageHeader
         icon={Building2}
         title="Estrutura Organizacional"
@@ -41,6 +41,7 @@ const SettingsStructurePage = () => {
             emptyLabel="Nenhum setor cadastrado ainda."
             itemNoun="setor"
             singularLabel="Setor"
+            moveVerb="Mover setor"
           />
         </TabsContent>
         <TabsContent value="cargos">
@@ -52,6 +53,7 @@ const SettingsStructurePage = () => {
             emptyLabel="Nenhum cargo cadastrado ainda."
             itemNoun="cargo"
             singularLabel="Cargo"
+            moveVerb="Mover cargo"
           />
         </TabsContent>
       </Tabs>

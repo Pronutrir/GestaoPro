@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from "react";
 import { PeopleManager } from "@/components/PeopleManager";
 import { Users } from "lucide-react";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
@@ -17,7 +18,9 @@ const SettingsPeoplePage = () => {
         title="Pessoas & Acessos"
         description="Cadastro, papéis, setores e módulos de cada pessoa — tudo num só lugar."
       />
-      <PeopleManager />
+      <Suspense fallback={null}>
+        <PeopleManager />
+      </Suspense>
     </div>
   );
 };
