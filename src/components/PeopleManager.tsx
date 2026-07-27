@@ -25,7 +25,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { ALL_MODULES, ALL_MODULE_KEYS, DEFAULT_MODULES } from "@/lib/modules";
 import { ALL_PROJECT_TABS, ALL_TAB_VALUES, normalizeProjectTabs } from "@/lib/projectTabs";
-import { RoleTitleSelect } from "@/components/settings/RoleTitleSelect";
+import { RoleTitleSelect, type JobTitleOption } from "@/components/settings/RoleTitleSelect";
+import { ORG_LEVELS } from "@/lib/orgLevels";
 import { SectorSelect } from "@/components/settings/SectorSelect";
 
 interface Profile {
@@ -92,6 +93,7 @@ export function PeopleManager() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);
+  const [titles, setTitles] = useState<JobTitleOption[]>([]);
   const [permissions, setPermissions] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -159,6 +161,18 @@ export function PeopleManager() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // Cargos/níveis: da tabela job_titles. Tolerante — se a tabela ainda não
+  // existe (migration pendente), cai nos 5 níveis padrão de ORG_LEVELS.
+  useEffect(() => {
+    (supabase.from("job_titles" as any).select("id, name").order("name") as any).then(({ data, error }: any) => {
+      if (!error && Array.isArray(data) && data.length > 0) {
+        setTitles(data as JobTitleOption[]);
+      } else {
+        setTitles(ORG_LEVELS.map((l) => ({ id: l.value, name: l.value })));
+      }
+    });
+  }, []);
 
   const getUserRole = (userId: string) => roles.find((r) => r.user_id === userId)?.role || "user";
   const isAdminUser = (userId: string) => getUserRole(userId) === "admin";
@@ -466,7 +480,7 @@ export function PeopleManager() {
                     </div>
                     <div className="grid gap-2">
                       <Label>Cargo / Nível</Label>
-                      <RoleTitleSelect value={form.role_title} onValueChange={(v) => setForm({ ...form, role_title: v })} />
+                      <RoleTitleSelect value={form.role_title} onValueChange={(v) => setForm({ ...form, role_title: v })} titles={titles} onTitlesChange={setTitles} />
                     </div>
                   </div>
                   <div className="grid gap-2">
@@ -672,7 +686,7 @@ export function PeopleManager() {
                               </div>
                               <div className="grid gap-2">
                                 <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Briefcase className="w-3.5 h-3.5" /> Cargo / Nível</Label>
-                                <RoleTitleSelect value={editForm.role_title} onValueChange={(v) => setEditForm({ ...editForm, role_title: v })} />
+                                <RoleTitleSelect value={editForm.role_title} onValueChange={(v) => setEditForm({ ...editForm, role_title: v })} titles={titles} onTitlesChange={setTitles} />
                               </div>
                             </div>
 
