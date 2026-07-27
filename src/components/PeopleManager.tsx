@@ -598,13 +598,15 @@ export function PeopleManager() {
       {/* ── Identificação ── */}
       <section className="space-y-3">
         <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1.5">Identificação</h3>
-        <div className="grid gap-2">
-          <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><User className="w-3.5 h-3.5" /> Nome Completo</Label>
-          <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
-        </div>
-        <div className="grid gap-2">
-          <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Mail className="w-3.5 h-3.5" /> E-mail</Label>
-          <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="email@empresa.com" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid gap-2">
+            <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><User className="w-3.5 h-3.5" /> Nome Completo</Label>
+            <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
+          </div>
+          <div className="grid gap-2">
+            <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Mail className="w-3.5 h-3.5" /> E-mail</Label>
+            <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="email@empresa.com" />
+          </div>
         </div>
         <div className="grid gap-2">
           <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground"><Key className="w-3.5 h-3.5" /> Redefinir Senha</Label>
@@ -718,69 +720,72 @@ export function PeopleManager() {
 
   return (
     <>
-      {/* Barra de topo: título, gerenciar listas e nova pessoa */}
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="text-[13px] text-muted-foreground">
-          {loading ? "Carregando…" : `${profiles.length} pessoa${profiles.length === 1 ? "" : "s"}`}
-          {pendingCount > 0 && (
-            <span className="ml-2 text-amber-700 dark:text-amber-400 font-medium">· {pendingCount} pendente(s)</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" className="gap-1.5 h-9" onClick={() => setManageListsDialog("sectors")}>
-            <Settings2 className="w-4 h-4" /> Gerenciar listas
-          </Button>
+      {/* Diálogo controlado de criação (aberto pela toolbar) */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Criar nova pessoa</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Nome Completo *</Label>
+              <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="João Silva" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Email *</Label>
+              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="joao@empresa.com" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Senha <span className="text-muted-foreground text-xs">(opcional — gerada automaticamente se vazio)</span></Label>
+              <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Deixe vazio para gerar automaticamente" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Setor</Label>
+                <SectorSelect value={form.sector} onValueChange={(v) => setForm({ ...form, sector: v })} sectors={sectors} onSectorsChange={setSectors} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Cargo / Nível</Label>
+                <RoleTitleSelect value={form.role_title} onValueChange={(v) => setForm({ ...form, role_title: v })} titles={titles} onTitlesChange={setTitles} />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Nível de acesso</Label>
+              <AccessLevelField
+                accessKey={form.accessKey}
+                admin={form.admin}
+                onAccessKeyChange={(k) => setForm({ ...form, accessKey: k })}
+                onAdminChange={(v) => setForm({ ...form, admin: v })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCreate} disabled={isSaving}>{isSaving ? "Criando..." : "Criar pessoa"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-1.5 h-9 shrink-0"><Plus className="w-4 h-4" /> Nova pessoa</Button>
-            </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Criar nova pessoa</DialogTitle></DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label>Nome Completo *</Label>
-                    <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="João Silva" />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Email *</Label>
-                    <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="joao@empresa.com" />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Senha <span className="text-muted-foreground text-xs">(opcional — gerada automaticamente se vazio)</span></Label>
-                    <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Deixe vazio para gerar automaticamente" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label>Setor</Label>
-                      <SectorSelect value={form.sector} onValueChange={(v) => setForm({ ...form, sector: v })} sectors={sectors} onSectorsChange={setSectors} />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label>Cargo / Nível</Label>
-                      <RoleTitleSelect value={form.role_title} onValueChange={(v) => setForm({ ...form, role_title: v })} titles={titles} onTitlesChange={setTitles} />
-                    </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Nível de acesso</Label>
-                    <AccessLevelField
-                      accessKey={form.accessKey}
-                      admin={form.admin}
-                      onAccessKeyChange={(k) => setForm({ ...form, accessKey: k })}
-                      onAdminChange={(v) => setForm({ ...form, admin: v })}
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-                  <Button onClick={handleCreate} disabled={isSaving}>{isSaving ? "Criando..." : "Criar pessoa"}</Button>
-                </DialogFooter>
-              </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      {/* ══ Tela única: lista (master) | ficha (detail) ══ */}
+      {/* ══ Tela única: toolbar + lista (master) | ficha (detail) ══ */}
       <Card className="overflow-hidden">
+        {/* ── Toolbar integrada: título · contagem · ações ── */}
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border">
+          <span className="text-[14px] font-semibold">Pessoas</span>
+          <span className="text-[11px] text-muted-foreground bg-muted rounded-full px-2 py-0.5 tabular-nums">
+            {loading ? "…" : profiles.length}
+          </span>
+          {pendingCount > 0 && (
+            <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 rounded-full px-2 py-0.5">
+              {pendingCount} pendente{pendingCount === 1 ? "" : "s"}
+            </span>
+          )}
+          <div className="flex-1" />
+          <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={() => setManageListsDialog("sectors")}>
+            <Settings2 className="w-4 h-4" /> Setores &amp; Cargos
+          </Button>
+          <Button size="sm" className="gap-1.5 h-8" onClick={() => setCreateOpen(true)}>
+            <Plus className="w-4 h-4" /> Nova pessoa
+          </Button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-[320px_1fr]">
           {/* ── MASTER: lista de pessoas ── */}
           <div className={cn("md:border-r border-border flex flex-col", selectedProfile && "hidden md:flex")}>
@@ -844,17 +849,16 @@ export function PeopleManager() {
                 grouped.map((g) => (
                   <div key={g.key}>
                     {g.label && (
-                      <div className="sticky top-0 z-[1] flex items-center gap-1.5 px-3 py-1.5 bg-muted/80 backdrop-blur-sm text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
+                      <div className="sticky top-0 z-[1] flex items-center gap-1.5 px-3 py-2 bg-muted text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
                         {groupBy === "sector" ? <Building2 className="w-3 h-3" /> : <Briefcase className="w-3 h-3" />}
                         <span className="truncate">{g.label}</span>
-                        <span className="ml-auto tabular-nums bg-background/70 rounded-full px-1.5">{g.people.length}</span>
+                        <span className="ml-auto tabular-nums bg-background rounded-full px-1.5 py-0.5">{g.people.length}</span>
                       </div>
                     )}
                     {g.people.map((profile) => {
                       const st = userState(profile);
-                      const admin = isAdminUser(profile.id);
-                      const gestor = isGestorUser(profile.id);
                       const isSel = selectedId === profile.id;
+                      const levelLabel = accessLabelForRole(getUserRole(profile.id));
                       const line2 = groupBy === "role_title"
                         ? (profile.sector || (st === "pending" ? "aguardando aprovação" : profile.email))
                         : (profile.role_title || (st === "pending" ? "aguardando aprovação" : profile.email));
@@ -865,23 +869,32 @@ export function PeopleManager() {
                           type="button"
                           onClick={() => handleSelect(profile)}
                           className={cn(
-                            "w-full flex items-center gap-2.5 px-3 py-2 text-left border-b border-border/60 transition-colors scroll-mt-16",
-                            isSel ? "bg-primary/10 shadow-[inset_2px_0_0] shadow-primary" : "hover:bg-muted/40",
+                            "w-full flex items-center gap-3 px-3 py-2.5 text-left border-b border-border/60 transition-colors scroll-mt-16",
+                            isSel ? "bg-primary/10 shadow-[inset_3px_0_0] shadow-primary" : "hover:bg-muted/40",
                           )}
                         >
-                          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", st === "active" ? "bg-emerald-500" : st === "pending" ? "bg-amber-500" : "bg-slate-400")} />
-                          <Avatar className="h-7 w-7 shrink-0">
-                            <AvatarImage src={profile.avatar_url || undefined} className={st !== "active" ? "grayscale" : ""} />
-                            <AvatarFallback className="text-[10px]">{getInitials(profile.full_name)}</AvatarFallback>
-                          </Avatar>
+                          <span className="relative shrink-0">
+                            <Avatar className="h-9 w-9">
+                              <AvatarImage src={profile.avatar_url || undefined} className={st !== "active" ? "grayscale" : ""} />
+                              <AvatarFallback className="text-[11px]">{getInitials(profile.full_name)}</AvatarFallback>
+                            </Avatar>
+                            <span className={cn(
+                              "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-card",
+                              st === "active" ? "bg-emerald-500" : st === "pending" ? "bg-amber-500" : "bg-slate-400",
+                            )} />
+                          </span>
                           <div className="min-w-0 flex-1">
                             <div className={cn("text-[13px] truncate", isSel ? "font-semibold" : "font-medium", st !== "active" && "text-muted-foreground")}>
                               {profile.full_name || "Sem nome"}
                             </div>
                             <div className="text-[11px] text-muted-foreground truncate">{line2}</div>
                           </div>
-                          {admin && <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0" aria-label="Administrador" />}
-                          {gestor && <span className="text-[9px] font-bold text-primary/80 shrink-0">GESTOR</span>}
+                          <span className={cn(
+                            "text-[9px] font-bold uppercase tracking-wide rounded-full px-1.5 py-0.5 shrink-0",
+                            levelLabel === "Administrador" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+                          )}>
+                            {levelLabel === "Administrador" ? "Admin" : levelLabel === "Colaborador" ? "Colab" : levelLabel === "Coordenador" ? "Coord" : levelLabel === "Visualizador" ? "Leitura" : levelLabel}
+                          </span>
                         </button>
                       );
                     })}
@@ -894,9 +907,36 @@ export function PeopleManager() {
           {/* ── DETAIL: ficha da pessoa selecionada ── */}
           <div className={cn("min-h-[420px]", !selectedProfile && "hidden md:block")}>
             {!selectedProfile ? (
-              <div className="h-full flex flex-col items-center justify-center text-center py-16 text-muted-foreground">
-                <Users className="w-9 h-9 mb-2 opacity-40" />
-                <p className="text-[13px]">Selecione uma pessoa à esquerda para ver e editar tudo dela.</p>
+              <div className="h-full flex flex-col items-center justify-center text-center px-6 py-16 text-muted-foreground">
+                <span className="h-12 w-12 rounded-2xl bg-muted flex items-center justify-center mb-3">
+                  <Users className="w-6 h-6 opacity-50" />
+                </span>
+                <p className="text-[14px] font-medium text-foreground">Nenhuma pessoa selecionada</p>
+                <p className="text-[12.5px] mt-0.5">Escolha alguém à esquerda para ver e editar tudo dela.</p>
+
+                {/* Resumo acionável (KPIs) — o espaço não fica ocioso */}
+                <div className="flex gap-2.5 mt-5">
+                  {[
+                    { v: profiles.length, k: "Pessoas" },
+                    { v: pendingCount, k: "Pendentes" },
+                    { v: sectors.length, k: "Setores" },
+                  ].map((kpi) => (
+                    <div key={kpi.k} className="rounded-xl border border-border bg-card px-4 py-2.5 min-w-[76px]">
+                      <div className="text-[18px] font-bold tabular-nums text-foreground">{kpi.v}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{kpi.k}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-3 mt-5 text-[12px] font-medium">
+                  <button type="button" onClick={() => setCreateOpen(true)} className="text-primary hover:underline inline-flex items-center gap-1">
+                    <Plus className="w-3.5 h-3.5" /> Nova pessoa
+                  </button>
+                  <span className="text-border">·</span>
+                  <button type="button" onClick={() => setManageListsDialog("sectors")} className="text-primary hover:underline inline-flex items-center gap-1">
+                    <Settings2 className="w-3.5 h-3.5" /> Setores &amp; Cargos
+                  </button>
+                </div>
               </div>
             ) : (
               (() => {
