@@ -1,81 +1,71 @@
 'use client';
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "@/components/ui/link";
 import { Building2, Settings2, Shield, CalendarDays, Users as UsersIcon, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRouter } from "next/navigation";
+import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 
-interface Sector {
-  id: string;
-}
+const AREAS = [
+  { href: "/settings/estrutura", eyebrow: "Estrutura", title: "Setores", icon: Building2, key: "estrutura" },
+  { href: "/settings/usuarios", eyebrow: "Pessoas", title: "Usuários", icon: UsersIcon, key: "usuarios" },
+  { href: "/settings/acessos", eyebrow: "Acessos", title: "Permissões", icon: Shield, key: "acessos" },
+  { href: "/settings/calendario", eyebrow: "Calendário", title: "Feriados e Férias", icon: CalendarDays, key: "calendario" },
+] as const;
 
 const Settings = () => {
   const [sectorsCount, setSectorsCount] = useState(0);
   const router = useRouter();
 
-  const fetchSectors = async () => {
-    const { data, error } = await supabase.from("sectors").select("id");
-    if (!error && data) setSectorsCount(data.length);
-  };
-
-  useEffect(() => { fetchSectors(); }, []);
+  useEffect(() => {
+    supabase.from("sectors").select("id").then(({ data, error }) => {
+      if (!error && data) setSectorsCount(data.length);
+    });
+  }, []);
 
   useEffect(() => {
-    router.prefetch("/settings/estrutura");
-    router.prefetch("/settings/usuarios");
-    router.prefetch("/settings/acessos");
-    router.prefetch("/settings/calendario");
+    AREAS.forEach((a) => router.prefetch(a.href));
   }, [router]);
 
-  return (
-    <div className="px-4 py-6 space-y-6 max-w-6xl mx-auto">
-      <Card>
-        <CardHeader className="space-y-4">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <CardTitle className="text-2xl flex items-center gap-2">
-                <Settings2 className="w-6 h-6 text-primary" />
-                Configuracoes do Sistema
-              </CardTitle>
-              <CardDescription className="mt-1">
-                Escolha uma area para configurar. Cada tema possui pagina propria para reduzir complexidade e melhorar foco.
-              </CardDescription>
-            </div>
-            <Badge variant="outline" className="text-xs">
-              Admin
-            </Badge>
-          </div>
+  const subtitleFor = (key: string) =>
+    key === "estrutura" ? `${sectorsCount} setor(es) cadastrado(s)`
+      : key === "usuarios" ? "Cadastro e manutenção"
+      : key === "acessos" ? "Módulos e visibilidade"
+      : "Capacidade e disponibilidade";
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <Link href="/settings/estrutura" className="text-left rounded-lg border border-border p-3 hover:bg-accent/40 transition block">
-              <p className="text-xs text-muted-foreground">Estrutura</p>
-              <p className="text-sm font-semibold flex items-center gap-2 mt-1"><Building2 className="w-4 h-4" /> Setores</p>
-              <p className="text-xs text-muted-foreground mt-1">{sectorsCount} cadastrado(s)</p>
-              <span className="text-xs text-primary mt-2 inline-flex items-center gap-1">Abrir <ArrowRight className="w-3 h-3" /></span>
+  return (
+    <div className="px-4 py-6 max-w-5xl mx-auto">
+      <SettingsPageHeader
+        icon={Settings2}
+        title="Configurações do Sistema"
+        description="Escolha uma área para configurar. Cada tema tem sua própria página para reduzir complexidade e melhorar o foco."
+        backHref={null}
+        actions={<Badge variant="outline" className="text-xs">Admin</Badge>}
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {AREAS.map((a) => {
+          const Icon = a.icon;
+          return (
+            <Link
+              key={a.key}
+              href={a.href}
+              className="group rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-sm transition-all block"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Icon className="w-5 h-5 text-primary" />
+                </span>
+                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+              </div>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{a.eyebrow}</p>
+              <p className="text-sm font-semibold mt-0.5">{a.title}</p>
+              <p className="text-xs text-muted-foreground mt-1.5">{subtitleFor(a.key)}</p>
             </Link>
-            <Link href="/settings/usuarios" className="text-left rounded-lg border border-border p-3 hover:bg-accent/40 transition block">
-              <p className="text-xs text-muted-foreground">Pessoas</p>
-              <p className="text-sm font-semibold flex items-center gap-2 mt-1"><UsersIcon className="w-4 h-4" /> Usuarios</p>
-              <p className="text-xs text-muted-foreground mt-1">Cadastro e manutencao</p>
-              <span className="text-xs text-primary mt-2 inline-flex items-center gap-1">Abrir <ArrowRight className="w-3 h-3" /></span>
-            </Link>
-            <Link href="/settings/acessos" className="text-left rounded-lg border border-border p-3 hover:bg-accent/40 transition block">
-              <p className="text-xs text-muted-foreground">Acessos</p>
-              <p className="text-sm font-semibold flex items-center gap-2 mt-1"><Shield className="w-4 h-4" /> Permissoes</p>
-              <p className="text-xs text-muted-foreground mt-1">Modulos e visibilidade</p>
-              <span className="text-xs text-primary mt-2 inline-flex items-center gap-1">Abrir <ArrowRight className="w-3 h-3" /></span>
-            </Link>
-            <Link href="/settings/calendario" className="text-left rounded-lg border border-border p-3 hover:bg-accent/40 transition block">
-              <p className="text-xs text-muted-foreground">Calendario</p>
-              <p className="text-sm font-semibold flex items-center gap-2 mt-1"><CalendarDays className="w-4 h-4" /> Feriados e Ferias</p>
-              <p className="text-xs text-muted-foreground mt-1">Capacidade e disponibilidade</p>
-              <span className="text-xs text-primary mt-2 inline-flex items-center gap-1">Abrir <ArrowRight className="w-3 h-3" /></span>
-            </Link>
-          </div>
-        </CardHeader>
-      </Card>
+          );
+        })}
+      </div>
     </div>
   );
 };

@@ -70,10 +70,10 @@ export const HolidaysManager = () => {
     <Card className="p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <CalendarDays className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-bold">Feriados</h2>
+          <CalendarDays className="w-4 h-4 text-primary" />
+          <h2 className="text-[15px] font-semibold">Feriados</h2>
         </div>
-        <Button size="sm" onClick={openNew} className="gap-2"><Plus className="w-4 h-4" /> Novo Feriado</Button>
+        <Button size="sm" onClick={openNew} className="gap-1.5 h-8"><Plus className="w-4 h-4" /> Novo Feriado</Button>
       </div>
 
       <div className="space-y-1 max-h-[500px] overflow-y-auto">

@@ -2,12 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Users, Plus, Shield, User, Pencil, Trash2, Ban, CheckCircle2,
+  Plus, Shield, User, Pencil, Trash2, Ban, CheckCircle2,
   Camera, Mail, Building2, Briefcase, Key, Search, MoreVertical, LayoutGrid,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -352,17 +352,14 @@ export const UserManagement = () => {
   return (
     <>
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="w-5 h-5" /> Usuários
-              </CardTitle>
-              <CardDescription>{profiles.length} usuário(s) cadastrado(s)</CardDescription>
-            </div>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <CardDescription className="text-[13px]">
+              <b className="text-foreground font-semibold">{profiles.length}</b> pessoa(s) cadastrada(s)
+            </CardDescription>
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
-                <Button className="gap-1"><Plus className="w-4 h-4" /> Novo Usuário</Button>
+                <Button size="sm" className="gap-1.5 h-9"><Plus className="w-4 h-4" /> Novo Usuário</Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader><DialogTitle>Criar Novo Usuário</DialogTitle></DialogHeader>

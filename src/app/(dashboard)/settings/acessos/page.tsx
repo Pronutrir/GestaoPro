@@ -1,27 +1,17 @@
 'use client';
 
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Link } from "@/components/ui/link";
 import { ModulePermissions } from "@/components/ModulePermissions";
-import { ChevronLeft, Shield } from "lucide-react";
+import { Shield } from "lucide-react";
+import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 
 const SettingsAccessPage = () => {
   return (
-    <div className="px-4 py-6 space-y-4 max-w-6xl mx-auto">
-      <Card>
-        <CardHeader>
-          <Link href="/settings" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-2">
-            <ChevronLeft className="w-4 h-4" /> Voltar para Configuracoes
-          </Link>
-          <CardTitle className="text-2xl flex items-center gap-2">
-            <Shield className="w-6 h-6 text-primary" />
-            Configuracoes de Acesso
-          </CardTitle>
-          <CardDescription>
-            Defina quais modulos do sistema cada usuario comum pode acessar.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+    <div className="px-4 py-6 space-y-4 max-w-5xl mx-auto">
+      <SettingsPageHeader
+        icon={Shield}
+        title="Acessos e Permissões"
+        description="Defina quais módulos do sistema cada pessoa pode acessar."
+      />
 
       <ModulePermissions />
     </div>

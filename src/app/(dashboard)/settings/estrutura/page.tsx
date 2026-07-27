@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Link } from "@/components/ui/link";
-import { Building2, ChevronLeft, Plus, X } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Building2, Plus, X, Pencil, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 
 interface Sector {
   id: string;
@@ -72,77 +72,84 @@ const SettingsStructurePage = () => {
   };
 
   return (
-    <div className="px-4 py-6 space-y-4 max-w-6xl mx-auto">
-      <Card>
-        <CardHeader>
-          <Link href="/settings" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-2">
-            <ChevronLeft className="w-4 h-4" /> Voltar para Configuracoes
-          </Link>
-          <CardTitle className="text-2xl flex items-center gap-2">
-            <Building2 className="w-6 h-6 text-primary" />
-            Estrutura Organizacional
-          </CardTitle>
-          <CardDescription>
-            Cadastre e mantenha os setores usados em usuarios, projetos e filtros executivos.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+    <div className="px-4 py-6 max-w-4xl mx-auto">
+      <SettingsPageHeader
+        icon={Building2}
+        title="Estrutura Organizacional"
+        description="Cadastre e mantenha os setores usados em usuários, projetos e filtros executivos."
+      />
 
       <Card>
-        <CardContent className="space-y-4 pt-6">
+        <CardContent className="p-4 space-y-3">
+          {/* Adicionar */}
           <div className="flex gap-2">
             <Input
-              placeholder="Nome do setor (ex: TI, Marketing, RH...)"
+              placeholder="Nome do setor (ex.: TI, Marketing, RH…)"
               value={newSector}
               onChange={(e) => setNewSector(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddSector()}
+              className="h-9"
             />
-            <Button onClick={handleAddSector} disabled={isLoading || !newSector.trim()} className="gap-1 shrink-0">
+            <Button onClick={handleAddSector} disabled={isLoading || !newSector.trim()} className="gap-1.5 shrink-0 h-9">
               <Plus className="w-4 h-4" /> Adicionar
             </Button>
           </div>
 
+          {/* Lista densa */}
           {sectors.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Nenhum setor cadastrado ainda.</p>
+            <div className="text-center py-10 text-[13px] text-muted-foreground border border-dashed rounded-lg">
+              Nenhum setor cadastrado ainda.
+            </div>
           ) : (
-            <div className="space-y-2 pt-2">
+            <div className="rounded-lg border border-border overflow-hidden">
               {sectors.map((sector) => (
-                <div key={sector.id} className="flex items-center justify-between p-2 rounded-lg border border-border">
+                <div
+                  key={sector.id}
+                  className="flex items-center gap-2 px-3 py-2 border-t border-border first:border-t-0 hover:bg-muted/40 transition-colors group"
+                >
                   {editingSectorId === sector.id ? (
-                    <div className="flex-1 flex items-center gap-2">
+                    <>
                       <Input
+                        autoFocus
                         value={editingSectorName}
                         onChange={(e) => setEditingSectorName(e.target.value)}
-                        className="h-8 text-sm"
-                        onKeyDown={(e) => e.key === "Enter" && handleRenameSector(sector.id)}
+                        className="h-8 text-[13px] flex-1"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleRenameSector(sector.id);
+                          if (e.key === "Escape") setEditingSectorId(null);
+                        }}
                       />
-                      <Button size="sm" variant="ghost" onClick={() => handleRenameSector(sector.id)}>Salvar</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingSectorId(null)}>
-                        <X className="w-3 h-3" />
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-primary" onClick={() => handleRenameSector(sector.id)} title="Salvar">
+                        <Check className="w-4 h-4" />
                       </Button>
-                    </div>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => setEditingSectorId(null)} title="Cancelar">
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </>
                   ) : (
                     <>
-                      <span className="text-sm font-medium text-foreground">{sector.name}</span>
-                      <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-xs"
-                          onClick={() => {
-                            setEditingSectorId(sector.id);
-                            setEditingSectorName(sector.name);
-                          }}
-                        >
-                          Renomear
-                        </Button>
-                        <button
-                          onClick={() => handleDeleteSector(sector)}
-                          className="text-muted-foreground hover:text-destructive transition-colors p-1"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
+                      <span className="h-6 w-6 rounded-md bg-muted flex items-center justify-center shrink-0">
+                        <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                      </span>
+                      <span className="text-[13px] font-medium text-foreground flex-1 truncate">{sector.name}</span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Renomear"
+                        onClick={() => { setEditingSectorId(sector.id); setEditingSectorName(sector.name); }}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Excluir"
+                        onClick={() => handleDeleteSector(sector)}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
                     </>
                   )}
                 </div>
