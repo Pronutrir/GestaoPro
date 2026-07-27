@@ -730,11 +730,11 @@ export function PeopleManager() {
 
       {/* ══ Tela única: lista (master) | ficha (detail) ══ */}
       <Card className="overflow-hidden">
-        <div className="grid grid-cols-1 md:grid-cols-[300px_1fr]">
+        <div className="grid grid-cols-1 md:grid-cols-[320px_1fr]">
           {/* ── MASTER: lista de pessoas ── */}
           <div className={cn("md:border-r border-border flex flex-col", selectedProfile && "hidden md:flex")}>
             {/* Ferramentas da lista */}
-            <div className="p-3 border-b border-border space-y-2">
+            <div className="p-3 border-b border-border space-y-2.5">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -744,39 +744,41 @@ export function PeopleManager() {
                   className="pl-9 h-9 text-[13px]"
                 />
               </div>
-              <div className="flex items-center gap-2 justify-between">
+              {/* Filtro de estado — linha própria, chips que quebram se faltar espaço */}
+              <div className="flex flex-wrap gap-1">
+                {STATE_FILTERS.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setStateFilter(f.key)}
+                    className={cn(
+                      "text-[11.5px] px-2.5 py-1 rounded-md border transition-colors",
+                      stateFilter === f.key
+                        ? "bg-primary/10 border-primary/30 text-primary font-medium"
+                        : "bg-transparent border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              {/* Agrupar — linha própria com rótulo à esquerda */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10.5px] uppercase tracking-wide text-muted-foreground shrink-0">Agrupar</span>
                 <div className="flex gap-0.5 bg-muted rounded-lg p-0.5">
-                  {STATE_FILTERS.map((f) => (
+                  {GROUP_OPTIONS.map((g) => (
                     <button
-                      key={f.key}
+                      key={g.key}
                       type="button"
-                      onClick={() => setStateFilter(f.key)}
+                      onClick={() => setGroupBy(g.key)}
                       className={cn(
-                        "text-[11.5px] px-2 py-1 rounded-md transition-colors",
-                        stateFilter === f.key ? "bg-background text-foreground font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
+                        "text-[11.5px] px-2.5 py-1 rounded-md transition-colors",
+                        groupBy === g.key ? "bg-background text-foreground font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      {f.label}
+                      {g.label}
                     </button>
                   ))}
-                </div>
-                <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <span className="hidden lg:inline">Agrupar:</span>
-                  <div className="flex gap-0.5 bg-muted rounded-lg p-0.5">
-                    {GROUP_OPTIONS.map((g) => (
-                      <button
-                        key={g.key}
-                        type="button"
-                        onClick={() => setGroupBy(g.key)}
-                        className={cn(
-                          "text-[11.5px] px-2 py-1 rounded-md transition-colors",
-                          groupBy === g.key ? "bg-background text-foreground font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {g.label}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               </div>
             </div>
@@ -875,7 +877,7 @@ export function PeopleManager() {
 
       {/* Diálogo: gerenciar listas mestras (Setores / Cargos) */}
       <Dialog open={!!manageListsDialog} onOpenChange={(o) => !o && setManageListsDialog(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{manageListsDialog === "sectors" ? "Setores" : "Cargos & Níveis"}</DialogTitle>
           </DialogHeader>
