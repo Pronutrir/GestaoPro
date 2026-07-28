@@ -1213,11 +1213,20 @@ export const EditActivityDialog = ({
               </span>
             </button>
           )}
-          <DialogTitle className="text-xl font-bold">
+          <DialogTitle className="text-base font-semibold">
             {createMode ? "Nova Atividade" : parentActivityTitle ? "Editar Sub-atividade" : "Editar Atividade"}
           </DialogTitle>
           {act && !createMode && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
+            <div
+              className="flex items-center gap-2 text-[11px] text-muted-foreground pt-0.5 min-w-0 overflow-hidden whitespace-nowrap"
+              title={[
+                `Criada em ${new Date(act.created_at).toLocaleDateString("pt-BR")}`,
+                (creatorName || creatorEmail) && `por ${creatorName || creatorEmail}`,
+                act.completed_at && `Concluída em ${new Date(act.completed_at).toLocaleDateString("pt-BR")}`,
+                (lastEditorName || lastEditorEmail) && `última edição por ${lastEditorName || lastEditorEmail}`,
+                act.closed_at && `Arquivada em ${new Date(act.closed_at).toLocaleDateString("pt-BR")}`,
+              ].filter(Boolean).join(" · ")}
+            >
               <Hash className="w-3 h-3" />
               <button
                 type="button"
@@ -1331,9 +1340,9 @@ export const EditActivityDialog = ({
 
           {/* Painel de propriedades — 2 colunas, linhas densas (label + valor) */}
           {act && (
-            <div className="p-3.5 rounded-lg border border-border bg-muted/10">
+            <div className="p-3 rounded-lg border border-border bg-muted/10">
               {/* Grade densa de 2 colunas; campos largos usam wide (col-span-2) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
                 {/* Status / Etapa */}
                 {workflowStages.length > 0 && (
                    <PropertyRow icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
@@ -1409,6 +1418,145 @@ export const EditActivityDialog = ({
                   </PropertyRow>
                 )}
 
+                {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
+                <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
+                  <div className="w-full">
+                    <PersonCombobox
+                      people={allProfiles}
+                      value={allProfiles.find((m) => m.full_name === formData.assigned_to)?.id ?? null}
+                      placeholder="Sem líder"
+                      onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
+                      onClear={() => setFormData({ ...formData, assigned_to: "" })}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                </PropertyRow>
+
+                {/* Tempo */}
+                {!formData.is_milestone && (
+                  <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {hasSubActivities ? (
+                        // Com subatividades: horas do pai = soma das subs (rollup,
+                        // somente-leitura). Sem campo concorrente => sem divergência.
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="h-7 px-2 text-xs w-[140px] flex items-center rounded-md border border-input bg-muted/40 text-muted-foreground cursor-default">
+                                {formatHoursDisplay(subHoursTotal) || "0h"}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="max-w-[240px] text-xs">
+                              Somado automaticamente das subatividades. Edite as horas em cada subatividade.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <>
+                          {/* Input livre (2:05 / 2h 30m / 90m) + menu compacto rolável */}
+                          <div className="relative w-[140px]">
+                            <Input
+                              placeholder="Ex: 2:05, 2h 30m, 90m"
+                              value={formData.hours}
+                              onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
+                              onFocus={(e) => e.currentTarget.select()}
+                              className="h-7 pl-2 pr-7 text-xs"
+                            />
+                            <Popover open={hoursPopoverOpen} onOpenChange={setHoursPopoverOpen}>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label="Escolher tempo"
+                                  className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:bg-muted"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent align="end" sideOffset={4} className="w-[180px] p-1">
+                                <div className="max-h-56 overflow-y-auto">
+                                  {HOURS_PRESETS.map((p) => {
+                                    const active = parseHoursInput(formData.hours) === parseHoursInput(p.value);
+                                    return (
+                                      <button
+                                        key={p.value}
+                                        type="button"
+                                        onClick={() => { setFormData({ ...formData, hours: p.value }); setHoursPopoverOpen(false); }}
+                                        className={`w-full flex items-baseline justify-between gap-2 px-2.5 py-1.5 rounded-md text-left transition-colors ${
+                                          active ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                                        }`}
+                                      >
+                                        <span className="text-xs font-medium tabular-nums">{p.value}</span>
+                                        <span className="text-[11px] text-muted-foreground">{p.label}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                          {/* Confirmação em linguagem natural do que foi digitado */}
+                          {(() => {
+                            const natural = formatHoursNatural(parseHoursInput(formData.hours));
+                            if (!natural) return null;
+                            return (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-1.5 py-0.5">
+                                <CheckCircle2 className="w-3 h-3" /> {natural}
+                              </span>
+                            );
+                          })()}
+                        </>
+                      )}
+                      {(plannedHours > 0 || consumedHours > 0) && (
+                        <span
+                          className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${
+                            // Vermelho só quando o consumo ESTOURA o planejado.
+                            // Consumir menos ou igual é normal => neutro.
+                            plannedHours > 0 && consumedHours > plannedHours
+                              ? "text-destructive border-destructive/40 bg-destructive/10"
+                              : "text-muted-foreground border-border bg-muted/30"
+                          }`}
+                          title={
+                            consumedFromTrackedEntries
+                              ? "Tempo real somado de apontamentos (time_entries)"
+                              : subActivities.length > 0
+                              ? "Consumido automático das subatividades concluídas"
+                              : "Consumido automático da atividade concluída"
+                          }
+                        >
+                          Consumidas ({consumedFromTrackedEntries ? "real" : "auto"}): {formatHoursDisplay(consumedHours) || "0h"} / Planejadas: {formatHoursDisplay(plannedHours) || "0h"}
+                        </span>
+                      )}
+                    </div>
+                  </PropertyRow>
+                )}
+
+                {/* Custo */}
+                {!formData.is_milestone && (
+                  <PropertyRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Custo">
+                    {hasSubActivities ? (
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="h-7 px-2 text-xs w-[140px] flex items-center rounded-md border border-input bg-muted/40 text-muted-foreground cursor-default">
+                              {subCostTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-[240px] text-xs">
+                            Somado automaticamente das subatividades. Edite o custo em cada subatividade.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <CurrencyInput
+                        step="0.01"
+                        min="0"
+                        value={formData.cost}
+                        onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+                        className="h-7 pl-8 pr-2 py-0 text-xs w-[140px]"
+                      />
+                    )}
+                  </PropertyRow>
+                )}
                 {/* Datas — planejado e execução real na MESMA linha */}
                 <PropertyRow wide icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Prazo"}>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 w-full">
@@ -1541,167 +1689,15 @@ export const EditActivityDialog = ({
                   </div>
                 </PropertyRow>
 
-                {/* Relacionamentos inline */}
-                {projectId && (
-                  <PropertyRow wide icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
-                    <ActivityRelationsInline
-                      activityId={act.id}
-                      projectId={projectId}
-                      onChanged={() => {
-                        if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
-                        onActivityUpdated();
-                      }}
-                    />
-                  </PropertyRow>
-                )}
-
-                {/* Tempo */}
-                {!formData.is_milestone && (
-                  <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {hasSubActivities ? (
-                        // Com subatividades: horas do pai = soma das subs (rollup,
-                        // somente-leitura). Sem campo concorrente => sem divergência.
-                        <TooltipProvider delayDuration={150}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="h-7 px-2 text-xs w-[140px] flex items-center rounded-md border border-input bg-muted/40 text-muted-foreground cursor-default">
-                                {formatHoursDisplay(subHoursTotal) || "0h"}
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="max-w-[240px] text-xs">
-                              Somado automaticamente das subatividades. Edite as horas em cada subatividade.
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        <>
-                          {/* Input livre (2:05 / 2h 30m / 90m) + menu compacto rolável */}
-                          <div className="relative w-[140px]">
-                            <Input
-                              placeholder="Ex: 2:05, 2h 30m, 90m"
-                              value={formData.hours}
-                              onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
-                              onFocus={(e) => e.currentTarget.select()}
-                              className="h-7 pl-2 pr-7 text-xs"
-                            />
-                            <Popover open={hoursPopoverOpen} onOpenChange={setHoursPopoverOpen}>
-                              <PopoverTrigger asChild>
-                                <button
-                                  type="button"
-                                  aria-label="Escolher tempo"
-                                  className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:bg-muted"
-                                >
-                                  <ChevronDown className="w-3.5 h-3.5" />
-                                </button>
-                              </PopoverTrigger>
-                              <PopoverContent align="end" sideOffset={4} className="w-[180px] p-1">
-                                <div className="max-h-56 overflow-y-auto">
-                                  {HOURS_PRESETS.map((p) => {
-                                    const active = parseHoursInput(formData.hours) === parseHoursInput(p.value);
-                                    return (
-                                      <button
-                                        key={p.value}
-                                        type="button"
-                                        onClick={() => { setFormData({ ...formData, hours: p.value }); setHoursPopoverOpen(false); }}
-                                        className={`w-full flex items-baseline justify-between gap-2 px-2.5 py-1.5 rounded-md text-left transition-colors ${
-                                          active ? "bg-primary/10 text-primary" : "hover:bg-muted"
-                                        }`}
-                                      >
-                                        <span className="text-xs font-medium tabular-nums">{p.value}</span>
-                                        <span className="text-[11px] text-muted-foreground">{p.label}</span>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          </div>
-                          {/* Confirmação em linguagem natural do que foi digitado */}
-                          {(() => {
-                            const natural = formatHoursNatural(parseHoursInput(formData.hours));
-                            if (!natural) return null;
-                            return (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-1.5 py-0.5">
-                                <CheckCircle2 className="w-3 h-3" /> {natural}
-                              </span>
-                            );
-                          })()}
-                        </>
-                      )}
-                      {(plannedHours > 0 || consumedHours > 0) && (
-                        <span
-                          className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${
-                            // Vermelho só quando o consumo ESTOURA o planejado.
-                            // Consumir menos ou igual é normal => neutro.
-                            plannedHours > 0 && consumedHours > plannedHours
-                              ? "text-destructive border-destructive/40 bg-destructive/10"
-                              : "text-muted-foreground border-border bg-muted/30"
-                          }`}
-                          title={
-                            consumedFromTrackedEntries
-                              ? "Tempo real somado de apontamentos (time_entries)"
-                              : subActivities.length > 0
-                              ? "Consumido automático das subatividades concluídas"
-                              : "Consumido automático da atividade concluída"
-                          }
-                        >
-                          Consumidas ({consumedFromTrackedEntries ? "real" : "auto"}): {formatHoursDisplay(consumedHours) || "0h"} / Planejadas: {formatHoursDisplay(plannedHours) || "0h"}
-                        </span>
-                      )}
-                    </div>
-                  </PropertyRow>
-                )}
-
-                {/* Custo */}
-                {!formData.is_milestone && (
-                  <PropertyRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Custo">
-                    {hasSubActivities ? (
-                      <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="h-7 px-2 text-xs w-[140px] flex items-center rounded-md border border-input bg-muted/40 text-muted-foreground cursor-default">
-                              {subCostTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-[240px] text-xs">
-                            Somado automaticamente das subatividades. Edite o custo em cada subatividade.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    ) : (
-                      <CurrencyInput
-                        step="0.01"
-                        min="0"
-                        value={formData.cost}
-                        onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                        className="h-7 pl-8 pr-2 py-0 text-xs w-[140px]"
-                      />
-                    )}
-                  </PropertyRow>
-                )}
-                {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
-                <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
-                  <div className="w-full max-w-[320px]">
-                    <PersonCombobox
-                      people={allProfiles}
-                      value={allProfiles.find((m) => m.full_name === formData.assigned_to)?.id ?? null}
-                      placeholder="Sem líder"
-                      onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
-                      onClear={() => setFormData({ ...formData, assigned_to: "" })}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                </PropertyRow>
-
                 {/* Prioridade — método GUT */}
                 <PropertyRow wide icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
-                  <div className="w-full min-w-0 max-w-[680px]">
+                  <div className="w-full min-w-0">
                     <GutPriorityField
                       gravity={formData.gravity}
                       urgency={formData.urgency}
                       tendency={formData.tendency}
                       onChange={(v) => setFormData({ ...formData, ...v })}
+                      buttonClassName="h-8 w-full px-2.5 text-xs"
                     />
                   </div>
                 </PropertyRow>
@@ -1762,10 +1758,8 @@ export const EditActivityDialog = ({
                       activeCls: "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400",
                     },
                   ];
-                  const activeHint = KIND_OPTIONS.find((o) => o.kind === itemKind)?.hint;
                   return (
                     <PropertyRow
-                      wide
                       icon={
                         itemKind === "marco" ? (
                           <Diamond className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
@@ -1790,8 +1784,8 @@ export const EditActivityDialog = ({
                                 disabled={disabled}
                                 onClick={() => setKind(opt.kind)}
                                 aria-pressed={active}
-                                title={reason ?? undefined}
-                                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors border ${
+                                title={reason ?? opt.hint}
+                                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border ${
                                   active
                                     ? opt.activeCls
                                     : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -1803,13 +1797,10 @@ export const EditActivityDialog = ({
                             );
                           })}
                         </div>
-                        {activeHint && (
-                          <span className="text-[11px] text-muted-foreground">{activeHint}</span>
-                        )}
                         {hasSubActivities && (
-                          <span className="text-[11px] text-primary flex items-center gap-1">
+                          <span className="text-[10.5px] text-primary flex items-center gap-1 min-w-0" title="Este item agrupa subitens — por isso é uma Fase/Entrega. Horas e custo são somados dos filhos (veja a aba Subatividades).">
                             <Layers className="w-3 h-3 shrink-0" />
-                            Este item agrupa {ownSubActivities.length} subitem(ns) — por isso é uma Fase/Entrega. Horas e custo são somados dos filhos (veja a aba Subatividades).
+                            <span className="truncate">Agrupa {ownSubActivities.length} subitem(ns) — horas e custo somados dos filhos.</span>
                           </span>
                         )}
                       </div>
@@ -1818,8 +1809,8 @@ export const EditActivityDialog = ({
                 })()}
 
                 {/* Código EAP/WBS */}
-                <PropertyRow wide icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
-                  <div className="flex flex-col gap-1 w-full max-w-[680px]">
+                <PropertyRow icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
+                  <div className="flex flex-col gap-1 w-full">
                     <div className="flex items-center gap-1.5">
                       <Input
                         value={formData.wbs_code}
@@ -1840,17 +1831,28 @@ export const EditActivityDialog = ({
                           "h-7 px-2.5 text-xs gap-1.5 shrink-0",
                           !formData.wbs_code.trim() && "text-primary border-primary/40 bg-primary/5 hover:bg-primary/10"
                         )}
-                        title="Gerar o próximo código com base no item pai (ou fase) e nos irmãos"
+                        title="Gerar o próximo código com base no item pai (ou fase) e nos irmãos. Fase/Entrega agrupa (qualquer nível); Atividade e Marco são folhas. Formato por posição: 1, 1.1, 1.1.1…"
                       >
                         <Wand2 className="w-3.5 h-3.5" />
                         {formData.wbs_code.trim() ? "Regerar" : "Gerar"}
                       </Button>
                     </div>
-                    <span className="text-[10px] text-muted-foreground leading-tight">
-                      Digite manualmente ou clique em <strong>{formData.wbs_code.trim() ? "Regerar" : "Gerar"}</strong>. <strong>Fase/Entrega</strong> agrupa (qualquer nível); <strong>Atividade</strong> e <strong>Marco</strong> são folhas. Código por posição: <strong>1</strong>, <strong>1.1</strong>, <strong>1.1.1</strong>…
-                    </span>
                   </div>
                 </PropertyRow>
+
+                {/* Relacionamentos inline */}
+                {projectId && (
+                  <PropertyRow wide icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
+                    <ActivityRelationsInline
+                      activityId={act.id}
+                      projectId={projectId}
+                      onChanged={() => {
+                        if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                        onActivityUpdated();
+                      }}
+                    />
+                  </PropertyRow>
+                )}
               </div>
             </div>
           )}
