@@ -1599,7 +1599,7 @@ export function ProjectCronogramaPanel({
                   className={cn(
                     "border-b hover:bg-muted/40 transition-colors",
                     isStageFinal && "opacity-90",
-                    isOverdue && "animate-pulse-overdue"
+                    isOverdue && "bg-destructive/5"
                   )}
                   style={stageColor ? { borderLeft: `3px solid ${stageColor}` } : undefined}
                 >
@@ -1745,7 +1745,7 @@ export function ProjectCronogramaPanel({
                   <div key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`}
                     className={cn(
                       "border-b px-3 flex items-center gap-2 hover:bg-muted/40",
-                      isOverdue && "animate-pulse-overdue"
+                      isOverdue && "bg-destructive/5 border-l-2 border-l-destructive"
                     )}
                     style={{ height: ROW_H, paddingLeft: 12 + depth * 14 }}>
                     {isGroup && hasChildren ? (
@@ -1955,43 +1955,31 @@ export function ProjectCronogramaPanel({
                                 title="Abrir edição da atividade"
                               >
                                 <div className={cn(
-                                  "w-[18px] h-[18px] rotate-45 bg-amber-500 border-2 border-amber-600 shadow-sm transition-transform hover:scale-110",
-                                  isOverdue && "animate-pulse-overdue"
+                                  "w-[18px] h-[18px] rotate-45 bg-amber-500 border-2 shadow-sm transition-transform hover:scale-110",
+                                  isOverdue ? "border-destructive" : "border-amber-600",
                                 )} />
                               </div>
                             ) : isGroup ? (
+                              // Fase/Entrega: barra-resumo sólida na cor primária, com
+                              // "abas" nas pontas (estilo MS-Project) e rótulo ao lado.
                               <div
                                 className={cn(
-                                  "absolute top-1/2 -translate-y-1/2",
-                                  isOverdue && "animate-pulse-overdue"
+                                  "absolute top-1/2 -translate-y-1/2 cursor-pointer",
+                                  isOverdue && "ring-1 ring-destructive rounded",
                                 )}
-                                style={{ left, width, height: 10 }}
+                                style={{ left, width, height: 14 }}
                                 onClick={() => openFromCronograma(a)}
                                 title="Abrir edição da atividade"
                               >
-                                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 bg-foreground/80 rounded" />
-                                <div
-                                  className="absolute left-0 top-1/2 -translate-y-1/2"
-                                  style={{
-                                    width: 0,
-                                    height: 0,
-                                    borderLeft: "5px solid transparent",
-                                    borderRight: "5px solid transparent",
-                                    borderTop: "7px solid hsl(var(--foreground))",
-                                  }}
-                                />
-                                <div
-                                  className="absolute right-0 top-1/2 -translate-y-1/2"
-                                  style={{
-                                    width: 0,
-                                    height: 0,
-                                    borderLeft: "5px solid transparent",
-                                    borderRight: "5px solid transparent",
-                                    borderTop: "7px solid hsl(var(--foreground))",
-                                  }}
-                                />
-                                {DAY_W >= 6 && width > 80 && (
-                                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-foreground/80 uppercase tracking-wide whitespace-nowrap">
+                                {/* corpo da barra-resumo */}
+                                <div className="absolute inset-x-0 top-0 h-2 rounded-sm bg-primary" />
+                                {/* pontas triangulares (abas) apontando para baixo */}
+                                <div className="absolute left-0 top-1.5"
+                                  style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "6px solid hsl(var(--primary))" }} />
+                                <div className="absolute right-0 top-1.5"
+                                  style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "6px solid hsl(var(--primary))" }} />
+                                {DAY_W >= 6 && (
+                                  <div className="absolute top-1/2 -translate-y-1/2 left-full ml-2 text-[11px] font-semibold text-primary uppercase tracking-wide whitespace-nowrap pointer-events-none">
                                     {a.title}
                                   </div>
                                 )}
@@ -2000,7 +1988,7 @@ export function ProjectCronogramaPanel({
                               <div className={cn(
                                 "group absolute top-1/2 -translate-y-1/2 rounded-md shadow-sm overflow-visible transition-all hover:shadow-md hover:brightness-105",
                                 drag ? "cursor-grabbing ring-2 ring-primary/60 z-20" : "cursor-grab",
-                                isOverdue && "animate-pulse-overdue border-destructive",
+                                isOverdue && "ring-2 ring-destructive ring-offset-1",
                                 !stageInfo && (isCritical ? "bg-red-500" : isCompleted ? "bg-emerald-500/80" : "bg-primary")
                               )}
                                 onMouseDown={(ev) => startBarDrag(ev, a, "move", DAY_W)}
@@ -2019,14 +2007,16 @@ export function ProjectCronogramaPanel({
                                   outline: isCritical ? "2px solid hsl(0 84% 55%)" : undefined,
                                 }}>
                                 <div className="absolute inset-0 rounded-md overflow-hidden">
-                                  {/* parte não concluída (mais clara) */}
-                                  <div className="absolute inset-y-0 right-0 bg-white/35" style={{ width: `${100 - progress}%` }} />
-                                  {/* marca de progresso concluído */}
+                                  {/* faixa concluída: um pouco mais escura à esquerda,
+                                      para o progresso ser lido sem lavar a cor da barra */}
+                                  {progress > 0 && (
+                                    <div className="absolute inset-y-0 left-0 bg-black/20" style={{ width: `${progress}%` }} />
+                                  )}
                                   {progress > 0 && progress < 100 && (
-                                    <div className="absolute inset-y-0 left-0 border-r border-white/50" style={{ width: `${progress}%` }} />
+                                    <div className="absolute inset-y-0 border-r border-white/60" style={{ left: `${progress}%` }} />
                                   )}
                                   {DAY_W >= 5 && (
-                                    <div className="absolute inset-0 flex items-center px-2 text-[11px] text-white font-medium truncate drop-shadow-sm">
+                                    <div className="absolute inset-0 flex items-center px-2 text-[11px] text-white font-semibold truncate [text-shadow:0_1px_2px_rgba(0,0,0,0.45)]">
                                       {a.title}
                                     </div>
                                   )}
