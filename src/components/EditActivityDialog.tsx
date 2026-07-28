@@ -1274,7 +1274,7 @@ export const EditActivityDialog = ({
                   </span>
                 </>
               )}
-              {storiesCount > 0 && projectId && (
+              {SHOW_USER_STORIES && storiesCount > 0 && projectId && (
                 <>
                   <span className="opacity-50">·</span>
                   <a
