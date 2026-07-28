@@ -12,3 +12,12 @@
  * atividade (ver ActivityRegistro).
  */
 export const SHOW_USER_STORIES = false;
+
+/**
+ * "Calendário" (react-big-calendar) mostrava atividades por data com feriados e
+ * férias. ~70% do que fazia já é coberto pelo Cronograma/Gantt (que agora também
+ * arrasta datas). O que era exclusivo — sombrear feriados/férias — foi ABSORVIDO
+ * pelo Gantt (ver ProjectCronogramaPanel). Por isso a aba do projeto e a página
+ * /calendar ficam OCULTAS. Código e dados intactos; reativável aqui.
+ */
+export const SHOW_CALENDAR = false;

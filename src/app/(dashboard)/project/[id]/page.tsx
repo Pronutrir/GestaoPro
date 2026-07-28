@@ -31,7 +31,7 @@ import { ChangeRequestsManager } from "@/components/ChangeRequestsManager";
 import { ProjectDependenciesView } from "@/components/ProjectDependenciesView";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
-import { SHOW_USER_STORIES } from "@/lib/featureFlags";
+import { SHOW_USER_STORIES, SHOW_CALENDAR } from "@/lib/featureFlags";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
 import { ProjectDocuments } from "@/components/documents/ProjectDocuments";
@@ -556,7 +556,10 @@ export default function ProjectDetailsPage() {
     if (!allowedTabs) return;
 
     const availableTabs = new Set(
-      allowedTabs.filter((tab) => !isQualityProject || tab !== "calendar"),
+      allowedTabs.filter((tab) =>
+        (!isQualityProject || tab !== "calendar") &&   // Qualidade nunca teve calendário
+        (SHOW_CALENDAR || tab !== "calendar"),          // Calendário ocultado por flag
+      ),
     );
 
     const fallbackTab = availableTabs.has("kanban")
@@ -1288,7 +1291,7 @@ export default function ProjectDetailsPage() {
                 { value: "kanban", label: "Kanban", icon: <Kanban className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-violet-500" },
                 { value: "backlog", label: "Backlog", icon: <Inbox className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-amber-500" },
                 { value: "timeline", label: "Cronograma", icon: <GanttChart className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-emerald-500" },
-                ...(isQualityProject ? [] : [
+                ...(isQualityProject || !SHOW_CALENDAR ? [] : [
                   { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-rose-500" },
                 ]),
                 { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-blue-500" },
@@ -1410,7 +1413,7 @@ export default function ProjectDetailsPage() {
               />
             </TabsContent>
 
-            {!isQualityProject && (
+            {!isQualityProject && SHOW_CALENDAR && (
               <TabsContent value="calendar" className="mt-0">
                 <ProjectCalendarView
                   projectId={id!}

@@ -22,6 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { BrandLogo } from "@/components/BrandLogo";
+import { SHOW_CALENDAR } from "@/lib/featureFlags";
 import { DEFAULT_MODULES } from "@/lib/modules";
 
 import {
@@ -108,6 +109,9 @@ export function AppSidebar() {
   };
 
   const navItems = allNavItems.filter(item => {
+    // 0) Calendário ocultado por flag (recurso absorvido pelo Cronograma/Gantt).
+    if (item.path === "/calendario" && !SHOW_CALENDAR) return false;
+
     // 1) Barreira de PAPEL.
     if (!roleAllows(item.minRole)) return false;
 

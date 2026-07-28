@@ -50,6 +50,8 @@ import { calculateCriticalPath } from "@/lib/criticalPath";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { isHoliday, isOnVacation, type Holiday, type WorkSchedule } from "@/lib/workCalendar";
 
 /**
  * Painel de Cronograma reutilizável (Tabela MS-Project + Gantt CPM).
@@ -216,7 +218,22 @@ export function ProjectCronogramaPanel({
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
+  const { profile } = useAuth();
   const { filterProjects, loading: accessLoading } = useProjectAccess();
+  // Feriados + férias do usuário: absorvidos do antigo Calendário para sombrear o Gantt.
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [workSchedule, setWorkSchedule] = useState<WorkSchedule | undefined>();
+  useEffect(() => {
+    Promise.all([
+      supabase.from("holidays").select("date,name").order("date"),
+      profile?.id
+        ? supabase.from("user_work_schedules").select("*").eq("user_id", profile.id).maybeSingle()
+        : Promise.resolve({ data: null } as any),
+    ]).then(([hols, sched]) => {
+      setHolidays((hols.data || []) as Holiday[]);
+      if (sched && (sched as any).data) setWorkSchedule((sched as any).data as WorkSchedule);
+    });
+  }, [profile?.id]);
   const [activities, setActivities] = useState<any[]>([]);
   const [phases, setPhases] = useState<any[]>([]);
   const [deps, setDeps] = useState<any[]>([]);
@@ -1097,13 +1114,17 @@ export function ProjectCronogramaPanel({
       if (mode === "move") { ns = addDays(s0, lastShift); ne = addDays(e0, lastShift); }
       else if (mode === "start") { ns = addDays(s0, lastShift); if (ns > ne) ns = ne; }
       else if (mode === "end") { ne = addDays(e0, lastShift); if (ne < ns) ne = ns; }
+      // Avisa (sem bloquear) se o novo início cai em feriado — herda o alerta
+      // que o antigo Calendário fazia, agora absorvido aqui.
+      const hol = isHoliday(ns, holidays);
+      if (hol) toast({ title: "⚠️ Início em feriado", description: `${format(ns, "dd/MM")} é ${hol.name}. Reagendado mesmo assim.` });
       saveBarDates(activity.id, format(ns, "yyyy-MM-dd"), format(ne, "yyyy-MM-dd"));
     };
     document.body.style.cursor = mode === "move" ? "grabbing" : "col-resize";
     document.body.style.userSelect = "none";
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-  }, [saveBarDates]);
+  }, [saveBarDates, holidays, toast]);
 
   const parseYmdDate = useCallback((d: string) => {
     const [y, m, day] = d.split("-").map(Number);
@@ -1643,6 +1664,14 @@ export function ProjectCronogramaPanel({
           Hoje
         </span>
         <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="w-3.5 h-2.5 rounded bg-destructive/20 border border-destructive/40 shrink-0" />
+          Feriado
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="w-3.5 h-2.5 rounded bg-sky-500/20 border border-sky-500/40 shrink-0" />
+          Férias
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <CalendarOff className="h-3.5 w-3.5 shrink-0" />
           Sem datas
         </span>
@@ -1808,15 +1837,21 @@ export function ProjectCronogramaPanel({
                   <div className="flex border-t border-border/60" style={{ height: 28 }}>
                     {ganttData.days.map((d, k) => {
                       const isToday = d.toDateString() === new Date().toDateString();
+                      const hol = isHoliday(d, holidays);
+                      const vac = !hol && isOnVacation(d, workSchedule);
                       return (
                         <div key={k}
+                          title={hol ? `Feriado: ${hol.name}` : vac ? "Férias do responsável" : undefined}
                           className={cn(
-                            "border-r border-border/40 text-[11px] text-center flex items-center justify-center tabular-nums",
-                            isWeekend(d) ? "bg-muted/40 text-muted-foreground/70" : "text-muted-foreground",
+                            "border-r border-border/40 text-[11px] text-center flex items-center justify-center tabular-nums relative",
+                            hol ? "bg-destructive/10 text-destructive font-medium"
+                              : vac ? "bg-sky-500/10 text-sky-600"
+                              : isWeekend(d) ? "bg-muted/40 text-muted-foreground/70" : "text-muted-foreground",
                             isToday && "bg-primary/10 text-primary font-semibold",
                           )}
                           style={{ width: DAY_W }}>
                           {zoom === "day" ? format(d, "d") : (d.getDay() === 1 ? format(d, "d/MM") : "")}
+                          {hol && DAY_W >= 14 && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-destructive" />}
                         </div>
                       );
                     })}
@@ -1826,14 +1861,23 @@ export function ProjectCronogramaPanel({
               </div>
 
               <div className="relative">
-                {/* fundo: faixas de fim de semana (só faz sentido em day/week) */}
+                {/* fundo: faixas de dias não úteis — feriado (vermelho), férias
+                    (azul) e fim de semana (cinza). Feriado/férias vêm do antigo
+                    Calendário, agora absorvidos aqui. Só em day/week (dia visível). */}
                 {(zoom === "day" || zoom === "week") && (
                   <div className="absolute inset-0 flex pointer-events-none">
-                    {ganttData.days.map((d, k) => (
-                      <div key={k}
-                        className={cn("border-r border-border/30", isWeekend(d) && "bg-muted/30")}
-                        style={{ width: DAY_W }} />
-                    ))}
+                    {ganttData.days.map((d, k) => {
+                      const hol = isHoliday(d, holidays);
+                      const vac = !hol && isOnVacation(d, workSchedule);
+                      return (
+                        <div key={k}
+                          className={cn(
+                            "border-r border-border/30",
+                            hol ? "bg-destructive/10" : vac ? "bg-sky-500/10" : isWeekend(d) && "bg-muted/30",
+                          )}
+                          style={{ width: DAY_W }} />
+                      );
+                    })}
                     <div className="flex-1" />
                   </div>
                 )}
