@@ -137,9 +137,18 @@ export const ActivityRegistro = ({
     }
   }, [comments, tab]);
 
+  // Ajusta a altura da textarea ao conteúdo (auto-grow até o máximo do CSS).
+  const autoGrow = useCallback(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "40px";
+    ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
+  }, []);
+
   // ── detecção de @ enquanto digita ──
   const onTextChange = (v: string) => {
     setText(v);
+    autoGrow();
     const caret = taRef.current?.selectionStart ?? v.length;
     const upto = v.slice(0, caret);
     const m = upto.match(/(?:^|\s)@([\p{L}\d]*)$/u);
@@ -162,7 +171,7 @@ export const ActivityRegistro = ({
     const next = `${before}@${p.full_name} ${after}`;
     setText(next);
     setMentionOpen(false);
-    setTimeout(() => ta?.focus(), 0);
+    setTimeout(() => { ta?.focus(); autoGrow(); }, 0);
   };
 
   // Extrai @nomes citados que casam com pessoas reais.
@@ -185,6 +194,7 @@ export const ActivityRegistro = ({
     if (error) { toast({ title: "Erro ao enviar", variant: "destructive" }); return; }
     setText("");
     setMentionOpen(false);
+    if (taRef.current) taRef.current.style.height = "40px"; // reset altura
     fetchComments();
     notify(body, extractMentions(body));
   };
@@ -354,7 +364,7 @@ export const ActivityRegistro = ({
                     })()}
                     <AvatarFallback className="text-[10px]">{getAvatarInitials(c.author)}</AvatarFallback>
                   </Avatar>
-                  <div className={cn("min-w-0 max-w-[82%]", mine && "items-end flex flex-col")}>
+                  <div className={cn("flex flex-col min-w-0 max-w-[82%]", mine && "items-end")}>
                     <div className="flex items-center gap-2 mb-0.5 px-0.5">
                       <span className="text-[12px] font-medium text-foreground">{mine ? "Você" : c.author}</span>
                       <span className="text-[10.5px] text-muted-foreground">{fmtTime(c.created_at)}</span>
@@ -363,7 +373,7 @@ export const ActivityRegistro = ({
                       )}
                     </div>
                     <div className={cn(
-                      "rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed whitespace-pre-wrap break-words",
+                      "max-w-full rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]",
                       mine ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-muted rounded-tl-sm text-foreground",
                     )}>
                       {renderBody(c.content)}
@@ -421,17 +431,17 @@ export const ActivityRegistro = ({
                     }
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                   }}
-                  placeholder="Escreva uma mensagem…  (@ para citar · Enter envia · Shift+Enter quebra linha)"
+                  placeholder="Escreva uma mensagem…  ( @ para citar )"
                   rows={1}
-                  className="flex-1 resize-none bg-transparent text-[13px] leading-relaxed px-2 py-1.5 max-h-32 focus:outline-none"
-                  style={{ minHeight: 40 }}
+                  className="flex-1 min-w-0 resize-none overflow-y-auto bg-transparent text-[13px] leading-relaxed px-2 py-1.5 max-h-40 focus:outline-none [scrollbar-width:thin]"
+                  style={{ minHeight: 40, height: 40 }}
                 />
                 <Button size="icon" className="h-9 w-9 shrink-0 rounded-lg" onClick={send} disabled={saving || !text.trim()}>
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
               <div className="flex items-center gap-1 mt-1 px-1 text-[10.5px] text-muted-foreground">
-                <AtSign className="w-3 h-3" /> Cite alguém para notificar
+                <AtSign className="w-3 h-3" /> Enter envia · Shift+Enter quebra linha · @ notifica
               </div>
             </div>
           )}
