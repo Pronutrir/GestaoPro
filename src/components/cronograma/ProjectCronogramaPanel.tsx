@@ -49,6 +49,7 @@ import { ptBR } from "date-fns/locale";
 import { calculateCriticalPath } from "@/lib/criticalPath";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { useToast } from "@/hooks/use-toast";
 
 /**
  * Painel de Cronograma reutilizável (Tabela MS-Project + Gantt CPM).
@@ -214,6 +215,7 @@ export function ProjectCronogramaPanel({
   onEditActivity,
 }: Props) {
   const router = useRouter();
+  const { toast } = useToast();
   const { filterProjects, loading: accessLoading } = useProjectAccess();
   const [activities, setActivities] = useState<any[]>([]);
   const [phases, setPhases] = useState<any[]>([]);
@@ -245,7 +247,7 @@ export function ProjectCronogramaPanel({
     const stored = window.localStorage.getItem("cronograma:gantt:labelWidth");
     const parsed = Number(stored);
     if (!Number.isFinite(parsed)) return 340;
-    return Math.min(520, Math.max(260, parsed));
+    return Math.min(560, Math.max(240, parsed));
   });
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1020,6 +1022,89 @@ export function ProjectCronogramaPanel({
     onEditActivity?.(activity);
   }, [onEditActivity]);
 
+  // ===== Redimensionar a coluna "Atividade" arrastando a divisória =====
+  // Substitui o antigo slider da toolbar: o usuário puxa a borda direita da
+  // coluna de rótulos, como numa planilha. Persiste em localStorage.
+  const [resizingLabel, setResizingLabel] = useState(false);
+  const startLabelResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = ganttLabelWidth;
+    setResizingLabel(true);
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.min(560, Math.max(240, startW + (ev.clientX - startX)));
+      setGanttLabelWidth(next);
+    };
+    const onUp = () => {
+      setResizingLabel(false);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [ganttLabelWidth]);
+
+  // ===== Arrastar / redimensionar barras do Gantt (reprograma datas) =====
+  // dayShift = deslocamento em dias enquanto arrasta (preview otimista);
+  // mode: "move" desloca início+fim juntos, "start"/"end" ajusta uma ponta.
+  const [barDrag, setBarDrag] = useState<{ id: string; mode: "move" | "start" | "end"; dayShift: number } | null>(null);
+
+  /** Grava start_date/end_date de uma atividade e recarrega. */
+  const saveBarDates = useCallback(async (id: string, startISO: string, endISO: string) => {
+    const { error } = await supabase
+      .from("activities")
+      .update({ start_date: startISO, end_date: endISO })
+      .eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao reprogramar", description: error.message, variant: "destructive" });
+      return;
+    }
+    // Atualização otimista local + refetch para recalcular fases/CPM.
+    setActivities((prev) => prev.map((a) => (a.id === id ? { ...a, start_date: startISO, end_date: endISO } : a)));
+    fetchData();
+    toast({ title: "Datas atualizadas", description: `${format(parseISO(startISO), "dd/MM/yy")} → ${format(parseISO(endISO), "dd/MM/yy")}` });
+  }, [toast, fetchData]);
+
+  /** Inicia o arraste de uma barra (folha, não-marco). DAY_W converte px→dias. */
+  const startBarDrag = useCallback((
+    e: React.MouseEvent, activity: any, mode: "move" | "start" | "end", dayW: number,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const s0 = activity.start_date ? parseISO(activity.start_date) : null;
+    const e0 = activity.end_date ? parseISO(activity.end_date) : s0;
+    if (!s0 || !e0) return;
+    let lastShift = 0;
+    const onMove = (ev: MouseEvent) => {
+      const shift = Math.round((ev.clientX - startX) / dayW);
+      lastShift = shift;
+      setBarDrag({ id: activity.id, mode, dayShift: shift });
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setBarDrag(null);
+      if (lastShift === 0) return; // clique sem arrasto → deixa o onClick abrir a edição
+      let ns = s0, ne = e0;
+      if (mode === "move") { ns = addDays(s0, lastShift); ne = addDays(e0, lastShift); }
+      else if (mode === "start") { ns = addDays(s0, lastShift); if (ns > ne) ns = ne; }
+      else if (mode === "end") { ne = addDays(e0, lastShift); if (ne < ns) ne = ns; }
+      saveBarDates(activity.id, format(ns, "yyyy-MM-dd"), format(ne, "yyyy-MM-dd"));
+    };
+    document.body.style.cursor = mode === "move" ? "grabbing" : "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [saveBarDates]);
+
   const parseYmdDate = useCallback((d: string) => {
     const [y, m, day] = d.split("-").map(Number);
     return new Date(y, m - 1, day);
@@ -1586,7 +1671,22 @@ export function ProjectCronogramaPanel({
         <div id="gantt-scroll-container" ref={ganttScrollRef} className="overflow-auto max-h-[calc(100vh-230px)] min-h-[420px]">
           <div className="flex" style={{ width: LABEL_W + ganttData.days.length * DAY_W, minWidth: "100%" }}>
             {/* Coluna fixa de rótulos */}
-            <div className="sticky left-0 z-20 bg-card border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]" style={{ width: LABEL_W }}>
+            <div className="sticky left-0 z-20 bg-card border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)] relative" style={{ width: LABEL_W }}>
+              {/* Alça de redimensionamento: arraste a borda direita (como planilha) */}
+              <div
+                onMouseDown={startLabelResize}
+                className={cn(
+                  "absolute top-0 right-0 bottom-0 w-1.5 translate-x-1/2 z-30 cursor-col-resize group",
+                  "hover:bg-primary/20 transition-colors",
+                  resizingLabel && "bg-primary/30",
+                )}
+                title="Arraste para ajustar a largura da coluna"
+              >
+                <div className={cn(
+                  "absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border group-hover:bg-primary/60",
+                  resizingLabel && "bg-primary",
+                )} />
+              </div>
               <div className="border-b bg-muted/40 sticky top-0 z-10 flex items-end" style={{ height: showDayLabels ? 56 : 28 }}>
                 <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Atividade
@@ -1774,8 +1874,18 @@ export function ProjectCronogramaPanel({
                   }
                   const startIdx = ganttData.days.findIndex(d => d.toDateString() === s.toDateString());
                   const endIdx = ganttData.days.findIndex(d => d.toDateString() === e.toDateString());
-                  const left = Math.max(0, startIdx) * DAY_W + hierarchyOffset;
-                  const width = Math.max(2, Math.max(2, (endIdx - startIdx + 1)) * DAY_W - 2 - hierarchyOffset);
+                  let left = Math.max(0, startIdx) * DAY_W + hierarchyOffset;
+                  let width = Math.max(2, Math.max(2, (endIdx - startIdx + 1)) * DAY_W - 2 - hierarchyOffset);
+                  // Preview otimista do arraste: desloca left/width em px enquanto arrasta.
+                  const drag = barDrag && barDrag.id === a.id ? barDrag : null;
+                  if (drag) {
+                    const px = drag.dayShift * DAY_W;
+                    if (drag.mode === "move") left += px;
+                    else if (drag.mode === "start") { left += px; width -= px; }
+                    else if (drag.mode === "end") { width += px; }
+                    width = Math.max(DAY_W, width);
+                    left = Math.max(0, left);
+                  }
                   const isCritical = criticalSet.has(a.id);
                   const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
                   const isCompleted = stageInfo?.is_final || a.status === "completed";
@@ -1844,12 +1954,14 @@ export function ProjectCronogramaPanel({
                               </div>
                             ) : (
                               <div className={cn(
-                                "absolute top-1/2 -translate-y-1/2 rounded-md shadow-sm overflow-hidden cursor-pointer transition-all hover:shadow-md hover:brightness-105",
+                                "group absolute top-1/2 -translate-y-1/2 rounded-md shadow-sm overflow-visible transition-all hover:shadow-md hover:brightness-105",
+                                drag ? "cursor-grabbing ring-2 ring-primary/60 z-20" : "cursor-grab",
                                 isOverdue && "animate-pulse-overdue border-destructive",
                                 !stageInfo && (isCritical ? "bg-red-500" : isCompleted ? "bg-emerald-500/80" : "bg-primary")
                               )}
-                                onClick={() => openFromCronograma(a)}
-                                title="Abrir edição da atividade"
+                                onMouseDown={(ev) => startBarDrag(ev, a, "move", DAY_W)}
+                                onClick={() => { if (!barDrag) openFromCronograma(a); }}
+                                title="Arraste para mover · puxe as bordas para redimensionar · clique para abrir"
                                 style={{
                                   left,
                                   width,
@@ -1862,15 +1974,36 @@ export function ProjectCronogramaPanel({
                                   borderColor: isSubactivity ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.35)",
                                   outline: isCritical ? "2px solid hsl(0 84% 55%)" : undefined,
                                 }}>
-                                {/* parte não concluída (mais clara) */}
-                                <div className="absolute inset-y-0 right-0 bg-white/35" style={{ width: `${100 - progress}%` }} />
-                                {/* marca de progresso concluído */}
-                                {progress > 0 && progress < 100 && (
-                                  <div className="absolute inset-y-0 left-0 border-r border-white/50" style={{ width: `${progress}%` }} />
-                                )}
-                                {DAY_W >= 5 && (
-                                  <div className="absolute inset-0 flex items-center px-2 text-[11px] text-white font-medium truncate drop-shadow-sm">
-                                    {a.title}
+                                <div className="absolute inset-0 rounded-md overflow-hidden">
+                                  {/* parte não concluída (mais clara) */}
+                                  <div className="absolute inset-y-0 right-0 bg-white/35" style={{ width: `${100 - progress}%` }} />
+                                  {/* marca de progresso concluído */}
+                                  {progress > 0 && progress < 100 && (
+                                    <div className="absolute inset-y-0 left-0 border-r border-white/50" style={{ width: `${progress}%` }} />
+                                  )}
+                                  {DAY_W >= 5 && (
+                                    <div className="absolute inset-0 flex items-center px-2 text-[11px] text-white font-medium truncate drop-shadow-sm">
+                                      {a.title}
+                                    </div>
+                                  )}
+                                </div>
+                                {/* Alças de redimensionamento (aparecem no hover) */}
+                                <div
+                                  onMouseDown={(ev) => startBarDrag(ev, a, "start", DAY_W)}
+                                  className="absolute left-0 inset-y-0 w-2 -translate-x-1/2 cursor-col-resize opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                                >
+                                  <div className="w-1 h-1/2 rounded-full bg-white/90 shadow" />
+                                </div>
+                                <div
+                                  onMouseDown={(ev) => startBarDrag(ev, a, "end", DAY_W)}
+                                  className="absolute right-0 inset-y-0 w-2 translate-x-1/2 cursor-col-resize opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                                >
+                                  <div className="w-1 h-1/2 rounded-full bg-white/90 shadow" />
+                                </div>
+                                {/* Dica de datas durante o arraste */}
+                                {drag && (
+                                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded bg-foreground text-background text-[10px] font-medium shadow z-30">
+                                    {format(addDays(s, drag.mode === "end" ? 0 : drag.dayShift), "dd/MM")} → {format(addDays(e, drag.mode === "start" ? 0 : drag.dayShift), "dd/MM")}
                                   </div>
                                 )}
                               </div>
@@ -1955,21 +2088,8 @@ export function ProjectCronogramaPanel({
             })}
           </div>
 
-          {/* Ajuste manual da largura da coluna "Atividade" no Gantt */}
-          <div className="inline-flex items-center gap-2 h-9 px-2.5 border rounded-lg bg-card">
-            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Largura atividade</span>
-            <input
-              type="range"
-              min={260}
-              max={520}
-              step={20}
-              value={ganttLabelWidth}
-              onChange={(e) => setGanttLabelWidth(Number(e.target.value))}
-              className="w-24"
-              aria-label="Ajustar largura da coluna de atividade"
-            />
-            <span className="text-[11px] font-mono text-muted-foreground w-[42px] text-right">{ganttLabelWidth}px</span>
-          </div>
+          {/* A largura da coluna "Atividade" é ajustada arrastando a própria
+              borda da coluna no Gantt (alça na divisória), não mais por slider. */}
         </>
       )}
 
