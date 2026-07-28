@@ -1852,11 +1852,11 @@ export const EditActivityDialog = ({
 
           {/* ============= ABAS ============= */}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
-            <TabsList className="w-full justify-start h-9 bg-transparent border-b border-border rounded-none p-0 gap-1">
-              <TabsTrigger value="details" className="text-xs gap-1.5 data-[state=active]:bg-background">
+            <TabsList className="w-full justify-start h-auto bg-muted/50 rounded-lg p-1 gap-1 flex-wrap">
+              <TabsTrigger value="details" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
                 <FileText className="w-3.5 h-3.5" /> Detalhes
               </TabsTrigger>
-              <TabsTrigger value="team" className="text-xs gap-1.5 data-[state=active]:bg-background">
+              <TabsTrigger value="team" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
                 <Users className="w-3.5 h-3.5" /> Equipe
                 {formData.participants.filter(Boolean).length > 0 && (
                   <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{formData.participants.filter(Boolean).length}</span>
@@ -1865,7 +1865,7 @@ export const EditActivityDialog = ({
               {/* Subatividades: só para itens que AGRUPAM na EAP. Marco é um ponto
                   no tempo (folha) — nunca tem subitens, então a aba é ocultada. */}
               {act && projectId && !formData.is_milestone && (
-                <TabsTrigger value="subtasks" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                <TabsTrigger value="subtasks" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
                   <ListTree className="w-3.5 h-3.5" /> Subatividades
                   {subActivities.length > 0 && (
                     <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{subActivities.length}</span>
@@ -1873,13 +1873,13 @@ export const EditActivityDialog = ({
                 </TabsTrigger>
               )}
               {act && projectId && (
-                <TabsTrigger value="attachments" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                <TabsTrigger value="attachments" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
                   <Paperclip className="w-3.5 h-3.5" /> Anexos
                 </TabsTrigger>
               )}
               {/* Comentários e Histórico foram movidos para o painel lateral à direita */}
               {SHOW_USER_STORIES && act && projectId && (
-                <TabsTrigger value="stories" className="text-xs gap-1.5 data-[state=active]:bg-background">
+                <TabsTrigger value="stories" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
                   <BookOpen className="w-3.5 h-3.5" /> Histórias
                   {storiesCount > 0 && (
                     <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{storiesCount}</span>
@@ -2566,8 +2566,8 @@ export const EditActivityDialog = ({
 
           {/* ========= PAINEL LATERAL (direita) ========= */}
           {act && (
-            <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-4 lg:max-h-[calc(95vh-180px)] lg:overflow-y-auto">
-              <div className="rounded-lg border border-border bg-card p-3">
+            <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-4 lg:max-h-[calc(95vh-180px)]">
+              <div className="rounded-lg border border-border bg-card p-3 flex-1 min-h-0 flex flex-col">
                 <ActivityRegistro
                   activityId={act.id}
                   projectId={projectId}
