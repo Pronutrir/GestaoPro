@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { AIAssistButton } from "@/components/AIAssistButton";
 
 /**
  * REGISTRO DA ATIVIDADE — Conversa + Histórico.
@@ -350,9 +351,12 @@ export const ActivityRegistro = ({
                     value={editText} onChange={(e) => setEditText(e.target.value)}
                     className="w-full min-h-[64px] text-sm rounded-lg border border-border bg-background p-2 resize-y"
                   />
-                  <div className="flex gap-1">
+                  <div className="flex items-center gap-1">
                     <Button size="sm" onClick={saveEdit}><Check className="w-3.5 h-3.5 mr-1" /> Salvar</Button>
                     <Button size="sm" variant="outline" onClick={() => setEditing(null)}><X className="w-3.5 h-3.5 mr-1" /> Cancelar</Button>
+                    {editText.trim() && (
+                      <AIAssistButton value={editText} onChange={setEditText} context="comment" actions={["correct", "improve"]} size="sm" className="ml-auto" />
+                    )}
                   </div>
                 </div>
               ) : (
@@ -438,6 +442,16 @@ export const ActivityRegistro = ({
                   className="flex-1 min-w-0 resize-none overflow-y-auto bg-transparent text-[13px] leading-relaxed px-2 py-1.5 max-h-40 focus:outline-none [scrollbar-width:thin]"
                   style={{ minHeight: 40, height: 40 }}
                 />
+                {text.trim() && (
+                  <AIAssistButton
+                    value={text}
+                    onChange={(next) => { setText(next); setTimeout(autoGrow, 0); }}
+                    context="comment"
+                    actions={["correct", "improve"]}
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                  />
+                )}
                 <Button size="icon" className="h-9 w-9 shrink-0 rounded-lg" onClick={send} disabled={saving || !text.trim()}>
                   <Send className="w-4 h-4" />
                 </Button>
