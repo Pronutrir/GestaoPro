@@ -1716,8 +1716,11 @@ export function ProjectCronogramaPanel({
                   resizingLabel && "bg-primary",
                 )} />
               </div>
-              <div className="border-b bg-muted/40 sticky top-0 z-10 flex items-end" style={{ height: showDayLabels ? 56 : 28 }}>
-                <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+              {/* Cabeçalho da coluna: fundo OPACO e z alto — senão as linhas de
+                  atividade vazam por cima ao rolar (o texto ficava sobreposto). */}
+              <div className="border-b sticky top-0 z-30 flex items-end bg-card" style={{ height: showDayLabels ? 56 : 28 }}>
+                <div className="absolute inset-0 bg-muted/40" />
+                <div className="relative px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Atividade
                 </div>
               </div>
@@ -1789,7 +1792,7 @@ export function ProjectCronogramaPanel({
                         >
                           {a.title}
                         </button>
-                        {isOverdue && <AlertCircle className="h-3 w-3 text-destructive animate-pulse shrink-0" />}
+                        {isOverdue && <AlertCircle className="h-3 w-3 text-destructive shrink-0" />}
                         {isCritical && <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />}
                         {noDates && <CalendarOff className="h-3 w-3 text-muted-foreground shrink-0" />}
                       </div>
