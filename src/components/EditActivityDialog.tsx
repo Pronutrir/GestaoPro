@@ -16,9 +16,8 @@ import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, 
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { endVariance, varianceTone, varianceClasses } from "@/lib/dateVariance";
-import { AuditLogPanel } from "@/components/AuditLogPanel";
 import { ActivityAttachments } from "@/components/ActivityAttachments";
-import { ActivityComments } from "@/components/ActivityComments";
+import { ActivityRegistro } from "@/components/ActivityRegistro";
 import { TaskRelations } from "@/components/TaskRelations";
 import { useTaskBlockers } from "@/hooks/useTaskBlockers";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -36,6 +35,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ActivityRelationsInline } from "@/components/ActivityRelationsInline";
 import { MessageSquare, Paperclip, ListTree, FileText, Users } from "lucide-react";
 import { ActivityStoriesPanel } from "@/components/ActivityStoriesPanel";
+import { SHOW_USER_STORIES } from "@/lib/featureFlags";
 import { AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -1878,7 +1878,7 @@ export const EditActivityDialog = ({
                 </TabsTrigger>
               )}
               {/* Comentários e Histórico foram movidos para o painel lateral à direita */}
-              {act && projectId && (
+              {SHOW_USER_STORIES && act && projectId && (
                 <TabsTrigger value="stories" className="text-xs gap-1.5 data-[state=active]:bg-background">
                   <BookOpen className="w-3.5 h-3.5" /> Histórias
                   {storiesCount > 0 && (
@@ -2538,9 +2538,9 @@ export const EditActivityDialog = ({
           )}
             </TabsContent>
 
-            {/* ===== ABA HISTÓRIAS ===== */}
+            {/* ===== ABA HISTÓRIAS (oculta por padrão — ver featureFlags) ===== */}
             <TabsContent value="stories" className="pt-4 mt-0">
-          {act && projectId && (
+          {SHOW_USER_STORIES && act && projectId && (
             <ActivityStoriesPanel activityId={act.id} projectId={projectId} projectLocked={projectLocked} />
           )}
             </TabsContent>
@@ -2568,32 +2568,13 @@ export const EditActivityDialog = ({
           {act && (
             <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-4 lg:max-h-[calc(95vh-180px)] lg:overflow-y-auto">
               <div className="rounded-lg border border-border bg-card p-3">
-                <Tabs defaultValue="comments" className="w-full">
-                  <TabsList className="w-full justify-start h-9 bg-muted/40 border border-border/60 rounded-md p-0.5 gap-0.5">
-                    <TabsTrigger
-                      value="comments"
-                      className="text-xs gap-1.5 flex-1 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" /> Comentários
-                    </TabsTrigger>
-                    {!createMode && (
-                      <TabsTrigger
-                        value="history"
-                        className="text-xs gap-1.5 flex-1 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-                      >
-                        <History className="w-3.5 h-3.5" /> Histórico
-                      </TabsTrigger>
-                    )}
-                  </TabsList>
-                  <TabsContent value="comments" className="mt-3">
-                    <ActivityComments activityId={act.id} includeSubActivities />
-                  </TabsContent>
-                  {!createMode && (
-                    <TabsContent value="history" className="mt-3">
-                      <AuditLogPanel recordId={act.id} tableName="activities" />
-                    </TabsContent>
-                  )}
-                </Tabs>
+                <ActivityRegistro
+                  activityId={act.id}
+                  projectId={projectId}
+                  phaseId={act.phase_id || null}
+                  includeSubActivities
+                  locked={projectLocked}
+                />
               </div>
             </aside>
           )}

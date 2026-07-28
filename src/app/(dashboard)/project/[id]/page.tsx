@@ -31,6 +31,7 @@ import { ChangeRequestsManager } from "@/components/ChangeRequestsManager";
 import { ProjectDependenciesView } from "@/components/ProjectDependenciesView";
 import { ProjectFinancials } from "@/components/ProjectFinancials";
 import { UserStoriesBoard } from "@/components/UserStoriesBoard";
+import { SHOW_USER_STORIES } from "@/lib/featureFlags";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
 import { ProjectDocuments } from "@/components/documents/ProjectDocuments";
@@ -1292,7 +1293,9 @@ export default function ProjectDetailsPage() {
                 ]),
                 { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-blue-500" },
                 { value: "docpages", label: "Páginas", icon: <NotebookPen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-pink-500" },
-                { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-fuchsia-500" },
+                ...(SHOW_USER_STORIES ? [
+                  { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-fuchsia-500" },
+                ] : []),
                 { value: "tap", label: "TAP", icon: <ClipboardList className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-indigo-500" },
                 { value: "meetings", label: "Reuniões", icon: <Users className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-teal-500" },
                 { value: "risks", label: "Riscos", icon: <AlertTriangle className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-red-500" },
@@ -1435,7 +1438,7 @@ export default function ProjectDetailsPage() {
             </TabsContent>
 
             <TabsContent value="stories" className="mt-0">
-              <UserStoriesBoard projectId={id!} projectLocked={isProjectConcluded} />
+              {SHOW_USER_STORIES && <UserStoriesBoard projectId={id!} projectLocked={isProjectConcluded} />}
             </TabsContent>
 
             <TabsContent value="tap" className="mt-0">
