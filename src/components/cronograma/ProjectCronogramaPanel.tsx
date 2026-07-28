@@ -77,11 +77,11 @@ const LINK_TYPES: Record<string, { short: string; label: string; desc: string }>
 
 /** Cada zoom controla a largura em pixels de UM DIA na régua do Gantt. */
 const ZOOM_PX_PER_DAY: Record<GanttZoom, number> = {
-  day: 36,
-  week: 14,
-  month: 6,
-  quarter: 4,
-  year: 2.2,
+  day: 44,
+  week: 20,
+  month: 9,
+  quarter: 5.5,
+  year: 3,
 };
 
 const ZOOM_LABEL: Record<GanttZoom, string> = {
@@ -1032,7 +1032,7 @@ export function ProjectCronogramaPanel({
   }, [parseYmdDate]);
 
   // ===== Gantt data =====
-  const ROW_H = 32;
+  const ROW_H = 44;
   const LABEL_W = ganttLabelWidth;
 
   const ganttData = useMemo(() => {
@@ -1536,31 +1536,45 @@ export function ProjectCronogramaPanel({
 
   const GanttBlock = (
     <div className="border rounded-lg bg-card overflow-hidden">
-      <div className="flex items-center px-3 py-2 border-b bg-muted/20 gap-4 flex-wrap">
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="w-3 h-3 rounded-sm bg-primary shrink-0" />
-          Cor da coluna do Kanban
+      <div className="flex items-center px-3 py-2 border-b bg-muted/20 gap-x-4 gap-y-1.5 flex-wrap">
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="w-3.5 h-2.5 rounded bg-primary shrink-0" />
+          Atividade
         </span>
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="w-3 h-3 rounded-sm ring-2 ring-red-500 shrink-0" />
-          Caminho crítico (folga 0)
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="w-3.5 h-2.5 rounded ring-2 ring-red-500 shrink-0" />
+          Caminho crítico
         </span>
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Diamond className="h-3.5 w-3.5 fill-orange-500 text-orange-500 shrink-0" />
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Diamond className="h-3.5 w-3.5 fill-amber-500 text-amber-500 shrink-0" />
           Marco
         </span>
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Layers className="h-3.5 w-3.5 shrink-0" />
-          Fase (datas derivadas)
+          Fase
         </span>
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="w-0.5 h-3.5 bg-primary/80 shrink-0" />
+          Hoje
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <CalendarOff className="h-3.5 w-3.5 shrink-0" />
           Sem datas
         </span>
-        <span className="ml-auto text-[11px] text-muted-foreground whitespace-nowrap">
-          {ganttData
-            ? `${ganttData.all.length} atividade(s) • ${ganttData.dated.length} com datas • ${ganttData.undated.length} sem datas`
-            : "—"}
+        <span className="ml-auto inline-flex items-center gap-2 text-[11px] text-muted-foreground whitespace-nowrap">
+          {ganttData ? (
+            <>
+              <span className="font-semibold text-foreground">{ganttData.all.length}</span> atividade(s)
+              <span className="opacity-50">·</span>
+              <span className="text-emerald-600">{ganttData.dated.length} com datas</span>
+              {ganttData.undated.length > 0 && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span className="text-amber-600">{ganttData.undated.length} sem datas</span>
+                </>
+              )}
+            </>
+          ) : "—"}
         </span>
       </div>
 
@@ -1569,12 +1583,12 @@ export function ProjectCronogramaPanel({
           Nenhuma atividade para exibir no Gantt.
         </div>
       ) : (
-        <div id="gantt-scroll-container" ref={ganttScrollRef} className="overflow-auto max-h-[70vh]">
+        <div id="gantt-scroll-container" ref={ganttScrollRef} className="overflow-auto max-h-[calc(100vh-230px)] min-h-[420px]">
           <div className="flex" style={{ width: LABEL_W + ganttData.days.length * DAY_W, minWidth: "100%" }}>
             {/* Coluna fixa de rótulos */}
-            <div className="sticky left-0 z-20 bg-card border-r" style={{ width: LABEL_W }}>
-              <div className="border-b bg-muted/40" style={{ height: 44 }}>
-                <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase">
+            <div className="sticky left-0 z-20 bg-card border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]" style={{ width: LABEL_W }}>
+              <div className="border-b bg-muted/40 sticky top-0 z-10 flex items-end" style={{ height: showDayLabels ? 56 : 28 }}>
+                <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Atividade
                 </div>
               </div>
@@ -1662,25 +1676,27 @@ export function ProjectCronogramaPanel({
               style={{ minWidth: ganttData.days.length * DAY_W }}
             >
               {/* Cabeçalho meses + dias */}
-              <div className="border-b sticky top-0 z-10 bg-card">
-                <div className="flex" style={{ height: 22 }}>
+              <div className="border-b sticky top-0 z-10 bg-card shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]">
+                <div className="flex" style={{ height: 28 }}>
                   {(() => {
+                    // Meses por extenso quando cabe (>= 90px de largura); senão abreviado.
                     const segments: { label: string; width: number }[] = [];
                     let i = 0;
                     while (i < ganttData.days.length) {
                       const monthStart = ganttData.days[i];
                       let j = i;
                       while (j < ganttData.days.length && isSameMonth(ganttData.days[j], monthStart)) j++;
+                      const width = (j - i) * DAY_W;
                       segments.push({
-                        label: format(monthStart, "MMM yyyy", { locale: ptBR }),
-                        width: (j - i) * DAY_W,
+                        label: format(monthStart, width >= 90 ? "MMMM yyyy" : "MMM yyyy", { locale: ptBR }),
+                        width,
                       });
                       i = j;
                     }
                     return [
                       ...segments.map((s, k) => (
-                        <div key={k} className="border-r text-[11px] font-semibold text-center bg-muted/40 capitalize overflow-hidden whitespace-nowrap"
-                          style={{ width: s.width, lineHeight: "22px" }}>
+                        <div key={k} className="border-r text-[12px] font-semibold text-center bg-muted/40 capitalize overflow-hidden whitespace-nowrap flex items-center justify-center text-foreground/80"
+                          style={{ width: s.width }}>
                           {s.label}
                         </div>
                       )),
@@ -1689,17 +1705,21 @@ export function ProjectCronogramaPanel({
                   })()}
                 </div>
                 {showDayLabels && (
-                  <div className="flex" style={{ height: 22 }}>
-                    {ganttData.days.map((d, k) => (
-                      <div key={k}
-                        className={cn(
-                          "border-r text-[10px] text-center text-muted-foreground",
-                          isWeekend(d) && "bg-muted/40"
-                        )}
-                        style={{ width: DAY_W, lineHeight: "22px" }}>
-                        {zoom === "day" ? format(d, "d") : (d.getDay() === 1 ? format(d, "d/MM") : "")}
-                      </div>
-                    ))}
+                  <div className="flex border-t border-border/60" style={{ height: 28 }}>
+                    {ganttData.days.map((d, k) => {
+                      const isToday = d.toDateString() === new Date().toDateString();
+                      return (
+                        <div key={k}
+                          className={cn(
+                            "border-r border-border/40 text-[11px] text-center flex items-center justify-center tabular-nums",
+                            isWeekend(d) ? "bg-muted/40 text-muted-foreground/70" : "text-muted-foreground",
+                            isToday && "bg-primary/10 text-primary font-semibold",
+                          )}
+                          style={{ width: DAY_W }}>
+                          {zoom === "day" ? format(d, "d") : (d.getDay() === 1 ? format(d, "d/MM") : "")}
+                        </div>
+                      );
+                    })}
                     <div className="flex-1" />
                   </div>
                 )}
@@ -1725,9 +1745,9 @@ export function ProjectCronogramaPanel({
                   const idxDay = ganttData.days.findIndex(d => d.toDateString() === today.toDateString());
                   if (idxDay < 0) return null;
                   return (
-                    <div className="absolute top-0 bottom-0 border-l-2 border-primary/70 pointer-events-none z-10"
+                    <div className="absolute top-0 bottom-0 w-0.5 bg-primary/80 pointer-events-none z-10"
                       style={{ left: idxDay * DAY_W + DAY_W / 2 }}>
-                      <div className="absolute -top-0 -translate-x-1/2 bg-primary text-primary-foreground text-[9px] px-1 rounded">
+                      <div className="absolute -top-0 left-1/2 -translate-x-1/2 -translate-y-full bg-primary text-primary-foreground text-[10px] font-semibold px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap">
                         Hoje
                       </div>
                     </div>
@@ -1775,13 +1795,13 @@ export function ProjectCronogramaPanel({
                         <Tooltip>
                           <TooltipTrigger asChild>
                             {a.is_milestone ? (
-                              <div className="absolute top-1/2 -translate-y-1/2"
-                                style={{ left: left + DAY_W / 2 - 8 }}
+                              <div className="absolute top-1/2 -translate-y-1/2 cursor-pointer"
+                                style={{ left: left + DAY_W / 2 - 9 }}
                                 onClick={() => openFromCronograma(a)}
                                 title="Abrir edição da atividade"
                               >
                                 <div className={cn(
-                                  "w-4 h-4 rotate-45 bg-amber-500 border border-amber-700",
+                                  "w-[18px] h-[18px] rotate-45 bg-amber-500 border-2 border-amber-600 shadow-sm transition-transform hover:scale-110",
                                   isOverdue && "animate-pulse-overdue"
                                 )} />
                               </div>
@@ -1824,16 +1844,16 @@ export function ProjectCronogramaPanel({
                               </div>
                             ) : (
                               <div className={cn(
-                                "absolute top-1.5 rounded-sm shadow-sm overflow-hidden cursor-pointer transition-opacity hover:opacity-90",
+                                "absolute top-1/2 -translate-y-1/2 rounded-md shadow-sm overflow-hidden cursor-pointer transition-all hover:shadow-md hover:brightness-105",
                                 isOverdue && "animate-pulse-overdue border-destructive",
-                                !stageInfo && (isCritical ? "bg-red-500" : isCompleted ? "bg-emerald-500/70" : "bg-primary")
+                                !stageInfo && (isCritical ? "bg-red-500" : isCompleted ? "bg-emerald-500/80" : "bg-primary")
                               )}
                                 onClick={() => openFromCronograma(a)}
                                 title="Abrir edição da atividade"
                                 style={{
                                   left,
                                   width,
-                                  height: ROW_H - 12,
+                                  height: ROW_H - 14,
                                   backgroundColor: stageInfo
                                     ? (isCritical ? undefined : stageInfo.color)
                                     : undefined,
@@ -1842,9 +1862,14 @@ export function ProjectCronogramaPanel({
                                   borderColor: isSubactivity ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.35)",
                                   outline: isCritical ? "2px solid hsl(0 84% 55%)" : undefined,
                                 }}>
-                                <div className="h-full bg-white/30" style={{ width: `${100 - progress}%`, marginLeft: `${progress}%` }} />
-                                {DAY_W >= 6 && (
-                                  <div className="absolute inset-0 flex items-center px-1.5 text-[10px] text-white font-medium truncate">
+                                {/* parte não concluída (mais clara) */}
+                                <div className="absolute inset-y-0 right-0 bg-white/35" style={{ width: `${100 - progress}%` }} />
+                                {/* marca de progresso concluído */}
+                                {progress > 0 && progress < 100 && (
+                                  <div className="absolute inset-y-0 left-0 border-r border-white/50" style={{ width: `${progress}%` }} />
+                                )}
+                                {DAY_W >= 5 && (
+                                  <div className="absolute inset-0 flex items-center px-2 text-[11px] text-white font-medium truncate drop-shadow-sm">
                                     {a.title}
                                   </div>
                                 )}
