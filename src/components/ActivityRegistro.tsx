@@ -216,8 +216,12 @@ export const ActivityRegistro = ({
       names.delete(authorName);
       if (names.size === 0) return;
 
-      const idByName = new Map(people.map((p) => [p.full_name, p.id]));
-      const ids = Array.from(names).map((n) => idByName.get(n)).filter(Boolean) as string[];
+      // Resolve nome→id tolerante a acento/caixa/espaços, para não perder avisos.
+      const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+      const idByName = new Map(people.map((p) => [norm(p.full_name), p.id]));
+      const ids = Array.from(new Set(
+        Array.from(names).map((n) => idByName.get(norm(n))).filter(Boolean) as string[],
+      ));
       if (ids.length === 0) return;
 
       const mentionedIds = new Set(mentioned.map((p) => p.id));
@@ -255,16 +259,23 @@ export const ActivityRegistro = ({
 
   const promoteToLesson = async (c: Comment) => {
     if (!projectId) { toast({ title: "Sem projeto para vincular a lição", variant: "destructive" }); return; }
+    if (!confirm("Promover esta mensagem a Lição Aprendida do projeto?")) return;
     setPromotingId(c.id);
     try {
       const { error } = await (supabase as any).from("lessons_learned").insert({
-        project_id: projectId, phase_id: phaseId ?? null,
-        problem: c.content, category: "Registro da atividade", reported_by: c.author ?? authorName,
+        project_id: projectId,
+        phase_id: phaseId || null,
+        problem: c.content,
+        category: "Registro da atividade",
+        reported_by: c.author ?? authorName,
       });
       if (error) throw error;
-      toast({ title: "Mensagem promovida a Lição Aprendida!" });
-    } catch {
-      toast({ title: "Não foi possível promover a lição", variant: "destructive" });
+      toast({
+        title: "Lição Aprendida criada!",
+        description: "Disponível na aba Lições do projeto.",
+      });
+    } catch (e: any) {
+      toast({ title: "Não foi possível promover a lição", description: e?.message, variant: "destructive" });
     } finally { setPromotingId(null); }
   };
 
