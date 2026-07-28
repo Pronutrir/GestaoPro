@@ -356,7 +356,8 @@ export const ActivityRegistro = ({
                   </div>
                 </div>
               ) : (
-                <div key={c.id} className={cn("flex gap-2.5 group", mine && "flex-row-reverse")}>
+                <div key={c.id} className={cn("flex w-full", mine ? "justify-end" : "justify-start")}>
+                <div className={cn("flex gap-2.5 group max-w-[85%]", mine && "flex-row-reverse")}>
                   <Avatar className="h-7 w-7 shrink-0 mt-0.5">
                     {(() => {
                       const a = resolveAvatarFromLookup(c.author, c.author, avatarMap);
@@ -364,7 +365,7 @@ export const ActivityRegistro = ({
                     })()}
                     <AvatarFallback className="text-[10px]">{getAvatarInitials(c.author)}</AvatarFallback>
                   </Avatar>
-                  <div className={cn("flex flex-col min-w-0 max-w-[82%]", mine && "items-end")}>
+                  <div className={cn("flex flex-col min-w-0", mine && "items-end")}>
                     <div className="flex items-center gap-2 mb-0.5 px-0.5">
                       <span className="text-[12px] font-medium text-foreground">{mine ? "Você" : c.author}</span>
                       <span className="text-[10.5px] text-muted-foreground">{fmtTime(c.created_at)}</span>
@@ -394,6 +395,7 @@ export const ActivityRegistro = ({
                       )}
                     </div>
                   </div>
+                </div>
                 </div>
               );
             })}
