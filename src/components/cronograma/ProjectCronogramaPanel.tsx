@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState, useCallback, Fragment, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback, Fragment, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { computeActivityProgress } from "@/lib/activityProgress";
@@ -19,6 +19,7 @@ import {
   Table2, GanttChart, ExternalLink, AlertTriangle, AlertCircle, CalendarOff,
   CalendarDays, Settings2, Filter, FolderKanban, Search, X,
   ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, ChevronDown, Layers, Diamond, GripVertical,
+  Info,
 } from "lucide-react";
 import {
   DndContext,
@@ -94,6 +95,19 @@ const ZOOM_LABEL: Record<GanttZoom, string> = {
   quarter: "Trimestre",
   year: "Ano",
 };
+
+/** Uma linha do painel de legenda: amostra visual real + nome + explicação curta. */
+function LegendRow({ sample, title, desc }: { sample: ReactNode; title: string; desc: string }) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <span className="flex w-9 items-center justify-center pt-0.5 shrink-0">{sample}</span>
+      <div className="min-w-0">
+        <div className="text-[11px] font-medium leading-tight text-foreground">{title}</div>
+        <div className="text-[10px] leading-tight text-muted-foreground">{desc}</div>
+      </div>
+    </div>
+  );
+}
 
 /** Colunas opcionais da tabela (controladas pelo usuário, persistidas em localStorage). */
 type ColKey =
@@ -1138,7 +1152,12 @@ export function ProjectCronogramaPanel({
   }, [parseYmdDate]);
 
   // ===== Gantt data =====
-  const ROW_H = 44;
+  // Linha alta o bastante para: barra (faixa superior) + datas (faixa inferior),
+  // sem sobreposição. BAR_TOP/BAR_H definem o trilho da barra; DATE_TOP a faixa das datas.
+  const ROW_H = 56;
+  const BAR_H = 22;
+  const BAR_TOP = 11;              // topo da barra dentro da linha
+  const DATE_TOP = BAR_TOP + BAR_H + 4; // faixa das datas, logo abaixo da barra
   const LABEL_W = ganttLabelWidth;
 
   const ganttData = useMemo(() => {
@@ -1640,17 +1659,33 @@ export function ProjectCronogramaPanel({
   /** Decide quando rotular dias x meses na régua, baseado no zoom. */
   const showDayLabels = zoom === "day" || zoom === "week";
 
+  /**
+   * Presença real de cada elemento na janela visível — a legenda só lista o que
+   * existe na tela (menos ruído). Feriado/férias são checados nos dias visíveis.
+   */
+  const legendPresence = useMemo(() => {
+    const days = ganttData?.days ?? [];
+    let hasHoliday = false;
+    let hasVacation = false;
+    for (const d of days) {
+      if (!hasHoliday && isHoliday(d, holidays)) hasHoliday = true;
+      else if (!hasVacation && isOnVacation(d, workSchedule)) hasVacation = true;
+      if (hasHoliday && hasVacation) break;
+    }
+    return {
+      hasCritical: criticalSet.size > 0,
+      hasUndated: (ganttData?.undated.length ?? 0) > 0,
+      hasHoliday,
+      hasVacation,
+      hasWeekendShading: showDayLabels, // sombreamento de fim de semana só nos zooms dia/semana
+    };
+  }, [ganttData, holidays, workSchedule, criticalSet, showDayLabels]);
+
   const GanttBlock = (
     <div className="border rounded-lg bg-card overflow-hidden">
+      {/* Legenda enxuta: só o essencial fica sempre visível; o resto vai para o
+          painel "Legenda" (estilo MS-Project: amostra real + explicação). */}
       <div className="flex items-center px-3 py-2 border-b bg-muted/20 gap-x-4 gap-y-1.5 flex-wrap">
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span className="w-3.5 h-2.5 rounded bg-primary shrink-0" />
-          Atividade
-        </span>
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span className="w-3.5 h-2.5 rounded ring-2 ring-red-500 shrink-0" />
-          Caminho crítico
-        </span>
         <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Diamond className="h-3.5 w-3.5 fill-amber-500 text-amber-500 shrink-0" />
           Marco
@@ -1663,18 +1698,7 @@ export function ProjectCronogramaPanel({
           <span className="w-0.5 h-3.5 bg-primary/80 shrink-0" />
           Hoje
         </span>
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span className="w-3.5 h-2.5 rounded bg-destructive/20 border border-destructive/40 shrink-0" />
-          Feriado
-        </span>
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span className="w-3.5 h-2.5 rounded bg-sky-500/20 border border-sky-500/40 shrink-0" />
-          Férias
-        </span>
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <CalendarOff className="h-3.5 w-3.5 shrink-0" />
-          Sem datas
-        </span>
+
         <span className="ml-auto inline-flex items-center gap-2 text-[11px] text-muted-foreground whitespace-nowrap">
           {ganttData ? (
             <>
@@ -1690,6 +1714,104 @@ export function ProjectCronogramaPanel({
             </>
           ) : "—"}
         </span>
+
+        {/* Painel de legenda completo, agrupado por significado */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground">
+              <Info className="h-3.5 w-3.5" /> Legenda
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-80 p-0">
+            <div className="px-3 py-2 border-b">
+              <div className="text-xs font-semibold">Como ler o cronograma</div>
+              <div className="text-[11px] text-muted-foreground">O que cada elemento representa no gráfico.</div>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto p-3 space-y-3">
+              {/* ── TIPOS DE ITEM ── */}
+              <div className="space-y-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tipos de item</div>
+                <LegendRow
+                  sample={
+                    <span className="relative block w-9 h-3 rounded-sm bg-primary overflow-hidden">
+                      <span className="absolute inset-y-0 left-0 w-2/5 bg-black/20" />
+                    </span>
+                  }
+                  title="Atividade"
+                  desc="Barra azul; a faixa mais escura indica o % concluído."
+                />
+                <LegendRow
+                  sample={
+                    <span className="relative block w-9 h-3">
+                      <span className="absolute inset-x-0 top-0 h-1.5 rounded-sm bg-primary" />
+                      <span className="absolute left-0 top-1" style={{ width: 0, height: 0, borderLeft: "3px solid transparent", borderRight: "3px solid transparent", borderTop: "5px solid hsl(var(--primary))" }} />
+                      <span className="absolute right-0 top-1" style={{ width: 0, height: 0, borderLeft: "3px solid transparent", borderRight: "3px solid transparent", borderTop: "5px solid hsl(var(--primary))" }} />
+                    </span>
+                  }
+                  title="Fase / Entrega"
+                  desc="Barra-resumo com abas nas pontas; datas derivadas das atividades filhas."
+                />
+                <LegendRow
+                  sample={<span className="block w-3 h-3 rotate-45 bg-amber-500 border-2 border-amber-600 mx-auto" />}
+                  title="Marco"
+                  desc="Data única (entrega ou decisão), sem duração."
+                />
+              </div>
+
+              {/* ── DESTAQUES ── */}
+              {(legendPresence.hasCritical || legendPresence.hasUndated) && (
+                <div className="space-y-2 pt-1 border-t">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Destaques</div>
+                  {legendPresence.hasCritical && (
+                    <LegendRow
+                      sample={<span className="block w-9 h-3 rounded-sm bg-red-500 outline outline-2 outline-red-500" />}
+                      title="Caminho crítico"
+                      desc="Atividades que, se atrasarem, atrasam a entrega do projeto."
+                    />
+                  )}
+                  {legendPresence.hasUndated && (
+                    <LegendRow
+                      sample={<CalendarOff className="h-3.5 w-3.5 text-muted-foreground mx-auto" />}
+                      title="Sem datas"
+                      desc="Item ainda não agendado (sem início/fim definidos)."
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* ── CALENDÁRIO (fundo) ── */}
+              <div className="space-y-2 pt-1 border-t">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Calendário (fundo)</div>
+                <LegendRow
+                  sample={<span className="block w-0.5 h-3.5 bg-primary/80 mx-auto" />}
+                  title="Hoje"
+                  desc="Linha vertical marcando a data atual."
+                />
+                {legendPresence.hasHoliday && (
+                  <LegendRow
+                    sample={<span className="block w-9 h-3 rounded-sm bg-destructive/20 border border-destructive/40" />}
+                    title="Feriado"
+                    desc="Dia não útil, vindo do calendário da organização."
+                  />
+                )}
+                {legendPresence.hasVacation && (
+                  <LegendRow
+                    sample={<span className="block w-9 h-3 rounded-sm bg-sky-500/20 border border-sky-500/40" />}
+                    title="Férias"
+                    desc="Período de férias do responsável pela atividade."
+                  />
+                )}
+                {legendPresence.hasWeekendShading && (
+                  <LegendRow
+                    sample={<span className="block w-9 h-3 rounded-sm bg-muted/60 border border-border" />}
+                    title="Fim de semana"
+                    desc="Sábado e domingo sombreados (visível nos zooms Dia e Semana)."
+                  />
+                )}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {!ganttData ? (
@@ -1911,8 +2033,8 @@ export function ProjectCronogramaPanel({
                     const left = (todayIdx >= 0 ? todayIdx : 0) * DAY_W + hierarchyOffset;
                     return (
                       <div key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`} className="relative border-b bg-muted/10" style={{ height: ROW_H }}>
-                        <div className="absolute top-1/2 -translate-y-1/2 inline-flex items-center gap-1 px-2 py-0.5 rounded border border-dashed border-muted-foreground/40 bg-card text-[10px] text-muted-foreground"
-                          style={{ left: Math.max(0, left - 60) }}>
+                        <div className="absolute inline-flex items-center gap-1 px-2 py-0.5 rounded border border-dashed border-muted-foreground/40 bg-card text-[10px] text-muted-foreground"
+                          style={{ left: Math.max(0, left - 60), top: BAR_TOP }}>
                           <CalendarOff className="h-3 w-3" />
                           Sem datas
                         </div>
@@ -1946,14 +2068,20 @@ export function ProjectCronogramaPanel({
                   const isGroup = isPhase;
                   const isSubactivity = !isGroup && !!a.parent_id;
 
+                  // Datas curtas exibidas logo abaixo da barra (in.º à esquerda, fim à direita).
+                  // Em barras estreitas os dois textos colidiriam → combina num rótulo só.
+                  const startLabel = format(s, "dd/MM");
+                  const endLabel = format(e, "dd/MM");
+                  const barTooNarrowForDates = width < 72;
+
                   return (
                     <div key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`} className="relative border-b" style={{ height: ROW_H }}>
                       <TooltipProvider delayDuration={150}>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             {a.is_milestone ? (
-                              <div className="absolute top-1/2 -translate-y-1/2 cursor-pointer"
-                                style={{ left: left + DAY_W / 2 - 9 }}
+                              <div className="absolute cursor-pointer"
+                                style={{ left: left + DAY_W / 2 - 9, top: BAR_TOP + BAR_H / 2 - 9 }}
                                 onClick={() => openFromCronograma(a)}
                                 title="Abrir edição da atividade"
                               >
@@ -1967,10 +2095,10 @@ export function ProjectCronogramaPanel({
                               // "abas" nas pontas (estilo MS-Project) e rótulo ao lado.
                               <div
                                 className={cn(
-                                  "absolute top-1/2 -translate-y-1/2 cursor-pointer",
+                                  "absolute cursor-pointer",
                                   isOverdue && "ring-1 ring-destructive rounded",
                                 )}
-                                style={{ left, width, height: 14 }}
+                                style={{ left, width, height: 14, top: BAR_TOP + (BAR_H - 14) / 2 }}
                                 onClick={() => openFromCronograma(a)}
                                 title="Abrir edição da atividade"
                               >
@@ -1989,7 +2117,7 @@ export function ProjectCronogramaPanel({
                               </div>
                             ) : (
                               <div className={cn(
-                                "group absolute top-1/2 -translate-y-1/2 rounded-md shadow-sm overflow-visible transition-all hover:shadow-md hover:brightness-105",
+                                "group absolute rounded-md shadow-sm overflow-visible transition-all hover:shadow-md hover:brightness-105",
                                 drag ? "cursor-grabbing ring-2 ring-primary/60 z-20" : "cursor-grab",
                                 isOverdue && "ring-2 ring-destructive ring-offset-1",
                                 !stageInfo && (isCritical ? "bg-red-500" : isCompleted ? "bg-emerald-500/80" : "bg-primary")
@@ -2000,7 +2128,8 @@ export function ProjectCronogramaPanel({
                                 style={{
                                   left,
                                   width,
-                                  height: ROW_H - 14,
+                                  top: BAR_TOP,
+                                  height: BAR_H,
                                   backgroundColor: stageInfo
                                     ? (isCritical ? undefined : stageInfo.color)
                                     : undefined,
@@ -2067,6 +2196,30 @@ export function ProjectCronogramaPanel({
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
+
+                      {/* Datas sob a barra — para ler início/fim sem hover (útil no zoom Mês+). */}
+                      {a.is_milestone ? (
+                        <div className="absolute text-[10px] leading-none text-muted-foreground tabular-nums whitespace-nowrap pointer-events-none -translate-x-1/2"
+                          style={{ left: left + DAY_W / 2, top: DATE_TOP }}>
+                          {startLabel}
+                        </div>
+                      ) : barTooNarrowForDates ? (
+                        <div className="absolute text-[10px] leading-none text-muted-foreground tabular-nums whitespace-nowrap pointer-events-none"
+                          style={{ left: left + width / 2, top: DATE_TOP, transform: "translateX(-50%)" }}>
+                          {startLabel} → {endLabel}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="absolute text-[10px] leading-none text-muted-foreground tabular-nums whitespace-nowrap pointer-events-none"
+                            style={{ left, top: DATE_TOP }}>
+                            {startLabel}
+                          </div>
+                          <div className="absolute text-[10px] leading-none text-muted-foreground tabular-nums whitespace-nowrap pointer-events-none text-right"
+                            style={{ left: left + width, top: DATE_TOP, transform: "translateX(-100%)" }}>
+                            {endLabel}
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })}
