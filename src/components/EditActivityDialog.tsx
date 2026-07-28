@@ -42,13 +42,17 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 
 /** Linha de propriedade densa (ícone + label cinza + valor) usada no painel ClickUp-like. */
-const PropertyRow = ({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) => (
-  <div className="flex items-start gap-3 min-h-[32px] py-1">
-    <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 w-[110px] pt-1">
+// Campo denso da aba Detalhes: rótulo (uppercase, discreto) EM CIMA do controle.
+// `wide` faz o campo ocupar a linha inteira da grade (para Prazo/Prioridade/Tipo/EAP).
+const PropertyRow = ({ icon, label, children, wide }: {
+  icon: React.ReactNode; label: string; children: React.ReactNode; wide?: boolean;
+}) => (
+  <div className={cn("flex flex-col gap-1 min-w-0", wide && "sm:col-span-2")}>
+    <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
       <span className="text-muted-foreground/70">{icon}</span>
       {label}
     </span>
-    <div className="flex-1 min-w-0 flex items-center flex-wrap gap-1.5">{children}</div>
+    <div className="min-w-0 flex items-center flex-wrap gap-1.5">{children}</div>
   </div>
 );
 
@@ -1327,9 +1331,9 @@ export const EditActivityDialog = ({
 
           {/* Painel de propriedades — 2 colunas, linhas densas (label + valor) */}
           {act && (
-            <div className="flex flex-col divide-y divide-border/60 p-3 rounded-lg border border-border bg-muted/10">
-              {/* Lista vertical única — evita sobreposição entre campos largos (GUT, Marco) e estreitos (Status) */}
-              <div className="flex flex-col">
+            <div className="p-3.5 rounded-lg border border-border bg-muted/10">
+              {/* Grade densa de 2 colunas; campos largos usam wide (col-span-2) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3">
                 {/* Status / Etapa */}
                 {workflowStages.length > 0 && (
                    <PropertyRow icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
@@ -1406,7 +1410,7 @@ export const EditActivityDialog = ({
                 )}
 
                 {/* Datas — planejado e execução real na MESMA linha */}
-                <PropertyRow icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Prazo"}>
+                <PropertyRow wide icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Prazo"}>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 w-full">
                     {/* PLANEJADO — chips compactos com calendário */}
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -1539,7 +1543,7 @@ export const EditActivityDialog = ({
 
                 {/* Relacionamentos inline */}
                 {projectId && (
-                  <PropertyRow icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
+                  <PropertyRow wide icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
                     <ActivityRelationsInline
                       activityId={act.id}
                       projectId={projectId}
@@ -1691,7 +1695,7 @@ export const EditActivityDialog = ({
                 </PropertyRow>
 
                 {/* Prioridade — método GUT */}
-                <PropertyRow icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
+                <PropertyRow wide icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
                   <div className="w-full min-w-0 max-w-[680px]">
                     <GutPriorityField
                       gravity={formData.gravity}
@@ -1761,6 +1765,7 @@ export const EditActivityDialog = ({
                   const activeHint = KIND_OPTIONS.find((o) => o.kind === itemKind)?.hint;
                   return (
                     <PropertyRow
+                      wide
                       icon={
                         itemKind === "marco" ? (
                           <Diamond className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
@@ -1813,7 +1818,7 @@ export const EditActivityDialog = ({
                 })()}
 
                 {/* Código EAP/WBS */}
-                <PropertyRow icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
+                <PropertyRow wide icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
                   <div className="flex flex-col gap-1 w-full max-w-[680px]">
                     <div className="flex items-center gap-1.5">
                       <Input
