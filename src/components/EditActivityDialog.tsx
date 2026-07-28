@@ -44,15 +44,17 @@ import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from
 /** Linha de propriedade densa (ícone + label cinza + valor) usada no painel ClickUp-like. */
 // Campo denso da aba Detalhes: rótulo (uppercase, discreto) EM CIMA do controle.
 // `wide` faz o campo ocupar a linha inteira da grade (para Prazo/Prioridade/Tipo/EAP).
-const PropertyRow = ({ icon, label, children, wide }: {
+const PropertyRow = ({ icon, label, children, wide, iconClassName }: {
   icon: React.ReactNode; label: string; children: React.ReactNode; wide?: boolean;
+  /** Cor do ícone do rótulo — dá vida à informação (padrão: cinza discreto). */
+  iconClassName?: string;
 }) => (
   <div className={cn("flex flex-col gap-1 min-w-0", wide && "sm:col-span-2")}>
     <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-      <span className="text-muted-foreground/70">{icon}</span>
+      <span className={cn("text-muted-foreground/70", iconClassName)}>{icon}</span>
       {label}
     </span>
-    <div className="min-w-0 flex items-center flex-wrap gap-1.5">{children}</div>
+    <div className="min-w-0 flex items-center flex-wrap gap-1.5 min-h-[32px]">{children}</div>
   </div>
 );
 
@@ -407,6 +409,7 @@ export const EditActivityDialog = ({
   const [relationsCount, setRelationsCount] = useState(0);
   const revealField = (k: OptionalFieldKey) =>
     setRevealedFields((prev) => new Set(prev).add(k));
+  const [addFieldOpen, setAddFieldOpen] = useState(false);
   const [members, setMembers] = useState<PersonOption[]>([]);
   const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
   const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
@@ -1379,20 +1382,20 @@ export const EditActivityDialog = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
                 {/* Status / Etapa */}
                 {workflowStages.length > 0 && (
-                   <PropertyRow icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
+                   <PropertyRow iconClassName="text-primary" icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
                      <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
                       <PopoverTrigger asChild>
                         <button
                           type="button"
-                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium border hover:bg-muted/40 transition-colors"
+                          className="inline-flex items-center gap-1.5 h-8 w-full px-2.5 rounded-md text-xs font-medium border bg-background hover:bg-muted/40 transition-colors"
                           style={(() => {
                             const s = workflowStages.find(s => s.id === currentStageId);
                             return s ? { borderColor: s.color, color: s.color } : {};
                           })()}
                         >
-                          <span className="w-2 h-2 rounded-full" style={{ background: workflowStages.find(s => s.id === currentStageId)?.color || "hsl(var(--muted-foreground))" }} />
-                          {workflowStages.find(s => s.id === currentStageId)?.title || "Sem coluna"}
-                          <ChevronDown className="w-3 h-3 opacity-60" />
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: workflowStages.find(s => s.id === currentStageId)?.color || "hsl(var(--muted-foreground))" }} />
+                          <span className="truncate">{workflowStages.find(s => s.id === currentStageId)?.title || "Sem coluna"}</span>
+                          <ChevronDown className="w-3 h-3 opacity-60 ml-auto shrink-0" />
                         </button>
                       </PopoverTrigger>
                       <PopoverContent className="w-48 p-1" align="start">
@@ -1453,7 +1456,7 @@ export const EditActivityDialog = ({
                 )}
 
                 {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
-                <PropertyRow icon={<User className="w-3.5 h-3.5" />} label="Líder">
+                <PropertyRow iconClassName="text-primary" icon={<User className="w-3.5 h-3.5" />} label="Líder">
                   <div className="w-full">
                     <PersonCombobox
                       people={allProfiles}
@@ -1461,7 +1464,7 @@ export const EditActivityDialog = ({
                       placeholder="Sem líder"
                       onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
                       onClear={() => setFormData({ ...formData, assigned_to: "" })}
-                      className="h-7 text-xs"
+                      className="h-8 text-xs"
                     />
                   </div>
                 </PropertyRow>
@@ -1592,7 +1595,7 @@ export const EditActivityDialog = ({
                   </PropertyRow>
                 )}
                 {/* Datas — planejado e execução real na MESMA linha */}
-                <PropertyRow wide icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Prazo"}>
+                <PropertyRow wide iconClassName="text-primary" icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Prazo"}>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 w-full">
                     {/* PLANEJADO — chips compactos com calendário */}
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -1666,9 +1669,10 @@ export const EditActivityDialog = ({
                           <button
                             type="button"
                             onClick={() => setShowRealDates(true)}
-                            className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline shrink-0 pl-4 border-l border-dashed border-border/70"
+                            title="Registrar as datas em que a atividade realmente começou e terminou"
+                            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors shrink-0 ml-2 pl-3 border-l border-dashed border-border"
                           >
-                            <Plus className="w-3 h-3" /> Registrar datas reais
+                            <Plus className="w-3 h-3" /> datas reais
                           </button>
                         );
                       }
@@ -1728,8 +1732,18 @@ export const EditActivityDialog = ({
                     definir G×U×T, expande para linha inteira com o badge completo. */}
                 {(() => {
                   const gutDefined = gutScore(formData.gravity, formData.urgency, formData.tendency) != null;
+                  // Cor do ícone do rótulo = cor do nível GUT (dá vida à informação).
+                  const gutLevel = gutLabel(gutScore(formData.gravity, formData.urgency, formData.tendency));
+                  const gutIconColor: Record<GutLevel, string> = {
+                    pendente: "text-muted-foreground/70",
+                    baixa: "text-emerald-500",
+                    media: "text-amber-500",
+                    alta: "text-orange-500",
+                    critica: "text-red-500",
+                    urgente: "text-fuchsia-500",
+                  };
                   return (
-                    <PropertyRow wide={gutDefined} icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
+                    <PropertyRow wide={gutDefined} iconClassName={gutIconColor[gutLevel]} icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
                       <div className="w-full min-w-0">
                         <GutPriorityField
                           gravity={formData.gravity}
@@ -1801,11 +1815,12 @@ export const EditActivityDialog = ({
                   ];
                   return (
                     <PropertyRow
+                      iconClassName={itemKind === "marco" ? "text-amber-500" : "text-primary"}
                       icon={
                         itemKind === "marco" ? (
-                          <Diamond className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                          <Diamond className="w-3.5 h-3.5 fill-amber-500" />
                         ) : itemKind === "fase" ? (
-                          <Layers className="w-3.5 h-3.5 text-primary" />
+                          <Layers className="w-3.5 h-3.5" />
                         ) : (
                           <Circle className="w-3.5 h-3.5" />
                         )
@@ -1851,7 +1866,7 @@ export const EditActivityDialog = ({
 
                 {/* Código EAP/WBS (opcional — colapsa quando vazio) */}
                 {showWbs && (
-                <PropertyRow icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
+                <PropertyRow iconClassName="text-primary" icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
                   <div className="flex flex-col gap-1 w-full">
                     <div className="flex items-center gap-1.5">
                       <Input
@@ -1888,7 +1903,7 @@ export const EditActivityDialog = ({
                     oculto, some da grade mas segue observando o banco em segundo plano. */}
                 {projectId && (
                   <div className={cn("min-w-0 sm:col-span-2", !showRelations && "hidden")}>
-                    <PropertyRow wide icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
+                    <PropertyRow wide iconClassName="text-primary" icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
                       <ActivityRelationsInline
                         activityId={act.id}
                         projectId={projectId}
@@ -1902,24 +1917,38 @@ export const EditActivityDialog = ({
                   </div>
                 )}
 
-                {/* Barra "+ Adicionar campo": revela campos opcionais ocultos.
-                    Só aparece se houver algo a adicionar. */}
+                {/* "+ Adicionar campo": um único botão que abre um menu com os
+                    campos opcionais ocultos (padrão ClickUp/Jira). Só aparece se
+                    houver algo a adicionar. */}
                 {hiddenChips.length > 0 && (
-                  <div className="sm:col-span-2 flex flex-wrap items-center gap-1.5 pt-1 mt-0.5 border-t border-dashed border-border/60">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70 pr-0.5">
-                      <Plus className="w-3 h-3" /> Adicionar campo
-                    </span>
-                    {hiddenChips.map((chip) => (
-                      <button
-                        key={chip.key}
-                        type="button"
-                        onClick={() => revealField(chip.key)}
-                        className="inline-flex items-center gap-1 rounded-md border border-dashed border-border bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-primary/5 transition-colors"
-                      >
-                        {chip.icon}
-                        {chip.label}
-                      </button>
-                    ))}
+                  <div className="sm:col-span-2 pt-2 mt-0.5 border-t border-dashed border-border/60">
+                    <Popover open={addFieldOpen} onOpenChange={setAddFieldOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-3 h-8 text-xs font-medium text-muted-foreground hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Adicionar campo
+                          <ChevronDown className="w-3 h-3 opacity-60" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-52 p-1" align="start">
+                        <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                          Campos disponíveis
+                        </p>
+                        {hiddenChips.map((chip) => (
+                          <button
+                            key={chip.key}
+                            type="button"
+                            onClick={() => { revealField(chip.key); setAddFieldOpen(false); }}
+                            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors"
+                          >
+                            <span className="text-muted-foreground">{chip.icon}</span>
+                            {chip.label}
+                          </button>
+                        ))}
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 )}
               </div>
@@ -2641,17 +2670,30 @@ export const EditActivityDialog = ({
 
           </div>
 
-          {/* ========= PAINEL LATERAL (direita) ========= */}
+          {/* ========= PAINEL LATERAL (direita) — CONVERSA ========= */}
           {act && (
-            <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-4 lg:max-h-[calc(95vh-180px)]">
-              <div className="rounded-lg border border-border bg-card p-3 flex-1 min-h-0 flex flex-col">
-                <ActivityRegistro
-                  activityId={act.id}
-                  projectId={projectId}
-                  phaseId={act.phase_id || null}
-                  includeSubActivities
-                  locked={projectLocked}
-                />
+            <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-3 lg:max-h-[calc(95vh-180px)]">
+              {/* Card com identidade própria: a Conversa é o espaço de interação do time. */}
+              <div className="rounded-xl border border-primary/25 bg-card flex-1 min-h-0 flex flex-col overflow-hidden shadow-sm">
+                {/* Faixa de destaque na cor primária */}
+                <div className="flex items-center gap-2 px-3.5 py-2.5 bg-primary/10 border-b border-primary/20">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-primary/15 text-primary shrink-0">
+                    <MessageSquare className="w-3.5 h-3.5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-foreground leading-tight">Conversa da atividade</p>
+                    <p className="text-[10.5px] text-muted-foreground leading-tight">Comente, cite pessoas com @ e acompanhe o histórico</p>
+                  </div>
+                </div>
+                <div className="p-3 flex-1 min-h-0 flex flex-col">
+                  <ActivityRegistro
+                    activityId={act.id}
+                    projectId={projectId}
+                    phaseId={act.phase_id || null}
+                    includeSubActivities
+                    locked={projectLocked}
+                  />
+                </div>
               </div>
             </aside>
           )}
