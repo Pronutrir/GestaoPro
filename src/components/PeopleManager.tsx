@@ -31,7 +31,10 @@ import { ALL_MODULES, ALL_MODULE_KEYS, DEFAULT_MODULES } from "@/lib/modules";
 import { ALL_PROJECT_TABS, ALL_TAB_VALUES, normalizeProjectTabs } from "@/lib/projectTabs";
 import { RoleTitleSelect, type JobTitleOption } from "@/components/settings/RoleTitleSelect";
 import { ORG_LEVELS } from "@/lib/orgLevels";
-import { ACCESS_LEVELS, accessLevelKey, roleFromAccessKey, accessLabelForRole } from "@/lib/accessLevels";
+import {
+  ACCESS_LEVELS, accessLevelKey, roleFromAccessKey, accessLabelForRole,
+  modulesForAccessKey, sameModuleSet,
+} from "@/lib/accessLevels";
 import { SectorSelect } from "@/components/settings/SectorSelect";
 import { TaxonomyManager } from "@/components/settings/TaxonomyManager";
 
@@ -472,6 +475,17 @@ export function PeopleManager() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao criar usuário");
       if (data?.error) throw new Error(data.error);
+
+      // Pré-requisito: semeia os módulos-padrão do nível escolhido (a não ser
+      // admin, que tem acesso total e não precisa de linha de permissão).
+      const newUserId = data?.user?.id;
+      if (newUserId && !form.admin) {
+        await supabase.from("user_module_permissions").upsert(
+          { user_id: newUserId, allowed_modules: modulesForAccessKey(form.accessKey), updated_at: new Date().toISOString() },
+          { onConflict: "user_id" },
+        );
+      }
+
       const temporaryPassword = typeof data?.temporary_password === "string" ? data.temporary_password : null;
       toast({
         title: "Pessoa criada!",
@@ -670,7 +684,16 @@ export function PeopleManager() {
           <AccessLevelField
             accessKey={editForm.accessKey}
             admin={editForm.admin}
-            onAccessKeyChange={(k) => setEditForm({ ...editForm, accessKey: k })}
+            onAccessKeyChange={(k) => {
+              setEditForm({ ...editForm, accessKey: k });
+              // Pré-requisito: trocar o nível reaplica os módulos-padrão dele
+              // (só quando não é admin — admin tem acesso total).
+              if (!editForm.admin) {
+                const preset = modulesForAccessKey(k);
+                setUserModules(profile.id, preset, modules);
+                toast({ title: `Módulos de ${accessLabelForRole(roleFromAccessKey(k))} aplicados`, description: "Você pode ajustar abaixo." });
+              }
+            }}
             onAdminChange={(v) => setEditForm({ ...editForm, admin: v })}
           />
         </div>
@@ -693,7 +716,11 @@ export function PeopleManager() {
                 <span className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><Blocks className="w-4 h-4 text-primary" /></span>
                 <span className="min-w-0 flex-1">
                   <span className={cn("block", TYPO.body, "font-medium")}>Módulos do sistema</span>
-                  <span className={cn("block", TYPO.meta)}>O que aparece no menu lateral</span>
+                  <span className={cn("block", TYPO.meta)}>
+                    {sameModuleSet(modules, modulesForAccessKey(editForm.accessKey))
+                      ? `Padrão de ${accessLabelForRole(roleFromAccessKey(editForm.accessKey))}`
+                      : "Personalizado"}
+                  </span>
                 </span>
                 <span className="text-[11px] font-semibold text-primary bg-primary/10 rounded-full px-2 py-0.5 tabular-nums shrink-0">
                   {modules.length} de {ALL_MODULES.length}
@@ -701,12 +728,12 @@ export function PeopleManager() {
               </button>
               {modulesOpen && (
                 <div className="border-t border-border p-3 bg-muted/20">
-                  <div className="flex items-center gap-2 mb-2.5 text-[11px]">
+                  <div className="flex items-center gap-2 mb-2.5 text-[11px] flex-wrap">
+                    <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, modulesForAccessKey(editForm.accessKey), modules)}>Padrão do nível</button>
+                    <span className="text-muted-foreground/40">·</span>
                     <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [...ALL_MODULE_KEYS], modules)}>Todos</button>
                     <span className="text-muted-foreground/40">·</span>
                     <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [], modules)}>Nenhum</button>
-                    <span className="text-muted-foreground/40">·</span>
-                    <button type="button" className="text-primary hover:underline" onClick={() => setUserModules(profile.id, [...DEFAULT_MODULES], modules)}>Padrão</button>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
                     {ALL_MODULES.map((mod) => (
