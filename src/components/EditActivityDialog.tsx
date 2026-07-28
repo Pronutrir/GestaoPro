@@ -1594,9 +1594,16 @@ export const EditActivityDialog = ({
                     )}
                   </PropertyRow>
                 )}
-                {/* Datas — planejado e execução real na MESMA linha */}
-                <PropertyRow wide iconClassName="text-primary" icon={<Calendar className="w-3.5 h-3.5" />} label={formData.is_milestone ? "Data" : "Prazo"}>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 w-full">
+                {/* Datas — planejado e execução real na MESMA linha.
+                    Meia coluna por padrão (Início→Vencimento cabe); só ocupa a
+                    linha inteira quando o bloco de datas reais está expandido. */}
+                <PropertyRow
+                  wide={!formData.is_milestone && (showRealDates || !!(formData.actual_start_date || formData.actual_end_date))}
+                  iconClassName="text-primary"
+                  icon={<Calendar className="w-3.5 h-3.5" />}
+                  label={formData.is_milestone ? "Data" : "Prazo"}
+                >
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 w-full min-h-[32px]">
                     {/* PLANEJADO — chips compactos com calendário */}
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
                       <DateChip
@@ -1826,6 +1833,7 @@ export const EditActivityDialog = ({
                         )
                       }
                       label="Tipo"
+                      wide
                     >
                       <div className="flex flex-col gap-1.5 w-full">
                         <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30 w-fit">

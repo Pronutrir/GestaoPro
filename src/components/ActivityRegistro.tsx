@@ -448,10 +448,10 @@ export const ActivityRegistro = ({
                     }
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                   }}
-                  placeholder="Escreva uma mensagem…  ( @ para citar )"
+                  placeholder="Escreva uma mensagem…"
                   rows={1}
-                  className="flex-1 min-w-0 resize-none overflow-y-auto bg-transparent text-[13px] leading-relaxed px-2 py-1.5 max-h-40 focus:outline-none [scrollbar-width:thin]"
-                  style={{ minHeight: 40, height: 40 }}
+                  className="flex-1 min-w-0 resize-none overflow-y-auto bg-transparent text-[13px] leading-relaxed px-2 py-2 max-h-40 focus:outline-none [scrollbar-width:thin] placeholder:text-muted-foreground/70"
+                  style={{ minHeight: 38, height: 38 }}
                 />
                 {text.trim() && (
                   <AIAssistButton
