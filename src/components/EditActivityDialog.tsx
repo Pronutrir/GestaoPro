@@ -56,6 +56,10 @@ const PropertyRow = ({ icon, label, children, wide }: {
   </div>
 );
 
+// Campos OPCIONAIS da aba Detalhes que colapsam quando vazios (padrão ClickUp/Jira/Linear).
+// Essenciais (Status, Tipo, Prazo, Líder) e Prioridade não entram aqui — têm regra própria.
+type OptionalFieldKey = "hours" | "cost" | "wbs" | "relations";
+
 // item_type persistido. Marco não é item_type — é a flag is_milestone.
 // A UI usa 3 papéis: Fase/Entrega (agrupa) · Atividade (folha) · Marco.
 // 'pacote' é um agrupador LEGADO no banco: lido e exibido como Fase/Entrega,
@@ -396,6 +400,13 @@ export const EditActivityDialog = ({
   const [showRealDates, setShowRealDates] = useState(false);
   const [hoursPopoverOpen, setHoursPopoverOpen] = useState(false);
   const [generatingWbs, setGeneratingWbs] = useState(false);
+  // Campos OPCIONAIS revelados manualmente pelo "+ Adicionar campo" nesta sessão.
+  // Um campo aparece se: já tem valor, OU foi revelado aqui. (padrão ClickUp/Jira/Linear)
+  const [revealedFields, setRevealedFields] = useState<Set<OptionalFieldKey>>(new Set());
+  // Total de vínculos (Relações), reportado pelo componente inline.
+  const [relationsCount, setRelationsCount] = useState(0);
+  const revealField = (k: OptionalFieldKey) =>
+    setRevealedFields((prev) => new Set(prev).add(k));
   const [members, setMembers] = useState<PersonOption[]>([]);
   const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
   const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
@@ -710,6 +721,10 @@ export const EditActivityDialog = ({
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
       setShowRealDates(false);
+      // Campos opcionais revelados são por-atividade: ao trocar de card, recolhe
+      // de volta os que estavam vazios (os com valor reaparecem pela regra de visibilidade).
+      setRevealedFields(new Set());
+      setRelationsCount(0);
       // Limpa as subs do card anterior ANTES do fetch async. Sem isso, há uma
       // janela em que o rollup roda com os filhos do card anterior aplicados ao
       // card atual — corrompendo hours/cost (ex.: abrir uma folha logo após um
@@ -1339,7 +1354,26 @@ export const EditActivityDialog = ({
           </div>
 
           {/* Painel de propriedades — 2 colunas, linhas densas (label + valor) */}
-          {act && (
+          {act && (() => {
+            // ---- Visibilidade dos campos OPCIONAIS (auto-colapso) ----
+            // Regra: aparece se tem valor, é rollup de Fase, ou foi revelado pelo "+".
+            const hasHours = parseHoursInput(formData.hours) > 0;
+            const hasCost = parseFloat(formData.cost || "0") > 0;
+            const hasWbs = !!formData.wbs_code.trim();
+            const hasRelations = relationsCount > 0;
+            // Marco não tem horas/custo; Fase com filhos mostra sempre (rollup somado).
+            const showHours = !formData.is_milestone && (hasHours || hasSubActivities || revealedFields.has("hours"));
+            const showCost = !formData.is_milestone && (hasCost || hasSubActivities || revealedFields.has("cost"));
+            const showWbs = hasWbs || revealedFields.has("wbs");
+            const showRelations = !!projectId && (hasRelations || revealedFields.has("relations"));
+            // Chips do "+ Adicionar campo": só os que estão ocultos no momento.
+            const hiddenChips: { key: OptionalFieldKey; label: string; icon: React.ReactNode }[] = [
+              !showHours && { key: "hours" as const, label: "Tempo", icon: <Clock className="w-3 h-3" /> },
+              !showCost && { key: "cost" as const, label: "Custo", icon: <DollarSign className="w-3 h-3" /> },
+              !showWbs && { key: "wbs" as const, label: "Código EAP", icon: <Hash className="w-3 h-3" /> },
+              !showRelations && !!projectId && { key: "relations" as const, label: "Relações", icon: <Link2 className="w-3 h-3" /> },
+            ].filter(Boolean) as { key: OptionalFieldKey; label: string; icon: React.ReactNode }[];
+            return (
             <div className="p-3 rounded-lg border border-border bg-muted/10">
               {/* Grade densa de 2 colunas; campos largos usam wide (col-span-2) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
@@ -1432,8 +1466,8 @@ export const EditActivityDialog = ({
                   </div>
                 </PropertyRow>
 
-                {/* Tempo */}
-                {!formData.is_milestone && (
+                {/* Tempo (opcional — colapsa quando vazio) */}
+                {showHours && (
                   <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {hasSubActivities ? (
@@ -1530,8 +1564,8 @@ export const EditActivityDialog = ({
                   </PropertyRow>
                 )}
 
-                {/* Custo */}
-                {!formData.is_milestone && (
+                {/* Custo (opcional — colapsa quando vazio) */}
+                {showCost && (
                   <PropertyRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Custo">
                     {hasSubActivities ? (
                       <TooltipProvider delayDuration={150}>
@@ -1689,18 +1723,25 @@ export const EditActivityDialog = ({
                   </div>
                 </PropertyRow>
 
-                {/* Prioridade — método GUT */}
-                <PropertyRow wide icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
-                  <div className="w-full min-w-0">
-                    <GutPriorityField
-                      gravity={formData.gravity}
-                      urgency={formData.urgency}
-                      tendency={formData.tendency}
-                      onChange={(v) => setFormData({ ...formData, ...v })}
-                      buttonClassName="h-8 w-full px-2.5 text-xs"
-                    />
-                  </div>
-                </PropertyRow>
+                {/* Prioridade — método GUT.
+                    Colapsa em meia coluna quando "Pendente" (chip discreto); ao
+                    definir G×U×T, expande para linha inteira com o badge completo. */}
+                {(() => {
+                  const gutDefined = gutScore(formData.gravity, formData.urgency, formData.tendency) != null;
+                  return (
+                    <PropertyRow wide={gutDefined} icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
+                      <div className="w-full min-w-0">
+                        <GutPriorityField
+                          gravity={formData.gravity}
+                          urgency={formData.urgency}
+                          tendency={formData.tendency}
+                          onChange={(v) => setFormData({ ...formData, ...v })}
+                          buttonClassName="h-8 w-full px-2.5 text-xs"
+                        />
+                      </div>
+                    </PropertyRow>
+                  );
+                })()}
 
                 {/* Tipo do item (papéis EAP): Fase/Entrega | Atividade | Marco.
                     Mutuamente exclusivo. Agrupador legado ('pacote') exibe como Fase. */}
@@ -1808,7 +1849,8 @@ export const EditActivityDialog = ({
                   );
                 })()}
 
-                {/* Código EAP/WBS */}
+                {/* Código EAP/WBS (opcional — colapsa quando vazio) */}
+                {showWbs && (
                 <PropertyRow icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
                   <div className="flex flex-col gap-1 w-full">
                     <div className="flex items-center gap-1.5">
@@ -1839,23 +1881,51 @@ export const EditActivityDialog = ({
                     </div>
                   </div>
                 </PropertyRow>
+                )}
 
-                {/* Relacionamentos inline */}
+                {/* Relacionamentos inline (opcional — colapsa quando não há vínculos).
+                    O componente fica sempre montado para reportar a contagem; quando
+                    oculto, some da grade mas segue observando o banco em segundo plano. */}
                 {projectId && (
-                  <PropertyRow wide icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
-                    <ActivityRelationsInline
-                      activityId={act.id}
-                      projectId={projectId}
-                      onChanged={() => {
-                        if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
-                        onActivityUpdated();
-                      }}
-                    />
-                  </PropertyRow>
+                  <div className={cn("min-w-0 sm:col-span-2", !showRelations && "hidden")}>
+                    <PropertyRow wide icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
+                      <ActivityRelationsInline
+                        activityId={act.id}
+                        projectId={projectId}
+                        onCountChange={setRelationsCount}
+                        onChanged={() => {
+                          if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                          onActivityUpdated();
+                        }}
+                      />
+                    </PropertyRow>
+                  </div>
+                )}
+
+                {/* Barra "+ Adicionar campo": revela campos opcionais ocultos.
+                    Só aparece se houver algo a adicionar. */}
+                {hiddenChips.length > 0 && (
+                  <div className="sm:col-span-2 flex flex-wrap items-center gap-1.5 pt-1 mt-0.5 border-t border-dashed border-border/60">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70 pr-0.5">
+                      <Plus className="w-3 h-3" /> Adicionar campo
+                    </span>
+                    {hiddenChips.map((chip) => (
+                      <button
+                        key={chip.key}
+                        type="button"
+                        onClick={() => revealField(chip.key)}
+                        className="inline-flex items-center gap-1 rounded-md border border-dashed border-border bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                      >
+                        {chip.icon}
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ============= ABAS ============= */}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">

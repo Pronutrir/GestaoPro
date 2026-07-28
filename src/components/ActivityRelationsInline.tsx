@@ -32,11 +32,13 @@ interface Props {
   activityId: string;
   projectId: string;
   onChanged?: () => void;
+  /** Notifica o total de vínculos sempre que a contagem muda (para colapsar o campo quando vazio). */
+  onCountChange?: (total: number) => void;
 }
 
 type UnifiedKind = "predecessor" | "successor" | "related" | "blocking" | "waiting_on";
 
-export const ActivityRelationsInline = ({ activityId, projectId, onChanged }: Props) => {
+export const ActivityRelationsInline = ({ activityId, projectId, onChanged, onCountChange }: Props) => {
   const [counts, setCounts] = useState<Counts>({
     predecessor: 0, successor: 0, blocking: 0, waiting_on: 0, related: 0,
   });
@@ -80,6 +82,11 @@ export const ActivityRelationsInline = ({ activityId, projectId, onChanged }: Pr
   }, [activityId]);
 
   const total = counts.predecessor + counts.successor + counts.blocking + counts.waiting_on + counts.related;
+
+  useEffect(() => {
+    onCountChange?.(total);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total]);
 
   const pills = useMemo(() => ([
     { key: "blocking", count: counts.blocking, label: "Bloqueio", Icon: Ban,
