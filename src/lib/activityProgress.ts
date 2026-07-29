@@ -14,6 +14,8 @@
  * sem percentual explícito, mantendo comportamento adaptável por projeto.
  */
 
+import { parseWorkflowCategory, WORKFLOW_CATEGORY_META } from "./workflowCategory";
+
 export interface ProgressStageLike {
   id: string;
   display_order: number;
@@ -23,6 +25,8 @@ export interface ProgressStageLike {
   is_exception?: boolean | null;
   progress_percent?: number | null;
   contributes_to_progress?: boolean | null;
+  /** Categoria semântica — quando presente, tem precedência sobre as flags. */
+  categoria?: string | null;
 }
 
 export interface ActivityProgress {
@@ -79,6 +83,23 @@ export function computeActivityProgress(
   const current = stages.find((s) => s.id === currentStageId);
   if (!current) {
     return { percent: 0, paused: false, label: PERCENT_LABELS[0] };
+  }
+
+  // A CATEGORIA manda quando existe. O peso é constante do sistema
+  // (ver lib/workflowCategory) — percentual por coluna é subjetivo e impede
+  // comparar projetos, razão pela qual as ferramentas de referência não usam.
+  const category = parseWorkflowCategory((current as any).categoria);
+  if (category) {
+    const weight = WORKFLOW_CATEGORY_META[category].progressWeight;
+    if (weight === null) {
+      // Cancelada: fora dos indicadores, sem percentual.
+      return { percent: null, paused: false, label: "Cancelada" };
+    }
+    return {
+      percent: weight,
+      paused: false,
+      label: category === "concluida" ? PERCENT_LABELS[100] : getPercentLabel(weight),
+    };
   }
 
   if (current.is_blocked) {

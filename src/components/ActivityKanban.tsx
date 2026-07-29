@@ -99,7 +99,10 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { normalizeGut, GUT_META, type GutLevel } from "@/lib/gutPriority";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
-import { inferStagePreset } from "@/lib/workflowStageRules";
+import {
+  suggestCategoryFromTitle, categoryFromLegacyFlags, parseWorkflowCategory,
+  WORKFLOW_CATEGORY_META, type WorkflowCategory,
+} from "@/lib/workflowCategory";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { resolveEapKind } from "@/lib/eapModel";
 import { cn } from "@/lib/utils";
@@ -324,6 +327,8 @@ interface WorkflowStage {
   progress_percent?: number | null;
   contributes_to_progress?: boolean;
   wip_limit?: number | null;
+  /** Categoria semântica — fonte da verdade, independente do título. */
+  categoria?: WorkflowCategory;
 }
 
 interface Phase {
@@ -2919,7 +2924,13 @@ export const ActivityKanban = ({
       .order("display_order");
     console.log("[Kanban] fetchStages:", { data, error, projectId });
     if (data) {
-      const normalized = data.map((s) => ({ ...s, title: getStageDisplayTitle(s.title) }));
+      const normalized = data.map((s) => ({
+        ...s,
+        title: getStageDisplayTitle(s.title),
+        // Enquanto a migration não roda, deriva a categoria das flags antigas
+        // para a UI já se comportar pela categoria.
+        categoria: parseWorkflowCategory((s as any).categoria) ?? categoryFromLegacyFlags(s as any),
+      }));
       setStages(normalized);
 
       // Autocorrige no banco títulos legados com encoding ruim (ex.: Concluãda/ConcluÃda).
@@ -3458,27 +3469,36 @@ export const ActivityKanban = ({
 
   // ===== Stage management handlers (admin/gestor only) =====
   const handleCreateStage = useCallback(async (title: string) => {
-    const preset = inferStagePreset(title, undefined);
-    const normalizedTitle = getStageDisplayTitle(preset.normalizedTitle);
+    const normalizedTitle = getStageDisplayTitle(title.trim());
     const maxOrder = stages.reduce((max, s) => Math.max(max, s.display_order), -1);
     const colorIdx = stages.length % STAGE_PRESET_COLORS.length;
+    // O nome só SUGERE a categoria inicial; ela é editável no menu da coluna
+    // e nunca mais muda sozinha. "Concluída" já existente impede duplicar a
+    // categoria de conclusão (índice único no banco).
+    let suggested = suggestCategoryFromTitle(normalizedTitle);
+    if (suggested === "concluida" && stages.some((s) => s.categoria === "concluida")) {
+      suggested = "andamento";
+    }
+    // `as never`: os tipos gerados do Supabase ainda não conhecem `categoria`
+    // (serão regerados após a migration). O fallback abaixo cobre o banco
+    // que ainda não tem a coluna.
     const basePayload = {
       project_id: projectId,
       title: normalizedTitle,
       color: STAGE_PRESET_COLORS[colorIdx],
       display_order: maxOrder + 1,
-      is_final: preset.isFinal,
-      is_blocked: preset.isBlocked,
-      is_exception: preset.isException,
-    };
+      categoria: suggested,
+      is_final: suggested === "concluida",
+    } as never;
     let { error } = await supabase.from("workflow_stages").insert(basePayload);
-    if (error && /(is_exception|is_blocked|progress_percent|contributes_to_progress)/i.test(error.message || "")) {
+    if (error && /categoria/i.test(error.message || "")) {
+      // Banco ainda sem a migration da categoria: cria só com o essencial.
       const compat = await supabase.from("workflow_stages").insert({
         project_id: projectId,
         title: normalizedTitle,
         color: STAGE_PRESET_COLORS[colorIdx],
         display_order: maxOrder + 1,
-        is_final: preset.isFinal,
+        is_final: suggested === "concluida",
       });
       error = compat.error;
     }
@@ -3489,32 +3509,20 @@ export const ActivityKanban = ({
     }
   }, [stages, projectId, toast]);
 
+  // Renomear altera APENAS o título. A semântica mora na categoria, escolhida
+  // explicitamente no menu da coluna — antes daqui, renomear "Concluída" para
+  // "Entregue ao cliente" desmarcava is_final em silêncio e derrubava o
+  // progresso de todas as atividades da coluna.
   const handleRenameStage = useCallback(async (id: string, title: string) => {
-    const stage = stages.find((s) => s.id === id);
-    const preset = inferStagePreset(title, stage?.display_order);
-    const normalizedTitle = getStageDisplayTitle(preset.normalizedTitle);
-    let { error } = await supabase
+    const normalizedTitle = getStageDisplayTitle(title.trim());
+    if (!normalizedTitle) return;
+    const { error } = await supabase
       .from("workflow_stages")
-      .update({
-        title: normalizedTitle,
-        is_final: preset.isFinal,
-        is_blocked: preset.isBlocked,
-        is_exception: preset.isException,
-      })
+      .update({ title: normalizedTitle })
       .eq("id", id);
-    if (error && /(is_exception|is_blocked|progress_percent|contributes_to_progress)/i.test(error.message || "")) {
-      const compat = await supabase
-        .from("workflow_stages")
-        .update({
-          title: normalizedTitle,
-          is_final: preset.isFinal,
-        })
-        .eq("id", id);
-      error = compat.error;
-    }
     if (error) toast({ title: "Erro ao renomear", description: error.message, variant: "destructive" });
     else fetchStages();
-  }, [stages, toast]);
+  }, [toast]);
 
   const handleDeleteStage = useCallback(async (id: string) => {
     const stage = stages.find((s) => s.id === id);

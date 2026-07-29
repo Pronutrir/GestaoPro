@@ -26,7 +26,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
-import { inferStagePreset } from "@/lib/workflowStageRules";
+import { normalizeStageTitle } from "@/lib/workflowStageRules";
+import { suggestCategoryFromTitle } from "@/lib/workflowCategory";
 import {
   Popover,
   PopoverContent,
@@ -177,7 +178,7 @@ function SortableStageItem({
       ) : (
         <>
           <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-foreground truncate">{inferStagePreset(stage.title, stage.display_order).normalizedTitle}</span>
+            <span className="text-sm font-medium text-foreground truncate">{normalizeStageTitle(stage.title)}</span>
             {stage.is_final && (
               <Badge
                 className="bg-success/20 text-success text-[10px]"
@@ -260,7 +261,7 @@ function SortableStageItem({
             variant="ghost"
             className="h-7 w-7 shrink-0"
             title="Renomear"
-            onClick={() => onStartEdit(stage.id, inferStagePreset(stage.title, stage.display_order).normalizedTitle)}
+            onClick={() => onStartEdit(stage.id, normalizeStageTitle(stage.title))}
           >
             <Pencil className="w-3.5 h-3.5" />
           </Button>
@@ -340,7 +341,7 @@ export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageMana
       .eq("project_id", projectId)
       .order("display_order");
     if (data) {
-      const normalized = data.map((s) => ({ ...s, title: inferStagePreset(s.title, s.display_order).normalizedTitle }));
+      const normalized = data.map((s) => ({ ...s, title: normalizeStageTitle(s.title) }));
       setStages(normalized);
 
       const fixes = normalized.filter((s, idx) => s.title !== data[idx].title);
@@ -433,26 +434,30 @@ export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageMana
     if (!newTitle.trim()) return;
     const maxOrder = stages.reduce((max, s) => Math.max(max, s.display_order), -1);
     const nextOrder = maxOrder + 1;
-    const preset = inferStagePreset(newTitle.trim(), nextOrder);
-    const normalizedTitle = preset.normalizedTitle;
+    const normalizedTitle = newTitle.trim();
     const colorIndex = stages.length % PRESET_COLORS.length;
+    // O nome só SUGERE a categoria inicial; ela é editável e nunca muda sozinha.
+    let suggested = suggestCategoryFromTitle(normalizedTitle);
+    if (suggested === "concluida" && stages.some((s) => (s as any).categoria === "concluida")) {
+      suggested = "andamento";
+    }
     const basePayload = {
       project_id: projectId,
       title: normalizedTitle,
       color: PRESET_COLORS[colorIndex],
       display_order: nextOrder,
-      is_final: preset.isFinal,
-      is_blocked: preset.isBlocked,
-      is_exception: preset.isException,
-    };
+      categoria: suggested,
+      is_final: suggested === "concluida",
+    } as never;
     let { error } = await supabase.from("workflow_stages").insert(basePayload);
-    if (error && /(is_exception|is_blocked|progress_percent|contributes_to_progress)/i.test(error.message || "")) {
+    if (error && /categoria/i.test(error.message || "")) {
+      // Banco ainda sem a migration: cria só com o essencial.
       const compat = await supabase.from("workflow_stages").insert({
         project_id: projectId,
         title: normalizedTitle,
         color: PRESET_COLORS[colorIndex],
         display_order: nextOrder,
-        is_final: preset.isFinal,
+        is_final: suggested === "concluida",
       });
       error = compat.error;
     }
@@ -470,30 +475,15 @@ export const WorkflowStageManager = ({ projectId, onChanged }: WorkflowStageMana
     }
   };
 
+  // Renomear altera APENAS o título — a semântica mora na categoria.
+  // Antes daqui, o nome redefinia is_final/is_blocked a cada rename.
   const handleRename = async (id: string) => {
-    if (!editingTitle.trim()) return;
-    const stage = stages.find((s) => s.id === id);
-    const preset = inferStagePreset(editingTitle.trim(), stage?.display_order);
-    const normalizedTitle = preset.normalizedTitle;
-    let { error } = await supabase
+    const normalizedTitle = editingTitle.trim();
+    if (!normalizedTitle) return;
+    const { error } = await supabase
       .from("workflow_stages")
-      .update({
-        title: normalizedTitle,
-        is_final: preset.isFinal,
-        is_blocked: preset.isBlocked,
-        is_exception: preset.isException,
-      })
+      .update({ title: normalizedTitle })
       .eq("id", id);
-    if (error && /(is_exception|is_blocked|progress_percent|contributes_to_progress)/i.test(error.message || "")) {
-      const compat = await supabase
-        .from("workflow_stages")
-        .update({
-          title: normalizedTitle,
-          is_final: preset.isFinal,
-        })
-        .eq("id", id);
-      error = compat.error;
-    }
     if (error) {
       toast({ title: "Erro ao renomear", description: error.message, variant: "destructive" });
     } else {

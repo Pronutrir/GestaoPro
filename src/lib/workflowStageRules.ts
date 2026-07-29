@@ -1,19 +1,30 @@
-export interface StagePreset {
-  normalizedTitle: string;
-  isFinal: boolean;
-  isBlocked: boolean;
-  isException: boolean;
-}
+/**
+ * Normalização do TÍTULO da coluna do Kanban.
+ *
+ * Este arquivo já inferiu a semântica da coluna (is_final/is_blocked/
+ * is_exception) por regex sobre o nome — inclusive ao renomear, o que fazia
+ * "Concluída" → "Entregue ao cliente" desmarcar is_final em silêncio e
+ * derrubar o progresso de todas as atividades da coluna.
+ *
+ * Essa responsabilidade saiu daqui: a semântica agora é a `categoria`,
+ * escolhida explicitamente (ver `lib/workflowCategory.ts`). O que restou é
+ * apenas o conserto de títulos legados com encoding ruim.
+ */
 
 function normalize(value: string): string {
   return (value || "")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .trim();
 }
 
-function normalizeDisplayTitle(title: string): string {
+/**
+ * Conserta grafias corrompidas de "Concluída" (ex.: "Concluãda", "ConcluÃda")
+ * vindas de importações antigas com encoding errado. Qualquer outro título é
+ * devolvido apenas com as pontas aparadas — nomes de coluna são livres.
+ */
+export function normalizeStageTitle(title: string): string {
   const normalized = normalize(title);
   const lettersOnly = normalized.replace(/[^a-z]/g, "");
 
@@ -27,49 +38,5 @@ function normalizeDisplayTitle(title: string): string {
     return "Concluída";
   }
 
-  return title.trim();
-}
-
-export function inferStagePreset(inputTitle: string, displayOrder?: number): StagePreset {
-  const normalized = normalize(inputTitle);
-  const title = normalizeDisplayTitle(inputTitle || "");
-
-  const isBacklog = displayOrder === 0 || normalized === "backlog";
-  const isBlocked = /\b(bloqueio|bloquead[oa]|impedid[oa])\b/.test(normalized);
-  const isException = /\b(atrasad[oa]|atraso|excecao|excecoes)\b/.test(normalized);
-  const isFinalByName = /\b(final|concluid[oa]|encerrad[oa])\b/.test(normalized);
-
-  if (isBacklog) {
-    return {
-      normalizedTitle: title || "Backlog",
-      isFinal: false,
-      isBlocked: false,
-      isException: false,
-    };
-  }
-
-  if (isBlocked) {
-    return {
-      normalizedTitle: title,
-      isFinal: false,
-      isBlocked: true,
-      isException: false,
-    };
-  }
-
-  if (isException) {
-    return {
-      normalizedTitle: title,
-      isFinal: false,
-      isBlocked: false,
-      isException: true,
-    };
-  }
-
-  return {
-    normalizedTitle: title,
-    isFinal: isFinalByName,
-    isBlocked: false,
-    isException: false,
-  };
+  return (title || "").trim();
 }

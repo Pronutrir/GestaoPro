@@ -258,7 +258,7 @@ export function ProjectCronogramaPanel({
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [projectDeadlines, setProjectDeadlines] = useState<Record<string, string | null>>({});
   const [mode, setMode] = useState<CronogramaMode>(defaultMode);
-  const [stages, setStages] = useState<Array<{ id: string; title: string; color: string; is_final: boolean; is_blocked: boolean; display_order: number; project_id: string }>>([]);
+  const [stages, setStages] = useState<Array<{ id: string; title: string; color: string; is_final: boolean; is_blocked: boolean; display_order: number; project_id: string; categoria?: string | null }>>([]);
   const [stageFilter, setStageFilter] = useState<Set<string> | null>(null); // null = todas
   // Filtro interno de projetos (usado principalmente no Cronograma Geral).
   // null = todos os projetos carregados
@@ -454,9 +454,11 @@ export function ProjectCronogramaPanel({
       .in("project_id", scopedProjectIds)
       .order("display_order", { ascending: true });
 
+    // `*` em vez da lista explícita: traz `categoria` onde a migration já
+    // rodou e continua funcionando onde ainda não rodou.
     const stagesQ = supabase
       .from("workflow_stages")
-      .select("id, title, color, is_final, is_blocked, display_order, project_id")
+      .select("*")
       .in("project_id", scopedProjectIds);
 
     const [{ data: acts }, { data: phs }, { data: profs }, { data: stgs }] = await Promise.all([
@@ -702,8 +704,12 @@ export function ProjectCronogramaPanel({
   );
 
   const stageById = useMemo(() => {
-    const m = new Map<string, { title: string; color: string; is_final: boolean }>();
-    stages.forEach(s => m.set(s.id, { title: s.title, color: s.color, is_final: s.is_final }));
+    // `categoria` viaja junto: é a fonte da verdade do estado (ver
+    // lib/workflowCategory) e precisa chegar a resolveActivityState.
+    const m = new Map<string, { title: string; color: string; is_final: boolean; categoria?: string | null }>();
+    stages.forEach(s => m.set(s.id, {
+      title: s.title, color: s.color, is_final: s.is_final, categoria: s.categoria ?? null,
+    }));
     return m;
   }, [stages]);
 
@@ -1701,7 +1707,7 @@ export function ProjectCronogramaPanel({
    */
   const ganttHealth = useMemo(() => {
     const count: Record<ActivityState, number> = {
-      concluida: 0, atrasada: 0, bloqueada: 0, andamento: 0, a_iniciar: 0,
+      concluida: 0, cancelada: 0, atrasada: 0, bloqueada: 0, andamento: 0, a_iniciar: 0,
     };
     let undated = 0;
 
@@ -1996,6 +2002,7 @@ export function ProjectCronogramaPanel({
                         "h-[7px] w-[7px] rounded-full shrink-0",
                         rowState === "atrasada" ? "bg-destructive"
                           : rowState === "concluida" ? "bg-emerald-600"
+                          : rowState === "cancelada" ? "bg-muted-foreground/35"
                           : rowState === "bloqueada" ? "bg-amber-500"
                           : rowState === "andamento" ? "bg-primary"
                           : "border-[1.5px] border-muted-foreground/45",
