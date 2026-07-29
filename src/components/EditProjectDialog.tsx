@@ -681,18 +681,29 @@ export const EditProjectDialog = ({
                 />
               </div>
               <div className="grid gap-2">
-                <Label>Setor do Projeto (Responsável) *</Label>
-                <SearchSelect
-                  options={sectors.map((s) => ({ value: s.name, label: s.name }))}
-                  value={formData.sector || null}
-                  onSelect={(v) => setFormData({ ...formData, sector: v })}
-                  onClear={() => setFormData({ ...formData, sector: "" })}
-                  placeholder="Selecione o setor"
-                  searchPlaceholder="Buscar setor..."
-                  emptyText="Nenhum setor encontrado."
+                <Label>Gestor do Projeto</Label>
+                <PersonCombobox
+                  people={profiles}
+                  value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}
+                  placeholder="Selecione o gestor"
+                  onSelect={(p) => setFormData({ ...formData, manager: p.full_name })}
+                  onClear={() => setFormData({ ...formData, manager: "" })}
                 />
-                <p className="text-[11px] text-muted-foreground">Define o setor do projeto. Pode ser diferente do setor do líder.</p>
+                <p className="text-[11px] text-muted-foreground">Opcional. Tem o mesmo nível de acesso ao projeto que o Líder.</p>
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Setor do Projeto (Responsável) *</Label>
+              <SearchSelect
+                options={sectors.map((s) => ({ value: s.name, label: s.name }))}
+                value={formData.sector || null}
+                onSelect={(v) => setFormData({ ...formData, sector: v })}
+                onClear={() => setFormData({ ...formData, sector: "" })}
+                placeholder="Selecione o setor"
+                searchPlaceholder="Buscar setor..."
+                emptyText="Nenhum setor encontrado."
+              />
+              <p className="text-[11px] text-muted-foreground">Define o setor do projeto. Pode ser diferente do setor do líder.</p>
             </div>
 
             {/* Equipe do Projeto */}
