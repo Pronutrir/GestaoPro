@@ -258,6 +258,13 @@ export const CARD_FIELD_GROUPS: { group: string; items: { key: keyof CardFields;
   ]},
 ];
 
+/**
+ * Largura mínima da coluna. Abaixo disto o card deixa de ser legível: o título
+ * quebra em três linhas, o rodapé colide e a barra de progresso some.
+ * Passando disso, o quadro rola na horizontal em vez de espremer as colunas.
+ */
+const MIN_COLUMN_WIDTH = 272;
+
 const DENSITY_CLASSES: Record<KanbanDensity, {
   card: string;
   title: string;
@@ -1537,7 +1544,12 @@ function SortableColumn({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
+    // `1 1 X%` sozinho deixava as colunas se comprimirem sem limite: com 7
+    // colunas cada uma ficava com ~14% e o card virava uma tira, com título
+    // quebrando em três linhas. minWidth trava o encolhimento e o quadro passa
+    // a rolar na horizontal — é assim que Trello, Jira e ClickUp se comportam.
     flex: `1 1 ${widthPct}%`,
+    minWidth: MIN_COLUMN_WIDTH,
     marginRight: isLast ? 0 : 8,
     borderTop: `3px solid ${stage.color}`,
     // Fundo cinza neutro (token dedicado, sem o matiz azul do --muted).
@@ -1731,7 +1743,9 @@ function SortableColumn({
     return (
       <div
         ref={setNodeRef}
-        style={{ ...style, flex: "0 0 auto", width: 44 }}
+        // minWidth precisa ser anulado: o spread traz MIN_COLUMN_WIDTH e a
+        // coluna recolhida tem largura fixa de 44px.
+        style={{ ...style, flex: "0 0 auto", width: 44, minWidth: 44 }}
         {...attributes}
         className="relative rounded-lg border bg-card border-border flex flex-col items-center overflow-hidden shadow-sm cursor-pointer hover:bg-muted/40 transition-colors"
         onClick={() => onToggleCollapse?.(stage.id)}
@@ -4319,7 +4333,9 @@ export const ActivityKanban = ({
           items={visibleStages.map((s) => `col-${s.id}`)}
           strategy={horizontalListSortingStrategy}
         >
-          <div ref={containerRef} className="flex pb-4 pt-2 px-2 w-full rounded-lg bg-muted/40" style={{ minHeight: 400 }}>
+          {/* overflow-x-auto: com muitas colunas o quadro rola em vez de
+              espremer cada uma até o card ficar ilegível (ver MIN_COLUMN_WIDTH). */}
+          <div ref={containerRef} className="flex pb-4 pt-2 px-2 w-full overflow-x-auto rounded-lg bg-muted/40" style={{ minHeight: 400 }}>
           {/* Tarefas do Dia - Quality Only */}
           {isQualityProject && (
             <div
@@ -4527,7 +4543,7 @@ export const ActivityKanban = ({
                       <span className="text-xs font-semibold">{lane.label}</span>
                       <span className="text-[10px] text-muted-foreground">{laneCount} {laneCount === 1 ? "card" : "cards"}</span>
                     </div>
-                    <div className="flex p-2">
+                    <div className="flex p-2 overflow-x-auto">
                       {visibleStages.map((stage, idx) => renderColumn(stage, idx, lane.match, lane.id))}
                     </div>
                   </div>
