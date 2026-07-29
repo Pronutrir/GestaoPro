@@ -295,6 +295,7 @@ const DENSITY_CLASSES: Record<KanbanDensity, {
   },
   md: {
     card: "p-2.5",
+    // 13px: o alvo aprovado. text-sm (14px) deixou o card grande demais.
     title: "text-[13px] leading-snug",
     desc: "text-[11px]",
     showDesc: true,
@@ -752,7 +753,7 @@ function KanbanCard({
                     }`}
                   >
                     {activity.wbs_code ? (
-                      <span className="inline-flex items-center h-[17px] px-1.5 mr-1.5 rounded border border-border bg-muted text-[10px] font-mono font-normal text-muted-foreground align-middle">
+                      <span className="inline-flex items-center h-[17px] px-1.5 mr-1.5 rounded border border-border bg-muted text-[10px] font-mono text-muted-foreground align-middle">
                         {activity.wbs_code}
                       </span>
                     ) : null}
@@ -773,6 +774,67 @@ function KanbanCard({
                       </span>
                     );
                   })()}
+            {/* Acoes NA LINHA DO TITULO, reveladas no hover: no rodape elas
+                      empurravam o conteudo e no canto superior cobriam o
+                      titulo. Aqui ocupam a folga que ja existe a direita. */}
+            {!readOnlyPreview && (
+              <div
+                className={`shrink-0 flex items-center gap-0.5 -mt-0.5 -mr-1 transition-opacity ${isBlocked ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onToggle} title="Concluir">
+                  {activity.status === "completed" ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                  ) : (
+                    <Circle className="w-3.5 h-3.5 text-muted-foreground" />
+                  )}
+                </Button>
+                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onEdit} title="Editar">
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onMoveToBacklog} title="Mover para Backlog">
+                  <Inbox className="w-3.5 h-3.5" />
+                </Button>
+                {onToggleBlocked && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className={`h-[22px] w-[22px] hover:bg-muted/70 ${isBlocked ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground hover:text-foreground"}`}
+                    onClick={(e) => { e.stopPropagation(); onToggleBlocked(); }}
+                    title={isBlocked ? "Desbloquear" : "Bloquear (o card fica onde está)"}
+                  >
+                    <Flag className={`w-3.5 h-3.5 ${isBlocked ? "fill-current" : ""}`} />
+                  </Button>
+                )}
+                {onLinkParent && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                    onClick={onLinkParent}
+                    title="Vincular ao pai"
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+                {SHOW_USER_STORIES && onCreateStory && (
+                  <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onCreateStory} title="Criar História">
+                    <BookOpen className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-[22px] w-[22px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    onClick={onDelete}
+                    title="Excluir"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
+            )}
                 </div>
 
                 {cardFields.description && activity.description && (
@@ -1030,68 +1092,6 @@ function KanbanCard({
               </div>
             </div>
 
-            {/* Ações no rodapé do card, reveladas no hover. Flutuar sobre o
-                canto superior direito cobria o título — o conteúdo do card vem
-                primeiro. Sem borda superior e com altura reduzida, para não
-                inflar o card como antes. */}
-            {!readOnlyPreview && (
-              <div
-                className="flex items-center gap-0.5 mt-1.5 max-h-0 overflow-hidden opacity-0 group-hover:max-h-8 group-hover:opacity-100 group-hover:mt-2 transition-all duration-150"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onToggle} title="Concluir">
-                  {activity.status === "completed" ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-                  ) : (
-                    <Circle className="w-3.5 h-3.5 text-muted-foreground" />
-                  )}
-                </Button>
-                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onEdit} title="Editar">
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onMoveToBacklog} title="Mover para Backlog">
-                  <Inbox className="w-3.5 h-3.5" />
-                </Button>
-                {onToggleBlocked && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className={`h-[22px] w-[22px] hover:bg-muted/70 ${isBlocked ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground hover:text-foreground"}`}
-                    onClick={(e) => { e.stopPropagation(); onToggleBlocked(); }}
-                    title={isBlocked ? "Desbloquear" : "Bloquear (o card fica onde está)"}
-                  >
-                    <Flag className={`w-3.5 h-3.5 ${isBlocked ? "fill-current" : ""}`} />
-                  </Button>
-                )}
-                {onLinkParent && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                    onClick={onLinkParent}
-                    title="Vincular ao pai"
-                  >
-                    <Link2 className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-                {SHOW_USER_STORIES && onCreateStory && (
-                  <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onCreateStory} title="Criar História">
-                    <BookOpen className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-                {isAdmin && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-[22px] w-[22px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    onClick={onDelete}
-                    title="Excluir"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-              </div>
-            )}
           </div>
         </TooltipTrigger>
         <TooltipContent side="right" className="max-w-[280px] space-y-1 text-xs">
@@ -1773,7 +1773,7 @@ function SortableColumn({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className="relative min-w-0 rounded-lg border border-border flex flex-col overflow-hidden shadow-sm"
+      className="group/col relative min-w-0 rounded-lg border border-border flex flex-col overflow-hidden shadow-sm"
     >
       {/* Column Header - drag handle for column reordering */}
       <div className={`${dCol.colHeaderPad} border-b border-border/60`} style={{ backgroundColor: "hsl(var(--kanban-col-head))" }}>
@@ -1848,6 +1848,11 @@ function SortableColumn({
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {/* Controles secundários (filtro, ordenar, recolher) só no hover:
+                cinco ícones fixos competiam com o próprio nome da coluna, que
+                em coluna estreita chegava a truncar. Criar e o menu ficam
+                sempre visíveis, por serem as ações do dia a dia. */}
+            <div className="flex items-center gap-0.5 opacity-0 group-hover/col:opacity-100 focus-within:opacity-100 transition-opacity">
             {/* Filtro por coluna (Frente B) — construído no pai, injetado aqui */}
             {columnFilterSlot}
             {/* Ordenar cards desta coluna — ícone discreto (era um select de largura total) */}
@@ -1920,6 +1925,7 @@ function SortableColumn({
                 <ChevronsLeft className="w-3.5 h-3.5" />
               </button>
             )}
+            </div>
             {canCreate && (
               <button
                 type="button"
