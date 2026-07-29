@@ -146,14 +146,19 @@ export const ActivityRegistro = ({
     ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
   }, []);
 
+  // Normaliza para casar menções de forma tolerante a acento/caixa/espaços.
+  const normName = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+
   // ── detecção de @ enquanto digita ──
+  // Reconhece o @ mesmo em nomes compostos (letras, dígitos e espaços internos),
+  // parando na pontuação/quebra de linha — assim "@Ana Paula" continua abrindo o menu.
   const onTextChange = (v: string) => {
     setText(v);
     autoGrow();
     const caret = taRef.current?.selectionStart ?? v.length;
     const upto = v.slice(0, caret);
-    const m = upto.match(/(?:^|\s)@([\p{L}\d]*)$/u);
-    if (m) { setMentionOpen(true); setMentionQuery(m[1]); setMentionIndex(0); }
+    const m = upto.match(/(?:^|\s)@([\p{L}\d]+(?: [\p{L}\d]+)*)?$/u);
+    if (m) { setMentionOpen(true); setMentionQuery(m[1] ?? ""); setMentionIndex(0); }
     else setMentionOpen(false);
   };
 
@@ -167,19 +172,30 @@ export const ActivityRegistro = ({
   const applyMention = (p: Person) => {
     const ta = taRef.current;
     const caret = ta?.selectionStart ?? text.length;
-    const before = text.slice(0, caret).replace(/@([\p{L}\d]*)$/u, "");
+    // Remove o fragmento @… já digitado (incl. nomes compostos com espaço) antes do caret.
+    const before = text.slice(0, caret).replace(/@([\p{L}\d]+(?: [\p{L}\d]+)*)?$/u, "");
     const after = text.slice(caret);
-    const next = `${before}@${p.full_name} ${after}`;
+    // Garante um espaço após o nome sem duplicar caso o texto seguinte já comece com espaço.
+    const sep = after.startsWith(" ") ? "" : " ";
+    const next = `${before}@${p.full_name}${sep}${after}`;
     setText(next);
     setMentionOpen(false);
-    setTimeout(() => { ta?.focus(); autoGrow(); }, 0);
+    // Reposiciona o cursor logo após o nome inserido.
+    const caretAfter = (before + "@" + p.full_name + sep).length;
+    setTimeout(() => {
+      ta?.focus();
+      ta?.setSelectionRange(caretAfter, caretAfter);
+      autoGrow();
+    }, 0);
   };
 
-  // Extrai @nomes citados que casam com pessoas reais.
+  // Extrai @nomes citados que casam com pessoas reais (tolerante a acento/caixa).
+  // Compara nome-a-nome sobre o corpo normalizado para não perder menções.
   const extractMentions = (body: string): Person[] => {
+    const nb = normName(body);
     const found: Person[] = [];
     for (const p of people) {
-      if (body.includes("@" + p.full_name)) found.push(p);
+      if (nb.includes("@" + normName(p.full_name))) found.push(p);
     }
     return found;
   };
@@ -217,10 +233,9 @@ export const ActivityRegistro = ({
       if (names.size === 0) return;
 
       // Resolve nome→id tolerante a acento/caixa/espaços, para não perder avisos.
-      const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
-      const idByName = new Map(people.map((p) => [norm(p.full_name), p.id]));
+      const idByName = new Map(people.map((p) => [normName(p.full_name), p.id]));
       const ids = Array.from(new Set(
-        Array.from(names).map((n) => idByName.get(norm(n))).filter(Boolean) as string[],
+        Array.from(names).map((n) => idByName.get(normName(n))).filter(Boolean) as string[],
       ));
       if (ids.length === 0) return;
 
@@ -234,8 +249,12 @@ export const ActivityRegistro = ({
         title: mentionedIds.has(uid) ? `${authorName} citou você em "${title}"` : `Novo registro em "${title}"`,
         message: `${authorName}: ${body.slice(0, 120)}`,
       }));
-      await (supabase as any).from("notifications").insert(rows);
-    } catch { /* silencioso */ }
+      const { error } = await (supabase as any).from("notifications").insert(rows);
+      // Falha de notificação não bloqueia o envio da mensagem, mas fica logada p/ depuração.
+      if (error) console.warn("[ActivityRegistro] falha ao inserir notificações:", error.message);
+    } catch (e) {
+      console.warn("[ActivityRegistro] erro inesperado ao notificar:", e);
+    }
   };
 
   const saveEdit = async () => {
@@ -289,32 +308,41 @@ export const ActivityRegistro = ({
       day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
     });
 
-  // Renderiza o corpo destacando @menções.
+  // Renderiza o corpo destacando @menções. O casamento é tolerante a acento/caixa:
+  // compara o trecho original (preservado na tela) com o nome, ambos normalizados
+  // sem alterar o comprimento, para os índices continuarem alinhados ao texto exibido.
   const renderBody = (body: string) => {
-    const names = people.map((p) => p.full_name).sort((a, b) => b.length - a.length);
+    // normalização que NÃO muda o comprimento (só minúsculas + remove marcas combinantes)
+    const nz = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const names = people
+      .map((p) => ({ raw: p.full_name, n: nz(p.full_name) }))
+      .filter((x) => x.n.length > 0)
+      .sort((a, b) => b.n.length - a.n.length); // mais longo primeiro (evita casar prefixo)
     if (names.length === 0) return body;
+
     const parts: (string | { m: string })[] = [];
-    let rest = body;
-    outer: while (rest.length) {
-      for (const n of names) {
-        const tok = "@" + n;
-        const i = rest.indexOf(tok);
-        if (i === 0) { parts.push({ m: tok }); rest = rest.slice(tok.length); continue outer; }
+    let i = 0;
+    let buf = "";
+    while (i < body.length) {
+      if (body[i] === "@") {
+        const restN = nz(body.slice(i + 1));
+        const hit = names.find((x) => restN.startsWith(x.n));
+        if (hit) {
+          if (buf) { parts.push(buf); buf = ""; }
+          const tok = body.slice(i, i + 1 + hit.raw.length); // preserva o texto original
+          parts.push({ m: tok });
+          i += 1 + hit.raw.length;
+          continue;
+        }
       }
-      // avança 1 char (acumulando texto) até achar uma menção
-      const nextAt = rest.indexOf("@", 1);
-      if (nextAt === -1) { parts.push(rest); break; }
-      // procura menção a partir do próximo @
-      let matched = false;
-      for (const n of names) {
-        if (rest.startsWith("@" + n, nextAt)) { matched = true; break; }
-      }
-      if (matched) { parts.push(rest.slice(0, nextAt)); rest = rest.slice(nextAt); }
-      else { parts.push(rest); break; }
+      buf += body[i];
+      i += 1;
     }
-    return parts.map((p, i) =>
-      typeof p === "string" ? <span key={i}>{p}</span>
-        : <span key={i} className="text-primary font-medium bg-primary/10 rounded px-1">{p.m}</span>,
+    if (buf) parts.push(buf);
+
+    return parts.map((p, idx) =>
+      typeof p === "string" ? <span key={idx}>{p}</span>
+        : <span key={idx} className="text-primary font-medium bg-primary/10 rounded px-1">{p.m}</span>,
     );
   };
 
