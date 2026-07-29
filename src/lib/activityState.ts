@@ -29,6 +29,8 @@ export interface ActivityStateInput {
   end_date?: string | null;
   workflow_stage_id?: string | null;
   last_progress_stage_id?: string | null;
+  /** Bloqueio "in place": flag na própria atividade, não na coluna. */
+  is_blocked?: boolean | null;
 }
 
 /** Rótulos exibidos ao usuário. Uma grafia só, em todas as telas. */
@@ -118,6 +120,9 @@ export function resolveActivityState(
   if (parseWorkflowCategory(stage?.categoria) === "cancelada") return "cancelada";
   if (isActivityCompleted(activity, stage)) return "concluida";
   if (isActivityOverdue(activity, stage, today)) return "atrasada";
+  // Bloqueio "in place": vem da flag da atividade. Atrasada tem precedência —
+  // um bloqueio que já estourou o prazo é, antes de tudo, um atraso.
+  if (activity.is_blocked) return "bloqueada";
 
   const progress = computeActivityProgress(
     activity.workflow_stage_id,

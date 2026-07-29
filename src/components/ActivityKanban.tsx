@@ -367,6 +367,9 @@ interface Activity {
   progress_flag?: number | null;
   blocked_since?: string | null;
   blocked_days_total?: number | null;
+  /** Bloqueio "in place": marcado na atividade, não pela coluna. */
+  is_blocked?: boolean | null;
+  blocked_reason?: string | null;
   created_by?: string | null;
 }
 
@@ -439,6 +442,7 @@ function SortableKanbanCard({
   onLinkParent,
   isAdmin,
   isBlocked,
+  onToggleBlocked,
   hasStory,
   storyCount,
   onStoryClick,
@@ -471,6 +475,7 @@ function SortableKanbanCard({
   onLinkParent?: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
+  onToggleBlocked?: () => void;
   hasStory?: boolean;
   storyCount?: number;
   onStoryClick?: () => void;
@@ -516,6 +521,7 @@ function SortableKanbanCard({
         dragListeners={listeners}
         isAdmin={isAdmin}
         isBlocked={isBlocked}
+        onToggleBlocked={onToggleBlocked}
         hasStory={hasStory}
         storyCount={storyCount}
         onStoryClick={onStoryClick}
@@ -554,6 +560,7 @@ function KanbanCard({
   dragListeners,
   isAdmin,
   isBlocked,
+  onToggleBlocked,
   hasStory,
   storyCount,
   onStoryClick,
@@ -588,6 +595,7 @@ function KanbanCard({
   dragListeners?: any;
   isAdmin?: boolean;
   isBlocked?: boolean;
+  onToggleBlocked?: () => void;
   hasStory?: boolean;
   storyCount?: number;
   onStoryClick?: () => void;
@@ -633,10 +641,12 @@ function KanbanCard({
   // 'pacote' legado e qualquer item com filhos. Exibido sempre como Fase.
   const isPhase =
     !isMilestone && (eapType === "fase" || eapType === "pacote" || (subActivityCount ?? 0) > 0);
-  const cardBorderClass = isMilestone
-    ? "border-amber-500 border-l-[4px] border-l-amber-500 bg-amber-500/5"
-    : isBlocked
-      ? "border-orange-500 border-l-[3px] border-l-orange-500 bg-orange-500/5"
+  // Bloqueio vem ANTES de marco: é o estado que exige ação, e um marco
+  // travado precisa ser lido como travado.
+  const cardBorderClass = isBlocked
+    ? "border-l-[3px] border-l-amber-500 bg-amber-500/[0.06]"
+    : isMilestone
+      ? "border-amber-500 border-l-[4px] border-l-amber-500 bg-amber-500/5"
       : isOverdue
         ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue"
         : "border-border";
@@ -790,6 +800,34 @@ function KanbanCard({
                 </div>
                 )}
 
+                {/* Bloqueio in place: o card continua na coluna onde o trabalho
+                    está, com o motivo legível e há quanto tempo está travado. */}
+                {isBlocked && (
+                  <div
+                    className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold text-amber-700 dark:text-amber-500"
+                    title={
+                      activity.blocked_since
+                        ? `Bloqueada desde ${new Date(activity.blocked_since).toLocaleString("pt-BR")}`
+                        : "Bloqueada"
+                    }
+                  >
+                    <Flag className="w-2.5 h-2.5 shrink-0 fill-current" />
+                    <span className="truncate">
+                      {activity.blocked_reason
+                        ? `Bloqueada — ${activity.blocked_reason}`
+                        : "Bloqueada"}
+                    </span>
+                    {(() => {
+                      const label = formatBlockedDays(getBlockedDays(activity));
+                      return label ? (
+                        <span className="ml-auto shrink-0 font-normal text-muted-foreground tabular-nums">
+                          {label}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-1">
                   {!!blockedSubsCount && blockedSubsCount > 0 && (
                     <Badge
@@ -799,22 +837,8 @@ function KanbanCard({
                       ⚠ {blockedSubsCount} sub{blockedSubsCount > 1 ? "s" : ""} impedida{blockedSubsCount > 1 ? "s" : ""}
                     </Badge>
                   )}
-                  {isBlocked && (
-                    <Badge
-                      className="bg-orange-500/20 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0"
-                      title={
-                        activity.blocked_since
-                          ? `Bloqueada desde ${new Date(activity.blocked_since).toLocaleString("pt-BR")}`
-                          : undefined
-                      }
-                    >
-                      🚫 {(() => {
-                        const days = getBlockedDays(activity);
-                        const label = formatBlockedDays(days);
-                        return label ? label : "Bloqueada";
-                      })()}
-                    </Badge>
-                  )}
+                  {/* Bloqueio virou linha própria, fora desta faixa de badges —
+                      ver o bloco "Bloqueio in place" logo abaixo. */}
                   {isQualityProject && activity.deadline_flag && activity.deadline_flag !== "" && (
                     <Badge className={`text-[10px] px-1.5 py-0 ${
                       activity.deadline_flag === "green" ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/30" :
@@ -1009,6 +1033,17 @@ function KanbanCard({
                 <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onMoveToBacklog} title="Mover para Backlog">
                   <Inbox className="w-3.5 h-3.5" />
                 </Button>
+                {onToggleBlocked && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className={`h-6 w-6 hover:bg-muted/70 ${isBlocked ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground hover:text-foreground"}`}
+                    onClick={(e) => { e.stopPropagation(); onToggleBlocked(); }}
+                    title={isBlocked ? "Desbloquear" : "Bloquear (o card fica onde está)"}
+                  >
+                    <Flag className={`w-3.5 h-3.5 ${isBlocked ? "fill-current" : ""}`} />
+                  </Button>
+                )}
                 {onLinkParent && (
                   <Button
                     size="icon"
@@ -1293,6 +1328,7 @@ function SortableColumn({
   onDeleteActivity,
   onToggleActivity,
   onMoveToBacklog,
+  onToggleBlocked,
   onLinkParent,
   onCreateActivity,
   storyLinkedActivities,
@@ -1343,6 +1379,7 @@ function SortableColumn({
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onMoveToBacklog: (activityId: string) => void;
+  onToggleBlocked: (activityId: string) => void;
   onLinkParent?: (activityId: string, currentParentId: string | null) => void;
   onCreateActivity: (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => Promise<void>;
   storyLinkedActivities: Map<string, number>;
@@ -1490,9 +1527,9 @@ function SortableColumn({
     opacity: isDragging ? 0.4 : 1,
     flex: `1 1 ${widthPct}%`,
     marginRight: isLast ? 0 : 8,
-    borderTop: stage.is_blocked ? undefined : `3px solid ${stage.color}`,
+    borderTop: `3px solid ${stage.color}`,
     // Fundo cinza neutro (token dedicado, sem o matiz azul do --muted).
-    backgroundColor: stage.is_blocked ? undefined : "hsl(var(--kanban-col-bg))",
+    backgroundColor: "hsl(var(--kanban-col-bg))",
   };
 
   const phaseOrderMap: Record<string, number> = {};
@@ -1591,8 +1628,9 @@ function SortableColumn({
     const parentBreadcrumb = parentAct && parentAct.workflow_stage_id !== activity.workflow_stage_id
       ? { id: parentAct.id, title: parentAct.title, wbsCode: parentAct.wbs_code }
       : null;
-    const blockedStageIds = new Set(allStages.filter((s) => s.is_blocked).map((s) => s.id));
-    const blockedSubsCount = allChildren.filter((c) => c.workflow_stage_id && blockedStageIds.has(c.workflow_stage_id)).length;
+    // Subtarefas impedidas: agora pela flag da própria atividade, não por
+    // estarem numa coluna de bloqueio.
+    const blockedSubsCount = allChildren.filter((c) => c.is_blocked).length;
 
     const commonCardProps = {
       activity,
@@ -1603,7 +1641,10 @@ function SortableColumn({
       onMoveToBacklog: () => onMoveToBacklog(activity.id),
       onLinkParent: () => onLinkParent?.(activity.id, activity.parent_id ?? null),
       isAdmin,
-      isBlocked: stage.is_blocked,
+      // "block in place": o bloqueio é da ATIVIDADE, não da coluna — o card
+      // fica onde o trabalho está e segue contando no limite de WIP.
+      isBlocked: !!activity.is_blocked,
+      onToggleBlocked: () => onToggleBlocked(activity.id),
       hasStory: storyLinkedActivities.has(activity.id),
       storyCount: storyLinkedActivities.get(activity.id) || 0,
       onStoryClick: () => onStoryClick(activity.id),
@@ -1680,9 +1721,7 @@ function SortableColumn({
         ref={setNodeRef}
         style={{ ...style, flex: "0 0 auto", width: 44 }}
         {...attributes}
-        className={`relative rounded-lg border flex flex-col items-center overflow-hidden shadow-sm cursor-pointer hover:bg-muted/40 transition-colors ${
-          stage.is_blocked ? "bg-orange-500/10 border-orange-500/40" : "bg-card border-border"
-        }`}
+        className="relative rounded-lg border bg-card border-border flex flex-col items-center overflow-hidden shadow-sm cursor-pointer hover:bg-muted/40 transition-colors"
         onClick={() => onToggleCollapse?.(stage.id)}
         title={`${getStageDisplayTitle(stage.title)} · ${visibleCardCount} card(s) — clique para expandir`}
       >
@@ -1708,14 +1747,10 @@ function SortableColumn({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className={`relative min-w-0 rounded-lg border flex flex-col overflow-hidden shadow-sm ${
-        stage.is_blocked
-          ? "bg-orange-500/10 border-orange-500/40"
-          : "border-border"
-      }`}
+      className="relative min-w-0 rounded-lg border border-border flex flex-col overflow-hidden shadow-sm"
     >
       {/* Column Header - drag handle for column reordering */}
-      <div className={`${dCol.colHeaderPad} border-b border-border/60`} style={stage.is_blocked ? undefined : { backgroundColor: "hsl(var(--kanban-col-head))" }}>
+      <div className={`${dCol.colHeaderPad} border-b border-border/60`} style={{ backgroundColor: "hsl(var(--kanban-col-head))" }}>
         <div className="flex items-center justify-between cursor-grab active:cursor-grabbing" {...listeners}>
           <div className="flex items-center gap-2 min-w-0">
             <div
@@ -1753,6 +1788,25 @@ function SortableColumn({
                 {getStageDisplayTitle(stage.title)}
               </h3>
             )}
+            {/* Categoria — só quando difere do nome da coluna. "Em Andamento"
+                com o rótulo "Em andamento" embaixo seria repetição pura; o que
+                interessa é quando divergem ("Entregue ao cliente" = Concluída). */}
+            {(() => {
+              const cat = parseWorkflowCategory(stage.categoria);
+              if (!cat) return null;
+              const meta = WORKFLOW_CATEGORY_META[cat];
+              const norm = (s: string) =>
+                s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+              if (norm(meta.label) === norm(getStageDisplayTitle(stage.title))) return null;
+              return (
+                <span
+                  className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0"
+                  title={meta.hint}
+                >
+                  {meta.label}
+                </span>
+              );
+            })()}
             {stage.wip_limit != null && stage.wip_limit > 0 ? (
               <Badge
                 variant="outline"
@@ -1935,17 +1989,10 @@ function SortableColumn({
                     <Check className="w-3.5 h-3.5 mr-2 text-success" />
                     {stage.is_final ? "Remover marca de Final" : "Marcar como Final"}
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="focus:bg-muted/60 focus:text-foreground"
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      onToggleStageBlocked(stage.id, stage.is_blocked);
-                    }}
-                    title="Bloqueio: atividades nesta coluna ficam pausadas, sem avanço de progresso."
-                  >
-                    <AlertCircle className="w-3.5 h-3.5 mr-2 text-orange-500" />
-                    {stage.is_blocked ? "Remover Bloqueio" : "Marcar como Bloqueio"}
-                  </DropdownMenuItem>
+                  {/* "Marcar como Bloqueio" saiu daqui: bloqueio é do ITEM, não
+                      da coluna. Uma coluna de bloqueio tira o card do fluxo,
+                      escapa do limite de WIP e distorce o tempo por etapa —
+                      agora se bloqueia pelo próprio card, que fica no lugar. */}
                   <DropdownMenuItem
                     className="focus:bg-muted/60 focus:text-foreground"
                     onSelect={(e) => {
@@ -2231,6 +2278,10 @@ export const ActivityKanban = ({
   const [storyDrawerActivityId, setStoryDrawerActivityId] = useState<string | null>(null);
   const [storyDrawerOpen, setStoryDrawerOpen] = useState(false);
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
+  // Bloqueio "in place": a atividade fica na coluna e recebe a flag.
+  const [blockingActivity, setBlockingActivity] = useState<Activity | null>(null);
+  const [blockReason, setBlockReason] = useState("");
+  const [blockSaving, setBlockSaving] = useState(false);
   const [createStoryTitle, setCreateStoryTitle] = useState("");
   const [createStoryNarrative, setCreateStoryNarrative] = useState("");
   const [createStoryLoading, setCreateStoryLoading] = useState(false);
@@ -2947,6 +2998,59 @@ export const ActivityKanban = ({
         );
       }
     }
+  };
+
+  /**
+   * Bloquear/desbloquear "in place": a atividade permanece na coluna onde o
+   * trabalho está e recebe a flag. Desbloquear é imediato; bloquear abre o
+   * diálogo do motivo (o trigger no banco cuida de blocked_since e do
+   * acumulado em blocked_days_total).
+   */
+  const handleToggleBlocked = async (activityId: string) => {
+    if (projectLocked) {
+      showProjectLockedToast("bloquear atividades");
+      return;
+    }
+    const activity = activities.find((a) => a.id === activityId);
+    if (!canMutateActivity(activity)) {
+      toast({ title: "Somente o criador ou responsável da atividade pode bloquear.", variant: "destructive" });
+      return;
+    }
+    if (activity?.is_blocked) {
+      const { error } = await supabase
+        .from("activities")
+        .update({ is_blocked: false } as never)
+        .eq("id", activityId);
+      if (error) {
+        toast({ title: "Erro ao desbloquear", description: error.message, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Atividade desbloqueada" });
+      onDataChanged();
+      return;
+    }
+    setBlockReason("");
+    setBlockingActivity(activity ?? null);
+  };
+
+  const confirmBlockActivity = async () => {
+    if (!blockingActivity) return;
+    setBlockSaving(true);
+    const { error } = await supabase
+      .from("activities")
+      .update({
+        is_blocked: true,
+        blocked_reason: blockReason.trim() || null,
+      } as never)
+      .eq("id", blockingActivity.id);
+    setBlockSaving(false);
+    if (error) {
+      toast({ title: "Erro ao bloquear", description: error.message, variant: "destructive" });
+      return;
+    }
+    setBlockingActivity(null);
+    setBlockReason("");
+    onDataChanged();
   };
 
   const handleMoveToBacklog = async (activityId: string) => {
@@ -4252,6 +4356,8 @@ export const ActivityKanban = ({
                       onMoveToBacklog={() => handleMoveToBacklog(activity.id)}
                       onLinkParent={canManageHierarchy ? () => openLinkParent(activity.id, activity.parent_id ?? null) : undefined}
                       isAdmin={isAdmin}
+                      isBlocked={!!activity.is_blocked}
+                      onToggleBlocked={() => handleToggleBlocked(activity.id)}
                       hasStory={storyLinkedActivities.has(activity.id)}
                       storyCount={storyLinkedActivities.get(activity.id) || 0}
                       onStoryClick={() => { setStoryDrawerActivityId(activity.id); setStoryDrawerOpen(true); }}
@@ -4311,6 +4417,7 @@ export const ActivityKanban = ({
                 onDeleteActivity={onDeleteActivity}
                 onToggleActivity={onToggleActivity}
                 onMoveToBacklog={handleMoveToBacklog}
+                onToggleBlocked={handleToggleBlocked}
                 onLinkParent={canManageHierarchy ? openLinkParent : undefined}
                 onCreateActivity={handleCreateActivity}
                 storyLinkedActivities={storyLinkedActivities}
@@ -4500,6 +4607,47 @@ export const ActivityKanban = ({
           }}
         />
       )}
+
+      {/* Bloquear atividade — o card NÃO sai da coluna ("block in place"),
+          para continuar contando no WIP e no tempo por etapa. */}
+      <Dialog open={!!blockingActivity} onOpenChange={(open) => { if (!open) setBlockingActivity(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Flag className="w-4 h-4 text-amber-600 fill-current" />
+              Bloquear atividade
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs text-muted-foreground">Atividade</Label>
+              <p className="text-sm font-medium">{blockingActivity?.title}</p>
+            </div>
+            <div>
+              <Label htmlFor="block-reason" className="text-xs text-muted-foreground">
+                O que está impedindo?
+              </Label>
+              <Input
+                id="block-reason"
+                value={blockReason}
+                onChange={(e) => setBlockReason(e.target.value)}
+                placeholder="Ex.: aguardando acesso ao ambiente"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter") confirmBlockActivity(); }}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                A atividade continua nesta coluna. O tempo bloqueado começa a contar agora.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setBlockingActivity(null)}>Cancelar</Button>
+            <Button onClick={confirmBlockActivity} disabled={blockSaving}>
+              {blockSaving ? "Bloqueando..." : "Bloquear"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog para criar história rápida — oculto junto com o recurso
           (ver SHOW_USER_STORIES em lib/featureFlags). */}
