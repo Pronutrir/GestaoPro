@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { isActivityOverdue } from "./activityState";
 
 export interface HealthScoreResult {
   score: number;
@@ -13,22 +14,34 @@ export interface HealthScoreResult {
 }
 
 export async function calculateHealthScore(projectId: string): Promise<HealthScoreResult> {
-  const [activitiesRes, risksRes, projectRes] = await Promise.all([
-    supabase.from("activities").select("id, status, end_date").eq("project_id", projectId),
+  const [activitiesRes, risksRes, projectRes, stagesRes] = await Promise.all([
+    // workflow_stage_id é necessário para respeitar a coluna final do Kanban:
+    // sem ele, uma atividade encerrada no quadro contava como atrasada aqui.
+    supabase
+      .from("activities")
+      .select("id, status, end_date, workflow_stage_id")
+      .eq("project_id", projectId),
     supabase.from("risks").select("id, probability, impact, status").eq("project_id", projectId).eq("is_trashed", false),
     supabase.from("projects").select("budget_planned, budget_used, updated_at").eq("id", projectId).single(),
+    supabase.from("workflow_stages").select("id, is_final").eq("project_id", projectId),
   ]);
 
   const activities = activitiesRes.data || [];
   const risks = risksRes.data || [];
   const project = projectRes.data;
 
+  const finalStageIds = new Set(
+    (stagesRes.data || []).filter((s: any) => s.is_final).map((s: any) => s.id),
+  );
+
   // 1. Prazo (40%)
+  // Usa a mesma regra do Cronograma (lib/activityState) — antes esta conta
+  // ignorava a coluna final do Kanban e as duas telas divergiam.
   const total = activities.length;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const overdue = activities.filter(
-    (a) => a.status !== "completed" && a.end_date && new Date(a.end_date) < today
+  const overdue = activities.filter((a: any) =>
+    isActivityOverdue(a, { is_final: finalStageIds.has(a.workflow_stage_id) }, today),
   ).length;
   const prazo = total > 0 ? (1 - overdue / total) * 100 : 100;
 
