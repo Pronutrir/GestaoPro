@@ -101,7 +101,7 @@ import { normalizeGut, GUT_META, type GutLevel } from "@/lib/gutPriority";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
 import {
   suggestCategoryFromTitle, categoryFromLegacyFlags, parseWorkflowCategory,
-  WORKFLOW_CATEGORY_META, type WorkflowCategory,
+  type WorkflowCategory,
 } from "@/lib/workflowCategory";
 import { SHOW_USER_STORIES } from "@/lib/featureFlags";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
@@ -1023,15 +1023,13 @@ function KanbanCard({
               </div>
             </div>
 
-            {/* Ações FLUTUANDO no topo direito, sobre o card: como barra própria
-                com borda superior, elas somavam ~30px de altura a cada card e
-                empurravam o conteúdo. Aparecem no hover; quando a atividade
-                está bloqueada, a bandeira fica sempre visível. */}
+            {/* Ações no rodapé do card, reveladas no hover. Flutuar sobre o
+                canto superior direito cobria o título — o conteúdo do card vem
+                primeiro. Sem borda superior e com altura reduzida, para não
+                inflar o card como antes. */}
             {!readOnlyPreview && (
               <div
-                className={`absolute top-1.5 right-1.5 z-10 flex items-center gap-0.5 rounded-md bg-card/95 backdrop-blur-[2px] shadow-sm border border-border/60 px-0.5 transition-opacity ${
-                  isBlocked ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                }`}
+                className="flex items-center gap-0.5 mt-1.5 max-h-0 overflow-hidden opacity-0 group-hover:max-h-8 group-hover:opacity-100 group-hover:mt-2 transition-all duration-150"
                 onClick={(e) => e.stopPropagation()}
               >
                 <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onToggle} title="Concluir">
@@ -1802,31 +1800,11 @@ function SortableColumn({
                 {getStageDisplayTitle(stage.title)}
               </h3>
             )}
-            {/* Categoria — some quando o nome da coluna já a comunica, e some
-                também no modo compacto, onde competia com o próprio título
-                (a coluna truncava "A Fazer" para "A ..." e mostrava a
-                categoria inteira ao lado). O menu da coluna sempre mostra. */}
-            {(() => {
-              if (density === "sm") return null;
-              const cat = parseWorkflowCategory(stage.categoria);
-              if (!cat) return null;
-              const meta = WORKFLOW_CATEGORY_META[cat];
-              const norm = (s: string) =>
-                s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-              const title = norm(getStageDisplayTitle(stage.title));
-              const label = norm(meta.label);
-              // Redundante quando um contém o outro: "Em Andamento" ~ "Em
-              // andamento", "Concluída" ~ "Concluída", "Cancelado" ~ "Cancelada".
-              if (title.includes(label) || label.includes(title)) return null;
-              return (
-                <span
-                  className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0"
-                  title={meta.hint}
-                >
-                  {meta.label}
-                </span>
-              );
-            })()}
+            {/* A categoria NÃO é exibida ao lado do título: com várias colunas
+                classificadas como "andamento", o cabeçalho passava a repetir
+                "EM ANDAMENTO" quadro afora e dava a impressão de que os nomes
+                das colunas tinham mudado. Ela vive no menu da coluna, onde é
+                escolhida — e é lá que se confere. */}
             {stage.wip_limit != null && stage.wip_limit > 0 ? (
               <Badge
                 variant="outline"
