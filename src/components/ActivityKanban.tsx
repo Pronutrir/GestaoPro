@@ -92,6 +92,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { getBlockedDays, formatBlockedDays } from "@/lib/blockedTime";
+import { KANBAN_TOKENS } from "@/lib/kanbanTokens";
 import {
   computeActivityProgress,
   type ActivityProgress,
@@ -196,8 +197,6 @@ const getStageDisplayTitle = (title: string) => {
   return title;
 };
 
-export type KanbanDensity = "sm" | "md" | "lg";
-
 // Campos configuráveis do card. O usuário liga/desliga cada um pelo painel
 // "⚙ Card". Alguns elementos (título, código EAP, ícone de tipo, bloqueio e
 // alerta de subs impedidas) são sinais críticos e NÃO entram aqui — sempre
@@ -265,64 +264,8 @@ export const CARD_FIELD_GROUPS: { group: string; items: { key: keyof CardFields;
  */
 const MIN_COLUMN_WIDTH = 272;
 
-const DENSITY_CLASSES: Record<KanbanDensity, {
-  card: string;
-  title: string;
-  desc: string;
-  showDesc: boolean;
-  showProgress: boolean;
-  showBadges: boolean;
-  descClamp: string;
-  gap: string;
-  colHeaderPad: string;
-  colBodyPad: string;
-  colBodyGap: string;
-  colHeaderTitle: string;
-}> = {
-  sm: {
-    card: "p-1.5",
-    title: "text-[11px] leading-tight",
-    desc: "text-[10px]",
-    showDesc: false,
-    showProgress: false,
-    showBadges: false,
-    descClamp: "line-clamp-1",
-    gap: "gap-1",
-    colHeaderPad: "px-2 py-1",
-    colBodyPad: "p-1 space-y-1",
-    colBodyGap: "space-y-1",
-    colHeaderTitle: "text-xs",
-  },
-  md: {
-    card: "p-2.5",
-    // 13px: o alvo aprovado. text-sm (14px) deixou o card grande demais.
-    title: "text-[13px] leading-snug",
-    desc: "text-[11px]",
-    showDesc: true,
-    showProgress: true,
-    showBadges: true,
-    descClamp: "line-clamp-1",
-    gap: "gap-1.5",
-    colHeaderPad: "px-2.5 py-2",
-    colBodyPad: "p-2 space-y-2",
-    colBodyGap: "space-y-1.5",
-    colHeaderTitle: "text-sm",
-  },
-  lg: {
-    card: "p-3.5",
-    title: "text-sm leading-snug",
-    desc: "text-xs",
-    showDesc: true,
-    showProgress: true,
-    showBadges: true,
-    descClamp: "line-clamp-3",
-    gap: "gap-2",
-    colHeaderPad: "px-3 py-2.5",
-    colBodyPad: "p-3 space-y-2.5",
-    colBodyGap: "space-y-2",
-    colHeaderTitle: "text-sm",
-  },
-};
+// Medidas do quadro: fonte única em lib/kanbanTokens (a imagem aprovada).
+// Nunca reintroduzir tabelas de densidade aqui — ver o comentário no token.
 
 interface WorkflowStage {
   id: string;
@@ -465,7 +408,6 @@ function SortableKanbanCard({
   isExpanded,
   onToggleExpand,
   progress,
-  density,
   cardFields,
   parentBreadcrumb,
   blockedSubsCount,
@@ -498,7 +440,6 @@ function SortableKanbanCard({
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
-  density?: KanbanDensity;
   cardFields?: CardFields;
   parentBreadcrumb?: { id: string; title: string; wbsCode?: string | null } | null;
   blockedSubsCount?: number;
@@ -544,7 +485,6 @@ function SortableKanbanCard({
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
         progress={progress}
-        density={density}
         cardFields={cardFields}
         parentBreadcrumb={parentBreadcrumb}
         blockedSubsCount={blockedSubsCount}
@@ -583,7 +523,6 @@ function KanbanCard({
   isExpanded,
   onToggleExpand,
   progress,
-  density = "md",
   cardFields = DEFAULT_CARD_FIELDS,
   parentBreadcrumb,
   blockedSubsCount,
@@ -618,7 +557,6 @@ function KanbanCard({
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   progress?: ActivityProgress;
-  density?: KanbanDensity;
   cardFields?: CardFields;
   parentBreadcrumb?: { id: string; title: string; wbsCode?: string | null } | null;
   blockedSubsCount?: number;
@@ -642,6 +580,11 @@ function KanbanCard({
 
   const parseDate = (d: string) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day); };
   const isOverdue = activity.end_date && parseDate(activity.end_date) < new Date() && activity.status !== "completed";
+
+  // O menu "..." vive num container que só aparece no hover. Ao mover o mouse
+  // para dentro do dropdown o card perde o hover, e sem isto o gatilho sumiria
+  // com o menu ainda aberto.
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const isMilestone = !!(activity as any).is_milestone;
   const eapType = (activity as any).item_type as string | undefined;
@@ -691,7 +634,7 @@ function KanbanCard({
     : null;
   const assigneeAvatar = resolveAvatarFromLookup(assigneeRaw, assigneeName, profileAvatarMap);
 
-  const d = DENSITY_CLASSES[density];
+  const d = KANBAN_TOKENS;
 
   return (
     <TooltipProvider delayDuration={400}>
@@ -774,67 +717,100 @@ function KanbanCard({
                       </span>
                     );
                   })()}
-            {/* Acoes NA LINHA DO TITULO, reveladas no hover: no rodape elas
-                      empurravam o conteudo e no canto superior cobriam o
-                      titulo. Aqui ocupam a folga que ja existe a direita. */}
+            {/* Acoes NO FLUXO, no fim da linha do titulo: [Concluir][...].
+                Absolutas elas sobrepunham o que estivesse no canto (badge de
+                prioridade, inicio do titulo). Em fluxo a sobreposicao e
+                impossivel — e com so 2 botoes o custo e 44px fixos, nao os
+                ~140px da fileira antiga de 6 icones. Invisiveis fora do hover
+                (opacity preserva o espaco: o layout nao pula), visiveis com o
+                menu aberto e na navegacao por teclado. */}
             {!readOnlyPreview && (
               <div
-                className={`shrink-0 flex items-center gap-0.5 -mt-0.5 -mr-1 transition-opacity ${isBlocked ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                className={`shrink-0 flex items-center gap-0.5 -mt-0.5 -mr-1 transition-opacity ${menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"}`}
                 onClick={(e) => e.stopPropagation()}
               >
-                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onToggle} title="Concluir">
+                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onToggle} title={activity.status === "completed" ? "Reabrir" : "Concluir"}>
                   {activity.status === "completed" ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-success" />
                   ) : (
                     <Circle className="w-3.5 h-3.5 text-muted-foreground" />
                   )}
                 </Button>
-                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onEdit} title="Editar">
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onMoveToBacklog} title="Mover para Backlog">
-                  <Inbox className="w-3.5 h-3.5" />
-                </Button>
-                {onToggleBlocked && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className={`h-[22px] w-[22px] hover:bg-muted/70 ${isBlocked ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground hover:text-foreground"}`}
-                    onClick={(e) => { e.stopPropagation(); onToggleBlocked(); }}
-                    title={isBlocked ? "Desbloquear" : "Bloquear (o card fica onde está)"}
+                <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="h-[22px] w-[22px] flex items-center justify-center rounded text-muted-foreground hover:bg-muted/70 hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      title="Opções da atividade"
+                    >
+                      <MoreHorizontal className="w-3.5 h-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-52"
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                   >
-                    <Flag className={`w-3.5 h-3.5 ${isBlocked ? "fill-current" : ""}`} />
-                  </Button>
-                )}
-                {onLinkParent && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                    onClick={onLinkParent}
-                    title="Vincular ao pai"
-                  >
-                    <Link2 className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-                {SHOW_USER_STORIES && onCreateStory && (
-                  <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onCreateStory} title="Criar História">
-                    <BookOpen className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-                {isAdmin && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-[22px] w-[22px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    onClick={onDelete}
-                    title="Excluir"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                )}
+                    <DropdownMenuItem
+                      className="focus:bg-muted/60 focus:text-foreground"
+                      onSelect={() => onEdit()}
+                    >
+                      <Pencil className="w-3.5 h-3.5 mr-2" /> Editar
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    {onToggleBlocked && (
+                      <DropdownMenuItem
+                        className="focus:bg-muted/60 focus:text-foreground"
+                        onSelect={() => onToggleBlocked()}
+                        title={isBlocked ? "Desbloquear" : "Bloquear (o card fica onde está)"}
+                      >
+                        <Flag className={`w-3.5 h-3.5 mr-2 ${isBlocked ? "fill-current text-amber-600 dark:text-amber-500" : ""}`} />
+                        {isBlocked ? "Desbloquear" : "Bloquear"}
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem
+                      className="focus:bg-muted/60 focus:text-foreground"
+                      onSelect={() => onMoveToBacklog()}
+                    >
+                      <Inbox className="w-3.5 h-3.5 mr-2" /> Mover para Backlog
+                    </DropdownMenuItem>
+                    {onLinkParent && (
+                      <DropdownMenuItem
+                        className="focus:bg-muted/60 focus:text-foreground"
+                        onSelect={() => onLinkParent()}
+                      >
+                        <Link2 className="w-3.5 h-3.5 mr-2" /> Vincular ao pai
+                      </DropdownMenuItem>
+                    )}
+                    {SHOW_USER_STORIES && onCreateStory && (
+                      <DropdownMenuItem
+                        className="focus:bg-muted/60 focus:text-foreground"
+                        onSelect={() => onCreateStory()}
+                      >
+                        <BookOpen className="w-3.5 h-3.5 mr-2" /> Criar História
+                      </DropdownMenuItem>
+                    )}
+
+                    {isAdmin && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                          onSelect={() => onDelete()}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-            )}
+            )}
                 </div>
 
                 {cardFields.description && activity.description && (
@@ -1094,11 +1070,15 @@ function KanbanCard({
 
           </div>
         </TooltipTrigger>
-        <TooltipContent side="right" className="max-w-[280px] space-y-1 text-xs">
-          {tooltipLines.map((line, i) => (
-            <p key={i} className={i === 0 ? "font-semibold" : "text-muted-foreground"}>{line}</p>
-          ))}
-        </TooltipContent>
+        {/* Com o menu aberto o tooltip do card so atrapalha: o ponteiro esta
+            sobre as opcoes, nao sobre o card. */}
+        {!menuOpen && (
+          <TooltipContent side="right" className="max-w-[280px] space-y-1 text-xs">
+            {tooltipLines.map((line, i) => (
+              <p key={i} className={i === 0 ? "font-semibold" : "text-muted-foreground"}>{line}</p>
+            ))}
+          </TooltipContent>
+        )}
       </Tooltip>
     </TooltipProvider>
   );
@@ -1375,7 +1355,6 @@ function SortableColumn({
   onToggleStageBlocked,
   onToggleStageVisible,
   allStages,
-  density,
   cardFields,
   profilesMap = {},
   profileAvatarMap = {},
@@ -1425,7 +1404,6 @@ function SortableColumn({
   onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
   onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
   allStages: WorkflowStage[];
-  density: KanbanDensity;
   cardFields: CardFields;
   hoursStatsByActivity?: Map<string, HoursStat>;
   profilesMap?: Record<string, string>;
@@ -1617,7 +1595,7 @@ function SortableColumn({
     }, 0);
   }, [sortedActivities, childrenByParent, stageActivityIds, expandedIds]);
 
-  const dCol = DENSITY_CLASSES[density];
+  const dCol = KANBAN_TOKENS;
 
   // Renderiza um card e, se expandido, seus filhos — RECURSIVAMENTE, de modo que
   // fase → pacote → atividade (netos e além) apareçam ao expandir. Cada filho
@@ -1683,7 +1661,6 @@ function SortableColumn({
       isExpanded: expanded,
       onToggleExpand: () => toggleExpanded(activity.id),
       progress: parentProgress,
-      density,
       cardFields,
       parentBreadcrumb,
       blockedSubsCount,
@@ -2136,7 +2113,7 @@ function SortableColumn({
       )}
 
       {/* Droppable Column Body */}
-      <DroppableColumn stage={stage} density={density} laneId={laneId}>
+      <DroppableColumn stage={stage} laneId={laneId}>
         <SortableContext
           items={stageActivities.map((a) => a.id)}
           strategy={verticalListSortingStrategy}
@@ -2168,18 +2145,16 @@ function SortableColumn({
 function DroppableColumn({
   stage,
   children,
-  density = "md",
   laneId,
 }: {
   stage: WorkflowStage;
   children: React.ReactNode;
-  density?: KanbanDensity;
   laneId?: string;
 }) {
   // Em raias, o id do droppable inclui a raia p/ nao colidir entre raias; o
   // handleDragEnd extrai o stageId (parte antes de "--").
   const { setNodeRef, isOver } = useDroppable({ id: laneId ? `stage-${stage.id}--${laneId}` : `stage-${stage.id}` });
-  const d = DENSITY_CLASSES[density];
+  const d = KANBAN_TOKENS;
   return (
     <div
       ref={setNodeRef}
@@ -2310,18 +2285,14 @@ export const ActivityKanban = ({
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
 
-  // Densidade dos cards (S / M / G), persistida por projeto
-  const densityKey = `kanban-density:${projectId}`;
-  const [density, setDensity] = useState<KanbanDensity>(() => {
-    if (typeof window === "undefined") return "md";
-    const stored = window.localStorage.getItem(densityKey);
-    return stored === "sm" || stored === "lg" ? stored : "md";
-  });
+  // Densidade S/M/G removida (Fase 0): o quadro tem um só tamanho, o da
+  // imagem aprovada (lib/kanbanTokens). Limpa a preferência antiga para
+  // ninguém ficar preso a um "Grande" gravado antes da unificação.
   useEffect(() => {
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(densityKey, density);
+      window.localStorage.removeItem(`kanban-density:${projectId}`);
     }
-  }, [density, densityKey]);
+  }, [projectId]);
 
   // Campos visíveis do card (⚙ Card), persistido por projeto. Faz merge com os
   // defaults para tolerar chaves novas adicionadas em versões futuras.
@@ -4252,38 +4223,6 @@ export const ActivityKanban = ({
           <User className="w-3.5 h-3.5" />
           Minhas
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1.5 text-xs"
-              title="Tamanho dos cards"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              {density === "sm" ? "Pequeno" : density === "lg" ? "Grande" : "Médio"}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40">
-            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Tamanho dos cards
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => setDensity("sm")}>
-              {density === "sm" && <Check className="w-3.5 h-3.5 mr-2" />}
-              <span className={density === "sm" ? "font-medium" : "ml-[22px]"}>Pequeno</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setDensity("md")}>
-              {density === "md" && <Check className="w-3.5 h-3.5 mr-2" />}
-              <span className={density === "md" ? "font-medium" : "ml-[22px]"}>Médio</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setDensity("lg")}>
-              {density === "lg" && <Check className="w-3.5 h-3.5 mr-2" />}
-              <span className={density === "lg" ? "font-medium" : "ml-[22px]"}>Grande</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
         {/* Configuração do card: liga/desliga cada informação exibida */}
         <Popover>
           <PopoverTrigger asChild>
@@ -4393,7 +4332,6 @@ export const ActivityKanban = ({
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
                       progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id)}
-                      density={density}
                       cardFields={cardFields}
                       hoursStat={hoursStatsByActivity.get(activity.id)}
                       profilesMap={profilesMap}
@@ -4506,7 +4444,6 @@ export const ActivityKanban = ({
                 onToggleStageBlocked={handleToggleStageBlocked}
                 onToggleStageVisible={handleToggleStageVisible}
                 allStages={stages}
-                density={density}
                 cardFields={cardFields}
                 profilesMap={profilesMap}
                 profileAvatarMap={profileAvatarMap}
@@ -4573,7 +4510,6 @@ export const ActivityKanban = ({
               onMoveToBacklog={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
               progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id)}
-              density={density}
               cardFields={cardFields}
               profilesMap={profilesMap}
               profileAvatarMap={profileAvatarMap}
