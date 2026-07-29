@@ -3,6 +3,9 @@ import { useEffect, useMemo, useState, useCallback, Fragment, useRef, type React
 import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { computeActivityProgress } from "@/lib/activityProgress";
+import {
+  resolveActivityState, isActivityOverdue, ACTIVITY_STATE_LABEL, type ActivityState,
+} from "@/lib/activityState";
 import { endVariance, varianceTone, varianceClasses, formatVariance } from "@/lib/dateVariance";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -261,6 +264,9 @@ export function ProjectCronogramaPanel({
   // null = todos os projetos carregados
   const [projectFilter, setProjectFilter] = useState<Set<string> | null>(null);
   const [projectSearch, setProjectSearch] = useState("");
+  // Isola os itens sem início/fim — o resumo do Gantt liga/desliga este filtro,
+  // para que "N sem datas" deixe de ser texto morto e vire uma ação.
+  const [onlyUndated, setOnlyUndated] = useState(false);
 
   // ===== Toolbar Gantt =====
   const [zoom, setZoom] = useState<GanttZoom>(() => {
@@ -684,10 +690,15 @@ export function ProjectCronogramaPanel({
       if (stageFilter !== null) {
         filtered = filtered.filter(a => a.workflow_stage_id && stageFilter.has(a.workflow_stage_id));
       }
+      if (onlyUndated) {
+        // Só itens sem par início/fim. Fases ficam de fora: suas datas derivam
+        // dos filhos, então "sem datas" numa fase não é algo que se preencha.
+        filtered = filtered.filter(a => !(a.start_date && a.end_date));
+      }
       return filtered.map((a, idx) => ({ a, idx, mock: mockFor(a.id, idx) }));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activities, profiles, stageFilter, projectFilter]
+    [activities, profiles, stageFilter, projectFilter, onlyUndated]
   );
 
   const stageById = useMemo(() => {
@@ -1145,19 +1156,21 @@ export function ProjectCronogramaPanel({
     return new Date(y, m - 1, day);
   }, []);
 
+  // Delega à fonte única (lib/activityState) para que Cronograma, healthScore e
+  // demais telas nunca divirjam sobre o que é "atrasada".
   const isOverdueByRule = useCallback((activity: any, isCompletedByStage: boolean) => {
-    if (!activity?.end_date) return false;
-    if (isCompletedByStage || activity.status === "completed") return false;
-    return parseYmdDate(activity.end_date) < new Date();
-  }, [parseYmdDate]);
+    if (!activity) return false;
+    return isActivityOverdue(activity, { is_final: isCompletedByStage });
+  }, []);
 
   // ===== Gantt data =====
-  // Linha alta o bastante para: barra (faixa superior) + datas (faixa inferior),
-  // sem sobreposição. BAR_TOP/BAR_H definem o trilho da barra; DATE_TOP a faixa das datas.
-  const ROW_H = 56;
-  const BAR_H = 22;
-  const BAR_TOP = 11;              // topo da barra dentro da linha
-  const DATE_TOP = BAR_TOP + BAR_H + 4; // faixa das datas, logo abaixo da barra
+  // Linha compacta: as datas moram DENTRO da barra (ou coladas nela), não numa
+  // faixa própria abaixo — por isso a linha não precisa mais de altura extra.
+  const ROW_H = 36;
+  const BAR_H = 18;
+  const BAR_TOP = (ROW_H - BAR_H) / 2;   // barra centralizada na linha
+  // Largura mínima da barra para caber "dd/MM" nas duas pontas, dentro dela.
+  const BAR_W_FOR_INNER_DATES = 110;
   const LABEL_W = ganttLabelWidth;
 
   const ganttData = useMemo(() => {
@@ -1681,39 +1694,94 @@ export function ProjectCronogramaPanel({
     };
   }, [ganttData, holidays, workSchedule, criticalSet, showDayLabels]);
 
+  /**
+   * Saúde do cronograma: responde "como o projeto está", não "quantas linhas há".
+   * Conta apenas trabalho real — fases são agrupadores e seriam dupla contagem,
+   * já que o estado delas deriva dos filhos.
+   */
+  const ganttHealth = useMemo(() => {
+    const count: Record<ActivityState, number> = {
+      concluida: 0, atrasada: 0, bloqueada: 0, andamento: 0, a_iniciar: 0,
+    };
+    let undated = 0;
+
+    for (const { a } of rows) {
+      const isGroup =
+        !a.is_milestone &&
+        (a.item_type === "fase" || a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0);
+      if (isGroup) continue;
+
+      if (!(a.start_date && a.end_date)) undated++;
+
+      // Colunas do projeto DA atividade: no Cronograma Geral cada projeto tem
+      // o seu workflow, e usar a lista errada classificaria o andamento errado.
+      const stage = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
+      const projStages = stagesByProject.get(a.project_id) || [];
+      count[resolveActivityState(a, stage, projStages as any)]++;
+    }
+    return { ...count, undated };
+  }, [rows, childrenByParent, stageById, stagesByProject]);
+
   const GanttBlock = (
     <div className="border rounded-lg bg-card overflow-hidden">
-      {/* Legenda enxuta: só o essencial fica sempre visível; o resto vai para o
-          painel "Legenda" (estilo MS-Project: amostra real + explicação). */}
-      <div className="flex items-center px-3 py-2 border-b bg-muted/20 gap-x-4 gap-y-1.5 flex-wrap">
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <Diamond className="h-3.5 w-3.5 fill-amber-500 text-amber-500 shrink-0" />
-          Marco
-        </span>
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <Layers className="h-3.5 w-3.5 shrink-0" />
-          Fase
-        </span>
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span className="w-0.5 h-3.5 bg-primary/80 shrink-0" />
-          Hoje
-        </span>
+      {/* Barra de resumo: estado do cronograma (não contagem de linhas) e a
+          pendência acionável. O vocabulário visual mora no painel "Legenda" —
+          repeti-lo aqui só criava duplicação que envelhece mal. */}
+      <div className="flex items-center px-3 py-2 border-b bg-muted/20 gap-x-3 gap-y-1.5 flex-wrap">
+        {onlyUndated ? (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-500">
+            <CalendarOff className="h-3.5 w-3.5" />
+            Mostrando apenas itens sem datas
+          </span>
+        ) : (
+          <div className="inline-flex items-center gap-3 text-[11px] text-muted-foreground whitespace-nowrap">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-[7px] w-[7px] rounded-full bg-emerald-600 shrink-0" />
+              <span className="font-semibold text-foreground tabular-nums">{ganttHealth.concluida}</span> concluída(s)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-[7px] w-[7px] rounded-full bg-destructive shrink-0" />
+              <span className="font-semibold text-foreground tabular-nums">{ganttHealth.atrasada}</span> atrasada(s)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-[7px] w-[7px] rounded-full bg-primary shrink-0" />
+              <span className="font-semibold text-foreground tabular-nums">{ganttHealth.andamento}</span> em andamento
+            </span>
+            {ganttHealth.bloqueada > 0 && (
+              <span className="inline-flex items-center gap-1.5" title="Em coluna de bloqueio ou exceção no Kanban">
+                <span className="h-[7px] w-[7px] rounded-full bg-amber-500 shrink-0" />
+                <span className="font-semibold text-foreground tabular-nums">{ganttHealth.bloqueada}</span> bloqueada(s)
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-[7px] w-[7px] rounded-full border-[1.5px] border-muted-foreground/45 shrink-0" />
+              <span className="font-semibold text-foreground tabular-nums">{ganttHealth.a_iniciar}</span> a iniciar
+            </span>
+          </div>
+        )}
 
-        <span className="ml-auto inline-flex items-center gap-2 text-[11px] text-muted-foreground whitespace-nowrap">
-          {ganttData ? (
-            <>
-              <span className="font-semibold text-foreground">{ganttData.all.length}</span> atividade(s)
-              <span className="opacity-50">·</span>
-              <span className="text-emerald-600">{ganttData.dated.length} com datas</span>
-              {ganttData.undated.length > 0 && (
-                <>
-                  <span className="opacity-50">·</span>
-                  <span className="text-amber-600">{ganttData.undated.length} sem datas</span>
-                </>
-              )}
-            </>
-          ) : "—"}
-        </span>
+        {/* Empurra a pendência e a Legenda para a direita, exista ou não o botão. */}
+        <span className="ml-auto" />
+
+        {/* Pendência acionável: filtra o cronograma para os itens sem datas. */}
+        {(ganttHealth.undated > 0 || onlyUndated) && (
+          <Button
+            variant={onlyUndated ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setOnlyUndated(v => !v)}
+            className={cn(
+              "h-6 gap-1.5 px-2 text-[11px]",
+              !onlyUndated && "text-amber-700 dark:text-amber-500 hover:text-amber-800 dark:hover:text-amber-400",
+            )}
+            title={onlyUndated ? "Voltar ao cronograma completo" : "Ver só os itens que ainda precisam de datas"}
+          >
+            {onlyUndated ? (
+              <><X className="h-3.5 w-3.5" /> Limpar filtro</>
+            ) : (
+              <><CalendarOff className="h-3.5 w-3.5" /> {ganttHealth.undated} sem datas</>
+            )}
+          </Button>
+        )}
 
         {/* Painel de legenda completo, agrupado por significado */}
         <Popover>
@@ -1728,33 +1796,63 @@ export function ProjectCronogramaPanel({
               <div className="text-[11px] text-muted-foreground">O que cada elemento representa no gráfico.</div>
             </div>
             <div className="max-h-[60vh] overflow-y-auto p-3 space-y-3">
-              {/* ── TIPOS DE ITEM ── */}
+              {/* ── O QUE É: três formas ── */}
               <div className="space-y-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tipos de item</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">O que é — a forma</div>
                 <LegendRow
                   sample={
-                    <span className="relative block w-9 h-3 rounded-sm bg-primary overflow-hidden">
-                      <span className="absolute inset-y-0 left-0 w-2/5 bg-black/20" />
+                    <span className="relative block w-9 h-3.5 rounded-sm bg-muted-foreground/25 border border-border overflow-hidden">
+                      <span className="absolute inset-y-0 left-0 w-3/5 bg-primary" />
                     </span>
                   }
-                  title="Atividade"
-                  desc="Barra azul; a faixa mais escura indica o % concluído."
+                  title="Tarefa"
+                  desc="Barra-trilho; a parte preenchida é o quanto já avançou."
                 />
                 <LegendRow
                   sample={
                     <span className="relative block w-9 h-3">
-                      <span className="absolute inset-x-0 top-0 h-1.5 rounded-sm bg-primary" />
-                      <span className="absolute left-0 top-1" style={{ width: 0, height: 0, borderLeft: "3px solid transparent", borderRight: "3px solid transparent", borderTop: "5px solid hsl(var(--primary))" }} />
-                      <span className="absolute right-0 top-1" style={{ width: 0, height: 0, borderLeft: "3px solid transparent", borderRight: "3px solid transparent", borderTop: "5px solid hsl(var(--primary))" }} />
+                      <span className="absolute inset-x-0 top-0 h-1.5 rounded-sm bg-foreground/55" />
+                      <span className="absolute left-0 top-1.5" style={{ width: 0, height: 0, borderLeft: "3px solid transparent", borderRight: "3px solid transparent", borderTop: "5px solid hsl(var(--foreground) / 0.55)" }} />
+                      <span className="absolute right-0 top-1.5" style={{ width: 0, height: 0, borderLeft: "3px solid transparent", borderRight: "3px solid transparent", borderTop: "5px solid hsl(var(--foreground) / 0.55)" }} />
                     </span>
                   }
                   title="Fase / Entrega"
-                  desc="Barra-resumo com abas nas pontas; datas derivadas das atividades filhas."
+                  desc="Barra-resumo cinza com abas nas pontas; datas derivadas das tarefas filhas."
                 />
                 <LegendRow
-                  sample={<span className="block w-3 h-3 rotate-45 bg-amber-500 border-2 border-amber-600 mx-auto" />}
+                  sample={<span className="block w-3 h-3 rotate-45 bg-card border-[2px] border-foreground mx-auto" />}
                   title="Marco"
-                  desc="Data única (entrega ou decisão), sem duração."
+                  desc="Losango vazado. Data única (entrega ou decisão), sem duração."
+                />
+              </div>
+
+              {/* ── COMO ESTÁ: o ponto ── */}
+              <div className="space-y-2 pt-1 border-t">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Como está — o ponto</div>
+                <LegendRow
+                  sample={<span className="block h-[7px] w-[7px] rounded-full bg-primary mx-auto" />}
+                  title="Em andamento"
+                  desc="Começou e ainda não terminou."
+                />
+                <LegendRow
+                  sample={<span className="block h-[7px] w-[7px] rounded-full bg-emerald-600 mx-auto" />}
+                  title="Concluída"
+                  desc="Barra totalmente preenchida."
+                />
+                <LegendRow
+                  sample={<span className="block h-[7px] w-[7px] rounded-full bg-destructive mx-auto" />}
+                  title="Atrasada"
+                  desc="Passou da data de fim sem concluir."
+                />
+                <LegendRow
+                  sample={<span className="block h-[7px] w-[7px] rounded-full bg-amber-500 mx-auto" />}
+                  title="Bloqueada"
+                  desc="Em coluna de bloqueio ou exceção no Kanban."
+                />
+                <LegendRow
+                  sample={<span className="block h-[7px] w-[7px] rounded-full border-[1.5px] border-muted-foreground/45 mx-auto" />}
+                  title="Não iniciada"
+                  desc="Sem progresso registrado."
                 />
               </div>
 
@@ -1764,7 +1862,7 @@ export function ProjectCronogramaPanel({
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Destaques</div>
                   {legendPresence.hasCritical && (
                     <LegendRow
-                      sample={<span className="block w-9 h-3 rounded-sm bg-red-500 outline outline-2 outline-red-500" />}
+                      sample={<AlertTriangle className="h-3.5 w-3.5 text-red-500 mx-auto" />}
                       title="Caminho crítico"
                       desc="Atividades que, se atrasarem, atrasam a entrega do projeto."
                     />
@@ -1864,6 +1962,11 @@ export function ProjectCronogramaPanel({
                 const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
                 const isCompleted = stageInfo?.is_final || a.status === "completed";
                 const isOverdue = isOverdueByRule(a, !!isCompleted);
+                // Estado pela fonte única — inclui "bloqueada", que antes se
+                // escondia entre as "a iniciar".
+                const rowState = resolveActivityState(
+                  a, stageInfo, (stagesByProject.get(a.project_id) || []) as any,
+                );
                 const hasChildren = (childrenByParent.get(a.id) || []).length > 0;
                 const collapsed = collapsedPhases.has(a.id);
                 return (
@@ -1885,26 +1988,37 @@ export function ProjectCronogramaPanel({
                     ) : isPhase ? (
                       <Layers className="h-3.5 w-3.5 text-primary shrink-0" />
                     ) : null}
+                    {/* Ponto de estado: único lugar onde o andamento é codificado por cor.
+                        Fica sempre imediatamente antes do código, para ser escaneado
+                        verticalmente. Não iniciada = círculo vazado. */}
+                    <span
+                      className={cn(
+                        "h-[7px] w-[7px] rounded-full shrink-0",
+                        rowState === "atrasada" ? "bg-destructive"
+                          : rowState === "concluida" ? "bg-emerald-600"
+                          : rowState === "bloqueada" ? "bg-amber-500"
+                          : rowState === "andamento" ? "bg-primary"
+                          : "border-[1.5px] border-muted-foreground/45",
+                      )}
+                      title={ACTIVITY_STATE_LABEL[rowState]}
+                    />
                     <span className="text-[10px] font-mono text-muted-foreground w-[52px] shrink-0">#{id}</span>
                     <div className="flex-1 min-w-0">
-                      <div className={cn("text-xs flex items-center gap-1", (isCritical || isGroup) && "font-semibold", isPhase && "text-primary uppercase tracking-wide")}>
-                        {isMilestone ? (
-                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-orange-500/15 text-orange-700 border-orange-500/40 shrink-0 gap-1">
-                            <Diamond className="h-2.5 w-2.5 fill-orange-500 text-orange-500" />
-                            Marco
-                          </Badge>
-                        ) : isPhase ? (
-                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-primary/10 text-primary border-primary/30 shrink-0">
-                            Fase / Entrega
-                          </Badge>
-                        ) : isSubactivity ? (
-                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-amber-500/10 text-amber-700 border-amber-500/30 shrink-0">
-                            Sub
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-emerald-500/10 text-emerald-700 border-emerald-500/30 shrink-0">
-                            Atv
-                          </Badge>
+                      {/* Tipo por tipografia/indentação: Fase = primária semibold caixa-alta,
+                          Sub = muted, Tarefa = padrão. Marco recebe o mesmo losango vazado
+                          que o usa no gráfico — a forma é a mesma nos dois lugares.
+                          "Atrasada" já é dito pelo ponto de estado; aqui não se repete. */}
+                      <div className={cn(
+                        "text-[13px] flex items-center gap-1.5",
+                        isGroup && "font-semibold",
+                        isPhase && "text-primary uppercase tracking-wide",
+                        isSubactivity && !isMilestone && "text-muted-foreground",
+                      )}>
+                        {isMilestone && (
+                          <span
+                            className="h-2 w-2 rotate-45 bg-card border-[1.5px] border-foreground shrink-0"
+                            title="Marco"
+                          />
                         )}
                         <button
                           type="button"
@@ -1914,8 +2028,11 @@ export function ProjectCronogramaPanel({
                         >
                           {a.title}
                         </button>
-                        {isOverdue && <AlertCircle className="h-3 w-3 text-destructive shrink-0" />}
-                        {isCritical && <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />}
+                        {isCritical && (
+                          <span title="Caminho crítico" className="shrink-0 inline-flex">
+                            <AlertTriangle className="h-3 w-3 text-red-500" />
+                          </span>
+                        )}
                         {noDates && <CalendarOff className="h-3 w-3 text-muted-foreground shrink-0" />}
                       </div>
                     </div>
@@ -2033,8 +2150,8 @@ export function ProjectCronogramaPanel({
                     const left = (todayIdx >= 0 ? todayIdx : 0) * DAY_W + hierarchyOffset;
                     return (
                       <div key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`} className="relative border-b bg-muted/10" style={{ height: ROW_H }}>
-                        <div className="absolute inline-flex items-center gap-1 px-2 py-0.5 rounded border border-dashed border-muted-foreground/40 bg-card text-[10px] text-muted-foreground"
-                          style={{ left: Math.max(0, left - 60), top: BAR_TOP }}>
+                        <div className="absolute inline-flex items-center gap-1 px-2 rounded border border-dashed border-muted-foreground/40 bg-card text-[10px] text-muted-foreground"
+                          style={{ left: Math.max(0, left - 60), top: BAR_TOP, height: BAR_H }}>
                           <CalendarOff className="h-3 w-3" />
                           Sem datas
                         </div>
@@ -2068,11 +2185,13 @@ export function ProjectCronogramaPanel({
                   const isGroup = isPhase;
                   const isSubactivity = !isGroup && !!a.parent_id;
 
-                  // Datas curtas exibidas logo abaixo da barra (in.º à esquerda, fim à direita).
-                  // Em barras estreitas os dois textos colidiriam → combina num rótulo só.
+                  // Datas em contraste pleno, sem depender de hover.
+                  // Cabendo na barra, vão dentro dela (branco sobre a cor); senão,
+                  // viram uma etiqueta única colada à direita, em text-foreground.
                   const startLabel = format(s, "dd/MM");
                   const endLabel = format(e, "dd/MM");
-                  const barTooNarrowForDates = width < 72;
+                  const datesFitInsideBar =
+                    !a.is_milestone && !isGroup && width >= BAR_W_FOR_INNER_DATES;
 
                   return (
                     <div key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`} className="relative border-b" style={{ height: ROW_H }}>
@@ -2080,76 +2199,66 @@ export function ProjectCronogramaPanel({
                         <Tooltip>
                           <TooltipTrigger asChild>
                             {a.is_milestone ? (
-                              <div className="absolute cursor-pointer"
+                              <div className="absolute cursor-pointer z-10"
                                 style={{ left: left + DAY_W / 2 - 9, top: BAR_TOP + BAR_H / 2 - 9 }}
                                 onClick={() => openFromCronograma(a)}
                                 title="Abrir edição da atividade"
                               >
-                                <div className={cn(
-                                  "w-[18px] h-[18px] rotate-45 bg-amber-500 border-2 shadow-sm transition-transform hover:scale-110",
-                                  isOverdue ? "border-destructive" : "border-amber-600",
-                                )} />
+                                {/* Marco: losango VAZADO. A forma diz "marco"; o estado
+                                    fica no ponto da coluna da esquerda, como em todo item. */}
+                                <div className="w-[14px] h-[14px] rotate-45 bg-card border-[2.5px] border-foreground shadow-sm transition-transform hover:scale-110" />
                               </div>
                             ) : isGroup ? (
-                              // Fase/Entrega: barra-resumo sólida na cor primária, com
-                              // "abas" nas pontas (estilo MS-Project) e rótulo ao lado.
+                              // Fase/Entrega: barra-resumo CINZA (neutra), mais fina, com
+                              // "abas" nas pontas. Neutra de propósito: a cor pertence ao
+                              // preenchimento de progresso das tarefas, não ao agrupador.
                               <div
-                                className={cn(
-                                  "absolute cursor-pointer",
-                                  isOverdue && "ring-1 ring-destructive rounded",
-                                )}
-                                style={{ left, width, height: 14, top: BAR_TOP + (BAR_H - 14) / 2 }}
+                                className="absolute cursor-pointer z-10"
+                                style={{ left, width, height: 12, top: BAR_TOP + (BAR_H - 12) / 2 }}
                                 onClick={() => openFromCronograma(a)}
                                 title="Abrir edição da atividade"
                               >
-                                {/* corpo da barra-resumo */}
-                                <div className="absolute inset-x-0 top-0 h-2 rounded-sm bg-primary" />
-                                {/* pontas triangulares (abas) apontando para baixo */}
+                                <div className="absolute inset-x-0 top-0 h-1.5 rounded-sm bg-foreground/55" />
                                 <div className="absolute left-0 top-1.5"
-                                  style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "6px solid hsl(var(--primary))" }} />
+                                  style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "5px solid hsl(var(--foreground) / 0.55)" }} />
                                 <div className="absolute right-0 top-1.5"
-                                  style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "6px solid hsl(var(--primary))" }} />
-                                {DAY_W >= 6 && (
-                                  <div className="absolute top-1/2 -translate-y-1/2 left-full ml-2 text-[11px] font-semibold text-primary uppercase tracking-wide whitespace-nowrap pointer-events-none">
-                                    {a.title}
-                                  </div>
-                                )}
+                                  style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "5px solid hsl(var(--foreground) / 0.55)" }} />
                               </div>
                             ) : (
+                              // Tarefa: BARRA-TRILHO. O trilho é neutro e o progresso o
+                              // preenche da esquerda — a extensão do preenchimento é a
+                              // informação principal, legível sem depender de matiz.
                               <div className={cn(
-                                "group absolute rounded-md shadow-sm overflow-visible transition-all hover:shadow-md hover:brightness-105",
-                                drag ? "cursor-grabbing ring-2 ring-primary/60 z-20" : "cursor-grab",
-                                isOverdue && "ring-2 ring-destructive ring-offset-1",
-                                !stageInfo && (isCritical ? "bg-red-500" : isCompleted ? "bg-emerald-500/80" : "bg-primary")
+                                "group absolute rounded-md overflow-visible transition-all hover:brightness-105",
+                                // z-10: a barra sempre cobre uma etiqueta de datas que
+                                // porventura invada seu espaço vindo da linha ao lado.
+                                drag ? "cursor-grabbing ring-2 ring-primary/60 z-20" : "cursor-grab z-10",
+                                "bg-muted-foreground/25 border border-border",
                               )}
                                 onMouseDown={(ev) => startBarDrag(ev, a, "move", DAY_W)}
                                 onClick={() => { if (!barDrag) openFromCronograma(a); }}
                                 title="Arraste para mover · puxe as bordas para redimensionar · clique para abrir"
-                                style={{
-                                  left,
-                                  width,
-                                  top: BAR_TOP,
-                                  height: BAR_H,
-                                  backgroundColor: stageInfo
-                                    ? (isCritical ? undefined : stageInfo.color)
-                                    : undefined,
-                                  borderStyle: isSubactivity ? "dashed" : "solid",
-                                  borderWidth: 1,
-                                  borderColor: isSubactivity ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.35)",
-                                  outline: isCritical ? "2px solid hsl(0 84% 55%)" : undefined,
-                                }}>
+                                style={{ left, width, top: BAR_TOP, height: BAR_H }}>
                                 <div className="absolute inset-0 rounded-md overflow-hidden">
-                                  {/* faixa concluída: um pouco mais escura à esquerda,
-                                      para o progresso ser lido sem lavar a cor da barra */}
+                                  {/* Preenchimento = progresso. A cor é o estado. */}
                                   {progress > 0 && (
-                                    <div className="absolute inset-y-0 left-0 bg-black/20" style={{ width: `${progress}%` }} />
+                                    <div
+                                      className={cn(
+                                        "absolute inset-y-0 left-0",
+                                        isOverdue ? "bg-destructive"
+                                          : isCompleted ? "bg-emerald-600"
+                                          : "bg-primary",
+                                      )}
+                                      style={{ width: `${progress}%` }}
+                                    />
                                   )}
-                                  {progress > 0 && progress < 100 && (
-                                    <div className="absolute inset-y-0 border-r border-white/60" style={{ left: `${progress}%` }} />
-                                  )}
-                                  {DAY_W >= 5 && (
-                                    <div className="absolute inset-0 flex items-center px-2 text-[11px] text-white font-semibold truncate [text-shadow:0_1px_2px_rgba(0,0,0,0.45)]">
-                                      {a.title}
+
+                                  {/* Datas sobre o trilho, em texto escuro. Tamanho e cor
+                                      únicos em todo o Gantt — nada de branco aqui. */}
+                                  {datesFitInsideBar && (
+                                    <div className="absolute inset-0 flex items-center justify-between px-2 text-[11px] font-semibold text-foreground tabular-nums pointer-events-none">
+                                      <span>{startLabel}</span>
+                                      <span>{endLabel}</span>
                                     </div>
                                   )}
                                 </div>
@@ -2158,13 +2267,13 @@ export function ProjectCronogramaPanel({
                                   onMouseDown={(ev) => startBarDrag(ev, a, "start", DAY_W)}
                                   className="absolute left-0 inset-y-0 w-2 -translate-x-1/2 cursor-col-resize opacity-0 group-hover:opacity-100 flex items-center justify-center"
                                 >
-                                  <div className="w-1 h-1/2 rounded-full bg-white/90 shadow" />
+                                  <div className="w-1 h-1/2 rounded-full bg-foreground/70 shadow" />
                                 </div>
                                 <div
                                   onMouseDown={(ev) => startBarDrag(ev, a, "end", DAY_W)}
                                   className="absolute right-0 inset-y-0 w-2 translate-x-1/2 cursor-col-resize opacity-0 group-hover:opacity-100 flex items-center justify-center"
                                 >
-                                  <div className="w-1 h-1/2 rounded-full bg-white/90 shadow" />
+                                  <div className="w-1 h-1/2 rounded-full bg-foreground/70 shadow" />
                                 </div>
                                 {/* Dica de datas durante o arraste */}
                                 {drag && (
@@ -2197,28 +2306,21 @@ export function ProjectCronogramaPanel({
                         </Tooltip>
                       </TooltipProvider>
 
-                      {/* Datas sob a barra — para ler início/fim sem hover (útil no zoom Mês+). */}
-                      {a.is_milestone ? (
-                        <div className="absolute text-[10px] leading-none text-muted-foreground tabular-nums whitespace-nowrap pointer-events-none -translate-x-1/2"
-                          style={{ left: left + DAY_W / 2, top: DATE_TOP }}>
-                          {startLabel}
+                      {/* Etiqueta de datas colada à direita — para Marco, Fase/Entrega e
+                          barras estreitas demais para o texto caber dentro. Mesmo tamanho e
+                          mesma cor das datas de dentro da barra: um único tratamento no
+                          Gantt inteiro. Fica atrás das barras (z-0) e sem eventos. */}
+                      {!datesFitInsideBar && (
+                        <div
+                          className="absolute z-0 flex items-center text-[11px] font-semibold text-foreground leading-none tabular-nums whitespace-nowrap pointer-events-none"
+                          style={{
+                            left: a.is_milestone ? left + DAY_W / 2 + 14 : left + width + 8,
+                            top: BAR_TOP,
+                            height: BAR_H,
+                          }}
+                        >
+                          {a.is_milestone ? startLabel : `${startLabel} → ${endLabel}`}
                         </div>
-                      ) : barTooNarrowForDates ? (
-                        <div className="absolute text-[10px] leading-none text-muted-foreground tabular-nums whitespace-nowrap pointer-events-none"
-                          style={{ left: left + width / 2, top: DATE_TOP, transform: "translateX(-50%)" }}>
-                          {startLabel} → {endLabel}
-                        </div>
-                      ) : (
-                        <>
-                          <div className="absolute text-[10px] leading-none text-muted-foreground tabular-nums whitespace-nowrap pointer-events-none"
-                            style={{ left, top: DATE_TOP }}>
-                            {startLabel}
-                          </div>
-                          <div className="absolute text-[10px] leading-none text-muted-foreground tabular-nums whitespace-nowrap pointer-events-none text-right"
-                            style={{ left: left + width, top: DATE_TOP, transform: "translateX(-100%)" }}>
-                            {endLabel}
-                          </div>
-                        </>
                       )}
                     </div>
                   );
