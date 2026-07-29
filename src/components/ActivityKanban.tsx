@@ -288,7 +288,7 @@ const DENSITY_CLASSES: Record<KanbanDensity, {
   },
   md: {
     card: "p-2.5",
-    title: "text-xs leading-snug",
+    title: "text-[13px] leading-snug",
     desc: "text-[11px]",
     showDesc: true,
     showProgress: true,
@@ -727,7 +727,7 @@ function KanbanCard({
                     <span className="truncate">{parentBreadcrumb.title}</span>
                   </button>
                 )}
-                <div className="flex items-start gap-1.5 mb-1">
+                <div className="flex items-start gap-1.5 mb-2">
                   {isMilestone && (
                     <Diamond
                       className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0 mt-0.5"
@@ -745,7 +745,7 @@ function KanbanCard({
                     }`}
                   >
                     {activity.wbs_code ? (
-                      <span className="inline-flex items-center h-4 px-1 mr-1 rounded border border-border bg-muted/40 text-[10px] font-mono text-muted-foreground align-middle">
+                      <span className="inline-flex items-center h-[17px] px-1.5 mr-1.5 rounded border border-border bg-muted text-[10px] font-mono font-normal text-muted-foreground align-middle">
                         {activity.wbs_code}
                       </span>
                     ) : null}
@@ -788,16 +788,16 @@ function KanbanCard({
                 {/* Barra de andamento (calculada pelo Kanban) */}
                 {cardFields.progress && !isQualityProject && (
                 <div
-                  className="mb-1.5 flex items-center gap-1.5"
+                  className="mb-2 flex items-center gap-2"
                   title={progressTooltip}
                 >
-                  <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div className="flex-1 h-[5px] rounded-full bg-muted overflow-hidden">
                     <div
-                      className={`h-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
+                      className={`h-full rounded-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
                       style={{ width: `${progressBarWidth}%` }}
                     />
                   </div>
-                  <span className="text-[9px] font-mono text-muted-foreground tabular-nums shrink-0">
+                  <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
                     {progressBadge}
                   </span>
                 </div>
@@ -807,14 +807,14 @@ function KanbanCard({
                     está, com o motivo legível e há quanto tempo está travado. */}
                 {isBlocked && (
                   <div
-                    className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold text-amber-700 dark:text-amber-500"
+                    className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-500"
                     title={
                       activity.blocked_since
                         ? `Bloqueada desde ${new Date(activity.blocked_since).toLocaleString("pt-BR")}`
                         : "Bloqueada"
                     }
                   >
-                    <Flag className="w-2.5 h-2.5 shrink-0 fill-current" />
+                    <Flag className="w-3 h-3 shrink-0 fill-current" />
                     <span className="truncate">
                       {activity.blocked_reason
                         ? `Bloqueada — ${activity.blocked_reason}`
@@ -856,9 +856,9 @@ function KanbanCard({
                   {/* Avatar limpo, sem moldura de badge: ancora o rodapé à
                       esquerda enquanto o prazo ancora à direita. */}
                   {cardFields.assignee && activity.assigned_to && (
-                    <Avatar className="h-[18px] w-[18px] shrink-0" title={assigneeName || "Responsável"}>
+                    <Avatar className="h-5 w-5 shrink-0" title={assigneeName || "Responsável"}>
                       {assigneeAvatar ? <AvatarImage src={assigneeAvatar} alt={assigneeName || "Responsável"} /> : null}
-                      <AvatarFallback className="text-[8px] font-semibold bg-primary/15 text-primary">
+                      <AvatarFallback className="text-[8.5px] font-semibold bg-primary/15 text-primary">
                         {getAvatarInitials(assigneeName)}
                       </AvatarFallback>
                     </Avatar>
@@ -989,7 +989,7 @@ function KanbanCard({
                       emoji; o atraso se lê pela cor. */}
                   {cardFields.dueDate && activity.end_date && (
                     <span
-                      className={`ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] tabular-nums ${
+                      className={`ml-auto shrink-0 inline-flex items-center gap-1 text-[11px] tabular-nums ${
                         isOverdue ? "text-destructive font-semibold" : "text-muted-foreground"
                       }`}
                       title={`Prazo: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}`}
@@ -1023,26 +1023,35 @@ function KanbanCard({
               </div>
             </div>
 
+            {/* Ações FLUTUANDO no topo direito, sobre o card: como barra própria
+                com borda superior, elas somavam ~30px de altura a cada card e
+                empurravam o conteúdo. Aparecem no hover; quando a atividade
+                está bloqueada, a bandeira fica sempre visível. */}
             {!readOnlyPreview && (
-              <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onToggle} title="Concluir">
+              <div
+                className={`absolute top-1.5 right-1.5 z-10 flex items-center gap-0.5 rounded-md bg-card/95 backdrop-blur-[2px] shadow-sm border border-border/60 px-0.5 transition-opacity ${
+                  isBlocked ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                }`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onToggle} title="Concluir">
                   {activity.status === "completed" ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-success" />
                   ) : (
                     <Circle className="w-3.5 h-3.5 text-muted-foreground" />
                   )}
                 </Button>
-                <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onEdit} title="Editar">
+                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onEdit} title="Editar">
                   <Pencil className="w-3.5 h-3.5" />
                 </Button>
-                <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onMoveToBacklog} title="Mover para Backlog">
+                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onMoveToBacklog} title="Mover para Backlog">
                   <Inbox className="w-3.5 h-3.5" />
                 </Button>
                 {onToggleBlocked && (
                   <Button
                     size="icon"
                     variant="ghost"
-                    className={`h-6 w-6 hover:bg-muted/70 ${isBlocked ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground hover:text-foreground"}`}
+                    className={`h-[22px] w-[22px] hover:bg-muted/70 ${isBlocked ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground hover:text-foreground"}`}
                     onClick={(e) => { e.stopPropagation(); onToggleBlocked(); }}
                     title={isBlocked ? "Desbloquear" : "Bloquear (o card fica onde está)"}
                   >
@@ -1053,7 +1062,7 @@ function KanbanCard({
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                    className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                     onClick={onLinkParent}
                     title="Vincular ao pai"
                   >
@@ -1061,7 +1070,7 @@ function KanbanCard({
                   </Button>
                 )}
                 {SHOW_USER_STORIES && onCreateStory && (
-                  <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onCreateStory} title="Criar História">
+                  <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onCreateStory} title="Criar História">
                     <BookOpen className="w-3.5 h-3.5" />
                   </Button>
                 )}
@@ -1069,7 +1078,7 @@ function KanbanCard({
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-6 w-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    className="h-[22px] w-[22px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     onClick={onDelete}
                     title="Excluir"
                   >
@@ -1793,16 +1802,22 @@ function SortableColumn({
                 {getStageDisplayTitle(stage.title)}
               </h3>
             )}
-            {/* Categoria — só quando difere do nome da coluna. "Em Andamento"
-                com o rótulo "Em andamento" embaixo seria repetição pura; o que
-                interessa é quando divergem ("Entregue ao cliente" = Concluída). */}
+            {/* Categoria — some quando o nome da coluna já a comunica, e some
+                também no modo compacto, onde competia com o próprio título
+                (a coluna truncava "A Fazer" para "A ..." e mostrava a
+                categoria inteira ao lado). O menu da coluna sempre mostra. */}
             {(() => {
+              if (density === "sm") return null;
               const cat = parseWorkflowCategory(stage.categoria);
               if (!cat) return null;
               const meta = WORKFLOW_CATEGORY_META[cat];
               const norm = (s: string) =>
                 s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-              if (norm(meta.label) === norm(getStageDisplayTitle(stage.title))) return null;
+              const title = norm(getStageDisplayTitle(stage.title));
+              const label = norm(meta.label);
+              // Redundante quando um contém o outro: "Em Andamento" ~ "Em
+              // andamento", "Concluída" ~ "Concluída", "Cancelado" ~ "Cancelada".
+              if (title.includes(label) || label.includes(title)) return null;
               return (
                 <span
                   className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0"
