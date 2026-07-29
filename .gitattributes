@@ -1,0 +1,11 @@
+# Normalizacao de line endings: o repositorio armazena LF; cada SO faz
+# checkout no seu formato nativo. Evita diffs de 4.800 linhas por CRLF
+# misturado (caso ActivityKanban.tsx, jul/2026).
+* text=auto
+
+# Scripts shell rodam na VM Linux: LF obrigatorio mesmo em checkout Windows
+*.sh text eol=lf
+
+# Arquivos exclusivos de Windows
+*.bat text eol=crlf
+*.cmd text eol=crlf
