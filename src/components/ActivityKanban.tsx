@@ -216,16 +216,19 @@ export type CardFields = {
   dependencies: boolean;
 };
 
-// Defaults enxutos: extras (descrição, breadcrumb, resumo de subs, tags,
-// dependências) começam desligados.
+// Defaults = exatamente os campos da imagem aprovada (Fase 1): prioridade,
+// barra de progresso, responsável e prazo. participants/hours/subCount
+// estavam ligados por padrão e não aparecem na imagem — eram o motivo do
+// card acumular "0h/10h · 2 subtarefas" ao lado da barra. Continuam
+// disponíveis no painel "⚙ Card", só passam a começar desligados.
 export const DEFAULT_CARD_FIELDS: CardFields = {
   priority: true,
   progress: true,
   assignee: true,
-  participants: true,
+  participants: false,
   dueDate: true,
-  hours: true,
-  subCount: true,
+  hours: false,
+  subCount: false,
   description: false,
   breadcrumb: false,
   subSummary: false,
@@ -999,7 +1002,7 @@ function KanbanCard({
                               key={r.relationId}
                               className="group flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-muted/60"
                             >
-                              <span className="font-mono text-[9px] text-muted-foreground/60 shrink-0">
+                              <span className="font-mono text-[10px] text-muted-foreground/60 shrink-0">
                                 #{r.id.slice(0, 6)}
                               </span>
                               <button
@@ -1010,7 +1013,7 @@ function KanbanCard({
                               >
                                 {r.title || "(sem título)"}
                               </button>
-                              <span className="text-[9px] text-muted-foreground/70 shrink-0 capitalize">
+                              <span className="text-[10px] text-muted-foreground/70 shrink-0 capitalize">
                                 {r.relationType.replace(/_/g, " ")}
                               </span>
                               <button
@@ -1202,7 +1205,7 @@ function ColumnFilterPanel({
         <div className="flex items-center gap-2 px-4 py-2.5 border-b">
           <Filter className="w-3.5 h-3.5 text-muted-foreground" />
           <span className="text-sm font-semibold">Filtros</span>
-          <span className="text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent-soft text-primary bg-primary/10">só esta coluna</span>
+          <span className="text-[10px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent-soft text-primary bg-primary/10">só esta coluna</span>
           {active && (
             <button type="button" onClick={() => onChange(stageId, EMPTY_COLUMN_FILTER)}
               className="ml-auto text-xs text-muted-foreground hover:text-destructive inline-flex items-center gap-1">
@@ -1697,7 +1700,7 @@ function SortableColumn({
                   {childStage && (
                     <div className="flex items-center gap-1.5 px-1">
                       <span
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide text-white"
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide text-white"
                         style={{ backgroundColor: childStage.color }}
                         title={`Esta subtarefa está em "${getStageDisplayTitle(childStage.title)}"`}
                       >
@@ -2285,22 +2288,33 @@ export const ActivityKanban = ({
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
 
-  // Densidade S/M/G removida (Fase 0): o quadro tem um só tamanho, o da
-  // imagem aprovada (lib/kanbanTokens). Limpa a preferência antiga para
-  // ninguém ficar preso a um "Grande" gravado antes da unificação.
+  // Chaves de preferência substituídas por versões novas: limpa a antiga
+  // para não acumular lixo indefinidamente no localStorage do usuário.
+  // - kanban-density (Fase 0): densidade S/M/G removida, o quadro tem um só
+  //   tamanho, o da imagem aprovada (lib/kanbanTokens).
+  // - kanban-card-fields v1 (Fase 1): campo virou versionado porque o merge
+  //   com o default antigo (participants/hours/subCount=true) sobrescrevia
+  //   o novo padrão para quem já tinha usado o quadro; ver cardFieldsKey.
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(`kanban-density:${projectId}`);
+      window.localStorage.removeItem(`kanban-card-fields:${projectId}`);
     }
   }, [projectId]);
 
   // Campos visíveis do card (⚙ Card), persistido por projeto. Faz merge com os
   // defaults para tolerar chaves novas adicionadas em versões futuras.
-  const cardFieldsKey = `kanban-card-fields:${projectId}`;
+  //
+  // Chave em v2 (Fase 1): quem já usava o quadro tinha participants/hours/
+  // subCount=true salvos no v1 — o merge "...DEFAULT_CARD_FIELDS, ...raw"
+  // faria o valor salvo vencer e a mudança de padrão nunca apareceria para
+  // ninguém que já tivesse aberto a tela antes. Bump de versão zera todo
+  // mundo para o novo padrão uma vez; o v1 fica órfão e inofensivo.
+  const cardFieldsKey = `kanban-card-fields:v2:${projectId}`;
   const [cardFields, setCardFields] = useState<CardFields>(() => {
     if (typeof window === "undefined") return DEFAULT_CARD_FIELDS;
     try {
-      const raw = window.localStorage.getItem(`kanban-card-fields:${projectId}`);
+      const raw = window.localStorage.getItem(cardFieldsKey);
       return raw ? { ...DEFAULT_CARD_FIELDS, ...JSON.parse(raw) } : DEFAULT_CARD_FIELDS;
     } catch {
       return DEFAULT_CARD_FIELDS;
