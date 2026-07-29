@@ -104,6 +104,7 @@ export function parseWorkflowCategory(value: unknown): WorkflowCategory | null {
  * `categoria` preenchida.
  */
 export function categoryFromLegacyFlags(stage: {
+  title?: string | null;
   is_final?: boolean | null;
   is_blocked?: boolean | null;
   is_exception?: boolean | null;
@@ -116,7 +117,10 @@ export function categoryFromLegacyFlags(stage: {
   // então a categoria correta é "andamento" — o bloqueio vira flag no item.
   if (stage.is_blocked || stage.is_exception) return "andamento";
   if (stage.contributes_to_progress === false) return "a_iniciar";
-  return "andamento";
+  // Último critério: o nome. "A Fazer" e "Em Andamento" nunca se
+  // distinguiram por nenhuma flag — sem isto, as duas cairiam em
+  // "andamento" e o quadro exibiria quase tudo como em curso.
+  return suggestCategoryFromTitle(stage.title || "");
 }
 
 /**

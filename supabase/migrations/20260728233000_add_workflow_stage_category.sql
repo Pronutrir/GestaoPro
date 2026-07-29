@@ -26,6 +26,12 @@ ALTER TABLE public.workflow_stages
 -- Só preenche o que ainda está nulo, para não sobrescrever ajuste manual.
 -- Bloqueio/exceção viram 'andamento': o trabalho está em curso, apenas
 -- travado — o bloqueio passa a ser flag no item, não coluna.
+--
+-- O NOME entra como último critério porque "a fazer" e "em andamento" nunca
+-- se distinguiram por coluna nenhuma do banco: sem ele, ambas cairiam em
+-- 'andamento' e o quadro exibiria quase tudo como em curso. É um backfill
+-- único sobre dados legados — o defeito que originou tudo isto era o rename
+-- RECORRENTE reescrever a semântica, e isso não acontece aqui.
 UPDATE public.workflow_stages
 SET categoria = CASE
   WHEN is_final THEN 'concluida'::public.workflow_category
@@ -33,6 +39,16 @@ SET categoria = CASE
   WHEN COALESCE(is_blocked, false) OR COALESCE(is_exception, false)
     THEN 'andamento'::public.workflow_category
   WHEN contributes_to_progress = false THEN 'a_iniciar'::public.workflow_category
+  WHEN lower(translate(title,
+        'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ',
+        'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'))
+       ~ '(cancelad[oa]|descartad[oa]|arquivad[oa]|rejeitad[oa])'
+    THEN 'cancelada'::public.workflow_category
+  WHEN lower(translate(title,
+        'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ',
+        'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'))
+       ~ '(a fazer|afazer|todo|to do|pendente|aguardando|fila|priorizad[oa]|planejad[oa]|nao iniciad[oa])'
+    THEN 'a_iniciar'::public.workflow_category
   ELSE 'andamento'::public.workflow_category
 END
 WHERE categoria IS NULL;
