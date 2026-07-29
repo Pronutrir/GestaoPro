@@ -690,19 +690,22 @@ function KanbanCard({
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`bg-card border border-border rounded-lg ${d.card} shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`}
+            className={`relative bg-card border border-border rounded-lg ${d.card} shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`}
             onClick={onEdit}
           >
+            {/* Alça de arrastar FORA do fluxo: como coluna fixa ela roubava
+                ~20px de largura de todo card, o tempo todo, para uma ação que
+                só importa no hover. Agora flutua sobre a borda esquerda. */}
+            {dragListeners ? (
+              <button
+                className="absolute left-0 top-0 bottom-0 w-4 flex items-start justify-center pt-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
+                onClick={(e) => e.stopPropagation()}
+                {...dragListeners}
+              >
+                <GripVertical className="w-3.5 h-3.5" />
+              </button>
+            ) : null}
             <div className={`flex items-start ${d.gap}`}>
-              {dragListeners ? (
-                <button
-                  className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
-                  onClick={(e) => e.stopPropagation()}
-                  {...dragListeners}
-                >
-                  <GripVertical className="w-3.5 h-3.5" />
-                </button>
-              ) : null}
               <div className="flex-1 min-w-0 overflow-hidden">
                 {parentBreadcrumb && cardFields.breadcrumb && (
                   <button
@@ -788,7 +791,7 @@ function KanbanCard({
                   className="mb-1.5 flex items-center gap-1.5"
                   title={progressTooltip}
                 >
-                  <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                  <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                     <div
                       className={`h-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
                       style={{ width: `${progressBarWidth}%` }}
@@ -828,7 +831,7 @@ function KanbanCard({
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   {!!blockedSubsCount && blockedSubsCount > 0 && (
                     <Badge
                       className="bg-destructive/15 text-destructive border-destructive/30 text-[10px] px-1.5 py-0 animate-pulse"
@@ -850,33 +853,19 @@ function KanbanCard({
                        activity.deadline_flag === "red" ? "🔴 Vencido" : ""}
                     </Badge>
                   )}
+                  {/* Avatar limpo, sem moldura de badge: ancora o rodapé à
+                      esquerda enquanto o prazo ancora à direita. */}
                   {cardFields.assignee && activity.assigned_to && (
-                    <Badge variant="outline" className="text-[10px] px-1 py-0" title={assigneeName || "Responsável"}>
-                      <Avatar className="h-4 w-4 shrink-0">
-                        {assigneeAvatar ? <AvatarImage src={assigneeAvatar} alt={assigneeName || "Responsável"} /> : null}
-                        <AvatarFallback className="text-[7px] font-semibold">
-                          {getAvatarInitials(assigneeName)}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Badge>
+                    <Avatar className="h-[18px] w-[18px] shrink-0" title={assigneeName || "Responsável"}>
+                      {assigneeAvatar ? <AvatarImage src={assigneeAvatar} alt={assigneeName || "Responsável"} /> : null}
+                      <AvatarFallback className="text-[8px] font-semibold bg-primary/15 text-primary">
+                        {getAvatarInitials(assigneeName)}
+                      </AvatarFallback>
+                    </Avatar>
                   )}
                   {cardFields.participants && activity.participants && activity.participants.length > 0 && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-accent/30" title={`Participantes: ${activity.participants.join(", ")}`}>
                       👥 +{activity.participants.length}
-                    </Badge>
-                  )}
-                  {cardFields.dueDate && activity.end_date && (
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] px-1.5 py-0 ${
-                        isOverdue
-                          ? "border-destructive bg-destructive/10 text-destructive font-semibold"
-                          : ""
-                      }`}
-                      title={`Prazo: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}`}
-                    >
-                      {isOverdue && <AlertCircle className="w-2.5 h-2.5 mr-0.5" />}
-                      📅 {parseDate(activity.end_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                     </Badge>
                   )}
                   {isQualityProject && activity.last_update_date && (
@@ -993,6 +982,22 @@ function KanbanCard({
                       </PopoverContent>
                     </Popover>
                   ) : null}
+
+                  {/* Prazo por ÚLTIMO e com ml-auto: ancora na borda direita do
+                      card, fechando a linha que o avatar abre à esquerda — é o
+                      que elimina a faixa vazia. Texto tabular, sem moldura nem
+                      emoji; o atraso se lê pela cor. */}
+                  {cardFields.dueDate && activity.end_date && (
+                    <span
+                      className={`ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] tabular-nums ${
+                        isOverdue ? "text-destructive font-semibold" : "text-muted-foreground"
+                      }`}
+                      title={`Prazo: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}`}
+                    >
+                      {isOverdue && <AlertCircle className="w-2.5 h-2.5" />}
+                      {parseDate(activity.end_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                    </span>
+                  )}
                 </div>
                 {cardFields.subCount && subActivityCount && subActivityCount > 0 ? (
                   <button
