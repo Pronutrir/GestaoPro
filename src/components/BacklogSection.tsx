@@ -70,6 +70,7 @@ interface BacklogSectionProps {
   onDataChanged: () => void;
   isAdmin?: boolean;
   onCreateActivityInPhase?: (phaseId: string | null, parentId?: string | null) => void;
+  onCreatePhase?: () => void;
 }
 
 const priorityLabels: Record<string, string> = { high: "Alta", medium: "Média", low: "Baixa" };
@@ -87,7 +88,7 @@ const priorityDot: Record<string, string> = {
 export const BacklogSection = ({
   projectId, activities, phases,
   onEditActivity, onDeleteActivity, onToggleActivity,
-  onDataChanged, isAdmin = false, onCreateActivityInPhase,
+  onDataChanged, isAdmin = false, onCreateActivityInPhase, onCreatePhase,
 }: BacklogSectionProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -446,13 +447,13 @@ export const BacklogSection = ({
       setQuickAddTitle("");
       return;
     }
+    const parent = parentId ? backlogActs.find((a) => a.id === parentId) : null;
     // EAP: se o pai é folha (atividade/marco), promove a agrupador (Fase/Entrega)
     // antes de inserir. Fase agrupa em qualquer nível. Erro ignorado de propósito:
     // o pai já funciona como agrupador por ter filhos.
-    if (parentId) {
-      const parent = backlogActs.find((a) => a.id === parentId);
-      const parentType = parent?.item_type || "atividade";
-      const parentIsLeaf = !parent || parent.is_milestone || (parentType !== "fase" && parentType !== "pacote");
+    if (parentId && parent) {
+      const parentType = parent.item_type || "atividade";
+      const parentIsLeaf = parent.is_milestone || (parentType !== "fase" && parentType !== "pacote");
       if (parentIsLeaf) {
         await supabase
           .from("activities")
@@ -461,12 +462,18 @@ export const BacklogSection = ({
       }
     }
 
+    // Herda o stage do pai (fase) em vez do stage fixo "Backlog": uma tarefa
+    // criada dentro de uma fase precisa nascer na MESMA coluna do quadro que a
+    // fase, senão fica presa no stage 0 (que nunca vira coluna do Kanban) e
+    // some visualmente, mesmo aparecendo corretamente aqui no Backlog.
+    const inheritedStageId = parent?.workflow_stage_id ?? backlogStageId;
+
     const { error } = await supabase.from("activities").insert({
       project_id: projectId,
       title,
       phase_id: phaseId,
       parent_id: parentId,
-      workflow_stage_id: backlogStageId,
+      workflow_stage_id: inheritedStageId,
       status: "pending",
       priority: "medium",
       item_type: "atividade",
@@ -1147,9 +1154,14 @@ export const BacklogSection = ({
           <div className="p-8 text-center">
             <Inbox className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
             <p className="text-muted-foreground text-sm">Nenhuma fase ou atividade ainda</p>
-            <p className="text-muted-foreground/60 text-xs mt-1">
+            <p className="text-muted-foreground/60 text-xs mt-1 mb-4">
               Crie uma fase para começar a organizar pacotes e atividades
             </p>
+            {onCreatePhase && (
+              <Button type="button" size="sm" onClick={onCreatePhase} className="gap-1.5">
+                <Plus className="w-3.5 h-3.5" /> Criar primeira fase
+              </Button>
+            )}
           </div>
         )}
 

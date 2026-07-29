@@ -1047,7 +1047,7 @@ function KanbanCard({
                     </span>
                   )}
                 </div>
-                {cardFields.subCount && subActivityCount && subActivityCount > 0 ? (
+                {(isPhase || cardFields.subCount) && subActivityCount && subActivityCount > 0 ? (
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}

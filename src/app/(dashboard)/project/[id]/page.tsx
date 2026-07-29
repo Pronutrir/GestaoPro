@@ -1129,7 +1129,11 @@ export default function ProjectDetailsPage() {
       newIds.forEach(nid => idsToTrash.add(nid));
       frontier = newIds;
     }
-    await (supabase.from("activities").update({ is_trashed: true, trashed_at: trashedAt } as any) as any).in("id", Array.from(idsToTrash));
+    const { error } = await (supabase.from("activities").update({ is_trashed: true, trashed_at: trashedAt } as any) as any).in("id", Array.from(idsToTrash));
+    if (error) {
+      toast.error("Não foi possível arquivar a atividade.", { description: error.message });
+      return;
+    }
     toast.success("Atividade movida para a lixeira!");
     fetchProjectData();
   };
@@ -1497,13 +1501,31 @@ export default function ProjectDetailsPage() {
             <TabsContent value="backlog" className="mt-3 space-y-3">
               {/* Barra única: ações à esquerda · busca/filtros/opções à direita */}
               <div className="flex flex-wrap items-center gap-2">
-                {canCreate && (
+                {canCreate ? (
                   <>
                     <Button size="sm" variant="default" onClick={() => setShowQuickCreate(true)} className="gap-1.5 h-9">
                       <Plus className="w-4 h-4" /> Nova Atividade
                     </Button>
                     <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
                   </>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    disabled
+                    className="gap-1.5 h-9"
+                    title={
+                      isProjectConcluded
+                        ? "Projeto concluído — reabra para criar atividades."
+                        : isChangeBlocked
+                          ? "Bloqueado por uma solicitação de mudança em aberto."
+                          : !canWrite
+                            ? "Seu acesso a este projeto é somente leitura."
+                            : "Você não tem permissão para criar atividades neste projeto."
+                    }
+                  >
+                    <Plus className="w-4 h-4" /> Nova Atividade
+                  </Button>
                 )}
 
                 <span className="flex-1" />
@@ -1605,6 +1627,7 @@ export default function ProjectDetailsPage() {
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
                 isAdmin={canDelete}
+                onCreatePhase={() => setShowAddPhase(true)}
               />
             </TabsContent>
 
