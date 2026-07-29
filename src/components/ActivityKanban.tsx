@@ -103,6 +103,7 @@ import {
   suggestCategoryFromTitle, categoryFromLegacyFlags, parseWorkflowCategory,
   WORKFLOW_CATEGORY_META, type WorkflowCategory,
 } from "@/lib/workflowCategory";
+import { SHOW_USER_STORIES } from "@/lib/featureFlags";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { resolveEapKind } from "@/lib/eapModel";
 import { cn } from "@/lib/utils";
@@ -859,7 +860,7 @@ function KanbanCard({
                       🔄 {parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}
                     </Badge>
                   )}
-                  {hasStory && (
+                  {SHOW_USER_STORIES && hasStory && (
                     <Badge
                       variant="outline"
                       className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/30 cursor-pointer hover:bg-primary/20 transition-colors"
@@ -1019,7 +1020,7 @@ function KanbanCard({
                     <Link2 className="w-3.5 h-3.5" />
                   </Button>
                 )}
-                {onCreateStory && (
+                {SHOW_USER_STORIES && onCreateStory && (
                   <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onCreateStory} title="Criar História">
                     <BookOpen className="w-3.5 h-3.5" />
                   </Button>
@@ -4500,8 +4501,9 @@ export const ActivityKanban = ({
         />
       )}
 
-      {/* Dialog para criar história rápida */}
-      <Dialog open={!!createStoryActivity} onOpenChange={(open) => { if (!open) setCreateStoryActivity(null); }}>
+      {/* Dialog para criar história rápida — oculto junto com o recurso
+          (ver SHOW_USER_STORIES em lib/featureFlags). */}
+      <Dialog open={SHOW_USER_STORIES && !!createStoryActivity} onOpenChange={(open) => { if (!open) setCreateStoryActivity(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
