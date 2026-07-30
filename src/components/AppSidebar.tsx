@@ -16,6 +16,7 @@ import {
   Trash2,
   Briefcase,
   Bot,
+  ListChecks,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -39,6 +40,9 @@ import {
 
 const allNavItems = [
   { path: "/", label: "Visão Geral", icon: Home, minRole: "user" as const, moduleKey: "overview" },
+  // Pessoal por definição (só mostra o que é da própria pessoa) — fica fora
+  // do controle por módulo, como o Roadmap.
+  { path: "/meu-trabalho", label: "Meu trabalho", icon: ListChecks, minRole: "user" as const, moduleKey: "overview" },
   { path: "/projects", label: "Projetos", icon: FolderKanban, minRole: "user" as const, moduleKey: "projects" },
   // Módulo Portfólio em standby — mantido no código mas oculto da navegação
   // { path: "/portfolio", label: "Portfólio", icon: Briefcase, minRole: "gestor" as const, moduleKey: "portfolio" },
@@ -124,6 +128,8 @@ export function AppSidebar() {
     // Roadmap é onde o usuário acompanha/edita as próprias solicitações —
     // fica fora do controle por módulo para não bloquear os próprios pedidos.
     if (item.path === "/roadmap") return true;
+    // Meu trabalho só mostra o que é da própria pessoa — mesma regra.
+    if (item.path === "/meu-trabalho") return true;
 
     // 4) Barreira de MÓDULO (aplica a gestor E usuário comum agora).
     if (allowedModules && !allowedModules.includes(item.moduleKey)) return false;
