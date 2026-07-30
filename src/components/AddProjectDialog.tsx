@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -48,6 +48,17 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
   const [profiles, setProfiles] = useState<{ id: string; full_name: string; sector: string | null; role_title?: string | null; avatar_url?: string | null }[]>([]);
   const [sectors, setSectors] = useState<{ id: string; name: string }[]>([]);
   const [team, setTeam] = useState<PendingMember[]>([]);
+  // Âncoras dos campos de cargo — ver focusRoleField abaixo.
+  const ownerFieldRef = useRef<HTMLDivElement>(null);
+  const managerFieldRef = useRef<HTMLDivElement>(null);
+  const focusRoleField = (role: "Líder" | "Gestor") => {
+    const el = (role === "Líder" ? ownerFieldRef : managerFieldRef).current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-primary", "rounded-md");
+    window.setTimeout(() => el.classList.remove("ring-2", "ring-primary", "rounded-md"), 1600);
+    el.querySelector("button")?.focus();
+  };
 
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -496,7 +507,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
+              <div className="grid gap-2" ref={managerFieldRef}>
                 <Label>Gestor do Projeto</Label>
                 <PersonCombobox
                   people={profiles}
@@ -510,7 +521,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 />
                 <p className="text-[11px] text-muted-foreground">Opcional. Tem o mesmo nível de acesso ao projeto que o Líder.</p>
               </div>
-              <div className="grid gap-2">
+              <div className="grid gap-2" ref={ownerFieldRef}>
                 <Label>Líder do Projeto</Label>
                 <PersonCombobox
                   people={profiles}
@@ -579,6 +590,17 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 shrink-0">
                             {r.role}
                           </span>
+                          {/* O X de remover não serve aqui (deixaria o projeto
+                              sem responsável em silêncio) — mas sem nada a linha
+                              parecia travada. "Trocar" leva ao campo do cargo. */}
+                          <button
+                            type="button"
+                            onClick={() => focusRoleField(r.role as "Líder" | "Gestor")}
+                            title={`Trocar o ${r.role} no campo acima`}
+                            className="text-[11px] font-medium text-primary hover:underline shrink-0 px-1"
+                          >
+                            Trocar
+                          </button>
                         </div>
                       );
                     })}
