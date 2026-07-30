@@ -292,6 +292,8 @@ interface WorkflowStage {
   progress_percent?: number | null;
   contributes_to_progress?: boolean;
   wip_limit?: number | null;
+  /** Quando true, o quadro IMPEDE exceder o wip_limit (opt-in por coluna). */
+  wip_strict?: boolean | null;
   /** Categoria semântica — fonte da verdade, independente do título. */
   categoria?: WorkflowCategory;
 }
@@ -1532,6 +1534,7 @@ function SortableColumn({
   onChangeStageColor,
   onSetStageProgress,
   onSetStageWipLimit,
+  onToggleStageWipStrict,
   onToggleStageContributes,
   onToggleStageFinal,
   onToggleStageBlocked,
@@ -1588,6 +1591,7 @@ function SortableColumn({
   onChangeStageColor: (id: string, color: string) => Promise<void>;
   onSetStageProgress: (id: string, current: number | null | undefined) => Promise<void>;
   onSetStageWipLimit: (id: string, current: number | null | undefined) => Promise<void>;
+  onToggleStageWipStrict?: (id: string, current: boolean) => Promise<void>;
   onToggleStageContributes: (id: string, current: boolean | undefined) => Promise<void>;
   onToggleStageFinal: (id: string, current: boolean) => Promise<void>;
   onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
@@ -2105,11 +2109,12 @@ function SortableColumn({
                 className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (onOpenCreateTask) {
-                    onOpenCreateTask(stage.id);
-                  } else {
-                    setShowQuickAdd(!showQuickAdd);
-                  }
+                  // Criação INLINE na coluna, não diálogo: digitar o título e dar
+                  // Enter é o gesto padrão (Trello/Linear/Notion) e o form inline
+                  // já existia aqui — só estava inalcançável, porque
+                  // onOpenCreateTask sempre vinha preenchido e abria o modal.
+                  // O formulário completo continua a um clique, dentro do inline.
+                  setShowQuickAdd((v) => !v);
                 }}
                 title="Criar atividade nesta coluna"
               >
@@ -2210,6 +2215,22 @@ function SortableColumn({
                       ? "Definir limite (WIP)"
                       : `Editar limite WIP (${stage.wip_limit})`}
                   </DropdownMenuItem>
+                  {/* Só faz sentido oferecer o modo rígido quando existe limite. */}
+                  {stage.wip_limit != null && stage.wip_limit > 0 && onToggleStageWipStrict && (
+                    <DropdownMenuItem
+                      className="focus:bg-muted/60 focus:text-foreground"
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        onToggleStageWipStrict(stage.id, !!(stage as any).wip_strict);
+                      }}
+                      title="Rígido: o quadro IMPEDE trazer mais cards ao atingir o limite. Flexível: apenas avisa."
+                    >
+                      {(stage as any).wip_strict
+                        ? <Check className="w-3.5 h-3.5 mr-2 text-success" />
+                        : <span className="w-3.5 h-3.5 mr-2" />}
+                      {(stage as any).wip_strict ? "Limite rígido (impede)" : "Tornar limite rígido"}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     className="focus:bg-muted/60 focus:text-foreground"
                     onSelect={(e) => {
@@ -2263,7 +2284,11 @@ function SortableColumn({
               if (e.key === "Enter" && quickTitle.trim()) {
                 setQuickLoading(true);
                 onCreateActivity(stage.id, quickTitle.trim(), quickPhase || null, quickOrder ? parseInt(quickOrder) : null)
-                  .then(() => { setQuickTitle(""); setQuickPhase(""); setQuickOrder(""); setShowQuickAdd(false); })
+                  // Enter cria e MANTÉM o campo aberto (só limpa o título): ao
+                  // planejar, criam-se várias tarefas em sequência. Fase e nº EAP
+                  // persistem de propósito — costumam repetir entre itens irmãos.
+                  // Esc fecha.
+                  .then(() => { setQuickTitle(""); })
                   .finally(() => setQuickLoading(false));
               }
               if (e.key === "Escape") setShowQuickAdd(false);
@@ -2305,6 +2330,18 @@ function SortableColumn({
               Cancelar
             </Button>
           </div>
+          {/* Porta para o formulário completo: o inline cobre o caso comum
+              (título, fase, EAP); responsável, prazo, horas e o resto continuam
+              a um clique daqui, sem virar pedágio de toda criação. */}
+          {onOpenCreateTask && (
+            <button
+              type="button"
+              className="w-full text-[11px] text-muted-foreground hover:text-primary transition-colors text-left"
+              onClick={() => { setShowQuickAdd(false); onOpenCreateTask(stage.id); }}
+            >
+              Mais campos (prazo, responsável…)
+            </button>
+          )}
         </div>
       )}
 
@@ -3730,6 +3767,25 @@ export const ActivityKanban = ({
     }
 
     const stage = stages.find((s) => s.id === targetStageId);
+
+    // Limite de WIP RÍGIDO (opt-in por coluna, wip_strict): impede o drop que
+    // ultrapassaria o limite. Sem isto o limite só avisava depois do fato — e um
+    // limite que nunca impede é decorativo, exatamente a crítica que a
+    // literatura Kanban faz. Colunas sem wip_strict seguem só sinalizando.
+    if (stage?.wip_limit != null && stage.wip_limit > 0 && (stage as any).wip_strict) {
+      const currentInTarget = activities.filter(
+        (a) => (optimisticMoves[a.id] || a.workflow_stage_id) === targetStageId && a.id !== activityId,
+      ).length;
+      if (currentInTarget >= stage.wip_limit) {
+        toast({
+          title: `"${getStageDisplayTitle(stage.title)}" está no limite de WIP`,
+          description: `A coluna aceita ${stage.wip_limit} e já tem ${currentInTarget}. Conclua ou mova algo antes de trazer mais trabalho.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     const newStatus = stage?.is_final ? "completed" : "pending";
 
     if (draggedActivity && newStatus === "completed") {
@@ -4098,6 +4154,37 @@ export const ActivityKanban = ({
       toast({ title: "Erro ao salvar limite", description: error.message, variant: "destructive" });
       return;
     }
+    fetchStages();
+  }, [toast]);
+
+  /** Alterna entre limite de WIP que só avisa e limite que IMPEDE o drop. */
+  const handleToggleStageWipStrict = useCallback(async (id: string, current: boolean) => {
+    const next = !current;
+    const { error } = await supabase
+      .from("workflow_stages")
+      .update({ wip_strict: next } as never)
+      .eq("id", id);
+
+    if (error) {
+      // Mesmo padrão do wip_limit: se a migration não rodou na VM, avisa em vez
+      // de estourar um erro técnico na cara do usuário.
+      if (/wip_strict/i.test(error.message)) {
+        toast({
+          title: "Limite rígido indisponível",
+          description: "A migration wip_strict ainda não foi aplicada no banco. Rode scripts/apply-workflow-stage-wip-strict.sh na VM.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Erro ao alterar o limite", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({
+      title: next ? "Limite rígido ativado" : "Limite volta a apenas avisar",
+      description: next
+        ? "O quadro passa a impedir trazer mais cards ao atingir o limite."
+        : undefined,
+    });
     fetchStages();
   }, [toast]);
 
@@ -4591,6 +4678,23 @@ export const ActivityKanban = ({
             </DropdownMenu>
           );
         })()}
+        {/* "Por time" depende de existir um time cadastrado, mas o cadastro
+            estava escondido dois níveis abaixo, no fim do menu de outra função —
+            quem não sabia que existia, não achava. Com a raia por time ativa, o
+            acesso fica ao lado, visível. Extra: sem nenhum time cadastrado, o
+            botão se explica em vez de deixar o quadro vazio sem motivo. */}
+        {groupBy === "customGroup" && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 text-xs"
+            onClick={() => setManageGroupsOpen(true)}
+            title="Criar e editar os times usados nas raias"
+          >
+            <Users className="w-3.5 h-3.5" />
+            {laneGroups.length === 0 ? "Criar um time" : `Times (${laneGroups.length})`}
+          </Button>
+        )}
         <Button
           variant={onlyMine ? "default" : "outline"}
           size="sm"
@@ -4824,6 +4928,7 @@ export const ActivityKanban = ({
                 onChangeStageColor={handleChangeStageColor}
                 onSetStageProgress={handleSetStageProgress}
                 onSetStageWipLimit={handleSetStageWipLimit}
+                onToggleStageWipStrict={handleToggleStageWipStrict}
                 onToggleStageContributes={handleToggleStageContributes}
                 onToggleStageFinal={handleToggleStageFinal}
                 onToggleStageBlocked={handleToggleStageBlocked}
