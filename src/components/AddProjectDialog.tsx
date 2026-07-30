@@ -431,6 +431,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 <Input
                   id="start_date"
                   type="date"
+                  lang="pt-BR"
                   value={formData.start_date}
                   onChange={(e) =>
                     setFormData({ ...formData, start_date: e.target.value })
@@ -442,6 +443,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 <Input
                   id="due_date"
                   type="date"
+                  lang="pt-BR"
                   value={formData.due_date}
                   onChange={(e) =>
                     setFormData({ ...formData, due_date: e.target.value })
@@ -455,6 +457,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 <Input
                   id="actual_start_date"
                   type="date"
+                  lang="pt-BR"
                   value={formData.actual_start_date}
                   onChange={(e) =>
                     setFormData({ ...formData, actual_start_date: e.target.value })
@@ -466,6 +469,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 <Input
                   id="actual_end_date"
                   type="date"
+                  lang="pt-BR"
                   value={formData.actual_end_date}
                   onChange={(e) =>
                     setFormData({ ...formData, actual_end_date: e.target.value })

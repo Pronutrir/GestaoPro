@@ -413,6 +413,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
               <Label className="text-xs text-muted-foreground">Data</Label>
               <Input
                 type="date"
+                lang="pt-BR"
                 value={form.meeting_date ? form.meeting_date.slice(0, 10) : ""}
                 onChange={(e) => setForm({ ...form, meeting_date: e.target.value })}
               />
@@ -835,6 +836,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                           <div className="flex gap-1">
                             <Input
                               type="date"
+                              lang="pt-BR"
                               value={newAction.due_date}
                               onChange={(e) => setNewAction({ ...newAction, due_date: e.target.value })}
                               className="text-sm h-8"

@@ -2371,6 +2371,7 @@ export const ActivityKanban = ({
                       <label className="w-8 text-xs text-muted-foreground shrink-0">De</label>
                       <Input
                         type="date"
+                        lang="pt-BR"
                         value={filterDueRange.from}
                         max={filterDueRange.to || undefined}
                         onChange={(e) => setFilterDueRange((r) => ({ ...r, from: e.target.value }))}
@@ -2381,6 +2382,7 @@ export const ActivityKanban = ({
                       <label className="w-8 text-xs text-muted-foreground shrink-0">Até</label>
                       <Input
                         type="date"
+                        lang="pt-BR"
                         value={filterDueRange.to}
                         min={filterDueRange.from || undefined}
                         onChange={(e) => setFilterDueRange((r) => ({ ...r, to: e.target.value }))}
@@ -2470,13 +2472,13 @@ export const ActivityKanban = ({
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <label className="w-8 text-xs text-muted-foreground shrink-0">De</label>
-                      <Input type="date" value={filterStartRange.from} max={filterStartRange.to || undefined}
+                      <Input type="date" lang="pt-BR" value={filterStartRange.from} max={filterStartRange.to || undefined}
                         onChange={(e) => setFilterStartRange((r) => ({ ...r, from: e.target.value }))}
                         className="h-8 text-xs flex-1" />
                     </div>
                     <div className="flex items-center gap-2">
                       <label className="w-8 text-xs text-muted-foreground shrink-0">Até</label>
-                      <Input type="date" value={filterStartRange.to} min={filterStartRange.from || undefined}
+                      <Input type="date" lang="pt-BR" value={filterStartRange.to} min={filterStartRange.from || undefined}
                         onChange={(e) => setFilterStartRange((r) => ({ ...r, to: e.target.value }))}
                         className="h-8 text-xs flex-1" />
                     </div>

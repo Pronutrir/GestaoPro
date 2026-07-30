@@ -536,7 +536,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           </Field>
           <Field label="Data de Início">
             {editing ? (
-              <Input type="date" value={data.start_date} onChange={(e) => setData({ ...data, start_date: e.target.value })} className="text-sm h-8" />
+              <Input type="date" lang="pt-BR" value={data.start_date} onChange={(e) => setData({ ...data, start_date: e.target.value })} className="text-sm h-8" />
             ) : (
               <p className="text-sm">{formatDate(data.start_date || project.start_date)}</p>
             )}
@@ -834,7 +834,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                     {editing ? <Input value={ap.name} onChange={(e) => updateApproval(idx, "name", e.target.value)} placeholder="Nome completo" className="h-8 text-sm" /> : <span>{ap.name || "—"}</span>}
                   </td>
                   <td className="px-3 py-2 align-top">
-                    {editing ? <Input type="date" value={ap.date} onChange={(e) => updateApproval(idx, "date", e.target.value)} className="h-8 text-sm" /> : <span>{formatDate(ap.date)}</span>}
+                    {editing ? <Input type="date" lang="pt-BR" value={ap.date} onChange={(e) => updateApproval(idx, "date", e.target.value)} className="h-8 text-sm" /> : <span>{formatDate(ap.date)}</span>}
                   </td>
                   {editing && (
                     <td className="px-2 py-2 align-top">

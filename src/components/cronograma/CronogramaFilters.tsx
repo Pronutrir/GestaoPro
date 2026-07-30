@@ -247,12 +247,12 @@ export function CronogramaFilters({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs">De</Label>
-                  <Input type="date" value={value.dateFrom ?? ""} className="h-8"
+                  <Input type="date" lang="pt-BR" value={value.dateFrom ?? ""} className="h-8"
                     onChange={(e) => set({ dateFrom: e.target.value || null })} />
                 </div>
                 <div>
                   <Label className="text-xs">Até</Label>
-                  <Input type="date" value={value.dateTo ?? ""} className="h-8"
+                  <Input type="date" lang="pt-BR" value={value.dateTo ?? ""} className="h-8"
                     onChange={(e) => set({ dateTo: e.target.value || null })} />
                 </div>
               </div>

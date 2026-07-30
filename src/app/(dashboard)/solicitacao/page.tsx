@@ -1405,6 +1405,7 @@ function SolicitacaoForm() {
                   <Input
                     id="dataNecessaria"
                     type="date"
+                    lang="pt-BR"
                     min={hoje}
                     value={form.dataNecessaria}
                     onChange={(e) => set("dataNecessaria", e.target.value)}

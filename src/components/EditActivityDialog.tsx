@@ -2080,7 +2080,7 @@ export const EditActivityDialog = ({
                 <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Calendar className="w-4 h-4" /> Data de Atualização
                 </Label>
-                <Input type="date" value={formData.last_update_date} onChange={(e) => setFormData({ ...formData, last_update_date: e.target.value })} />
+                <Input type="date" lang="pt-BR" value={formData.last_update_date} onChange={(e) => setFormData({ ...formData, last_update_date: e.target.value })} />
               </div>
             </div>
           )}
@@ -2494,6 +2494,7 @@ export const EditActivityDialog = ({
                                 <span>{dateShort}</span>
                                 <input
                                   type="date"
+                                  lang="pt-BR"
                                   value={sub.end_date || ""}
                                   onChange={(e) => updateField(e.target.value || null)}
                                   className="absolute inset-0 opacity-0 cursor-pointer"
@@ -2515,6 +2516,7 @@ export const EditActivityDialog = ({
                                 <span>{ds}</span>
                                 <input
                                   type="date"
+                                  lang="pt-BR"
                                   value={sub.start_date || ""}
                                   onChange={(e) => updateField(e.target.value || null)}
                                   className="absolute inset-0 opacity-0 cursor-pointer"

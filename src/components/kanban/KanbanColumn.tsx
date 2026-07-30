@@ -272,18 +272,18 @@ export function ColumnFilterPanel({
         <Section id="due" label="Prazo" summary={filter.dueRange.from || filter.dueRange.to ? "Definido" : "Qualquer"} on={!!(filter.dueRange.from || filter.dueRange.to)}>
           <div className="space-y-2">
             <div className="flex items-center gap-2"><label className="w-8 text-xs text-muted-foreground shrink-0">De</label>
-              <Input type="date" value={filter.dueRange.from} onChange={(e) => set({ dueRange: { ...filter.dueRange, from: e.target.value } })} className="h-8 text-xs flex-1" /></div>
+              <Input type="date" lang="pt-BR" value={filter.dueRange.from} onChange={(e) => set({ dueRange: { ...filter.dueRange, from: e.target.value } })} className="h-8 text-xs flex-1" /></div>
             <div className="flex items-center gap-2"><label className="w-8 text-xs text-muted-foreground shrink-0">Até</label>
-              <Input type="date" value={filter.dueRange.to} onChange={(e) => set({ dueRange: { ...filter.dueRange, to: e.target.value } })} className="h-8 text-xs flex-1" /></div>
+              <Input type="date" lang="pt-BR" value={filter.dueRange.to} onChange={(e) => set({ dueRange: { ...filter.dueRange, to: e.target.value } })} className="h-8 text-xs flex-1" /></div>
           </div>
         </Section>
 
         <Section id="start" label="Início" summary={filter.startRange.from || filter.startRange.to ? "Definido" : "Qualquer"} on={!!(filter.startRange.from || filter.startRange.to)}>
           <div className="space-y-2">
             <div className="flex items-center gap-2"><label className="w-8 text-xs text-muted-foreground shrink-0">De</label>
-              <Input type="date" value={filter.startRange.from} onChange={(e) => set({ startRange: { ...filter.startRange, from: e.target.value } })} className="h-8 text-xs flex-1" /></div>
+              <Input type="date" lang="pt-BR" value={filter.startRange.from} onChange={(e) => set({ startRange: { ...filter.startRange, from: e.target.value } })} className="h-8 text-xs flex-1" /></div>
             <div className="flex items-center gap-2"><label className="w-8 text-xs text-muted-foreground shrink-0">Até</label>
-              <Input type="date" value={filter.startRange.to} onChange={(e) => set({ startRange: { ...filter.startRange, to: e.target.value } })} className="h-8 text-xs flex-1" /></div>
+              <Input type="date" lang="pt-BR" value={filter.startRange.to} onChange={(e) => set({ startRange: { ...filter.startRange, to: e.target.value } })} className="h-8 text-xs flex-1" /></div>
           </div>
         </Section>
 

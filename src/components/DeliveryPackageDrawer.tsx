@@ -292,11 +292,11 @@ export const DeliveryPackageDrawer = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs text-muted-foreground">Início</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <Input type="date" lang="pt-BR" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Fim</Label>
-                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                  <Input type="date" lang="pt-BR" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
                 </div>
               </div>
 

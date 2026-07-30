@@ -275,6 +275,7 @@ export function FiltroPeriodo({
           <span className="text-[11px] text-muted-foreground">De</span>
           <Input
             type="date"
+            lang="pt-BR"
             value={valor.de}
             onChange={(e) => onChange({ ...valor, de: e.target.value })}
             className="h-8"
@@ -284,6 +285,7 @@ export function FiltroPeriodo({
           <span className="text-[11px] text-muted-foreground">Até</span>
           <Input
             type="date"
+            lang="pt-BR"
             value={valor.ate}
             onChange={(e) => onChange({ ...valor, ate: e.target.value })}
             className="h-8"

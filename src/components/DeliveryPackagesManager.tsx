@@ -205,8 +205,8 @@ export const DeliveryPackagesManager = ({ projectId, activities, phases = [], ca
           <Input placeholder="Título do pacote *" value={title} onChange={e => setTitle(e.target.value)} />
           <Textarea placeholder="Descrição (opcional)" value={description} onChange={e => setDescription(e.target.value)} rows={2} />
           <div className="grid grid-cols-2 gap-3">
-            <div><Label className="text-xs text-muted-foreground">Início</Label><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
-            <div><Label className="text-xs text-muted-foreground">Fim</Label><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
+            <div><Label className="text-xs text-muted-foreground">Início</Label><Input type="date" lang="pt-BR" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
+            <div><Label className="text-xs text-muted-foreground">Fim</Label><Input type="date" lang="pt-BR" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <Select value={sector} onValueChange={setSector}>
