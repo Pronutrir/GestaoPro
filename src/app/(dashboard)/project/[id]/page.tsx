@@ -1668,6 +1668,12 @@ export default function ProjectDetailsPage() {
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
                 isAdmin={canDelete}
+                deleteBlockedReason={
+                  isProjectConcluded ? "Projeto concluído — reabra o projeto para arquivar atividades."
+                  : isChangeBlocked ? "Há uma solicitação de mudança aberta neste projeto."
+                  : !canWrite ? "Seu acesso a este projeto é somente leitura."
+                  : "Você não tem permissão para arquivar atividades neste projeto."
+                }
                 onCreatePhase={() => setShowAddPhase(true)}
                 hasActiveFilters={!!listSearch || listStatusFilter !== "all" || listPriorityFilter !== "all"}
               />

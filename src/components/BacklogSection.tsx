@@ -13,6 +13,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -70,6 +71,10 @@ interface BacklogSectionProps {
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onDataChanged: () => void;
   isAdmin?: boolean;
+  /** Por que arquivar está indisponível (projeto concluído, sem permissão…).
+   *  Quando vem preenchido, o botão fica DESABILITADO com este texto no
+   *  tooltip em vez de sumir — some sem explicação vira "não consigo excluir". */
+  deleteBlockedReason?: string;
   onCreatePhase?: () => void;
   hasActiveFilters?: boolean;
 }
@@ -77,7 +82,7 @@ interface BacklogSectionProps {
 export const BacklogSection = ({
   projectId, activities, phases,
   onEditActivity, onDeleteActivity, onToggleActivity,
-  onDataChanged, isAdmin = false, onCreatePhase, hasActiveFilters,
+  onDataChanged, isAdmin = false, deleteBlockedReason, onCreatePhase, hasActiveFilters,
 }: BacklogSectionProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -679,14 +684,16 @@ export const BacklogSection = ({
           ) : (
             <button
               type="button"
-              className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted shrink-0"
+              className="h-6 w-6 flex items-center justify-center rounded hover:bg-success/10 shrink-0"
               onClick={(e) => { e.stopPropagation(); onToggleActivity(activity.id, activity.status); }}
               title={activity.status === "completed" ? "Reabrir tarefa" : "Concluir tarefa"}
             >
               {activity.status === "completed" ? (
                 <CheckCircle2 className="w-4 h-4 text-success" />
               ) : (
-                <Circle className="w-4 h-4 text-muted-foreground" />
+                // Traço mais forte que o ícone de TIPO ao lado: os dois eram
+                // círculos cinza idênticos e pareciam checkbox duplicado.
+                <Circle className="w-4 h-4 text-muted-foreground/70 [stroke-width:2.5]" />
               )}
             </button>
           )}
@@ -698,8 +705,8 @@ export const BacklogSection = ({
                 <button
                   type="button"
                   onClick={(e) => e.stopPropagation()}
-                  title={`${kindMeta.label} — clique para mudar o tipo`}
-                  className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md border transition-colors hover:brightness-95 ${kindMeta.cls}`}
+                  title={`Tipo: ${kindMeta.label} — clique para mudar`}
+                  className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md border bg-muted/60 transition-colors hover:brightness-95 ${kindMeta.cls}`}
                 >
                   {kindMeta.icon}
                 </button>
@@ -782,16 +789,23 @@ export const BacklogSection = ({
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
-            {isAdmin && (
-              <button
-                type="button"
-                className="h-6 w-6 flex items-center justify-center rounded text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => { e.stopPropagation(); onDeleteActivity(activity.id); }}
-                title="Excluir"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
+            {/* Arquivar: sempre presente. Sem permissão/projeto concluído ele
+                fica desabilitado COM o motivo — sumir levava a "não consigo
+                excluir esta atividade" sem pista nenhuma do porquê. */}
+            <button
+              type="button"
+              disabled={!isAdmin}
+              className={cn(
+                "h-6 w-6 flex items-center justify-center rounded transition-opacity opacity-0 group-hover:opacity-100",
+                isAdmin
+                  ? "text-destructive hover:bg-destructive/10"
+                  : "text-muted-foreground/40 cursor-not-allowed",
+              )}
+              onClick={(e) => { e.stopPropagation(); if (isAdmin) onDeleteActivity(activity.id); }}
+              title={isAdmin ? "Arquivar atividade" : (deleteBlockedReason || "Você não tem permissão para arquivar esta atividade")}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </span>
         </div>
 
@@ -975,16 +989,18 @@ export const BacklogSection = ({
             >
               <Plus className="w-3.5 h-3.5" /> Tarefa
             </Button>
-            {isAdmin && (
-              <button
-                type="button"
-                className="h-7 w-7 flex items-center justify-center rounded text-destructive hover:bg-destructive/10"
-                title="Excluir fase"
-                onClick={(e) => { e.stopPropagation(); onDeleteActivity(phaseAct.id); }}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
+            <button
+              type="button"
+              disabled={!isAdmin}
+              className={cn(
+                "h-7 w-7 flex items-center justify-center rounded",
+                isAdmin ? "text-destructive hover:bg-destructive/10" : "text-muted-foreground/40 cursor-not-allowed",
+              )}
+              title={isAdmin ? "Arquivar fase (as subtarefas vão junto)" : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
+              onClick={(e) => { e.stopPropagation(); if (isAdmin) onDeleteActivity(phaseAct.id); }}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
