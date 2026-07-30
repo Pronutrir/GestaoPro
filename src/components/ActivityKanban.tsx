@@ -32,6 +32,9 @@ import {
   GitFork,
   MoreHorizontal,
   Check,
+  Copy,
+  ArrowRightLeft,
+  Shuffle,
   X as XIcon,
   Eye,
   EyeOff,
@@ -57,6 +60,7 @@ import {
   DndContext,
   rectIntersection,
   PointerSensor,
+  KeyboardSensor,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -71,6 +75,7 @@ import {
   horizontalListSortingStrategy,
   useSortable,
   arrayMove,
+  sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
@@ -106,7 +111,8 @@ import {
 } from "@/lib/workflowCategory";
 import { SHOW_USER_STORIES } from "@/lib/featureFlags";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { resolveEapKind } from "@/lib/eapModel";
+import { resolveEapKind, eapTypeOptions, eapToPersisted, EAP_LABELS, type EapKind } from "@/lib/eapModel";
+import { ToastAction } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 const formatHours = (hours: number): string => {
@@ -392,7 +398,11 @@ function SortableKanbanCard({
   onEdit,
   onDelete,
   onToggle,
-  onMoveToBacklog,
+  onDuplicate,
+  onCopyLink,
+  onMoveToStage,
+  moveTargets,
+  onChangeType,
   onLinkParent,
   isAdmin,
   isBlocked,
@@ -424,7 +434,11 @@ function SortableKanbanCard({
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
-  onMoveToBacklog: () => void;
+  onDuplicate?: () => void;
+  onCopyLink?: () => void;
+  onMoveToStage?: (stageId: string) => void;
+  moveTargets?: { id: string; title: string; color: string }[];
+  onChangeType?: (kind: EapKind) => void;
   onLinkParent?: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
@@ -468,7 +482,11 @@ function SortableKanbanCard({
         onEdit={onEdit}
         onDelete={onDelete}
         onToggle={onToggle}
-        onMoveToBacklog={onMoveToBacklog}
+        onDuplicate={onDuplicate}
+        onCopyLink={onCopyLink}
+        onMoveToStage={onMoveToStage}
+        moveTargets={moveTargets}
+        onChangeType={onChangeType}
         onLinkParent={onLinkParent}
         dragListeners={listeners}
         isAdmin={isAdmin}
@@ -506,7 +524,11 @@ function KanbanCard({
   onEdit,
   onDelete,
   onToggle,
-  onMoveToBacklog,
+  onDuplicate,
+  onCopyLink,
+  onMoveToStage,
+  moveTargets,
+  onChangeType,
   onLinkParent,
   dragListeners,
   isAdmin,
@@ -540,7 +562,14 @@ function KanbanCard({
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
-  onMoveToBacklog: () => void;
+  onDuplicate?: () => void;
+  onCopyLink?: () => void;
+  /** Move o card para outra coluna do quadro (substitui o antigo "mover para backlog"). */
+  onMoveToStage?: (stageId: string) => void;
+  /** Colunas visíveis do quadro, destinos possíveis do "Mover para →". */
+  moveTargets?: { id: string; title: string; color: string }[];
+  /** Converte o papel EAP do item (Fase / Atividade / Marco). */
+  onChangeType?: (kind: EapKind) => void;
   onLinkParent?: () => void;
   dragListeners?: any;
   isAdmin?: boolean;
@@ -757,12 +786,62 @@ function KanbanCard({
                     onClick={(e) => e.stopPropagation()}
                     onPointerDown={(e) => e.stopPropagation()}
                   >
+                    {/* "Editar" saiu: clicar em qualquer lugar do card já abre a
+                        edição (onClick={onEdit} no card), então o item era morto. */}
+                    {onDuplicate && (
+                      <DropdownMenuItem
+                        className="focus:bg-muted/60 focus:text-foreground"
+                        onSelect={() => onDuplicate()}
+                      >
+                        <Copy className="w-3.5 h-3.5 mr-2" /> Duplicar
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem
                       className="focus:bg-muted/60 focus:text-foreground"
-                      onSelect={() => onEdit()}
+                      onSelect={() => onCopyLink?.()}
                     >
-                      <Pencil className="w-3.5 h-3.5 mr-2" /> Editar
+                      <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
                     </DropdownMenuItem>
+
+                    {/* "Mover para →" substitui o antigo "Mover para Backlog", que
+                        mandava o card para o stage display_order=0 — coluna que o
+                        quadro não renderiza, fazendo o card desaparecer sem aviso. */}
+                    {onMoveToStage && moveTargets && moveTargets.length > 0 && (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="focus:bg-muted/60 focus:text-foreground data-[state=open]:bg-muted/60">
+                          <ArrowRightLeft className="w-3.5 h-3.5 mr-2" /> Mover para
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent sideOffset={6} className="w-52">
+                          {moveTargets.map((s) => (
+                            <DropdownMenuItem
+                              key={s.id}
+                              disabled={s.id === activity.workflow_stage_id}
+                              className="text-xs focus:bg-muted/60 focus:text-foreground"
+                              onSelect={() => onMoveToStage(s.id)}
+                            >
+                              <span className="w-2 h-2 rounded-full mr-2 shrink-0" style={{ backgroundColor: s.color }} />
+                              <span className="truncate">{s.title}</span>
+                              {s.id === activity.workflow_stage_id && (
+                                <Check className="w-3 h-3 ml-auto text-primary shrink-0" />
+                              )}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    )}
+
+                    {/* Aninhar: era "Vincular ao pai" — nome que não dizia o que
+                        fazia. Fica junto do "Mover para" por serem ambos sobre
+                        realocar o item; é o ÚNICO caminho para re-aninhar um card,
+                        então não pode sair do menu (o diálogo de edição não faz). */}
+                    {onLinkParent && (
+                      <DropdownMenuItem
+                        className="focus:bg-muted/60 focus:text-foreground"
+                        onSelect={() => onLinkParent()}
+                      >
+                        <Layers className="w-3.5 h-3.5 mr-2" /> Aninhar em uma fase
+                      </DropdownMenuItem>
+                    )}
 
                     <DropdownMenuSeparator />
 
@@ -776,19 +855,34 @@ function KanbanCard({
                         {isBlocked ? "Desbloquear" : "Bloquear"}
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem
-                      className="focus:bg-muted/60 focus:text-foreground"
-                      onSelect={() => onMoveToBacklog()}
-                    >
-                      <Inbox className="w-3.5 h-3.5 mr-2" /> Mover para Backlog
-                    </DropdownMenuItem>
-                    {onLinkParent && (
-                      <DropdownMenuItem
-                        className="focus:bg-muted/60 focus:text-foreground"
-                        onSelect={() => onLinkParent()}
-                      >
-                        <Link2 className="w-3.5 h-3.5 mr-2" /> Vincular ao pai
-                      </DropdownMenuItem>
+                    {/* Converter tipo (papéis EAP): já existia no Backlog e no
+                        diálogo — o quadro era a única tela sem. */}
+                    {onChangeType && (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="focus:bg-muted/60 focus:text-foreground data-[state=open]:bg-muted/60">
+                          <Shuffle className="w-3.5 h-3.5 mr-2" /> Converter em
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent sideOffset={6} className="w-44">
+                          {eapTypeOptions({ hasChildren: (subActivityCount ?? 0) > 0 }).map((k) => {
+                            const currentKind: EapKind = isMilestone
+                              ? "marco"
+                              : isPhase
+                                ? "fase"
+                                : "atividade";
+                            return (
+                              <DropdownMenuItem
+                                key={k}
+                                disabled={k === currentKind}
+                                className="text-xs focus:bg-muted/60 focus:text-foreground"
+                                onSelect={() => onChangeType(k)}
+                              >
+                                <span className="truncate">{EAP_LABELS[k]}</span>
+                                {k === currentKind && <Check className="w-3 h-3 ml-auto text-primary shrink-0" />}
+                              </DropdownMenuItem>
+                            );
+                          })}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
                     )}
                     {SHOW_USER_STORIES && onCreateStory && (
                       <DropdownMenuItem
@@ -1329,7 +1423,11 @@ function SortableColumn({
   onEditActivity,
   onDeleteActivity,
   onToggleActivity,
-  onMoveToBacklog,
+  onMoveToStage,
+  moveTargets,
+  onDuplicateActivity,
+  onCopyActivityLink,
+  onChangeActivityType,
   onToggleBlocked,
   onLinkParent,
   onCreateActivity,
@@ -1379,7 +1477,11 @@ function SortableColumn({
   onEditActivity: (activity: Activity) => void;
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
-  onMoveToBacklog: (activityId: string) => void;
+  onMoveToStage: (activityId: string, stageId: string) => void;
+  moveTargets?: { id: string; title: string; color: string }[];
+  onDuplicateActivity?: (activityId: string) => void;
+  onCopyActivityLink?: (activityId: string) => void;
+  onChangeActivityType?: (activityId: string, kind: EapKind) => void;
   onToggleBlocked: (activityId: string) => void;
   onLinkParent?: (activityId: string, currentParentId: string | null) => void;
   onCreateActivity: (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => Promise<void>;
@@ -1643,7 +1745,11 @@ function SortableColumn({
       onEdit: () => onEditActivity(activity),
       onDelete: () => onDeleteActivity(activity.id),
       onToggle: () => onToggleActivity(activity.id, activity.status),
-      onMoveToBacklog: () => onMoveToBacklog(activity.id),
+      onMoveToStage: (stageId: string) => onMoveToStage(activity.id, stageId),
+      moveTargets,
+      onDuplicate: onDuplicateActivity ? () => onDuplicateActivity(activity.id) : undefined,
+      onCopyLink: onCopyActivityLink ? () => onCopyActivityLink(activity.id) : undefined,
+      onChangeType: onChangeActivityType ? (kind: EapKind) => onChangeActivityType(activity.id, kind) : undefined,
       onLinkParent: () => onLinkParent?.(activity.id, activity.parent_id ?? null),
       isAdmin,
       // "block in place": o bloqueio é da ATIVIDADE, não da coluna — o card
@@ -2178,11 +2284,11 @@ function AddStageColumn({ projectId, onChanged }: { projectId: string; onChanged
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title="Criar grupo"
+        title="Adicionar uma coluna ao quadro"
         className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors whitespace-nowrap"
       >
         <Plus className="w-3 h-3" />
-        Criar grupo
+        Nova coluna
       </button>
 
       <Dialog
@@ -2194,7 +2300,7 @@ function AddStageColumn({ projectId, onChanged }: { projectId: string; onChanged
       >
         <DialogContent className="max-w-[750px] p-0 gap-0">
           <DialogHeader className="px-6 pt-6 pb-2">
-            <DialogTitle>Configurar grupos do Kanban</DialogTitle>
+            <DialogTitle>Configurar colunas do quadro</DialogTitle>
           </DialogHeader>
           <div className="p-4">
             <WorkflowStageManager projectId={projectId} onChanged={onChanged} />
@@ -2753,7 +2859,7 @@ export const ActivityKanban = ({
       const list = valid.map((g) => {
         const memberSet = new Set(g.members);
         return {
-          id: g.id, label: g.name || "Grupo",
+          id: g.id, label: g.name || "Time",
           match: (a: Activity) => !!a.assigned_to && memberSet.has(a.assigned_to),
         };
       });
@@ -2851,8 +2957,12 @@ export const ActivityKanban = ({
     document.addEventListener("mouseup", handleMouseUp);
   }, [columnWidthsKey]);
 
+  // KeyboardSensor além do ponteiro: sem ele o quadro é inoperável por teclado
+  // (mover card só com mouse). O Backlog já usava este par — o Kanban ficou
+  // atrás por omissão, não por decisão.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   useEffect(() => {
@@ -3082,6 +3192,121 @@ export const ActivityKanban = ({
       .eq("activity_id", activityId); 
     onDataChanged();
   };
+
+  /**
+   * Move o card para QUALQUER coluna do quadro. Generaliza o antigo
+   * handleMoveToBacklog, que só mandava para o stage display_order=0 — uma
+   * coluna que o quadro não renderiza, então o card sumia da tela sem aviso.
+   */
+  const handleMoveToStage = useCallback(async (activityId: string, stageId: string) => {
+    if (projectLocked) {
+      showProjectLockedToast("mover atividades");
+      return;
+    }
+    const activity = activities.find((a) => a.id === activityId);
+    if (!canMutateActivity(activity)) {
+      toast({ title: "Somente o criador ou responsável da atividade pode mover.", variant: "destructive" });
+      return;
+    }
+    const target = stages.find((s) => s.id === stageId);
+    if (!target) return;
+    const previousStageId = activity?.workflow_stage_id ?? null;
+
+    setOptimisticMoves((prev) => ({ ...prev, [activityId]: stageId }));
+    const { error } = await supabase
+      .from("activities")
+      .update({ workflow_stage_id: stageId } as never)
+      .eq("id", activityId);
+    if (error) {
+      setOptimisticMoves((prev) => {
+        const next = { ...prev };
+        delete next[activityId];
+        return next;
+      });
+      toast({ title: "Não foi possível mover a atividade.", description: error.message, variant: "destructive" });
+      return;
+    }
+    await supabase.from("user_stories").update({ stage_id: stageId } as never).eq("activity_id", activityId);
+
+    // Desfazer: mover é a ação mais fácil de errar no quadro (um clique no
+    // submenu errado) e a mais barata de reverter — é só o stage anterior.
+    toast({
+      title: `Movida para "${getStageDisplayTitle(target.title)}"`,
+      action: previousStageId ? (
+        <ToastAction
+          altText="Desfazer"
+          onClick={async () => {
+            setOptimisticMoves((prev) => ({ ...prev, [activityId]: previousStageId }));
+            await supabase
+              .from("activities")
+              .update({ workflow_stage_id: previousStageId } as never)
+              .eq("id", activityId);
+            await supabase.from("user_stories").update({ stage_id: previousStageId } as never).eq("activity_id", activityId);
+            onDataChanged();
+          }}
+        >
+          Desfazer
+        </ToastAction>
+      ) : undefined,
+    });
+    onDataChanged();
+  }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, stages, toast]);
+
+  /** Duplica a atividade (com a subárvore). A capacidade já existia em
+   *  lib/duplicateActivity, usada só dentro do diálogo de edição. */
+  const handleDuplicateActivity = useCallback(async (activityId: string) => {
+    if (projectLocked) {
+      showProjectLockedToast("duplicar atividades");
+      return;
+    }
+    try {
+      const { duplicateActivity } = await import("@/lib/duplicateActivity");
+      await duplicateActivity({ activityId, includeChildren: true });
+      toast({ title: "Atividade duplicada", description: "As subtarefas também foram duplicadas." });
+      onDataChanged();
+    } catch (e) {
+      toast({
+        title: "Erro ao duplicar",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+    }
+  }, [onDataChanged, projectLocked, showProjectLockedToast, toast]);
+
+  /** Copia o deep-link da atividade (a rota do projeto já trata ?activity=). */
+  const handleCopyActivityLink = useCallback(async (activityId: string) => {
+    try {
+      const url = `${window.location.origin}${window.location.pathname}?activity=${activityId}`;
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Link copiado" });
+    } catch {
+      toast({ title: "Não foi possível copiar o link", variant: "destructive" });
+    }
+  }, [toast]);
+
+  /** Converte o papel EAP (Fase / Atividade / Marco) direto do quadro — já
+   *  existia no Backlog e no diálogo; o Kanban era a única tela sem. */
+  const handleChangeActivityType = useCallback(async (activityId: string, kind: EapKind) => {
+    if (projectLocked) {
+      showProjectLockedToast("alterar atividades");
+      return;
+    }
+    const activity = activities.find((a) => a.id === activityId);
+    if (!canMutateActivity(activity)) {
+      toast({ title: "Somente o criador ou responsável da atividade pode alterar o tipo.", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase
+      .from("activities")
+      .update(eapToPersisted(kind) as never)
+      .eq("id", activityId);
+    if (error) {
+      toast({ title: "Erro ao converter tipo", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: `Convertida em ${EAP_LABELS[kind]}` });
+    onDataChanged();
+  }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, toast]);
 
   const openLinkParent = useCallback((activityId: string, currentParentId: string | null) => {
     setLinkParentIds([activityId]);
@@ -3574,6 +3799,11 @@ export const ActivityKanban = ({
 
 
   const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
+  /** Destinos do "Mover para →" no menu do card: as colunas que o quadro mostra. */
+  const moveTargets = useMemo(
+    () => visibleStages.map((s) => ({ id: s.id, title: getStageDisplayTitle(s.title), color: s.color })),
+    [visibleStages],
+  );
 
   // ===== Stage management handlers (admin/gestor only) =====
   const handleCreateStage = useCallback(async (title: string) => {
@@ -3611,7 +3841,7 @@ export const ActivityKanban = ({
       error = compat.error;
     }
     if (error) {
-      toast({ title: "Erro ao criar grupo", description: error.message, variant: "destructive" });
+      toast({ title: "Erro ao criar coluna", description: error.message, variant: "destructive" });
     } else {
       fetchStages();
     }
@@ -4326,8 +4556,11 @@ export const ActivityKanban = ({
                       onEdit={() => onEditActivity(activity)}
                       onDelete={() => onDeleteActivity(activity.id)}
                       onToggle={() => onToggleActivity(activity.id, activity.status)}
-                      onMoveToBacklog={() => handleMoveToBacklog(activity.id)}
-                      onLinkParent={canManageHierarchy ? () => openLinkParent(activity.id, activity.parent_id ?? null) : undefined}
+                      onDuplicate={() => handleDuplicateActivity(activity.id)}
+                      onCopyLink={() => handleCopyActivityLink(activity.id)}
+                      onMoveToStage={(stageId) => handleMoveToStage(activity.id, stageId)}
+                      moveTargets={moveTargets}
+                      onChangeType={canManageHierarchy ? (kind) => handleChangeActivityType(activity.id, kind) : undefined}
                       isAdmin={isAdmin}
                       isBlocked={!!activity.is_blocked}
                       onToggleBlocked={() => handleToggleBlocked(activity.id)}
@@ -4388,7 +4621,8 @@ export const ActivityKanban = ({
                 onEditActivity={onEditActivity}
                 onDeleteActivity={onDeleteActivity}
                 onToggleActivity={onToggleActivity}
-                onMoveToBacklog={handleMoveToBacklog}
+                onMoveToStage={handleMoveToStage}
+
                 onToggleBlocked={handleToggleBlocked}
                 onLinkParent={canManageHierarchy ? openLinkParent : undefined}
                 onCreateActivity={handleCreateActivity}
@@ -4521,7 +4755,6 @@ export const ActivityKanban = ({
               onEdit={() => {}}
               onDelete={() => {}}
               onToggle={() => {}}
-              onMoveToBacklog={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
               progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id)}
               cardFields={cardFields}
