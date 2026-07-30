@@ -60,7 +60,7 @@ const PropertyRow = ({ icon, label, children, wide, iconClassName }: {
 
 // Campos OPCIONAIS da aba Detalhes que colapsam quando vazios (padrão ClickUp/Jira/Linear).
 // Essenciais (Status, Tipo, Prazo, Líder) e Prioridade não entram aqui — têm regra própria.
-type OptionalFieldKey = "hours" | "cost" | "wbs" | "relations";
+type OptionalFieldKey = "hours" | "cost" | "wbs";
 
 // item_type persistido. Marco não é item_type — é a flag is_milestone.
 // A UI usa 3 papéis: Fase/Entrega (agrupa) · Atividade (folha) · Marco.
@@ -405,7 +405,8 @@ export const EditActivityDialog = ({
   // Campos OPCIONAIS revelados manualmente pelo "+ Adicionar campo" nesta sessão.
   // Um campo aparece se: já tem valor, OU foi revelado aqui. (padrão ClickUp/Jira/Linear)
   const [revealedFields, setRevealedFields] = useState<Set<OptionalFieldKey>>(new Set());
-  // Total de vínculos (Relações), reportado pelo componente inline.
+  // Total de dependências, reportado pelo componente inline — exibido no
+  // rótulo do campo para dar o sinal de quantidade sem precisar abrir nada.
   const [relationsCount, setRelationsCount] = useState(0);
   const revealField = (k: OptionalFieldKey) =>
     setRevealedFields((prev) => new Set(prev).add(k));
@@ -1363,18 +1364,17 @@ export const EditActivityDialog = ({
             const hasHours = parseHoursInput(formData.hours) > 0;
             const hasCost = parseFloat(formData.cost || "0") > 0;
             const hasWbs = !!formData.wbs_code.trim();
-            const hasRelations = relationsCount > 0;
             // Marco não tem horas/custo; Fase com filhos mostra sempre (rollup somado).
             const showHours = !formData.is_milestone && (hasHours || hasSubActivities || revealedFields.has("hours"));
             const showCost = !formData.is_milestone && (hasCost || hasSubActivities || revealedFields.has("cost"));
             const showWbs = hasWbs || revealedFields.has("wbs");
-            const showRelations = !!projectId && (hasRelations || revealedFields.has("relations"));
             // Chips do "+ Adicionar campo": só os que estão ocultos no momento.
+            // Dependências não entra: passou a ser sempre visível (é informação de
+            // sequenciamento, não campo opcional — quem não vê, não sabe que existe).
             const hiddenChips: { key: OptionalFieldKey; label: string; icon: React.ReactNode }[] = [
               !showHours && { key: "hours" as const, label: "Tempo", icon: <Clock className="w-3 h-3" /> },
               !showCost && { key: "cost" as const, label: "Custo", icon: <DollarSign className="w-3 h-3" /> },
               !showWbs && { key: "wbs" as const, label: "Código EAP", icon: <Hash className="w-3 h-3" /> },
-              !showRelations && !!projectId && { key: "relations" as const, label: "Relações", icon: <Link2 className="w-3 h-3" /> },
             ].filter(Boolean) as { key: OptionalFieldKey; label: string; icon: React.ReactNode }[];
             return (
             <div className="p-3 rounded-lg border border-border bg-muted/10">
@@ -1455,21 +1455,10 @@ export const EditActivityDialog = ({
                   </PropertyRow>
                 )}
 
-                {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
-                <PropertyRow iconClassName="text-primary" icon={<User className="w-3.5 h-3.5" />} label="Líder">
-                  <div className="w-full">
-                    <PersonCombobox
-                      people={allProfiles}
-                      value={allProfiles.find((m) => m.full_name === formData.assigned_to)?.id ?? null}
-                      placeholder="Sem líder"
-                      onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
-                      onClear={() => setFormData({ ...formData, assigned_to: "" })}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                </PropertyRow>
-
-                {/* Tempo (opcional — colapsa quando vazio) */}
+                {/* Tempo (opcional — colapsa quando vazio).
+                    Vem ANTES do Líder de propósito: na grade de 2 colunas isso
+                    coloca Status+Tempo na 1ª linha e Líder+Custo na 2ª, juntando
+                    os quatro campos de leitura rápida no topo do formulário. */}
                 {showHours && (
                   <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -1566,6 +1555,20 @@ export const EditActivityDialog = ({
                     </div>
                   </PropertyRow>
                 )}
+
+                {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
+                <PropertyRow iconClassName="text-primary" icon={<User className="w-3.5 h-3.5" />} label="Líder">
+                  <div className="w-full">
+                    <PersonCombobox
+                      people={allProfiles}
+                      value={allProfiles.find((m) => m.full_name === formData.assigned_to)?.id ?? null}
+                      placeholder="Sem líder"
+                      onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
+                      onClear={() => setFormData({ ...formData, assigned_to: "" })}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </PropertyRow>
 
                 {/* Custo (opcional — colapsa quando vazio) */}
                 {showCost && (
@@ -1738,7 +1741,6 @@ export const EditActivityDialog = ({
                     Colapsa em meia coluna quando "Pendente" (chip discreto); ao
                     definir G×U×T, expande para linha inteira com o badge completo. */}
                 {(() => {
-                  const gutDefined = gutScore(formData.gravity, formData.urgency, formData.tendency) != null;
                   // Cor do ícone do rótulo = cor do nível GUT (dá vida à informação).
                   const gutLevel = gutLabel(gutScore(formData.gravity, formData.urgency, formData.tendency));
                   const gutIconColor: Record<GutLevel, string> = {
@@ -1750,7 +1752,7 @@ export const EditActivityDialog = ({
                     urgente: "text-fuchsia-500",
                   };
                   return (
-                    <PropertyRow wide={gutDefined} iconClassName={gutIconColor[gutLevel]} icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
+                    <PropertyRow iconClassName={gutIconColor[gutLevel]} icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
                       <div className="w-full min-w-0">
                         <GutPriorityField
                           gravity={formData.gravity}
@@ -1906,12 +1908,18 @@ export const EditActivityDialog = ({
                 </PropertyRow>
                 )}
 
-                {/* Relacionamentos inline (opcional — colapsa quando não há vínculos).
-                    O componente fica sempre montado para reportar a contagem; quando
-                    oculto, some da grade mas segue observando o banco em segundo plano. */}
+                {/* Dependências (predecessoras/sucessoras) — SEMPRE visível.
+                    Era um campo opcional colapsado chamado "Relações": ficava
+                    escondido justamente de quem ainda não tinha criado nenhuma,
+                    ou seja, quem mais precisava descobrir que o recurso existe. */}
                 {projectId && (
-                  <div className={cn("min-w-0 sm:col-span-2", !showRelations && "hidden")}>
-                    <PropertyRow wide iconClassName="text-primary" icon={<Link2 className="w-3.5 h-3.5" />} label="Relações">
+                  <div className="min-w-0 sm:col-span-2">
+                    <PropertyRow
+                      wide
+                      iconClassName="text-primary"
+                      icon={<Link2 className="w-3.5 h-3.5" />}
+                      label={relationsCount > 0 ? `Dependências (${relationsCount})` : "Dependências"}
+                    >
                       <ActivityRelationsInline
                         activityId={act.id}
                         projectId={projectId}
