@@ -876,12 +876,14 @@ function KanbanCard({
                         <Copy className="w-3.5 h-3.5 mr-2" /> Duplicar
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem
-                      className="focus:bg-muted/60 focus:text-foreground"
-                      onSelect={() => onCopyLink?.()}
-                    >
-                      <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
-                    </DropdownMenuItem>
+                    {onCopyLink && (
+                      <DropdownMenuItem
+                        className="focus:bg-muted/60 focus:text-foreground"
+                        onSelect={() => onCopyLink()}
+                      >
+                        <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
+                      </DropdownMenuItem>
+                    )}
 
                     {/* "Mover para →" substitui o antigo "Mover para Backlog", que
                         mandava o card para o stage display_order=0 — coluna que o
@@ -5087,10 +5089,13 @@ export const ActivityKanban = ({
                 onDeleteActivity={onDeleteActivity}
                 onToggleActivity={onToggleActivity}
                 onMoveToStage={handleMoveToStage}
+                moveTargets={moveTargets}
                 onAssignActivity={handleAssignActivity}
                 assigneeChoices={assigneeChoices}
                 onSetActivityDueDate={handleSetActivityDueDate}
-
+                onDuplicateActivity={handleDuplicateActivity}
+                onCopyActivityLink={handleCopyActivityLink}
+                onChangeActivityType={canManageHierarchy ? handleChangeActivityType : undefined}
                 onToggleBlocked={handleToggleBlocked}
                 onLinkParent={canManageHierarchy ? openLinkParent : undefined}
                 onCreateActivity={handleCreateActivity}
