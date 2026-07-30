@@ -98,6 +98,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { getBlockedDays, formatBlockedDays } from "@/lib/blockedTime";
 import { KANBAN_TOKENS } from "@/lib/kanbanTokens";
@@ -277,22 +278,39 @@ export const CARD_FIELD_GROUPS: { group: string; items: { key: keyof CardFields;
  */
 const MIN_COLUMN_WIDTH = 272;
 
+// Date local -> "YYYY-MM-DD" SEM passar por UTC: toISOString() à noite em
+// UTC-3 já é o dia seguinte, então "Hoje" gravaria amanhã. Mesmo cuidado do
+// DateChip.
+function localYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+// "YYYY-MM-DD" (ou timestamp ISO) -> Date local ao meio-dia (evita drift de fuso).
+function ymdToLocalDate(v?: string | null): Date | undefined {
+  const s = v ? v.slice(0, 10) : "";
+  const [y, m, d] = s.split("-").map(Number);
+  if (!y || !m || !d) return undefined;
+  return new Date(y, m - 1, d, 12, 0, 0);
+}
+
 /**
- * Opções rápidas de prazo no menu do card. Datas relativas em vez de calendário:
- * cobrem a maioria dos ajustes ("empurra pra amanhã") sem abrir nada. Data
- * arbitrária continua no diálogo de edição.
+ * Opções rápidas de prazo no menu do card. Datas relativas cobrem a maioria
+ * dos ajustes ("empurra pra amanhã") sem procurar no calendário; data
+ * arbitrária fica no calendário logo abaixo, no mesmo submenu.
  */
 const DUE_DATE_PRESETS: { label: string; compute: () => string }[] = [
   {
     label: "Hoje",
-    compute: () => new Date().toISOString().slice(0, 10),
+    compute: () => localYmd(new Date()),
   },
   {
     label: "Amanhã",
     compute: () => {
       const d = new Date();
       d.setDate(d.getDate() + 1);
-      return d.toISOString().slice(0, 10);
+      return localYmd(d);
     },
   },
   {
@@ -302,7 +320,7 @@ const DUE_DATE_PRESETS: { label: string; compute: () => string }[] = [
       // 5 = sexta; se já passou, cai na sexta seguinte.
       const delta = (5 - d.getDay() + 7) % 7;
       d.setDate(d.getDate() + (delta === 0 ? 7 : delta));
-      return d.toISOString().slice(0, 10);
+      return localYmd(d);
     },
   },
   {
@@ -310,7 +328,7 @@ const DUE_DATE_PRESETS: { label: string; compute: () => string }[] = [
     compute: () => {
       const d = new Date();
       d.setDate(d.getDate() + 7);
-      return d.toISOString().slice(0, 10);
+      return localYmd(d);
     },
   },
 ];
@@ -950,7 +968,7 @@ function KanbanCard({
                         <DropdownMenuSubTrigger className="focus:bg-muted/60 focus:text-foreground data-[state=open]:bg-muted/60">
                           <CalendarIcon className="w-3.5 h-3.5 mr-2" /> Prazo
                         </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent sideOffset={6} className="w-44">
+                        <DropdownMenuSubContent sideOffset={6} className="w-auto">
                           {DUE_DATE_PRESETS.map((preset) => (
                             <DropdownMenuItem
                               key={preset.label}
@@ -960,6 +978,22 @@ function KanbanCard({
                               {preset.label}
                             </DropdownMenuItem>
                           ))}
+                          <DropdownMenuSeparator />
+                          {/* Data manual: o mesmo calendário do resto da
+                              plataforma (DateChip). Não é DropdownMenuItem,
+                              então clicar num dia não fecha sozinho — grava
+                              e fecha via setMenuOpen. */}
+                          <CalendarPicker
+                            mode="single"
+                            selected={ymdToLocalDate(activity.end_date)}
+                            defaultMonth={ymdToLocalDate(activity.end_date)}
+                            onSelect={(d) => {
+                              if (!d) return;
+                              onSetDueDate(localYmd(d));
+                              setMenuOpen(false);
+                            }}
+                            className="p-2 pointer-events-auto"
+                          />
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-xs focus:bg-muted/60 focus:text-foreground"
