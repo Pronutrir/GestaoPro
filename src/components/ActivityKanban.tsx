@@ -58,6 +58,7 @@ import {
   Layers,
   Search,
   Filter,
+  BarChart3,
 } from "lucide-react";
 import {
   DndContext,
@@ -154,6 +155,7 @@ import {
   ColumnFilterPanel,
 } from "./kanban/KanbanColumn";
 import { ActivityDetailPanel } from "./kanban/ActivityDetailPanel";
+import { FlowMetricsDialog } from "./kanban/FlowMetricsDialog";
 
 // Compat: o tipo CardFields morava aqui antes do fatiamento (Fase 4).
 // Valores (DEFAULT_CARD_FIELDS etc.) agora só em kanban/shared — re-exportar
@@ -362,6 +364,8 @@ export const ActivityKanban = ({
   // "Configurar colunas do quadro" acionado pelo menu ⋯ da toolbar — mesmo
   // diálogo do botão "Nova coluna" no fim do quadro (AddStageColumn).
   const [manageStagesOpen, setManageStagesOpen] = useState(false);
+  // Métricas de fluxo (Item 6): throughput + tempo por coluna + maior coluna.
+  const [metricsOpen, setMetricsOpen] = useState(false);
   const [teamsUnavailable, setTeamsUnavailable] = useState(false); // migration ainda não aplicada
 
   const fetchTeams = useCallback(async () => {
@@ -2948,6 +2952,10 @@ export const ActivityKanban = ({
               Gerenciar times…
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => setMetricsOpen(true)} className="gap-2 text-xs">
+              <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
+              Métricas do fluxo…
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => router.push(`/blocked?project=${projectId}`)} className="gap-2 text-xs">
               <AlertCircle className="w-3.5 h-3.5 text-muted-foreground" />
               Relatório de bloqueios…
@@ -3323,6 +3331,17 @@ export const ActivityKanban = ({
           </button>
         </div>
       )}
+      {/* Métricas de fluxo — inclui a medição da maior coluna (gatilho da
+          virtualização, decisão F: 60 cards). */}
+      <FlowMetricsDialog
+        open={metricsOpen}
+        onOpenChange={setMetricsOpen}
+        projectId={projectId}
+        activities={activities}
+        stages={stages}
+        maxColumnCount={Math.max(0, ...Object.values(activitiesByStage).map((l) => l.length))}
+      />
+
       {/* Painel de detalhe do card — Editar abre o diálogo de edição de sempre. */}
       <ActivityDetailPanel
         activity={detailId ? activities.find((a) => a.id === detailId) ?? null : null}
