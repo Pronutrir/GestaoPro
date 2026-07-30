@@ -368,8 +368,6 @@ export function SortableColumn({
   collapsed = false,
   onToggleCollapse,
   columnFilterSlot,
-  selectedIds,
-  onToggleSelect,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -377,9 +375,6 @@ export function SortableColumn({
   collapsed?: boolean;
   onToggleCollapse?: (id: string) => void;
   columnFilterSlot?: React.ReactNode;
-  /** Seleção para ação em lote (Set compartilhado do quadro). */
-  selectedIds?: Set<string>;
-  onToggleSelect?: (id: string) => void;
   activities: Activity[];
   phases: Phase[];
   widthPct: number;
@@ -688,8 +683,6 @@ export function SortableColumn({
       blockedSubsCount,
       subActivityStatusSummary,
       hoursStat: hoursStatsByActivity?.get(activity.id),
-      selected: selectedIds?.has(activity.id) ?? false,
-      onToggleSelect: onToggleSelect ? () => onToggleSelect(activity.id) : undefined,
       profilesMap,
       profileAvatarMap,
     };
