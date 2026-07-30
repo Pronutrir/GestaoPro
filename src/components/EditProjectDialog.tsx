@@ -712,9 +712,7 @@ export const EditProjectDialog = ({
                   }}
                 />
             </div>
-            {/* items-start + nota nas DUAS colunas: só o Gestor tinha texto de
-                ajuda, então a coluna esquerda ficava mais alta e o campo
-                seguinte subia torto em relação ao Líder. */}
+            {/* items-start: as colunas se alinham pelo topo mesmo que uma cresça. */}
             <div className="grid grid-cols-2 gap-4 items-start">
               <div className="grid gap-2 content-start" ref={managerFieldRef}>
                 <Label>Gestor do Projeto</Label>
@@ -728,7 +726,6 @@ export const EditProjectDialog = ({
                   }}
                   onClear={() => setFormData({ ...formData, manager: "" })}
                 />
-                <p className="text-[11px] text-muted-foreground">Opcional. Tem o mesmo nível de acesso ao projeto que o Líder.</p>
               </div>
               <div className="grid gap-2 content-start" ref={ownerFieldRef}>
                 <Label>Líder do Projeto *</Label>
@@ -747,7 +744,6 @@ export const EditProjectDialog = ({
                   }}
                   onClear={() => setFormData({ ...formData, owner: "" })}
                 />
-                <p className="text-[11px] text-muted-foreground">Obrigatório. Responde pela execução do projeto no dia a dia.</p>
               </div>
             </div>
             <div className="grid gap-2">
