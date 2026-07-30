@@ -159,11 +159,13 @@ import { ActivityDetailPanel } from "./kanban/ActivityDetailPanel";
 // valor daqui quebraria o fast refresh do arquivo do componente.
 export type { CardFields } from "./kanban/shared";
 
-// A tabela kanban_teams ainda não está nos tipos gerados do Supabase
-// (migration pendente na VM) — único `any` tolerado do arquivo, num ponto só.
-// Remover quando os tipos forem regenerados.
+// kanban_teams e kanban_views ainda não estão nos tipos gerados do Supabase
+// (migrations pendentes na VM) — únicos `any` tolerados do arquivo, cada um
+// num ponto só. Remover quando os tipos forem regenerados.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const teamsTable = () => (supabase as any).from("kanban_teams");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const viewsTable = () => (supabase as any).from("kanban_views");
 
 export const ActivityKanban = ({
   projectId,
@@ -518,6 +520,123 @@ export const ActivityKanban = ({
       if (next.has(value)) next.delete(value); else next.add(value);
       return next;
     });
+
+  // ===== Visões salvas (Item 3 da rodada final) — tabela kanban_views =====
+  // Combinação nomeada de filtros + raia + ordenação + campos do card, por
+  // projeto, compartilhada com o time. Some da toolbar se a migration não rodou.
+  type KanbanViewConfig = {
+    filters?: {
+      assignees?: string[]; phases?: string[]; priorities?: string[];
+      dueRange?: { from: string; to: string }; tags?: string[]; blocked?: boolean;
+      stages?: string[]; sectors?: string[]; types?: string[]; participants?: string[];
+      startRange?: { from: string; to: string }; hoursRange?: { min: string; max: string };
+      onlyMine?: boolean;
+    };
+    groupBy?: string;
+    boardSort?: string;
+    cardFields?: Partial<CardFields>;
+  };
+  type KanbanView = { id: string; name: string; config: KanbanViewConfig; created_by: string | null };
+  const [views, setViews] = useState<KanbanView[]>([]);
+  const [viewsUnavailable, setViewsUnavailable] = useState(false);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [saveViewOpen, setSaveViewOpen] = useState(false);
+  const [saveViewName, setSaveViewName] = useState("");
+
+  const fetchViews = useCallback(async () => {
+    const { data, error } = await viewsTable()
+      .select("id, name, config, created_by")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true });
+    if (error) {
+      if (/kanban_views|relation|does not exist|schema cache/i.test(error.message)) setViewsUnavailable(true);
+      return;
+    }
+    setViewsUnavailable(false);
+    setViews((data as KanbanView[]) || []);
+  }, [projectId]);
+  useEffect(() => { fetchViews(); }, [fetchViews]);
+
+  const buildViewConfig = (): KanbanViewConfig => ({
+    filters: {
+      assignees: Array.from(filterAssignees), phases: Array.from(filterPhases),
+      priorities: Array.from(filterPriorities), dueRange: filterDueRange,
+      tags: Array.from(filterTags), blocked: filterBlocked,
+      stages: Array.from(filterStages), sectors: Array.from(filterSectors),
+      types: Array.from(filterTypes), participants: Array.from(filterParticipants),
+      startRange: filterStartRange, hoursRange: filterHoursRange,
+      onlyMine,
+    },
+    groupBy, boardSort, cardFields,
+  });
+
+  const applyView = (v: KanbanView) => {
+    const c = v.config || {};
+    const f = c.filters || {};
+    setFilterAssignees(new Set(f.assignees ?? []));
+    setFilterPhases(new Set(f.phases ?? []));
+    setFilterPriorities(new Set(f.priorities ?? []));
+    setFilterDueRange(f.dueRange ?? { from: "", to: "" });
+    setFilterTags(new Set(f.tags ?? []));
+    setFilterBlocked(!!f.blocked);
+    setFilterStages(new Set(f.stages ?? []));
+    setFilterSectors(new Set(f.sectors ?? []));
+    setFilterTypes(new Set(f.types ?? []));
+    setFilterParticipants(new Set(f.participants ?? []));
+    setFilterStartRange(f.startRange ?? { from: "", to: "" });
+    setFilterHoursRange(f.hoursRange ?? { min: "", max: "" });
+    setOnlyMine(!!f.onlyMine);
+    setGroupBy((GROUP_BY_VALUES as readonly string[]).includes(c.groupBy ?? "") ? (c.groupBy as GroupByValue) : "none");
+    setBoardSort(isValidSortValue(c.boardSort ?? null) ? (c.boardSort as string) : DEFAULT_BOARD_SORT);
+    setCardFields({ ...DEFAULT_CARD_FIELDS, ...(c.cardFields ?? {}) });
+    setActiveViewId(v.id);
+  };
+
+  const activeView = activeViewId ? views.find((v) => v.id === activeViewId) ?? null : null;
+  const viewDirty = !!activeView && JSON.stringify(buildViewConfig()) !== JSON.stringify(activeView.config);
+
+  const saveNewView = async () => {
+    const name = saveViewName.trim();
+    if (!name) return;
+    const { data, error } = await viewsTable()
+      .insert({ project_id: projectId, name, config: buildViewConfig() })
+      .select("id, name, config, created_by")
+      .single();
+    if (error) {
+      toast({ title: "Não foi possível salvar a visão.", description: error.message, variant: "destructive" });
+      return;
+    }
+    setViews((vs) => [...vs, data as KanbanView]);
+    setActiveViewId((data as KanbanView).id);
+    setSaveViewOpen(false);
+    setSaveViewName("");
+    toast({ title: `Visão "${name}" salva`, description: "Visível para todos que participam do projeto." });
+  };
+
+  const updateActiveView = async () => {
+    if (!activeView) return;
+    const config = buildViewConfig();
+    const { error } = await viewsTable()
+      .update({ config, updated_at: new Date().toISOString() })
+      .eq("id", activeView.id);
+    if (error) {
+      toast({ title: "Não foi possível atualizar a visão.", description: error.message, variant: "destructive" });
+      return;
+    }
+    setViews((vs) => vs.map((v) => (v.id === activeView.id ? { ...v, config } : v)));
+    toast({ title: `Visão "${activeView.name}" atualizada` });
+  };
+
+  const deleteView = async (v: KanbanView) => {
+    const { error } = await viewsTable().delete().eq("id", v.id);
+    if (error) {
+      toast({ title: "Não foi possível excluir a visão.", description: error.message, variant: "destructive" });
+      return;
+    }
+    setViews((vs) => vs.filter((x) => x.id !== v.id));
+    if (activeViewId === v.id) setActiveViewId(null);
+    toast({ title: `Visão "${v.name}" excluída` });
+  };
 
   // Colunas de bloqueio (para o filtro "Bloqueadas").
   const blockedStageIdSet = useMemo(
@@ -2222,6 +2341,60 @@ export const ActivityKanban = ({
           )}
         </div>
 
+        {/* VISÕES SALVAS — combinação nomeada de filtros+raia+ordenação+campos,
+            compartilhada com o projeto. Só aparece com a migration aplicada. */}
+        {!viewsUnavailable && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant={activeView ? "default" : "outline"}
+                size="sm"
+                className="h-7 gap-1.5 text-xs max-w-[180px]"
+                title="Visões salvas do quadro"
+              >
+                <Eye className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{activeView ? activeView.name : "Visões"}</span>
+                {viewDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Visão modificada — dá para atualizar no menu" />}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-60">
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Visões do projeto
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {views.length === 0 && (
+                <div className="px-2 py-3 text-center text-xs text-muted-foreground">Nenhuma visão salva ainda</div>
+              )}
+              {views.map((v) => (
+                <DropdownMenuItem key={v.id} onSelect={() => applyView(v)} className="gap-2 text-xs">
+                  <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="flex-1 truncate">{v.name}</span>
+                  {activeViewId === v.id && <Check className="w-3.5 h-3.5 text-primary" />}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => { setSaveViewName(""); setSaveViewOpen(true); }} className="gap-2 text-xs">
+                <Plus className="w-3.5 h-3.5 text-muted-foreground" /> Salvar visão atual…
+              </DropdownMenuItem>
+              {activeView && viewDirty && activeView.created_by === myId && (
+                <DropdownMenuItem onSelect={updateActiveView} className="gap-2 text-xs">
+                  <Check className="w-3.5 h-3.5 text-muted-foreground" /> Atualizar &ldquo;{activeView.name}&rdquo;
+                </DropdownMenuItem>
+              )}
+              {activeView && (
+                <DropdownMenuItem onSelect={() => setActiveViewId(null)} className="gap-2 text-xs text-muted-foreground">
+                  <XIcon className="w-3.5 h-3.5" /> Sair da visão
+                </DropdownMenuItem>
+              )}
+              {activeView && activeView.created_by === myId && (
+                <DropdownMenuItem onSelect={() => deleteView(activeView)} className="gap-2 text-xs text-destructive focus:text-destructive">
+                  <Trash2 className="w-3.5 h-3.5" /> Excluir &ldquo;{activeView.name}&rdquo;
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
         {/* FILTROS — um único painel com tudo */}
         {(() => {
           const activeCount =
@@ -3197,6 +3370,35 @@ export const ActivityKanban = ({
           }}
         />
       )}
+
+      {/* Salvar visão — nome + snapshot da exibição atual. */}
+      <Dialog open={saveViewOpen} onOpenChange={setSaveViewOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-4 h-4 text-primary" /> Salvar visão
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="view-name" className="text-xs text-muted-foreground">Nome da visão</Label>
+            <Input
+              id="view-name"
+              value={saveViewName}
+              onChange={(e) => setSaveViewName(e.target.value)}
+              placeholder="Ex.: Reunião de sexta"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter") saveNewView(); }}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Guarda filtros, raias, ordenação e campos do card como estão agora. Visível para todos do projeto.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSaveViewOpen(false)}>Cancelar</Button>
+            <Button onClick={saveNewView} disabled={!saveViewName.trim()}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Bloquear atividade — o card NÃO sai da coluna ("block in place"),
           para continuar contando no WIP e no tempo por etapa. */}
