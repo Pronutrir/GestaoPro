@@ -17,27 +17,74 @@ interface Project {
   owner: string | null; blockers: string | null;
 }
 
+// Relatório de bloqueios de ATIVIDADES (Item 5 da rodada final): os dados
+// sempre existiram (is_blocked/blocked_reason/blocked_since/blocked_days_total),
+// só não havia tela que agregasse. O RLS já limita ao que o usuário pode ver.
+interface BlockedActivity {
+  id: string; title: string; project_id: string; wbs_code: string | null;
+  assigned_to: string | null; blocked_reason: string | null;
+  blocked_since: string | null; blocked_days_total: number | null;
+  projects: { title: string } | null;
+}
+
+const daysSince = (iso: string | null): number => {
+  if (!iso) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+};
+
 const BlockedProjects = () => {
   const router = useRouter();
   const { filterProjects } = useProjectAccess();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [blockedActs, setBlockedActs] = useState<BlockedActivity[]>([]);
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // ?project=<id> (atalho vindo do menu ⋯ do quadro) pré-filtra as atividades.
+  // Lido de window em vez de useSearchParams para não exigir Suspense no build.
+  useEffect(() => {
+    setProjectFilter(new URLSearchParams(window.location.search).get("project"));
+  }, []);
 
   useEffect(() => {
     const fetch = async () => {
       try {
-        const { data, error } = await supabase.from("projects").select("*")
-          .not("blockers", "is", null).neq("blockers", "").neq("status", "done")
-          .eq("is_trashed", false)
-          .order("created_at", { ascending: false });
-        if (error) throw error;
-        const filtered = await filterProjects(data || []);
+        const [projRes, actRes] = await Promise.all([
+          supabase.from("projects").select("*")
+            .not("blockers", "is", null).neq("blockers", "").neq("status", "done")
+            .eq("is_trashed", false)
+            .order("created_at", { ascending: false }),
+          supabase.from("activities")
+            .select("id, title, project_id, wbs_code, assigned_to, blocked_reason, blocked_since, blocked_days_total, projects(title)")
+            // .filter em vez de .eq: is_blocked ainda não está nos tipos gerados
+            // (migration da flag pendente de regenerar tipos).
+            .filter("is_blocked", "eq", true).eq("is_trashed", false)
+            .order("blocked_since", { ascending: true }),
+        ]);
+        if (projRes.error) throw projRes.error;
+        const filtered = await filterProjects(projRes.data || []);
         setProjects(filtered);
-      } catch { toast.error("Erro ao carregar projetos bloqueados"); }
+        setBlockedActs((actRes.data as unknown as BlockedActivity[]) || []);
+      } catch { toast.error("Erro ao carregar bloqueios"); }
       finally { setIsLoading(false); }
     };
     fetch();
   }, [filterProjects]);
+
+  const visibleActs = projectFilter ? blockedActs.filter((a) => a.project_id === projectFilter) : blockedActs;
+  // Agrupadas por projeto; dentro do grupo, o bloqueio mais antigo primeiro.
+  const actGroups = (() => {
+    const map = new Map<string, { title: string; list: BlockedActivity[] }>();
+    visibleActs.forEach((a) => {
+      const g = map.get(a.project_id) ?? { title: a.projects?.title ?? "Projeto", list: [] };
+      g.list.push(a);
+      map.set(a.project_id, g);
+    });
+    return Array.from(map.entries()).sort(
+      (x, y) => Math.max(...y[1].list.map((a) => daysSince(a.blocked_since))) - Math.max(...x[1].list.map((a) => daysSince(a.blocked_since))),
+    );
+  })();
+  const totalCurrentDays = visibleActs.reduce((s, a) => s + daysSince(a.blocked_since), 0);
 
   const priorityColors: Record<string, string> = {
     low: "bg-muted text-muted-foreground", medium: "bg-info text-info-foreground", high: "bg-destructive text-destructive-foreground",
@@ -89,7 +136,7 @@ const BlockedProjects = () => {
           </Card>
         ) : (
           <div className="space-y-4">
-            {projects.map(project => (
+            {projects.filter(p => !projectFilter || p.id === projectFilter).map(project => (
               <Card key={project.id} className="p-6 hover:shadow-lg transition-shadow">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 space-y-3">
@@ -118,8 +165,87 @@ const BlockedProjects = () => {
             ))}
           </div>
         )}
+
+        {/* ===== Atividades bloqueadas (agregado entre projetos) ===== */}
+        {!isLoading && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-lg font-semibold text-foreground">Atividades bloqueadas</h2>
+              <Badge variant="secondary" className="tabular-nums">{visibleActs.length}</Badge>
+              {visibleActs.length > 0 && (
+                <span className="text-sm text-muted-foreground">
+                  {totalCurrentDays} dia{totalCurrentDays === 1 ? "" : "s"} parados somando os bloqueios atuais
+                </span>
+              )}
+              {projectFilter && (
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setProjectFilter(null)}>
+                  Ver todos os projetos
+                </Button>
+              )}
+            </div>
+
+            {visibleActs.length === 0 ? (
+              <Card className="p-8 text-center">
+                <p className="text-sm font-medium text-foreground">Nenhuma atividade bloqueada{projectFilter ? " neste projeto" : ""}.</p>
+                <p className="text-xs text-muted-foreground mt-1">Bloqueios feitos no quadro (bandeira do card) aparecem aqui com motivo e tempo parado.</p>
+              </Card>
+            ) : (
+              actGroups.map(([projectId, g]) => (
+                <Card key={projectId} className="overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/project/${projectId}`)}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 border-b bg-muted/40 hover:bg-muted/60 transition-colors text-left"
+                    title="Abrir o projeto"
+                  >
+                    <span className="text-sm font-semibold truncate">{g.title}</span>
+                    <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 tabular-nums">{g.list.length}</Badge>
+                  </button>
+                  <div>
+                    {g.list.map((a) => {
+                      const dias = daysSince(a.blocked_since);
+                      const acumulado = Number(a.blocked_days_total) || 0;
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => router.push(`/project/${a.project_id}?activity=${a.id}`)}
+                          className="w-full flex items-start gap-2.5 px-4 py-2.5 border-b last:border-b-0 hover:bg-muted/40 transition-colors text-left"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-2">
+                              {a.wbs_code && (
+                                <span className="hidden sm:inline-flex items-center h-[17px] px-1.5 rounded border bg-muted font-mono text-[10px] text-muted-foreground shrink-0">
+                                  {a.wbs_code}
+                                </span>
+                              )}
+                              <span className="text-[13px] font-medium truncate">{a.title}</span>
+                            </span>
+                            <span className="block text-xs text-muted-foreground mt-0.5 truncate">
+                              {a.blocked_reason ? a.blocked_reason : "Sem motivo registrado"}
+                              {a.assigned_to ? ` · ${a.assigned_to}` : ""}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-right">
+                            <span className={`block text-xs font-semibold tabular-nums ${dias >= 7 ? "text-destructive" : "text-amber-600"}`}>
+                              há {dias} dia{dias === 1 ? "" : "s"}
+                            </span>
+                            {acumulado > 0 && (
+                              <span className="block text-[11px] text-muted-foreground tabular-nums">{acumulado}d acumulados</span>
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
+        )}
       </div>
-    
+
   );
 };
 

@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -185,6 +186,7 @@ export const ActivityKanban = ({
   profileSectorMap = {},
 }: ActivityKanbanProps) => {
   const { toast } = useToast();
+  const router = useRouter();
   const appConfirm = useAppConfirm();
   const showProjectLockedToast = useCallback((action: string) => {
     toast({
@@ -2944,6 +2946,11 @@ export const ActivityKanban = ({
             <DropdownMenuItem onSelect={() => setManageGroupsOpen(true)} className="gap-2 text-xs">
               <Users className="w-3.5 h-3.5 text-muted-foreground" />
               Gerenciar times…
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => router.push(`/blocked?project=${projectId}`)} className="gap-2 text-xs">
+              <AlertCircle className="w-3.5 h-3.5 text-muted-foreground" />
+              Relatório de bloqueios…
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
