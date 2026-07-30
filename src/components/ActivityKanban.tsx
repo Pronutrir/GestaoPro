@@ -35,6 +35,9 @@ import {
   Copy,
   ArrowRightLeft,
   Shuffle,
+  MessageSquare,
+  Paperclip,
+  Hourglass,
   X as XIcon,
   Eye,
   EyeOff,
@@ -113,6 +116,7 @@ import { SHOW_USER_STORIES } from "@/lib/featureFlags";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { resolveEapKind, eapTypeOptions, eapToPersisted, EAP_LABELS, type EapKind } from "@/lib/eapModel";
 import { ToastAction } from "@/components/ui/toast";
+import { computeCardAging, CARD_AGING_CLASSES } from "@/lib/cardAging";
 import { cn } from "@/lib/utils";
 
 const formatHours = (hours: number): string => {
@@ -326,6 +330,8 @@ interface Activity {
   is_milestone?: boolean;
   progress_flag?: number | null;
   blocked_since?: string | null;
+  /** Quando entrou na coluna atual — base do envelhecimento (card aging). */
+  stage_entered_at?: string | null;
   blocked_days_total?: number | null;
   /** Bloqueio "in place": marcado na atividade, não pela coluna. */
   is_blocked?: boolean | null;
@@ -415,6 +421,9 @@ function SortableKanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
+  waitingOnCount,
+  commentCount,
+  attachmentCount,
   relationItems,
   onOpenRelated,
   onRemoveRelation,
@@ -451,6 +460,10 @@ function SortableKanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
+  /** Predecessoras ainda nao concluidas — dependencia bloqueante. */
+  waitingOnCount?: number;
+  commentCount?: number;
+  attachmentCount?: number;
   relationItems?: { id: string; title: string; relationId: string; relationType: string }[];
   onOpenRelated?: (activityId: string) => void;
   onRemoveRelation?: (relationId: string) => void;
@@ -500,6 +513,9 @@ function SortableKanbanCard({
         stageColor={stageColor}
         subActivityCount={subActivityCount}
         dependencyCount={dependencyCount}
+        waitingOnCount={waitingOnCount}
+        commentCount={commentCount}
+        attachmentCount={attachmentCount}
         relationItems={relationItems}
         onOpenRelated={onOpenRelated}
         onRemoveRelation={onRemoveRelation}
@@ -542,6 +558,9 @@ function KanbanCard({
   stageColor,
   subActivityCount,
   dependencyCount,
+  waitingOnCount,
+  commentCount,
+  attachmentCount,
   relationItems,
   onOpenRelated,
   onRemoveRelation,
@@ -583,6 +602,10 @@ function KanbanCard({
   stageColor?: string;
   subActivityCount?: number;
   dependencyCount?: { pred: number; succ: number };
+  /** Predecessoras ainda nao concluidas — dependencia bloqueante. */
+  waitingOnCount?: number;
+  commentCount?: number;
+  attachmentCount?: number;
   relationItems?: { id: string; title: string; relationId: string; relationType: string }[];
   onOpenRelated?: (activityId: string) => void;
   onRemoveRelation?: (relationId: string) => void;
@@ -973,6 +996,24 @@ function KanbanCard({
                   </div>
                 )}
 
+                {/* Dependência bloqueante: espera predecessora não concluída.
+                    Distinto do bloqueio manual (que é uma decisão de alguém) —
+                    aqui é sequenciamento. Sem isso, um card pronto para começar
+                    e um travado esperando outro pareciam idênticos no quadro. */}
+                {!isBlocked && waitingOnCount && waitingOnCount > 0 ? (
+                  <div
+                    className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-orange-700 dark:text-orange-400"
+                    title={`Aguarda ${waitingOnCount} predecessora(s) ainda não concluída(s)`}
+                  >
+                    <Hourglass className="w-3 h-3 shrink-0" />
+                    <span className="truncate">
+                      {waitingOnCount === 1
+                        ? "Aguarda 1 predecessora"
+                        : `Aguarda ${waitingOnCount} predecessoras`}
+                    </span>
+                  </div>
+                ) : null}
+
                 <div className="flex flex-wrap items-center gap-1">
                   {!!blockedSubsCount && blockedSubsCount > 0 && (
                     <Badge
@@ -1123,6 +1164,43 @@ function KanbanCard({
                         </ul>
                       </PopoverContent>
                     </Popover>
+                  ) : null}
+
+                  {/* Envelhecimento: há quanto tempo está parado NESTA coluna.
+                      A métrica central do Kanban, antes ausente — sem ela um card
+                      esquecido há 40 dias parecia igual a um que entrou hoje.
+                      Só aparece a partir de 3 dias, para não poluir. */}
+                  {(() => {
+                    const aging = computeCardAging(activity.stage_entered_at, activity.status);
+                    if (!aging) return null;
+                    return (
+                      <span
+                        className={`shrink-0 inline-flex items-center gap-0.5 text-[10px] tabular-nums ${CARD_AGING_CLASSES[aging.tone]}`}
+                        title={`Há ${aging.days} dia(s) nesta coluna`}
+                      >
+                        <Hourglass className="w-2.5 h-2.5" /> {aging.label}
+                      </span>
+                    );
+                  })()}
+
+                  {/* Discussão e anexos: sinais universais de card (Trello, Jira,
+                      Asana, Notion todos exibem). Sempre visíveis — é presença de
+                      conteúdo, não preferência de campo. */}
+                  {commentCount && commentCount > 0 ? (
+                    <span
+                      className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-muted-foreground tabular-nums"
+                      title={`${commentCount} ${commentCount === 1 ? "comentário" : "comentários"}`}
+                    >
+                      <MessageSquare className="w-2.5 h-2.5" /> {commentCount}
+                    </span>
+                  ) : null}
+                  {attachmentCount && attachmentCount > 0 ? (
+                    <span
+                      className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-muted-foreground tabular-nums"
+                      title={`${attachmentCount} ${attachmentCount === 1 ? "anexo" : "anexos"}`}
+                    >
+                      <Paperclip className="w-2.5 h-2.5" /> {attachmentCount}
+                    </span>
                   ) : null}
 
                   {/* Prazo por ÚLTIMO e com ml-auto: ancora na borda direita do
@@ -1442,6 +1520,9 @@ function SortableColumn({
   subActivityCounts,
   hoursStatsByActivity,
   dependencyCounts,
+  waitingOnCounts,
+  commentCounts,
+  attachmentCounts,
   relationCounts,
   onOpenRelated,
   onRemoveRelation,
@@ -1495,6 +1576,9 @@ function SortableColumn({
   onOpenCreateTask?: (stageId: string) => void;
   subActivityCounts: Map<string, number>;
   dependencyCounts?: Map<string, { pred: number; succ: number }>;
+  waitingOnCounts?: Map<string, number>;
+  commentCounts?: Map<string, number>;
+  attachmentCounts?: Map<string, number>;
   relationCounts?: Map<string, { id: string; title: string; relationId: string; relationType: string }[]>;
   onOpenRelated?: (activityId: string) => void;
   onRemoveRelation?: (relationId: string) => void;
@@ -1763,6 +1847,9 @@ function SortableColumn({
       isQualityProject,
       stageColor: stage.color,
       dependencyCount: dependencyCounts?.get(activity.id),
+      waitingOnCount: waitingOnCounts?.get(activity.id),
+      commentCount: commentCounts?.get(activity.id),
+      attachmentCount: attachmentCounts?.get(activity.id),
       relationItems: relationCounts?.get(activity.id) || [],
       onOpenRelated,
       onRemoveRelation,
@@ -2374,6 +2461,10 @@ export const ActivityKanban = ({
   }, [collapsedStagesKey]);
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Map<string, number>>(new Map());
   const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
+  // Predecessoras ainda nao concluidas por atividade (dependencia bloqueante).
+  const [waitingOnCounts, setWaitingOnCounts] = useState<Map<string, number>>(new Map());
+  const [commentCounts, setCommentCounts] = useState<Map<string, number>>(new Map());
+  const [attachmentCounts, setAttachmentCounts] = useState<Map<string, number>>(new Map());
   const [relationCounts, setRelationCounts] = useState<
     Map<string, { id: string; title: string; relationId: string; relationType: string }[]>
   >(new Map());
@@ -2996,6 +3087,46 @@ export const ActivityKanban = ({
             map.set(d.predecessor_id, s);
           });
           setDependencyCounts(map);
+
+          // Dependência BLOQUEANTE: quantas predecessoras ainda não concluídas.
+          // Contagem sozinha não diz o que importa — um card pronto para começar
+          // e um travado esperando outro pareciam idênticos no quadro.
+          const statusById = new Map(activities.map((a) => [a.id, a.status]));
+          const waiting = new Map<string, number>();
+          (data || []).forEach((d: any) => {
+            const predStatus = statusById.get(d.predecessor_id);
+            // Só conta predecessora que existe neste projeto e não terminou.
+            if (predStatus !== undefined && predStatus !== "completed") {
+              waiting.set(d.successor_id, (waiting.get(d.successor_id) || 0) + 1);
+            }
+          });
+          setWaitingOnCounts(waiting);
+        });
+      // Contagem de comentários e anexos por atividade: os dois sinais mais
+      // universais de card no mercado ("tem discussão aqui", "tem arquivo").
+      supabase
+        .from("activity_comments")
+        .select("activity_id")
+        .in("activity_id", ids)
+        .eq("is_trashed", false)
+        .then(({ data }) => {
+          const map = new Map<string, number>();
+          (data || []).forEach((c: any) => {
+            map.set(c.activity_id, (map.get(c.activity_id) || 0) + 1);
+          });
+          setCommentCounts(map);
+        });
+      supabase
+        .from("project_documents")
+        .select("activity_id")
+        .in("activity_id", ids)
+        .eq("is_trashed", false)
+        .then(({ data }) => {
+          const map = new Map<string, number>();
+          (data || []).forEach((d: any) => {
+            if (d.activity_id) map.set(d.activity_id, (map.get(d.activity_id) || 0) + 1);
+          });
+          setAttachmentCounts(map);
         });
       supabase
         .from("task_relations")
@@ -3035,6 +3166,9 @@ export const ActivityKanban = ({
         });
     } else {
       setDependencyCounts(new Map());
+      setWaitingOnCounts(new Map());
+      setCommentCounts(new Map());
+      setAttachmentCounts(new Map());
       setRelationCounts(new Map());
     }
   }, [projectId, activities]);
@@ -4644,6 +4778,9 @@ export const ActivityKanban = ({
                 onOpenCreateTask={onOpenCreateTask}
                 subActivityCounts={subActivityCounts}
                 dependencyCounts={dependencyCounts}
+                waitingOnCounts={waitingOnCounts}
+                commentCounts={commentCounts}
+                attachmentCounts={attachmentCounts}
                 relationCounts={relationCounts}
                 hoursStatsByActivity={hoursStatsByActivity}
                 onOpenRelated={(activityId) => {
