@@ -277,6 +277,44 @@ export const CARD_FIELD_GROUPS: { group: string; items: { key: keyof CardFields;
  */
 const MIN_COLUMN_WIDTH = 272;
 
+/**
+ * Opções rápidas de prazo no menu do card. Datas relativas em vez de calendário:
+ * cobrem a maioria dos ajustes ("empurra pra amanhã") sem abrir nada. Data
+ * arbitrária continua no diálogo de edição.
+ */
+const DUE_DATE_PRESETS: { label: string; compute: () => string }[] = [
+  {
+    label: "Hoje",
+    compute: () => new Date().toISOString().slice(0, 10),
+  },
+  {
+    label: "Amanhã",
+    compute: () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().slice(0, 10);
+    },
+  },
+  {
+    label: "Sexta desta semana",
+    compute: () => {
+      const d = new Date();
+      // 5 = sexta; se já passou, cai na sexta seguinte.
+      const delta = (5 - d.getDay() + 7) % 7;
+      d.setDate(d.getDate() + (delta === 0 ? 7 : delta));
+      return d.toISOString().slice(0, 10);
+    },
+  },
+  {
+    label: "Em 1 semana",
+    compute: () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      return d.toISOString().slice(0, 10);
+    },
+  },
+];
+
 // Medidas do quadro: fonte única em lib/kanbanTokens (a imagem aprovada).
 // Nunca reintroduzir tabelas de densidade aqui — ver o comentário no token.
 
@@ -411,6 +449,9 @@ function SortableKanbanCard({
   onMoveToStage,
   moveTargets,
   onChangeType,
+  onAssign,
+  assigneeChoices,
+  onSetDueDate,
   onLinkParent,
   isAdmin,
   isBlocked,
@@ -450,6 +491,9 @@ function SortableKanbanCard({
   onMoveToStage?: (stageId: string) => void;
   moveTargets?: { id: string; title: string; color: string }[];
   onChangeType?: (kind: EapKind) => void;
+  onAssign?: (value: string | null) => void;
+  assigneeChoices?: { value: string; label: string }[];
+  onSetDueDate?: (iso: string | null) => void;
   onLinkParent?: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
@@ -502,6 +546,9 @@ function SortableKanbanCard({
         onMoveToStage={onMoveToStage}
         moveTargets={moveTargets}
         onChangeType={onChangeType}
+        onAssign={onAssign}
+        assigneeChoices={assigneeChoices}
+        onSetDueDate={onSetDueDate}
         onLinkParent={onLinkParent}
         dragListeners={listeners}
         isAdmin={isAdmin}
@@ -547,6 +594,9 @@ function KanbanCard({
   onMoveToStage,
   moveTargets,
   onChangeType,
+  onAssign,
+  assigneeChoices,
+  onSetDueDate,
   onLinkParent,
   dragListeners,
   isAdmin,
@@ -591,6 +641,11 @@ function KanbanCard({
   moveTargets?: { id: string; title: string; color: string }[];
   /** Converte o papel EAP do item (Fase / Atividade / Marco). */
   onChangeType?: (kind: EapKind) => void;
+  /** Atribui responsavel (null = ninguem). */
+  onAssign?: (value: string | null) => void;
+  assigneeChoices?: { value: string; label: string }[];
+  /** Define prazo em ISO yyyy-mm-dd (null = sem prazo). */
+  onSetDueDate?: (iso: string | null) => void;
   onLinkParent?: () => void;
   dragListeners?: any;
   isAdmin?: boolean;
@@ -851,6 +906,65 @@ function KanbanCard({
                               )}
                             </DropdownMenuItem>
                           ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    )}
+
+                    {/* Atribuir e Prazo: os dois campos mais editados de uma
+                        tarefa exigiam abrir o diálogo inteiro. Prioridade NÃO entra
+                        aqui de propósito — ela é derivada de G×U×T por design, e um
+                        atalho que grave o rótulo direto criaria um valor divergente
+                        do score (o trigger só recalcula quando G/U/T mudam). */}
+                    {onAssign && assigneeChoices && assigneeChoices.length > 0 && (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="focus:bg-muted/60 focus:text-foreground data-[state=open]:bg-muted/60">
+                          <User className="w-3.5 h-3.5 mr-2" /> Atribuir a
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent sideOffset={6} className="w-52 max-h-64 overflow-y-auto">
+                          <DropdownMenuItem
+                            className="text-xs focus:bg-muted/60 focus:text-foreground"
+                            onSelect={() => onAssign(null)}
+                          >
+                            <span className="text-muted-foreground">Ninguém</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {assigneeChoices.map((p) => (
+                            <DropdownMenuItem
+                              key={p.value}
+                              className="text-xs focus:bg-muted/60 focus:text-foreground"
+                              onSelect={() => onAssign(p.value)}
+                            >
+                              <span className="truncate">{p.label}</span>
+                              {activity.assigned_to === p.value && (
+                                <Check className="w-3 h-3 ml-auto text-primary shrink-0" />
+                              )}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    )}
+                    {onSetDueDate && (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="focus:bg-muted/60 focus:text-foreground data-[state=open]:bg-muted/60">
+                          <CalendarIcon className="w-3.5 h-3.5 mr-2" /> Prazo
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent sideOffset={6} className="w-44">
+                          {DUE_DATE_PRESETS.map((preset) => (
+                            <DropdownMenuItem
+                              key={preset.label}
+                              className="text-xs focus:bg-muted/60 focus:text-foreground"
+                              onSelect={() => onSetDueDate(preset.compute())}
+                            >
+                              {preset.label}
+                            </DropdownMenuItem>
+                          ))}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-xs focus:bg-muted/60 focus:text-foreground"
+                            onSelect={() => onSetDueDate(null)}
+                          >
+                            <span className="text-muted-foreground">Sem prazo</span>
+                          </DropdownMenuItem>
                         </DropdownMenuSubContent>
                       </DropdownMenuSub>
                     )}
@@ -1508,6 +1622,9 @@ function SortableColumn({
   onDuplicateActivity,
   onCopyActivityLink,
   onChangeActivityType,
+  onAssignActivity,
+  assigneeChoices,
+  onSetActivityDueDate,
   onToggleBlocked,
   onLinkParent,
   onCreateActivity,
@@ -1566,6 +1683,9 @@ function SortableColumn({
   onDuplicateActivity?: (activityId: string) => void;
   onCopyActivityLink?: (activityId: string) => void;
   onChangeActivityType?: (activityId: string, kind: EapKind) => void;
+  onAssignActivity?: (activityId: string, value: string | null) => void;
+  assigneeChoices?: { value: string; label: string }[];
+  onSetActivityDueDate?: (activityId: string, iso: string | null) => void;
   onToggleBlocked: (activityId: string) => void;
   onLinkParent?: (activityId: string, currentParentId: string | null) => void;
   onCreateActivity: (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => Promise<void>;
@@ -1839,6 +1959,9 @@ function SortableColumn({
       onCopyLink: onCopyActivityLink ? () => onCopyActivityLink(activity.id) : undefined,
       onChangeType: onChangeActivityType ? (kind: EapKind) => onChangeActivityType(activity.id, kind) : undefined,
       onLinkParent: () => onLinkParent?.(activity.id, activity.parent_id ?? null),
+      onAssign: onAssignActivity ? (v: string | null) => onAssignActivity(activity.id, v) : undefined,
+      assigneeChoices,
+      onSetDueDate: onSetActivityDueDate ? (iso: string | null) => onSetActivityDueDate(activity.id, iso) : undefined,
       isAdmin,
       // "block in place": o bloqueio é da ATIVIDADE, não da coluna — o card
       // fica onde o trabalho está e segue contando no limite de WIP.
@@ -3479,6 +3602,50 @@ export const ActivityKanban = ({
     onDataChanged();
   }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, toast]);
 
+  /** Atribui responsável direto do card, sem abrir o diálogo. */
+  const handleAssignActivity = useCallback(async (activityId: string, value: string | null) => {
+    if (projectLocked) {
+      showProjectLockedToast("alterar atividades");
+      return;
+    }
+    const activity = activities.find((a) => a.id === activityId);
+    if (!canMutateActivity(activity)) {
+      toast({ title: "Somente o criador ou responsável da atividade pode alterar.", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase
+      .from("activities")
+      .update({ assigned_to: value } as never)
+      .eq("id", activityId);
+    if (error) {
+      toast({ title: "Erro ao atribuir", description: error.message, variant: "destructive" });
+      return;
+    }
+    onDataChanged();
+  }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, toast]);
+
+  /** Define o prazo por opção rápida (hoje, amanhã, sexta…). */
+  const handleSetActivityDueDate = useCallback(async (activityId: string, iso: string | null) => {
+    if (projectLocked) {
+      showProjectLockedToast("alterar atividades");
+      return;
+    }
+    const activity = activities.find((a) => a.id === activityId);
+    if (!canMutateActivity(activity)) {
+      toast({ title: "Somente o criador ou responsável da atividade pode alterar.", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase
+      .from("activities")
+      .update({ end_date: iso } as never)
+      .eq("id", activityId);
+    if (error) {
+      toast({ title: "Erro ao definir prazo", description: error.message, variant: "destructive" });
+      return;
+    }
+    onDataChanged();
+  }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, toast]);
+
   const openLinkParent = useCallback((activityId: string, currentParentId: string | null) => {
     setLinkParentIds([activityId]);
     setLinkParentCurrent(currentParentId);
@@ -3989,10 +4156,66 @@ export const ActivityKanban = ({
 
 
   const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
+  /**
+   * Atalhos de teclado do quadro (referência: Linear).
+   *  N  nova tarefa na primeira coluna
+   *  /  foca a busca
+   *  M  alterna "só minhas"
+   *  Esc limpa a busca
+   * Ignora quando o foco está em campo de texto ou há modificador — senão
+   * digitar "n" numa busca criaria tarefa.
+   */
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      const typing =
+        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable;
+
+      if (e.key === "Escape" && typing && el === searchInputRef.current) {
+        setSearch("");
+        searchInputRef.current?.blur();
+        return;
+      }
+      if (typing) return;
+
+      if (e.key === "/") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+      if (e.key === "n" || e.key === "N") {
+        if (!canCreate) return;
+        const first = stages.find((s) => s.display_order > 0 && s.is_visible !== false);
+        if (first && onOpenCreateTask) {
+          e.preventDefault();
+          onOpenCreateTask(first.id);
+        }
+        return;
+      }
+      if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        setOnlyMine((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canCreate, onOpenCreateTask, stages]);
+
   /** Destinos do "Mover para →" no menu do card: as colunas que o quadro mostra. */
   const moveTargets = useMemo(
     () => visibleStages.map((s) => ({ id: s.id, title: getStageDisplayTitle(s.title), color: s.color })),
     [visibleStages],
+  );
+  /** Pessoas oferecidas no "Atribuir a" — do mapa de perfis do projeto. */
+  const assigneeChoices = useMemo(
+    () =>
+      Object.entries(profilesMap)
+        .map(([value, label]) => ({ value, label: label || value }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [profilesMap],
   );
 
   // ===== Stage management handlers (admin/gestor only) =====
@@ -4240,9 +4463,10 @@ export const ActivityKanban = ({
         <div className="relative w-full max-w-[240px]">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={searchInputRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar tarefa..."
+            placeholder="Buscar tarefa...  ( / )"
             className="h-7 pl-8 pr-7 text-xs"
           />
           {search && (
@@ -4799,6 +5023,9 @@ export const ActivityKanban = ({
                       onMoveToStage={(stageId) => handleMoveToStage(activity.id, stageId)}
                       moveTargets={moveTargets}
                       onChangeType={canManageHierarchy ? (kind) => handleChangeActivityType(activity.id, kind) : undefined}
+                      onAssign={(v) => handleAssignActivity(activity.id, v)}
+                      assigneeChoices={assigneeChoices}
+                      onSetDueDate={(iso) => handleSetActivityDueDate(activity.id, iso)}
                       isAdmin={isAdmin}
                       isBlocked={!!activity.is_blocked}
                       onToggleBlocked={() => handleToggleBlocked(activity.id)}
@@ -4860,6 +5087,9 @@ export const ActivityKanban = ({
                 onDeleteActivity={onDeleteActivity}
                 onToggleActivity={onToggleActivity}
                 onMoveToStage={handleMoveToStage}
+                onAssignActivity={handleAssignActivity}
+                assigneeChoices={assigneeChoices}
+                onSetActivityDueDate={handleSetActivityDueDate}
 
                 onToggleBlocked={handleToggleBlocked}
                 onLinkParent={canManageHierarchy ? openLinkParent : undefined}

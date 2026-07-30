@@ -1144,7 +1144,32 @@ export default function ProjectDetailsPage() {
       toast.error("Não foi possível arquivar a atividade.", { description: error.message });
       return;
     }
-    toast.success("Atividade movida para a lixeira!");
+    // Desfazer: arquivar é soft-delete (is_trashed), então reverter é só
+    // limpar as flags dos MESMOS ids — inclusive os descendentes que entraram
+    // na cascata. Sem isto, o caminho de volta era achar cada item na Lixeira e
+    // restaurar um por um.
+    const trashedIds = Array.from(idsToTrash);
+    toast.success(
+      trashedIds.length > 1
+        ? `Atividade e ${trashedIds.length - 1} subtarefa(s) movidas para a lixeira`
+        : "Atividade movida para a lixeira",
+      {
+        action: {
+          label: "Desfazer",
+          onClick: async () => {
+            const { error: undoError } = await (
+              supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any) as any
+            ).in("id", trashedIds);
+            if (undoError) {
+              toast.error("Não foi possível desfazer.", { description: undoError.message });
+              return;
+            }
+            toast.success("Arquivamento desfeito");
+            fetchProjectData();
+          },
+        },
+      },
+    );
     fetchProjectData();
   };
 
