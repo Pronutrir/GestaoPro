@@ -97,10 +97,10 @@ export const EditProjectDialog = ({
     const el = (role === "Líder" ? ownerFieldRef : managerFieldRef).current;
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "center" });
-    // Destaque momentâneo: rolar sozinho não diz qual campo é o alvo.
-    el.classList.add("ring-2", "ring-primary", "rounded-md");
-    window.setTimeout(() => el.classList.remove("ring-2", "ring-primary", "rounded-md"), 1600);
-    el.querySelector("button")?.focus();
+    // ABRE o seletor, não só foca: focar o gatilho destacava o campo mas não
+    // mostrava lista nenhuma — parecia que "Trocar" não fazia nada. O clique
+    // espera o scroll suave terminar, para o popover ancorar no lugar certo.
+    window.setTimeout(() => el.querySelector("button")?.click(), 320);
   };
 
   useEffect(() => {
