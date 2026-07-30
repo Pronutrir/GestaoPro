@@ -459,22 +459,25 @@ function KanbanCardBase({
                 className={`shrink-0 flex items-center gap-0.5 -mt-0.5 -mr-1 transition-opacity ${menuOpen || selected ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"}`}
                 onClick={(e) => e.stopPropagation()}
               >
+                {/* Seleção é QUADRADA e concluir é REDONDO: os dois eram
+                    marcadores vazios do mesmo tamanho, lado a lado, e pareciam
+                    o mesmo controle repetido. */}
                 {onToggleSelect && (
                   <button
                     type="button"
                     onClick={onToggleSelect}
                     title={selected ? "Remover da seleção" : "Selecionar para ação em lote"}
-                    className="h-[22px] w-[22px] flex items-center justify-center rounded hover:bg-muted/70 transition-colors"
+                    className="h-[22px] w-[22px] flex items-center justify-center rounded hover:bg-primary/10 transition-colors"
                   >
                     <span className={cn(
-                      "w-3.5 h-3.5 rounded border flex items-center justify-center",
-                      selected ? "bg-primary border-primary" : "border-input",
+                      "w-3.5 h-3.5 rounded-[3px] border-2 flex items-center justify-center transition-colors",
+                      selected ? "bg-primary border-primary" : "border-muted-foreground/50",
                     )}>
                       {selected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
                     </span>
                   </button>
                 )}
-                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onToggle} title={activity.status === "completed" ? "Reabrir" : "Concluir"}>
+                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-success/10 hover:text-success" onClick={onToggle} title={activity.status === "completed" ? "Reabrir atividade" : "Concluir atividade"}>
                   {activity.status === "completed" ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-success" />
                   ) : (
@@ -578,7 +581,10 @@ function KanbanCardBase({
                           className="text-destructive focus:bg-destructive/10 focus:text-destructive"
                           onSelect={() => onDelete()}
                         >
-                          <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
+                          {/* "Arquivar", não "Excluir": a ação marca is_trashed
+                              e o item volta pelo Arquivo. Excluir de verdade só
+                              existe lá dentro, onde é de fato irreversível. */}
+                          <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar
                         </DropdownMenuItem>
                       </>
                     )}

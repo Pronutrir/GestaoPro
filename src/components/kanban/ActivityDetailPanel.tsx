@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle2, Circle, Pencil, Flag, Hourglass, Diamond, Layers } from "lucide-react";
-import { ActivityComments } from "@/components/ActivityComments";
+// Mesmo componente do diálogo de edição: os dois liam/gravavam a MESMA tabela
+// (activity_comments) com nomes diferentes. Este tem histórico, comentários das
+// subatividades e @menção — o antigo ActivityComments era a versão plana.
+import { ActivityRegistro } from "@/components/ActivityRegistro";
 import { ActivityAttachments } from "@/components/ActivityAttachments";
 import { normalizeGut, GUT_META } from "@/lib/gutPriority";
 import { resolveEapKind } from "@/lib/eapModel";
@@ -209,8 +212,13 @@ export function ActivityDetailPanel({
 
           <Separator />
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Comentários</p>
-            <ActivityComments activityId={activity.id} />
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Conversa da atividade</p>
+            <ActivityRegistro
+              activityId={activity.id}
+              projectId={projectId}
+              phaseId={activity.phase_id ?? null}
+              includeSubActivities
+            />
           </div>
         </div>
       </SheetContent>
