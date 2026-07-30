@@ -127,9 +127,6 @@ import {
   getProgressBarColor,
   progressLabelFromPercent,
   STAGE_PRESET_COLORS,
-  SORT_CRITERIA,
-  DEFAULT_BOARD_SORT,
-  isValidSortValue,
   GROUP_BY_VALUES,
   MIN_COLUMN_WIDTH,
   EMPTY_COLUMN_FILTER,
@@ -344,17 +341,6 @@ export const ActivityKanban = ({
       try { window.localStorage.setItem(groupByKey, groupBy); } catch { /* quota */ }
     }
   }, [groupBy, groupByKey]);
-  const boardSortKey = `kanban-board-sort:${projectId}`;
-  const [boardSort, setBoardSort] = useState<string>(() => {
-    if (typeof window === "undefined") return DEFAULT_BOARD_SORT;
-    const raw = window.localStorage.getItem(boardSortKey);
-    return isValidSortValue(raw) ? raw : DEFAULT_BOARD_SORT;
-  });
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try { window.localStorage.setItem(boardSortKey, boardSort); } catch { /* quota */ }
-    }
-  }, [boardSort, boardSortKey]);
   // Times de raia (nível B): grupos nomeados de pessoas, por projeto,
   // compartilhados via banco. Alimentam a "Raia por time" quando o usuário
   // escolhe agrupar por time — não alteram o comportamento padrão do Kanban.
@@ -539,7 +525,6 @@ export const ActivityKanban = ({
       onlyMine?: boolean;
     };
     groupBy?: string;
-    boardSort?: string;
     cardFields?: Partial<CardFields>;
   };
   type KanbanView = { id: string; name: string; config: KanbanViewConfig; created_by: string | null };
@@ -573,7 +558,7 @@ export const ActivityKanban = ({
       startRange: filterStartRange, hoursRange: filterHoursRange,
       onlyMine,
     },
-    groupBy, boardSort, cardFields,
+    groupBy, cardFields,
   });
 
   const applyView = (v: KanbanView) => {
@@ -593,7 +578,6 @@ export const ActivityKanban = ({
     setFilterHoursRange(f.hoursRange ?? { min: "", max: "" });
     setOnlyMine(!!f.onlyMine);
     setGroupBy((GROUP_BY_VALUES as readonly string[]).includes(c.groupBy ?? "") ? (c.groupBy as GroupByValue) : "none");
-    setBoardSort(isValidSortValue(c.boardSort ?? null) ? (c.boardSort as string) : DEFAULT_BOARD_SORT);
     setCardFields({ ...DEFAULT_CARD_FIELDS, ...(c.cardFields ?? {}) });
     setActiveViewId(v.id);
   };
@@ -2794,12 +2778,9 @@ export const ActivityKanban = ({
         )}
 
         <div className="ml-auto flex items-center gap-2">
-        {/* EXIBIÇÃO — raias, ordenação e campos do card num painel só (Fase 2).
-            Antes eram três controles soltos (Raias, Minhas, Card): "Minhas" é
-            filtro e foi para o painel Filtros; o resto mora aqui, no modelo
-            do painel Display do Linear. */}
+        {/* Agrupar em raias (swimlanes) — menu clicável de critérios */}
         {(() => {
-          const laneOptions: { id: GroupByValue; label: string; icon: React.ReactNode }[] = [
+          const laneOptions: { id: typeof groupBy; label: string; icon: React.ReactNode }[] = [
             { id: "none", label: "Sem raias", icon: <XIcon className="w-3.5 h-3.5" /> },
             { id: "phase", label: "Por fase", icon: <Layers className="w-3.5 h-3.5" /> },
             { id: "assignee", label: "Por responsável", icon: <User className="w-3.5 h-3.5" /> },
@@ -2810,132 +2791,118 @@ export const ActivityKanban = ({
             { id: "blocked", label: "Por bloqueio", icon: <AlertCircle className="w-3.5 h-3.5" /> },
             { id: "customGroup", label: "Por time", icon: <Users className="w-3.5 h-3.5" /> },
           ];
-          const currentLane = laneOptions.find((o) => o.id === groupBy) ?? laneOptions[0];
-          const [sortCrit, sortDir = "asc"] = boardSort.split(":");
-          const currentSort = SORT_CRITERIA.find((c) => c.id === sortCrit) ?? SORT_CRITERIA[0];
-          const displayTouched =
-            groupBy !== "none" || boardSort !== DEFAULT_BOARD_SORT ||
-            (Object.keys(DEFAULT_CARD_FIELDS) as (keyof CardFields)[]).some((k) => cardFields[k] !== DEFAULT_CARD_FIELDS[k]);
+          const current = laneOptions.find((o) => o.id === groupBy) ?? laneOptions[0];
           return (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" title="Raias, ordenação e campos do card">
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  Exibição
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={groupBy !== "none" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  title="Agrupar cards em raias horizontais"
+                >
+                  <Layers className="w-3.5 h-3.5 shrink-0" />
+                  {groupBy === "none" ? "Raias" : current.label}
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-72 p-0" collisionPadding={12}>
-                <div className="flex items-center justify-between px-3 py-2.5 border-b">
-                  <span className="text-sm font-semibold">Exibição</span>
-                  {displayTouched && (
-                    <button
-                      type="button"
-                      onClick={() => { setGroupBy("none"); setBoardSort(DEFAULT_BOARD_SORT); setCardFields(DEFAULT_CARD_FIELDS); }}
-                      className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                      title="Voltar raias, ordenação e campos ao padrão"
-                    >
-                      Restaurar
-                    </button>
-                  )}
-                </div>
-                {/* Raias */}
-                <div className="px-3 py-2.5 border-b space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13px] font-medium">Raias</span>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs max-w-[160px]">
-                          <span className="text-muted-foreground shrink-0">{currentLane.icon}</span>
-                          <span className="truncate">{currentLane.label}</span>
-                          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        {laneOptions.map((o) => (
-                          <DropdownMenuItem key={o.id} onSelect={() => setGroupBy(o.id)} className="gap-2 text-xs">
-                            <span className="text-muted-foreground">{o.icon}</span>
-                            <span className="flex-1">{o.label}</span>
-                            {groupBy === o.id && <Check className="w-3.5 h-3.5 text-primary" />}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  {/* Raia por time sem times cadastrados deixaria o quadro igual
-                      sem explicação — o acesso ao cadastro fica ao lado. */}
-                  {groupBy === "customGroup" && (
-                    <button
-                      type="button"
-                      onClick={() => setManageGroupsOpen(true)}
-                      className="text-[11px] text-primary hover:underline inline-flex items-center gap-1"
-                    >
-                      <Users className="w-3 h-3" />
-                      {laneGroups.length === 0 ? "Criar um time…" : `Gerenciar times (${laneGroups.length})…`}
-                    </button>
-                  )}
-                </div>
-                {/* Ordenação padrão do quadro */}
-                <div className="px-3 py-2.5 border-b">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13px] font-medium">Ordenar cards</span>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs max-w-[160px]">
-                          {sortDir === "asc"
-                            ? <ArrowUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            : <ArrowDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                          <span className="truncate">{currentSort.label}</span>
-                          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        {SORT_CRITERIA.map((c) => {
-                          const isActive = sortCrit === c.id;
-                          const nextDir = isActive ? (sortDir === "asc" ? "desc" : "asc") : c.defaultDir;
-                          return (
-                            <DropdownMenuItem key={c.id} onSelect={() => setBoardSort(`${c.id}:${nextDir}`)} className="gap-2 text-xs">
-                              <span className={cn("flex-1", isActive && "font-medium text-primary")}>{c.label}</span>
-                              {isActive && (sortDir === "asc"
-                                ? <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
-                                : <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />)}
-                            </DropdownMenuItem>
-                          );
-                        })}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Colunas com ordenação própria (ícone ⇅ destacado) mantêm a delas.
-                  </p>
-                </div>
-                {/* Campos do card */}
-                <div className="px-3 pt-2.5 pb-1 text-[13px] font-medium">Campos do card</div>
-                <div className="max-h-[min(300px,45vh)] overflow-y-auto pb-1">
-                  {CARD_FIELD_GROUPS.map((grp) => (
-                    <div key={grp.group}>
-                      <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        {grp.group}
-                      </div>
-                      {grp.items.map((it) => (
-                        <label
-                          key={it.key}
-                          className="flex items-center justify-between px-3 py-1.5 text-[13px] cursor-pointer hover:bg-muted/50"
-                        >
-                          <span className={cardFields[it.key] ? "" : "text-muted-foreground"}>{it.label}</span>
-                          <Switch
-                            checked={cardFields[it.key]}
-                            onCheckedChange={() => toggleCardField(it.key)}
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Agrupar em raias
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {laneOptions.map((o) => (
+                  <DropdownMenuItem
+                    key={o.id}
+                    onSelect={() => setGroupBy(o.id)}
+                    className="gap-2 text-xs"
+                  >
+                    <span className="text-muted-foreground">{o.icon}</span>
+                    <span className="flex-1">{o.label}</span>
+                    {groupBy === o.id && <Check className="w-3.5 h-3.5 text-primary" />}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setManageGroupsOpen(true)} className="gap-2 text-xs">
+                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="flex-1">Gerenciar times…</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           );
         })()}
-        {/* Ações do quadro que não são do dia a dia */}
+        {/* "Por time" depende de existir um time cadastrado, mas o cadastro
+            estava escondido dois níveis abaixo, no fim do menu de outra função —
+            quem não sabia que existia, não achava. Com a raia por time ativa, o
+            acesso fica ao lado, visível. Extra: sem nenhum time cadastrado, o
+            botão se explica em vez de deixar o quadro vazio sem motivo. */}
+        {groupBy === "customGroup" && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 text-xs"
+            onClick={() => setManageGroupsOpen(true)}
+            title="Criar e editar os times usados nas raias"
+          >
+            <Users className="w-3.5 h-3.5" />
+            {laneGroups.length === 0 ? "Criar um time" : `Times (${laneGroups.length})`}
+          </Button>
+        )}
+        <Button
+          variant={onlyMine ? "default" : "outline"}
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          title="Mostrar apenas minhas tarefas (Líder, Participante ou Criador)"
+          onClick={() => setOnlyMine((v) => !v)}
+        >
+          <User className="w-3.5 h-3.5" />
+          Minhas
+        </Button>
+        {/* Configuração do card: liga/desliga cada informação exibida */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" title="Configurar o que aparece nos cards">
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Card
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-64 p-0" collisionPadding={12}>
+            <div className="flex items-center justify-between px-3 py-2.5 border-b">
+              <span className="text-sm font-semibold">Exibição do card</span>
+              <button
+                type="button"
+                onClick={() => setCardFields(DEFAULT_CARD_FIELDS)}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                title="Restaurar padrão"
+              >
+                Restaurar
+              </button>
+            </div>
+            <div className="max-h-[min(420px,60vh)] overflow-y-auto py-1">
+              {CARD_FIELD_GROUPS.map((grp) => (
+                <div key={grp.group}>
+                  <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {grp.group}
+                  </div>
+                  {grp.items.map((it) => (
+                    <label
+                      key={it.key}
+                      className="flex items-center justify-between px-3 py-1.5 text-[13px] cursor-pointer hover:bg-muted/50"
+                    >
+                      <span className={cardFields[it.key] ? "" : "text-muted-foreground"}>{it.label}</span>
+                      <Switch
+                        checked={cardFields[it.key]}
+                        onCheckedChange={() => toggleCardField(it.key)}
+                      />
+                    </label>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+        {/* Ações do quadro que não são do dia a dia. Não faz parte do painel de
+            exibição: são telas e configurações, e sem este menu ficariam sem
+            nenhum acesso pelo quadro. */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-7 w-7 p-0" title="Mais ações do quadro">
@@ -2946,10 +2913,6 @@ export const ActivityKanban = ({
             <DropdownMenuItem onSelect={() => setManageStagesOpen(true)} className="gap-2 text-xs">
               <LayoutGrid className="w-3.5 h-3.5 text-muted-foreground" />
               Configurar colunas do quadro…
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setManageGroupsOpen(true)} className="gap-2 text-xs">
-              <Users className="w-3.5 h-3.5 text-muted-foreground" />
-              Gerenciar times…
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => setMetricsOpen(true)} className="gap-2 text-xs">
@@ -3148,7 +3111,6 @@ export const ActivityKanban = ({
                 onToggleStageVisible={handleToggleStageVisible}
                 allStages={stages}
                 cardFields={cardFields}
-                boardSort={boardSort}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelected}
                 profilesMap={profilesMap}

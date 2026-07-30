@@ -368,7 +368,6 @@ export function SortableColumn({
   collapsed = false,
   onToggleCollapse,
   columnFilterSlot,
-  boardSort = DEFAULT_BOARD_SORT,
   selectedIds,
   onToggleSelect,
 }: {
@@ -378,7 +377,6 @@ export function SortableColumn({
   collapsed?: boolean;
   onToggleCollapse?: (id: string) => void;
   columnFilterSlot?: React.ReactNode;
-  boardSort?: string;
   /** Seleção para ação em lote (Set compartilhado do quadro). */
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
@@ -428,10 +426,8 @@ export function SortableColumn({
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
 }) {
-  // Ordenação: segue o padrão do quadro (painel Exibição). O dropdown da
-  // coluna grava um override local, que vale só aqui e só até recarregar.
-  const [colSortOverride, setColSortOverride] = useState<string | null>(null);
-  const colSort = colSortOverride ?? boardSort;
+  // Ordenação por coluna, independente das demais (comportamento original).
+  const [colSort, setColSort] = useState<string>(DEFAULT_BOARD_SORT);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickTitle, setQuickTitle] = useState("");
   const [quickPhase, setQuickPhase] = useState("");
@@ -875,11 +871,11 @@ export function SortableColumn({
                   type="button"
                   className={cn(
                     "h-5 w-5 flex items-center justify-center rounded hover:bg-accent transition-colors",
-                    colSortOverride === null ? "text-muted-foreground hover:text-foreground" : "text-primary",
+                    colSort === DEFAULT_BOARD_SORT ? "text-muted-foreground hover:text-foreground" : "text-primary",
                   )}
                   onClick={(e) => e.stopPropagation()}
                   onPointerDown={(e) => e.stopPropagation()}
-                  title="Ordenar só esta coluna (sobrepõe o padrão do quadro)"
+                  title="Ordenar cards desta coluna"
                 >
                   <ArrowUpDown className="w-3.5 h-3.5" />
                 </button>
@@ -903,7 +899,7 @@ export function SortableColumn({
                     return (
                       <DropdownMenuItem
                         key={c.id}
-                        onSelect={() => setColSortOverride(`${c.id}:${nextDir}`)}
+                        onSelect={() => setColSort(`${c.id}:${nextDir}`)}
                         className="gap-2 text-xs"
                       >
                         <span className={cn("flex-1", isActive && "font-medium text-primary")}>{c.label}</span>
@@ -914,15 +910,6 @@ export function SortableColumn({
                     );
                   });
                 })()}
-                {colSortOverride !== null && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={() => setColSortOverride(null)} className="gap-2 text-xs">
-                      <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="flex-1">Seguir padrão do quadro</span>
-                    </DropdownMenuItem>
-                  </>
-                )}
               </DropdownMenuContent>
             </DropdownMenu>
             {onToggleCollapse && (
