@@ -369,6 +369,8 @@ export function SortableColumn({
   onToggleCollapse,
   columnFilterSlot,
   boardSort = DEFAULT_BOARD_SORT,
+  selectedIds,
+  onToggleSelect,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -377,6 +379,9 @@ export function SortableColumn({
   onToggleCollapse?: (id: string) => void;
   columnFilterSlot?: React.ReactNode;
   boardSort?: string;
+  /** Seleção para ação em lote (Set compartilhado do quadro). */
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
   activities: Activity[];
   phases: Phase[];
   widthPct: number;
@@ -687,6 +692,8 @@ export function SortableColumn({
       blockedSubsCount,
       subActivityStatusSummary,
       hoursStat: hoursStatsByActivity?.get(activity.id),
+      selected: selectedIds?.has(activity.id) ?? false,
+      onToggleSelect: onToggleSelect ? () => onToggleSelect(activity.id) : undefined,
       profilesMap,
       profileAvatarMap,
     };

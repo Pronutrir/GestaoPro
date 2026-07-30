@@ -118,6 +118,8 @@ export function SortableKanbanCard({
   blockedSubsCount,
   subActivityStatusSummary,
   hoursStat,
+  selected,
+  onToggleSelect,
   profilesMap = {},
   profileAvatarMap = {},
 }: {
@@ -130,6 +132,8 @@ export function SortableKanbanCard({
   onMoveToStage?: (stageId: string) => void;
   moveTargets?: { id: string; title: string; color: string }[];
   onLinkParent?: () => void;
+  selected?: boolean;
+  onToggleSelect?: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
   onToggleBlocked?: () => void;
@@ -206,6 +210,8 @@ export function SortableKanbanCard({
         blockedSubsCount={blockedSubsCount}
         subActivityStatusSummary={subActivityStatusSummary}
         hoursStat={hoursStat}
+        selected={selected}
+        onToggleSelect={onToggleSelect}
         profilesMap={profilesMap}
         profileAvatarMap={profileAvatarMap}
       />
@@ -250,6 +256,8 @@ function KanbanCardBase({
   subActivityStatusSummary,
   hoursStat,
   readOnlyPreview = false,
+  selected = false,
+  onToggleSelect,
   profilesMap = {},
   profileAvatarMap = {},
 }: {
@@ -292,6 +300,9 @@ function KanbanCardBase({
   subActivityStatusSummary?: SubActivityStatusSummary;
   hoursStat?: HoursStat;
   readOnlyPreview?: boolean;
+  /** Seleção para ação em lote: quando fornecido, o card mostra o checkbox. */
+  selected?: boolean;
+  onToggleSelect?: () => void;
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
 }) {
@@ -358,7 +369,7 @@ function KanbanCardBase({
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`relative bg-card border border-border rounded-lg ${d.card} ${dragListeners ? "pl-[18px]" : ""} shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`}
+            className={`relative bg-card border border-border rounded-lg ${d.card} ${dragListeners ? "pl-[18px]" : ""} shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass} ${selected ? "ring-2 ring-primary/50" : ""}`}
             onClick={onEdit}
           >
             {/* Alça de arrastar FORA do fluxo: como coluna fixa ela roubava
@@ -445,9 +456,24 @@ function KanbanCardBase({
                 menu aberto e na navegacao por teclado. */}
             {!readOnlyPreview && (
               <div
-                className={`shrink-0 flex items-center gap-0.5 -mt-0.5 -mr-1 transition-opacity ${menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"}`}
+                className={`shrink-0 flex items-center gap-0.5 -mt-0.5 -mr-1 transition-opacity ${menuOpen || selected ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"}`}
                 onClick={(e) => e.stopPropagation()}
               >
+                {onToggleSelect && (
+                  <button
+                    type="button"
+                    onClick={onToggleSelect}
+                    title={selected ? "Remover da seleção" : "Selecionar para ação em lote"}
+                    className="h-[22px] w-[22px] flex items-center justify-center rounded hover:bg-muted/70 transition-colors"
+                  >
+                    <span className={cn(
+                      "w-3.5 h-3.5 rounded border flex items-center justify-center",
+                      selected ? "bg-primary border-primary" : "border-input",
+                    )}>
+                      {selected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                    </span>
+                  </button>
+                )}
                 <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-muted/70 hover:text-foreground" onClick={onToggle} title={activity.status === "completed" ? "Reabrir" : "Concluir"}>
                   {activity.status === "completed" ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-success" />

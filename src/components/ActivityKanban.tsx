@@ -239,8 +239,20 @@ export const ActivityKanban = ({
   const [createStoryActivity, setCreateStoryActivity] = useState<Activity | null>(null);
   // Bloqueio "in place": a atividade fica na coluna e recebe a flag.
   const [blockingActivity, setBlockingActivity] = useState<Activity | null>(null);
+  // Bloqueio em lote: mesmo diálogo de motivo, aplicado a vários ids de uma vez.
+  const [blockingBulkIds, setBlockingBulkIds] = useState<string[] | null>(null);
   const [blockReason, setBlockReason] = useState("");
   const [blockSaving, setBlockSaving] = useState(false);
+  // Seleção para ação em lote (Item 1 da rodada final da crítica).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
   const [createStoryTitle, setCreateStoryTitle] = useState("");
   const [createStoryNarrative, setCreateStoryNarrative] = useState("");
   const [createStoryLoading, setCreateStoryLoading] = useState(false);
@@ -1070,22 +1082,195 @@ export const ActivityKanban = ({
   };
 
   const confirmBlockActivity = async () => {
-    if (!blockingActivity) return;
+    if (!blockingActivity && !blockingBulkIds) return;
     setBlockSaving(true);
+    const ids = blockingBulkIds ?? [blockingActivity!.id];
     const { error } = await supabase
       .from("activities")
       .update({
         is_blocked: true,
         blocked_reason: blockReason.trim() || null,
       } as never)
-      .eq("id", blockingActivity.id);
+      .in("id", ids);
     setBlockSaving(false);
     if (error) {
       toast({ title: "Erro ao bloquear", description: error.message, variant: "destructive" });
       return;
     }
+    if (blockingBulkIds) {
+      toast({ title: `${ids.length} atividade(s) bloqueada(s)` });
+      clearSelection();
+    }
     setBlockingActivity(null);
+    setBlockingBulkIds(null);
     setBlockReason("");
+    onDataChanged();
+  };
+
+  // ===== Ação em lote (Item 1 da rodada final) =====
+  /** Selecionadas que o usuário PODE mutar — mesmo critério das ações individuais. */
+  const bulkEligible = () => {
+    if (projectLocked) {
+      showProjectLockedToast("agir em lote");
+      return null;
+    }
+    const list = activities.filter((a) => selectedIds.has(a.id));
+    const ok = list.filter((a) => canMutateActivity(a));
+    if (ok.length === 0) {
+      toast({ title: "Nenhuma das selecionadas pode ser alterada por você.", variant: "destructive" });
+      return null;
+    }
+    if (list.length - ok.length > 0) {
+      toast({ title: `${list.length - ok.length} selecionada(s) ignorada(s) — sem permissão.` });
+    }
+    return ok;
+  };
+
+  const handleBulkMove = async (stageId: string) => {
+    const ok = bulkEligible(); if (!ok) return;
+    const target = stages.find((s) => s.id === stageId);
+    if (!target) return;
+    const moving = ok.filter((a) => (optimisticMoves[a.id] || a.workflow_stage_id) !== stageId);
+    if (moving.length === 0) { clearSelection(); return; }
+    // Limite rígido vale para o lote inteiro: mover 5 para uma coluna com 1 vaga
+    // não pode virar "entra 1 e falham 4" silenciosamente.
+    if (target.wip_limit != null && target.wip_limit > 0 && target.wip_strict) {
+      const inTarget = activities.filter((a) => (optimisticMoves[a.id] || a.workflow_stage_id) === stageId).length;
+      if (inTarget + moving.length > target.wip_limit) {
+        toast({
+          title: `"${getStageDisplayTitle(target.title)}" está no limite de WIP`,
+          description: `Mover ${moving.length} ultrapassaria o limite rígido (${inTarget}/${target.wip_limit}). Conclua ou mova algo antes.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    const prev = new Map(moving.map((a) => [a.id, a.workflow_stage_id ?? null] as const));
+    const ids = moving.map((a) => a.id);
+    setOptimisticMoves((p) => { const n = { ...p }; ids.forEach((id) => { n[id] = stageId; }); return n; });
+    const { error } = await supabase.from("activities").update({ workflow_stage_id: stageId } as never).in("id", ids);
+    if (error) {
+      setOptimisticMoves((p) => { const n = { ...p }; ids.forEach((id) => delete n[id]); return n; });
+      toast({ title: "Não foi possível mover o lote.", description: error.message, variant: "destructive" });
+      return;
+    }
+    await supabase.from("user_stories").update({ stage_id: stageId } as never).in("activity_id", ids);
+    toast({
+      title: `${ids.length} movida(s) para "${getStageDisplayTitle(target.title)}"`,
+      action: (
+        <ToastAction
+          altText="Desfazer"
+          onClick={async () => {
+            // Cada uma volta para a coluna de ORIGEM (agrupado por coluna).
+            const byStage = new Map<string | null, string[]>();
+            prev.forEach((st, id) => { const l = byStage.get(st) || []; l.push(id); byStage.set(st, l); });
+            for (const [st, groupIds] of byStage) {
+              setOptimisticMoves((p) => {
+                const n = { ...p };
+                groupIds.forEach((id) => { if (st) n[id] = st; else delete n[id]; });
+                return n;
+              });
+              if (st) {
+                await supabase.from("activities").update({ workflow_stage_id: st } as never).in("id", groupIds);
+                await supabase.from("user_stories").update({ stage_id: st } as never).in("activity_id", groupIds);
+              }
+            }
+            onDataChanged();
+          }}
+        >
+          Desfazer
+        </ToastAction>
+      ),
+    });
+    clearSelection();
+    onDataChanged();
+  };
+
+  const handleBulkAssign = async (name: string | null) => {
+    const ok = bulkEligible(); if (!ok) return;
+    const ids = ok.map((a) => a.id);
+    const { error } = await supabase.from("activities").update({ assigned_to: name } as never).in("id", ids);
+    if (error) {
+      toast({ title: "Não foi possível atribuir o lote.", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: name ? `${ids.length} atribuída(s) a ${profilesMap[name] ?? name}` : `Responsável removido de ${ids.length}` });
+    clearSelection();
+    onDataChanged();
+  };
+
+  // Data local (sem UTC): toISOString() à noite em UTC-3 gravaria o dia seguinte.
+  const localYmd = (dt: Date) =>
+    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+
+  const handleBulkDue = async (ymd: string | null) => {
+    const ok = bulkEligible(); if (!ok) return;
+    const ids = ok.map((a) => a.id);
+    const { error } = await supabase.from("activities").update({ end_date: ymd } as never).in("id", ids);
+    if (error) {
+      toast({ title: "Não foi possível definir o prazo do lote.", description: error.message, variant: "destructive" });
+      return;
+    }
+    const [, m, d] = (ymd ?? "--").split("-");
+    toast({ title: ymd ? `Prazo de ${ids.length} definido para ${d}/${m}` : `Prazo removido de ${ids.length}` });
+    clearSelection();
+    onDataChanged();
+  };
+
+  const handleBulkBlock = () => {
+    const ok = bulkEligible(); if (!ok) return;
+    const toBlock = ok.filter((a) => !a.is_blocked);
+    if (toBlock.length === 0) {
+      toast({ title: "Todas as selecionadas já estão bloqueadas." });
+      return;
+    }
+    setBlockReason("");
+    setBlockingBulkIds(toBlock.map((a) => a.id));
+  };
+
+  const handleBulkArchive = async () => {
+    const ok = bulkEligible(); if (!ok) return;
+    const confirmed = await appConfirm({
+      title: "Arquivar em lote",
+      description: `Arquivar ${ok.length} atividade(s)? Subtarefas vão junto e tudo pode ser restaurado no Arquivo.`,
+      confirmText: "Arquivar",
+      cancelText: "Cancelar",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    // Mesma cascata do arquivar individual: selecionadas + descendentes.
+    const idsToTrash = new Set(ok.map((a) => a.id));
+    let frontier = Array.from(idsToTrash);
+    while (frontier.length > 0) {
+      const children = activities.filter((a) => a.parent_id && frontier.includes(a.parent_id) && !idsToTrash.has(a.id));
+      if (children.length === 0) break;
+      children.forEach((c) => idsToTrash.add(c.id));
+      frontier = children.map((c) => c.id);
+    }
+    const all = Array.from(idsToTrash);
+    const { error } = await supabase
+      .from("activities")
+      .update({ is_trashed: true, trashed_at: new Date().toISOString() } as never)
+      .in("id", all);
+    if (error) {
+      toast({ title: "Não foi possível arquivar o lote.", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({
+      title: `${all.length} atividade(s) arquivada(s)`,
+      action: (
+        <ToastAction
+          altText="Desfazer"
+          onClick={async () => {
+            await supabase.from("activities").update({ is_trashed: false, trashed_at: null } as never).in("id", all);
+            onDataChanged();
+          }}
+        >
+          Desfazer
+        </ToastAction>
+      ),
+    });
+    clearSelection();
     onDataChanged();
   };
 
@@ -1727,6 +1912,11 @@ export const ActivityKanban = ({
       if (e.key === "Escape" && typing && el === searchInputRef.current) {
         setSearch("");
         searchInputRef.current?.blur();
+        return;
+      }
+      // Esc fora de inputs: limpa a seleção em lote (se houver).
+      if (e.key === "Escape" && !typing) {
+        setSelectedIds((prev) => (prev.size > 0 ? new Set<string>() : prev));
         return;
       }
       if (typing) return;
@@ -2766,6 +2956,8 @@ export const ActivityKanban = ({
                 allStages={stages}
                 cardFields={cardFields}
                 boardSort={boardSort}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelected}
                 profilesMap={profilesMap}
                 profileAvatarMap={profileAvatarMap}
               />
@@ -2845,6 +3037,107 @@ export const ActivityKanban = ({
         ) : null}
       </DragOverlay>
       </DndContext>
+
+      {/* Barra de ação em lote — flutua sobre o quadro enquanto houver seleção.
+          Esc limpa; cada ação passa pelo mesmo gate de permissão das individuais. */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 rounded-xl border bg-background shadow-lg px-2.5 py-1.5">
+          <span className="text-xs font-semibold px-1.5 whitespace-nowrap">
+            {selectedIds.size} selecionada{selectedIds.size > 1 ? "s" : ""}
+          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs">
+                <ArrowRightLeft className="w-3.5 h-3.5" /> Mover para
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" className="w-52 max-h-72 overflow-y-auto">
+              {moveTargets.map((t) => (
+                <DropdownMenuItem key={t.id} onSelect={() => handleBulkMove(t.id)} className="gap-2 text-xs">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                  {t.title}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs">
+                <User className="w-3.5 h-3.5" /> Atribuir a
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" className="w-56 max-h-72 overflow-y-auto">
+              {assigneeOptions.length === 0 && (
+                <div className="px-2 py-3 text-center text-xs text-muted-foreground">Nenhum responsável no quadro</div>
+              )}
+              {assigneeOptions.map((name) => (
+                <DropdownMenuItem key={name} onSelect={() => handleBulkAssign(name)} className="gap-2 text-xs">
+                  <Avatar className="h-4 w-4 shrink-0">
+                    {resolveAvatarFromLookup(name, profilesMap[name] ?? name, profileAvatarMap)
+                      ? <AvatarImage src={resolveAvatarFromLookup(name, profilesMap[name] ?? name, profileAvatarMap)} alt={profilesMap[name] ?? name} />
+                      : null}
+                    <AvatarFallback className="text-[7px] font-semibold">{getAvatarInitials(profilesMap[name] ?? name)}</AvatarFallback>
+                  </Avatar>
+                  <span className="truncate">{profilesMap[name] ?? name}</span>
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => handleBulkAssign(null)} className="gap-2 text-xs text-muted-foreground">
+                <XIcon className="w-3.5 h-3.5" /> Remover responsável
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs">
+                <CalendarIcon className="w-3.5 h-3.5" /> Prazo
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" className="w-44">
+              {(() => {
+                const today = new Date();
+                const tomorrow = new Date(); tomorrow.setDate(today.getDate() + 1);
+                const friday = new Date(); friday.setDate(today.getDate() + (((5 - today.getDay() + 7) % 7) || 7));
+                const week = new Date(); week.setDate(today.getDate() + 7);
+                const presets: { label: string; value: string }[] = [
+                  { label: "Hoje", value: localYmd(today) },
+                  { label: "Amanhã", value: localYmd(tomorrow) },
+                  { label: "Próxima sexta", value: localYmd(friday) },
+                  { label: "Em 1 semana", value: localYmd(week) },
+                ];
+                return presets.map((p) => (
+                  <DropdownMenuItem key={p.label} onSelect={() => handleBulkDue(p.value)} className="text-xs">
+                    {p.label}
+                  </DropdownMenuItem>
+                ));
+              })()}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => handleBulkDue(null)} className="gap-2 text-xs text-muted-foreground">
+                <XIcon className="w-3.5 h-3.5" /> Remover prazo
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={handleBulkBlock}>
+            <Flag className="w-3.5 h-3.5" /> Bloquear
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive"
+            onClick={handleBulkArchive}
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Arquivar
+          </Button>
+          <button
+            type="button"
+            onClick={clearSelection}
+            title="Limpar seleção (Esc)"
+            className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+          >
+            <XIcon className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       <UserStoryDrawer
         activityId={storyDrawerActivityId}
         projectId={projectId}
@@ -2886,19 +3179,24 @@ export const ActivityKanban = ({
 
       {/* Bloquear atividade — o card NÃO sai da coluna ("block in place"),
           para continuar contando no WIP e no tempo por etapa. */}
-      <Dialog open={!!blockingActivity} onOpenChange={(open) => { if (!open) setBlockingActivity(null); }}>
+      <Dialog
+        open={!!blockingActivity || !!blockingBulkIds}
+        onOpenChange={(open) => { if (!open) { setBlockingActivity(null); setBlockingBulkIds(null); } }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Flag className="w-4 h-4 text-amber-600 fill-current" />
-              Bloquear atividade
+              {blockingBulkIds ? `Bloquear ${blockingBulkIds.length} atividade(s)` : "Bloquear atividade"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div>
-              <Label className="text-xs text-muted-foreground">Atividade</Label>
-              <p className="text-sm font-medium">{blockingActivity?.title}</p>
-            </div>
+            {!blockingBulkIds && (
+              <div>
+                <Label className="text-xs text-muted-foreground">Atividade</Label>
+                <p className="text-sm font-medium">{blockingActivity?.title}</p>
+              </div>
+            )}
             <div>
               <Label htmlFor="block-reason" className="text-xs text-muted-foreground">
                 O que está impedindo?
@@ -2912,12 +3210,14 @@ export const ActivityKanban = ({
                 onKeyDown={(e) => { if (e.key === "Enter") confirmBlockActivity(); }}
               />
               <p className="text-[11px] text-muted-foreground mt-1.5">
-                A atividade continua nesta coluna. O tempo bloqueado começa a contar agora.
+                {blockingBulkIds
+                  ? "O mesmo motivo vale para todas. Cada uma continua na sua coluna."
+                  : "A atividade continua nesta coluna. O tempo bloqueado começa a contar agora."}
               </p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setBlockingActivity(null)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => { setBlockingActivity(null); setBlockingBulkIds(null); }}>Cancelar</Button>
             <Button onClick={confirmBlockActivity} disabled={blockSaving}>
               {blockSaving ? "Bloqueando..." : "Bloquear"}
             </Button>
