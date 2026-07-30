@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { DateField } from "@/components/ui/date-field";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -2369,23 +2370,19 @@ export const ActivityKanban = ({
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <label className="w-8 text-xs text-muted-foreground shrink-0">De</label>
-                      <Input
-                        type="date"
-                        lang="pt-BR"
+                      <DateField
                         value={filterDueRange.from}
                         max={filterDueRange.to || undefined}
-                        onChange={(e) => setFilterDueRange((r) => ({ ...r, from: e.target.value }))}
+                        onChange={(v) => setFilterDueRange((r) => ({ ...r, from: v }))}
                         className="h-8 text-xs flex-1"
                       />
                     </div>
                     <div className="flex items-center gap-2">
                       <label className="w-8 text-xs text-muted-foreground shrink-0">Até</label>
-                      <Input
-                        type="date"
-                        lang="pt-BR"
+                      <DateField
                         value={filterDueRange.to}
                         min={filterDueRange.from || undefined}
-                        onChange={(e) => setFilterDueRange((r) => ({ ...r, to: e.target.value }))}
+                        onChange={(v) => setFilterDueRange((r) => ({ ...r, to: v }))}
                         className="h-8 text-xs flex-1"
                       />
                     </div>
@@ -2472,14 +2469,14 @@ export const ActivityKanban = ({
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <label className="w-8 text-xs text-muted-foreground shrink-0">De</label>
-                      <Input type="date" lang="pt-BR" value={filterStartRange.from} max={filterStartRange.to || undefined}
-                        onChange={(e) => setFilterStartRange((r) => ({ ...r, from: e.target.value }))}
+                      <DateField value={filterStartRange.from} max={filterStartRange.to || undefined}
+                        onChange={(v) => setFilterStartRange((r) => ({ ...r, from: v }))}
                         className="h-8 text-xs flex-1" />
                     </div>
                     <div className="flex items-center gap-2">
                       <label className="w-8 text-xs text-muted-foreground shrink-0">Até</label>
-                      <Input type="date" lang="pt-BR" value={filterStartRange.to} min={filterStartRange.from || undefined}
-                        onChange={(e) => setFilterStartRange((r) => ({ ...r, to: e.target.value }))}
+                      <DateField value={filterStartRange.to} min={filterStartRange.from || undefined}
+                        onChange={(v) => setFilterStartRange((r) => ({ ...r, to: v }))}
                         className="h-8 text-xs flex-1" />
                     </div>
                     {startActive && (

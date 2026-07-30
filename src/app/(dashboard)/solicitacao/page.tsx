@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { DateField } from "@/components/ui/date-field";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1402,13 +1403,11 @@ function SolicitacaoForm() {
                     Quando você precisa disso funcionando?{" "}
                     <span className="text-destructive">*</span>
                   </Label>
-                  <Input
+                  <DateField
                     id="dataNecessaria"
-                    type="date"
-                    lang="pt-BR"
                     min={hoje}
                     value={form.dataNecessaria}
-                    onChange={(e) => set("dataNecessaria", e.target.value)}
+                    onChange={(v) => set("dataNecessaria", v)}
                     aria-invalid={!!errors.dataNecessaria}
                     className={errors.dataNecessaria ? "border-destructive" : undefined}
                   />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { DateField } from "@/components/ui/date-field";
 import {
   ArrowDown,
   ArrowUp,
@@ -273,21 +274,17 @@ export function FiltroPeriodo({
         <p className="text-xs font-medium">{label}</p>
         <label className="block space-y-1">
           <span className="text-[11px] text-muted-foreground">De</span>
-          <Input
-            type="date"
-            lang="pt-BR"
+          <DateField
             value={valor.de}
-            onChange={(e) => onChange({ ...valor, de: e.target.value })}
+            onChange={(v) => onChange({ ...valor, de: v })}
             className="h-8"
           />
         </label>
         <label className="block space-y-1">
           <span className="text-[11px] text-muted-foreground">Até</span>
-          <Input
-            type="date"
-            lang="pt-BR"
+          <DateField
             value={valor.ate}
-            onChange={(e) => onChange({ ...valor, ate: e.target.value })}
+            onChange={(v) => onChange({ ...valor, ate: v })}
             className="h-8"
           />
         </label>

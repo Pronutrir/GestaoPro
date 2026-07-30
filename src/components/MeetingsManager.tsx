@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from "react";
+import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -411,11 +412,9 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs text-muted-foreground">Data</Label>
-              <Input
-                type="date"
-                lang="pt-BR"
+              <DateField
                 value={form.meeting_date ? form.meeting_date.slice(0, 10) : ""}
-                onChange={(e) => setForm({ ...form, meeting_date: e.target.value })}
+                onChange={(v) => setForm({ ...form, meeting_date: v })}
               />
             </div>
             <div>
@@ -834,11 +833,9 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                             className="text-sm h-8"
                           />
                           <div className="flex gap-1">
-                            <Input
-                              type="date"
-                              lang="pt-BR"
+                            <DateField
                               value={newAction.due_date}
-                              onChange={(e) => setNewAction({ ...newAction, due_date: e.target.value })}
+                              onChange={(v) => setNewAction({ ...newAction, due_date: v })}
                               className="text-sm h-8"
                             />
                             <Button size="sm" variant="outline" className="h-8" onClick={() => handleAddAction(meeting.id)}>

@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from "react";
+import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -653,49 +654,41 @@ export const EditProjectDialog = ({
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="edit-start_date">Data de Início *</Label>
-                <Input
+                <DateField
                   id="edit-start_date"
-                  type="date"
-                  lang="pt-BR"
                   value={formData.start_date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, start_date: e.target.value })
+                  onChange={(v) =>
+                    setFormData({ ...formData, start_date: v })
                   }
                 />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-due_date">Data de Entrega *</Label>
-                <Input
+                <DateField
                   id="edit-due_date"
-                  type="date"
-                  lang="pt-BR"
                   value={formData.due_date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, due_date: e.target.value })
+                  onChange={(v) =>
+                    setFormData({ ...formData, due_date: v })
                   }
                 />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-actual_start_date">Data de Início Real</Label>
-                <Input
+                <DateField
                   id="edit-actual_start_date"
-                  type="date"
-                  lang="pt-BR"
                   value={formData.actual_start_date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, actual_start_date: e.target.value })
+                  onChange={(v) =>
+                    setFormData({ ...formData, actual_start_date: v })
                   }
                 />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-actual_end_date">Data de Término Real</Label>
-                <Input
+                <DateField
                   id="edit-actual_end_date"
-                  type="date"
-                  lang="pt-BR"
                   value={formData.actual_end_date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, actual_end_date: e.target.value })
+                  onChange={(v) =>
+                    setFormData({ ...formData, actual_end_date: v })
                   }
                 />
               </div>

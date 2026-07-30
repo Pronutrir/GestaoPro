@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo } from "react";
+import { DateField } from "@/components/ui/date-field";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,13 @@ import { GUT_META, gutLabel, gutScore, normalizeGut, type GutLevel } from "@/lib
 import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon, Wand2 } from "lucide-react";
 import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+
+/** Date -> "YYYY-MM-DD" pelo fuso LOCAL (toISOString à noite em UTC-3 já é o dia seguinte). */
+const localYmd = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 import { UserPlus2 } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
 import { AIAssistButton } from "@/components/AIAssistButton";
@@ -2080,7 +2087,7 @@ export const EditActivityDialog = ({
                 <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Calendar className="w-4 h-4" /> Data de Atualização
                 </Label>
-                <Input type="date" lang="pt-BR" value={formData.last_update_date} onChange={(e) => setFormData({ ...formData, last_update_date: e.target.value })} />
+                <DateField value={formData.last_update_date} onChange={(v) => setFormData({ ...formData, last_update_date: v })} />
               </div>
             </div>
           )}
@@ -2490,16 +2497,27 @@ export const EditActivityDialog = ({
                           if (colId === "end_date") {
                             const subInvalid = !!sub.start_date && !!sub.end_date && sub.start_date > sub.end_date;
                             return (
-                              <label key={colId} className={`relative cursor-pointer text-xs transition-colors hover:text-foreground ${subInvalid ? "text-destructive font-medium" : "text-muted-foreground group-hover:text-foreground"}`} title={subInvalid ? "Datas inconsistentes" : undefined}>
-                                <span>{dateShort}</span>
-                                <input
-                                  type="date"
-                                  lang="pt-BR"
-                                  value={sub.end_date || ""}
-                                  onChange={(e) => updateField(e.target.value || null)}
-                                  className="absolute inset-0 opacity-0 cursor-pointer"
-                                />
-                              </label>
+                              <Popover key={colId}>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className={`cursor-pointer text-xs transition-colors hover:text-foreground ${subInvalid ? "text-destructive font-medium" : "text-muted-foreground group-hover:text-foreground"}`}
+                                    title={subInvalid ? "Datas inconsistentes" : "Definir data de término"}
+                                  >
+                                    {dateShort}
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start" collisionPadding={12}>
+                                  <CalendarPicker
+                                    mode="single"
+                                    locale={ptBR}
+                                    selected={sub.end_date ? new Date(`${sub.end_date}T12:00:00`) : undefined}
+                                    onSelect={(d) => updateField(d ? localYmd(d) : null)}
+                                    initialFocus
+                                    className="p-3 pointer-events-auto"
+                                  />
+                                </PopoverContent>
+                              </Popover>
                             );
                           }
                           if (colId === "start_date") {
@@ -2512,16 +2530,27 @@ export const EditActivityDialog = ({
                                 })()
                               : "—";
                             return (
-                              <label key={colId} className={`relative cursor-pointer text-xs transition-colors hover:text-foreground ${subInvalid ? "text-destructive font-medium" : "text-muted-foreground group-hover:text-foreground"}`} title={subInvalid ? "Datas inconsistentes" : undefined}>
-                                <span>{ds}</span>
-                                <input
-                                  type="date"
-                                  lang="pt-BR"
-                                  value={sub.start_date || ""}
-                                  onChange={(e) => updateField(e.target.value || null)}
-                                  className="absolute inset-0 opacity-0 cursor-pointer"
-                                />
-                              </label>
+                              <Popover key={colId}>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className={`cursor-pointer text-xs transition-colors hover:text-foreground ${subInvalid ? "text-destructive font-medium" : "text-muted-foreground group-hover:text-foreground"}`}
+                                    title={subInvalid ? "Datas inconsistentes" : "Definir data de início"}
+                                  >
+                                    {ds}
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start" collisionPadding={12}>
+                                  <CalendarPicker
+                                    mode="single"
+                                    locale={ptBR}
+                                    selected={sub.start_date ? new Date(`${sub.start_date}T12:00:00`) : undefined}
+                                    onSelect={(d) => updateField(d ? localYmd(d) : null)}
+                                    initialFocus
+                                    className="p-3 pointer-events-auto"
+                                  />
+                                </PopoverContent>
+                              </Popover>
                             );
                           }
                           if (colId === "hours") {

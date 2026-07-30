@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -247,13 +248,13 @@ export function CronogramaFilters({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs">De</Label>
-                  <Input type="date" lang="pt-BR" value={value.dateFrom ?? ""} className="h-8"
-                    onChange={(e) => set({ dateFrom: e.target.value || null })} />
+                  <DateField value={value.dateFrom ?? ""} className="h-8"
+                    onChange={(v) => set({ dateFrom: v || null })} />
                 </div>
                 <div>
                   <Label className="text-xs">Até</Label>
-                  <Input type="date" lang="pt-BR" value={value.dateTo ?? ""} className="h-8"
-                    onChange={(e) => set({ dateTo: e.target.value || null })} />
+                  <DateField value={value.dateTo ?? ""} className="h-8"
+                    onChange={(v) => set({ dateTo: v || null })} />
                 </div>
               </div>
             )}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { DateField } from "@/components/ui/date-field";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
@@ -292,11 +293,11 @@ export const DeliveryPackageDrawer = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs text-muted-foreground">Início</Label>
-                  <Input type="date" lang="pt-BR" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <DateField value={startDate} onChange={(v) => setStartDate(v)} />
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Fim</Label>
-                  <Input type="date" lang="pt-BR" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                  <DateField value={endDate} onChange={(v) => setEndDate(v)} />
                 </div>
               </div>
 
