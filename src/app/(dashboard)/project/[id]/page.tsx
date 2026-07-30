@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -75,6 +75,7 @@ interface Project {
   budget_planned: number;
   budget_used: number;
   owner: string | null;
+  manager?: string | null;
   blockers: string | null;
   category?: string | null;
 }
@@ -231,7 +232,7 @@ export default function ProjectDetailsPage() {
   }, [toast]);
   const canMutateActivity = useCallback((activity?: Activity | null) => {
     if (!activity) return false;
-    if (isRealAdmin || isAdmin) return true;
+    if (isRealAdmin) return true;
     if (!currentUser?.id) return false;
     if (!!activity.created_by && activity.created_by === currentUser.id) return true;
 
@@ -243,8 +244,17 @@ export default function ProjectDetailsPage() {
       currentUser.id,
     ]);
 
+    // Líder/Gestor DESTE projeto específico tem o mesmo acesso que o RLS já
+    // concede (is_project_leader_v2) — nível de acesso GLOBAL (Gestor/
+    // Coordenador) sozinho não basta mais: o banco nunca reconheceu isso para
+    // mutar atividade de outra pessoa, e a tela não deve prometer o que o
+    // banco recusa.
+    if (matchesIdentity(project?.owner, identityCandidates) || matchesIdentity(project?.manager, identityCandidates)) {
+      return true;
+    }
+
     return matchesIdentity(activity.assigned_to, identityCandidates);
-  }, [currentUser?.email, currentUser?.id, isAdmin, isRealAdmin, profile?.email, profile?.full_name]);
+  }, [currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, project?.owner, project?.manager]);
 
   // Helper que abre o EditActivityDialog respeitando bloqueios escopados
   const openEditActivity = useCallback((
@@ -1162,6 +1172,17 @@ export default function ProjectDetailsPage() {
     }
   };
 
+  const backlogFilteredActivities = useMemo(
+    () =>
+      activities.filter((a: any) => {
+        if (listSearch && !a.title?.toLowerCase().includes(listSearch.toLowerCase())) return false;
+        if (listStatusFilter !== "all" && a.status !== listStatusFilter) return false;
+        if (listPriorityFilter !== "all" && a.priority !== listPriorityFilter) return false;
+        return true;
+      }),
+    [activities, listSearch, listStatusFilter, listPriorityFilter]
+  );
+
   if (isLoading || authLoading || permissionsLoading) {
     return (<div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Carregando projeto...</p></div>);
   }
@@ -1615,12 +1636,7 @@ export default function ProjectDetailsPage() {
 
               <BacklogSection
                 projectId={id!}
-                activities={activities.filter((a: any) => {
-                  if (listSearch && !a.title?.toLowerCase().includes(listSearch.toLowerCase())) return false;
-                  if (listStatusFilter !== "all" && a.status !== listStatusFilter) return false;
-                  if (listPriorityFilter !== "all" && a.priority !== listPriorityFilter) return false;
-                  return true;
-                })}
+                activities={backlogFilteredActivities}
                 phases={phases}
                 onEditActivity={(activity) => openEditActivity(activity as any)}
                 onDeleteActivity={handleDeleteActivity}
@@ -1628,6 +1644,7 @@ export default function ProjectDetailsPage() {
                 onDataChanged={fetchProjectData}
                 isAdmin={canDelete}
                 onCreatePhase={() => setShowAddPhase(true)}
+                hasActiveFilters={!!listSearch || listStatusFilter !== "all" || listPriorityFilter !== "all"}
               />
             </TabsContent>
 

@@ -35,6 +35,7 @@ import {
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { resolveEapKind, eapTypeOptions, type EapKind } from "@/lib/eapModel";
+import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 
 interface Phase { id: string; title: string; }
 interface WorkflowStage { id: string; title: string; display_order: number; color: string; }
@@ -69,32 +70,18 @@ interface BacklogSectionProps {
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onDataChanged: () => void;
   isAdmin?: boolean;
-  onCreateActivityInPhase?: (phaseId: string | null, parentId?: string | null) => void;
   onCreatePhase?: () => void;
+  hasActiveFilters?: boolean;
 }
-
-const priorityLabels: Record<string, string> = { high: "Alta", medium: "Média", low: "Baixa" };
-const priorityColors: Record<string, string> = {
-  high: "bg-destructive/10 text-destructive border-destructive/20",
-  medium: "bg-amber-500/10 text-amber-700 border-amber-500/20",
-  low: "bg-muted text-muted-foreground border-border",
-};
-const priorityDot: Record<string, string> = {
-  high: "bg-destructive",
-  medium: "bg-warning",
-  low: "bg-success",
-};
 
 export const BacklogSection = ({
   projectId, activities, phases,
   onEditActivity, onDeleteActivity, onToggleActivity,
-  onDataChanged, isAdmin = false, onCreateActivityInPhase, onCreatePhase,
+  onDataChanged, isAdmin = false, onCreatePhase, hasActiveFilters,
 }: BacklogSectionProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
   const [backlogStageId, setBacklogStageId] = useState<string | null>(null);
-  const [allStageIds, setAllStageIds] = useState<Set<string>>(new Set());
-  const [stages, setStages] = useState<WorkflowStage[]>([]);
   // Todos os stages, incluindo o "Backlog" (display_order=0), para mostrar badge de status
   const [allStages, setAllStages] = useState<WorkflowStage[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -231,8 +218,6 @@ export const BacklogSection = ({
       if (data) {
         const backlog = data.find((s) => s.display_order === 0);
         setBacklogStageId(backlog?.id ?? null);
-        setAllStageIds(new Set(data.filter((s) => s.display_order > 0).map((s) => s.id)));
-        setStages(data.filter((s) => s.display_order > 0));
         setAllStages(data);
       }
     };
@@ -358,10 +343,9 @@ export const BacklogSection = ({
       return named;
     }
     if (groupBy === "priority") {
-      const order: { id: string; label: string }[] = [
-        { id: "high", label: "Alta" }, { id: "medium", label: "Média" }, { id: "low", label: "Baixa" },
-      ];
-      return order.map((o) => ({ id: o.id, label: o.label, items: acts.filter((a) => (a.priority || "medium") === o.id) }))
+      const order: GutLevel[] = ["urgente", "critica", "alta", "media", "baixa", "pendente"];
+      return order
+        .map((level) => ({ id: level, label: GUT_META[level].label, items: acts.filter((a) => normalizeGut(a.priority) === level) }))
         .filter((l) => l.items.length > 0);
     }
     if (groupBy === "status") {
@@ -475,7 +459,7 @@ export const BacklogSection = ({
       parent_id: parentId,
       workflow_stage_id: inheritedStageId,
       status: "pending",
-      priority: "medium",
+      priority: "pendente",
       item_type: "atividade",
     });
     if (error) {
@@ -579,7 +563,7 @@ export const BacklogSection = ({
 
   const renderActivityRow = (activity: Activity, depth: number = 0, flat: boolean = false) => {
     const isSelected = selectedIds.has(activity.id);
-    const prio = activity.priority || "medium";
+    const gutLevel = normalizeGut(activity.priority);
     const subs = flat ? [] : (childrenByParent.get(activity.id) || []);
     const hasChildren = subs.length > 0;
     const isCollapsed = collapsedParents.has(activity.id);
@@ -596,11 +580,12 @@ export const BacklogSection = ({
 
     const renderCol = (colId: string) => {
       if (colId === "priority") {
+        const meta = GUT_META[gutLevel];
         return (
-          <span key="priority" className="min-w-0" title={`Prioridade: ${priorityLabels[prio] || prio}`}>
-            <span className={`inline-flex items-center gap-1.5 h-6 px-2.5 rounded-md border text-xs font-medium ${priorityColors[prio] || priorityColors.medium}`}>
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityDot[prio] || priorityDot.medium}`} aria-hidden />
-              {priorityLabels[prio] || prio}
+          <span key="priority" className="min-w-0" title={`Prioridade: ${meta.label}`}>
+            <span className={`inline-flex items-center gap-1.5 h-6 px-2.5 rounded-md border text-xs font-medium ${meta.badgeClass}`}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dotClass}`} aria-hidden />
+              {meta.label}
             </span>
           </span>
         );
@@ -841,10 +826,6 @@ export const BacklogSection = ({
     const key = phaseId || "none";
     const acts = topLevelByPhase.get(key) || [];
     const isCollapsed = phaseId ? collapsedPhases.has(phaseId) : false;
-    const totalCount = acts.reduce(
-      (acc, a) => acc + 1 + (childrenByParent.get(a.id)?.length || 0),
-      0
-    );
     const quickAddPhaseKey = `phase:${key}`;
     const quickAddOpen = quickAddKey === quickAddPhaseKey;
     const { total: progTotal, done: progDone } = groupProgress(acts);
@@ -892,7 +873,7 @@ export const BacklogSection = ({
           <div>
             {acts.length === 0 && !quickAddOpen ? (
               <p className="text-xs text-muted-foreground/70 italic px-2 py-3 text-center">
-                Nenhuma tarefa. Clique em "+ Tarefa" para começar.
+                {hasActiveFilters ? "Nenhuma tarefa visível com os filtros atuais." : "Nenhuma tarefa. Clique em \"+ Tarefa\" para começar."}
               </p>
             ) : (
               acts.map((a) => renderActivityRow(a, 0))
@@ -924,7 +905,6 @@ export const BacklogSection = ({
   const renderVirtualPhase = (phaseAct: Activity) => {
     const subs = childrenByParent.get(phaseAct.id) || [];
     const isCollapsed = collapsedParents.has(phaseAct.id);
-    const totalCount = subs.length;
     const quickAddPhaseKey = `parent:${phaseAct.id}`;
     const quickAddOpen = quickAddKey === quickAddPhaseKey;
     const isEditingTitle = editingTitleId === phaseAct.id;
@@ -1012,7 +992,7 @@ export const BacklogSection = ({
           <div>
             {subs.length === 0 && !quickAddOpen ? (
               <p className="text-xs text-muted-foreground/70 italic px-2 py-3 text-center">
-                Nenhuma tarefa nesta fase. Clique em "+ Tarefa" para começar.
+                {hasActiveFilters ? "Nenhuma tarefa visível com os filtros atuais." : "Nenhuma tarefa nesta fase. Clique em \"+ Tarefa\" para começar."}
               </p>
             ) : (
               subs.map((s) => renderActivityRow(s, 0))
@@ -1207,7 +1187,7 @@ export const BacklogSection = ({
         })}
         {groupBy !== "phase" && lanes.length === 0 && (
           <div className="p-8 text-center text-sm text-muted-foreground">
-            Nenhuma tarefa para agrupar por esta dimensão.
+            {hasActiveFilters ? "Nenhuma tarefa visível com os filtros atuais." : "Nenhuma tarefa para agrupar por esta dimensão."}
           </div>
         )}
 
@@ -1217,66 +1197,10 @@ export const BacklogSection = ({
         {/* Atividades-fase (item_type='fase') em qualquer nível top-level viram cards de fase virtuais */}
         {groupBy === "phase" && virtualPhaseActs.map((vp) => renderVirtualPhase(vp))}
 
-        {/* Atividades top-level sem phase_id que não são fases viram grupo "Sem fase" */}
-        {groupBy === "phase" && (() => {
-          const orphanTop = topLevelByPhase.get("none") || [];
-          const looseTasks = orphanTop;
-          const { total: progTotal, done: progDone } = groupProgress(looseTasks);
-          const progPct = progTotal > 0 ? Math.round((progDone / progTotal) * 100) : 0;
-          return (
-            <>
-              {looseTasks.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50">
-                    <span className="w-5 shrink-0" />
-                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-muted text-muted-foreground shrink-0">
-                      <FolderOpen className="w-3.5 h-3.5" />
-                    </span>
-                    <h4 className="text-[13px] font-semibold text-muted-foreground">Sem fase</h4>
-                    <div className="flex items-center gap-3 ml-auto">
-                      {progTotal > 0 && (
-                        <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
-                          <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
-                            <span className="block h-full rounded-full bg-success transition-all" style={{ width: `${progPct}%` }} />
-                          </span>
-                          <span className="text-[11px] text-muted-foreground tabular-nums">{progDone}/{progTotal}</span>
-                        </span>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs gap-1"
-                        onClick={() => { setQuickAddKey(`phase:none`); setQuickAddTitle(""); }}
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Tarefa
-                      </Button>
-                    </div>
-                  </div>
-                  <div>
-                    {looseTasks.map((a) => renderActivityRow(a, 0))}
-                    {quickAddKey === "phase:none" && (
-                      <div className="flex items-center gap-2 mx-2 my-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
-                        <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
-                        <Input
-                          autoFocus
-                          placeholder="Título — Enter cria e continua · Esc fecha"
-                          value={quickAddTitle}
-                          onChange={(e) => setQuickAddTitle(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleQuickAddSubmit(null, null);
-                            if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
-                          }}
-                          onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </>
-          );
-        })()}
+        {/* "Sem fase" reaproveita renderPhaseGroup(null, ...): mesmo comportamento de uma fase
+            real, inclusive continuar visível quando esvazia (antes desaparecia com a última
+            tarefa solta, junto com o único "+ Tarefa" daquele grupo). */}
+        {groupBy === "phase" && renderPhaseGroup(null, "Sem fase")}
       </div>
 
       {/* Trash Section */}
