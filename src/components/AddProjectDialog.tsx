@@ -506,8 +506,11 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2" ref={managerFieldRef}>
+            {/* items-start + nota nas DUAS colunas: só o Gestor tinha texto de
+                ajuda, então a coluna esquerda ficava mais alta e o campo
+                seguinte subia torto em relação ao Líder. */}
+            <div className="grid grid-cols-2 gap-4 items-start">
+              <div className="grid gap-2 content-start" ref={managerFieldRef}>
                 <Label>Gestor do Projeto</Label>
                 <PersonCombobox
                   people={profiles}
@@ -521,7 +524,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 />
                 <p className="text-[11px] text-muted-foreground">Opcional. Tem o mesmo nível de acesso ao projeto que o Líder.</p>
               </div>
-              <div className="grid gap-2" ref={ownerFieldRef}>
+              <div className="grid gap-2 content-start" ref={ownerFieldRef}>
                 <Label>Líder do Projeto</Label>
                 <PersonCombobox
                   people={profiles}
@@ -539,6 +542,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   }}
                   onClear={() => setFormData({ ...formData, owner: "" })}
                 />
+                <p className="text-[11px] text-muted-foreground">Opcional. Responde pela execução do projeto no dia a dia.</p>
               </div>
             </div>
             <div className="grid gap-2">
@@ -567,8 +571,8 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   e não podem ser removidos por aqui (troca-se no campo acima). */}
               {(() => {
                 const roleRows = [
-                  { role: "Líder", name: formData.owner },
                   { role: "Gestor", name: formData.manager },
+                  { role: "Líder", name: formData.owner },
                 ].filter((r) => !!r.name);
                 if (roleRows.length === 0) return null;
                 return (
