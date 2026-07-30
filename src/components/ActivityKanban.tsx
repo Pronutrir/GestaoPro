@@ -34,7 +34,6 @@ import {
   Check,
   Copy,
   ArrowRightLeft,
-  Shuffle,
   MessageSquare,
   Paperclip,
   Hourglass,
@@ -98,7 +97,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { WorkflowStageManager } from "@/components/WorkflowStageManager";
 import { getBlockedDays, formatBlockedDays } from "@/lib/blockedTime";
 import { KANBAN_TOKENS } from "@/lib/kanbanTokens";
@@ -115,7 +113,7 @@ import {
 } from "@/lib/workflowCategory";
 import { SHOW_USER_STORIES } from "@/lib/featureFlags";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { resolveEapKind, eapTypeOptions, eapToPersisted, EAP_LABELS, type EapKind } from "@/lib/eapModel";
+import { resolveEapKind } from "@/lib/eapModel";
 import { ToastAction } from "@/components/ui/toast";
 import { computeCardAging, CARD_AGING_CLASSES } from "@/lib/cardAging";
 import { cn } from "@/lib/utils";
@@ -278,61 +276,6 @@ export const CARD_FIELD_GROUPS: { group: string; items: { key: keyof CardFields;
  */
 const MIN_COLUMN_WIDTH = 272;
 
-// Date local -> "YYYY-MM-DD" SEM passar por UTC: toISOString() à noite em
-// UTC-3 já é o dia seguinte, então "Hoje" gravaria amanhã. Mesmo cuidado do
-// DateChip.
-function localYmd(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-}
-// "YYYY-MM-DD" (ou timestamp ISO) -> Date local ao meio-dia (evita drift de fuso).
-function ymdToLocalDate(v?: string | null): Date | undefined {
-  const s = v ? v.slice(0, 10) : "";
-  const [y, m, d] = s.split("-").map(Number);
-  if (!y || !m || !d) return undefined;
-  return new Date(y, m - 1, d, 12, 0, 0);
-}
-
-/**
- * Opções rápidas de prazo no menu do card. Datas relativas cobrem a maioria
- * dos ajustes ("empurra pra amanhã") sem procurar no calendário; data
- * arbitrária fica no calendário logo abaixo, no mesmo submenu.
- */
-const DUE_DATE_PRESETS: { label: string; compute: () => string }[] = [
-  {
-    label: "Hoje",
-    compute: () => localYmd(new Date()),
-  },
-  {
-    label: "Amanhã",
-    compute: () => {
-      const d = new Date();
-      d.setDate(d.getDate() + 1);
-      return localYmd(d);
-    },
-  },
-  {
-    label: "Sexta desta semana",
-    compute: () => {
-      const d = new Date();
-      // 5 = sexta; se já passou, cai na sexta seguinte.
-      const delta = (5 - d.getDay() + 7) % 7;
-      d.setDate(d.getDate() + (delta === 0 ? 7 : delta));
-      return localYmd(d);
-    },
-  },
-  {
-    label: "Em 1 semana",
-    compute: () => {
-      const d = new Date();
-      d.setDate(d.getDate() + 7);
-      return localYmd(d);
-    },
-  },
-];
-
 // Medidas do quadro: fonte única em lib/kanbanTokens (a imagem aprovada).
 // Nunca reintroduzir tabelas de densidade aqui — ver o comentário no token.
 
@@ -463,13 +406,8 @@ function SortableKanbanCard({
   onDelete,
   onToggle,
   onDuplicate,
-  onCopyLink,
   onMoveToStage,
   moveTargets,
-  onChangeType,
-  onAssign,
-  assigneeChoices,
-  onSetDueDate,
   onLinkParent,
   isAdmin,
   isBlocked,
@@ -505,13 +443,8 @@ function SortableKanbanCard({
   onDelete: () => void;
   onToggle: () => void;
   onDuplicate?: () => void;
-  onCopyLink?: () => void;
   onMoveToStage?: (stageId: string) => void;
   moveTargets?: { id: string; title: string; color: string }[];
-  onChangeType?: (kind: EapKind) => void;
-  onAssign?: (value: string | null) => void;
-  assigneeChoices?: { value: string; label: string }[];
-  onSetDueDate?: (iso: string | null) => void;
   onLinkParent?: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;
@@ -560,13 +493,8 @@ function SortableKanbanCard({
         onDelete={onDelete}
         onToggle={onToggle}
         onDuplicate={onDuplicate}
-        onCopyLink={onCopyLink}
         onMoveToStage={onMoveToStage}
         moveTargets={moveTargets}
-        onChangeType={onChangeType}
-        onAssign={onAssign}
-        assigneeChoices={assigneeChoices}
-        onSetDueDate={onSetDueDate}
         onLinkParent={onLinkParent}
         dragListeners={listeners}
         isAdmin={isAdmin}
@@ -608,13 +536,8 @@ function KanbanCard({
   onDelete,
   onToggle,
   onDuplicate,
-  onCopyLink,
   onMoveToStage,
   moveTargets,
-  onChangeType,
-  onAssign,
-  assigneeChoices,
-  onSetDueDate,
   onLinkParent,
   dragListeners,
   isAdmin,
@@ -652,18 +575,10 @@ function KanbanCard({
   onDelete: () => void;
   onToggle: () => void;
   onDuplicate?: () => void;
-  onCopyLink?: () => void;
   /** Move o card para outra coluna do quadro (substitui o antigo "mover para backlog"). */
   onMoveToStage?: (stageId: string) => void;
-  /** Colunas visíveis do quadro, destinos possíveis do "Mover para →". */
+  /** Todas as colunas criadas no projeto, destinos do "Mover para →". */
   moveTargets?: { id: string; title: string; color: string }[];
-  /** Converte o papel EAP do item (Fase / Atividade / Marco). */
-  onChangeType?: (kind: EapKind) => void;
-  /** Atribui responsavel (null = ninguem). */
-  onAssign?: (value: string | null) => void;
-  assigneeChoices?: { value: string; label: string }[];
-  /** Define prazo em ISO yyyy-mm-dd (null = sem prazo). */
-  onSetDueDate?: (iso: string | null) => void;
   onLinkParent?: () => void;
   dragListeners?: any;
   isAdmin?: boolean;
@@ -896,15 +811,6 @@ function KanbanCard({
                         <Copy className="w-3.5 h-3.5 mr-2" /> Duplicar
                       </DropdownMenuItem>
                     )}
-                    {onCopyLink && (
-                      <DropdownMenuItem
-                        className="focus:bg-muted/60 focus:text-foreground"
-                        onSelect={() => onCopyLink()}
-                      >
-                        <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
-                      </DropdownMenuItem>
-                    )}
-
                     {/* "Mover para →" substitui o antigo "Mover para Backlog", que
                         mandava o card para o stage display_order=0 — coluna que o
                         quadro não renderiza, fazendo o card desaparecer sem aviso. */}
@@ -932,85 +838,11 @@ function KanbanCard({
                       </DropdownMenuSub>
                     )}
 
-                    {/* Atribuir e Prazo: os dois campos mais editados de uma
-                        tarefa exigiam abrir o diálogo inteiro. Prioridade NÃO entra
-                        aqui de propósito — ela é derivada de G×U×T por design, e um
-                        atalho que grave o rótulo direto criaria um valor divergente
-                        do score (o trigger só recalcula quando G/U/T mudam). */}
-                    {onAssign && assigneeChoices && assigneeChoices.length > 0 && (
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger className="focus:bg-muted/60 focus:text-foreground data-[state=open]:bg-muted/60">
-                          <User className="w-3.5 h-3.5 mr-2" /> Atribuir a
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent sideOffset={6} className="w-52 max-h-64 overflow-y-auto">
-                          <DropdownMenuItem
-                            className="text-xs focus:bg-muted/60 focus:text-foreground"
-                            onSelect={() => onAssign(null)}
-                          >
-                            <span className="text-muted-foreground">Ninguém</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          {assigneeChoices.map((p) => (
-                            <DropdownMenuItem
-                              key={p.value}
-                              className="text-xs focus:bg-muted/60 focus:text-foreground"
-                              onSelect={() => onAssign(p.value)}
-                            >
-                              <span className="truncate">{p.label}</span>
-                              {activity.assigned_to === p.value && (
-                                <Check className="w-3 h-3 ml-auto text-primary shrink-0" />
-                              )}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuSubContent>
-                      </DropdownMenuSub>
-                    )}
-                    {onSetDueDate && (
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger className="focus:bg-muted/60 focus:text-foreground data-[state=open]:bg-muted/60">
-                          <CalendarIcon className="w-3.5 h-3.5 mr-2" /> Prazo
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent sideOffset={6} className="w-auto">
-                          {DUE_DATE_PRESETS.map((preset) => (
-                            <DropdownMenuItem
-                              key={preset.label}
-                              className="text-xs focus:bg-muted/60 focus:text-foreground"
-                              onSelect={() => onSetDueDate(preset.compute())}
-                            >
-                              {preset.label}
-                            </DropdownMenuItem>
-                          ))}
-                          <DropdownMenuSeparator />
-                          {/* Data manual: o mesmo calendário do resto da
-                              plataforma (DateChip). Não é DropdownMenuItem,
-                              então clicar num dia não fecha sozinho — grava
-                              e fecha via setMenuOpen. */}
-                          <CalendarPicker
-                            mode="single"
-                            selected={ymdToLocalDate(activity.end_date)}
-                            defaultMonth={ymdToLocalDate(activity.end_date)}
-                            onSelect={(d) => {
-                              if (!d) return;
-                              onSetDueDate(localYmd(d));
-                              setMenuOpen(false);
-                            }}
-                            className="p-2 pointer-events-auto"
-                          />
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-xs focus:bg-muted/60 focus:text-foreground"
-                            onSelect={() => onSetDueDate(null)}
-                          >
-                            <span className="text-muted-foreground">Sem prazo</span>
-                          </DropdownMenuItem>
-                        </DropdownMenuSubContent>
-                      </DropdownMenuSub>
-                    )}
-
-                    {/* Aninhar: era "Vincular ao pai" — nome que não dizia o que
-                        fazia. Fica junto do "Mover para" por serem ambos sobre
-                        realocar o item; é o ÚNICO caminho para re-aninhar um card,
-                        então não pode sair do menu (o diálogo de edição não faz). */}
+                    {/* Menu enxuto por decisão de produto (29/07/2026): só ações
+                        que o diálogo de edição NÃO cobre. Atribuir, Prazo e
+                        Converter saíram — clicar no card já abre o diálogo, que
+                        tem os três. Aninhar fica: é o ÚNICO caminho para
+                        re-aninhar um card (o diálogo não faz). */}
                     {onLinkParent && (
                       <DropdownMenuItem
                         className="focus:bg-muted/60 focus:text-foreground"
@@ -1031,35 +863,6 @@ function KanbanCard({
                         <Flag className={`w-3.5 h-3.5 mr-2 ${isBlocked ? "fill-current text-amber-600 dark:text-amber-500" : ""}`} />
                         {isBlocked ? "Desbloquear" : "Bloquear"}
                       </DropdownMenuItem>
-                    )}
-                    {/* Converter tipo (papéis EAP): já existia no Backlog e no
-                        diálogo — o quadro era a única tela sem. */}
-                    {onChangeType && (
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger className="focus:bg-muted/60 focus:text-foreground data-[state=open]:bg-muted/60">
-                          <Shuffle className="w-3.5 h-3.5 mr-2" /> Converter em
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent sideOffset={6} className="w-44">
-                          {eapTypeOptions({ hasChildren: (subActivityCount ?? 0) > 0 }).map((k) => {
-                            const currentKind: EapKind = isMilestone
-                              ? "marco"
-                              : isPhase
-                                ? "fase"
-                                : "atividade";
-                            return (
-                              <DropdownMenuItem
-                                key={k}
-                                disabled={k === currentKind}
-                                className="text-xs focus:bg-muted/60 focus:text-foreground"
-                                onSelect={() => onChangeType(k)}
-                              >
-                                <span className="truncate">{EAP_LABELS[k]}</span>
-                                {k === currentKind && <Check className="w-3 h-3 ml-auto text-primary shrink-0" />}
-                              </DropdownMenuItem>
-                            );
-                          })}
-                        </DropdownMenuSubContent>
-                      </DropdownMenuSub>
                     )}
                     {SHOW_USER_STORIES && onCreateStory && (
                       <DropdownMenuItem
@@ -1658,11 +1461,6 @@ function SortableColumn({
   onMoveToStage,
   moveTargets,
   onDuplicateActivity,
-  onCopyActivityLink,
-  onChangeActivityType,
-  onAssignActivity,
-  assigneeChoices,
-  onSetActivityDueDate,
   onToggleBlocked,
   onLinkParent,
   onCreateActivity,
@@ -1719,11 +1517,6 @@ function SortableColumn({
   onMoveToStage: (activityId: string, stageId: string) => void;
   moveTargets?: { id: string; title: string; color: string }[];
   onDuplicateActivity?: (activityId: string) => void;
-  onCopyActivityLink?: (activityId: string) => void;
-  onChangeActivityType?: (activityId: string, kind: EapKind) => void;
-  onAssignActivity?: (activityId: string, value: string | null) => void;
-  assigneeChoices?: { value: string; label: string }[];
-  onSetActivityDueDate?: (activityId: string, iso: string | null) => void;
   onToggleBlocked: (activityId: string) => void;
   onLinkParent?: (activityId: string, currentParentId: string | null) => void;
   onCreateActivity: (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => Promise<void>;
@@ -1994,12 +1787,7 @@ function SortableColumn({
       onMoveToStage: (stageId: string) => onMoveToStage(activity.id, stageId),
       moveTargets,
       onDuplicate: onDuplicateActivity ? () => onDuplicateActivity(activity.id) : undefined,
-      onCopyLink: onCopyActivityLink ? () => onCopyActivityLink(activity.id) : undefined,
-      onChangeType: onChangeActivityType ? (kind: EapKind) => onChangeActivityType(activity.id, kind) : undefined,
       onLinkParent: () => onLinkParent?.(activity.id, activity.parent_id ?? null),
-      onAssign: onAssignActivity ? (v: string | null) => onAssignActivity(activity.id, v) : undefined,
-      assigneeChoices,
-      onSetDueDate: onSetActivityDueDate ? (iso: string | null) => onSetActivityDueDate(activity.id, iso) : undefined,
       isAdmin,
       // "block in place": o bloqueio é da ATIVIDADE, não da coluna — o card
       // fica onde o trabalho está e segue contando no limite de WIP.
@@ -3613,84 +3401,11 @@ export const ActivityKanban = ({
     }
   }, [onDataChanged, projectLocked, showProjectLockedToast, toast]);
 
-  /** Copia o deep-link da atividade (a rota do projeto já trata ?activity=). */
-  const handleCopyActivityLink = useCallback(async (activityId: string) => {
-    try {
-      const url = `${window.location.origin}${window.location.pathname}?activity=${activityId}`;
-      await navigator.clipboard.writeText(url);
-      toast({ title: "Link copiado" });
-    } catch {
-      toast({ title: "Não foi possível copiar o link", variant: "destructive" });
-    }
-  }, [toast]);
-
-  /** Converte o papel EAP (Fase / Atividade / Marco) direto do quadro — já
-   *  existia no Backlog e no diálogo; o Kanban era a única tela sem. */
-  const handleChangeActivityType = useCallback(async (activityId: string, kind: EapKind) => {
-    if (projectLocked) {
-      showProjectLockedToast("alterar atividades");
-      return;
-    }
-    const activity = activities.find((a) => a.id === activityId);
-    if (!canMutateActivity(activity)) {
-      toast({ title: "Somente o criador ou responsável da atividade pode alterar o tipo.", variant: "destructive" });
-      return;
-    }
-    const { error } = await supabase
-      .from("activities")
-      .update(eapToPersisted(kind) as never)
-      .eq("id", activityId);
-    if (error) {
-      toast({ title: "Erro ao converter tipo", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: `Convertida em ${EAP_LABELS[kind]}` });
-    onDataChanged();
-  }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, toast]);
-
-  /** Atribui responsável direto do card, sem abrir o diálogo. */
-  const handleAssignActivity = useCallback(async (activityId: string, value: string | null) => {
-    if (projectLocked) {
-      showProjectLockedToast("alterar atividades");
-      return;
-    }
-    const activity = activities.find((a) => a.id === activityId);
-    if (!canMutateActivity(activity)) {
-      toast({ title: "Somente o criador ou responsável da atividade pode alterar.", variant: "destructive" });
-      return;
-    }
-    const { error } = await supabase
-      .from("activities")
-      .update({ assigned_to: value } as never)
-      .eq("id", activityId);
-    if (error) {
-      toast({ title: "Erro ao atribuir", description: error.message, variant: "destructive" });
-      return;
-    }
-    onDataChanged();
-  }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, toast]);
-
-  /** Define o prazo por opção rápida (hoje, amanhã, sexta…). */
-  const handleSetActivityDueDate = useCallback(async (activityId: string, iso: string | null) => {
-    if (projectLocked) {
-      showProjectLockedToast("alterar atividades");
-      return;
-    }
-    const activity = activities.find((a) => a.id === activityId);
-    if (!canMutateActivity(activity)) {
-      toast({ title: "Somente o criador ou responsável da atividade pode alterar.", variant: "destructive" });
-      return;
-    }
-    const { error } = await supabase
-      .from("activities")
-      .update({ end_date: iso } as never)
-      .eq("id", activityId);
-    if (error) {
-      toast({ title: "Erro ao definir prazo", description: error.message, variant: "destructive" });
-      return;
-    }
-    onDataChanged();
-  }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, toast]);
+  // Atribuir, Prazo, Converter e Copiar link saíram do menu do card
+  // (decisão de produto 29/07/2026): o menu só carrega o que o diálogo de
+  // edição não cobre, e clicar no card já abre o diálogo. Os handlers foram
+  // removidos junto — prop opcional sem consumidor é feature invisível que
+  // compila limpa (foi exatamente o bug do menu em 8925146).
 
   const openLinkParent = useCallback((activityId: string, currentParentId: string | null) => {
     setLinkParentIds([activityId]);
@@ -4242,18 +3957,15 @@ export const ActivityKanban = ({
     return () => window.removeEventListener("keydown", onKey);
   }, [canCreate, onOpenCreateTask, stages]);
 
-  /** Destinos do "Mover para →" no menu do card: as colunas que o quadro mostra. */
+  /** Destinos do "Mover para →": QUALQUER coluna criada no projeto — inclui
+   *  Backlog (o card passa a aparecer na seção Backlog, é um destino legítimo
+   *  e nomeado) e colunas ocultas do quadro. */
   const moveTargets = useMemo(
-    () => visibleStages.map((s) => ({ id: s.id, title: getStageDisplayTitle(s.title), color: s.color })),
-    [visibleStages],
-  );
-  /** Pessoas oferecidas no "Atribuir a" — do mapa de perfis do projeto. */
-  const assigneeChoices = useMemo(
     () =>
-      Object.entries(profilesMap)
-        .map(([value, label]) => ({ value, label: label || value }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [profilesMap],
+      [...stages]
+        .sort((a, b) => a.display_order - b.display_order)
+        .map((s) => ({ id: s.id, title: getStageDisplayTitle(s.title), color: s.color })),
+    [stages],
   );
 
   // ===== Stage management handlers (admin/gestor only) =====
@@ -5057,13 +4769,8 @@ export const ActivityKanban = ({
                       onDelete={() => onDeleteActivity(activity.id)}
                       onToggle={() => onToggleActivity(activity.id, activity.status)}
                       onDuplicate={() => handleDuplicateActivity(activity.id)}
-                      onCopyLink={() => handleCopyActivityLink(activity.id)}
                       onMoveToStage={(stageId) => handleMoveToStage(activity.id, stageId)}
                       moveTargets={moveTargets}
-                      onChangeType={canManageHierarchy ? (kind) => handleChangeActivityType(activity.id, kind) : undefined}
-                      onAssign={(v) => handleAssignActivity(activity.id, v)}
-                      assigneeChoices={assigneeChoices}
-                      onSetDueDate={(iso) => handleSetActivityDueDate(activity.id, iso)}
                       isAdmin={isAdmin}
                       isBlocked={!!activity.is_blocked}
                       onToggleBlocked={() => handleToggleBlocked(activity.id)}
@@ -5126,12 +4833,7 @@ export const ActivityKanban = ({
                 onToggleActivity={onToggleActivity}
                 onMoveToStage={handleMoveToStage}
                 moveTargets={moveTargets}
-                onAssignActivity={handleAssignActivity}
-                assigneeChoices={assigneeChoices}
-                onSetActivityDueDate={handleSetActivityDueDate}
                 onDuplicateActivity={handleDuplicateActivity}
-                onCopyActivityLink={handleCopyActivityLink}
-                onChangeActivityType={canManageHierarchy ? handleChangeActivityType : undefined}
                 onToggleBlocked={handleToggleBlocked}
                 onLinkParent={canManageHierarchy ? openLinkParent : undefined}
                 onCreateActivity={handleCreateActivity}

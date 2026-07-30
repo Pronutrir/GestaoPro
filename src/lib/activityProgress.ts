@@ -2,19 +2,26 @@
  * Calcula o andamento (%) de uma atividade automaticamente a partir
  * da posição da sua coluna no workflow do projeto.
  *
- * Regras (memória do produto):
- *  - Cálculo 100% automático pelo Kanban (sem override manual por atividade).
- *  - Cada coluna pode ter um percentual explícito (progress_percent).
- *  - Colunas podem participar ou não da evolução (contributes_to_progress).
- *  - Coluna marcada como "Bloqueio" → status "pausado" (sem %).
- *  - Coluna marcada como "Final" → 100%.
+ * Regras (decisão de produto, 29/07/2026):
+ *  - Backlog e "A iniciar" (a_iniciar) são SEMPRE 0% — existir/estar na fila
+ *    não é avanço.
+ *  - Concluída = 100%; Cancelada fica fora dos indicadores (sem %).
+ *  - Colunas de TRABALHO (categoria "andamento") avançam pela POSIÇÃO no
+ *    fluxo: com K colunas de trabalho, a j-ésima vale j/(K+1) de 100.
+ *    Ex.: A Fazer(0) → Fazendo → Revisão → Concluída(100) dá 33% e 67%.
+ *    Antes toda coluna "andamento" valia 25% fixo (modelo Linear) — o quadro
+ *    inteiro parecia parado no mesmo número, e ninguém entendia o percentual.
+ *  - Um % explícito da coluna (progress_percent, menu "Definir % da coluna")
+ *    vence a posição — é o override manual por coluna.
+ *  - Coluna de bloqueio/exceção (legado sem categoria) → "pausada" (sem %).
  *  - Sem stage definida → 0%.
- *
- * O cálculo usa a ordem (display_order) apenas como fallback para colunas
- * sem percentual explícito, mantendo comportamento adaptável por projeto.
  */
 
-import { parseWorkflowCategory, WORKFLOW_CATEGORY_META } from "./workflowCategory";
+import {
+  categoryFromLegacyFlags,
+  parseWorkflowCategory,
+  WORKFLOW_CATEGORY_META,
+} from "./workflowCategory";
 
 export interface ProgressStageLike {
   id: string;
@@ -30,7 +37,7 @@ export interface ProgressStageLike {
 }
 
 export interface ActivityProgress {
-  /** Percentual snapped: 0, 25, 50, 75 ou 100 (null se pausado/sem stage) */
+  /** Percentual 0–100 (null se pausada/cancelada). */
   percent: number | null;
   /** true quando a coluna atual é de bloqueio */
   paused: boolean;
@@ -85,15 +92,36 @@ export function computeActivityProgress(
     return { percent: 0, paused: false, label: PERCENT_LABELS[0] };
   }
 
-  // A CATEGORIA manda quando existe. O peso é constante do sistema
-  // (ver lib/workflowCategory) — percentual por coluna é subjetivo e impede
-  // comparar projetos, razão pela qual as ferramentas de referência não usam.
-  const category = parseWorkflowCategory((current as any).categoria);
+  // A CATEGORIA manda quando existe: backlog/a_iniciar = 0, concluída = 100,
+  // cancelada = fora. "Andamento" avança pela POSIÇÃO entre as colunas de
+  // trabalho (ver cabeçalho) — o peso fixo do META vira só fallback.
+  const category = parseWorkflowCategory(current.categoria);
   if (category) {
     const weight = WORKFLOW_CATEGORY_META[category].progressWeight;
     if (weight === null) {
       // Cancelada: fora dos indicadores, sem percentual.
       return { percent: null, paused: false, label: "Cancelada" };
+    }
+    if (category === "andamento") {
+      // 1) % explícito da coluna (menu "Definir % da coluna") vence a posição.
+      if (current.progress_percent != null) {
+        const explicit = clampPercent(current.progress_percent);
+        return { percent: explicit, paused: false, label: getPercentLabel(explicit) };
+      }
+      // 2) Posicional: j-ésima de K colunas de trabalho → j/(K+1) de 100.
+      //    Divide por K+1 (não K) para nunca dar 100% antes da Concluída.
+      //    Colunas sem categoria explícita entram pela leitura legada, para o
+      //    fluxo ficar completo em quadros mistos (pré/pós-backfill).
+      const flow = stages
+        .filter((s) => (parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s)) === "andamento")
+        .sort((a, b) => a.display_order - b.display_order);
+      const j = flow.findIndex((s) => s.id === current.id) + 1;
+      if (j > 0) {
+        const raw = clampPercent((j / (flow.length + 1)) * 100);
+        return { percent: raw, paused: false, label: getPercentLabel(raw) };
+      }
+      // Posição indeterminável: crédito parcial constante (fallback).
+      return { percent: weight, paused: false, label: getPercentLabel(weight) };
     }
     return {
       percent: weight,

@@ -36,10 +36,11 @@ export interface WorkflowCategoryMeta {
   /** Frase curta usada em menus e na legenda. */
   hint: string;
   /**
-   * Peso no cálculo de andamento. É constante do sistema, não campo por
-   * projeto: percentual por coluna é subjetivo e impede comparar projetos —
-   * razão pela qual nenhuma ferramenta de referência o usa. O crédito parcial
-   * de 25% em "andamento" segue o modelo do Linear.
+   * Peso no cálculo de andamento. Para backlog/a_iniciar (0) e concluida (100)
+   * é o valor final. Para "andamento" é só FALLBACK: o percentual real é
+   * posicional — j-ésima de K colunas de trabalho vale j/(K+1) de 100 (ver
+   * lib/activityProgress) — e cai neste peso apenas quando a posição não é
+   * determinável.
    *
    * `null` = fora da conta (não entra no numerador nem no denominador).
    */
