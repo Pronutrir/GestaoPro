@@ -152,6 +152,7 @@ import {
   FilterOptionList,
   ColumnFilterPanel,
 } from "./kanban/KanbanColumn";
+import { ActivityDetailPanel } from "./kanban/ActivityDetailPanel";
 
 // Compat: o tipo CardFields morava aqui antes do fatiamento (Fase 4).
 // Valores (DEFAULT_CARD_FIELDS etc.) agora só em kanban/shared — re-exportar
@@ -253,6 +254,10 @@ export const ActivityKanban = ({
     });
   }, []);
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+  // Painel de detalhe (Item 2): clique no card abre LEITURA; editar é botão.
+  // Guarda só o id — o objeto vem sempre fresco da lista de atividades.
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const openDetail = useCallback((a: Activity) => setDetailId(a.id), []);
   const [createStoryTitle, setCreateStoryTitle] = useState("");
   const [createStoryNarrative, setCreateStoryNarrative] = useState("");
   const [createStoryLoading, setCreateStoryLoading] = useState(false);
@@ -2812,7 +2817,7 @@ export const ActivityKanban = ({
                       key={`daily-${activity.id}`}
                       activity={activity}
                       phases={phases}
-                      onEdit={() => onEditActivity(activity)}
+                      onEdit={() => openDetail(activity)}
                       onDelete={() => onDeleteActivity(activity.id)}
                       onToggle={() => onToggleActivity(activity.id, activity.status)}
                       onDuplicate={() => handleDuplicateActivity(activity.id)}
@@ -2875,7 +2880,7 @@ export const ActivityKanban = ({
                 phases={phases}
                 widthPct={widthPct}
                 isLast={idx === visibleStages.length - 1}
-                onEditActivity={onEditActivity}
+                onEditActivity={openDetail}
                 onDeleteActivity={onDeleteActivity}
                 onToggleActivity={onToggleActivity}
                 onMoveToStage={handleMoveToStage}
@@ -2910,7 +2915,7 @@ export const ActivityKanban = ({
                 onOpenRelated={(activityId) => {
                   const target = activities.find((a) => a.id === activityId);
                   if (target) {
-                    onEditActivity(target);
+                    openDetail(target);
                   } else {
                     toast({
                       title: "Atividade vinculada não encontrada",
@@ -3138,6 +3143,22 @@ export const ActivityKanban = ({
           </button>
         </div>
       )}
+      {/* Painel de detalhe do card — Editar abre o diálogo de edição de sempre. */}
+      <ActivityDetailPanel
+        activity={detailId ? activities.find((a) => a.id === detailId) ?? null : null}
+        stages={stages}
+        phases={phases}
+        projectId={projectId}
+        profilesMap={profilesMap}
+        profileAvatarMap={profileAvatarMap}
+        waitingOnCount={detailId ? waitingOnCounts.get(detailId) : undefined}
+        onClose={() => setDetailId(null)}
+        onEdit={(a) => {
+          setDetailId(null);
+          onEditActivity(a);
+        }}
+        onToggleComplete={(a) => onToggleActivity(a.id, a.status)}
+      />
       <UserStoryDrawer
         activityId={storyDrawerActivityId}
         projectId={projectId}
