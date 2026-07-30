@@ -3231,9 +3231,12 @@ export const ActivityKanban = ({
       </DragOverlay>
       </DndContext>
 
-      {/* Barra de ação em lote — flutua sobre o quadro enquanto houver seleção.
-          Esc limpa; cada ação passa pelo mesmo gate de permissão das individuais. */}
-      {selectedIds.size > 0 && (
+      {/* Barra de ação em lote — só a partir de DOIS selecionados. Com um card
+          só, ela repetia Mover/Bloquear/Arquivar que já estão no menu ⋯ dele:
+          dois caminhos para o mesmo resultado, e o de baixo dando mais trabalho
+          (selecionar, descer o olho, agir). Lote é para lote. Esc limpa; cada
+          ação passa pelo mesmo gate de permissão das individuais. */}
+      {selectedIds.size > 1 && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 rounded-xl border bg-background shadow-lg px-2.5 py-1.5">
           <span className="text-xs font-semibold px-1.5 whitespace-nowrap">
             {selectedIds.size} selecionada{selectedIds.size > 1 ? "s" : ""}
