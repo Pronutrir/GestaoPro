@@ -178,20 +178,28 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
         });
       }
 
-      // Adiciona o criador como membro com acesso total
+      // Criador, Líder e Gestor entram como membros com ACESSO TOTAL.
+      // Antes só o criador entrava: quem era escolhido como Líder ficava apenas
+      // no texto projects.owner e não aparecia na equipe nem herdava permissão —
+      // por isso parecia que "o líder some" depois de criar o projeto.
       if (created?.id && user?.id) {
-        const { error: creatorMemberError } = await supabase.from("project_members").insert({
-          project_id: created.id,
-          user_id: user.id,
-          invitation_status: "accepted",
-          invited_by: user.id,
-          can_create: true,
-          can_edit: true,
-          can_delete: true,
-          can_move: true,
-        });
+        const leaderId = profiles.find((p) => p.full_name === formData.owner)?.id ?? null;
+        const managerId = profiles.find((p) => p.full_name === formData.manager)?.id ?? null;
+        const fullAccessIds = Array.from(new Set([user.id, leaderId, managerId].filter(Boolean) as string[]));
+        const { error: creatorMemberError } = await supabase.from("project_members").insert(
+          fullAccessIds.map((uid) => ({
+            project_id: created.id,
+            user_id: uid,
+            invitation_status: "accepted" as const,
+            invited_by: user.id,
+            can_create: true,
+            can_edit: true,
+            can_delete: true,
+            can_move: true,
+          })),
+        );
         if (creatorMemberError) {
-          console.warn("Erro ao vincular criador como membro:", creatorMemberError.message);
+          console.warn("Erro ao vincular responsáveis como membros:", creatorMemberError.message);
         }
       }
 
@@ -239,7 +247,16 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
       // bloquear feedback da criação principal.
       if (createdProjectId && teamSnapshot.length > 0) {
         void (async () => {
-          const rows = teamSnapshot.map((m) => ({
+          // Criador/Líder/Gestor já entraram acima com acesso total — inseri-los
+          // de novo aqui violaria a unicidade e rebaixaria a permissão.
+          const alreadyMembers = new Set(
+            [
+              invitedBy,
+              profiles.find((p) => p.full_name === formData.owner)?.id ?? null,
+              profiles.find((p) => p.full_name === formData.manager)?.id ?? null,
+            ].filter(Boolean) as string[],
+          );
+          const rows = teamSnapshot.filter((m) => !alreadyMembers.has(m.user_id)).map((m) => ({
             project_id: createdProjectId,
             user_id: m.user_id,
             sector: m.sector,
@@ -252,6 +269,8 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
             can_move: false,
           }));
 
+          // Toda a equipe já entrou como responsável — nada a inserir.
+          if (rows.length === 0) return;
           const { error: memErr } = await supabase.from("project_members").insert(rows);
           if (memErr) {
             console.warn("Erro ao adicionar equipe:", memErr.message);
@@ -314,7 +333,15 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
   const removeTeamMember = (uid: string) =>
     setTeam((prev) => prev.filter((m) => m.user_id !== uid));
 
-  const availableForTeam = profiles.filter((p) => !team.some((t) => t.user_id === p.id));
+  // Fora da lista de adicionar: quem já está na equipe e quem já é Líder ou
+  // Gestor (esses entram com acesso total por serem responsáveis, e apareceriam
+  // duas vezes no bloco).
+  const availableForTeam = profiles.filter(
+    (p) =>
+      !team.some((t) => t.user_id === p.id) &&
+      p.full_name !== formData.owner &&
+      p.full_name !== formData.manager,
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -475,13 +502,16 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   people={profiles}
                   value={profiles.find((p) => p.full_name === formData.owner)?.id ?? null}
                   placeholder="Selecione o líder"
-                  onSelect={(p) =>
+                  onSelect={(p) => {
                     setFormData({
                       ...formData,
                       owner: p.full_name,
                       sector: formData.sector || p.sector || "",
-                    })
-                  }
+                    });
+                    // Promovido a Líder sai da lista de equipe: passa a entrar
+                    // com acesso total, não como membro convidado.
+                    setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
+                  }}
                   onClear={() => setFormData({ ...formData, owner: "" })}
                 />
               </div>
@@ -491,7 +521,10 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   people={profiles}
                   value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}
                   placeholder="Selecione o gestor"
-                  onSelect={(p) => setFormData({ ...formData, manager: p.full_name })}
+                  onSelect={(p) => {
+                    setFormData({ ...formData, manager: p.full_name });
+                    setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
+                  }}
                   onClear={() => setFormData({ ...formData, manager: "" })}
                 />
                 <p className="text-[11px] text-muted-foreground">Opcional. Tem o mesmo nível de acesso ao projeto que o Líder.</p>
@@ -517,6 +550,41 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
               <p className="text-[11px] text-muted-foreground -mt-1">
                 Cada pessoa receberá um convite e poderá aceitar ou recusar a participação.
               </p>
+
+              {/* Líder e Gestor entram na equipe com ACESSO TOTAL, sem convite —
+                  aparecem aqui para o time inteiro ficar visível num lugar só,
+                  e não podem ser removidos por aqui (troca-se no campo acima). */}
+              {(() => {
+                const roleRows = [
+                  { role: "Líder", name: formData.owner },
+                  { role: "Gestor", name: formData.manager },
+                ].filter((r) => !!r.name);
+                if (roleRows.length === 0) return null;
+                return (
+                  <div className="space-y-1.5">
+                    {roleRows.map((r) => {
+                      const p = profiles.find((x) => x.full_name === r.name);
+                      return (
+                        <div key={r.role} className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-primary/5 border border-primary/25">
+                          <Avatar className="h-6 w-6 shrink-0">
+                            {p?.avatar_url ? <AvatarImage src={p.avatar_url} alt={r.name} /> : null}
+                            <AvatarFallback className="text-[9px]">
+                              {r.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
+                            <span className="text-sm font-medium truncate">{r.name}</span>
+                            {p?.sector && <span className="text-[11px] text-muted-foreground truncate shrink-0">· {p.sector}</span>}
+                          </div>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 shrink-0">
+                            {r.role}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {team.length > 0 && (
                 <div className="space-y-1.5">

@@ -382,9 +382,17 @@ export const EditProjectDialog = ({
           throw existingMembersError;
         }
 
+        // Líder e Gestor são membros com acesso total pelo cargo que ocupam —
+        // nunca podem ser removidos pela sincronização da equipe.
+        const leaderId = profiles.find((p) => p.full_name === formData.owner)?.id ?? null;
+        const managerId = profiles.find((p) => p.full_name === formData.manager)?.id ?? null;
+        const responsibleIds = new Set([leaderId, managerId].filter(Boolean) as string[]);
+
         const keptIds = new Set(team.filter((m) => m.persisted).map((m) => m.id));
-        // Remove os que foram retirados na UI
-        const toRemove = (existingMembers || []).filter((m: any) => !keptIds.has(m.id));
+        // Remove os que foram retirados na UI (exceto Líder/Gestor atuais)
+        const toRemove = (existingMembers || []).filter(
+          (m: any) => !keptIds.has(m.id) && !responsibleIds.has(m.user_id),
+        );
         if (toRemove.length > 0) {
           const { error: removeError } = await supabase
             .from("project_members")
@@ -395,10 +403,37 @@ export const EditProjectDialog = ({
           }
         }
 
+        // Líder/Gestor que ainda não são membros entram com ACESSO TOTAL.
+        // Antes ficavam só no texto projects.owner/manager: quem era promovido
+        // a Líder não aparecia na equipe nem herdava permissão do cargo.
+        const removedIds = new Set(toRemove.map((m: { id: string }) => m.id));
+        const currentMemberIds = new Set(
+          (existingMembers || [])
+            .filter((m) => !removedIds.has(m.id))
+            .map((m) => m.user_id as string),
+        );
+        const missingResponsibles = Array.from(responsibleIds).filter((uid) => !currentMemberIds.has(uid));
+        if (missingResponsibles.length > 0) {
+          const { error: respErr } = await supabase.from("project_members").insert(
+            missingResponsibles.map((uid) => ({
+              project_id: project.id,
+              user_id: uid,
+              invitation_status: "accepted" as const,
+              responded_at: new Date().toISOString(),
+              invited_by: user?.id ?? null,
+              can_create: true,
+              can_edit: true,
+              can_delete: true,
+              can_move: true,
+            })),
+          );
+          if (respErr) throw respErr;
+        }
+
         // Membros não têm mais distinção Leitor/Editor — permissões ficam zeradas;
         // a edição vem do papel de participante/responsável da atividade (RLS).
-        // Insere novos
-        const newOnes = team.filter((m) => !m.persisted);
+        // Insere novos (sem repetir quem já entrou como Líder/Gestor)
+        const newOnes = team.filter((m) => !m.persisted && !responsibleIds.has(m.user_id));
         if (newOnes.length > 0) {
           const rows = newOnes.map((m) => ({
             project_id: project.id,
@@ -670,13 +705,15 @@ export const EditProjectDialog = ({
                   people={profiles}
                   value={profiles.find((p) => p.full_name === formData.owner)?.id ?? null}
                   placeholder="Selecione o líder"
-                  onSelect={(p) =>
+                  onSelect={(p) => {
                     setFormData({
                       ...formData,
                       owner: p.full_name,
                       sector: formData.sector || p.sector || "",
-                    })
-                  }
+                    });
+                    // Promovido a Líder sai da equipe: entra com acesso total.
+                    setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
+                  }}
                   onClear={() => setFormData({ ...formData, owner: "" })}
                 />
               </div>
@@ -686,7 +723,10 @@ export const EditProjectDialog = ({
                   people={profiles}
                   value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}
                   placeholder="Selecione o gestor"
-                  onSelect={(p) => setFormData({ ...formData, manager: p.full_name })}
+                  onSelect={(p) => {
+                    setFormData({ ...formData, manager: p.full_name });
+                    setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
+                  }}
                   onClear={() => setFormData({ ...formData, manager: "" })}
                 />
                 <p className="text-[11px] text-muted-foreground">Opcional. Tem o mesmo nível de acesso ao projeto que o Líder.</p>
@@ -713,9 +753,46 @@ export const EditProjectDialog = ({
                 Adicione ou remova membros. Novos membros recebem um convite ao salvar.
               </p>
 
+              {/* Líder e Gestor: membros por CARGO, com acesso total. Aparecem
+                  aqui para o time ficar visível num lugar só; para trocá-los,
+                  usa-se o campo acima (não o X da lista). */}
+              {(() => {
+                const roleRows = [
+                  { role: "Líder", name: formData.owner },
+                  { role: "Gestor", name: formData.manager },
+                ].filter((r) => !!r.name);
+                if (roleRows.length === 0) return null;
+                return (
+                  <div className="space-y-1.5">
+                    {roleRows.map((r) => {
+                      const p = profiles.find((x) => x.full_name === r.name);
+                      return (
+                        <div key={r.role} className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-primary/5 border border-primary/25">
+                          <Avatar className="h-6 w-6 shrink-0">
+                            {p?.avatar_url ? <AvatarImage src={p.avatar_url} alt={r.name} /> : null}
+                            <AvatarFallback className="text-[9px]">
+                              {r.name.split(" ").filter(Boolean).slice(0, 2).map((n) => n[0]?.toUpperCase()).join("")}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
+                            <span className="text-sm font-medium truncate">{r.name}</span>
+                            {p?.sector && <span className="text-[11px] text-muted-foreground truncate shrink-0">· {p.sector}</span>}
+                          </div>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 shrink-0">
+                            {r.role}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
               {team.length > 0 && (
                 <div className="space-y-2">
-                  {team.map((m) => {
+                  {/* Quem é Líder/Gestor já aparece no bloco de cargos acima —
+                      sai daqui para não constar duas vezes na mesma equipe. */}
+                  {team.filter((m) => m.full_name !== formData.owner && m.full_name !== formData.manager).map((m) => {
                     const initials = (m.full_name || "?")
                       .split(" ")
                       .filter(Boolean)
@@ -759,7 +836,12 @@ export const EditProjectDialog = ({
               <div className="pt-3 border-t border-border/60">
                 <PersonCombobox
                   variant="add"
-                  people={profiles.filter((p) => !team.some((t) => t.user_id === p.id))}
+                  people={profiles.filter(
+                    (p) =>
+                      !team.some((t) => t.user_id === p.id) &&
+                      p.full_name !== formData.owner &&
+                      p.full_name !== formData.manager,
+                  )}
                   placeholder="Adicionar membro por nome, setor ou função..."
                   onSelect={(p) => {
                     if (team.some((t) => t.user_id === p.id)) return;
