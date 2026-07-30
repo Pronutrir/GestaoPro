@@ -100,7 +100,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
       if (!formData.sector.trim()) {
         toast({
           title: "Campo obrigatório",
-          description: "Selecione o setor responsável pelo projeto.",
+          description: "Selecione o setor de origem do projeto.",
           variant: "destructive",
         });
         return;
@@ -173,7 +173,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
       if (droppedOptionalColumns.includes("sector")) {
         toast({
           title: "Projeto criado com aviso",
-          description: "O campo Setor Responsável não está disponível neste ambiente e não pôde ser salvo no projeto.",
+          description: "O campo Setor de Origem não está disponível neste ambiente e não pôde ser salvo no projeto.",
           variant: "destructive",
         });
       }
@@ -497,6 +497,20 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
+                <Label>Gestor do Projeto</Label>
+                <PersonCombobox
+                  people={profiles}
+                  value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}
+                  placeholder="Selecione o gestor"
+                  onSelect={(p) => {
+                    setFormData({ ...formData, manager: p.full_name });
+                    setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
+                  }}
+                  onClear={() => setFormData({ ...formData, manager: "" })}
+                />
+                <p className="text-[11px] text-muted-foreground">Opcional. Tem o mesmo nível de acesso ao projeto que o Líder.</p>
+              </div>
+              <div className="grid gap-2">
                 <Label>Líder do Projeto</Label>
                 <PersonCombobox
                   people={profiles}
@@ -515,23 +529,9 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                   onClear={() => setFormData({ ...formData, owner: "" })}
                 />
               </div>
-              <div className="grid gap-2">
-                <Label>Gestor do Projeto</Label>
-                <PersonCombobox
-                  people={profiles}
-                  value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}
-                  placeholder="Selecione o gestor"
-                  onSelect={(p) => {
-                    setFormData({ ...formData, manager: p.full_name });
-                    setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
-                  }}
-                  onClear={() => setFormData({ ...formData, manager: "" })}
-                />
-                <p className="text-[11px] text-muted-foreground">Opcional. Tem o mesmo nível de acesso ao projeto que o Líder.</p>
-              </div>
             </div>
             <div className="grid gap-2">
-              <Label>Setor do Projeto (Responsável) *</Label>
+              <Label>Setor de Origem *</Label>
               <SearchSelect
                 options={sectors.map((s) => ({ value: s.name, label: s.name }))}
                 value={formData.sector || null}
@@ -541,7 +541,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
                 searchPlaceholder="Buscar setor..."
                 emptyText="Nenhum setor encontrado."
               />
-              <p className="text-[11px] text-muted-foreground">Define o setor do projeto. Pode ser diferente do setor do líder.</p>
+              <p className="text-[11px] text-muted-foreground">Setor de onde o projeto se origina. Pode ser diferente do setor do líder.</p>
             </div>
 
             {/* Equipe do Projeto */}

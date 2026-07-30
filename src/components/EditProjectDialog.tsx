@@ -261,7 +261,7 @@ export const EditProjectDialog = ({
     if (!formData.due_date) missingRequiredFields.push("Data de Entrega");
     if (!formData.status.trim()) missingRequiredFields.push("Status");
     if (!formData.owner.trim()) missingRequiredFields.push("Líder do Projeto");
-    if (!formData.sector.trim()) missingRequiredFields.push("Setor Responsável");
+    if (!formData.sector.trim()) missingRequiredFields.push("Setor de Origem");
 
     const currentPriority = formData.priority || "pendente";
     if (currentPriority === "pendente") missingRequiredFields.push("Prioridade");
@@ -700,6 +700,20 @@ export const EditProjectDialog = ({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
+                <Label>Gestor do Projeto</Label>
+                <PersonCombobox
+                  people={profiles}
+                  value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}
+                  placeholder="Selecione o gestor"
+                  onSelect={(p) => {
+                    setFormData({ ...formData, manager: p.full_name });
+                    setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
+                  }}
+                  onClear={() => setFormData({ ...formData, manager: "" })}
+                />
+                <p className="text-[11px] text-muted-foreground">Opcional. Tem o mesmo nível de acesso ao projeto que o Líder.</p>
+              </div>
+              <div className="grid gap-2">
                 <Label>Líder do Projeto *</Label>
                 <PersonCombobox
                   people={profiles}
@@ -717,23 +731,9 @@ export const EditProjectDialog = ({
                   onClear={() => setFormData({ ...formData, owner: "" })}
                 />
               </div>
-              <div className="grid gap-2">
-                <Label>Gestor do Projeto</Label>
-                <PersonCombobox
-                  people={profiles}
-                  value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}
-                  placeholder="Selecione o gestor"
-                  onSelect={(p) => {
-                    setFormData({ ...formData, manager: p.full_name });
-                    setTeam((prev) => prev.filter((m) => m.user_id !== p.id));
-                  }}
-                  onClear={() => setFormData({ ...formData, manager: "" })}
-                />
-                <p className="text-[11px] text-muted-foreground">Opcional. Tem o mesmo nível de acesso ao projeto que o Líder.</p>
-              </div>
             </div>
             <div className="grid gap-2">
-              <Label>Setor do Projeto (Responsável) *</Label>
+              <Label>Setor de Origem *</Label>
               <SearchSelect
                 options={sectors.map((s) => ({ value: s.name, label: s.name }))}
                 value={formData.sector || null}
@@ -743,7 +743,7 @@ export const EditProjectDialog = ({
                 searchPlaceholder="Buscar setor..."
                 emptyText="Nenhum setor encontrado."
               />
-              <p className="text-[11px] text-muted-foreground">Define o setor do projeto. Pode ser diferente do setor do líder.</p>
+              <p className="text-[11px] text-muted-foreground">Setor de onde o projeto se origina. Pode ser diferente do setor do líder.</p>
             </div>
 
             {/* Equipe do Projeto */}
