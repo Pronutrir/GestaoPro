@@ -58,6 +58,32 @@ const PropertyRow = ({ icon, label, children, wide, iconClassName }: {
   </div>
 );
 
+// Faixa temática do painel de propriedades. A grade plana de 2 colunas não
+// tinha hierarquia: Status ao lado de Tempo, Líder ao lado de Custo — assuntos
+// diferentes disputando a mesma linha, e o olho lia em zigue-zague. Cada faixa
+// responde UMA pergunta, na ordem em que se preenche.
+const FieldBand = ({ step, title, children, tone = "default" }: {
+  step: number; title: string; children: React.ReactNode; tone?: "default" | "primary";
+}) => (
+  <div className="rounded-lg border border-border overflow-hidden">
+    <div className={cn(
+      "flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider border-b",
+      tone === "primary"
+        ? "bg-primary/10 text-primary border-primary/20"
+        : "bg-muted/50 text-muted-foreground border-border",
+    )}>
+      <span className={cn(
+        "inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold shrink-0",
+        tone === "primary" ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground",
+      )}>
+        {step}
+      </span>
+      {title}
+    </div>
+    <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">{children}</div>
+  </div>
+);
+
 // Campos OPCIONAIS da aba Detalhes que colapsam quando vazios (padrão ClickUp/Jira/Linear).
 // Essenciais (Status, Tipo, Prazo, Líder) e Prioridade não entram aqui — têm regra própria.
 type OptionalFieldKey = "hours" | "cost" | "wbs";
@@ -1322,7 +1348,9 @@ export const EditActivityDialog = ({
             </div>
           )}
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-5">
+        {/* Conversa em 400px (era 360, e o card interno tinha ~300 úteis):
+            cada frase quebrava em três linhas no espaço de interação do time. */}
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-5">
           {/* ========= COLUNA PRINCIPAL (esquerda) ========= */}
           <div className="space-y-5 min-w-0">
           {/* ============= CABEÇALHO COMPACTO (estilo ClickUp) ============= */}
@@ -1357,622 +1385,8 @@ export const EditActivityDialog = ({
             </div>
           </div>
 
-          {/* Painel de propriedades — 2 colunas, linhas densas (label + valor) */}
-          {act && (() => {
-            // ---- Visibilidade dos campos OPCIONAIS (auto-colapso) ----
-            // Regra: aparece se tem valor, é rollup de Fase, ou foi revelado pelo "+".
-            const hasHours = parseHoursInput(formData.hours) > 0;
-            const hasCost = parseFloat(formData.cost || "0") > 0;
-            const hasWbs = !!formData.wbs_code.trim();
-            // Marco não tem horas/custo; Fase com filhos mostra sempre (rollup somado).
-            const showHours = !formData.is_milestone && (hasHours || hasSubActivities || revealedFields.has("hours"));
-            const showCost = !formData.is_milestone && (hasCost || hasSubActivities || revealedFields.has("cost"));
-            const showWbs = hasWbs || revealedFields.has("wbs");
-            // Chips do "+ Adicionar campo": só os que estão ocultos no momento.
-            // Dependências não entra: passou a ser sempre visível (é informação de
-            // sequenciamento, não campo opcional — quem não vê, não sabe que existe).
-            const hiddenChips: { key: OptionalFieldKey; label: string; icon: React.ReactNode }[] = [
-              !showHours && { key: "hours" as const, label: "Tempo", icon: <Clock className="w-3 h-3" /> },
-              !showCost && { key: "cost" as const, label: "Custo", icon: <DollarSign className="w-3 h-3" /> },
-              !showWbs && { key: "wbs" as const, label: "Código EAP", icon: <Hash className="w-3 h-3" /> },
-            ].filter(Boolean) as { key: OptionalFieldKey; label: string; icon: React.ReactNode }[];
-            return (
-            <div className="p-3 rounded-lg border border-border bg-muted/10">
-              {/* Grade densa de 2 colunas; campos largos usam wide (col-span-2) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
-                {/* Status / Etapa */}
-                {workflowStages.length > 0 && (
-                   <PropertyRow iconClassName="text-primary" icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
-                     <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1.5 h-8 w-full px-2.5 rounded-md text-xs font-medium border bg-background hover:bg-muted/40 transition-colors"
-                          style={(() => {
-                            const s = workflowStages.find(s => s.id === currentStageId);
-                            return s ? { borderColor: s.color, color: s.color } : {};
-                          })()}
-                        >
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: workflowStages.find(s => s.id === currentStageId)?.color || "hsl(var(--muted-foreground))" }} />
-                          <span className="truncate">{workflowStages.find(s => s.id === currentStageId)?.title || "Sem coluna"}</span>
-                          <ChevronDown className="w-3 h-3 opacity-60 ml-auto shrink-0" />
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-48 p-1" align="start">
-                        {workflowStages.map((stage) => (
-                          <button
-                            key={stage.id}
-                            type="button"
-                            className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted ${currentStageId === stage.id ? "bg-primary/10 text-primary font-medium" : ""}`}
-                            onClick={async () => {
-                              if (currentStageId === stage.id) return;
-                              setStatusPopoverOpen(false);
-                              if (stage.is_final && isBlockedByOthers) {
-                                toast({ title: "Tarefa bloqueada", description: `Há ${blockers.length} bloqueio(s) pendente(s).`, variant: "destructive" });
-                                return;
-                              }
-
-                              if (stage.is_final && act) {
-                                const pendingCount = await getPendingDescendantsCount(act.id);
-                                if (pendingCount > 0) {
-                                  toast({
-                                    title: "Atividade com pendências",
-                                    description: `Não é possível concluir enquanto existirem ${pendingCount} subatividade(s) pendente(s).`,
-                                    variant: "destructive",
-                                  });
-                                  return;
-                                }
-                              }
-
-                              try {
-                                if (!ensureProjectUnlocked()) return;
-                                const today = new Date().toISOString().slice(0, 10);
-                                const updateData: any = { workflow_stage_id: stage.id };
-                                // Datas reais sao manuais — nao mexe em actual_*.
-                                if (stage.is_final) {
-                                  updateData.status = "completed";
-                                  updateData.completed_at = new Date().toISOString();
-                                } else if (act.status === "completed") {
-                                  updateData.status = "pending";
-                                  updateData.completed_at = null;
-                                }
-                                const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
-                                if (error) throw error;
-                                await supabase.from("user_stories").update({ stage_id: stage.id }).eq("activity_id", act.id);
-                                setCurrentStageId(stage.id);
-                                onActivityUpdated();
-                              } catch {
-                                toast({ title: "Erro ao mover", variant: "destructive" });
-                              }
-                            }}
-                          >
-                            <span className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
-                            {stage.title}
-                          </button>
-                        ))}
-                      </PopoverContent>
-                    </Popover>
-                  </PropertyRow>
-                )}
-
-                {/* Tempo (opcional — colapsa quando vazio).
-                    Vem ANTES do Líder de propósito: na grade de 2 colunas isso
-                    coloca Status+Tempo na 1ª linha e Líder+Custo na 2ª, juntando
-                    os quatro campos de leitura rápida no topo do formulário. */}
-                {showHours && (
-                  <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {hasSubActivities ? (
-                        // Com subatividades: horas do pai = soma das subs (rollup,
-                        // somente-leitura). Sem campo concorrente => sem divergência.
-                        <TooltipProvider delayDuration={150}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="h-7 px-2 text-xs w-[140px] flex items-center rounded-md border border-input bg-muted/40 text-muted-foreground cursor-default">
-                                {formatHoursDisplay(subHoursTotal) || "0h"}
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="max-w-[240px] text-xs">
-                              Somado automaticamente das subatividades. Edite as horas em cada subatividade.
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        <>
-                          {/* Input livre (2:05 / 2h 30m / 90m) + menu compacto rolável */}
-                          <div className="relative w-[140px]">
-                            <Input
-                              placeholder="Ex: 2:05, 2h 30m, 90m"
-                              value={formData.hours}
-                              onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
-                              onFocus={(e) => e.currentTarget.select()}
-                              className="h-7 pl-2 pr-7 text-xs"
-                            />
-                            <Popover open={hoursPopoverOpen} onOpenChange={setHoursPopoverOpen}>
-                              <PopoverTrigger asChild>
-                                <button
-                                  type="button"
-                                  aria-label="Escolher tempo"
-                                  className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:bg-muted"
-                                >
-                                  <ChevronDown className="w-3.5 h-3.5" />
-                                </button>
-                              </PopoverTrigger>
-                              <PopoverContent align="end" sideOffset={4} className="w-[180px] p-1">
-                                <div className="max-h-56 overflow-y-auto">
-                                  {HOURS_PRESETS.map((p) => {
-                                    const active = parseHoursInput(formData.hours) === parseHoursInput(p.value);
-                                    return (
-                                      <button
-                                        key={p.value}
-                                        type="button"
-                                        onClick={() => { setFormData({ ...formData, hours: p.value }); setHoursPopoverOpen(false); }}
-                                        className={`w-full flex items-baseline justify-between gap-2 px-2.5 py-1.5 rounded-md text-left transition-colors ${
-                                          active ? "bg-primary/10 text-primary" : "hover:bg-muted"
-                                        }`}
-                                      >
-                                        <span className="text-xs font-medium tabular-nums">{p.value}</span>
-                                        <span className="text-[11px] text-muted-foreground">{p.label}</span>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          </div>
-                          {/* Confirmação em linguagem natural do que foi digitado */}
-                          {(() => {
-                            const natural = formatHoursNatural(parseHoursInput(formData.hours));
-                            if (!natural) return null;
-                            return (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-1.5 py-0.5">
-                                <CheckCircle2 className="w-3 h-3" /> {natural}
-                              </span>
-                            );
-                          })()}
-                        </>
-                      )}
-                      {(plannedHours > 0 || consumedHours > 0) && (
-                        <span
-                          className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${
-                            // Vermelho só quando o consumo ESTOURA o planejado.
-                            // Consumir menos ou igual é normal => neutro.
-                            plannedHours > 0 && consumedHours > plannedHours
-                              ? "text-destructive border-destructive/40 bg-destructive/10"
-                              : "text-muted-foreground border-border bg-muted/30"
-                          }`}
-                          title={
-                            consumedFromTrackedEntries
-                              ? "Tempo real somado de apontamentos (time_entries)"
-                              : subActivities.length > 0
-                              ? "Consumido automático das subatividades concluídas"
-                              : "Consumido automático da atividade concluída"
-                          }
-                        >
-                          Consumidas ({consumedFromTrackedEntries ? "real" : "auto"}): {formatHoursDisplay(consumedHours) || "0h"} / Planejadas: {formatHoursDisplay(plannedHours) || "0h"}
-                        </span>
-                      )}
-                    </div>
-                  </PropertyRow>
-                )}
-
-                {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
-                <PropertyRow iconClassName="text-primary" icon={<User className="w-3.5 h-3.5" />} label="Líder">
-                  <div className="w-full">
-                    <PersonCombobox
-                      people={allProfiles}
-                      value={allProfiles.find((m) => m.full_name === formData.assigned_to)?.id ?? null}
-                      placeholder="Sem líder"
-                      onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
-                      onClear={() => setFormData({ ...formData, assigned_to: "" })}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                </PropertyRow>
-
-                {/* Custo (opcional — colapsa quando vazio) */}
-                {showCost && (
-                  <PropertyRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Custo">
-                    {hasSubActivities ? (
-                      <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="h-7 px-2 text-xs w-[140px] flex items-center rounded-md border border-input bg-muted/40 text-muted-foreground cursor-default">
-                              {subCostTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-[240px] text-xs">
-                            Somado automaticamente das subatividades. Edite o custo em cada subatividade.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    ) : (
-                      <CurrencyInput
-                        step="0.01"
-                        min="0"
-                        value={formData.cost}
-                        onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                        className="h-7 pl-8 pr-2 py-0 text-xs w-[140px]"
-                      />
-                    )}
-                  </PropertyRow>
-                )}
-                {/* Datas — planejado e execução real na MESMA linha.
-                    Meia coluna por padrão (Início→Vencimento cabe); só ocupa a
-                    linha inteira quando o bloco de datas reais está expandido. */}
-                <PropertyRow
-                  wide={!formData.is_milestone && (showRealDates || !!(formData.actual_start_date || formData.actual_end_date))}
-                  iconClassName="text-primary"
-                  icon={<Calendar className="w-3.5 h-3.5" />}
-                  label={formData.is_milestone ? "Data" : "Prazo"}
-                >
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 w-full min-h-[32px]">
-                    {/* PLANEJADO — chips compactos com calendário */}
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                      <DateChip
-                        value={formData.is_milestone ? formData.end_date : formData.start_date}
-                        onChange={(v) =>
-                          setFormData(
-                            formData.is_milestone
-                              ? { ...formData, end_date: v }
-                              : { ...formData, start_date: v }
-                          )
-                        }
-                        placeholder={formData.is_milestone ? "Data do marco" : "Início"}
-                        tooltip={formData.is_milestone ? "Definir data do marco" : "Definir data de início"}
-                        invalid={dateRangeInvalid}
-                      />
-                      {!formData.is_milestone && (
-                        <>
-                          <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
-                          <DateChip
-                            value={formData.end_date}
-                            onChange={(v) => setFormData({ ...formData, end_date: v })}
-                            placeholder="Vencimento"
-                            tooltip="Definir data de vencimento"
-                            invalid={dateRangeInvalid}
-                          />
-                        </>
-                      )}
-                      {dateRangeInvalid && (
-                        <TooltipProvider delayDuration={150}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="inline-flex items-center justify-center text-destructive">
-                                <AlertTriangle className="w-4 h-4" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="max-w-[260px] text-xs">
-                              Datas inconsistentes: a data de início é posterior à data de término.
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                      {(startDivergence || endDivergence) && (
-                        <TooltipProvider delayDuration={150}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button type="button" className="inline-flex items-center justify-center text-amber-600 dark:text-amber-400 hover:opacity-80">
-                                <AlertTriangle className="w-4 h-4" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="max-w-[260px] text-xs">
-                              Divergência com subatividades:
-                              {startDivergence && minSubStart && (
-                                <div>• sub começa em <strong>{minSubStart.split("-").reverse().join("/")}</strong> (antes do pai)</div>
-                              )}
-                              {endDivergence && maxSubEnd && (
-                                <div>• sub termina em <strong>{maxSubEnd.split("-").reverse().join("/")}</strong> (depois do pai)</div>
-                              )}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </div>
-
-                    {/* EXECUÇÃO REAL — na MESMA linha, à direita do planejado */}
-                    {!formData.is_milestone && (() => {
-                      const hasReal = !!(formData.actual_start_date || formData.actual_end_date);
-                      const expanded = showRealDates || hasReal;
-                      if (!expanded) {
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => setShowRealDates(true)}
-                            title="Registrar as datas em que a atividade realmente começou e terminou"
-                            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors shrink-0 ml-2 pl-3 border-l border-dashed border-border"
-                          >
-                            <Plus className="w-3 h-3" /> datas reais
-                          </button>
-                        );
-                      }
-                      const v = endVariance(formData.actual_end_date || null, (act as any)?.baseline_end_date, formData.end_date);
-                      const tone = v !== null ? varianceTone(v) : null;
-                      // Sem datas preenchidas o X apenas recolhe. Com datas, ele
-                      // seria a unica forma de destruir o dado (o preenchimento
-                      // automatico foi removido), entao confirma antes.
-                      const closeReal = () => {
-                        if (hasReal) {
-                          const ok = window.confirm(
-                            "Limpar as datas reais preenchidas? Esta acao apaga inicio e termino reais."
-                          );
-                          if (!ok) return;
-                          setFormData((prev) => ({ ...prev, actual_start_date: "", actual_end_date: "" }));
-                        }
-                        setShowRealDates(false);
-                      };
-                      return (
-                        <div className="flex items-center gap-1.5 text-xs pl-4 border-l border-dashed border-border/70">
-                          <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">Real</span>
-                          <DateChip
-                            value={formData.actual_start_date}
-                            onChange={(v) => setFormData({ ...formData, actual_start_date: v })}
-                            placeholder="Início real"
-                            tooltip="Definir início real"
-                          />
-                          <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          <DateChip
-                            value={formData.actual_end_date}
-                            onChange={(v) => setFormData({ ...formData, actual_end_date: v })}
-                            placeholder="Término real"
-                            tooltip="Definir término real"
-                          />
-                          {v !== null && tone && (
-                            <span className={cn("px-1.5 py-0 rounded border text-[10px] font-mono shrink-0", varianceClasses(tone))}
-                                  title={(act as any)?.baseline_end_date ? "Real − Linha de Base" : "Real − Planejado"}>
-                              {v > 0 ? `${Math.abs(v)}d de atraso` : v < 0 ? `${Math.abs(v)}d adiantado` : "no prazo"}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={closeReal}
-                            title={hasReal ? "Limpar datas reais" : "Fechar"}
-                            className="text-muted-foreground hover:text-foreground shrink-0"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </PropertyRow>
-
-                {/* Prioridade — método GUT.
-                    Colapsa em meia coluna quando "Pendente" (chip discreto); ao
-                    definir G×U×T, expande para linha inteira com o badge completo. */}
-                {(() => {
-                  // Cor do ícone do rótulo = cor do nível GUT (dá vida à informação).
-                  const gutLevel = gutLabel(gutScore(formData.gravity, formData.urgency, formData.tendency));
-                  const gutIconColor: Record<GutLevel, string> = {
-                    pendente: "text-muted-foreground/70",
-                    baixa: "text-emerald-500",
-                    media: "text-amber-500",
-                    alta: "text-orange-500",
-                    critica: "text-red-500",
-                    urgente: "text-fuchsia-500",
-                  };
-                  return (
-                    <PropertyRow iconClassName={gutIconColor[gutLevel]} icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
-                      <div className="w-full min-w-0">
-                        <GutPriorityField
-                          gravity={formData.gravity}
-                          urgency={formData.urgency}
-                          tendency={formData.tendency}
-                          onChange={(v) => setFormData({ ...formData, ...v })}
-                          buttonClassName="h-8 w-full px-2.5 text-xs"
-                        />
-                      </div>
-                    </PropertyRow>
-                  );
-                })()}
-
-                {/* Tipo do item (papéis EAP): Fase/Entrega | Atividade | Marco.
-                    Mutuamente exclusivo. Agrupador legado ('pacote') exibe como Fase. */}
-                {(() => {
-                  type Kind = "fase" | "atividade" | "marco";
-                  // Papel EXIBIDO: agrupador legado ('pacote' ou com subitens) vira Fase.
-                  const itemKind: Kind = formData.is_milestone
-                    ? "marco"
-                    : (formData.item_type === "fase" || formData.item_type === "pacote" || hasSubActivities)
-                      ? "fase"
-                      : "atividade";
-                  const setKind = (kind: Kind) =>
-                    setFormData({
-                      ...formData,
-                      is_milestone: kind === "marco",
-                      // Marco grava como 'atividade' (o tipo é a flag is_milestone).
-                      // Fase/Entrega grava 'fase'; folha grava 'atividade'.
-                      item_type: kind === "marco" ? "atividade" : kind,
-                      // Marco é um ponto no tempo — não tem intervalo de fim.
-                      end_date: kind === "marco" ? "" : formData.end_date,
-                    });
-
-                  // Só Fase/Entrega agrupa. Item com subitens não pode virar folha.
-                  const kindDisabledReason = (kind: Kind): string | null => {
-                    if (hasSubActivities && kind !== "fase")
-                      return "Este item tem subitens; só Fase/Entrega agrupa.";
-                    return null;
-                  };
-                  const KIND_OPTIONS: {
-                    kind: Kind;
-                    label: string;
-                    icon: React.ReactNode;
-                    hint: string;
-                    activeCls: string;
-                  }[] = [
-                    {
-                      kind: "fase",
-                      label: "Fase / Entrega",
-                      icon: <Layers className="w-3.5 h-3.5" />,
-                      hint: "Agrupa outros itens (em qualquer nível). Datas, horas e custo derivam dos filhos.",
-                      activeCls: "border-primary bg-primary/10 text-primary",
-                    },
-                    {
-                      kind: "atividade",
-                      label: "Atividade",
-                      icon: <Circle className="w-3.5 h-3.5" />,
-                      hint: "Trabalho executável (folha da EAP), com estimativa e intervalo de datas próprios.",
-                      activeCls: "border-primary bg-primary/10 text-primary",
-                    },
-                    {
-                      kind: "marco",
-                      label: "Marco",
-                      icon: <Diamond className={`w-3.5 h-3.5 ${itemKind === "marco" ? "fill-amber-500" : ""}`} />,
-                      hint: "Ponto único no tempo (uma data, sem intervalo). Não tem horas nem custo.",
-                      activeCls: "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-                    },
-                  ];
-                  return (
-                    <PropertyRow
-                      iconClassName={itemKind === "marco" ? "text-amber-500" : "text-primary"}
-                      icon={
-                        itemKind === "marco" ? (
-                          <Diamond className="w-3.5 h-3.5 fill-amber-500" />
-                        ) : itemKind === "fase" ? (
-                          <Layers className="w-3.5 h-3.5" />
-                        ) : (
-                          <Circle className="w-3.5 h-3.5" />
-                        )
-                      }
-                      label="Tipo"
-                      wide
-                    >
-                      <div className="flex flex-col gap-1.5 w-full">
-                        <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30 w-fit">
-                          {KIND_OPTIONS.map((opt) => {
-                            const active = itemKind === opt.kind;
-                            const reason = active ? null : kindDisabledReason(opt.kind);
-                            const disabled = !!reason;
-                            return (
-                              <button
-                                key={opt.kind}
-                                type="button"
-                                disabled={disabled}
-                                onClick={() => setKind(opt.kind)}
-                                aria-pressed={active}
-                                title={reason ?? opt.hint}
-                                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border ${
-                                  active
-                                    ? opt.activeCls
-                                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                                } ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
-                              >
-                                {opt.icon}
-                                {opt.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {hasSubActivities && (
-                          <span className="text-[10.5px] text-primary flex items-center gap-1 min-w-0" title="Este item agrupa subitens — por isso é uma Fase/Entrega. Horas e custo são somados dos filhos (veja a aba Subatividades).">
-                            <Layers className="w-3 h-3 shrink-0" />
-                            <span className="truncate">Agrupa {ownSubActivities.length} subitem(ns) — horas e custo somados dos filhos.</span>
-                          </span>
-                        )}
-                      </div>
-                    </PropertyRow>
-                  );
-                })()}
-
-                {/* Código EAP/WBS (opcional — colapsa quando vazio) */}
-                {showWbs && (
-                <PropertyRow iconClassName="text-primary" icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
-                  <div className="flex flex-col gap-1 w-full">
-                    <div className="flex items-center gap-1.5">
-                      <Input
-                        value={formData.wbs_code}
-                        onChange={(e) => setFormData({ ...formData, wbs_code: e.target.value })}
-                        placeholder="Digite ou gere automaticamente"
-                        className={cn(
-                          "h-7 text-xs font-mono flex-1",
-                          formData.wbs_code && !/^\d+(\.\d+){0,6}$/.test(formData.wbs_code.trim()) && "border-destructive"
-                        )}
-                      />
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={formData.wbs_code.trim() ? "ghost" : "outline"}
-                        onClick={handleAutoWbs}
-                        disabled={generatingWbs}
-                        className={cn(
-                          "h-7 px-2.5 text-xs gap-1.5 shrink-0",
-                          !formData.wbs_code.trim() && "text-primary border-primary/40 bg-primary/5 hover:bg-primary/10"
-                        )}
-                        title="Gerar o próximo código com base no item pai (ou fase) e nos irmãos. Fase/Entrega agrupa (qualquer nível); Atividade e Marco são folhas. Formato por posição: 1, 1.1, 1.1.1…"
-                      >
-                        <Wand2 className="w-3.5 h-3.5" />
-                        {formData.wbs_code.trim() ? "Regerar" : "Gerar"}
-                      </Button>
-                    </div>
-                  </div>
-                </PropertyRow>
-                )}
-
-                {/* Dependências (predecessoras/sucessoras) — SEMPRE visível.
-                    Era um campo opcional colapsado chamado "Relações": ficava
-                    escondido justamente de quem ainda não tinha criado nenhuma,
-                    ou seja, quem mais precisava descobrir que o recurso existe. */}
-                {projectId && (
-                  <div className="min-w-0 sm:col-span-2">
-                    <PropertyRow
-                      wide
-                      iconClassName="text-primary"
-                      icon={<Link2 className="w-3.5 h-3.5" />}
-                      label={relationsCount > 0 ? `Dependências (${relationsCount})` : "Dependências"}
-                    >
-                      <ActivityRelationsInline
-                        activityId={act.id}
-                        projectId={projectId}
-                        onCountChange={setRelationsCount}
-                        onChanged={() => {
-                          if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
-                          onActivityUpdated();
-                        }}
-                      />
-                    </PropertyRow>
-                  </div>
-                )}
-
-                {/* "+ Adicionar campo": um único botão que abre um menu com os
-                    campos opcionais ocultos (padrão ClickUp/Jira). Só aparece se
-                    houver algo a adicionar. */}
-                {hiddenChips.length > 0 && (
-                  <div className="sm:col-span-2 pt-2 mt-0.5 border-t border-dashed border-border/60">
-                    <Popover open={addFieldOpen} onOpenChange={setAddFieldOpen}>
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-3 h-8 text-xs font-medium text-muted-foreground hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-colors"
-                        >
-                          <Plus className="w-3.5 h-3.5" /> Adicionar campo
-                          <ChevronDown className="w-3 h-3 opacity-60" />
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-52 p-1" align="start">
-                        <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-                          Campos disponíveis
-                        </p>
-                        {hiddenChips.map((chip) => (
-                          <button
-                            key={chip.key}
-                            type="button"
-                            onClick={() => { revealField(chip.key); setAddFieldOpen(false); }}
-                            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors"
-                          >
-                            <span className="text-muted-foreground">{chip.icon}</span>
-                            {chip.label}
-                          </button>
-                        ))}
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                )}
-              </div>
-            </div>
-            );
-          })()}
-
-          {/* ============= ABAS ============= */}
+          {/* ABAS no topo: ficavam DEPOIS do painel de propriedades, em cinza,
+              e quem não rolava a tela não descobria Equipe/Subatividades/Anexos. */}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
             <TabsList className="w-full justify-start h-auto bg-muted/50 rounded-lg p-1 gap-1 flex-wrap">
               <TabsTrigger value="details" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
@@ -1981,7 +1395,7 @@ export const EditActivityDialog = ({
               <TabsTrigger value="team" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
                 <Users className="w-3.5 h-3.5" /> Equipe
                 {formData.participants.filter(Boolean).length > 0 && (
-                  <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{formData.participants.filter(Boolean).length}</span>
+                  <span className="text-[10px] px-1.5 py-0 rounded-full bg-primary/15 text-primary font-semibold">{formData.participants.filter(Boolean).length}</span>
                 )}
               </TabsTrigger>
               {/* Subatividades: só para itens que AGRUPAM na EAP. Marco é um ponto
@@ -1990,7 +1404,7 @@ export const EditActivityDialog = ({
                 <TabsTrigger value="subtasks" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
                   <ListTree className="w-3.5 h-3.5" /> Subatividades
                   {subActivities.length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{subActivities.length}</span>
+                    <span className="text-[10px] px-1.5 py-0 rounded-full bg-primary/15 text-primary font-semibold">{subActivities.length}</span>
                   )}
                 </TabsTrigger>
               )}
@@ -2004,15 +1418,648 @@ export const EditActivityDialog = ({
                 <TabsTrigger value="stories" className="text-[13px] gap-1.5 rounded-md data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium data-[state=active]:shadow-none text-muted-foreground hover:text-foreground">
                   <BookOpen className="w-3.5 h-3.5" /> Histórias
                   {storiesCount > 0 && (
-                    <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted">{storiesCount}</span>
+                    <span className="text-[10px] px-1.5 py-0 rounded-full bg-primary/15 text-primary font-semibold">{storiesCount}</span>
                   )}
                 </TabsTrigger>
               )}
               {/* Histórico vive no painel lateral */}
             </TabsList>
 
-            {/* ===== ABA DETALHES ===== */}
-            <TabsContent value="details" className="space-y-5 pt-4 mt-0">
+            {/* ===== ABA DETALHES: propriedades + descrição ===== */}
+            <TabsContent value="details" className="space-y-4 pt-4 mt-0">
+            {/* Painel de propriedades em 3 faixas temáticas */}
+            {act && (() => {
+              // ---- Visibilidade dos campos OPCIONAIS (auto-colapso) ----
+              // Regra: aparece se tem valor, é rollup de Fase, ou foi revelado pelo "+".
+              const hasHours = parseHoursInput(formData.hours) > 0;
+              const hasCost = parseFloat(formData.cost || "0") > 0;
+              const hasWbs = !!formData.wbs_code.trim();
+              // Marco não tem horas/custo; Fase com filhos mostra sempre (rollup somado).
+              const showHours = !formData.is_milestone && (hasHours || hasSubActivities || revealedFields.has("hours"));
+              const showCost = !formData.is_milestone && (hasCost || hasSubActivities || revealedFields.has("cost"));
+              const showWbs = hasWbs || revealedFields.has("wbs");
+              // Chips do "+ Adicionar campo": só os que estão ocultos no momento.
+              // Dependências não entra: passou a ser sempre visível (é informação de
+              // sequenciamento, não campo opcional — quem não vê, não sabe que existe).
+              const hiddenChips: { key: OptionalFieldKey; label: string; icon: React.ReactNode }[] = [
+                !showHours && { key: "hours" as const, label: "Tempo", icon: <Clock className="w-3 h-3" /> },
+                !showCost && { key: "cost" as const, label: "Custo", icon: <DollarSign className="w-3 h-3" /> },
+                !showWbs && { key: "wbs" as const, label: "Código EAP", icon: <Hash className="w-3 h-3" /> },
+              ].filter(Boolean) as { key: OptionalFieldKey; label: string; icon: React.ReactNode }[];
+              return (
+              <div className="space-y-2.5">
+                {/* ---- FAIXA 1: O QUE É (status, tipo, dependências, EAP) ---- */}
+                <FieldBand step={1} title="O que é" tone="primary">
+                  {/* Status / Etapa */}
+                  {workflowStages.length > 0 && (
+                     <PropertyRow iconClassName="text-primary" icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
+                       <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 h-8 w-full px-2.5 rounded-md text-xs font-medium border bg-background hover:bg-muted/40 transition-colors"
+                            style={(() => {
+                              const s = workflowStages.find(s => s.id === currentStageId);
+                              return s ? { borderColor: s.color, color: s.color } : {};
+                            })()}
+                          >
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: workflowStages.find(s => s.id === currentStageId)?.color || "hsl(var(--muted-foreground))" }} />
+                            <span className="truncate">{workflowStages.find(s => s.id === currentStageId)?.title || "Sem coluna"}</span>
+                            <ChevronDown className="w-3 h-3 opacity-60 ml-auto shrink-0" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-48 p-1" align="start">
+                          {workflowStages.map((stage) => (
+                            <button
+                              key={stage.id}
+                              type="button"
+                              className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted ${currentStageId === stage.id ? "bg-primary/10 text-primary font-medium" : ""}`}
+                              onClick={async () => {
+                                if (currentStageId === stage.id) return;
+                                setStatusPopoverOpen(false);
+                                if (stage.is_final && isBlockedByOthers) {
+                                  toast({ title: "Tarefa bloqueada", description: `Há ${blockers.length} bloqueio(s) pendente(s).`, variant: "destructive" });
+                                  return;
+                                }
+  
+                                if (stage.is_final && act) {
+                                  const pendingCount = await getPendingDescendantsCount(act.id);
+                                  if (pendingCount > 0) {
+                                    toast({
+                                      title: "Atividade com pendências",
+                                      description: `Não é possível concluir enquanto existirem ${pendingCount} subatividade(s) pendente(s).`,
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+                                }
+  
+                                try {
+                                  if (!ensureProjectUnlocked()) return;
+                                  const today = new Date().toISOString().slice(0, 10);
+                                  const updateData: any = { workflow_stage_id: stage.id };
+                                  // Datas reais sao manuais — nao mexe em actual_*.
+                                  if (stage.is_final) {
+                                    updateData.status = "completed";
+                                    updateData.completed_at = new Date().toISOString();
+                                  } else if (act.status === "completed") {
+                                    updateData.status = "pending";
+                                    updateData.completed_at = null;
+                                  }
+                                  const { error } = await supabase.from("activities").update(updateData).eq("id", act.id);
+                                  if (error) throw error;
+                                  await supabase.from("user_stories").update({ stage_id: stage.id }).eq("activity_id", act.id);
+                                  setCurrentStageId(stage.id);
+                                  onActivityUpdated();
+                                } catch {
+                                  toast({ title: "Erro ao mover", variant: "destructive" });
+                                }
+                              }}
+                            >
+                              <span className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
+                              {stage.title}
+                            </button>
+                          ))}
+                        </PopoverContent>
+                      </Popover>
+                    </PropertyRow>
+                  )}
+  
+                  {/* Tipo do item (papéis EAP): Fase/Entrega | Atividade | Marco.
+                      Mutuamente exclusivo. Agrupador legado ('pacote') exibe como Fase. */}
+                  {(() => {
+                    type Kind = "fase" | "atividade" | "marco";
+                    // Papel EXIBIDO: agrupador legado ('pacote' ou com subitens) vira Fase.
+                    const itemKind: Kind = formData.is_milestone
+                      ? "marco"
+                      : (formData.item_type === "fase" || formData.item_type === "pacote" || hasSubActivities)
+                        ? "fase"
+                        : "atividade";
+                    const setKind = (kind: Kind) =>
+                      setFormData({
+                        ...formData,
+                        is_milestone: kind === "marco",
+                        // Marco grava como 'atividade' (o tipo é a flag is_milestone).
+                        // Fase/Entrega grava 'fase'; folha grava 'atividade'.
+                        item_type: kind === "marco" ? "atividade" : kind,
+                        // Marco é um ponto no tempo — não tem intervalo de fim.
+                        end_date: kind === "marco" ? "" : formData.end_date,
+                      });
+  
+                    // Só Fase/Entrega agrupa. Item com subitens não pode virar folha.
+                    const kindDisabledReason = (kind: Kind): string | null => {
+                      if (hasSubActivities && kind !== "fase")
+                        return "Este item tem subitens; só Fase/Entrega agrupa.";
+                      return null;
+                    };
+                    const KIND_OPTIONS: {
+                      kind: Kind;
+                      label: string;
+                      icon: React.ReactNode;
+                      hint: string;
+                      activeCls: string;
+                    }[] = [
+                      {
+                        kind: "fase",
+                        label: "Fase / Entrega",
+                        icon: <Layers className="w-3.5 h-3.5" />,
+                        hint: "Agrupa outros itens (em qualquer nível). Datas, horas e custo derivam dos filhos.",
+                        activeCls: "border-primary bg-primary/10 text-primary",
+                      },
+                      {
+                        kind: "atividade",
+                        label: "Atividade",
+                        icon: <Circle className="w-3.5 h-3.5" />,
+                        hint: "Trabalho executável (folha da EAP), com estimativa e intervalo de datas próprios.",
+                        activeCls: "border-primary bg-primary/10 text-primary",
+                      },
+                      {
+                        kind: "marco",
+                        label: "Marco",
+                        icon: <Diamond className={`w-3.5 h-3.5 ${itemKind === "marco" ? "fill-amber-500" : ""}`} />,
+                        hint: "Ponto único no tempo (uma data, sem intervalo). Não tem horas nem custo.",
+                        activeCls: "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                      },
+                    ];
+                    return (
+                      <PropertyRow
+                        iconClassName={itemKind === "marco" ? "text-amber-500" : "text-primary"}
+                        icon={
+                          itemKind === "marco" ? (
+                            <Diamond className="w-3.5 h-3.5 fill-amber-500" />
+                          ) : itemKind === "fase" ? (
+                            <Layers className="w-3.5 h-3.5" />
+                          ) : (
+                            <Circle className="w-3.5 h-3.5" />
+                          )
+                        }
+                        label="Tipo"
+                        wide
+                      >
+                        <div className="flex flex-col gap-1.5 w-full">
+                          <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30 w-fit">
+                            {KIND_OPTIONS.map((opt) => {
+                              const active = itemKind === opt.kind;
+                              const reason = active ? null : kindDisabledReason(opt.kind);
+                              const disabled = !!reason;
+                              return (
+                                <button
+                                  key={opt.kind}
+                                  type="button"
+                                  disabled={disabled}
+                                  onClick={() => setKind(opt.kind)}
+                                  aria-pressed={active}
+                                  title={reason ?? opt.hint}
+                                  className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border ${
+                                    active
+                                      ? opt.activeCls
+                                      : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                                  } ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+                                >
+                                  {opt.icon}
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {hasSubActivities && (
+                            <span className="text-[10.5px] text-primary flex items-center gap-1 min-w-0" title="Este item agrupa subitens — por isso é uma Fase/Entrega. Horas e custo são somados dos filhos (veja a aba Subatividades).">
+                              <Layers className="w-3 h-3 shrink-0" />
+                              <span className="truncate">Agrupa {ownSubActivities.length} subitem(ns) — horas e custo somados dos filhos.</span>
+                            </span>
+                          )}
+                        </div>
+                      </PropertyRow>
+                    );
+                  })()}
+  
+                  {/* Dependências (predecessoras/sucessoras) — SEMPRE visível.
+                      Era um campo opcional colapsado chamado "Relações": ficava
+                      escondido justamente de quem ainda não tinha criado nenhuma,
+                      ou seja, quem mais precisava descobrir que o recurso existe. */}
+                  {projectId && (
+                    <div className="min-w-0 sm:col-span-2">
+                      <PropertyRow
+                        wide
+                        iconClassName="text-primary"
+                        icon={<Link2 className="w-3.5 h-3.5" />}
+                        label={relationsCount > 0 ? `Dependências (${relationsCount})` : "Dependências"}
+                      >
+                        <ActivityRelationsInline
+                          activityId={act.id}
+                          projectId={projectId}
+                          onCountChange={setRelationsCount}
+                          onChanged={() => {
+                            if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+                            onActivityUpdated();
+                          }}
+                        />
+                      </PropertyRow>
+                    </div>
+                  )}
+  
+                  {/* Código EAP/WBS (opcional — colapsa quando vazio) */}
+                  {showWbs && (
+                  <PropertyRow iconClassName="text-primary" icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
+                    <div className="flex flex-col gap-1 w-full">
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          value={formData.wbs_code}
+                          onChange={(e) => setFormData({ ...formData, wbs_code: e.target.value })}
+                          placeholder="Digite ou gere automaticamente"
+                          className={cn(
+                            "h-7 text-xs font-mono flex-1",
+                            formData.wbs_code && !/^\d+(\.\d+){0,6}$/.test(formData.wbs_code.trim()) && "border-destructive"
+                          )}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={formData.wbs_code.trim() ? "ghost" : "outline"}
+                          onClick={handleAutoWbs}
+                          disabled={generatingWbs}
+                          className={cn(
+                            "h-7 px-2.5 text-xs gap-1.5 shrink-0",
+                            !formData.wbs_code.trim() && "text-primary border-primary/40 bg-primary/5 hover:bg-primary/10"
+                          )}
+                          title="Gerar o próximo código com base no item pai (ou fase) e nos irmãos. Fase/Entrega agrupa (qualquer nível); Atividade e Marco são folhas. Formato por posição: 1, 1.1, 1.1.1…"
+                        >
+                          <Wand2 className="w-3.5 h-3.5" />
+                          {formData.wbs_code.trim() ? "Regerar" : "Gerar"}
+                        </Button>
+                      </div>
+                    </div>
+                  </PropertyRow>
+                  )}
+  
+                </FieldBand>
+  
+                {/* ---- FAIXA 2: QUEM E QUANDO (líder, prioridade, prazo) ---- */}
+                <FieldBand step={2} title="Quem e quando">
+                  {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
+                  <PropertyRow iconClassName="text-primary" icon={<User className="w-3.5 h-3.5" />} label="Líder">
+                    <div className="w-full">
+                      <PersonCombobox
+                        people={allProfiles}
+                        value={allProfiles.find((m) => m.full_name === formData.assigned_to)?.id ?? null}
+                        placeholder="Sem líder"
+                        onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
+                        onClear={() => setFormData({ ...formData, assigned_to: "" })}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </PropertyRow>
+  
+                  {/* Prioridade — método GUT.
+                      Colapsa em meia coluna quando "Pendente" (chip discreto); ao
+                      definir G×U×T, expande para linha inteira com o badge completo. */}
+                  {(() => {
+                    // Cor do ícone do rótulo = cor do nível GUT (dá vida à informação).
+                    const gutLevel = gutLabel(gutScore(formData.gravity, formData.urgency, formData.tendency));
+                    const gutIconColor: Record<GutLevel, string> = {
+                      pendente: "text-muted-foreground/70",
+                      baixa: "text-emerald-500",
+                      media: "text-amber-500",
+                      alta: "text-orange-500",
+                      critica: "text-red-500",
+                      urgente: "text-fuchsia-500",
+                    };
+                    return (
+                      <PropertyRow iconClassName={gutIconColor[gutLevel]} icon={<Flag className="w-3.5 h-3.5" />} label="Prioridade (GUT)">
+                        {/* A dica sai de DENTRO do controle (onde inchava o campo
+                            com "Clique para definir G × U × T") e vira nota abaixo. */}
+                        <div className="w-full min-w-0 flex flex-col gap-1">
+                          <GutPriorityField
+                            gravity={formData.gravity}
+                            urgency={formData.urgency}
+                            tendency={formData.tendency}
+                            onChange={(v) => setFormData({ ...formData, ...v })}
+                            buttonClassName="h-8 w-full px-2.5 text-xs"
+                          />
+                          {gutLevel === "pendente" && (
+                            <span className="text-[10.5px] text-muted-foreground">
+                              Defina Gravidade × Urgência × Tendência para calcular a prioridade.
+                            </span>
+                          )}
+                        </div>
+                      </PropertyRow>
+                    );
+                  })()}
+  
+                  {/* Datas — planejado e execução real na MESMA linha.
+                      Meia coluna por padrão (Início→Vencimento cabe); só ocupa a
+                      linha inteira quando o bloco de datas reais está expandido. */}
+                  {/* Sempre em linha inteira: com as 4 datas abertas, meia coluna
+                      espremia cada campo até ficarem ilegíveis. Planejado e real
+                      passam a ocupar FILEIRAS próprias, uma sobre a outra. */}
+                  <PropertyRow
+                    wide
+                    iconClassName="text-primary"
+                    icon={<Calendar className="w-3.5 h-3.5" />}
+                    label={formData.is_milestone ? "Data" : "Prazo"}
+                  >
+                    <div className="flex flex-col gap-2 w-full min-h-[32px]">
+                      {/* PLANEJADO — chips compactos com calendário */}
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <DateChip
+                          value={formData.is_milestone ? formData.end_date : formData.start_date}
+                          onChange={(v) =>
+                            setFormData(
+                              formData.is_milestone
+                                ? { ...formData, end_date: v }
+                                : { ...formData, start_date: v }
+                            )
+                          }
+                          placeholder={formData.is_milestone ? "Data do marco" : "Início"}
+                          tooltip={formData.is_milestone ? "Definir data do marco" : "Definir data de início"}
+                          invalid={dateRangeInvalid}
+                        />
+                        {!formData.is_milestone && (
+                          <>
+                            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+                            <DateChip
+                              value={formData.end_date}
+                              onChange={(v) => setFormData({ ...formData, end_date: v })}
+                              placeholder="Vencimento"
+                              tooltip="Definir data de vencimento"
+                              invalid={dateRangeInvalid}
+                            />
+                          </>
+                        )}
+                        {dateRangeInvalid && (
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center justify-center text-destructive">
+                                  <AlertTriangle className="w-4 h-4" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-[260px] text-xs">
+                                Datas inconsistentes: a data de início é posterior à data de término.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {(startDivergence || endDivergence) && (
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button type="button" className="inline-flex items-center justify-center text-amber-600 dark:text-amber-400 hover:opacity-80">
+                                  <AlertTriangle className="w-4 h-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-[260px] text-xs">
+                                Divergência com subatividades:
+                                {startDivergence && minSubStart && (
+                                  <div>• sub começa em <strong>{minSubStart.split("-").reverse().join("/")}</strong> (antes do pai)</div>
+                                )}
+                                {endDivergence && maxSubEnd && (
+                                  <div>• sub termina em <strong>{maxSubEnd.split("-").reverse().join("/")}</strong> (depois do pai)</div>
+                                )}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
+  
+                      {/* EXECUÇÃO REAL — na MESMA linha, à direita do planejado */}
+                      {!formData.is_milestone && (() => {
+                        const hasReal = !!(formData.actual_start_date || formData.actual_end_date);
+                        const expanded = showRealDates || hasReal;
+                        if (!expanded) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setShowRealDates(true)}
+                              title="Registrar as datas em que a atividade realmente começou e terminou"
+                              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors self-start"
+                            >
+                              <Plus className="w-3 h-3" /> datas reais
+                            </button>
+                          );
+                        }
+                        const v = endVariance(formData.actual_end_date || null, (act as any)?.baseline_end_date, formData.end_date);
+                        const tone = v !== null ? varianceTone(v) : null;
+                        // Sem datas preenchidas o X apenas recolhe. Com datas, ele
+                        // seria a unica forma de destruir o dado (o preenchimento
+                        // automatico foi removido), entao confirma antes.
+                        const closeReal = () => {
+                          if (hasReal) {
+                            const ok = window.confirm(
+                              "Limpar as datas reais preenchidas? Esta acao apaga inicio e termino reais."
+                            );
+                            if (!ok) return;
+                            setFormData((prev) => ({ ...prev, actual_start_date: "", actual_end_date: "" }));
+                          }
+                          setShowRealDates(false);
+                        };
+                        return (
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs pt-2 border-t border-dashed border-border/70">
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">Real</span>
+                            <DateChip
+                              value={formData.actual_start_date}
+                              onChange={(v) => setFormData({ ...formData, actual_start_date: v })}
+                              placeholder="Início real"
+                              tooltip="Definir início real"
+                            />
+                            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <DateChip
+                              value={formData.actual_end_date}
+                              onChange={(v) => setFormData({ ...formData, actual_end_date: v })}
+                              placeholder="Término real"
+                              tooltip="Definir término real"
+                            />
+                            {v !== null && tone && (
+                              <span className={cn("px-1.5 py-0 rounded border text-[10px] font-mono shrink-0", varianceClasses(tone))}
+                                    title={(act as any)?.baseline_end_date ? "Real − Linha de Base" : "Real − Planejado"}>
+                                {v > 0 ? `${Math.abs(v)}d de atraso` : v < 0 ? `${Math.abs(v)}d adiantado` : "no prazo"}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={closeReal}
+                              title={hasReal ? "Limpar datas reais" : "Fechar"}
+                              className="text-muted-foreground hover:text-foreground shrink-0"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </PropertyRow>
+  
+                </FieldBand>
+  
+                {/* ---- FAIXA 3: ESFORÇO (tempo, custo, campos opcionais) ---- */}
+                <FieldBand step={3} title="Esforço">
+                  {/* Tempo (opcional — colapsa quando vazio) */}
+                  {showHours && (
+                    <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {hasSubActivities ? (
+                          // Com subatividades: horas do pai = soma das subs (rollup,
+                          // somente-leitura). Sem campo concorrente => sem divergência.
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="h-7 px-2 text-xs w-[140px] flex items-center rounded-md border border-input bg-muted/40 text-muted-foreground cursor-default">
+                                  {formatHoursDisplay(subHoursTotal) || "0h"}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-[240px] text-xs">
+                                Somado automaticamente das subatividades. Edite as horas em cada subatividade.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <>
+                            {/* Input livre (2:05 / 2h 30m / 90m) + menu compacto rolável */}
+                            <div className="relative w-[140px]">
+                              <Input
+                                placeholder="Ex: 2:05, 2h 30m, 90m"
+                                value={formData.hours}
+                                onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
+                                onFocus={(e) => e.currentTarget.select()}
+                                className="h-7 pl-2 pr-7 text-xs"
+                              />
+                              <Popover open={hoursPopoverOpen} onOpenChange={setHoursPopoverOpen}>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    aria-label="Escolher tempo"
+                                    className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:bg-muted"
+                                  >
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent align="end" sideOffset={4} className="w-[180px] p-1">
+                                  <div className="max-h-56 overflow-y-auto">
+                                    {HOURS_PRESETS.map((p) => {
+                                      const active = parseHoursInput(formData.hours) === parseHoursInput(p.value);
+                                      return (
+                                        <button
+                                          key={p.value}
+                                          type="button"
+                                          onClick={() => { setFormData({ ...formData, hours: p.value }); setHoursPopoverOpen(false); }}
+                                          className={`w-full flex items-baseline justify-between gap-2 px-2.5 py-1.5 rounded-md text-left transition-colors ${
+                                            active ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                                          }`}
+                                        >
+                                          <span className="text-xs font-medium tabular-nums">{p.value}</span>
+                                          <span className="text-[11px] text-muted-foreground">{p.label}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                            {/* Confirmação em linguagem natural do que foi digitado */}
+                            {(() => {
+                              const natural = formatHoursNatural(parseHoursInput(formData.hours));
+                              if (!natural) return null;
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-1.5 py-0.5">
+                                  <CheckCircle2 className="w-3 h-3" /> {natural}
+                                </span>
+                              );
+                            })()}
+                          </>
+                        )}
+                        {(plannedHours > 0 || consumedHours > 0) && (
+                          <span
+                            className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${
+                              // Vermelho só quando o consumo ESTOURA o planejado.
+                              // Consumir menos ou igual é normal => neutro.
+                              plannedHours > 0 && consumedHours > plannedHours
+                                ? "text-destructive border-destructive/40 bg-destructive/10"
+                                : "text-muted-foreground border-border bg-muted/30"
+                            }`}
+                            title={
+                              consumedFromTrackedEntries
+                                ? "Tempo real somado de apontamentos (time_entries)"
+                                : subActivities.length > 0
+                                ? "Consumido automático das subatividades concluídas"
+                                : "Consumido automático da atividade concluída"
+                            }
+                          >
+                            Consumidas ({consumedFromTrackedEntries ? "real" : "auto"}): {formatHoursDisplay(consumedHours) || "0h"} / Planejadas: {formatHoursDisplay(plannedHours) || "0h"}
+                          </span>
+                        )}
+                      </div>
+                    </PropertyRow>
+                  )}
+  
+                  {/* Custo (opcional — colapsa quando vazio) */}
+                  {showCost && (
+                    <PropertyRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Custo">
+                      {hasSubActivities ? (
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="h-7 px-2 text-xs w-[140px] flex items-center rounded-md border border-input bg-muted/40 text-muted-foreground cursor-default">
+                                {subCostTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="max-w-[240px] text-xs">
+                              Somado automaticamente das subatividades. Edite o custo em cada subatividade.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <CurrencyInput
+                          step="0.01"
+                          min="0"
+                          value={formData.cost}
+                          onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+                          className="h-7 pl-8 pr-2 py-0 text-xs w-[140px]"
+                        />
+                      )}
+                    </PropertyRow>
+                  )}
+                  {/* "+ Adicionar campo": um único botão que abre um menu com os
+                      campos opcionais ocultos (padrão ClickUp/Jira). Só aparece se
+                      houver algo a adicionar. */}
+                  {/* Tracejado cinza sobre fundo claro tinha a aparência exata de
+                      um controle DESABILITADO — e é a porta de entrada de Tempo,
+                      Custo e Código EAP. Ganha a cor da plataforma e diz o que falta. */}
+                  {hiddenChips.length > 0 && (
+                    <div className="sm:col-span-2">
+                      <Popover open={addFieldOpen} onOpenChange={setAddFieldOpen}>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/5 px-3 h-8 text-xs font-medium text-primary hover:bg-primary/10 hover:border-primary/60 transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Adicionar campo: {hiddenChips.map((c) => c.label).join(" · ")}
+                            <ChevronDown className="w-3 h-3 opacity-70" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-52 p-1" align="start">
+                          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                            Campos disponíveis
+                          </p>
+                          {hiddenChips.map((chip) => (
+                            <button
+                              key={chip.key}
+                              type="button"
+                              onClick={() => { revealField(chip.key); setAddFieldOpen(false); }}
+                              className="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors"
+                            >
+                              <span className="text-muted-foreground">{chip.icon}</span>
+                              {chip.label}
+                            </button>
+                          ))}
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  )}
+                </FieldBand>
+              </div>
+              );
+            })()}
 
           <div className="space-y-2 min-w-0">
             <div className="flex items-center justify-between">
@@ -2688,7 +2735,7 @@ export const EditActivityDialog = ({
 
           {/* ========= PAINEL LATERAL (direita) — CONVERSA ========= */}
           {act && (
-            <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-3 lg:max-h-[calc(95vh-180px)]">
+            <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-3 lg:sticky lg:top-0 lg:h-[calc(95vh-150px)]">
               {/* Card com identidade própria: a Conversa é o espaço de interação do time. */}
               <div className="rounded-xl border border-primary/25 bg-card flex-1 min-h-0 flex flex-col overflow-hidden shadow-sm">
                 {/* Faixa de destaque na cor primária */}
