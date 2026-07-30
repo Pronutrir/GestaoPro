@@ -771,12 +771,14 @@ function KanbanCard({
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`relative bg-card border border-border rounded-lg ${d.card} shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`}
+            className={`relative bg-card border border-border rounded-lg ${d.card} ${dragListeners ? "pl-[18px]" : ""} shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`}
             onClick={onEdit}
           >
             {/* Alça de arrastar FORA do fluxo: como coluna fixa ela roubava
                 ~20px de largura de todo card, o tempo todo, para uma ação que
-                só importa no hover. Agora flutua sobre a borda esquerda. */}
+                só importa no hover. Flutua sobre a borda esquerda; o card
+                reserva 18px (pl acima) só quando arrastável, senão a alça
+                cobria o nº EAP no hover. */}
             {dragListeners ? (
               <button
                 className="absolute left-0 top-0 bottom-0 w-4 flex items-start justify-center pt-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
@@ -2033,10 +2035,18 @@ function SortableColumn({
       <div key={activity.id} className={dCol.colBodyGap}>
         {isMirrorParent ? (
           <KanbanCard {...commonCardProps} readOnlyPreview />
-        ) : depth === 0 ? (
+        ) : depth === 0 ||
+          (stageActivityIds.has(activity.id) &&
+            activity.parent_id &&
+            stageActivityIds.has(activity.parent_id)) ? (
+          // Raiz OU filho aninhado cuja cadeia está NESTA coluna: arrastável.
+          // A SortableContext da coluna já lista todos os ids do stage, então o
+          // filho só precisa montar o useSortable. A condição do pai evita id
+          // duplicado: filho de pai em OUTRA coluna já aparece como card raiz
+          // aqui (com breadcrumb), e duas instâncias sortable do mesmo id
+          // quebram o dnd-kit.
           <SortableKanbanCard {...commonCardProps} />
         ) : (
-          // Filhos aninhados não são sortable (drag é por raiz de coluna).
           <KanbanCard {...commonCardProps} />
         )}
         {expanded && (inlineChildren.length > 0 || externalChildren.length > 0) && (
@@ -3955,19 +3965,11 @@ export const ActivityKanban = ({
     const currentStageId = draggedActivity?.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
     if (targetStageId === currentStageId) return;
 
-    // Regra container: atividade-pai (com subatividades) não pode ser movida manualmente.
-    // Ela só transita por automação quando todas as subs forem concluídas/reabertas.
-    // Admin pode sobrescrever.
-    const childCount = subActivityCounts.get(activityId) || 0;
-    if (childCount > 0 && !isAdmin) {
-      toast({
-        title: "Atividade-pai bloqueada para mover",
-        description:
-          "Esta atividade é um container de subatividades. Ela move automaticamente para Final quando todas as subs estiverem concluídas.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // A antiga "regra container" (pai com subatividades só movia por automação,
+    // salvo admin) saiu: o menu "Mover para →" nunca a aplicou, então o mesmo
+    // card que o menu movia o arraste recusava — incoerência pura. A automação
+    // que leva o pai para Final quando as subs concluem continua valendo; o
+    // movimento manual apenas convive com ela, como sempre conviveu via menu.
 
     const stage = stages.find((s) => s.id === targetStageId);
 
