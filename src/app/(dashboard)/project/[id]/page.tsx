@@ -22,7 +22,6 @@ import { ActivityKanban } from "@/components/ActivityKanban";
 import { BacklogSection } from "@/components/BacklogSection";
 import { QuickCreateActivity } from "@/components/QuickCreateActivity";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
-import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 import { MeetingsManager } from "@/components/MeetingsManager";
 
 import { RisksManager } from "@/components/RisksManager";
@@ -188,7 +187,6 @@ export default function ProjectDetailsPage() {
   const [createTaskStageId, setCreateTaskStageId] = useState<string | null>(null);
   const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
   const [createTaskParentId, setCreateTaskParentId] = useState<string | null>(null);
-  const [showAddPhase, setShowAddPhase] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
@@ -1698,7 +1696,6 @@ export default function ProjectDetailsPage() {
                   : !canWrite ? "Seu acesso a este projeto é somente leitura."
                   : "Você não tem permissão para arquivar atividades neste projeto."
                 }
-                onCreatePhase={() => setShowAddPhase(true)}
                 hasActiveFilters={!!listSearch || listStatusFilter !== "all" || listPriorityFilter !== "all"}
               />
             </TabsContent>
@@ -1757,13 +1754,6 @@ export default function ProjectDetailsPage() {
             projectLocked={isProjectConcluded}
           />
         )}
-        <CreatePhaseDialog
-          open={showAddPhase}
-          onOpenChange={setShowAddPhase}
-          projectId={id!}
-          existingPhasesCount={phases.length}
-          onCreated={() => fetchProjectData()}
-        />
         <QuickCreateActivity
           open={showQuickCreate}
           onOpenChange={setShowQuickCreate}

@@ -75,14 +75,13 @@ interface BacklogSectionProps {
    *  Quando vem preenchido, o botão fica DESABILITADO com este texto no
    *  tooltip em vez de sumir — some sem explicação vira "não consigo excluir". */
   deleteBlockedReason?: string;
-  onCreatePhase?: () => void;
   hasActiveFilters?: boolean;
 }
 
 export const BacklogSection = ({
   projectId, activities, phases,
   onEditActivity, onDeleteActivity, onToggleActivity,
-  onDataChanged, isAdmin = false, deleteBlockedReason, onCreatePhase, hasActiveFilters,
+  onDataChanged, isAdmin = false, deleteBlockedReason, hasActiveFilters,
 }: BacklogSectionProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -836,6 +835,53 @@ export const BacklogSection = ({
     );
   };
 
+  /**
+   * Arquiva UMA fase (soft-delete, igual ao resto do sistema).
+   *
+   * Faltava: o cabeçalho da fase real só tinha "+ Tarefa", enquanto a fase
+   * virtual (atividade com item_type='fase') já tinha o botão de arquivar. Quem
+   * criasse uma fase ficava sem saída — a única opção era "Arquivar todas as
+   * fases", que é tudo ou nada.
+   *
+   * As atividades da fase NÃO são apagadas: perdem o vínculo e caem em
+   * "Sem fase", que é reversível. Apagar tarefa junto com o agrupador seria
+   * destrutivo demais para uma ação de um clique.
+   */
+  const handleDeletePhase = async (phaseId: string, phaseTitle: string) => {
+    const acts = topLevelByPhase.get(phaseId) || [];
+    const ok = await appConfirm({
+      title: `Arquivar a fase "${phaseTitle}"?`,
+      description: acts.length > 0
+        ? `${acts.length} ${acts.length === 1 ? "tarefa vai" : "tarefas vão"} para "Sem fase". Nada é excluído — dá para restaurar em Arquivo.`
+        : "A fase vai para o Arquivo e pode ser restaurada de lá.",
+      confirmText: "Arquivar fase",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    // Solta as tarefas antes de arquivar: se a fase sumir com elas ainda
+    // apontando, elas somem da tela sem estarem arquivadas.
+    if (acts.length > 0) {
+      const { error: unlinkError } = await supabase
+        .from("activities").update({ phase_id: null } as any).eq("phase_id", phaseId);
+      if (unlinkError) {
+        toast({ title: "Erro ao soltar as tarefas da fase", description: unlinkError.message, variant: "destructive" });
+        return;
+      }
+    }
+
+    const { error } = await supabase
+      .from("phases")
+      .update({ is_trashed: true, trashed_at: new Date().toISOString() } as any)
+      .eq("id", phaseId);
+    if (error) {
+      toast({ title: "Erro ao arquivar a fase", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Fase arquivada", description: "Pode ser restaurada em Arquivo." });
+    onDataChanged();
+  };
+
   const renderPhaseGroup = (phaseId: string | null, phaseTitle: string) => {
     const key = phaseId || "none";
     const acts = topLevelByPhase.get(key) || [];
@@ -880,6 +926,22 @@ export const BacklogSection = ({
             >
               <Plus className="w-3.5 h-3.5" /> Tarefa
             </Button>
+            {/* Só na fase real: "Sem fase" é grupo virtual, não existe no banco
+                e portanto não há o que arquivar. */}
+            {phaseId && (
+              <button
+                type="button"
+                disabled={!isAdmin}
+                className={cn(
+                  "h-7 w-7 flex items-center justify-center rounded",
+                  isAdmin ? "text-destructive hover:bg-destructive/10" : "text-muted-foreground/40 cursor-not-allowed",
+                )}
+                title={isAdmin ? "Arquivar fase (as tarefas vão para \"Sem fase\")" : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
+                onClick={(e) => { e.stopPropagation(); if (isAdmin) handleDeletePhase(phaseId, phaseTitle); }}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -1146,18 +1208,17 @@ export const BacklogSection = ({
 
       {/* Phase groups — tabela única com cabeçalho de colunas no topo */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">
+        {/* Sem botão de criar fase aqui: a entrada do backlog é "Nova
+            Atividade" (ou importar a EAP, que já cria as fases). Fase avulsa
+            criada antes de existir qualquer tarefa só produzia um agrupador
+            vazio que o usuário depois não sabia como remover. */}
         {phases.length === 0 && backlogActs.length === 0 && (
           <div className="p-8 text-center">
             <Inbox className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-            <p className="text-muted-foreground text-sm">Nenhuma fase ou atividade ainda</p>
-            <p className="text-muted-foreground/60 text-xs mt-1 mb-4">
-              Crie uma fase para começar a organizar pacotes e atividades
+            <p className="text-muted-foreground text-sm">Nenhuma atividade ainda</p>
+            <p className="text-muted-foreground/60 text-xs mt-1">
+              Use <span className="font-medium">Nova Atividade</span> para começar, ou <span className="font-medium">Importar EAP</span> para trazer a estrutura pronta.
             </p>
-            {onCreatePhase && (
-              <Button type="button" size="sm" onClick={onCreatePhase} className="gap-1.5">
-                <Plus className="w-3.5 h-3.5" /> Criar primeira fase
-              </Button>
-            )}
           </div>
         )}
 
