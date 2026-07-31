@@ -43,34 +43,77 @@ const parseFlexible = (text: string): TreeNode[] => {
   const rawLines = text.split("\n").map((l) => l.replace(/\t/g, "  ")).filter((l) => l.trim().length > 0);
   if (rawLines.length === 0) return [];
 
-  // 1) Se a MAIORIA das linhas tem código numérico, usa o modo "código".
-  const numRe = /^\s*(\d+(?:\.\d+)*)\.?\s+(.+)$/;
-  const numbered = rawLines.filter((l) => numRe.test(l));
-  const useNumbered = numbered.length >= Math.ceil(rawLines.length * 0.6);
+  // Aceita "1.1 Título", "1.1. Título", "1.1) Título" e "1.1 - Título".
+  // O separador opcional depois do código evita que uma EAP colada do Word,
+  // que costuma usar ")" ou "-", deixe de ser reconhecida como numerada.
+  const numRe = /^\s*(\d+(?:\.\d+)*)\s*[.)]?\s*[-–—]?\s+(.+)$/;
 
   type Raw = { indent: number; title: string; explicitCode: string | null };
   const raws: Raw[] = rawLines.map((line) => {
     const indent = line.length - line.trimStart().length;
     let body = line.trim();
     let explicitCode: string | null = null;
-    const m = body.match(/^(\d+(?:\.\d+)*)\.?\s+(.+)$/);
+    const m = body.match(numRe);
     if (m) { explicitCode = m[1]; body = m[2].trim(); }
     // remove marcadores de bullet no início
     body = body.replace(/^[•\-–—*•]+\s*/, "").trim();
     return { indent, title: body, explicitCode };
   }).filter((r) => r.title.length > 0);
 
+  // Decide o modo pelo que REALMENTE foi extraído, não por um segundo teste
+  // sobre o texto cru. E o critério é "existe hierarquia numérica de verdade"
+  // (algum código com ponto), não uma maioria de 60%: uma EAP numerada colada
+  // junto com linhas de observação caía no modo indentação e, sem recuo no
+  // texto, virava uma lista plana — todos os itens irmãos na raiz, com a
+  // numeração original descartada e recriada como 1,2,3… Era o defeito que
+  // achatava a estrutura inteira na importação.
+  const withCode = raws.filter((r) => r.explicitCode);
+  const useNumbered =
+    withCode.length > 0 &&
+    withCode.some((r) => r.explicitCode!.includes(".")) &&
+    withCode.length >= Math.ceil(raws.length * 0.3);
+
   const nodes: TreeNode[] = [];
 
   if (useNumbered) {
     // Modo código: a profundidade vem do número de segmentos do código.
+    // Linha sem código é continuação do título anterior (título que quebrou em
+    // duas linhas ao ser colado). Antes ela era simplesmente descartada e o
+    // texto sumia da importação sem aviso.
     for (const r of raws) {
-      if (!r.explicitCode) continue; // ignora linhas sem código neste modo
+      if (!r.explicitCode) {
+        const prev = nodes[nodes.length - 1];
+        if (prev) prev.title = `${prev.title} ${r.title}`.trim();
+        continue;
+      }
       const parts = r.explicitCode.split(".");
       const depth = parts.length;
       const parentCode = depth > 1 ? parts.slice(0, depth - 1).join(".") : null;
       nodes.push({ code: r.explicitCode, title: r.title, depth, role: "atividade", parentCode });
     }
+
+    // Pai ausente (colaram só um ramo, ex.: começa em 2.3.1 sem 2.3): cria o
+    // ancestral que falta para segurar os filhos, senão o item nasce solto na
+    // raiz e a hierarquia se perde. Título provisório, para renomear depois.
+    const existing = new Set(nodes.map((n) => n.code));
+    const missing: TreeNode[] = [];
+    for (const n of nodes) {
+      let code = n.parentCode;
+      while (code && !existing.has(code) && !missing.some((m) => m.code === code)) {
+        const parts = code.split(".");
+        missing.push({
+          code,
+          title: `(sem título) ${code}`,
+          depth: parts.length,
+          role: "fase",
+          parentCode: parts.length > 1 ? parts.slice(0, -1).join(".") : null,
+        });
+        code = parts.length > 1 ? parts.slice(0, -1).join(".") : null;
+      }
+    }
+    nodes.push(...missing);
+    // Reordena por código para a árvore sair na ordem natural da EAP.
+    nodes.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   } else {
     // Modo indentação/bullets: a profundidade vem do recuo. Gera códigos.
     // Pilha de ancestrais: cada nível guarda { indent, count, code }.
@@ -228,7 +271,10 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       for (const phase of phases) {
         const { data, error } = await supabase.from("phases").insert({
           project_id: projectId,
-          title: `${phase.code} ${phase.title}`,
+          // Título limpo: o código vive em wbs_code. Concatenar os dois gravava
+          // a numeração dentro do texto, então renumerar a EAP exigiria reescrever
+          // o título de cada item à mão.
+          title: phase.title,
           display_order: phaseOrder++,
           wbs_code: phase.code,
         }).select("id").single();
@@ -260,7 +306,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         const itemType = node.role === "fase" ? "fase" : "atividade";
         const basePayload: any = {
           project_id: projectId,
-          title: `${node.code} ${node.title}`,
+          // Idem às fases: título limpo, código em wbs_code.
+          title: node.title,
           phase_id: phaseId,
           parent_id: parentId,
           display_order: phaseOrderCounter[phaseKey]++,
