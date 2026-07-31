@@ -216,67 +216,41 @@ export const ActivityRegistro = ({
     notify(body, extractMentions(body));
   };
 
-  // Notifica: pessoas @citadas + responsável/participantes. Resolve nome→id.
+  /**
+   * Notifica citados + responsável + participantes.
+   *
+   * Via API com service role: o insert direto daqui não gravava — nenhuma linha
+   * aparecia, mesmo com a policy permitindo INSERT autenticado e o mesmo payload
+   * funcionando no servidor. O mesmo padrão da leitura e do mark-read.
+   *
+   * O servidor também resolve QUEM notificar: aqui a lista de perfis é a que o
+   * RLS deixa o usuário ler, então alguém escondido simplesmente não era
+   * avisado, sem erro nenhum.
+   */
   const notify = async (body: string, mentioned: Person[]) => {
     try {
-      const { data: act } = await supabase
-        .from("activities").select("assigned_to, participants, title, project_id")
-        .eq("id", activityId).maybeSingle();
-      const names = new Set<string>();
-      mentioned.forEach((p) => names.add(p.full_name));
-      if (act) {
-        if ((act as any).assigned_to) names.add((act as any).assigned_to);
-        const parts = (act as any).participants;
-        if (Array.isArray(parts)) parts.forEach((p: any) => p && names.add(p));
-      }
-      names.delete(authorName);
-      if (names.size === 0) return;
-
-      // Resolve nome→id tolerante a acento/caixa/espaços, para não perder avisos.
-      //
-      // Um nome pode corresponder a MAIS DE UM perfil — a base tem "Williame
-      // Correia de Lima" duas vezes, ambos ativos. Com um Map de nome→id, o
-      // segundo sobrescrevia o primeiro e só uma das contas era avisada, sem
-      // nada indicar que a outra ficou de fora. Aqui o nome resolve para todos
-      // os ids que casam.
-      const idsByName = new Map<string, string[]>();
-      for (const p of people) {
-        const k = normName(p.full_name);
-        idsByName.set(k, [...(idsByName.get(k) || []), p.id]);
-      }
-      const ids = Array.from(new Set(
-        Array.from(names).flatMap((n) => idsByName.get(normName(n)) || []),
-      ));
-      if (ids.length === 0) return;
-
-      // Idem para decidir quem foi citado: o mesmo nome pode render vários ids.
-      const mentionedIds = new Set(
-        mentioned.flatMap((p) => idsByName.get(normName(p.full_name)) || [p.id]),
-      );
-      const title = (act as any)?.title ?? "atividade";
-      const rows = ids.map((uid) => ({
-        target_user_id: uid,
-        activity_id: activityId,
-        project_id: (act as any)?.project_id ?? projectId ?? null,
-        type: mentionedIds.has(uid) ? "activity_mention" : "activity_note",
-        title: mentionedIds.has(uid) ? `${authorName} citou você em "${title}"` : `Novo registro em "${title}"`,
-        message: `${authorName}: ${body.slice(0, 120)}`,
-      }));
-      const { error } = await (supabase as any).from("notifications").insert(rows);
-      // Falha de notificação não bloqueia o envio da mensagem — a mensagem já
-      // está salva e reenviar seria pior. Mas o silêncio anterior escondia o
-      // problema: quem citou achava que o outro tinha sido avisado, e não tinha.
-      // Agora o aviso é visível, com a causa junto.
-      if (error) {
-        console.warn("[ActivityRegistro] falha ao inserir notificações:", error);
+      const res = await fetch("/api/notifications/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          activityId,
+          projectId: projectId ?? null,
+          body,
+          mentionedNames: mentioned.map((p) => p.full_name),
+        }),
+      });
+      if (!res.ok) {
+        // Não bloqueia o envio: a mensagem já está salva e reenviar seria pior.
+        // Mas o silêncio anterior escondia o problema — quem citava achava que
+        // a pessoa tinha sido avisada, e não tinha.
+        const detail = await res.json().then((b) => b?.error).catch(() => null);
         toast({
           title: "Mensagem enviada, mas sem aviso",
-          description: `Não foi possível notificar ${ids.length === 1 ? "a pessoa citada" : "as pessoas citadas"}: ${error.message}`,
+          description: detail || "Não foi possível notificar as pessoas citadas.",
           variant: "destructive",
         });
       }
     } catch (e: any) {
-      console.warn("[ActivityRegistro] erro inesperado ao notificar:", e);
       toast({
         title: "Mensagem enviada, mas sem aviso",
         description: e?.message || "Falha inesperada ao notificar.",
