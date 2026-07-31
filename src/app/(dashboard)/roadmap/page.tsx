@@ -79,6 +79,30 @@ const Roadmap = () => {
         scope: item.minimo_entregavel || null,
         due_date: item.data_necessaria || null,
         sponsor: item.solicitante_nome || null,
+        // O TAP lê de charter_data, não das colunas nativas. Sem isto a aba
+        // nasceria vazia mesmo com os campos do projeto preenchidos, e tudo
+        // teria de ser redigitado — que é justamente o que a herança evita.
+        charter_data: {
+          __charter: true,
+          sponsor: item.solicitante_nome || "",
+          justification: justificativa || "",
+          // O que veio da solicitação, dito como origem: quem abrir o TAP
+          // precisa saber que isto foi herdado e merece revisão.
+          assumptions: item.observacoes || "",
+          constraints: item.motivo_prazo || "",
+          smart_specific: item.title || "",
+          smart_measurable: item.resultado_esperado || "",
+          smart_temporal: item.data_necessaria
+            ? `Necessário até ${new Date(item.data_necessaria).toLocaleDateString("pt-BR")}`
+            : "",
+          approvals: [],
+          benefits_table: [],
+          approved_at: null,
+          approved_by: null,
+          approved_by_name: null,
+          // Rastreabilidade: de qual demanda este projeto nasceu.
+          origin_roadmap_item_id: item.id,
+        },
       };
 
       // Degrada se alguma coluna não existir no ambiente (mesmo padrão do

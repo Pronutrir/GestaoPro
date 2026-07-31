@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { CharterFlowPanel, type CharterStatus } from "@/components/charter/CharterFlowPanel";
+import { OrigemDemanda } from "@/components/charter/OrigemDemanda";
 import {
   FileText, Save, ClipboardList, CheckCircle2, Ban, FileDown,
 } from "lucide-react";
@@ -472,6 +473,9 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           ) : null}
         </div>
       </div>
+
+      {/* De qual demanda este projeto nasceu (só se veio do roadmap). */}
+      <OrigemDemanda projectId={projectId} />
 
       {/* Circulação para aprovação: estado, aprovadores e trilha. */}
       <div className="print:hidden">
