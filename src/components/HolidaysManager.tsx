@@ -23,6 +23,7 @@ export const HolidaysManager = () => {
   const [list, setList] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [editing, setEditing] = useState<Holiday | null>(null);
   const [form, setForm] = useState<{ date?: Date; name: string; is_national: boolean }>({ name: "", is_national: true });
 
@@ -104,7 +105,7 @@ export const HolidaysManager = () => {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Data</Label>
-              <Popover>
+              <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start gap-2">
                     <CalendarIcon className="w-4 h-4" />
@@ -112,7 +113,13 @@ export const HolidaysManager = () => {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={form.date} onSelect={d => setForm({ ...form, date: d })} className={cn("p-3 pointer-events-auto")} />
+                  <Calendar
+                    mode="single"
+                    selected={form.date}
+                    defaultMonth={form.date}
+                    onSelect={d => { setForm({ ...form, date: d }); setDatePopoverOpen(false); }}
+                    className={cn("p-3 pointer-events-auto")}
+                  />
                 </PopoverContent>
               </Popover>
             </div>

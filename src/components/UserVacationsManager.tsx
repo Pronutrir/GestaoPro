@@ -28,6 +28,9 @@ export const UserVacationsManager = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [form, setForm] = useState<{ start?: Date; end?: Date }>({});
+  // Fecham ao escolher o dia (antes ficavam abertos sobre o formulário).
+  const [startOpen, setStartOpen] = useState(false);
+  const [endOpen, setEndOpen] = useState(false);
 
   useEffect(() => {
     supabase.from("profiles").select("id,full_name,email,sector").eq("is_active", true).order("full_name")
@@ -148,7 +151,7 @@ export const UserVacationsManager = () => {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Início</Label>
-              <Popover>
+              <Popover open={startOpen} onOpenChange={setStartOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start gap-2">
                     <CalendarIcon className="w-4 h-4" />
@@ -156,13 +159,13 @@ export const UserVacationsManager = () => {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={form.start} onSelect={d => setForm({ ...form, start: d })} className={cn("p-3 pointer-events-auto")} />
+                  <Calendar mode="single" selected={form.start} defaultMonth={form.start} onSelect={d => { setForm({ ...form, start: d }); setStartOpen(false); }} className={cn("p-3 pointer-events-auto")} />
                 </PopoverContent>
               </Popover>
             </div>
             <div className="space-y-2">
               <Label>Fim</Label>
-              <Popover>
+              <Popover open={endOpen} onOpenChange={setEndOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start gap-2">
                     <CalendarIcon className="w-4 h-4" />
@@ -170,7 +173,7 @@ export const UserVacationsManager = () => {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={form.end} onSelect={d => setForm({ ...form, end: d })} className={cn("p-3 pointer-events-auto")} />
+                  <Calendar mode="single" selected={form.end} defaultMonth={form.end} onSelect={d => { setForm({ ...form, end: d }); setEndOpen(false); }} className={cn("p-3 pointer-events-auto")} />
                 </PopoverContent>
               </Popover>
             </div>

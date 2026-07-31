@@ -1,5 +1,7 @@
 'use client';
+import { useState } from "react";
 import { Calendar as CalendarIcon, X } from "lucide-react";
+import { ptBR } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -49,6 +51,9 @@ const br = (v: string) => {
 
 export function DateChip({ value, onChange, placeholder, tooltip, invalid, disabled }: DateChipProps) {
   const hasValue = !!value;
+  // Controlado para FECHAR ao escolher o dia: sem isto o calendário ficava
+  // aberto por cima do formulário depois de já ter cumprido sua função.
+  const [open, setOpen] = useState(false);
   const chip = (
     <button
       type="button"
@@ -83,13 +88,18 @@ export function DateChip({ value, onChange, placeholder, tooltip, invalid, disab
   // a ref/props que o Popover injeta no botão; do contrário o clique não abre o
   // calendário (bug que afetava os chips vazios, que exibem tooltip).
   const popover = (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{chip}</PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start" side="bottom" sideOffset={4} collisionPadding={12}>
         <Calendar
           mode="single"
+          locale={ptBR}
           selected={toDate(value)}
-          onSelect={(d) => onChange(d ? toStr(d) : "")}
+          defaultMonth={toDate(value)}
+          onSelect={(d) => {
+            onChange(d ? toStr(d) : "");
+            setOpen(false);
+          }}
           initialFocus
           className={cn("p-3 pointer-events-auto")}
         />

@@ -427,6 +427,9 @@ export const EditActivityDialog = ({
   const [newTag, setNewTag] = useState("");
   const [newSubTitle, setNewSubTitle] = useState("");
   const [subActivities, setSubActivities] = useState<Activity[]>([]);
+  // Popover aberto na linha de subatividade (chave `${subId}:${coluna}`) — sem
+  // isto o calendário/seletor ficava aberto depois de escolher o valor.
+  const [openSubPopover, setOpenSubPopover] = useState<string | null>(null);
   const [editingSubActivity, setEditingSubActivity] = useState<Activity | null>(null);
   const [editingSubOpen, setEditingSubOpen] = useState(false);
   // Popover de responsável por subatividade: guarda o id da sub com o popover
@@ -2497,7 +2500,7 @@ export const EditActivityDialog = ({
                           if (colId === "end_date") {
                             const subInvalid = !!sub.start_date && !!sub.end_date && sub.start_date > sub.end_date;
                             return (
-                              <Popover key={colId}>
+                              <Popover key={colId} open={openSubPopover === `${sub.id}:${colId}`} onOpenChange={(o) => setOpenSubPopover(o ? `${sub.id}:${colId}` : null)}>
                                 <PopoverTrigger asChild>
                                   <button
                                     type="button"
@@ -2512,7 +2515,7 @@ export const EditActivityDialog = ({
                                     mode="single"
                                     locale={ptBR}
                                     selected={sub.end_date ? new Date(`${sub.end_date}T12:00:00`) : undefined}
-                                    onSelect={(d) => updateField(d ? localYmd(d) : null)}
+                                    onSelect={(d) => { updateField(d ? localYmd(d) : null); setOpenSubPopover(null); }}
                                     initialFocus
                                     className="p-3 pointer-events-auto"
                                   />
@@ -2530,7 +2533,7 @@ export const EditActivityDialog = ({
                                 })()
                               : "—";
                             return (
-                              <Popover key={colId}>
+                              <Popover key={colId} open={openSubPopover === `${sub.id}:${colId}`} onOpenChange={(o) => setOpenSubPopover(o ? `${sub.id}:${colId}` : null)}>
                                 <PopoverTrigger asChild>
                                   <button
                                     type="button"
@@ -2545,7 +2548,7 @@ export const EditActivityDialog = ({
                                     mode="single"
                                     locale={ptBR}
                                     selected={sub.start_date ? new Date(`${sub.start_date}T12:00:00`) : undefined}
-                                    onSelect={(d) => updateField(d ? localYmd(d) : null)}
+                                    onSelect={(d) => { updateField(d ? localYmd(d) : null); setOpenSubPopover(null); }}
                                     initialFocus
                                     className="p-3 pointer-events-auto"
                                   />
@@ -2595,7 +2598,7 @@ export const EditActivityDialog = ({
                             const stageId = (sub as any).workflow_stage_id || "";
                             const stage = workflowStages.find((s) => s.id === stageId);
                             return (
-                              <Popover key={colId}>
+                              <Popover key={colId} open={openSubPopover === `${sub.id}:${colId}`} onOpenChange={(o) => setOpenSubPopover(o ? `${sub.id}:${colId}` : null)}>
                                 <PopoverTrigger asChild>
                                   <button
                                     type="button"
@@ -2622,6 +2625,7 @@ export const EditActivityDialog = ({
                                           upd.completed_at = new Date().toISOString();
                                         }
                                         await supabase.from("activities").update(upd).eq("id", sub.id);
+                                        setOpenSubPopover(null);
                                         if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
                                         onActivityUpdated();
                                       }}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Calendar as CalendarIcon, X, Filter } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -76,6 +77,10 @@ const MultiSelect = ({ label, options, selected, onToggle }: {
 );
 
 export const CalendarFilters = ({ value, onChange, options, showProjectFilter }: Props) => {
+  // Os calendários De/Até fecham ao escolher o dia — só os MultiSelect, que
+  // aceitam vários cliques, seguem abertos.
+  const [fromOpen, setFromOpen] = useState(false);
+  const [toOpen, setToOpen] = useState(false);
   const toggle = (key: keyof CalendarFiltersValue, v: string) => {
     const arr = (value[key] as string[]) || [];
     onChange({ ...value, [key]: arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v] });
@@ -116,7 +121,7 @@ export const CalendarFilters = ({ value, onChange, options, showProjectFilter }:
         <MultiSelect label="Tags" options={options.tags} selected={value.tags} onToggle={v => toggle("tags", v)} />
 
         <div className="grid grid-cols-2 gap-2">
-          <Popover>
+          <Popover open={fromOpen} onOpenChange={setFromOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="h-8 w-full gap-2 text-xs justify-start">
                 <CalendarIcon className="w-3 h-3" />
@@ -124,11 +129,11 @@ export const CalendarFilters = ({ value, onChange, options, showProjectFilter }:
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-              <Calendar mode="single" selected={value.dateFrom} onSelect={d => onChange({ ...value, dateFrom: d })} className={cn("p-3 pointer-events-auto")} />
+              <Calendar mode="single" selected={value.dateFrom} defaultMonth={value.dateFrom} onSelect={d => { onChange({ ...value, dateFrom: d }); setFromOpen(false); }} className={cn("p-3 pointer-events-auto")} />
             </PopoverContent>
           </Popover>
 
-          <Popover>
+          <Popover open={toOpen} onOpenChange={setToOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="h-8 w-full gap-2 text-xs justify-start">
                 <CalendarIcon className="w-3 h-3" />
@@ -136,7 +141,7 @@ export const CalendarFilters = ({ value, onChange, options, showProjectFilter }:
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-              <Calendar mode="single" selected={value.dateTo} onSelect={d => onChange({ ...value, dateTo: d })} className={cn("p-3 pointer-events-auto")} />
+              <Calendar mode="single" selected={value.dateTo} defaultMonth={value.dateTo} onSelect={d => { onChange({ ...value, dateTo: d }); setToOpen(false); }} className={cn("p-3 pointer-events-auto")} />
             </PopoverContent>
           </Popover>
         </div>
