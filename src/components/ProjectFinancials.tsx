@@ -242,7 +242,7 @@ export const ProjectFinancials = ({
   const pvSeries = useMemo(() => {
     if (months.length === 0) return [];
     const byMonth = distributeOverTime(
-      budgetItems.map((i) => ({ total_cost: Number(i.total_cost) || 0, phase_id: i.phase_id, accrual: (i as BudgetItem & { accrual?: string }).accrual })),
+      budgetItems.map((i) => ({ total_cost: Number(i.total_cost) || 0, phase_id: i.phase_id, accrual: i.accrual })),
       phasePeriods,
       { start: projectStart!, end: projectEnd! },
     );
@@ -330,7 +330,7 @@ export const ProjectFinancials = ({
     // Congela também a distribuição no tempo — é o que a curva S consulta.
     if (data?.id && months.length > 0) {
       const byMonth = distributeOverTime(
-        budgetItems.map((i) => ({ total_cost: Number(i.total_cost) || 0, phase_id: i.phase_id, accrual: (i as BudgetItem & { accrual?: string }).accrual })),
+        budgetItems.map((i) => ({ total_cost: Number(i.total_cost) || 0, phase_id: i.phase_id, accrual: i.accrual })),
         phasePeriods,
         { start: projectStart!, end: projectEnd! },
       );

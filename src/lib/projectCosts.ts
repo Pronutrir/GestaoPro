@@ -44,6 +44,13 @@ export interface BudgetItem {
   total_cost: number;
   supplier: string | null;
   notes: string | null;
+  /** Quando o custo é reconhecido no tempo (Fase 2) — dá forma à curva S. */
+  accrual?: string | null;
+  /** Estimativa em três pontos (Fase 4): 'simples' | 'pert'. */
+  estimate_method?: string | null;
+  optimistic_cost?: number | null;
+  likely_cost?: number | null;
+  pessimistic_cost?: number | null;
 }
 
 export interface CostRate {

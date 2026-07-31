@@ -63,6 +63,8 @@ const Investments = () => {
   const [investments, setInvestments] = useState<ActivityInvestment[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Linhas de base ATIVAS dos projetos visíveis (consolidação do portfólio).
+  const [baselines, setBaselines] = useState<{ project_id: string; baseline_total: number; contingency_total: number; management_reserve_total: number }[]>([]);
   const [filterProject, setFilterProject] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
@@ -73,7 +75,7 @@ const Investments = () => {
   }, [authLoading]);
 
   const fetchData = async () => {
-    const [projRes, invRes, actRes, itemsRes] = await Promise.all([
+    const [projRes, invRes, actRes, itemsRes, baseRes] = await Promise.all([
       supabase.from("projects").select("id, title, budget_planned, budget_used, status").eq("is_trashed", false),
       supabase.from("activity_investments").select("id, activity_id, amount, description, project_id, responsible, category, recorded_at"),
       supabase.from("activities").select("id, title, assigned_to, project_id, is_trashed").eq("is_trashed", false),
@@ -81,6 +83,11 @@ const Investments = () => {
       // passa a ser a SOMA deles — o campo digitado vira apenas fallback.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (supabase as any).from("budget_items").select("project_id, total_cost"),
+      // Linhas de base ATIVAS: consolidação de reservas no portfólio (Fase 4).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).from("budget_baselines")
+        .select("project_id, baseline_total, contingency_total, management_reserve_total")
+        .eq("is_active", true),
     ]);
     const composedByProject = new Map<string, number>();
     if (!itemsRes.error) {
@@ -94,6 +101,7 @@ const Investments = () => {
     });
     const filtered = await filterProjects(withComposed);
     setProjects(filtered);
+    if (!baseRes.error) setBaselines(baseRes.data || []);
     const projectIds = new Set(filtered.map(p => p.id));
     const scopedActivities = (actRes.data || []).filter(a => projectIds.has(a.project_id) && a.is_trashed !== true);
     setActivities(scopedActivities);
@@ -107,6 +115,17 @@ const Investments = () => {
   // Derived data
   const totalBudgetPlanned = useMemo(() => projects.reduce((s, p) => s + (Number(p.budget_planned) || 0), 0), [projects]);
   const totalBudgetUsed = useMemo(() => projects.reduce((s, p) => s + (Number(p.budget_used) || 0), 0), [projects]);
+  // Consolidação entre projetos (Fase 4 do plano financeiro): quantos têm
+  // linha de base aprovada e quanto de reserva existe no portfólio.
+  const baselineSummary = useMemo(() => {
+    const withBaseline = baselines.filter((b) => projects.some((p) => p.id === b.project_id));
+    return {
+      count: withBaseline.length,
+      total: withBaseline.reduce((s, b) => s + (Number(b.baseline_total) || 0), 0),
+      contingency: withBaseline.reduce((s, b) => s + (Number(b.contingency_total) || 0), 0),
+      reserve: withBaseline.reduce((s, b) => s + (Number(b.management_reserve_total) || 0), 0),
+    };
+  }, [baselines, projects]);
   const totalActivityInvestments = useMemo(() => investments.reduce((s, i) => s + (i.amount || 0), 0), [investments]);
   const budgetProgress = totalBudgetPlanned > 0 ? (totalBudgetUsed / totalBudgetPlanned) * 100 : 0;
 
@@ -205,6 +224,44 @@ const Investments = () => {
           <p className="text-muted-foreground text-center py-12">Carregando...</p>
         ) : (
           <>
+            {/* Consolidação de reservas do portfólio (Fase 4 do plano
+                financeiro): mostra a governança de custo entre projetos —
+                quantos têm orçamento aprovado e quanta reserva existe. */}
+            {baselineSummary.count > 0 && (
+              <Card className="p-4">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <DollarSign className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold">Linhas de base aprovadas</span>
+                  <Badge variant="secondary" className="tabular-nums">
+                    {baselineSummary.count} de {projects.length}
+                  </Badge>
+                  {baselineSummary.count < projects.length && (
+                    <span className="text-xs text-muted-foreground">
+                      {projects.length - baselineSummary.count} projeto(s) ainda sem orçamento congelado
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Linha de base (BAC)</p>
+                    <p className="text-lg font-bold tabular-nums">{formatCurrency(baselineSummary.total)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Contingência</p>
+                    <p className="text-lg font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                      {formatCurrency(baselineSummary.contingency)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">dentro da linha de base</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Reserva gerencial</p>
+                    <p className="text-lg font-semibold tabular-nums">{formatCurrency(baselineSummary.reserve)}</p>
+                    <p className="text-[11px] text-muted-foreground">fora, exige aprovação</p>
+                  </div>
+                </div>
+              </Card>
+            )}
+
             {/* KPI Row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Card className="p-5">

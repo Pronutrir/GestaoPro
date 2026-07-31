@@ -35,9 +35,18 @@ interface Props {
 const emptyForm = {
   description: "", category: "outros", quantity: "1", unit_cost: "",
   phase_id: "", supplier: "", notes: "",
+  // Fase 2: quando o custo é reconhecido no tempo — dá forma à curva S.
+  accrual: "rateado",
   // Fase 4: estimativa em três pontos (PERT).
   estimate_method: "simples", optimistic_cost: "", likely_cost: "", pessimistic_cost: "",
 };
+
+// Regra de reconhecimento do custo (cost accrual do MS Project).
+const ACCRUALS: { value: string; label: string; hint: string }[] = [
+  { value: "inicio", label: "No início", hint: "todo o custo no primeiro mês do período" },
+  { value: "rateado", label: "Rateado", hint: "dividido igualmente pelos meses" },
+  { value: "fim", label: "No fim", hint: "todo o custo no último mês" },
+];
 
 export function BudgetPlanner({
   items, phases, settings, canManage, onSaveItem, onDeleteItem, onSaveSettings,
@@ -53,6 +62,8 @@ export function BudgetPlanner({
     management_reserve_pct: String(settings.management_reserve_pct || ""),
     management_reserve_amount: String(settings.management_reserve_amount || ""),
     alert_threshold_pct: String(settings.alert_threshold_pct ?? 90),
+    currency: settings.currency || "BRL",
+    precision: String(settings.precision ?? 2),
   });
   const [saving, setSaving] = useState(false);
 
@@ -71,10 +82,11 @@ export function BudgetPlanner({
       phase_id: it.phase_id ?? "",
       supplier: it.supplier ?? "",
       notes: it.notes ?? "",
-      estimate_method: (it as BudgetItem & { estimate_method?: string }).estimate_method || "simples",
-      optimistic_cost: String((it as BudgetItem & { optimistic_cost?: number }).optimistic_cost ?? ""),
-      likely_cost: String((it as BudgetItem & { likely_cost?: number }).likely_cost ?? ""),
-      pessimistic_cost: String((it as BudgetItem & { pessimistic_cost?: number }).pessimistic_cost ?? ""),
+      accrual: it.accrual || "rateado",
+      estimate_method: it.estimate_method || "simples",
+      optimistic_cost: String(it.optimistic_cost ?? ""),
+      likely_cost: String(it.likely_cost ?? ""),
+      pessimistic_cost: String(it.pessimistic_cost ?? ""),
     });
     setItemDialog(true);
   };
@@ -97,6 +109,7 @@ export function BudgetPlanner({
       phase_id: form.phase_id || null,
       supplier: form.supplier.trim() || null,
       notes: form.notes.trim() || null,
+      accrual: form.accrual,
       ...(isPert
         ? {
             estimate_method: "pert",
@@ -105,7 +118,7 @@ export function BudgetPlanner({
             pessimistic_cost: num(form.pessimistic_cost),
           }
         : { estimate_method: "simples" }),
-    } as Partial<BudgetItem> & { id?: string });
+    });
     setSaving(false);
     setItemDialog(false);
   };
@@ -140,6 +153,8 @@ export function BudgetPlanner({
       management_reserve_pct: Number(reserve.management_reserve_pct.replace(",", ".")) || 0,
       management_reserve_amount: Number(reserve.management_reserve_amount.replace(",", ".")) || 0,
       alert_threshold_pct: Number(reserve.alert_threshold_pct.replace(",", ".")) || 90,
+      currency: reserve.currency,
+      precision: Number(reserve.precision) || 2,
     });
     setSaving(false);
     setReserveDialog(false);
@@ -324,9 +339,25 @@ export function BudgetPlanner({
               )}
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs">Fornecedor (opcional)</Label>
-              <Input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Fornecedor (opcional)</Label>
+                <Input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Quando o custo acontece</Label>
+                <Select value={form.accrual} onValueChange={(v) => setForm({ ...form, accrual: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ACCRUALS.map((a) => (
+                      <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  {ACCRUALS.find((a) => a.value === form.accrual)?.hint} — define a curva S.
+                </p>
+              </div>
             </div>
             <div className="rounded-md border bg-muted/30 px-3 py-2 flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Total do item</span>
@@ -389,12 +420,39 @@ export function BudgetPlanner({
                 </div>
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Alertar ao consumir (% da linha de base)</Label>
-              <Input type="number" min="1" max="200" value={reserve.alert_threshold_pct}
-                onChange={(e) => setReserve({ ...reserve, alert_threshold_pct: e.target.value })} className="w-32" />
-              <p className="text-[11px] text-muted-foreground">Limite de controle: acima disso o painel sinaliza.</p>
+            {/* Plano de gerenciamento de custos: unidade, precisão e limite —
+                os campos que o PMBOK pede, num formulário só. */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Moeda</Label>
+                <Select value={reserve.currency} onValueChange={(v) => setReserve({ ...reserve, currency: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BRL">Real (R$)</SelectItem>
+                    <SelectItem value="USD">Dólar (US$)</SelectItem>
+                    <SelectItem value="EUR">Euro (€)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Casas decimais</Label>
+                <Select value={reserve.precision} onValueChange={(v) => setReserve({ ...reserve, precision: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Sem centavos</SelectItem>
+                    <SelectItem value="2">2 (padrão)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Alertar em (%)</Label>
+                <Input type="number" min="1" max="200" value={reserve.alert_threshold_pct}
+                  onChange={(e) => setReserve({ ...reserve, alert_threshold_pct: e.target.value })} />
+              </div>
             </div>
+            <p className="text-[11px] text-muted-foreground -mt-1">
+              Limite de controle: ao consumir esse % da linha de base, o painel sinaliza.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setReserveDialog(false)}>Cancelar</Button>
