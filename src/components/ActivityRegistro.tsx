@@ -233,13 +233,26 @@ export const ActivityRegistro = ({
       if (names.size === 0) return;
 
       // Resolve nome→id tolerante a acento/caixa/espaços, para não perder avisos.
-      const idByName = new Map(people.map((p) => [normName(p.full_name), p.id]));
+      //
+      // Um nome pode corresponder a MAIS DE UM perfil — a base tem "Williame
+      // Correia de Lima" duas vezes, ambos ativos. Com um Map de nome→id, o
+      // segundo sobrescrevia o primeiro e só uma das contas era avisada, sem
+      // nada indicar que a outra ficou de fora. Aqui o nome resolve para todos
+      // os ids que casam.
+      const idsByName = new Map<string, string[]>();
+      for (const p of people) {
+        const k = normName(p.full_name);
+        idsByName.set(k, [...(idsByName.get(k) || []), p.id]);
+      }
       const ids = Array.from(new Set(
-        Array.from(names).map((n) => idByName.get(normName(n))).filter(Boolean) as string[],
+        Array.from(names).flatMap((n) => idsByName.get(normName(n)) || []),
       ));
       if (ids.length === 0) return;
 
-      const mentionedIds = new Set(mentioned.map((p) => p.id));
+      // Idem para decidir quem foi citado: o mesmo nome pode render vários ids.
+      const mentionedIds = new Set(
+        mentioned.flatMap((p) => idsByName.get(normName(p.full_name)) || [p.id]),
+      );
       const title = (act as any)?.title ?? "atividade";
       const rows = ids.map((uid) => ({
         target_user_id: uid,
@@ -250,10 +263,25 @@ export const ActivityRegistro = ({
         message: `${authorName}: ${body.slice(0, 120)}`,
       }));
       const { error } = await (supabase as any).from("notifications").insert(rows);
-      // Falha de notificação não bloqueia o envio da mensagem, mas fica logada p/ depuração.
-      if (error) console.warn("[ActivityRegistro] falha ao inserir notificações:", error.message);
-    } catch (e) {
+      // Falha de notificação não bloqueia o envio da mensagem — a mensagem já
+      // está salva e reenviar seria pior. Mas o silêncio anterior escondia o
+      // problema: quem citou achava que o outro tinha sido avisado, e não tinha.
+      // Agora o aviso é visível, com a causa junto.
+      if (error) {
+        console.warn("[ActivityRegistro] falha ao inserir notificações:", error);
+        toast({
+          title: "Mensagem enviada, mas sem aviso",
+          description: `Não foi possível notificar ${ids.length === 1 ? "a pessoa citada" : "as pessoas citadas"}: ${error.message}`,
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
       console.warn("[ActivityRegistro] erro inesperado ao notificar:", e);
+      toast({
+        title: "Mensagem enviada, mas sem aviso",
+        description: e?.message || "Falha inesperada ao notificar.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -311,7 +339,11 @@ export const ActivityRegistro = ({
   // Renderiza o corpo destacando @menções. O casamento é tolerante a acento/caixa:
   // compara o trecho original (preservado na tela) com o nome, ambos normalizados
   // sem alterar o comprimento, para os índices continuarem alinhados ao texto exibido.
-  const renderBody = (body: string) => {
+  // `onPrimary` = balão azul (mensagem própria). O destaque padrão é text-primary
+  // sobre bg-primary/10, que no balão azul vira azul-sobre-azul: a menção some da
+  // tela — foi o que o print mostrava. Ali o realce inverte para o contraste do
+  // próprio balão.
+  const renderBody = (body: string, onPrimary = false) => {
     // normalização que NÃO muda o comprimento (só minúsculas + remove marcas combinantes)
     const nz = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
     const names = people
@@ -342,7 +374,21 @@ export const ActivityRegistro = ({
 
     return parts.map((p, idx) =>
       typeof p === "string" ? <span key={idx}>{p}</span>
-        : <span key={idx} className="text-primary font-medium bg-primary/10 rounded px-1">{p.m}</span>,
+        : (
+          <span
+            key={idx}
+            className={cn(
+              "font-medium rounded px-1",
+              onPrimary
+                // No balão azul: herda a cor do texto do balão e usa um véu
+                // claro por trás, em vez de azul sobre azul.
+                ? "bg-primary-foreground/20 text-primary-foreground"
+                : "bg-primary/10 text-primary",
+            )}
+          >
+            {p.m}
+          </span>
+        ),
     );
   };
 
@@ -420,7 +466,7 @@ export const ActivityRegistro = ({
                       "max-w-full rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]",
                       mine ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-muted rounded-tl-sm text-foreground",
                     )}>
-                      {renderBody(c.content)}
+                      {renderBody(c.content, mine)}
                     </div>
                     {/* ações */}
                     <div className={cn("flex gap-0.5 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity", mine && "flex-row-reverse")}>
