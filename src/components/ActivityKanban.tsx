@@ -148,6 +148,7 @@ import {
   ColumnFilterPanel,
 } from "./kanban/KanbanColumn";
 import { ActivityDetailPanel } from "./kanban/ActivityDetailPanel";
+import { selectInChunks } from "@/lib/chunkedIn";
 
 // Compat: o tipo CardFields morava aqui antes do fatiamento (Fase 4).
 // Valores (DEFAULT_CARD_FIELDS etc.) agora só em kanban/shared — re-exportar
@@ -1028,37 +1029,50 @@ export const ActivityKanban = ({
         });
       // Contagem de comentários e anexos por atividade: os dois sinais mais
       // universais de card no mercado ("tem discussão aqui", "tem arquivo").
-      supabase
-        .from("activity_comments")
-        .select("activity_id")
-        .in("activity_id", ids)
-        .eq("is_trashed", false)
-        .then(({ data }) => {
+      // Em lotes: com muitas atividades a lista de ids estoura o limite de URL
+      // do proxy e a requisição volta 502 (ver lib/chunkedIn).
+      selectInChunks<{ activity_id: string }>(ids, (batch) =>
+        supabase
+          .from("activity_comments")
+          .select("activity_id")
+          .in("activity_id", batch)
+          .eq("is_trashed", false),
+      )
+        .then((data) => {
           const map = new Map<string, number>();
           (data || []).forEach((c) => {
             map.set(c.activity_id, (map.get(c.activity_id) || 0) + 1);
           });
           setCommentCounts(map);
-        });
-      supabase
-        .from("project_documents")
-        .select("activity_id")
-        .in("activity_id", ids)
-        .eq("is_trashed", false)
-        .then(({ data }) => {
+        })
+        .catch(() => setCommentCounts(new Map()));
+      selectInChunks<{ activity_id: string | null }>(ids, (batch) =>
+        supabase
+          .from("project_documents")
+          .select("activity_id")
+          .in("activity_id", batch)
+          .eq("is_trashed", false),
+      )
+        .then((data) => {
           const map = new Map<string, number>();
           (data || []).forEach((d) => {
             if (d.activity_id) map.set(d.activity_id, (map.get(d.activity_id) || 0) + 1);
           });
           setAttachmentCounts(map);
-        });
-      supabase
-        .from("task_relations")
-        .select("id, source_activity_id, target_activity_id, relation_type")
-        .or(
-          `source_activity_id.in.(${ids.join(",")}),target_activity_id.in.(${ids.join(",")})`,
-        )
-        .then(({ data }) => {
+        })
+        .catch(() => setAttachmentCounts(new Map()));
+      // Este era o pior caso: o `.or()` monta a lista de ids DUAS vezes na mesma
+      // URL, então estourava o limite do proxy com metade das atividades. Em
+      // lotes, cada requisição carrega no máximo 2×50 ids.
+      selectInChunks<{ id: string; source_activity_id: string; target_activity_id: string; relation_type: string }>(
+        ids,
+        (batch) =>
+          supabase
+            .from("task_relations")
+            .select("id, source_activity_id, target_activity_id, relation_type")
+            .or(`source_activity_id.in.(${batch.join(",")}),target_activity_id.in.(${batch.join(",")})`),
+      )
+        .then((data) => {
           const titleById = new Map<string, string>();
           activities.forEach((a) => titleById.set(a.id, a.title));
           const map = new Map<
@@ -1087,7 +1101,8 @@ export const ActivityKanban = ({
             push(r.target_activity_id, r.source_activity_id, r.id, r.relation_type);
           });
           setRelationCounts(map);
-        });
+        })
+        .catch(() => setRelationCounts(new Map()));
     } else {
       setDependencyCounts(new Map());
       setWaitingOnCounts(new Map());

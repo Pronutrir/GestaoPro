@@ -59,12 +59,17 @@ export async function GET() {
     user.email,
   ]);
 
+  // As não lidas vêm PRIMEIRO e sem depender do teto: com 1644 registros no
+  // acervo, um `limit(300)` por data escondia não lidas antigas — o usuário
+  // limpava a lista e o contador não zerava, sem nada explicando o porquê.
+  // Agora o corte só atinge o histórico já lido.
   const fetchNotifications = async () => {
     const withReadAt = await adminClient
       .from('notifications')
       .select('id, project_id, activity_id, type, title, message, is_read, created_at, read_at, target_user_id')
+      .order('is_read', { ascending: true })
       .order('created_at', { ascending: false })
-      .limit(300);
+      .limit(500);
 
     // Fallback caso a migration do read_at ainda não tenha sido aplicada.
     const missingColumn =
@@ -78,8 +83,9 @@ export async function GET() {
     return adminClient
       .from('notifications')
       .select('id, project_id, activity_id, type, title, message, is_read, created_at, target_user_id')
+      .order('is_read', { ascending: true })
       .order('created_at', { ascending: false })
-      .limit(300);
+      .limit(500);
   };
 
   const [notificationsRes, activitiesRes, membersRes, projectsRes] = await Promise.all([

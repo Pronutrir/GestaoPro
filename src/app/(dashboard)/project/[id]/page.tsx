@@ -55,6 +55,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getProjectDeadlineInfo, formatProjectDueDate } from "@/lib/projectDeadline";
 import { normalizeProjectTabs } from "@/lib/projectTabs";
+import { selectInChunks, mutateInChunks } from "@/lib/chunkedIn";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
@@ -743,13 +744,19 @@ export default function ProjectDetailsPage() {
 
     const allIds = Array.from(new Set([...memberIds, ...assignedIds]));
     if (allIds.length > 0) {
-      const { data: profilesById } = await supabase
-        .from("profiles")
-        .select("id, full_name, sector, avatar_url, email")
-        .in("id", allIds);
+      // Em lotes: esta lista junta membros e responsáveis de TODAS as atividades,
+      // então cresce com o projeto e pode estourar o limite de URL do proxy
+      // (ver lib/chunkedIn).
+      const profilesById = await selectInChunks<{ id: string; full_name: string | null; sector: string | null; avatar_url: string | null; email: string | null }>(
+        allIds,
+        (batch) => supabase
+          .from("profiles")
+          .select("id, full_name, sector, avatar_url, email")
+          .in("id", batch),
+      ).catch(() => []);
 
-      (profilesById || []).forEach((profile) => {
-        mergedById.set(profile.id, profile as { id: string; full_name: string | null; sector: string | null; avatar_url: string | null; email: string | null });
+      profilesById.forEach((profile) => {
+        mergedById.set(profile.id, profile);
       });
     }
 
@@ -1041,7 +1048,11 @@ export default function ProjectDetailsPage() {
       }
     }
 
-    const { error: updateActivitiesError } = await (supabase.from("activities").update(updatePayload) as any).in("id", idsToUpdate);
+    // Em lotes: concluir um item com muitos descendentes gera uma lista longa,
+    // que estoura o limite de URL do proxy (ver lib/chunkedIn).
+    const { error: updateActivitiesError } = await mutateInChunks(idsToUpdate, (batch) =>
+      (supabase.from("activities").update(updatePayload) as any).in("id", batch),
+    );
     if (updateActivitiesError) {
       toast.error(`Erro ao atualizar atividade(s): ${updateActivitiesError.message}`);
       return;
@@ -1052,8 +1063,9 @@ export default function ProjectDetailsPage() {
     });
 
     if (updatePayload.workflow_stage_id) {
-      const { error: updateStoriesError } = await (supabase.from("user_stories").update({ stage_id: updatePayload.workflow_stage_id }) as any)
-        .in("activity_id", idsToUpdate);
+      const { error: updateStoriesError } = await mutateInChunks(idsToUpdate, (batch) =>
+        (supabase.from("user_stories").update({ stage_id: updatePayload.workflow_stage_id }) as any)
+          .in("activity_id", batch));
       if (updateStoriesError) {
         toast.error(`Erro ao atualizar estágio das histórias: ${updateStoriesError.message}`);
       }
@@ -1160,7 +1172,11 @@ export default function ProjectDetailsPage() {
       newIds.forEach(nid => idsToTrash.add(nid));
       frontier = newIds;
     }
-    const { error } = await (supabase.from("activities").update({ is_trashed: true, trashed_at: trashedAt } as any) as any).in("id", Array.from(idsToTrash));
+    // Em lotes: arquivar uma fase leva junto todos os descendentes, e essa
+    // lista cresce sem teto (ver lib/chunkedIn).
+    const { error } = await mutateInChunks(Array.from(idsToTrash), (batch) =>
+      (supabase.from("activities").update({ is_trashed: true, trashed_at: trashedAt } as any) as any).in("id", batch),
+    );
     if (error) {
       toast.error("Não foi possível arquivar a atividade.", { description: error.message });
       return;
@@ -1178,9 +1194,8 @@ export default function ProjectDetailsPage() {
         action: {
           label: "Desfazer",
           onClick: async () => {
-            const { error: undoError } = await (
-              supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any) as any
-            ).in("id", trashedIds);
+            const { error: undoError } = await mutateInChunks(trashedIds, (batch) =>
+              (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any) as any).in("id", batch));
             if (undoError) {
               toast.error("Não foi possível desfazer.", { description: undoError.message });
               return;
