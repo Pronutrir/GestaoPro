@@ -1569,26 +1569,30 @@ export const EditActivityDialog = ({
                       hint: string;
                       activeCls: string;
                     }[] = [
+                      // O selecionado usa cor SÓLIDA. Com bg-primary/10 sobre o
+                      // trilho bg-muted/30 o realce quase sumia — o botão ativo
+                      // ficava só "um pouco mais claro" que os outros e não se
+                      // lia como marcado.
                       {
                         kind: "fase",
                         label: "Fase / Entrega",
                         icon: <Layers className="w-3.5 h-3.5" />,
                         hint: "Agrupa outros itens (em qualquer nível). Datas, horas e custo derivam dos filhos.",
-                        activeCls: "border-primary bg-primary/10 text-primary",
+                        activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
                       },
                       {
                         kind: "atividade",
                         label: "Atividade",
                         icon: <Circle className="w-3.5 h-3.5" />,
                         hint: "Trabalho executável (folha da EAP), com estimativa e intervalo de datas próprios.",
-                        activeCls: "border-primary bg-primary/10 text-primary",
+                        activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
                       },
                       {
                         kind: "marco",
                         label: "Marco",
-                        icon: <Diamond className={`w-3.5 h-3.5 ${itemKind === "marco" ? "fill-amber-500" : ""}`} />,
+                        icon: <Diamond className={`w-3.5 h-3.5 ${itemKind === "marco" ? "fill-current" : ""}`} />,
                         hint: "Ponto único no tempo (uma data, sem intervalo). Não tem horas nem custo.",
-                        activeCls: "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                        activeCls: "border-amber-500 bg-amber-500 text-white shadow-sm",
                       },
                     ];
                     return (
