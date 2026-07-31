@@ -30,10 +30,12 @@ interface Props {
   laborHours: number;
   /** Sem taxa cadastrada, as horas não viram dinheiro: avisa em vez de somar 0. */
   ratesConfigured: boolean;
+  /** Margem (Fase 4) — só aparece onde há taxa de cobrança definida. */
+  margin?: { revenue: number; cost: number; margin: number; marginPct: number } | null;
 }
 
 export function BudgetDashboard({
-  summary, currency, precision, phases, laborCost, directCost, laborHours, ratesConfigured,
+  summary, currency, precision, phases, laborCost, directCost, laborHours, ratesConfigured, margin,
 }: Props) {
   const money = (v: number) => formatMoney(v, currency, precision);
   const s = summary;
@@ -176,6 +178,36 @@ export function BudgetDashboard({
               <span className="inline-block w-3 h-2 rounded bg-destructive" /> acima do orçado
             </span>
           </p>
+        </div>
+      )}
+
+      {/* Margem — só onde há taxa de cobrança; sem ela não se finge lucro */}
+      {margin && margin.revenue > 0 && (
+        <div className="rounded-lg border bg-card p-3.5">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <span className="text-[13px] font-semibold">Margem sobre as horas apontadas</span>
+            <span className={cn("ml-auto text-[15px] font-bold tabular-nums",
+              margin.margin >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
+              {margin.marginPct.toFixed(1)}%
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Cobrança prevista</p>
+              <p className="text-[13px] font-semibold tabular-nums">{money(margin.revenue)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Custo das horas</p>
+              <p className="text-[13px] font-semibold tabular-nums">{money(margin.cost)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Margem</p>
+              <p className={cn("text-[13px] font-semibold tabular-nums",
+                margin.margin >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
+                {money(margin.margin)}
+              </p>
+            </div>
+          </div>
         </div>
       )}
 

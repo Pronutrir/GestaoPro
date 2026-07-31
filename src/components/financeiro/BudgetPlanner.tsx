@@ -14,10 +14,10 @@ import { Badge } from "@/components/ui/badge";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Layers, ShieldCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, Layers, ShieldCheck, Download, Sigma } from "lucide-react";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import {
-  BUDGET_CATEGORIES, categoryLabel, formatMoney,
+  BUDGET_CATEGORIES, categoryLabel, formatMoney, pertEstimate, pertRange, budgetToCsv,
   type BudgetItem, type BudgetSettings,
 } from "@/lib/projectCosts";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,8 @@ interface Props {
 const emptyForm = {
   description: "", category: "outros", quantity: "1", unit_cost: "",
   phase_id: "", supplier: "", notes: "",
+  // Fase 4: estimativa em três pontos (PERT).
+  estimate_method: "simples", optimistic_cost: "", likely_cost: "", pessimistic_cost: "",
 };
 
 export function BudgetPlanner({
@@ -69,9 +71,19 @@ export function BudgetPlanner({
       phase_id: it.phase_id ?? "",
       supplier: it.supplier ?? "",
       notes: it.notes ?? "",
+      estimate_method: (it as BudgetItem & { estimate_method?: string }).estimate_method || "simples",
+      optimistic_cost: String((it as BudgetItem & { optimistic_cost?: number }).optimistic_cost ?? ""),
+      likely_cost: String((it as BudgetItem & { likely_cost?: number }).likely_cost ?? ""),
+      pessimistic_cost: String((it as BudgetItem & { pessimistic_cost?: number }).pessimistic_cost ?? ""),
     });
     setItemDialog(true);
   };
+
+  const num = (s: string) => Number(String(s).replace(",", ".")) || 0;
+  const isPert = form.estimate_method === "pert";
+  // No modo PERT o valor unitário é CALCULADO — não digitado.
+  const pert = pertEstimate(num(form.optimistic_cost), num(form.likely_cost), num(form.pessimistic_cost));
+  const effectiveUnit = isPert ? pert.expected : num(form.unit_cost);
 
   const submitItem = async () => {
     if (!form.description.trim()) return;
@@ -80,14 +92,34 @@ export function BudgetPlanner({
       id: editing?.id,
       description: form.description.trim(),
       category: form.category,
-      quantity: Number(form.quantity.replace(",", ".")) || 1,
-      unit_cost: Number(form.unit_cost.replace(",", ".")) || 0,
+      quantity: num(form.quantity) || 1,
+      unit_cost: effectiveUnit,
       phase_id: form.phase_id || null,
       supplier: form.supplier.trim() || null,
       notes: form.notes.trim() || null,
-    });
+      ...(isPert
+        ? {
+            estimate_method: "pert",
+            optimistic_cost: num(form.optimistic_cost),
+            likely_cost: num(form.likely_cost),
+            pessimistic_cost: num(form.pessimistic_cost),
+          }
+        : { estimate_method: "simples" }),
+    } as Partial<BudgetItem> & { id?: string });
     setSaving(false);
     setItemDialog(false);
+  };
+
+  const exportCsv = () => {
+    const csv = budgetToCsv(items, (id) => phases.find((p) => p.id === id)?.title ?? "Projeto inteiro");
+    // BOM para o Excel abrir os acentos corretamente.
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `orcamento-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const removeItem = async (it: BudgetItem) => {
@@ -135,6 +167,11 @@ export function BudgetPlanner({
         <Badge variant="secondary" className="tabular-nums">{items.length}</Badge>
         <span className="text-sm text-muted-foreground">Total: <strong className="text-foreground tabular-nums">{money(planned)}</strong></span>
         <div className="ml-auto flex items-center gap-2">
+          {items.length > 0 && (
+            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={exportCsv} title="Baixar o orçamento em CSV">
+              <Download className="w-3.5 h-3.5" /> Exportar
+            </Button>
+          )}
           {canManage && (
             <>
               <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setReserveDialog(true)}>
@@ -237,9 +274,56 @@ export function BudgetPlanner({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Valor unitário</Label>
-                <CurrencyInput value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} />
+                {isPert ? (
+                  <div className="h-10 px-3 flex items-center rounded-md border bg-muted/40 text-sm tabular-nums text-muted-foreground">
+                    {money(pert.expected)}
+                  </div>
+                ) : (
+                  <CurrencyInput value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} />
+                )}
               </div>
             </div>
+
+            {/* Estimativa em três pontos — opcional, para itens incertos */}
+            <div className="rounded-md border p-3 space-y-2.5">
+              <button type="button"
+                onClick={() => setForm({ ...form, estimate_method: isPert ? "simples" : "pert" })}
+                className="flex items-center gap-2 text-[13px] font-medium hover:text-primary transition-colors">
+                <Sigma className={cn("w-3.5 h-3.5", isPert ? "text-primary" : "text-muted-foreground")} />
+                Estimativa em três pontos (PERT)
+                <span className={cn("ml-auto text-[11px]", isPert ? "text-primary" : "text-muted-foreground")}>
+                  {isPert ? "ativa — clique para desligar" : "clique para usar"}
+                </span>
+              </button>
+              {isPert && (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[11px]">Otimista</Label>
+                      <CurrencyInput value={form.optimistic_cost}
+                        onChange={(e) => setForm({ ...form, optimistic_cost: e.target.value })} className="h-9" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px]">Mais provável</Label>
+                      <CurrencyInput value={form.likely_cost}
+                        onChange={(e) => setForm({ ...form, likely_cost: e.target.value })} className="h-9" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px]">Pessimista</Label>
+                      <CurrencyInput value={form.pessimistic_cost}
+                        onChange={(e) => setForm({ ...form, pessimistic_cost: e.target.value })} className="h-9" />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Esperado = (O + 4×M + P) ÷ 6 = <strong className="text-foreground">{money(pert.expected)}</strong>
+                    {pert.stdDev > 0 && (
+                      <> · faixa provável {money(pertRange(pert.expected, pert.stdDev).min)} a {money(pertRange(pert.expected, pert.stdDev).max)}</>
+                    )}
+                  </p>
+                </>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs">Fornecedor (opcional)</Label>
               <Input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
@@ -247,7 +331,7 @@ export function BudgetPlanner({
             <div className="rounded-md border bg-muted/30 px-3 py-2 flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Total do item</span>
               <span className="text-sm font-bold tabular-nums">
-                {money((Number(form.quantity.replace(",", ".")) || 0) * (Number(form.unit_cost.replace(",", ".")) || 0))}
+                {money((num(form.quantity) || 0) * effectiveUnit)}
               </span>
             </div>
           </div>

@@ -26,7 +26,7 @@ import { BudgetDashboard, type PhaseBreakdown } from "@/components/financeiro/Bu
 import { BaselineManager } from "@/components/financeiro/BaselineManager";
 import { EarnedValuePanel } from "@/components/financeiro/EarnedValuePanel";
 import {
-  summarizeBudget, laborCost as calcLaborCost, totalActivityCost,
+  summarizeBudget, laborCost as calcLaborCost, totalActivityCost, summarizeMargin,
   distributeOverTime, monthsBetween, monthKey, cumulative, earnedValue,
   DEFAULT_BUDGET_SETTINGS, formatMoney,
   type BudgetItem, type BudgetSettings, type CostRate, type BudgetBaseline,
@@ -266,6 +266,20 @@ export const ProjectFinancials = ({
     });
     return cumulative(byMonth, months);
   }, [investments, timeEntries, rates, months]);
+
+  // Fase 4: margem sobre as horas — só onde há taxa de cobrança definida.
+  const marginSummary = useMemo(() => {
+    if (rates.length === 0 || !rates.some((r) => r.bill_rate)) return null;
+    return summarizeMargin(
+      timeEntries.map((t) => ({
+        minutes: Number(t.duration_minutes) || 0,
+        on: (t.started_at || "").slice(0, 10),
+        user_id: null,
+        job_title_id: null,
+      })),
+      rates,
+    );
+  }, [timeEntries, rates]);
 
   const evmBac = activeBaseline?.baseline_total ?? summary.baseline;
   const evm = useMemo(

@@ -399,3 +399,91 @@ export function earnedValue(input: {
 /** Classificação de um índice (CPI/SPI) para semáforo. */
 export const indexTone = (v: number): "ok" | "warn" | "bad" =>
   v === 0 ? "warn" : v >= 1 ? "ok" : v >= 0.9 ? "warn" : "bad";
+
+// ============================================================
+// FASE 4 — ESTIMATIVA EM TRÊS PONTOS (PERT) E MARGEM
+// ============================================================
+
+/**
+ * Estimativa em três pontos pela distribuição Beta (PERT).
+ * O peso 4 no "mais provável" é o que diferencia PERT da média simples: ele
+ * reconhece que o valor central tem maior probabilidade de ocorrer.
+ */
+export function pertEstimate(o: number, m: number, p: number): { expected: number; stdDev: number } {
+  const O = Number(o) || 0, M = Number(m) || 0, P = Number(p) || 0;
+  return {
+    expected: (O + 4 * M + P) / 6,
+    // Desvio-padrão: mede a CONFIANÇA da estimativa. Quanto maior a distância
+    // entre otimista e pessimista, mais incerta ela é.
+    stdDev: Math.abs(P - O) / 6,
+  };
+}
+
+/** Faixa de confiança de ~95% (±2 desvios) para a estimativa. */
+export const pertRange = (expected: number, stdDev: number): { min: number; max: number } => ({
+  min: Math.max(0, expected - 2 * stdDev),
+  max: expected + 2 * stdDev,
+});
+
+export interface MarginSummary {
+  /** Receita prevista: horas × valor de cobrança. */
+  revenue: number;
+  /** Custo das mesmas horas. */
+  cost: number;
+  /** Margem bruta em valor. */
+  margin: number;
+  /** Margem em % da receita. */
+  marginPct: number;
+}
+
+/**
+ * Margem a partir do bill_rate já capturado na Fase 1 — sem trabalho extra de
+ * cadastro. Só faz sentido onde há taxa de cobrança definida; sem ela, devolve
+ * zeros em vez de fingir lucro.
+ */
+export function summarizeMargin(
+  entries: { user_id?: string | null; job_title_id?: string | null; minutes: number; on: string }[],
+  rates: CostRate[],
+): MarginSummary {
+  let revenue = 0;
+  let cost = 0;
+  entries.forEach((e) => {
+    const rate = resolveRate(rates, { userId: e.user_id, jobTitleId: e.job_title_id, on: e.on });
+    if (!rate) return;
+    const hours = e.minutes / 60;
+    cost += hours * (Number(rate.cost_rate) || 0);
+    if (rate.bill_rate) revenue += hours * Number(rate.bill_rate);
+  });
+  const margin = revenue - cost;
+  return {
+    revenue,
+    cost,
+    margin,
+    marginPct: revenue > 0 ? (margin / revenue) * 100 : 0,
+  };
+}
+
+/** Exportação do orçamento em CSV (Excel pt-BR: separador ";"). */
+export function budgetToCsv(
+  items: BudgetItem[],
+  phaseTitle: (id: string | null) => string,
+): string {
+  const head = ["Categoria", "Descrição", "Fase", "Fornecedor", "Quantidade", "Valor unitário", "Total"];
+  const esc = (v: unknown) => {
+    const s = String(v ?? "");
+    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const num = (v: number) => String(Number(v) || 0).replace(".", ",");
+  const rows = items.map((i) => [
+    categoryLabel(i.category),
+    i.description,
+    phaseTitle(i.phase_id),
+    i.supplier ?? "",
+    num(Number(i.quantity)),
+    num(Number(i.unit_cost)),
+    num(Number(i.total_cost)),
+  ]);
+  const total = items.reduce((s, i) => s + (Number(i.total_cost) || 0), 0);
+  rows.push(["", "", "", "", "", "TOTAL", num(total)]);
+  return [head, ...rows].map((r) => r.map(esc).join(";")).join("\n");
+}
