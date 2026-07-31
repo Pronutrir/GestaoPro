@@ -22,9 +22,15 @@ ALTER TABLE public.activities
 -- updated_at é impreciso (qualquer edição o move), mas é o único sinal
 -- existente; sem ele todo card apareceria como "recém-chegado" ou "sem dado".
 -- A partir da trigger abaixo o valor passa a ser exato.
+-- Desliga os triggers de negocio: sem isto o trigger de projeto concluido
+-- (20260526150000) aborta o backfill em atividades de projetos ja fechados.
+SET session_replication_role = replica;
+
 UPDATE public.activities
 SET stage_entered_at = COALESCE(updated_at, created_at)
 WHERE stage_entered_at IS NULL;
+
+SET session_replication_role = origin;
 
 -- Mantém o campo atualizado: toca APENAS quando a coluna muda de verdade.
 -- Editar título, prazo ou responsável não deve rejuvenescer o card — esse era

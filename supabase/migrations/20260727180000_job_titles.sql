@@ -17,15 +17,24 @@ CREATE TABLE IF NOT EXISTS public.job_titles (
 
 ALTER TABLE public.job_titles ENABLE ROW LEVEL SECURITY;
 
--- Mesma política dos setores: leitura pública, gestão por autenticados.
+-- Leitura por qualquer usuario autenticado; escrita so por admin.
+-- IMPORTANTE: policy sem clausula TO vale para PUBLIC, o que inclui o papel
+-- anon da chave publica embarcada no front — qualquer pessoa na internet
+-- poderia apagar os cargos, e o ON DELETE CASCADE de cost_rates.job_title_id
+-- levaria junto as taxas de custo (dado salarial). Por isso todas explicitam
+-- TO authenticated.
 DROP POLICY IF EXISTS "job_titles_select" ON public.job_titles;
-CREATE POLICY "job_titles_select" ON public.job_titles FOR SELECT USING (true);
+CREATE POLICY "job_titles_select" ON public.job_titles
+  FOR SELECT TO authenticated USING (true);
+
 DROP POLICY IF EXISTS "job_titles_insert" ON public.job_titles;
-CREATE POLICY "job_titles_insert" ON public.job_titles FOR INSERT WITH CHECK (true);
 DROP POLICY IF EXISTS "job_titles_update" ON public.job_titles;
-CREATE POLICY "job_titles_update" ON public.job_titles FOR UPDATE USING (true);
 DROP POLICY IF EXISTS "job_titles_delete" ON public.job_titles;
-CREATE POLICY "job_titles_delete" ON public.job_titles FOR DELETE USING (true);
+DROP POLICY IF EXISTS "job_titles_write" ON public.job_titles;
+CREATE POLICY "job_titles_write" ON public.job_titles
+  FOR ALL TO authenticated
+  USING (public.is_admin_user_v2(auth.uid()))
+  WITH CHECK (public.is_admin_user_v2(auth.uid()));
 
 -- Seed dos 5 níveis padrão (Direção → Externo). Idempotente.
 INSERT INTO public.job_titles (name, rank) VALUES
