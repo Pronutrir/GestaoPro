@@ -1320,10 +1320,13 @@ export const BacklogSection = ({
         {/* Atividades-fase (item_type='fase') em qualquer nível top-level viram cards de fase virtuais */}
         {groupBy === "phase" && virtualPhaseActs.map((vp) => renderVirtualPhase(vp))}
 
-        {/* "Sem fase" reaproveita renderPhaseGroup(null, ...): mesmo comportamento de uma fase
-            real, inclusive continuar visível quando esvazia (antes desaparecia com a última
-            tarefa solta, junto com o único "+ Tarefa" daquele grupo). */}
-        {groupBy === "phase" && renderPhaseGroup(null, "Sem fase")}
+        {/* "Sem fase" só aparece quando REALMENTE tem tarefa solta: um grupo
+            vazio permanente é ruído, ainda mais num backlog organizado por fases.
+            Ele existia sempre porque era o único "+ Tarefa" para criar item sem
+            fase — mas isso já é coberto pelo "Nova Atividade" no topo, que
+            cria no nível principal. */}
+        {groupBy === "phase" && (topLevelByPhase.get("none") || []).length > 0 &&
+          renderPhaseGroup(null, "Sem fase")}
       </div>
 
       {/* Trash Section */}

@@ -2,7 +2,6 @@
 import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Upload, Layers, Circle, Diamond, ClipboardList, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -406,10 +405,18 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           {/* Entrada */}
           <div className="p-6 md:border-r flex flex-col min-h-0">
             {tab === "paste" ? (
-              <Textarea
+              // textarea nativa: o wrapper de UI força whiteSpace/overflowWrap
+              // inline e reajusta altura no onChange, o que atrapalhava a
+              // digitação e a colagem neste campo (que é monoespaçado, de
+              // muitas linhas e vive dentro de um flex com min-h-0).
+              // `h-full` explícito: com `flex-1 min-h-0` a altura colapsava a
+              // zero e o campo ficava sem área clicável.
+              <textarea
                 value={text}
                 onChange={(e) => { setText(e.target.value); setSelectedTemplate(null); }}
-                className="flex-1 min-h-0 resize-none font-mono text-[13px] leading-relaxed"
+                spellCheck={false}
+                autoFocus
+                className="h-full w-full min-h-[240px] resize-none rounded-md border border-input bg-muted/50 px-3 py-2 font-mono text-[13px] leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 placeholder={"1. Fase\n1.1 Entrega\n1.1.1 Atividade\n\nou com bullets e recuo:\n• Fase\n   - Atividade"}
               />
             ) : (

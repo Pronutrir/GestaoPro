@@ -2131,7 +2131,7 @@ export const ActivityKanban = ({
             ref={searchInputRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar tarefa...  ( / )"
+            placeholder="Buscar tarefa..."
             className="h-7 pl-8 pr-7 text-xs"
           />
           {search && (
@@ -2144,60 +2144,6 @@ export const ActivityKanban = ({
             </button>
           )}
         </div>
-
-        {/* VISÕES SALVAS — combinação nomeada de filtros+raia+ordenação+campos,
-            compartilhada com o projeto. Só aparece com a migration aplicada. */}
-        {!viewsUnavailable && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant={activeView ? "default" : "outline"}
-                size="sm"
-                className="h-7 gap-1.5 text-xs max-w-[180px]"
-                title="Visões salvas do quadro"
-              >
-                <Eye className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{activeView ? activeView.name : "Visões"}</span>
-                {viewDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Visão modificada — dá para atualizar no menu" />}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-60">
-              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                Visões do projeto
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {views.length === 0 && (
-                <div className="px-2 py-3 text-center text-xs text-muted-foreground">Nenhuma visão salva ainda</div>
-              )}
-              {views.map((v) => (
-                <DropdownMenuItem key={v.id} onSelect={() => applyView(v)} className="gap-2 text-xs">
-                  <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="flex-1 truncate">{v.name}</span>
-                  {activeViewId === v.id && <Check className="w-3.5 h-3.5 text-primary" />}
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => { setSaveViewName(""); setSaveViewOpen(true); }} className="gap-2 text-xs">
-                <Plus className="w-3.5 h-3.5 text-muted-foreground" /> Salvar visão atual…
-              </DropdownMenuItem>
-              {activeView && viewDirty && activeView.created_by === myId && (
-                <DropdownMenuItem onSelect={updateActiveView} className="gap-2 text-xs">
-                  <Check className="w-3.5 h-3.5 text-muted-foreground" /> Atualizar &ldquo;{activeView.name}&rdquo;
-                </DropdownMenuItem>
-              )}
-              {activeView && (
-                <DropdownMenuItem onSelect={() => setActiveViewId(null)} className="gap-2 text-xs text-muted-foreground">
-                  <XIcon className="w-3.5 h-3.5" /> Sair da visão
-                </DropdownMenuItem>
-              )}
-              {activeView && activeView.created_by === myId && (
-                <DropdownMenuItem onSelect={() => deleteView(activeView)} className="gap-2 text-xs text-destructive focus:text-destructive">
-                  <Trash2 className="w-3.5 h-3.5" /> Excluir &ldquo;{activeView.name}&rdquo;
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
 
         {/* FILTROS — um único painel com tudo */}
         {(() => {
@@ -3031,35 +2977,6 @@ export const ActivityKanban = ({
           }}
         />
       )}
-
-      {/* Salvar visão — nome + snapshot da exibição atual. */}
-      <Dialog open={saveViewOpen} onOpenChange={setSaveViewOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="w-4 h-4 text-primary" /> Salvar visão
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="view-name" className="text-xs text-muted-foreground">Nome da visão</Label>
-            <Input
-              id="view-name"
-              value={saveViewName}
-              onChange={(e) => setSaveViewName(e.target.value)}
-              placeholder="Ex.: Reunião de sexta"
-              autoFocus
-              onKeyDown={(e) => { if (e.key === "Enter") saveNewView(); }}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Guarda filtros, raias, ordenação e campos do card como estão agora. Visível para todos do projeto.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setSaveViewOpen(false)}>Cancelar</Button>
-            <Button onClick={saveNewView} disabled={!saveViewName.trim()}>Salvar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Bloquear atividade — o card NÃO sai da coluna ("block in place"),
           para continuar contando no WIP e no tempo por etapa. */}
