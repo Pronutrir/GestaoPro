@@ -150,13 +150,32 @@ export const NotificationBell = () => {
     if (!uid) return;
     const unreadIds = notifications.filter((n) => !n.is_read).map((n) => n.id);
     if (unreadIds.length === 0) return;
+    // SEM `ids` de propósito: assim a rota marca todas as não lidas a que o
+    // usuário tem acesso, e não só as que couberam nesta tela. A listagem traz
+    // as 300 mais recentes de um acervo bem maior — mandar os ids visíveis
+    // deixaria as antigas não lidas para trás, e o contador nunca zeraria.
     const response = await fetch("/api/notifications/mark-read", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: unreadIds }),
+      body: JSON.stringify({}),
     });
     if (!response.ok) {
-      toast({ title: "Erro", description: "Não foi possível marcar as notificações.", variant: "destructive" });
+      // A rota grava em lotes; se um falhar no meio, os anteriores já foram
+      // gravados. Refaz o fetch mesmo no erro para a lista refletir o banco em
+      // vez de continuar mostrando como não lida algo que já foi marcado.
+      const partial = await response
+        .json()
+        .then((body) => (typeof body?.updated === "number" ? body.updated : 0))
+        .catch(() => 0);
+      if (partial > 0) fetchNotifications();
+      toast({
+        title: "Erro",
+        description:
+          partial > 0
+            ? `${partial} notificações foram marcadas antes da falha. Tente novamente.`
+            : "Não foi possível marcar as notificações.",
+        variant: "destructive",
+      });
       return;
     }
     fetchNotifications();
