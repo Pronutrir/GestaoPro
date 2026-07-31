@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -132,12 +132,16 @@ export const BacklogSection = ({
 
   // Colunas selecionáveis do backlog (o usuário escolhe o que ver). Persistido
   // por projeto, mesmo padrão da tabela de subatividades.
+  // Largura elástica (minmax) em vez de fixa: com valores fixos a soma passava
+  // de 760px e a última coluna — a de ações — saía da tela, exigindo rolagem
+  // lateral para chegar ao botão de arquivar. Agora cada coluna encolhe até um
+  // mínimo ainda legível e a tabela cabe na largura disponível.
   const BACKLOG_COLS: { id: string; label: string; width: string; align?: "center" | "left" }[] = [
-    { id: "priority", label: "Prioridade", width: "132px", align: "left" },
-    { id: "status", label: "Status", width: "148px", align: "left" },
-    { id: "assigned_to", label: "Responsável", width: "180px", align: "left" },
-    { id: "end_date", label: "Prazo", width: "116px", align: "left" },
-    { id: "hours", label: "Horas", width: "96px", align: "left" },
+    { id: "priority", label: "Prioridade", width: "minmax(84px,132px)", align: "left" },
+    { id: "status", label: "Status", width: "minmax(92px,148px)", align: "left" },
+    { id: "assigned_to", label: "Responsável", width: "minmax(96px,180px)", align: "left" },
+    { id: "end_date", label: "Prazo", width: "minmax(64px,116px)", align: "left" },
+    { id: "hours", label: "Horas", width: "minmax(56px,96px)", align: "left" },
   ];
   const BACKLOG_COLS_DEFAULT = ["priority", "status", "assigned_to", "end_date"];
   const backlogColsKey = `backlog-cols:${projectId}`;
@@ -159,9 +163,43 @@ export const BacklogSection = ({
       return next;
     });
   };
-  const activeCols = BACKLOG_COLS.filter((c) => visibleCols.includes(c.id));
-  // Grid: [expand 20][check 26][tarefa flex][...colunas][ações 68]
-  const backlogGrid = `20px 26px minmax(220px,1fr) ${activeCols.map((c) => c.width).join(" ")} 68px`;
+  // Largura real do container (não da janela): o backlog também aparece dentro
+  // de painéis estreitos, onde uma media query da viewport erraria.
+  const tableRef = useRef<HTMLDivElement>(null);
+  const [tableWidth, setTableWidth] = useState(0);
+  useEffect(() => {
+    const el = tableRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => setTableWidth(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Quando o espaço aperta, some com as colunas menos essenciais em vez de
+  // criar rolagem lateral. Ordem de descarte = da menos para a mais decisiva
+  // na leitura do backlog; tarefa e ações nunca saem.
+  const DROP_ORDER = ["hours", "end_date", "assigned_to", "status", "priority"];
+  const chosenCols = BACKLOG_COLS.filter((c) => visibleCols.includes(c.id));
+  const activeCols = (() => {
+    // 0 = ainda não medido (primeiro render): mostra tudo e deixa o
+    // ResizeObserver corrigir, em vez de piscar escondendo colunas.
+    if (tableWidth === 0) return chosenCols;
+    const FIXED = 20 + 26 + 60 + 120; // expand + check + ações + mínimo da Tarefa
+    const minOf = (c: { width: string }) => Number(c.width.match(/minmax\((\d+)px/)?.[1] ?? 0);
+    let cols = [...chosenCols];
+    const fits = () => FIXED + cols.reduce((s, c) => s + minOf(c), 0) + 8 * (3 + cols.length) <= tableWidth;
+    for (const id of DROP_ORDER) {
+      if (fits()) break;
+      cols = cols.filter((c) => c.id !== id);
+    }
+    return cols;
+  })();
+
+  // Grid: [expand 20][check 26][tarefa flex][...colunas][ações 60]
+  // O mínimo da coluna Tarefa é baixo de propósito: ela tem `truncate`, então
+  // encolher corta o texto com reticências — o que é preferível a empurrar a
+  // coluna de ações para fora da tela.
+  const backlogGrid = `20px 26px minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 60px`;
 
   useEffect(() => {
     const ids = activities.map((a) => a.id);
@@ -525,7 +563,7 @@ export const BacklogSection = ({
   // Cabeçalho de colunas alinhado com o grid das linhas.
   const ColumnHeader = () => (
     <div
-      className="grid items-center gap-3 px-3 py-2 bg-muted/40 border-b border-border text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+      className="grid items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
       style={{ gridTemplateColumns: backlogGrid }}
     >
       <span /><span />
@@ -653,7 +691,7 @@ export const BacklogSection = ({
     return (
       <div key={activity.id}>
         <div
-          className={`grid items-center gap-3 border-b px-3 py-2.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
+          className={`grid items-center gap-2 border-b px-3 py-2.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
             isSelected ? "bg-primary/5" : ""
           }`}
           style={{ gridTemplateColumns: backlogGrid, paddingLeft: 12 + depth * 22 }}
@@ -1211,12 +1249,11 @@ export const BacklogSection = ({
       )}
 
       {/* Phase groups — tabela única com cabeçalho de colunas no topo */}
-      {/* overflow-x-auto, não hidden: o grid tem largura mínima (~760px com as
-          colunas padrão) e a coluna de AÇÕES é a última. Em tela estreita o
-          `overflow-hidden` anterior cortava essa coluna sem oferecer rolagem —
-          o botão de arquivar existia, renderizado, mas inalcançável. Era o
-          "não consigo excluir" relatado: layout, não permissão. */}
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
+      {/* Sem rolagem lateral: as colunas são elásticas (minmax em BACKLOG_COLS)
+          e encolhem até caber. Antes as larguras eram fixas e somavam ~760px,
+          então a coluna de AÇÕES — a última — saía da tela e o botão de
+          arquivar ficava inalcançável. */}
+      <div ref={tableRef} className="rounded-lg border border-border bg-card overflow-hidden">
         {/* Sem botão de criar fase aqui: a entrada do backlog é "Nova
             Atividade" (ou importar a EAP, que já cria as fases). Fase avulsa
             criada antes de existir qualquer tarefa só produzia um agrupador
