@@ -39,6 +39,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { MinhasPendencias } from '@/components/MinhasPendencias';
 
 interface Project {
   id: string;
@@ -285,6 +286,10 @@ export function OverviewPage() {
           <DashboardSkeleton />
         ) : (
           <>
+            {/* O que depende de MIM vem antes do panorama: o resto da tela
+                mostra todos os projetos acessíveis, sem filtrar por pessoa. */}
+            <MinhasPendencias />
+
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-8">
               <Card
                 className="cursor-pointer p-5 transition-all hover:border-primary hover:shadow-md"

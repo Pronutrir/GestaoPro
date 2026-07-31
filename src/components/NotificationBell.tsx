@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Bell, Check, AlertTriangle, Clock, Info, BellRing, X, Ban, UserPlus } from "lucide-react";
+import { Bell, Check, AlertTriangle, Clock, Info, BellRing, X, Ban, UserPlus, FileSignature, AtSign } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -139,7 +139,11 @@ export const NotificationBell = () => {
     // Convites são resolvidos pelos botões Aceitar/Recusar, não navegam.
     if (n.type === "project_invite") return;
     if (n.project_id) {
-      const query = n.activity_id ? `?activity=${n.activity_id}` : "";
+      // Pedido de assinatura leva à aba onde se assina; menção, à atividade.
+      // Sem isto o aviso parava na visão geral e a pessoa procurava sozinha.
+      const query = n.type === "flow_pending"
+        ? "?tab=tap"
+        : n.activity_id ? `?activity=${n.activity_id}` : "";
       setIsOpen(false);
       router.push(`/project/${n.project_id}${query}`);
     }
@@ -207,6 +211,22 @@ export const NotificationBell = () => {
       case "project_invite":
         return {
           icon: <UserPlus className="w-4 h-4" />,
+          color: "text-primary",
+          bg: "bg-primary/10 border-primary/30",
+          pulse: true,
+        };
+      // Pedido de assinatura/aprovação: destaque próprio porque exige AÇÃO da
+      // pessoa, não é só informação — antes caía no ícone genérico de "info".
+      case "flow_pending":
+        return {
+          icon: <FileSignature className="w-4 h-4" />,
+          color: "text-primary",
+          bg: "bg-primary/10 border-primary/30",
+          pulse: true,
+        };
+      case "activity_mention":
+        return {
+          icon: <AtSign className="w-4 h-4" />,
           color: "text-primary",
           bg: "bg-primary/10 border-primary/30",
           pulse: true,

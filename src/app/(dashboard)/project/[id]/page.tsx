@@ -287,6 +287,21 @@ export default function ProjectDetailsPage() {
   // Abre direto (sem passar por openEditActivity) para não esbarrar na guarda
   // de permissão de edição — a notificação pode ser de uma atividade de outra
   // pessoa, e o usuário precisa ao menos visualizá-la. O próprio dialog cuida
+  // Deep-link de ABA (?tab=tap, ?tab=documents…). Sem isto, um aviso de "assine
+  // este TAP" levava só à visão geral do projeto e a pessoa ainda precisava
+  // caçar onde estava o pedido.
+  const openedTabRef = useRef<string | null>(null);
+  useEffect(() => {
+    const tabParam = searchParams?.get("tab");
+    if (!tabParam || openedTabRef.current === tabParam) return;
+    // Respeita alias legado (docpages → documents) e o que o usuário pode ver.
+    const alvo = normalizeProjectTabs([tabParam])[0];
+    if (alvo && visibleTabs.includes(alvo)) {
+      openedTabRef.current = tabParam;
+      setActiveTab(alvo);
+    }
+  }, [searchParams, visibleTabs]);
+
   // do que é editável.
   const openedDeepLinkRef = useRef<string | null>(null);
   useEffect(() => {
