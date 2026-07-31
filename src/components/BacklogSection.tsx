@@ -815,7 +815,7 @@ export const BacklogSection = ({
           <span className="flex items-center gap-0.5 justify-end shrink-0">
             <button
               type="button"
-              className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-muted transition-opacity opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+              className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-muted transition-opacity opacity-45 group-hover:opacity-100 focus-visible:opacity-100"
               title="Adicionar subitem (torna-o uma Fase/Entrega)"
               onClick={(e) => {
                 e.stopPropagation();
@@ -833,11 +833,11 @@ export const BacklogSection = ({
               type="button"
               disabled={!isAdmin}
               className={cn(
-                // Visível sempre em telas pequenas e em dispositivo sem hover:
-                // esconder a única saída atrás do mouse deixava a ação
-                // inacessível justamente onde ela é mais difícil de achar.
+                // SEMPRE visível, só atenuado em repouso. Esconder atrás do
+                // hover deixava a ação indescobrível: quem não passa o mouse
+                // por cima não sabe que ela existe.
                 "h-6 w-6 flex items-center justify-center rounded transition-opacity",
-                "opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100",
+                "opacity-45 group-hover:opacity-100 focus-visible:opacity-100",
                 isAdmin
                   ? "text-destructive hover:bg-destructive/10"
                   : "text-muted-foreground/40 cursor-not-allowed",
@@ -856,12 +856,14 @@ export const BacklogSection = ({
           </div>
         )}
 
+        {/* Recuo igual ao das linhas (12 + depth*22), um nível abaixo do pai:
+            o campo cai sob os irmãos que vai criar, não deslocado deles. */}
         {quickAddOpen && (
-          <div style={{ marginLeft: 8 + (depth + 1) * 20 }} className="flex items-center gap-2 px-3 py-2 my-1 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+          <div style={{ paddingLeft: 12 + (depth + 1) * 22 }} className="flex items-center gap-2 pr-3 py-1.5 border-b bg-primary/5">
             <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
             <Input
               autoFocus
-              placeholder="Título do subitem — Enter cria e continua · Esc fecha"
+              placeholder="Título do subitem — Enter cria · Esc fecha"
               value={quickAddTitle}
               onChange={(e) => setQuickAddTitle(e.target.value)}
               onKeyDown={(e) => {
@@ -997,11 +999,18 @@ export const BacklogSection = ({
               acts.map((a) => renderActivityRow(a, 0))
             )}
             {quickAddOpen && (
-              <div className="flex items-center gap-2 mx-2 my-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
-                <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+              // Mesmo grid das linhas de tarefa: o campo cai exatamente sob a
+              // coluna "Tarefa". Antes era um flex com margem própria, então o
+              // input começava num ponto e as tarefas em outro.
+              <div
+                className="grid items-center gap-2 border-b px-3 py-2 bg-primary/5"
+                style={{ gridTemplateColumns: backlogGrid }}
+              >
+                <span />
+                <Plus className="w-3.5 h-3.5 text-primary justify-self-center" />
                 <Input
                   autoFocus
-                  placeholder="Título — Enter cria e continua · Esc fecha"
+                  placeholder="Título — Enter cria · Esc fecha"
                   value={quickAddTitle}
                   onChange={(e) => setQuickAddTitle(e.target.value)}
                   onKeyDown={(e) => {
@@ -1009,7 +1018,7 @@ export const BacklogSection = ({
                     if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
                   }}
                   onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
-                  className="h-8 text-sm"
+                  className="h-7 text-sm"
                 />
               </div>
             )}
@@ -1118,11 +1127,16 @@ export const BacklogSection = ({
               subs.map((s) => renderActivityRow(s, 0))
             )}
             {quickAddOpen && (
-              <div className="flex items-center gap-2 mx-2 my-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
-                <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+              // Mesmo grid das linhas: o campo alinha com a coluna "Tarefa".
+              <div
+                className="grid items-center gap-2 border-b px-3 py-2 bg-primary/5"
+                style={{ gridTemplateColumns: backlogGrid }}
+              >
+                <span />
+                <Plus className="w-3.5 h-3.5 text-primary justify-self-center" />
                 <Input
                   autoFocus
-                  placeholder="Título — Enter cria e continua · Esc fecha"
+                  placeholder="Título — Enter cria · Esc fecha"
                   value={quickAddTitle}
                   onChange={(e) => setQuickAddTitle(e.target.value)}
                   onKeyDown={(e) => {
