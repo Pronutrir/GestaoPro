@@ -242,6 +242,11 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     if (!t) return;
     setSelectedTemplate(id);
     setText(t.text);
+    // Volta para "Colar texto" ao escolher um modelo: é lá que o texto fica
+    // visível e editável. Ficar na aba de modelos escondia o que havia sido
+    // carregado — a pessoa via só um "✓" e não percebia que ainda faltava
+    // confirmar em "Importar N itens", então parecia que nada acontecia.
+    setTab("paste");
   };
 
   const handleImport = async () => {
@@ -340,9 +345,17 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       });
       resetAndClose();
       onDataChanged();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao importar EAP:", error);
-      toast({ title: "Erro ao importar EAP", variant: "destructive" });
+      // A inserção não é transacional: se falhar no meio, o que já entrou está
+      // gravado. Atualizar mesmo no erro evita a tela mostrar um backlog vazio
+      // enquanto o banco tem itens — antes o refetch só rodava no sucesso.
+      onDataChanged();
+      toast({
+        title: "Erro ao importar EAP",
+        description: `${error?.message || "Falha desconhecida."} Parte dos itens pode ter sido criada — confira o backlog antes de tentar de novo.`,
+        variant: "destructive",
+      });
     } finally {
       setImporting(false);
     }
@@ -419,17 +432,22 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                     {selectedTemplate === t.id && <span className="ml-auto text-primary text-sm">✓</span>}
                   </button>
                 ))}
-                <button
-                  type="button"
-                  onClick={resetAndClose}
-                  className="w-full flex items-center gap-3 text-left border border-dashed rounded-lg p-3 hover:bg-muted/50"
-                >
-                  <span className="w-9 h-9 rounded-md bg-muted flex items-center justify-center text-lg shrink-0">📄</span>
-                  <span>
-                    <span className="block text-[13px] font-medium">EAP em branco</span>
-                    <span className="block text-xs text-muted-foreground">Montar item a item no Backlog</span>
-                  </span>
-                </button>
+                {/* Não é uma opção de importação: só fecha o diálogo. Estava
+                    com a mesma aparência dos modelos acima, então clicar nele
+                    parecia escolher um modelo — o modal fechava, nada era
+                    criado e nada explicava o porquê. Agora é texto com um link,
+                    não mais um cartão irmão dos modelos. */}
+                <p className="text-xs text-muted-foreground pt-1">
+                  Prefere montar item a item?{" "}
+                  <button
+                    type="button"
+                    onClick={resetAndClose}
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    Feche e use “Nova Atividade”
+                  </button>
+                  .
+                </p>
               </div>
             )}
           </div>
