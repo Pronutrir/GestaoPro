@@ -15,7 +15,7 @@ import { EditActivityDialog } from "@/components/EditActivityDialog";
 import { ImportWBSDialog } from "@/components/ImportWBSDialog";
 import { ProjectCronogramaPanel } from "@/components/cronograma/ProjectCronogramaPanel";
 import { LessonsLearned } from "@/components/LessonsLearned";
-import { DocumentManager } from "@/components/DocumentManager";
+import { DocumentCenter } from "@/components/documentos/DocumentCenter";
 import { ProjectCharter } from "@/components/ProjectCharter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
@@ -33,7 +33,6 @@ import { UserStoriesBoard } from "@/components/UserStoriesBoard";
 import { SHOW_USER_STORIES, SHOW_CALENDAR } from "@/lib/featureFlags";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
-import { ProjectDocuments } from "@/components/documents/ProjectDocuments";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, GanttChart, BookOpen, FileText, Flag,
@@ -118,7 +117,6 @@ const SUPPORTED_PROJECT_TABS = [
   "timeline",
   "calendar",
   "documents",
-  "docpages",
   "stories",
   "tap",
   "meetings",
@@ -132,6 +130,10 @@ const SUPPORTED_PROJECT_TABS = [
 
 const LEGACY_PROJECT_TAB_ALIASES: Record<string, typeof SUPPORTED_PROJECT_TABS[number]> = {
   list: "backlog",
+  // "Páginas" virou uma visão dentro de Documentos (Central de Documentos).
+  // Links salvos, preferências gravadas por usuário e permissões de aba já
+  // existentes continuam válidos — passam a apontar para a aba única.
+  docpages: "documents",
 };
 
 const sanitizeVisibleProjectTabs = (tabs: string[] | null | undefined) => {
@@ -305,6 +307,28 @@ export default function ProjectDetailsPage() {
     setEditingActivity(target);
     setEditActivityDialogOpen(true);
   }, [activities, searchParams]);
+
+  // O cartão de tarefa dentro de um documento escrito ("/tarefa") dispara
+  // `open-activity` ao clicar em Abrir. Até agora ninguém escutava esse evento
+  // e o botão não fazia nada. Abre igual ao deep-link de notificação: sem
+  // passar pela guarda de edição, porque abrir para VER não é editar — o
+  // próprio dialog decide o que fica editável.
+  useEffect(() => {
+    const onOpenActivity = (e: Event) => {
+      const detail = (e as CustomEvent<{ activityId?: string }>).detail;
+      if (!detail?.activityId) return;
+      const target = activities.find((a) => a.id === detail.activityId);
+      if (!target) {
+        toast.error("Atividade não encontrada — pode ter sido excluída ou arquivada.");
+        return;
+      }
+      setEditActivityInitialTab("details");
+      setEditingActivity(target);
+      setEditActivityDialogOpen(true);
+    };
+    window.addEventListener("open-activity", onOpenActivity);
+    return () => window.removeEventListener("open-activity", onOpenActivity);
+  }, [activities, toast]);
 
   const fetchPendingChangeRequests = useCallback(async () => {
     if (!id) return;
@@ -1344,7 +1368,6 @@ export default function ProjectDetailsPage() {
                   { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-rose-500" },
                 ]),
                 { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-blue-500" },
-                { value: "docpages", label: "Páginas", icon: <NotebookPen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-pink-500" },
                 ...(SHOW_USER_STORIES ? [
                   { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-fuchsia-500" },
                 ] : []),
@@ -1476,17 +1499,19 @@ export default function ProjectDetailsPage() {
               </TabsContent>
             )}
 
+            {/* CENTRAL DE DOCUMENTOS — as antigas abas "Documentos" e "Páginas"
+                fundidas. Eram metades do mesmo trabalho: uma escrevia e não
+                distribuía, a outra distribuía e não escrevia. A escolha entre
+                escrever e enviar arquivo virou sub-navegação, não aba do
+                projeto. A rota antiga (?tab=docpages) continua abrindo aqui. */}
             <TabsContent value="documents" className="mt-0">
-              <DocumentManager
+              <DocumentCenter
                 projectId={id!}
                 phases={phases}
                 activities={activities.map(a => ({ id: a.id, title: a.title }))}
                 canManageProject={isAdmin}
+                onActivityCreated={fetchProjectData}
               />
-            </TabsContent>
-
-            <TabsContent value="docpages" className="mt-0">
-              <ProjectDocuments projectId={id!} onActivityCreated={fetchProjectData} />
             </TabsContent>
 
             <TabsContent value="stories" className="mt-0">

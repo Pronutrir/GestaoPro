@@ -4,8 +4,9 @@ export const ALL_PROJECT_TABS = [
   { value: "backlog", label: "Lista" },
   { value: "timeline", label: "Cronograma" },
   { value: "calendar", label: "Calendário" },
+  // "Páginas" foi fundida em Documentos (Central de Documentos): escrever e
+  // enviar arquivo são visões da mesma aba, não permissões separadas.
   { value: "documents", label: "Documentos" },
-  { value: "docpages", label: "Páginas" },
   { value: "stories", label: "Histórias" },
   { value: "tap", label: "TAP" },
   { value: "meetings", label: "Reuniões" },
@@ -21,7 +22,11 @@ export const ALL_PROJECT_TABS = [
 export const ALL_TAB_VALUES = ALL_PROJECT_TABS.map(t => t.value);
 
 export const normalizeProjectTabs = (tabs?: string[] | null) => {
-  const validTabs = (tabs || []).filter((tab): tab is typeof ALL_TAB_VALUES[number] =>
+  // Permissões gravadas antes da fusão podem conter "docpages" sozinho. Sem
+  // esta troca, quem só tinha Páginas liberada perderia o acesso ao módulo.
+  const migrated = (tabs || []).map((tab) => (tab === "docpages" ? "documents" : tab));
+
+  const validTabs = migrated.filter((tab): tab is typeof ALL_TAB_VALUES[number] =>
     ALL_TAB_VALUES.includes(tab as typeof ALL_TAB_VALUES[number])
   );
 

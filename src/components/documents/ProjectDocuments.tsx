@@ -21,8 +21,15 @@ import {
   Type, ListChecks, ArrowRight, Table as TableIcon, Minus,
   AlignLeft, AlignCenter, AlignRight, Link as LinkIcon,
   Highlighter, Code, Undo2, Redo2, Trash, Plus as PlusIcon,
-  ZoomIn, ZoomOut, RotateCcw, ChevronLeft, ChevronRight,
+  ZoomIn, ZoomOut, RotateCcw, ChevronLeft, ChevronRight, AlertTriangle,
+  MessageSquare, Image as ImageIcon, CalendarDays, ListTree, FileDown, History,
 } from "lucide-react";
+import { PageHistory } from "@/components/documentos/PageHistory";
+import { CalloutNode } from "./CalloutNode";
+import { ToggleNode } from "./ToggleNode";
+import { PAGE_TEMPLATES } from "@/lib/pageTemplates";
+import { PageFlowBar } from "@/components/documentos/PageFlowBar";
+import { PageComments } from "@/components/documentos/PageComments";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -41,12 +48,23 @@ import { TaskReferenceNode } from "./TaskReferenceCard";
 import { AIAssistButton, type AIAction } from "@/components/AIAssistButton";
 import { ImageEditorDialog } from "./ImageEditorDialog";
 
+// project_pages e suas colunas novas ainda estão fora dos tipos gerados
+// (migration pendente na VM). Escape hatch único e documentado, mesmo padrão
+// do DocumentManager.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sb = supabase as any;
+
 interface PageDoc {
   id: string;
   project_id: string;
   title: string;
+  // JSON do ProseMirror: estrutura recursiva sem tipo estável no TipTap.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   content: any;
   updated_at: string;
+  /** Sobe a cada gravação; é o que permite detectar edição concorrente. */
+  revision?: number | null;
+  updated_by_name?: string | null;
 }
 
 interface Stage {
@@ -72,6 +90,13 @@ const SLASH_ITEMS = [
   { key: "quote", label: "Citação", icon: Quote, hint: "Bloco destacado" },
   { key: "table", label: "Tabela", icon: TableIcon, hint: "Tabela 3x3 com cabeçalho" },
   { key: "hr", label: "Divisor", icon: Minus, hint: "Linha horizontal" },
+  // Blocos da fase 4 — o editor tinha 11 comandos e nenhum deles servia para
+  // destacar uma regra, esconder um anexo longo ou inserir imagem pelo menu.
+  { key: "imagem", label: "Imagem", icon: ImageIcon, hint: "Enviar do computador" },
+  { key: "codigo", label: "Bloco de código", icon: Code, hint: "Trecho técnico monoespaçado" },
+  { key: "aviso", label: "Aviso destacado", icon: AlertTriangle, hint: "Nota, atenção ou cuidado" },
+  { key: "secao", label: "Seção recolhível", icon: ChevronRight, hint: "Esconde detalhe longo" },
+  { key: "data", label: "Data de hoje", icon: CalendarDays, hint: "Insere a data por extenso" },
 ] as const;
 type SlashKey = typeof SLASH_ITEMS[number]["key"];
 
@@ -100,6 +125,31 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  // Revisão carregada. O update compara com o banco antes de gravar: se outra
+  // pessoa salvou no meio do caminho, a gravação é recusada em vez de
+  // sobrescrever o trabalho dela.
+  const revisionRef = useRef<number>(1);
+  const [conflict, setConflict] = useState(false);
+  const [profileName, setProfileName] = useState<string | null>(null);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // Marca a próxima gravação como fruto de uma restauração, para o histórico
+  // registrar a origem em vez de parecer uma edição comum.
+  const restoringRef = useRef(false);
+  // Contador que sobe a cada edição: o documento do ProseMirror é mutável, e
+  // por isso não serve de dependência para recalcular o sumário.
+  const [editorVersion, setEditorVersion] = useState(0);
+  // Trecho selecionado vira a âncora do comentário: guardamos o TEXTO, não a
+  // posição, porque posição envelhece a cada parágrafo inserido acima.
+  const [selectedText, setSelectedText] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle()
+      .then(({ data }) => setProfileName(data?.full_name ?? null));
+  }, [user?.id]);
   // Zoom do editor (persistido localmente). 100% = padrão.
   const [zoom, setZoom] = useState<number>(() => {
     if (typeof window === "undefined") return 100;
@@ -182,7 +232,9 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     const [pagesRes, stagesRes] = await Promise.all([
       supabase
         .from("project_pages" as any)
-        .select("id, project_id, title, content, updated_at")
+        // `revision` pode não existir ainda (migration pendente na VM); o
+        // fallback logo abaixo relê sem ela em vez de deixar a lista vazia.
+        .select("id, project_id, title, content, updated_at, revision, updated_by_name")
         .eq("project_id", projectId)
         .eq("is_trashed", false)
         .order("updated_at", { ascending: false }),
@@ -192,7 +244,21 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
         .eq("project_id", projectId)
         .order("display_order"),
     ]);
-    const list = (pagesRes.data as any[] as PageDoc[]) || [];
+    let list = (pagesRes.data as any[] as PageDoc[]) || [];
+
+    // Migration ainda não aplicada na VM: a consulta acima falha por causa das
+    // colunas novas. Relê sem elas — a aba continua funcionando exatamente como
+    // antes, só sem a proteção contra edição concorrente.
+    if (pagesRes.error && /revision|updated_by_name/i.test(pagesRes.error.message)) {
+      const retry = await sb
+        .from("project_pages")
+        .select("id, project_id, title, content, updated_at")
+        .eq("project_id", projectId)
+        .eq("is_trashed", false)
+        .order("updated_at", { ascending: false });
+      list = (retry.data as PageDoc[]) || [];
+    }
+
     setPages(list);
     setStages(stagesRes.data || []);
     setActivePageId((prev) => prev && list.some(p => p.id === prev) ? prev : (list[0]?.id ?? null));
@@ -243,6 +309,10 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
         },
       }).configure({ inline: false, allowBase64: false, HTMLAttributes: { class: "rounded-lg border border-border max-w-full h-auto my-2 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all" } }),
       TaskReferenceNode,
+      // Blocos que faltavam para documento normativo: aviso destacado e seção
+      // recolhível. Ver comentários nos próprios arquivos.
+      CalloutNode,
+      ToggleNode,
     ],
     content: { type: "doc", content: [{ type: "paragraph" }] },
     editorProps: {
@@ -335,12 +405,16 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     hydratingRef.current = true;
     setTitleDraft(nextTitle);
     titleDraftRef.current = nextTitle;
+    // Base da comparação de concorrência: é ESTA revisão que a pessoa está
+    // editando. Sem migration aplicada a coluna vem undefined e vale 1.
+    revisionRef.current = activePage.revision ?? 1;
+    setConflict(false);
     editor.commands.setContent(nextContent);
     queueMicrotask(() => {
       hydratingRef.current = false;
       dirtyRef.current = !!draft;
     });
-  }, [editor, activePage?.id, activePage?.updated_at]);
+  }, [editor, activePage?.id, activePage?.updated_at, activePage?.revision]);
 
   /* ---------- Slash detection ---------- */
   useEffect(() => {
@@ -492,6 +566,42 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
     [editor]
   );
 
+  /**
+   * SUMÁRIO — construído a partir dos títulos reais do documento.
+   *
+   * Não é uma lista que a pessoa mantém à mão (que envelhece na primeira
+   * edição): lê a árvore do ProseMirror a cada mudança. Clicar rola até o
+   * título, que é o que torna útil um documento de vinte páginas.
+   */
+  const toc = useMemo(() => {
+    if (!editor || editor.isDestroyed) return [];
+    // Lido de propósito: é o gatilho do recálculo. O documento do ProseMirror é
+    // mutável, então mudar o texto não muda a referência de `editor` — sem este
+    // contador o sumário congelaria no estado do primeiro render.
+    void editorVersion;
+    const out: { level: number; text: string; pos: number }[] = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === "heading") {
+        const text = node.textContent.trim();
+        if (text) out.push({ level: node.attrs.level as number, text, pos });
+      }
+    });
+    return out;
+    // `editorVersion` força o recálculo a cada edição — o doc é mutável e não
+    // serve como dependência por si só.
+  }, [editor, editorVersion]);
+
+  /**
+   * EXPORTAR EM PDF — pela impressão do navegador.
+   *
+   * Sem biblioteca de PDF: uma dependência dessas pesa centenas de KB e
+   * reimplementa mal a paginação, quebra de tabela e fonte que o navegador já
+   * resolve. O CSS de impressão esconde a interface e deixa só o documento.
+   */
+  const exportPdf = useCallback(() => {
+    window.print();
+  }, []);
+
   /* ---------- Apply slash command ---------- */
   const applySlash = useCallback(
     async (key: SlashKey) => {
@@ -526,6 +636,30 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
         case "quote": chain.toggleBlockquote().run(); break;
         case "table": chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); break;
         case "hr": chain.setHorizontalRule().run(); break;
+        case "codigo": chain.toggleCodeBlock().run(); break;
+        case "aviso":
+          chain.insertContent({
+            type: "callout", attrs: { tone: "nota" },
+            content: [{ type: "paragraph" }],
+          }).run();
+          break;
+        case "secao":
+          chain.insertContent({
+            type: "toggleSection", attrs: { open: true, summary: "" },
+            content: [{ type: "paragraph" }],
+          }).run();
+          break;
+        case "data":
+          // Data por extenso em pt-BR: "31 de julho de 2026". Formato numérico
+          // dá ambiguidade dd/mm vs mm/dd em documento que sai do sistema.
+          chain.insertContent(
+            new Date().toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" }),
+          ).run();
+          break;
+        case "imagem":
+          // Só o menu; o envio em si acontece no input escondido.
+          imageInputRef.current?.click();
+          break;
       }
       setSlashOpen(false);
     },
@@ -555,31 +689,96 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   }, [slashOpen, filteredSlash, slashIndex, applySlash]);
 
   /* ---------- Save ---------- */
+  /**
+   * Gravação com detecção de edição concorrente.
+   *
+   * Antes, o update era cego: duas pessoas na mesma página e a última a salvar
+   * apagava o trabalho da outra, sem aviso e sem histórico para recuperar.
+   *
+   * Agora o UPDATE traz `.eq("revision", atual)` — se outra pessoa gravou no
+   * meio do caminho, a revisão no banco já mudou, nenhuma linha é afetada e a
+   * gravação é recusada em vez de sobrescrever. O rascunho local permanece
+   * intacto, então nada do que foi digitado se perde.
+   */
   const savePage = useCallback(async () => {
     if (!editor || editor.isDestroyed || !activePage) return;
     setSaving(true);
     const json = editor.getJSON();
     const nextTitle = titleDraftRef.current || "Documento sem título";
-    const { error } = await supabase
-      .from("project_pages" as any)
+    const baseRevision = revisionRef.current;
+
+    const { data, error } = await sb
+      .from("project_pages")
       .update({
         title: nextTitle,
-        content: json as any,
+        content: json,
+        revision: baseRevision + 1,
+        updated_by_id: user?.id ?? null,
+        updated_by_name: profileName ?? null,
       })
-      .eq("id", activePage.id);
+      .eq("id", activePage.id)
+      .eq("revision", baseRevision)
+      .select("id, revision");
+
     setSaving(false);
-    if (error) { toast.error("Erro ao salvar"); return; }
+
+    if (error) {
+      // Coluna `revision` ainda não existe (migration pendente na VM): grava
+      // como antes, sem a proteção, em vez de travar o editor.
+      if (/revision/i.test(error.message)) {
+        const { error: plainError } = await sb
+          .from("project_pages")
+          .update({ title: nextTitle, content: json })
+          .eq("id", activePage.id);
+        if (plainError) { toast.error("Erro ao salvar"); return; }
+        setPages((prev) => prev.map((p) => p.id === activePage.id
+          ? { ...p, title: nextTitle, content: json, updated_at: new Date().toISOString() } : p));
+        clearDraft(activePage.id);
+        dirtyRef.current = false;
+        return;
+      }
+      toast.error("Erro ao salvar");
+      return;
+    }
+
+    // Zero linhas afetadas = a revisão mudou no banco: outra pessoa salvou.
+    if (!data || data.length === 0) {
+      setConflict(true);
+      toast.error("Outra pessoa editou esta página", {
+        description: "Seu texto está salvo aqui no navegador. Recarregue para ver a versão dela antes de continuar.",
+        duration: 10000,
+      });
+      return;
+    }
+
+    revisionRef.current = (data[0] as { revision?: number }).revision ?? baseRevision + 1;
+    setConflict(false);
+
+    // Guarda a versão. Falha em silêncio: perder o histórico de uma gravação é
+    // ruim, mas bloquear a gravação por causa dele seria pior.
+    void sb.from("page_versions").insert({
+      page_id: activePage.id,
+      project_id: projectId,
+      revision: revisionRef.current,
+      title: nextTitle,
+      content: json,
+      author_id: user?.id ?? null,
+      author_name: profileName ?? null,
+      origin: restoringRef.current ? "restauracao" : "auto",
+    });
+    restoringRef.current = false;
     setPages((prev) =>
       prev.map((p) =>
         p.id === activePage.id
-          ? { ...p, title: nextTitle, content: json, updated_at: new Date().toISOString() }
+          ? { ...p, title: nextTitle, content: json, updated_at: new Date().toISOString(),
+              revision: revisionRef.current }
           : p
       )
     );
     // Sucesso → limpa rascunho local
     clearDraft(activePage.id);
     dirtyRef.current = false;
-  }, [editor, activePage]);
+  }, [editor, activePage, user?.id, profileName, projectId]);
 
   /* ---------- Mantém flushRef sempre atualizado ---------- */
   useEffect(() => {
@@ -597,6 +796,8 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
 
     const onChange = () => {
       if (hydratingRef.current) return;
+      // Sinaliza a mudança para o sumário se recalcular.
+      setEditorVersion((v) => v + 1);
       const json = editor.getJSON();
       const titleNow = titleDraft || "Documento sem título";
       // 1) Rascunho local instantâneo (rede de segurança contra desmontagem)
@@ -651,20 +852,28 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
   }, []);
 
   /* ---------- Create / Delete page ---------- */
-  const createPage = async () => {
-    const { data, error } = await supabase
-      .from("project_pages" as any)
+  /**
+   * Cria a página, opcionalmente a partir de um modelo.
+   *
+   * A folha em branco é o maior obstáculo: "escreva a ata" produz atas em cinco
+   * formatos, cada uma esquecendo um campo diferente. O modelo é o que torna o
+   * documento comparável entre projetos.
+   */
+  const createPage = async (templateKey?: string) => {
+    const tpl = templateKey ? PAGE_TEMPLATES.find((t) => t.key === templateKey) : null;
+    const { data, error } = await sb
+      .from("project_pages")
       .insert({
         project_id: projectId,
-        title: "Novo documento",
-        content: { type: "doc", content: [{ type: "paragraph" }] },
+        title: tpl ? tpl.title : "Novo documento",
+        content: tpl ? tpl.build() : { type: "doc", content: [{ type: "paragraph" }] },
         created_by: user?.id ?? null,
         created_by_email: user?.email ?? null,
-      } as any)
+      })
       .select("id, project_id, title, content, updated_at")
       .single();
     if (error || !data) { toast.error("Erro ao criar documento"); return; }
-    const newPage = data as any as PageDoc;
+    const newPage = data as PageDoc;
     setPages((prev) => [newPage, ...prev]);
     setActivePageId(newPage.id);
   };
@@ -733,7 +942,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button onClick={createPage} size="icon" variant="ghost" className="h-7 w-7" title="Novo documento">
+              <Button onClick={() => createPage()} size="icon" variant="ghost" className="h-7 w-7" title="Novo documento">
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
@@ -745,7 +954,7 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                   <div className="text-xs text-muted-foreground p-4 text-center">
                     Nenhum documento.
                     <br />
-                    <Button onClick={createPage} size="sm" variant="link" className="h-auto p-0 mt-1">
+                    <Button onClick={() => createPage()} size="sm" variant="link" className="h-auto p-0 mt-1">
                       Criar o primeiro
                     </Button>
                   </div>
@@ -793,13 +1002,28 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
           {/* Editor */}
           <main className="overflow-auto bg-background">
             {!activePage ? (
-              <div className="h-full flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
+              <div className="h-full flex items-center justify-center text-muted-foreground p-6">
+                <div className="text-center max-w-lg">
                   <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm mb-3">Crie um documento para começar.</p>
-                  <Button onClick={createPage} size="sm">
-                    <Plus className="h-4 w-4 mr-1" /> Novo documento
+                  <p className="text-sm mb-4">Crie um documento para começar.</p>
+                  <Button onClick={() => createPage()} size="sm" className="mb-5">
+                    <Plus className="h-4 w-4 mr-1" /> Documento em branco
                   </Button>
+
+                  {/* Modelos: a folha em branco é o maior obstáculo, e o modelo
+                      garante que os campos que importam não fiquem de fora. */}
+                  <p className="text-[11px] font-semibold uppercase tracking-wide mb-2">
+                    ou comece por um modelo
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-left">
+                    {PAGE_TEMPLATES.map((t) => (
+                      <button key={t.key} type="button" onClick={() => createPage(t.key)}
+                        className="rounded-lg border bg-card px-3 py-2 hover:border-primary hover:bg-accent/40 transition-colors">
+                        <p className="text-[13px] font-semibold text-foreground">{t.label}</p>
+                        <p className="text-[11px] text-muted-foreground">{t.hint}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -822,6 +1046,32 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                     </Button>
                   </div>
                 </div>
+
+                {/* O texto escrito aqui agora circula: ciência, aprovação ou
+                    assinatura, com a mesma trilha de auditoria dos arquivos. */}
+                <PageFlowBar
+                  projectId={projectId}
+                  pageId={activePage.id}
+                  pageTitle={titleDraft || activePage.title}
+                  getPlainText={() => editor?.getText() ?? ""}
+                  canManage
+                />
+
+                {/* Edição concorrente: avisa em vez de sobrescrever em silêncio.
+                    O texto continua salvo no rascunho local — nada se perde. */}
+                {conflict && (
+                  <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="text-[13px] text-foreground flex-1">
+                      Outra pessoa salvou esta página enquanto você escrevia. Seu texto está guardado
+                      neste navegador — recarregue para ver a versão dela antes de continuar.
+                    </span>
+                    <Button size="sm" variant="outline" className="h-7 text-xs shrink-0"
+                      onClick={() => window.location.reload()}>
+                      Recarregar
+                    </Button>
+                  </div>
+                )}
 
                 {editor && (
                   <div className="sticky top-0 z-10 mb-3 flex items-center gap-0.5 p-1 rounded-lg border bg-card/95 backdrop-blur shadow-sm flex-wrap">
@@ -888,6 +1138,34 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                     </button>
                     <ToolbarBtn icon={ZoomIn} label="Aumentar zoom" onClick={zoomIn} />
                     <Sep />
+                    <ToolbarBtn icon={ImageIcon} label="Inserir imagem"
+                      onClick={() => imageInputRef.current?.click()} />
+                    <ToolbarBtn icon={ListTree} label="Sumário" active={tocOpen}
+                      onClick={() => setTocOpen((v) => !v)} />
+                    <ToolbarBtn icon={FileDown} label="Exportar em PDF" onClick={exportPdf} />
+                    <ToolbarBtn icon={History} label="Histórico de versões"
+                      onClick={() => setHistoryOpen(true)} />
+                    <ToolbarBtn icon={AlertTriangle} label="Aviso destacado"
+                      active={editor.isActive("callout")}
+                      onClick={() => editor.chain().focus().insertContent({
+                        type: "callout", attrs: { tone: "nota" },
+                        content: [{ type: "paragraph" }],
+                      }).run()} />
+                    {/* Comentar o trecho selecionado. Sem seleção, apenas abre
+                        o painel da conversa. */}
+                    <ToolbarBtn
+                      icon={MessageSquare}
+                      label="Comentar trecho selecionado"
+                      active={commentsOpen}
+                      onClick={() => {
+                        const { from, to } = editor.state.selection;
+                        const text = from !== to
+                          ? editor.state.doc.textBetween(from, to, " ").trim().slice(0, 300)
+                          : null;
+                        setSelectedText(text);
+                        setCommentsOpen(true);
+                      }}
+                    />
                     <Button
                       size="sm"
                       className="h-7 px-2.5 text-xs gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
@@ -949,15 +1227,85 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    transform: `scale(${zoom / 100})`,
-                    transformOrigin: "top left",
-                    width: `${10000 / zoom}%`,
-                  }}
-                >
-                  <EditorContent editor={editor} />
+                {/* Sumário gerado dos títulos reais — não uma lista mantida à
+                    mão, que envelheceria na primeira edição. */}
+                {tocOpen && toc.length > 0 && (
+                  <div className="mb-3 rounded-lg border bg-muted/30 p-3 doc-no-print">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                      Sumário
+                    </p>
+                    <div className="space-y-0.5">
+                      {toc.map((t, i) => (
+                        <button key={`${t.pos}-${i}`} type="button"
+                          onClick={() => {
+                            editor.chain().focus().setTextSelection(t.pos + 1).run();
+                            editor.view.dom.querySelector<HTMLElement>(
+                              `h${t.level}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }}
+                          className="block w-full text-left text-[12.5px] text-muted-foreground hover:text-foreground truncate"
+                          style={{ paddingLeft: `${(t.level - 1) * 12}px` }}>
+                          {t.text}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-4 items-start">
+                  <div
+                    className="flex-1 min-w-0"
+                    style={{
+                      transform: `scale(${zoom / 100})`,
+                      transformOrigin: "top left",
+                      width: `${10000 / zoom}%`,
+                    }}
+                  >
+                    <EditorContent editor={editor} />
+                  </div>
+
+                  {/* Conversa presa ao texto. O painel só abre quando pedido —
+                      documento longo com barra lateral fixa fica apertado. */}
+                  {commentsOpen && (
+                    <PageComments
+                      projectId={projectId}
+                      pageId={activePage.id}
+                      selection={selectedText}
+                      onClearSelection={() => setSelectedText(null)}
+                    />
+                  )}
                 </div>
+
+                {/* Restaurar cria uma versão NOVA com o conteúdo antigo — o
+                    texto atual continua no histórico, nada é sobrescrito. */}
+                <PageHistory
+                  open={historyOpen}
+                  onOpenChange={setHistoryOpen}
+                  pageId={activePage.id}
+                  currentRevision={revisionRef.current}
+                  onRestore={async (content, title) => {
+                    restoringRef.current = true;
+                    setTitleDraft(title);
+                    titleDraftRef.current = title;
+                    editor?.commands.setContent(content);
+                    dirtyRef.current = true;
+                    await savePage();
+                    toast.success("Versão restaurada");
+                  }}
+                />
+
+                {/* Imagem pelo menu e pela barra. Antes só entrava colando ou
+                    arrastando — quem não conhecia o atalho não inseria imagem. */}
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadAndInsertImage(f);
+                    e.target.value = "";
+                  }}
+                />
 
                 {/* Slash menu */}
                 {slashOpen && slashPos && filteredSlash.length > 0 && (
@@ -1006,6 +1354,29 @@ export function ProjectDocuments({ projectId, onActivityCreated }: ProjectDocume
         </div>
 
         <style>{`
+          /* IMPRESSÃO / PDF — esconde a interface e deixa só o documento.
+             Feito por CSS em vez de biblioteca de PDF: o navegador já resolve
+             paginação, quebra de tabela e fonte melhor do que reimplementaríamos. */
+          @media print {
+            body * { visibility: hidden; }
+            .ProseMirror, .ProseMirror * { visibility: visible; }
+            .ProseMirror {
+              position: absolute; left: 0; top: 0; width: 100%;
+              padding: 0; transform: none !important;
+            }
+            .doc-no-print { display: none !important; }
+            /* Uma seção recolhida some do papel — no PDF, tudo é impresso. */
+            [data-toggle-section] .hidden { display: block !important; }
+            .ProseMirror h1, .ProseMirror h2, .ProseMirror h3 { break-after: avoid; }
+            .ProseMirror table, .ProseMirror img { break-inside: avoid; }
+          }
+          .ProseMirror pre {
+            background: hsl(var(--muted)); border: 1px solid hsl(var(--border));
+            border-radius: 0.5rem; padding: 0.75rem 0.9rem; margin: 0.5rem 0;
+            font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+            font-size: 0.85rem; line-height: 1.5; overflow-x: auto;
+          }
+          .ProseMirror pre code { background: none; border: none; padding: 0; font-size: inherit; }
           .ProseMirror p.is-editor-empty:first-child::before {
             content: attr(data-placeholder);
             float: left;

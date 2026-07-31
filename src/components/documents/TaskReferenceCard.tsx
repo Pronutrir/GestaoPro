@@ -105,6 +105,9 @@ function TaskRefView({ node, deleteNode }: any) {
           size="sm"
           variant="ghost"
           className="h-7 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+          // O card vive dentro do editor, longe da página do projeto — o evento
+          // evita arrastar um callback por toda a árvore do TipTap. Quem escuta
+          // é a página do projeto, que sabe abrir a atividade.
           onClick={() => {
             window.dispatchEvent(new CustomEvent("open-activity", { detail: { activityId, projectId } }));
           }}

@@ -18,7 +18,10 @@ export type ParticipantStatus = "pendente" | "notificado" | "visualizado" | "con
 
 export interface DocumentFlow {
   id: string;
-  document_id: string;
+  /** Arquivo. Vazio quando o alvo é uma página escrita aqui. */
+  document_id: string | null;
+  /** Página escrita no editor — o outro alvo possível do mesmo envelope. */
+  page_id?: string | null;
   project_id: string;
   kind: FlowKind;
   status: FlowStatus;
@@ -183,6 +186,28 @@ export async function hashFile(file: Blob): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+/**
+ * ORIGEM DO ATO — IP e agente, para a trilha de auditoria.
+ *
+ * O navegador não conhece o próprio IP público; quem sabe é o servidor, lendo o
+ * cabeçalho que o proxy escreveu. Por isso a pergunta vai a /api/client-ip em
+ * vez de ser montada no cliente: valor que o cliente escolhe não serve de prova.
+ *
+ * Falha em silêncio devolvendo o agente sozinho — um aceite não pode ser
+ * bloqueado porque o endpoint de auditoria não respondeu.
+ */
+export async function captureOrigin(): Promise<{ ip: string | null; userAgent: string | null }> {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 300) : null;
+  try {
+    const res = await fetch("/api/client-ip");
+    if (!res.ok) return { ip: null, userAgent: ua };
+    const data = (await res.json()) as { ip?: string | null; userAgent?: string | null };
+    return { ip: data.ip ?? null, userAgent: data.userAgent?.slice(0, 300) ?? ua };
+  } catch {
+    return { ip: null, userAgent: ua };
+  }
 }
 
 /** Rótulo legível de cada evento da trilha. */
