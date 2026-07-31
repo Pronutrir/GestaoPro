@@ -777,7 +777,7 @@ export const BacklogSection = ({
           <span className="flex items-center gap-0.5 justify-end shrink-0">
             <button
               type="button"
-              className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-muted transition-opacity opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
               title="Adicionar subitem (torna-o uma Fase/Entrega)"
               onClick={(e) => {
                 e.stopPropagation();
@@ -795,7 +795,11 @@ export const BacklogSection = ({
               type="button"
               disabled={!isAdmin}
               className={cn(
-                "h-6 w-6 flex items-center justify-center rounded transition-opacity opacity-0 group-hover:opacity-100",
+                // Visível sempre em telas pequenas e em dispositivo sem hover:
+                // esconder a única saída atrás do mouse deixava a ação
+                // inacessível justamente onde ela é mais difícil de achar.
+                "h-6 w-6 flex items-center justify-center rounded transition-opacity",
+                "opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100",
                 isAdmin
                   ? "text-destructive hover:bg-destructive/10"
                   : "text-muted-foreground/40 cursor-not-allowed",
@@ -1207,7 +1211,12 @@ export const BacklogSection = ({
       )}
 
       {/* Phase groups — tabela única com cabeçalho de colunas no topo */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
+      {/* overflow-x-auto, não hidden: o grid tem largura mínima (~760px com as
+          colunas padrão) e a coluna de AÇÕES é a última. Em tela estreita o
+          `overflow-hidden` anterior cortava essa coluna sem oferecer rolagem —
+          o botão de arquivar existia, renderizado, mas inalcançável. Era o
+          "não consigo excluir" relatado: layout, não permissão. */}
+      <div className="rounded-lg border border-border bg-card overflow-x-auto">
         {/* Sem botão de criar fase aqui: a entrada do backlog é "Nova
             Atividade" (ou importar a EAP, que já cria as fases). Fase avulsa
             criada antes de existir qualquer tarefa só produzia um agrupador
