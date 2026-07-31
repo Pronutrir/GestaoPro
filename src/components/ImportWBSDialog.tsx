@@ -145,14 +145,17 @@ const parseFlexible = (text: string): TreeNode[] => {
     }
   }
 
-  // 2) Resolve o PAPEL EAP (modelo unificado, profundidade livre):
-  //    - QUALQUER nó com filhos = Fase/Entrega (agrupa, em qualquer nível)
-  //    - folha: marco se o título indicar; senão atividade
-  const hasChildren = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
+  // 2) Resolve o PAPEL EAP pelo NÍVEL (mesma regra de lib/eapModel):
+  //    nível 1 (1, 2, 3…)  = Fase/Entrega
+  //    nível 2+ (1.1, …)   = Atividade — mesmo que agrupe
+  //    marco vence quando o título indica
+  //
+  // Antes o papel vinha da função ("tem filho → Fase"), o que fazia
+  // "1 / 1.1 / 1.1.1" virar Fase, Fase, Atividade. A leitura da EAP é
+  // "1. Fase / 1.1 Entrega / 1.1.1 Atividade": o nível é que decide.
   for (const n of nodes) {
-    if (hasChildren.has(n.code)) n.role = "fase";
-    else if (isMilestoneTitle(n.title)) n.role = "marco";
-    else n.role = "atividade";
+    if (isMilestoneTitle(n.title)) n.role = "marco";
+    else n.role = n.depth === 1 ? "fase" : "atividade";
   }
 
   return nodes;
@@ -253,8 +256,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     setImporting(true);
     try {
       // Nível 1 agrupador = "fase do projeto" (tabela phases). Agrupadores
-      // ANINHADOS (fase em profundidade > 1) viram activities com item_type='fase'
-      // — Fase/Entrega vive na árvore de atividades em qualquer nível.
+      // Com a regra por nível, "fase" só existe em depth 1 — os filtros abaixo
+      // são equivalentes a depth===1 / depth>1, e ficam explícitos assim.
       const phases = tree.filter((n) => n.role === "fase" && n.depth === 1);
       const nonPhase = tree.filter((n) => !(n.role === "fase" && n.depth === 1));
 

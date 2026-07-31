@@ -61,6 +61,8 @@ interface Activity {
   workflow_stage_id?: string | null;
   item_type?: string | null;
   is_milestone?: boolean | null;
+  /** Código da EAP: define o papel (nível 1 = Fase, 2+ = Atividade). */
+  wbs_code?: string | null;
 }
 
 interface BacklogSectionProps {

@@ -1556,10 +1556,13 @@ export const EditActivityDialog = ({
                         end_date: kind === "marco" ? "" : formData.end_date,
                       });
   
-                    // Só Fase/Entrega agrupa. Item com subitens não pode virar folha.
+                    // Atividade também pode agrupar: o que define o rótulo é o
+                    // NÍVEL na EAP, não o fato de ter subitens. Só Marco segue
+                    // barrado com filhos — marco é folha de controle, um marco
+                    // que agrupa não faz sentido.
                     const kindDisabledReason = (kind: Kind): string | null => {
-                      if (hasSubActivities && kind !== "fase")
-                        return "Este item tem subitens; só Fase/Entrega agrupa.";
+                      if (hasSubActivities && kind === "marco")
+                        return "Este item tem subitens; Marco não agrupa.";
                       return null;
                     };
                     const KIND_OPTIONS: {
