@@ -8,7 +8,7 @@ import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Diamond,
-  Rows3, MoreHorizontal,
+  Rows3, MoreHorizontal, Pencil,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -184,7 +185,7 @@ export const BacklogSection = ({
     // 0 = ainda não medido (primeiro render): mostra tudo e deixa o
     // ResizeObserver corrigir, em vez de piscar escondendo colunas.
     if (tableWidth === 0) return chosenCols;
-    const FIXED = 20 + 26 + 60 + 120; // expand + check + ações + mínimo da Tarefa
+    const FIXED = 20 + 26 + 32 + 120; // expand + check + ações + mínimo da Tarefa
     const minOf = (c: { width: string }) => Number(c.width.match(/minmax\((\d+)px/)?.[1] ?? 0);
     let cols = [...chosenCols];
     const fits = () => FIXED + cols.reduce((s, c) => s + minOf(c), 0) + 8 * (3 + cols.length) <= tableWidth;
@@ -195,11 +196,13 @@ export const BacklogSection = ({
     return cols;
   })();
 
-  // Grid: [expand 20][check 26][tarefa flex][...colunas][ações 60]
+  // Grid: [expand 20][check 26][tarefa flex][...colunas][ações 32]
+  // Ações agora é um único "⋯" (antes eram dois botões, daí os 60px): a folga
+  // volta para o título, que é o que a pessoa lê.
   // O mínimo da coluna Tarefa é baixo de propósito: ela tem `truncate`, então
   // encolher corta o texto com reticências — o que é preferível a empurrar a
   // coluna de ações para fora da tela.
-  const backlogGrid = `20px 26px minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 60px`;
+  const backlogGrid = `20px 26px minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
 
   useEffect(() => {
     const ids = activities.map((a) => a.id);
@@ -811,42 +814,50 @@ export const BacklogSection = ({
           {/* colunas selecionáveis, na ordem de BACKLOG_COLS */}
           {activeCols.map((c) => renderCol(c.id))}
 
-          {/* col: ações (aparecem no hover) */}
-          <span className="flex items-center gap-0.5 justify-end shrink-0">
-            <button
-              type="button"
-              className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-muted transition-opacity opacity-45 group-hover:opacity-100 focus-visible:opacity-100"
-              title="Adicionar subitem (torna-o uma Fase/Entrega)"
-              onClick={(e) => {
-                e.stopPropagation();
-                setQuickAddKey(`parent:${activity.id}`);
-                setQuickAddTitle("");
-                setCollapsedParents((prev) => { const n = new Set(prev); n.delete(activity.id); return n; });
-              }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-            {/* Arquivar: sempre presente. Sem permissão/projeto concluído ele
-                fica desabilitado COM o motivo — sumir levava a "não consigo
-                excluir esta atividade" sem pista nenhuma do porquê. */}
-            <button
-              type="button"
-              disabled={!isAdmin}
-              className={cn(
-                // SEMPRE visível, só atenuado em repouso. Esconder atrás do
-                // hover deixava a ação indescobrível: quem não passa o mouse
-                // por cima não sabe que ela existe.
-                "h-6 w-6 flex items-center justify-center rounded transition-opacity",
-                "opacity-45 group-hover:opacity-100 focus-visible:opacity-100",
-                isAdmin
-                  ? "text-destructive hover:bg-destructive/10"
-                  : "text-muted-foreground/40 cursor-not-allowed",
-              )}
-              onClick={(e) => { e.stopPropagation(); if (isAdmin) onDeleteActivity(activity.id); }}
-              title={isAdmin ? "Arquivar atividade" : (deleteBlockedReason || "Você não tem permissão para arquivar esta atividade")}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+          {/* col: ações — um "⋯" em vez de ícones soltos. Dois ícones por linha
+              viravam ruído numa lista longa, e o menu acomoda ações novas sem
+              alargar a coluna. O gatilho fica sempre visível (atenuado em
+              repouso): escondê-lo no hover deixava a ação indescobrível. */}
+          <span className="flex items-center justify-end shrink-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-opacity opacity-45 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 data-[state=open]:bg-muted"
+                  title="Ações da tarefa"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setQuickAddKey(`parent:${activity.id}`);
+                    setQuickAddTitle("");
+                    setCollapsedParents((prev) => { const n = new Set(prev); n.delete(activity.id); return n; });
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-2" /> Adicionar subitem
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onEditActivity(activity)}>
+                  <Pencil className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {/* Desabilitado COM o motivo em vez de oculto: sumir levava a
+                    "não consigo excluir" sem pista nenhuma do porquê. */}
+                <DropdownMenuItem
+                  disabled={!isAdmin}
+                  className={isAdmin ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
+                  title={isAdmin ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta atividade")}
+                  // preventDefault: sem ele o menu fecha e leva o foco junto,
+                  // brigando com o diálogo de confirmação que abre em seguida.
+                  onSelect={(e) => { e.preventDefault(); if (isAdmin) onDeleteActivity(activity.id); }}
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </span>
         </div>
 
@@ -973,18 +984,28 @@ export const BacklogSection = ({
             {/* Só na fase real: "Sem fase" é grupo virtual, não existe no banco
                 e portanto não há o que arquivar. */}
             {phaseId && (
-              <button
-                type="button"
-                disabled={!isAdmin}
-                className={cn(
-                  "h-7 w-7 flex items-center justify-center rounded",
-                  isAdmin ? "text-destructive hover:bg-destructive/10" : "text-muted-foreground/40 cursor-not-allowed",
-                )}
-                title={isAdmin ? "Arquivar fase (as tarefas vão para \"Sem fase\")" : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
-                onClick={(e) => { e.stopPropagation(); if (isAdmin) handleDeletePhase(phaseId, phaseTitle); }}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted"
+                    title="Ações da fase"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem
+                    disabled={!isAdmin}
+                    className={isAdmin ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
+                    title={isAdmin ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
+                    onSelect={(e) => { e.preventDefault(); if (isAdmin) handleDeletePhase(phaseId, phaseTitle); }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar fase
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -1102,18 +1123,34 @@ export const BacklogSection = ({
             >
               <Plus className="w-3.5 h-3.5" /> Tarefa
             </Button>
-            <button
-              type="button"
-              disabled={!isAdmin}
-              className={cn(
-                "h-7 w-7 flex items-center justify-center rounded",
-                isAdmin ? "text-destructive hover:bg-destructive/10" : "text-muted-foreground/40 cursor-not-allowed",
-              )}
-              title={isAdmin ? "Arquivar fase (as subtarefas vão junto)" : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
-              onClick={(e) => { e.stopPropagation(); if (isAdmin) onDeleteActivity(phaseAct.id); }}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {/* "+ Tarefa" continua exposto (é a ação principal da fase); o
+                resto vai para o menu, como nas linhas. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted"
+                  title="Ações da fase"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem onSelect={() => onEditActivity(phaseAct)}>
+                  <Pencil className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={!isAdmin}
+                  className={isAdmin ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
+                  title={isAdmin ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
+                  onSelect={(e) => { e.preventDefault(); if (isAdmin) onDeleteActivity(phaseAct.id); }}
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar fase
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
