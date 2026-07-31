@@ -5,13 +5,25 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X } from "lucide-react";
+import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X, Send, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { useAuth } from "@/contexts/AuthContext";
+import { DocumentFlowPanel } from "@/components/documentos/DocumentFlowPanel";
+import { StartFlowDialog, type DraftParticipant } from "@/components/documentos/StartFlowDialog";
+import {
+  FLOW_KINDS, ROLE_META, flowProgress, isMyTurn, hashFile,
+  type DocumentFlow, type FlowParticipant, type FlowEvent, type FlowKind,
+} from "@/lib/documentFlow";
+
+// Tabelas do fluxo ainda fora dos tipos gerados (migration pendente na VM).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sb = supabase as any;
 
 interface ProjectDocument {
   id: string;
@@ -63,10 +75,182 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const uploadedByAvatarMap = useAssigneeAvatarLookup(documents.map((doc) => doc.uploaded_by));
+  const { user, profile } = useAuth();
+
+  // ===== Fluxo de ciência / aprovação / assinatura =====
+  const [flows, setFlows] = useState<DocumentFlow[]>([]);
+  const [participants, setParticipants] = useState<FlowParticipant[]>([]);
+  const [events, setEvents] = useState<FlowEvent[]>([]);
+  const [people, setPeople] = useState<{ id: string; full_name: string; sector: string | null; role_title?: string | null; avatar_url?: string | null }[]>([]);
+  const [flowUnavailable, setFlowUnavailable] = useState(false);
+  const [startFor, setStartFor] = useState<ProjectDocument | null>(null);
+  const [openFlowDoc, setOpenFlowDoc] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDocuments();
+    fetchFlows();
   }, [projectId]);
+
+  const fetchFlows = async () => {
+    const [flowRes, peopleRes] = await Promise.all([
+      sb.from("document_flows").select("*").eq("project_id", projectId).order("created_at", { ascending: false }),
+      supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url")
+        .not("full_name", "is", null).order("full_name"),
+    ]);
+    if (flowRes.error && /document_flows|does not exist|schema cache/i.test(flowRes.error.message || "")) {
+      setFlowUnavailable(true);
+      return;
+    }
+    setFlowUnavailable(false);
+    const list = (flowRes.data as DocumentFlow[]) || [];
+    setFlows(list);
+    setPeople((peopleRes.data as { id: string; full_name: string; sector: string | null }[]) || []);
+    if (list.length > 0) {
+      const ids = list.map((f) => f.id);
+      const [partRes, evRes] = await Promise.all([
+        sb.from("document_participants").select("*").in("flow_id", ids),
+        sb.from("document_flow_events").select("*").in("flow_id", ids).order("occurred_at", { ascending: false }),
+      ]);
+      if (!partRes.error) setParticipants((partRes.data as FlowParticipant[]) || []);
+      if (!evRes.error) setEvents((evRes.data as FlowEvent[]) || []);
+    } else {
+      setParticipants([]);
+      setEvents([]);
+    }
+  };
+
+  /** Registra um evento na trilha — append-only, com a prova do ato. */
+  const logEvent = async (flowId: string, type: string, extra?: { participantId?: string; detail?: string }) => {
+    await sb.from("document_flow_events").insert({
+      flow_id: flowId,
+      participant_id: extra?.participantId ?? null,
+      event_type: type,
+      actor_id: user?.id ?? null,
+      actor_name: profile?.full_name ?? null,
+      // O IP real só o servidor conhece; o navegador registra o agente. Numa
+      // evolução, um endpoint captura o IP — a coluna já existe para isso.
+      user_agent: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 300) : null,
+      detail: extra?.detail ?? null,
+    });
+  };
+
+  const startFlow = async (data: {
+    kind: FlowKind; message: string; dueDate: string; participants: DraftParticipant[];
+  }) => {
+    if (!startFor) return;
+    // Impressão digital do arquivo (Fase 3): prova que ele não mudou depois.
+    // Falha em silêncio se a URL for externa e não permitir leitura — o fluxo
+    // continua válido, só sem o hash.
+    let fileHash: string | null = null;
+    try {
+      const res = await fetch(startFor.file_url);
+      if (res.ok) fileHash = await hashFile(await res.blob());
+    } catch { /* arquivo externo sem CORS: segue sem hash */ }
+
+    const { data: flow, error } = await sb.from("document_flows").insert({
+      document_id: startFor.id,
+      project_id: projectId,
+      kind: data.kind,
+      status: "circulando",
+      title: startFor.file_name,
+      message: data.message || null,
+      due_date: data.dueDate || null,
+      document_version: startFor.version ?? 1,
+      file_hash: fileHash,
+      file_url_snapshot: startFor.file_url,
+      created_by: user?.id ?? null,
+      created_by_name: profile?.full_name ?? null,
+      started_at: new Date().toISOString(),
+    }).select("id").single();
+
+    if (error) {
+      toast({ title: "Não foi possível enviar o documento", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    const rows = data.participants.map((p) => ({
+      flow_id: flow.id,
+      user_id: p.user_id,
+      user_name: p.user_name,
+      role: p.role,
+      position: ROLE_META[p.role].blocking ? p.position : 999,
+      is_blocking: ROLE_META[p.role].blocking,
+      status: "notificado",
+      notified_at: new Date().toISOString(),
+    }));
+    await sb.from("document_participants").insert(rows);
+    await logEvent(flow.id, "enviado", { detail: `${rows.length} participante(s) · ${FLOW_KINDS[data.kind].label}` });
+
+    toast({
+      title: "Documento enviado",
+      description: `${rows.length} pessoa(s) receberão o pedido de ${FLOW_KINDS[data.kind].short}.`,
+    });
+    setStartFor(null);
+    setOpenFlowDoc(startFor.id);
+    fetchFlows();
+  };
+
+  /** Concluir (ciência/aprovação/assinatura) ou recusar, com a prova do ato. */
+  const actOnFlow = async (flowId: string, participantId: string, action: "concluir" | "recusar", reason?: string) => {
+    const flow = flows.find((f) => f.id === flowId);
+    if (!flow) return;
+    const now = new Date().toISOString();
+
+    if (action === "recusar") {
+      await sb.from("document_participants")
+        .update({ status: "recusado", refusal_reason: reason ?? null, completed_at: now })
+        .eq("id", participantId);
+      // Recusa encerra o fluxo: para retomar, nova versão e novo fluxo.
+      await sb.from("document_flows").update({ status: "recusado", finished_at: now }).eq("id", flowId);
+      await logEvent(flowId, "recusado", { participantId, detail: reason });
+      toast({ title: "Documento recusado", description: "O autor será notificado com o motivo." });
+      fetchFlows();
+      return;
+    }
+
+    // Clickwrap: guarda o texto EXATO que a pessoa viu ao confirmar.
+    await sb.from("document_participants").update({
+      status: "concluido",
+      completed_at: now,
+      accepted_text: FLOW_KINDS[flow.kind].acceptText,
+      user_agent: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 300) : null,
+    }).eq("id", participantId);
+
+    const eventType = flow.kind === "assinatura" ? "assinado" : flow.kind === "aprovacao" ? "aprovado" : "ciencia";
+    await logEvent(flowId, eventType, { participantId, detail: FLOW_KINDS[flow.kind].acceptText });
+
+    // Todos os bloqueantes concluíram? Então o fluxo fecha.
+    const after = participants.map((p) =>
+      p.id === participantId ? { ...p, status: "concluido" as const } : p);
+    const prog = flowProgress(after.filter((p) => p.flow_id === flowId));
+    if (prog.isComplete) {
+      await sb.from("document_flows").update({ status: "concluido", finished_at: now }).eq("id", flowId);
+      await logEvent(flowId, "concluido");
+    }
+
+    toast({ title: prog.isComplete ? "Fluxo concluído" : "Registrado", description: FLOW_KINDS[flow.kind].acceptText });
+    fetchFlows();
+  };
+
+  const cancelFlow = async (flowId: string) => {
+    const ok = await appConfirm({
+      title: "Cancelar circulação",
+      description: "O documento deixa de circular e o que já foi registrado permanece na trilha. Para retomar, será preciso enviar de novo.",
+      confirmText: "Cancelar fluxo",
+      destructive: true,
+    });
+    if (!ok) return;
+    await sb.from("document_flows").update({ status: "cancelado", finished_at: new Date().toISOString() }).eq("id", flowId);
+    await logEvent(flowId, "cancelado");
+    toast({ title: "Fluxo cancelado" });
+    fetchFlows();
+  };
+
+  const sendFlow = async (flowId: string) => {
+    await sb.from("document_flows").update({ status: "circulando", started_at: new Date().toISOString() }).eq("id", flowId);
+    await logEvent(flowId, "enviado");
+    fetchFlows();
+  };
 
   const fetchDocuments = async () => {
     const { data, error } = await supabase
@@ -201,9 +385,19 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
       {documents.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-4">Nenhum documento associado</p>
       ) : (
-        <div className="space-y-2 max-h-[400px] overflow-y-auto">
-          {documents.map((doc) => (
-            <div key={doc.id} className="flex items-center justify-between p-3 border border-border rounded-lg bg-card group hover:shadow-sm transition-shadow">
+        <div className="space-y-2 max-h-[520px] overflow-y-auto">
+          {documents.map((doc) => {
+          // Fluxo mais recente deste documento (a lista já vem ordenada).
+          const flow = flows.find((f) => f.document_id === doc.id) ?? null;
+          const flowParts = flow ? participants.filter((p) => p.flow_id === flow.id) : [];
+          const flowEvents = flow ? events.filter((e) => e.flow_id === flow.id) : [];
+          const prog = flowProgress(flowParts);
+          const myTurn = flow?.status === "circulando" && isMyTurn(flowParts, user?.id ?? null);
+          const isOpen = openFlowDoc === doc.id;
+          return (
+          <div key={doc.id} className={cn("border border-border rounded-lg bg-card overflow-hidden transition-shadow",
+                myTurn && "border-primary/50 ring-1 ring-primary/20")}>
+            <div className="flex items-center justify-between p-3 group hover:shadow-sm transition-shadow">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
                   <FileText className="w-5 h-5 text-primary" />
@@ -232,11 +426,36 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                     <span className="text-xs text-muted-foreground">
                       v{doc.version} · {new Date(doc.created_at).toLocaleDateString("pt-BR")}
                     </span>
+                    {/* Selo do fluxo: o que está sendo pedido e como vai */}
+                    {flow && (
+                      <button type="button" onClick={() => setOpenFlowDoc(isOpen ? null : doc.id)}
+                        className={cn("inline-flex items-center gap-1 h-5 px-2 rounded-full text-[10px] font-bold transition-colors",
+                          flow.status === "concluido" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : flow.status === "recusado" || flow.status === "cancelado" ? "bg-destructive/10 text-destructive"
+                          : myTurn ? "bg-primary text-primary-foreground"
+                          : "bg-primary/10 text-primary")}
+                        title="Ver participantes e trilha">
+                        {flow.status === "concluido" ? <CheckCircle2 className="w-3 h-3" />
+                          : flow.status === "recusado" ? <XCircle className="w-3 h-3" />
+                          : <Clock className="w-3 h-3" />}
+                        {myTurn ? "sua vez"
+                          : flow.status === "circulando" ? `${FLOW_KINDS[flow.kind].short} ${prog.done}/${prog.total}`
+                          : FLOW_KINDS[flow.kind].label}
+                      </button>
+                    )}
                   </div>
                   {doc.description && <p className="text-xs text-muted-foreground mt-1 truncate">{doc.description}</p>}
                 </div>
               </div>
               <div className="flex gap-1 ml-2">
+                {/* Enviar para circular: só quem pode editar o projeto, e só
+                    se não houver fluxo em andamento neste documento. */}
+                {canManageProject && !flowUnavailable && (!flow || flow.status !== "circulando") && (
+                  <Button size="icon" variant="ghost" className="h-8 w-8 text-primary"
+                    onClick={() => setStartFor(doc)} title="Enviar para ciência, aprovação ou assinatura">
+                    <Send className="w-4 h-4" />
+                  </Button>
+                )}
                 <Button size="icon" variant="ghost" className="h-8 w-8" asChild>
                   <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="w-4 h-4" />
@@ -264,8 +483,38 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                 )}
               </div>
             </div>
-          ))}
+
+            {/* Painel do fluxo: participantes, progresso e trilha */}
+            {flow && isOpen && (
+              <div className="px-3 pb-3">
+                <DocumentFlowPanel
+                  flow={flow}
+                  participants={flowParts}
+                  events={flowEvents}
+                  myUserId={user?.id ?? null}
+                  canManage={canManageProject}
+                  profileAvatarMap={uploadedByAvatarMap}
+                  onAct={(pid, action, reason) => actOnFlow(flow.id, pid, action, reason)}
+                  onCancel={() => cancelFlow(flow.id)}
+                  onSend={() => sendFlow(flow.id)}
+                />
+              </div>
+            )}
+          </div>
+          );
+          })}
         </div>
+      )}
+
+      {/* Enviar documento para circular */}
+      {startFor && (
+        <StartFlowDialog
+          open={!!startFor}
+          onOpenChange={(o) => { if (!o) setStartFor(null); }}
+          documentName={startFor.file_name}
+          people={people}
+          onConfirm={startFlow}
+        />
       )}
     </Card>
   );
