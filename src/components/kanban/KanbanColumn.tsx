@@ -927,12 +927,14 @@ export function SortableColumn({
                 className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Criação INLINE na coluna, não diálogo: digitar o título e dar
-                  // Enter é o gesto padrão (Trello/Linear/Notion) e o form inline
-                  // já existia aqui — só estava inalcançável, porque
-                  // onOpenCreateTask sempre vinha preenchido e abria o modal.
-                  // O formulário completo continua a um clique, dentro do inline.
-                  setShowQuickAdd((v) => !v);
+                  // Abre a tela de edição de sempre. Houve uma tentativa de
+                  // trocar por um formulário inline na coluna; na prática o
+                  // inline só cobria título/fase/EAP e escondia o resto atrás
+                  // de mais um clique, então voltou a abrir a tela completa.
+                  // O inline segue disponível como fallback se a tela não for
+                  // passada por quem usa a coluna.
+                  if (onOpenCreateTask) onOpenCreateTask(stage.id);
+                  else setShowQuickAdd((v) => !v);
                 }}
                 title="Criar atividade nesta coluna"
               >
