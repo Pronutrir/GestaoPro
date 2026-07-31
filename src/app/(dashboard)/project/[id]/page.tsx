@@ -1686,6 +1686,9 @@ export default function ProjectDetailsPage() {
                 onProjectUpdated={fetchProjectData}
                 canManageProject={canEdit}
                 phases={phases.map((p) => ({ id: p.id, title: p.title }))}
+                projectStart={(project as { start_date?: string | null }).start_date ?? null}
+                projectEnd={project.due_date ?? null}
+                progressPct={activityProgress}
               />
             </TabsContent>
           </Tabs>

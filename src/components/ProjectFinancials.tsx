@@ -20,12 +20,16 @@ import {
 import { DollarSign, Plus, TrendingUp, TrendingDown, Pencil, Trash2, Wallet, Receipt, PiggyBank } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { BudgetPlanner } from "@/components/financeiro/BudgetPlanner";
 import { BudgetDashboard, type PhaseBreakdown } from "@/components/financeiro/BudgetDashboard";
+import { BaselineManager } from "@/components/financeiro/BaselineManager";
+import { EarnedValuePanel } from "@/components/financeiro/EarnedValuePanel";
 import {
-  summarizeBudget, laborCost as calcLaborCost, resolveRate, totalActivityCost,
+  summarizeBudget, laborCost as calcLaborCost, totalActivityCost,
+  distributeOverTime, monthsBetween, monthKey, cumulative, earnedValue,
   DEFAULT_BUDGET_SETTINGS, formatMoney,
-  type BudgetItem, type BudgetSettings, type CostRate,
+  type BudgetItem, type BudgetSettings, type CostRate, type BudgetBaseline,
 } from "@/lib/projectCosts";
 
 // Tabelas da Fase 1 ainda fora dos tipos gerados (migration pendente na VM).
@@ -51,6 +55,11 @@ interface ProjectFinancialsProps {
   canManageProject?: boolean;
   /** Fases do projeto — para vincular item de orçamento e abrir o desvio por fase. */
   phases?: { id: string; title: string }[];
+  /** Período do projeto: define os meses da curva S. */
+  projectStart?: string | null;
+  projectEnd?: string | null;
+  /** Avanço físico (0–100) — é o que converte a linha de base em valor agregado. */
+  progressPct?: number;
 }
 
 const categoryLabels: Record<string, string> = {
@@ -65,7 +74,10 @@ const categoryLabels: Record<string, string> = {
   outros: "Outros",
 };
 
-export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProjectUpdated, canManageProject = false, phases = [] }: ProjectFinancialsProps) => {
+export const ProjectFinancials = ({
+  projectId, budgetPlanned, budgetUsed, onProjectUpdated, canManageProject = false,
+  phases = [], projectStart, projectEnd, progressPct = 0,
+}: ProjectFinancialsProps) => {
   const { toast } = useToast();
   const [investments, setInvestments] = useState<Investment[]>([]);
   // ===== Fase 1 do plano financeiro =====
@@ -75,6 +87,10 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
   const [timeEntries, setTimeEntries] = useState<{ user_name: string | null; duration_minutes: number | null; started_at: string; activity_id: string }[]>([]);
   const [costActivities, setCostActivities] = useState<{ id: string; parent_id: string | null; phase_id: string | null; cost: number | null }[]>([]);
   const [budgetUnavailable, setBudgetUnavailable] = useState(false);
+  // Fase 2: linha de base versionada.
+  const [baselines, setBaselines] = useState<BudgetBaseline[]>([]);
+  const [phasePeriods, setPhasePeriods] = useState<Map<string, { start: string; end: string }>>(new Map());
+  const { profile } = useAuth();
   const [activities, setActivities] = useState<{ id: string; title: string }[]>([]);
   const [members, setMembers] = useState<{ id: string; full_name: string; sector: string | null; avatar_url?: string | null }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -138,6 +154,21 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
     if (!ratesRes.error) setRates((ratesRes.data as CostRate[]) || []);
     if (!timeRes.error) setTimeEntries(timeRes.data || []);
     if (!actRes.error) setCostActivities(actRes.data || []);
+
+    // Fase 2: linhas de base e período das fases (para distribuir no tempo).
+    const [baseRes, phaseRes] = await Promise.all([
+      sb.from("budget_baselines").select("*").eq("project_id", projectId).order("version", { ascending: false }),
+      sb.from("phases").select("id, start_date, end_date").eq("project_id", projectId),
+    ]);
+    if (!baseRes.error) setBaselines((baseRes.data as BudgetBaseline[]) || []);
+    if (!phaseRes.error) {
+      const map = new Map<string, { start: string; end: string }>();
+      ((phaseRes.data as { id: string; start_date: string | null; end_date: string | null }[]) || [])
+        .forEach((p) => {
+          if (p.start_date && p.end_date) map.set(p.id, { start: p.start_date, end: p.end_date });
+        });
+      setPhasePeriods(map);
+    }
   };
 
   useEffect(() => { fetchData(); fetchBudget(); }, [projectId]);
@@ -195,6 +226,111 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
     if (loosePlanned > 0) rows.push({ id: null, title: "Projeto inteiro", planned: loosePlanned, actual: 0 });
     return rows.filter((r) => r.planned > 0 || r.actual > 0).sort((a, b) => b.planned - a.planned);
   }, [phases, budgetItems, costActivities, investments]);
+
+  // ===== Fase 2/3: curva S e valor agregado =====
+  const activeBaseline = useMemo(() => baselines.find((b) => b.is_active) ?? null, [baselines]);
+
+  // Meses do projeto: da data de início à de entrega. Sem datas, sem curva.
+  const months = useMemo(() => {
+    if (!projectStart || !projectEnd) return [];
+    return monthsBetween(projectStart, projectEnd);
+  }, [projectStart, projectEnd]);
+
+  const todayIndex = useMemo(() => months.indexOf(monthKey(new Date())), [months]);
+
+  // Planejado (PV) distribuído no tempo pela regra de reconhecimento do item.
+  const pvSeries = useMemo(() => {
+    if (months.length === 0) return [];
+    const byMonth = distributeOverTime(
+      budgetItems.map((i) => ({ total_cost: Number(i.total_cost) || 0, phase_id: i.phase_id, accrual: (i as BudgetItem & { accrual?: string }).accrual })),
+      phasePeriods,
+      { start: projectStart!, end: projectEnd! },
+    );
+    return cumulative(byMonth, months);
+  }, [budgetItems, phasePeriods, months, projectStart, projectEnd]);
+
+  // Custo real (AC) acumulado: lançamentos pela data em que foram registrados.
+  const acSeries = useMemo(() => {
+    if (months.length === 0) return [];
+    const byMonth = new Map<string, number>();
+    investments.forEach((i) => {
+      const m = monthKey(i.recorded_at);
+      byMonth.set(m, (byMonth.get(m) ?? 0) + (Number(i.amount) || 0));
+    });
+    timeEntries.forEach((t) => {
+      if (rates.length === 0) return;
+      const m = monthKey(t.started_at);
+      const hours = (Number(t.duration_minutes) || 0) / 60;
+      const rate = rates.find((r) => r.job_title_id)?.cost_rate ?? 0;
+      byMonth.set(m, (byMonth.get(m) ?? 0) + hours * rate);
+    });
+    return cumulative(byMonth, months);
+  }, [investments, timeEntries, rates, months]);
+
+  const evmBac = activeBaseline?.baseline_total ?? summary.baseline;
+  const evm = useMemo(
+    () => earnedValue({
+      bac: evmBac,
+      pvToDate: todayIndex >= 0 ? (pvSeries[todayIndex] ?? 0) : (pvSeries[pvSeries.length - 1] ?? 0),
+      actualCost: summary.actual,
+      progressPct,
+    }),
+    [evmBac, pvSeries, todayIndex, summary.actual, progressPct],
+  );
+
+  // Valor agregado (EV) acumulado: proporção do BAC entregue até cada mês.
+  // Aproximação honesta — o avanço real por mês exigiria histórico de
+  // conclusão, que não guardamos; usamos o avanço atual projetado na curva.
+  const evSeries = useMemo(() => {
+    if (months.length === 0 || evmBac === 0) return [];
+    const upto = todayIndex >= 0 ? todayIndex : months.length - 1;
+    const maxPv = pvSeries[upto] || 1;
+    return months.map((_, i) => {
+      if (i > upto) return evm.ev; // depois de hoje a curva de entrega para
+      const share = (pvSeries[i] ?? 0) / maxPv;
+      return evm.ev * share;
+    });
+  }, [months, pvSeries, todayIndex, evm.ev, evmBac]);
+
+  const approveBaseline = async (reason: string) => {
+    const nextVersion = (baselines[0]?.version ?? 0) + 1;
+    // Desativa a anterior: só uma linha de base ativa por projeto.
+    if (activeBaseline) {
+      await sb.from("budget_baselines").update({ is_active: false }).eq("id", activeBaseline.id);
+    }
+    const { data, error } = await sb.from("budget_baselines").insert({
+      project_id: projectId,
+      version: nextVersion,
+      planned_total: summary.planned,
+      contingency_total: summary.contingency,
+      baseline_total: summary.baseline,
+      management_reserve_total: summary.managementReserve,
+      approved_by_name: profile?.full_name ?? null,
+      reason: reason || null,
+      is_active: true,
+    }).select("id").single();
+    if (error) {
+      toast({ title: "Erro ao aprovar a linha de base", description: error.message, variant: "destructive" });
+      return;
+    }
+    // Congela também a distribuição no tempo — é o que a curva S consulta.
+    if (data?.id && months.length > 0) {
+      const byMonth = distributeOverTime(
+        budgetItems.map((i) => ({ total_cost: Number(i.total_cost) || 0, phase_id: i.phase_id, accrual: (i as BudgetItem & { accrual?: string }).accrual })),
+        phasePeriods,
+        { start: projectStart!, end: projectEnd! },
+      );
+      const lines = months
+        .map((m) => ({ baseline_id: data.id, period_start: m, planned_amount: byMonth.get(m) ?? 0 }))
+        .filter((l) => l.planned_amount > 0);
+      if (lines.length > 0) await sb.from("budget_baseline_lines").insert(lines);
+    }
+    toast({
+      title: `Linha de base v${nextVersion} aprovada`,
+      description: "O desempenho passa a ser medido contra este valor.",
+    });
+    fetchBudget();
+  };
 
   const saveBudgetItem = async (item: Partial<BudgetItem> & { id?: string }) => {
     const { id, ...payload } = item;
@@ -373,6 +509,30 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
             directCost={directCost}
             laborHours={laborHours}
             ratesConfigured={rates.length > 0}
+          />
+
+          {/* Desempenho: valor agregado + curva S (só com linha de base) */}
+          {activeBaseline && (
+            <EarnedValuePanel
+              ev={evm}
+              currency={settings.currency}
+              precision={settings.precision}
+              months={months}
+              pvSeries={pvSeries}
+              acSeries={acSeries}
+              evSeries={evSeries}
+              todayIndex={todayIndex}
+            />
+          )}
+
+          {/* Linha de base versionada */}
+          <BaselineManager
+            baselines={baselines}
+            summary={summary}
+            currency={settings.currency}
+            precision={settings.precision}
+            canManage={canManageProject}
+            onApprove={approveBaseline}
           />
 
           {/* Composição do orçamento (itens + reservas) */}

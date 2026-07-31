@@ -236,3 +236,166 @@ export const formatMoney = (v: number, currency = "BRL", precision = 2): string 
     minimumFractionDigits: precision,
     maximumFractionDigits: precision,
   });
+
+// ============================================================
+// FASE 2 — LINHA DE BASE E DISTRIBUIÇÃO NO TEMPO
+// ============================================================
+
+export interface BudgetBaseline {
+  id: string;
+  project_id: string;
+  version: number;
+  planned_total: number;
+  contingency_total: number;
+  baseline_total: number;
+  management_reserve_total: number;
+  approved_by_name: string | null;
+  approved_at: string;
+  reason: string | null;
+  is_active: boolean;
+}
+
+export interface BaselineLine {
+  baseline_id: string;
+  period_start: string;
+  planned_amount: number;
+}
+
+/** Regra de reconhecimento do custo ao longo do período (cost accrual). */
+export type Accrual = "inicio" | "rateado" | "fim";
+
+/** Primeiro dia do mês, em texto — a chave de período usada em tudo aqui. */
+export const monthKey = (d: Date | string): string => {
+  const dt = typeof d === "string" ? new Date(`${d.slice(0, 10)}T12:00:00`) : d;
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-01`;
+};
+
+/** Lista de meses (inclusive) entre duas datas. */
+export const monthsBetween = (from: string, to: string): string[] => {
+  const out: string[] = [];
+  const start = new Date(`${from.slice(0, 10)}T12:00:00`);
+  const end = new Date(`${to.slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return out;
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1, 12);
+  const last = new Date(end.getFullYear(), end.getMonth(), 1, 12);
+  while (cur <= last) {
+    out.push(monthKey(cur));
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return out;
+};
+
+/**
+ * Distribui o custo dos itens pelos meses do projeto — é isto que dá FORMA à
+ * curva S. Cada item usa o período da sua fase (ou o do projeto, se solto) e a
+ * regra de reconhecimento: tudo no início, rateado, ou tudo no fim.
+ */
+export function distributeOverTime(
+  items: { total_cost: number; phase_id: string | null; accrual?: string | null }[],
+  phasePeriods: Map<string, { start: string; end: string }>,
+  projectPeriod: { start: string; end: string },
+): Map<string, number> {
+  const byMonth = new Map<string, number>();
+  const add = (m: string, v: number) => byMonth.set(m, (byMonth.get(m) ?? 0) + v);
+
+  items.forEach((item) => {
+    const total = Number(item.total_cost) || 0;
+    if (total === 0) return;
+    const period = (item.phase_id && phasePeriods.get(item.phase_id)) || projectPeriod;
+    const months = monthsBetween(period.start, period.end);
+    if (months.length === 0) {
+      // Sem datas não há como distribuir: joga no mês corrente para o valor
+      // não sumir da curva (melhor visível no lugar errado do que invisível).
+      add(monthKey(new Date()), total);
+      return;
+    }
+    const rule = (item.accrual as Accrual) || "rateado";
+    if (rule === "inicio") add(months[0], total);
+    else if (rule === "fim") add(months[months.length - 1], total);
+    else months.forEach((m) => add(m, total / months.length));
+  });
+
+  return byMonth;
+}
+
+/** Série acumulada a partir de um mapa mês → valor do período. */
+export function cumulative(byMonth: Map<string, number>, months: string[]): number[] {
+  let running = 0;
+  return months.map((m) => {
+    running += byMonth.get(m) ?? 0;
+    return running;
+  });
+}
+
+// ============================================================
+// FASE 3 — VALOR AGREGADO (EVM enxuto)
+// ============================================================
+
+export interface EarnedValue {
+  /** Valor planejado (PV): quanto deveria ter sido gasto até hoje. */
+  pv: number;
+  /** Valor agregado (EV): quanto do trabalho previsto foi entregue, em dinheiro. */
+  ev: number;
+  /** Custo real (AC). */
+  ac: number;
+  /** Linha de base (BAC). */
+  bac: number;
+  /** Desvio de custo (CV = EV − AC). Positivo é bom. */
+  cv: number;
+  /** Desvio de prazo (SV = EV − PV), em dinheiro. Positivo é bom. */
+  sv: number;
+  /** Desempenho de custo (CPI = EV / AC). Acima de 1 é bom. */
+  cpi: number;
+  /** Desempenho de prazo (SPI = EV / PV). Acima de 1 é bom. */
+  spi: number;
+  /** Previsão final (EAC = BAC / CPI): onde termina, no ritmo atual. */
+  eac: number;
+  /** Custo restante previsto (ETC = EAC − AC). */
+  etc: number;
+  /** Desvio previsto no fim (VAC = BAC − EAC). Positivo é sobra. */
+  vac: number;
+  /** % de avanço físico usado para calcular o EV. */
+  progressPct: number;
+}
+
+/**
+ * EVM enxuto: 10 números derivados de 3 entradas.
+ *
+ * Deliberadamente fora (ver plano): % físico separado do % de avanço, as 4
+ * variantes de EAC e regras de EV por tarefa — é o que torna o EVM pesado.
+ * Usamos a variante mais usada, EAC = BAC / CPI (o desempenho atual persiste).
+ */
+export function earnedValue(input: {
+  bac: number;
+  /** Planejado acumulado até hoje, vindo da distribuição time-phased. */
+  pvToDate: number;
+  actualCost: number;
+  /** Avanço físico do projeto (0–100), das atividades concluídas. */
+  progressPct: number;
+}): EarnedValue {
+  const bac = Number(input.bac) || 0;
+  const pv = Number(input.pvToDate) || 0;
+  const ac = Number(input.actualCost) || 0;
+  const pct = Math.max(0, Math.min(100, Number(input.progressPct) || 0));
+  const ev = bac * (pct / 100);
+
+  // Divisões por zero acontecem no começo do projeto (nada gasto, nada
+  // planejado ainda): devolver 0 em vez de Infinity mantém a tela honesta.
+  const cpi = ac > 0 ? ev / ac : 0;
+  const spi = pv > 0 ? ev / pv : 0;
+  const eac = cpi > 0 ? bac / cpi : bac;
+
+  return {
+    pv, ev, ac, bac,
+    cv: ev - ac,
+    sv: ev - pv,
+    cpi, spi, eac,
+    etc: Math.max(0, eac - ac),
+    vac: bac - eac,
+    progressPct: pct,
+  };
+}
+
+/** Classificação de um índice (CPI/SPI) para semáforo. */
+export const indexTone = (v: number): "ok" | "warn" | "bad" =>
+  v === 0 ? "warn" : v >= 1 ? "ok" : v >= 0.9 ? "warn" : "bad";
