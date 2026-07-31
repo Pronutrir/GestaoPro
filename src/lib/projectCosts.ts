@@ -1,0 +1,238 @@
+/**
+ * CUSTO DO PROJETO — fonte única de cálculo (Fase 1 do plano financeiro).
+ *
+ * Antes, "Custo do Projeto" era um campo digitado à mão (projects.budget_used)
+ * que convivia com o custo das atividades sem nunca bater com ele. Aqui o custo
+ * passa a ser DERIVADO, sempre pela mesma conta, em qualquer tela:
+ *
+ *   Orçado  = soma dos itens de orçamento (budget_items)
+ *   Real    = custos lançados + custo de mão de obra (horas × taxa vigente)
+ *   Linha de base = Orçado + contingência        (a gerencial fica FORA)
+ *
+ * Vocabulário: rótulo em português com a sigla ao lado ("Valor agregado (EV)"),
+ * conforme decidido — quem conhece PMBOK reconhece, quem não conhece entende.
+ */
+
+export type BudgetCategory =
+  | "pessoal"
+  | "licencas"
+  | "servicos"
+  | "infraestrutura"
+  | "viagem"
+  | "outros";
+
+export const BUDGET_CATEGORIES: { value: BudgetCategory; label: string; hint: string }[] = [
+  { value: "pessoal", label: "Pessoal", hint: "Horas de equipe, alocação, terceiros por hora" },
+  { value: "licencas", label: "Licenças e software", hint: "Assinaturas, licenças, ferramentas" },
+  { value: "servicos", label: "Serviços", hint: "Consultoria, fornecedor de preço fechado" },
+  { value: "infraestrutura", label: "Infraestrutura", hint: "Servidores, nuvem, equipamentos" },
+  { value: "viagem", label: "Viagem", hint: "Deslocamento, hospedagem, diárias" },
+  { value: "outros", label: "Outros", hint: "O que não se encaixa nas demais" },
+];
+
+export const categoryLabel = (v?: string | null): string =>
+  BUDGET_CATEGORIES.find((c) => c.value === v)?.label ?? "Outros";
+
+export interface BudgetItem {
+  id: string;
+  project_id: string;
+  phase_id: string | null;
+  description: string;
+  category: string;
+  quantity: number;
+  unit_cost: number;
+  total_cost: number;
+  supplier: string | null;
+  notes: string | null;
+}
+
+export interface CostRate {
+  id: string;
+  job_title_id: string | null;
+  user_id: string | null;
+  cost_rate: number;
+  bill_rate: number | null;
+  effective_from: string;
+  effective_to: string | null;
+}
+
+export interface BudgetSettings {
+  project_id: string;
+  currency: string;
+  precision: number;
+  alert_threshold_pct: number;
+  contingency_pct: number;
+  contingency_amount: number;
+  management_reserve_pct: number;
+  management_reserve_amount: number;
+  notes: string | null;
+}
+
+export const DEFAULT_BUDGET_SETTINGS: Omit<BudgetSettings, "project_id"> = {
+  currency: "BRL",
+  precision: 2,
+  alert_threshold_pct: 90,
+  contingency_pct: 0,
+  contingency_amount: 0,
+  management_reserve_pct: 0,
+  management_reserve_amount: 0,
+  notes: null,
+};
+
+/** Atividade, no mínimo que o cálculo de custo precisa. */
+export interface CostActivity {
+  id: string;
+  parent_id?: string | null;
+  phase_id?: string | null;
+  cost?: number | null;
+  hours?: number | null;
+}
+
+/**
+ * Taxa vigente para uma pessoa numa data: exceção da PESSOA vence a do PAPEL.
+ * Entre várias vigências, ganha a mais recente que já começou e não terminou.
+ */
+export function resolveRate(
+  rates: CostRate[],
+  opts: { userId?: string | null; jobTitleId?: string | null; on?: string },
+): CostRate | null {
+  const day = opts.on ?? new Date().toISOString().slice(0, 10);
+  const valid = (r: CostRate) =>
+    r.effective_from <= day && (!r.effective_to || r.effective_to >= day);
+  const newest = (list: CostRate[]) =>
+    list.filter(valid).sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0] ?? null;
+
+  if (opts.userId) {
+    const own = newest(rates.filter((r) => r.user_id === opts.userId));
+    if (own) return own;
+  }
+  if (opts.jobTitleId) {
+    return newest(rates.filter((r) => r.job_title_id === opts.jobTitleId));
+  }
+  return null;
+}
+
+/**
+ * Custo de mão de obra a partir das horas lançadas.
+ * Cada apontamento usa a taxa VIGENTE NA DATA em que foi feito — por isso a
+ * vigência existe: um reajuste hoje não reescreve o custo do mês passado.
+ */
+export function laborCost(
+  entries: { user_id?: string | null; job_title_id?: string | null; minutes: number; on: string }[],
+  rates: CostRate[],
+): number {
+  return entries.reduce((sum, e) => {
+    const rate = resolveRate(rates, { userId: e.user_id, jobTitleId: e.job_title_id, on: e.on });
+    if (!rate) return sum;
+    return sum + (e.minutes / 60) * rate.cost_rate;
+  }, 0);
+}
+
+/**
+ * ROLLUP DA EAP: custo próprio de cada atividade + o de todos os descendentes.
+ * É o que faltava — o custo já existia no card e morria ali. Devolve um mapa
+ * id → total, para a Fase mostrar a soma dos filhos sem recalcular a árvore.
+ */
+export function rollupActivityCosts(activities: CostActivity[]): Map<string, number> {
+  const childrenOf = new Map<string, CostActivity[]>();
+  activities.forEach((a) => {
+    const key = a.parent_id ?? "__root__";
+    const list = childrenOf.get(key) ?? [];
+    list.push(a);
+    childrenOf.set(key, list);
+  });
+
+  const totals = new Map<string, number>();
+  const visiting = new Set<string>();
+
+  const walk = (a: CostActivity): number => {
+    const cached = totals.get(a.id);
+    if (cached !== undefined) return cached;
+    // Ciclo em parent_id não deve travar a tela (dado ruim acontece).
+    if (visiting.has(a.id)) return Number(a.cost) || 0;
+    visiting.add(a.id);
+    const own = Number(a.cost) || 0;
+    const kids = (childrenOf.get(a.id) ?? []).reduce((s, c) => s + walk(c), 0);
+    visiting.delete(a.id);
+    const total = own + kids;
+    totals.set(a.id, total);
+    return total;
+  };
+
+  activities.forEach(walk);
+  return totals;
+}
+
+/** Custo total das atividades RAIZ (somar todas duplicaria os filhos). */
+export function totalActivityCost(activities: CostActivity[]): number {
+  const totals = rollupActivityCosts(activities);
+  const ids = new Set(activities.map((a) => a.id));
+  return activities
+    // Filho de pai que não veio na lista conta como raiz — senão sumiria.
+    .filter((a) => !a.parent_id || !ids.has(a.parent_id))
+    .reduce((s, a) => s + (totals.get(a.id) ?? 0), 0);
+}
+
+export interface BudgetSummary {
+  /** Soma dos itens do orçamento. */
+  planned: number;
+  /** Reserva de contingência — DENTRO da linha de base. */
+  contingency: number;
+  /** Linha de base (BAC): é contra ela que o desempenho é medido. */
+  baseline: number;
+  /** Reserva gerencial — FORA da linha de base. */
+  managementReserve: number;
+  /** Orçamento total autorizado = linha de base + reserva gerencial. */
+  totalBudget: number;
+  /** Custo real: lançamentos + mão de obra. */
+  actual: number;
+  /** Saldo contra a linha de base. */
+  remaining: number;
+  /** % consumido da linha de base. */
+  consumedPct: number;
+  /** Passou do limite de alerta configurado? */
+  overThreshold: boolean;
+  /** Estourou a linha de base? */
+  overBudget: boolean;
+}
+
+export function summarizeBudget(input: {
+  items: { total_cost: number }[];
+  actualDirect: number;
+  actualLabor: number;
+  settings: Pick<
+    BudgetSettings,
+    "contingency_pct" | "contingency_amount" | "management_reserve_pct" | "management_reserve_amount" | "alert_threshold_pct"
+  >;
+}): BudgetSummary {
+  const planned = input.items.reduce((s, i) => s + (Number(i.total_cost) || 0), 0);
+  const s = input.settings;
+  // % e valor fixo se somam: o % cobre o proporcional, o valor cobre o pontual.
+  const contingency = planned * (Number(s.contingency_pct) || 0) / 100 + (Number(s.contingency_amount) || 0);
+  const baseline = planned + contingency;
+  const managementReserve =
+    baseline * (Number(s.management_reserve_pct) || 0) / 100 + (Number(s.management_reserve_amount) || 0);
+  const actual = (Number(input.actualDirect) || 0) + (Number(input.actualLabor) || 0);
+  const consumedPct = baseline > 0 ? (actual / baseline) * 100 : 0;
+
+  return {
+    planned,
+    contingency,
+    baseline,
+    managementReserve,
+    totalBudget: baseline + managementReserve,
+    actual,
+    remaining: baseline - actual,
+    consumedPct,
+    overThreshold: baseline > 0 && consumedPct >= (Number(s.alert_threshold_pct) || 90),
+    overBudget: baseline > 0 && actual > baseline,
+  };
+}
+
+export const formatMoney = (v: number, currency = "BRL", precision = 2): string =>
+  (Number(v) || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: precision,
+    maximumFractionDigits: precision,
+  });

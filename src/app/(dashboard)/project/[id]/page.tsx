@@ -1684,6 +1684,8 @@ export default function ProjectDetailsPage() {
                 budgetPlanned={project.budget_planned}
                 budgetUsed={project.budget_used}
                 onProjectUpdated={fetchProjectData}
+                canManageProject={canEdit}
+                phases={phases.map((p) => ({ id: p.id, title: p.title }))}
               />
             </TabsContent>
           </Tabs>

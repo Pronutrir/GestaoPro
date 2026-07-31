@@ -73,12 +73,26 @@ const Investments = () => {
   }, [authLoading]);
 
   const fetchData = async () => {
-    const [projRes, invRes, actRes] = await Promise.all([
+    const [projRes, invRes, actRes, itemsRes] = await Promise.all([
       supabase.from("projects").select("id, title, budget_planned, budget_used, status").eq("is_trashed", false),
       supabase.from("activity_investments").select("id, activity_id, amount, description, project_id, responsible, category, recorded_at"),
       supabase.from("activities").select("id, title, assigned_to, project_id, is_trashed").eq("is_trashed", false),
+      // Orçamento composto (Fase 1): quando o projeto tem itens, o planejado
+      // passa a ser a SOMA deles — o campo digitado vira apenas fallback.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).from("budget_items").select("project_id, total_cost"),
     ]);
-    const filtered = await filterProjects(projRes.data || []);
+    const composedByProject = new Map<string, number>();
+    if (!itemsRes.error) {
+      ((itemsRes.data as { project_id: string; total_cost: number }[]) || []).forEach((i) => {
+        composedByProject.set(i.project_id, (composedByProject.get(i.project_id) || 0) + (Number(i.total_cost) || 0));
+      });
+    }
+    const withComposed = (projRes.data || []).map((p) => {
+      const composed = composedByProject.get(p.id);
+      return composed && composed > 0 ? { ...p, budget_planned: composed } : p;
+    });
+    const filtered = await filterProjects(withComposed);
     setProjects(filtered);
     const projectIds = new Set(filtered.map(p => p.id));
     const scopedActivities = (actRes.data || []).filter(a => projectIds.has(a.project_id) && a.is_trashed !== true);

@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "@/components/ui/link";
-import { Settings2, CalendarDays, Users as UsersIcon, ArrowRight } from "lucide-react";
+import { Settings2, CalendarDays, Users as UsersIcon, Coins, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRouter } from "next/navigation";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
@@ -10,6 +10,7 @@ import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 const AREAS = [
   { href: "/settings/organizacao", eyebrow: "Organização", title: "Pessoas, Setores & Cargos", icon: UsersIcon, key: "organizacao" },
   { href: "/settings/calendario", eyebrow: "Calendário", title: "Feriados e Férias", icon: CalendarDays, key: "calendario" },
+  { href: "/settings/custos", eyebrow: "Financeiro", title: "Custos & Taxas", icon: Coins, key: "custos" },
 ] as const;
 
 const Settings = () => {
@@ -28,6 +29,7 @@ const Settings = () => {
 
   const subtitleFor = (key: string) =>
     key === "organizacao" ? `Cadastro, acesso · ${sectorsCount} setor(es)`
+      : key === "custos" ? "Taxa por papel e por pessoa"
       : "Capacidade e disponibilidade";
 
   return (

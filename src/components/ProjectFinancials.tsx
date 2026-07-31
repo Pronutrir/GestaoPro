@@ -20,6 +20,17 @@ import {
 import { DollarSign, Plus, TrendingUp, TrendingDown, Pencil, Trash2, Wallet, Receipt, PiggyBank } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { BudgetPlanner } from "@/components/financeiro/BudgetPlanner";
+import { BudgetDashboard, type PhaseBreakdown } from "@/components/financeiro/BudgetDashboard";
+import {
+  summarizeBudget, laborCost as calcLaborCost, resolveRate, totalActivityCost,
+  DEFAULT_BUDGET_SETTINGS, formatMoney,
+  type BudgetItem, type BudgetSettings, type CostRate,
+} from "@/lib/projectCosts";
+
+// Tabelas da Fase 1 ainda fora dos tipos gerados (migration pendente na VM).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sb = supabase as any;
 
 interface Investment {
   id: string;
@@ -38,6 +49,8 @@ interface ProjectFinancialsProps {
   budgetUsed: number;
   onProjectUpdated: () => void;
   canManageProject?: boolean;
+  /** Fases do projeto — para vincular item de orçamento e abrir o desvio por fase. */
+  phases?: { id: string; title: string }[];
 }
 
 const categoryLabels: Record<string, string> = {
@@ -52,9 +65,16 @@ const categoryLabels: Record<string, string> = {
   outros: "Outros",
 };
 
-export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProjectUpdated, canManageProject = false }: ProjectFinancialsProps) => {
+export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProjectUpdated, canManageProject = false, phases = [] }: ProjectFinancialsProps) => {
   const { toast } = useToast();
   const [investments, setInvestments] = useState<Investment[]>([]);
+  // ===== Fase 1 do plano financeiro =====
+  const [budgetItems, setBudgetItems] = useState<BudgetItem[]>([]);
+  const [settings, setSettings] = useState<BudgetSettings>({ project_id: projectId, ...DEFAULT_BUDGET_SETTINGS });
+  const [rates, setRates] = useState<CostRate[]>([]);
+  const [timeEntries, setTimeEntries] = useState<{ user_name: string | null; duration_minutes: number | null; started_at: string; activity_id: string }[]>([]);
+  const [costActivities, setCostActivities] = useState<{ id: string; parent_id: string | null; phase_id: string | null; cost: number | null }[]>([]);
+  const [budgetUnavailable, setBudgetUnavailable] = useState(false);
   const [activities, setActivities] = useState<{ id: string; title: string }[]>([]);
   const [members, setMembers] = useState<{ id: string; full_name: string; sector: string | null; avatar_url?: string | null }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -97,9 +117,120 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
     setIsLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [projectId]);
+  // Dados da Fase 1: composição do orçamento, taxas, horas e custo das
+  // atividades. Se a migration ainda não rodou na VM, a tela cai no modo
+  // antigo (avisa) em vez de quebrar.
+  const fetchBudget = async () => {
+    const [itemsRes, setRes, ratesRes, timeRes, actRes] = await Promise.all([
+      sb.from("budget_items").select("*").eq("project_id", projectId).order("created_at"),
+      sb.from("project_budget_settings").select("*").eq("project_id", projectId).maybeSingle(),
+      sb.from("cost_rates").select("*"),
+      sb.from("time_entries").select("user_name, duration_minutes, started_at, activity_id").eq("project_id", projectId),
+      sb.from("activities").select("id, parent_id, phase_id, cost").eq("project_id", projectId).eq("is_trashed", false),
+    ]);
+    if (itemsRes.error && /budget_items|does not exist|schema cache/i.test(itemsRes.error.message || "")) {
+      setBudgetUnavailable(true);
+      return;
+    }
+    setBudgetUnavailable(false);
+    setBudgetItems((itemsRes.data as BudgetItem[]) || []);
+    if (setRes.data) setSettings(setRes.data as BudgetSettings);
+    if (!ratesRes.error) setRates((ratesRes.data as CostRate[]) || []);
+    if (!timeRes.error) setTimeEntries(timeRes.data || []);
+    if (!actRes.error) setCostActivities(actRes.data || []);
+  };
+
+  useEffect(() => { fetchData(); fetchBudget(); }, [projectId]);
 
   const totalInvestments = useMemo(() => investments.reduce((s, i) => s + i.amount, 0), [investments]);
+
+  // Mão de obra: horas apontadas × taxa VIGENTE NA DATA do apontamento.
+  const laborHours = useMemo(
+    () => timeEntries.reduce((s, t) => s + (Number(t.duration_minutes) || 0), 0) / 60,
+    [timeEntries],
+  );
+  const laborTotal = useMemo(() => {
+    if (rates.length === 0) return 0;
+    // O apontamento guarda o NOME de quem lançou, não o id — por ora a taxa
+    // aplicada é a do papel; a exceção por pessoa entra quando time_entries
+    // passar a gravar user_id (mudança de escopo maior, fora da Fase 1).
+    return calcLaborCost(
+      timeEntries.map((t) => ({
+        minutes: Number(t.duration_minutes) || 0,
+        on: (t.started_at || "").slice(0, 10),
+        user_id: null,
+        job_title_id: null,
+      })),
+      rates,
+    );
+  }, [timeEntries, rates]);
+
+  // Custo real = lançamentos + custo das atividades (rollup da EAP) + mão de obra.
+  const activityCost = useMemo(() => totalActivityCost(costActivities), [costActivities]);
+  const directCost = totalInvestments + activityCost;
+
+  const summary = useMemo(
+    () => summarizeBudget({
+      items: budgetItems,
+      actualDirect: directCost,
+      actualLabor: laborTotal,
+      settings,
+    }),
+    [budgetItems, directCost, laborTotal, settings],
+  );
+
+  // Orçado × real por fase: item de orçamento vs custo das atividades da fase.
+  const phaseBreakdown = useMemo<PhaseBreakdown[]>(() => {
+    const rows = phases.map((p) => ({
+      id: p.id,
+      title: p.title,
+      planned: budgetItems.filter((i) => i.phase_id === p.id).reduce((s, i) => s + (Number(i.total_cost) || 0), 0),
+      actual: costActivities.filter((a) => a.phase_id === p.id).reduce((s, a) => s + (Number(a.cost) || 0), 0)
+        + investments.filter((inv) => {
+          const act = costActivities.find((a) => a.id === inv.activity_id);
+          return act?.phase_id === p.id;
+        }).reduce((s, inv) => s + inv.amount, 0),
+    }));
+    const loosePlanned = budgetItems.filter((i) => !i.phase_id).reduce((s, i) => s + (Number(i.total_cost) || 0), 0);
+    if (loosePlanned > 0) rows.push({ id: null, title: "Projeto inteiro", planned: loosePlanned, actual: 0 });
+    return rows.filter((r) => r.planned > 0 || r.actual > 0).sort((a, b) => b.planned - a.planned);
+  }, [phases, budgetItems, costActivities, investments]);
+
+  const saveBudgetItem = async (item: Partial<BudgetItem> & { id?: string }) => {
+    const { id, ...payload } = item;
+    const { error } = id
+      ? await sb.from("budget_items").update(payload).eq("id", id)
+      : await sb.from("budget_items").insert({ ...payload, project_id: projectId });
+    if (error) {
+      toast({ title: "Erro ao salvar o item", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: id ? "Item atualizado" : "Item adicionado ao orçamento" });
+    fetchBudget();
+  };
+
+  const deleteBudgetItem = async (id: string) => {
+    const { error } = await sb.from("budget_items").delete().eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao excluir o item", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Item removido" });
+    fetchBudget();
+  };
+
+  const saveBudgetSettings = async (patch: Partial<BudgetSettings>) => {
+    const { error } = await sb
+      .from("project_budget_settings")
+      .upsert({ project_id: projectId, ...settings, ...patch, updated_at: new Date().toISOString() }, { onConflict: "project_id" });
+    if (error) {
+      toast({ title: "Erro ao salvar reservas", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Reservas e limites atualizados" });
+    fetchBudget();
+  };
+
   const totalConsolidated = budgetUsed + totalInvestments;
   const budgetPct = budgetPlanned > 0 ? Math.min((totalConsolidated / budgetPlanned) * 100, 100) : 0;
   const isOverBudget = budgetPlanned > 0 && totalConsolidated > budgetPlanned;
@@ -191,53 +322,70 @@ export const ProjectFinancials = ({ projectId, budgetPlanned, budgetUsed, onProj
 
   return (
     <div className="space-y-6">
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <PiggyBank className="w-4 h-4 text-primary" />
-            <span className="text-xs text-muted-foreground">Orçamento Planejado</span>
+      {budgetUnavailable ? (
+        // Migration ainda não aplicada: mantém a visão antiga em vez de quebrar.
+        <>
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-[13px] text-amber-700 dark:text-amber-400">
+            A composição do orçamento ainda não está habilitada neste ambiente — rode{" "}
+            <code className="font-mono text-[11px]">scripts/apply-project-budget-fase1.sh</code> na VM.
+            Enquanto isso, valem os campos antigos de orçamento.
           </div>
-          <p className="text-xl font-bold text-foreground">{formatCurrency(budgetPlanned)}</p>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Wallet className="w-4 h-4 text-warning" />
-            <span className="text-xs text-muted-foreground">Custo do Projeto</span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <PiggyBank className="w-4 h-4 text-primary" />
+                <span className="text-xs text-muted-foreground">Orçamento Planejado</span>
+              </div>
+              <p className="text-xl font-bold text-foreground">{formatCurrency(budgetPlanned)}</p>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Wallet className="w-4 h-4 text-warning" />
+                <span className="text-xs text-muted-foreground">Custo do Projeto</span>
+              </div>
+              <p className="text-xl font-bold text-foreground">{formatCurrency(budgetUsed)}</p>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Receipt className="w-4 h-4 text-accent-foreground" />
+                <span className="text-xs text-muted-foreground">Investimentos (Atividades)</span>
+              </div>
+              <p className="text-xl font-bold text-foreground">{formatCurrency(totalInvestments)}</p>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                {isOverBudget ? <TrendingDown className="w-4 h-4 text-destructive" /> : <TrendingUp className="w-4 h-4 text-success" />}
+                <span className="text-xs text-muted-foreground">Total Consolidado</span>
+              </div>
+              <p className={`text-xl font-bold ${isOverBudget ? "text-destructive" : "text-foreground"}`}>{formatCurrency(totalConsolidated)}</p>
+            </Card>
           </div>
-          <p className="text-xl font-bold text-foreground">{formatCurrency(budgetUsed)}</p>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Receipt className="w-4 h-4 text-accent-foreground" />
-            <span className="text-xs text-muted-foreground">Investimentos (Atividades)</span>
-          </div>
-          <p className="text-xl font-bold text-foreground">{formatCurrency(totalInvestments)}</p>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-1">
-            {isOverBudget ? <TrendingDown className="w-4 h-4 text-destructive" /> : <TrendingUp className="w-4 h-4 text-success" />}
-            <span className="text-xs text-muted-foreground">Total Consolidado</span>
-          </div>
-          <p className={`text-xl font-bold ${isOverBudget ? "text-destructive" : "text-foreground"}`}>{formatCurrency(totalConsolidated)}</p>
-        </Card>
-      </div>
+        </>
+      ) : (
+        <>
+          {/* Painel: indicadores, consumo e desvio por fase */}
+          <BudgetDashboard
+            summary={summary}
+            currency={settings.currency}
+            precision={settings.precision}
+            phases={phaseBreakdown}
+            laborCost={laborTotal}
+            directCost={directCost}
+            laborHours={laborHours}
+            ratesConfigured={rates.length > 0}
+          />
 
-      {/* Budget Progress */}
-      {budgetPlanned > 0 && (
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-foreground">Consumo do Orçamento</span>
-            <span className={`text-sm font-bold ${isOverBudget ? "text-destructive" : "text-foreground"}`}>
-              {budgetPct.toFixed(1)}%
-            </span>
-          </div>
-          <Progress value={budgetPct} className="h-2.5" />
-          <div className="flex justify-between mt-1 text-xs text-muted-foreground">
-            <span>Utilizado: {formatCurrency(totalConsolidated)}</span>
-            <span>Disponível: {formatCurrency(Math.max(budgetPlanned - totalConsolidated, 0))}</span>
-          </div>
-        </Card>
+          {/* Composição do orçamento (itens + reservas) */}
+          <BudgetPlanner
+            items={budgetItems}
+            phases={phases}
+            settings={settings}
+            canManage={canManageProject}
+            onSaveItem={saveBudgetItem}
+            onDeleteItem={deleteBudgetItem}
+            onSaveSettings={saveBudgetSettings}
+          />
+        </>
       )}
 
       {/* Actions */}
