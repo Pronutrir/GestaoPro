@@ -962,15 +962,20 @@ export const BacklogSection = ({
 
     return (
       <div key={key}>
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50">
+        {/* A FAIXA INTEIRA abre e fecha a fase. Antes só o chevron de 20px
+            respondia ao clique — o título e o resto pareciam clicáveis e não
+            eram, então "clicar na fase" simplesmente não fazia nada. */}
+        <div
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50",
+            phaseId && "cursor-pointer hover:bg-muted/70 transition-colors",
+          )}
+          onClick={() => { if (phaseId) togglePhase(phaseId); }}
+        >
           {phaseId ? (
-            <button
-              type="button"
-              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-              onClick={() => togglePhase(phaseId)}
-            >
+            <span className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground shrink-0">
               {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
+            </span>
           ) : (
             <span className="w-5 shrink-0" />
           )}
@@ -978,8 +983,10 @@ export const BacklogSection = ({
             {phaseId ? <Layers className="w-3.5 h-3.5" /> : <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />}
           </span>
           <h4 className="text-[13px] font-semibold text-foreground truncate">{phaseTitle}</h4>
-          {/* gap-2 (não 3) para o "⋯" cair sobre a coluna de ações das linhas. */}
-          <div className="flex items-center gap-2 ml-auto shrink-0">
+          {/* gap-2 (não 3) para o "⋯" cair sobre a coluna de ações das linhas.
+              stopPropagation: a faixa toda colapsa a fase, então sem isto
+              clicar em "+ Tarefa" fecharia o grupo junto. */}
+          <div className="flex items-center gap-2 ml-auto shrink-0" onClick={(e) => e.stopPropagation()}>
             {progTotal > 0 && (
               <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
                 <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
@@ -1076,11 +1083,15 @@ export const BacklogSection = ({
 
     return (
       <div key={phaseAct.id}>
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50">
+        {/* Faixa inteira colapsa, igual à fase real. */}
+        <div
+          className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+          onClick={() => toggleParent(phaseAct.id)}
+        >
           <button
             type="button"
             className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-            onClick={() => toggleParent(phaseAct.id)}
+            onClick={(e) => { e.stopPropagation(); toggleParent(phaseAct.id); }}
           >
             {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -1105,7 +1116,8 @@ export const BacklogSection = ({
             ) : (
               <h4
                 className="text-[13px] font-semibold text-foreground cursor-pointer truncate"
-                onClick={() => onEditActivity(phaseAct)}
+                // stopPropagation: a faixa colapsa, o título abre os detalhes.
+                onClick={(e) => { e.stopPropagation(); onEditActivity(phaseAct); }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   setEditingTitleId(phaseAct.id);
@@ -1117,8 +1129,9 @@ export const BacklogSection = ({
               </h4>
             )}
           </div>
-          {/* gap-2: mesmo alinhamento do cabeçalho de fase real. */}
-          <div className="flex items-center gap-2 ml-auto shrink-0">
+          {/* gap-2: mesmo alinhamento do cabeçalho de fase real.
+              stopPropagation: a faixa colapsa; os botões daqui não devem. */}
+          <div className="flex items-center gap-2 ml-auto shrink-0" onClick={(e) => e.stopPropagation()}>
             {progTotal > 0 && (
               <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
                 <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
@@ -1346,17 +1359,17 @@ export const BacklogSection = ({
           const progPct = progTotal > 0 ? Math.round((progDone / progTotal) * 100) : 0;
           return (
             <div key={lane.id}>
-              <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50">
-                <button
-                  type="button"
-                  className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-                  onClick={() => toggleLane(lane.id)}
-                >
+              {/* Faixa inteira colapsa, igual às fases. */}
+              <div
+                className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+                onClick={() => toggleLane(lane.id)}
+              >
+                <span className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground shrink-0">
                   {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
+                </span>
                 <h4 className="text-[13px] font-semibold text-foreground truncate">{lane.label}</h4>
                 <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{lane.items.length}</span>
-                <div className="flex items-center gap-3 ml-auto">
+                <div className="flex items-center gap-3 ml-auto" onClick={(e) => e.stopPropagation()}>
                   {progTotal > 0 && (
                     <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
                       <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
