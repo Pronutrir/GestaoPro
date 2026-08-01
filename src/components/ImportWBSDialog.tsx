@@ -6,6 +6,10 @@ import { Upload, Layers, Circle, Diamond, ClipboardList, FileText } from "lucide
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import {
+  splitColumns, pareceCabecalho, detectarColunas, lerLinha, statusPorDatas,
+  type ColValues,
+} from "@/lib/wbsColumns";
 
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
@@ -17,6 +21,8 @@ interface TreeNode {
   depth: number;         // 1 = topo
   role: EapRole;         // resolvido por posição + palavra-chave
   parentCode: string | null;
+  /** Datas, horas, custo e responsável lidos das colunas da planilha. */
+  vals?: ColValues;
 }
 
 interface ImportWBSDialogProps {
@@ -30,8 +36,32 @@ const ROLE_META: Record<EapRole, { label: string; short: string; icon: JSX.Eleme
   marco:     { label: "Marco",        short: "Marco", icon: <Diamond className="w-3 h-3" />,  cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
 };
 
+/** "2026-08-01" → "01/08". Só o dia importa na prévia; o ano polui. */
+const fmtDia = (iso?: string) => {
+  if (!iso) return "—";
+  const [, m, d] = iso.split("-");
+  return `${d}/${m}`;
+};
+
 const isMilestoneTitle = (t: string) =>
   /(^|\s)(marco|milestone)(\s|:|$)/i.test(t) || /🏁|\[m\]/i.test(t);
+
+/**
+ * Papel de cada nó: nível 1 = Fase, demais = Atividade, marco só em folha.
+ *
+ * Quem tem filhos NUNCA é marco, mesmo com "Milestone" no título — marco é
+ * ponto no tempo e não agrupa. EAPs reais usam "Milestone 1 - Lançamento" como
+ * nome da FASE, e tratar isso como marco quebrava o agrupamento inteiro: no
+ * Backlog e no Cronograma os filhos ficavam sem pai visível.
+ */
+const aplicarPapeis = (nodes: TreeNode[]) => {
+  const temFilhos = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
+  for (const n of nodes) {
+    if (n.depth === 1) n.role = "fase";
+    else if (isMilestoneTitle(n.title) && !temFilhos.has(n.code)) n.role = "marco";
+    else n.role = "atividade";
+  }
+};
 
 /* ------------------------------------------------------------------ */
 /*  Parser FLEXÍVEL: aceita código numérico (1.2.3), bullets (• - – *)  */
@@ -39,6 +69,39 @@ const isMilestoneTitle = (t: string) =>
 /*  códigos normalizados (1, 1.1, 1.1.2...).                            */
 /* ------------------------------------------------------------------ */
 const parseFlexible = (text: string): TreeNode[] => {
+  // MODO PLANILHA: quando vem com TAB, as colunas são lidas antes de tudo.
+  // Sem isto o TAB virava espaço e datas/horas entravam no TÍTULO — a
+  // informação não era só perdida, sujava o nome da tarefa.
+  const grid = splitColumns(text);
+  if (grid) {
+    const temCab = pareceCabecalho(grid[0]);
+    const roles = detectarColunas(grid, temCab);
+    const corpo = temCab ? grid.slice(1) : grid;
+    const linhas = corpo
+      .map((row) => ({ vals: lerLinha(row, roles), row }))
+      .filter((x) => (x.vals.titulo || "").trim().length > 0);
+
+    const nodes: TreeNode[] = [];
+    for (const { vals } of linhas) {
+      if (!vals.codigo) continue; // sem código não há como posicionar na árvore
+      const parts = vals.codigo.split(".");
+      while (parts.length > 1 && parts[parts.length - 1] === "0") parts.pop();
+      const code = parts.join(".");
+      const depth = parts.length;
+      nodes.push({
+        code,
+        title: (vals.titulo || "").trim(),
+        depth,
+        role: "atividade",
+        parentCode: depth > 1 ? parts.slice(0, -1).join(".") : null,
+        vals,
+      });
+    }
+    aplicarPapeis(nodes);
+    nodes.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+    return nodes;
+  }
+
   const rawLines = text.split("\n").map((l) => l.replace(/\t/g, "  ")).filter((l) => l.trim().length > 0);
   if (rawLines.length === 0) return [];
 
@@ -158,16 +221,7 @@ const parseFlexible = (text: string): TreeNode[] => {
   // Antes o papel vinha da função ("tem filho → Fase"), o que fazia
   // "1 / 1.1 / 1.1.1" virar Fase, Fase, Atividade. A leitura da EAP é
   // "1. Fase / 1.1 Entrega / 1.1.1 Atividade": o nível é que decide.
-  // Quem tem filhos NUNCA é marco, mesmo com "Milestone" no título: um marco é
-  // ponto no tempo e não agrupa. EAPs reais usam "Milestone 1 - Lançamento"
-  // como nome da FASE, e tratar isso como marco quebrava o agrupamento inteiro
-  // — no Backlog e no Cronograma os filhos ficavam órfãos.
-  const temFilhos = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
-  for (const n of nodes) {
-    if (n.depth === 1) n.role = "fase";
-    else if (isMilestoneTitle(n.title) && !temFilhos.has(n.code)) n.role = "marco";
-    else n.role = "atividade";
-  }
+  aplicarPapeis(nodes);
 
   return nodes;
 };
@@ -284,6 +338,27 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         .eq("project_id", projectId).order("display_order", { ascending: true });
       const backlogStageId =
         stagesData?.find((s) => s.display_order === 0)?.id ?? stagesData?.[0]?.id ?? null;
+      // Item com data real vai direto para a coluna certa: quem já terminou não
+      // deve nascer no Backlog. `is_final` marca a coluna de conclusão; a de
+      // andamento é a do meio (display_order 2 no fluxo padrão).
+      const finalStageId = (stagesData as any[])?.find((s) => s.is_final)?.id
+        ?? (stagesData as any[])?.slice(-1)[0]?.id ?? null;
+      const emAndamentoStageId = (stagesData as any[])?.find((s) => s.display_order === 2)?.id ?? null;
+
+      // Responsável: casa por nome ou e-mail, tolerante a acento e caixa — os
+      // campos de pessoa no sistema são texto livre, não FK.
+      const normPessoa = (s: string) =>
+        s.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+      const { data: perfis } = await supabase
+        .from("profiles").select("full_name, email").eq("is_active", true);
+      const pessoaPorNome = new Map<string, string>();
+      for (const p of (perfis as any[]) || []) {
+        if (p.full_name) pessoaPorNome.set(normPessoa(p.full_name), p.full_name);
+        if (p.email) pessoaPorNome.set(normPessoa(p.email), p.full_name || p.email);
+      }
+      // Nomes da planilha sem conta no sistema: importa sem responsável e avisa
+      // no fim, em vez de travar a importação inteira por causa de um nome.
+      const naoEncontrados = new Set<string>();
 
       // `phases` NÃO tem wbs_code em todos os ambientes — só `activities` tem.
       // Gravar a coluna direto quebrava a importação inteira na primeira fase
@@ -291,6 +366,12 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       // Detecta uma vez e reusa: se a coluna não existe, o código volta para o
       // título, que é onde ele aparece hoje nessas bases.
       let phasesHasWbs = true;
+      // Idem para as datas: a migration que as cria pode não ter rodado ainda.
+      let phasesHasDates = true;
+      // Colunas que o banco não tinha e foram descartadas para a importação
+      // seguir. Avisadas no fim: silenciar faria o item nascer sem o campo sem
+      // ninguém saber (ex.: sem código EAP, que define o papel Fase/Atividade).
+      const droppedCols = new Set<string>();
       const phaseIdMap: Record<string, string> = {};
       for (const phase of phases) {
         const base: Record<string, any> = {
@@ -302,12 +383,30 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           display_order: phaseOrder++,
         };
         if (phasesHasWbs) base.wbs_code = phase.code;
+        // Datas da linha da fase, quando a planilha as traz. É dado diferente
+        // da soma dos filhos: esta é a data PLANEJADA para a fase, e a
+        // divergência entre as duas é justamente o que interessa ver.
+        if (phasesHasDates && phase.vals) {
+          const v = phase.vals;
+          if (v.start_date) base.start_date = v.start_date;
+          if (v.end_date) base.end_date = v.end_date;
+          if (v.actual_start_date) base.actual_start_date = v.actual_start_date;
+          if (v.actual_end_date) base.actual_end_date = v.actual_end_date;
+        }
 
         let res = await supabase.from("phases").insert(base as any).select("id").single();
         if (res.error && /wbs_code/i.test(res.error.message)) {
           phasesHasWbs = false;
           delete base.wbs_code;
           base.title = `${phase.code} ${phase.title}`;
+          res = await supabase.from("phases").insert(base as any).select("id").single();
+        }
+        // Datas ausentes em phases: descarta as quatro de uma vez (vêm da mesma
+        // migration) e segue — a fase sem data ainda é melhor que nenhuma fase.
+        if (res.error && /(start_date|end_date)/i.test(res.error.message)) {
+          phasesHasDates = false;
+          for (const c of ["start_date", "end_date", "actual_start_date", "actual_end_date"]) delete base[c];
+          droppedCols.add("datas da fase");
           res = await supabase.from("phases").insert(base as any).select("id").single();
         }
         if (res.error) throw res.error;
@@ -326,10 +425,6 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       };
 
       let pacoteUnsupported = false;
-      // Colunas que o banco não tinha e foram descartadas para a importação
-      // seguir. Avisadas no fim: silenciar faria o item nascer sem o campo sem
-      // ninguém saber (ex.: sem código EAP, que define o papel Fase/Atividade).
-      const droppedCols = new Set<string>();
       // Ordena por código para inserir pais antes dos filhos.
       const ordered = [...nonPhase].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
       for (const node of ordered) {
@@ -350,10 +445,40 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           wbs_code: node.code,
           item_type: itemType,
           is_milestone: node.role === "marco",
-          // Nasce no Backlog, pendente — igual a criação manual (segue o fluxo).
+          // Nasce no Backlog — igual a criação manual (segue o fluxo).
           workflow_stage_id: backlogStageId,
           status: "pending",
         };
+
+        // Colunas da planilha. O status reflete as datas REAIS: importar um
+        // histórico e ver tudo como "pendente" obrigaria a refazer o trabalho
+        // à mão, item por item.
+        const v = node.vals;
+        if (v) {
+          if (v.start_date) basePayload.start_date = v.start_date;
+          if (v.end_date) basePayload.end_date = v.end_date;
+          if (v.actual_start_date) basePayload.actual_start_date = v.actual_start_date;
+          if (v.actual_end_date) basePayload.actual_end_date = v.actual_end_date;
+          if (v.hours != null) basePayload.hours = v.hours;
+          if (v.cost != null) basePayload.cost = v.cost;
+
+          const st = statusPorDatas(v);
+          basePayload.status = st;
+          if (st === "completed") {
+            basePayload.completed_at = `${v.actual_end_date}T12:00:00.000Z`;
+            if (finalStageId) basePayload.workflow_stage_id = finalStageId;
+          } else if (st === "in_progress" && emAndamentoStageId) {
+            basePayload.workflow_stage_id = emAndamentoStageId;
+          }
+
+          // Responsável só entra se casar com alguém do sistema. Nome solto
+          // viraria texto que nenhuma tela consegue resolver em pessoa.
+          if (v.responsavel) {
+            const achado = pessoaPorNome.get(normPessoa(v.responsavel));
+            if (achado) basePayload.assigned_to = achado;
+            else naoEncontrados.add(v.responsavel);
+          }
+        }
 
         let res = await supabase.from("activities").insert(basePayload).select("id").single();
         if (res.error && /item_type/i.test(res.error.message) && itemType === "fase") {
@@ -385,6 +510,12 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         toast({
           title: "Importado sem alguns campos",
           description: `Este banco não tem: ${Array.from(droppedCols).join(", ")}. Os itens foram criados sem esses campos — aplique as migrations pendentes na VM e reimporte se precisar deles.`,
+        });
+      }
+      if (naoEncontrados.size > 0) {
+        toast({
+          title: "Responsáveis não encontrados",
+          description: `Sem conta no sistema: ${Array.from(naoEncontrados).slice(0, 6).join(", ")}${naoEncontrados.size > 6 ? ` e mais ${naoEncontrados.size - 6}` : ""}. Os itens foram criados sem responsável.`,
         });
       }
       if (!phasesHasWbs) {
@@ -434,7 +565,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           <DialogTitle className="text-base font-semibold">Importar EAP</DialogTitle>
           <p className="text-[13px] text-muted-foreground mt-0.5">
             Cole sua estrutura em qualquer formato ou comece de um modelo.{" "}
-            <span className="text-foreground">Nível 1 vira Fase; do 1.1 em diante, Atividade.</span>
+            <span className="text-foreground">Nível 1 vira Fase; do 1.1 em diante, Atividade.</span>{" "}
+            Colando de planilha, as colunas de data, horas e responsável são reconhecidas.
           </p>
         </DialogHeader>
 
@@ -536,6 +668,25 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                     </span>
                     <span className="text-[11px] font-mono text-muted-foreground shrink-0">{n.code}</span>
                     <span className="text-[13px] truncate">{n.title}</span>
+                    {/* O que veio das colunas: conferir aqui evita descobrir
+                        que a data entrou errada só depois de importar. */}
+                    {n.vals && (
+                      <span className="ml-auto flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
+                        {(n.vals.start_date || n.vals.end_date) && (
+                          <span className="font-mono">
+                            {fmtDia(n.vals.start_date)}→{fmtDia(n.vals.end_date)}
+                          </span>
+                        )}
+                        {n.vals.hours != null && <span className="font-mono">{n.vals.hours}h</span>}
+                        {n.vals.actual_end_date && (
+                          <span className="px-1 rounded border border-success/40 text-success">concluída</span>
+                        )}
+                        {!n.vals.actual_end_date && n.vals.actual_start_date && (
+                          <span className="px-1 rounded border border-warning/40 text-warning">em andamento</span>
+                        )}
+                        {n.vals.responsavel && <span className="truncate max-w-[90px]">{n.vals.responsavel}</span>}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>

@@ -66,6 +66,7 @@ run 20260801110000 "supabase/migrations/20260801110000_project_files_bucket.sql"
 run 20260801120000 "supabase/migrations/20260801120000_page_comments.sql"               "Comentários por página"
 run 20260801140000 "supabase/migrations/20260801140000_tap_flow_and_versions.sql"       "TAP como ato formal"
 run 20260801130000 "supabase/migrations/20260801130000_migrate_legacy_budget_to_items.sql" "Orçamento legado → itens"
+run 20260801150000 "supabase/migrations/20260801150000_phases_dates.sql"                  "Datas na fase (importação de EAP)"
 
 echo ""
 echo "══════════════════════════════════════════════════════════"
