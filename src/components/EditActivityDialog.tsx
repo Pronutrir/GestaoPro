@@ -1580,14 +1580,14 @@ export const EditActivityDialog = ({
                         kind: "fase",
                         label: "Fase / Entrega",
                         icon: <Layers className="w-3.5 h-3.5" />,
-                        hint: "Agrupa outros itens (em qualquer nível). Datas, horas e custo derivam dos filhos.",
+                        hint: "Nível 1 da EAP (1, 2, 3…). Agrupa entregas; datas, horas e custo derivam dos filhos.",
                         activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
                       },
                       {
                         kind: "atividade",
                         label: "Atividade",
                         icon: <Circle className="w-3.5 h-3.5" />,
-                        hint: "Trabalho executável (folha da EAP), com estimativa e intervalo de datas próprios.",
+                        hint: "Do nível 1.1 em diante. Pode ter subitens — aí horas e custo somam dos filhos.",
                         activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
                       },
                       {
@@ -1699,7 +1699,7 @@ export const EditActivityDialog = ({
                             "h-7 px-2.5 text-xs gap-1.5 shrink-0",
                             !formData.wbs_code.trim() && "text-primary border-primary/40 bg-primary/5 hover:bg-primary/10"
                           )}
-                          title="Gerar o próximo código com base no item pai (ou fase) e nos irmãos. Fase/Entrega agrupa (qualquer nível); Atividade e Marco são folhas. Formato por posição: 1, 1.1, 1.1.1…"
+                          title="Gerar o próximo código com base no item pai (ou fase) e nos irmãos. O nível define o papel: 1, 2, 3… são Fase; 1.1, 1.1.1… são Atividade."
                         >
                           <Wand2 className="w-3.5 h-3.5" />
                           {formData.wbs_code.trim() ? "Regerar" : "Gerar"}

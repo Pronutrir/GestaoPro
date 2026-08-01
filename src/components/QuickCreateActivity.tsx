@@ -31,8 +31,8 @@ interface QuickCreateActivityProps {
 }
 
 const KIND_META: Record<Kind, { label: string; icon: JSX.Element; hint: string }> = {
-  fase: { label: "Fase / Entrega", icon: <Layers className="w-3.5 h-3.5" />, hint: "Agrupa outros itens (qualquer nível)." },
-  atividade: { label: "Atividade", icon: <Circle className="w-3.5 h-3.5" />, hint: "Trabalho executável (folha)." },
+  fase: { label: "Fase / Entrega", icon: <Layers className="w-3.5 h-3.5" />, hint: "Nível 1 da EAP (1, 2, 3…). Agrupa entregas." },
+  atividade: { label: "Atividade", icon: <Circle className="w-3.5 h-3.5" />, hint: "Do 1.1 em diante. Pode ter subitens." },
   // fill-current: herda a cor do botão. Com âmbar fixo, o ícone sumia quando o
   // botão ficava com fundo âmbar sólido (selecionado).
   marco: { label: "Marco", icon: <Diamond className="w-3.5 h-3.5 fill-current" />, hint: "Ponto único no tempo." },

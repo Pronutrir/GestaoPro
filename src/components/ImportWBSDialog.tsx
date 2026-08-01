@@ -381,7 +381,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <DialogTitle className="text-base font-semibold">Importar EAP</DialogTitle>
           <p className="text-[13px] text-muted-foreground mt-0.5">
-            Cole sua estrutura em qualquer formato ou comece de um modelo.
+            Cole sua estrutura em qualquer formato ou comece de um modelo.{" "}
+            <span className="text-foreground">Nível 1 vira Fase; do 1.1 em diante, Atividade.</span>
           </p>
         </DialogHeader>
 
@@ -420,7 +421,10 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 spellCheck={false}
                 autoFocus
                 className="h-full w-full min-h-[240px] resize-none rounded-md border border-input bg-muted/50 px-3 py-2 font-mono text-[13px] leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                placeholder={"1. Fase\n1.1 Entrega\n1.1.1 Atividade\n\nou com bullets e recuo:\n• Fase\n   - Atividade"}
+                // O placeholder ensina a regra: nível 1 é Fase, o resto é
+                // Atividade. Antes rotulava "1.1 Entrega", o que contradizia o
+                // que a importação de fato produz.
+                placeholder={"1. Planejamento        ← nível 1 vira Fase\n1.1 Levantar requisitos  ← 1.1 em diante viram Atividade\n1.2 Aprovar escopo\n2. Execução\n2.1 Desenvolver\n\nou com bullets e recuo:\n• Planejamento\n   - Levantar requisitos"}
               />
             ) : (
               <div className="overflow-y-auto space-y-2 -mx-1 px-1">
