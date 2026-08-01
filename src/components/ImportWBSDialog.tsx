@@ -274,19 +274,33 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       const backlogStageId =
         stagesData?.find((s) => s.display_order === 0)?.id ?? stagesData?.[0]?.id ?? null;
 
+      // `phases` NÃO tem wbs_code em todos os ambientes — só `activities` tem.
+      // Gravar a coluna direto quebrava a importação inteira na primeira fase
+      // ("Could not find the 'wbs_code' column of 'phases'"), sem criar nada.
+      // Detecta uma vez e reusa: se a coluna não existe, o código volta para o
+      // título, que é onde ele aparece hoje nessas bases.
+      let phasesHasWbs = true;
       const phaseIdMap: Record<string, string> = {};
       for (const phase of phases) {
-        const { data, error } = await supabase.from("phases").insert({
+        const base: Record<string, any> = {
           project_id: projectId,
-          // Título limpo: o código vive em wbs_code. Concatenar os dois gravava
-          // a numeração dentro do texto, então renumerar a EAP exigiria reescrever
-          // o título de cada item à mão.
-          title: phase.title,
+          // Título limpo quando há wbs_code: o código vive na coluna própria.
+          // Concatenar os dois gravava a numeração dentro do texto, e renumerar
+          // a EAP exigiria reescrever o título de cada item à mão.
+          title: phasesHasWbs ? phase.title : `${phase.code} ${phase.title}`,
           display_order: phaseOrder++,
-          wbs_code: phase.code,
-        }).select("id").single();
-        if (error) throw error;
-        phaseIdMap[phase.code] = data.id;
+        };
+        if (phasesHasWbs) base.wbs_code = phase.code;
+
+        let res = await supabase.from("phases").insert(base as any).select("id").single();
+        if (res.error && /wbs_code/i.test(res.error.message)) {
+          phasesHasWbs = false;
+          delete base.wbs_code;
+          base.title = `${phase.code} ${phase.title}`;
+          res = await supabase.from("phases").insert(base as any).select("id").single();
+        }
+        if (res.error) throw res.error;
+        phaseIdMap[phase.code] = res.data.id;
       }
 
       const codeIdMap: Record<string, string> = {};
@@ -301,6 +315,10 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       };
 
       let pacoteUnsupported = false;
+      // Colunas que o banco não tinha e foram descartadas para a importação
+      // seguir. Avisadas no fim: silenciar faria o item nascer sem o campo sem
+      // ninguém saber (ex.: sem código EAP, que define o papel Fase/Atividade).
+      const droppedCols = new Set<string>();
       // Ordena por código para inserir pais antes dos filhos.
       const ordered = [...nonPhase].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
       for (const node of ordered) {
@@ -331,6 +349,17 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           pacoteUnsupported = true;
           res = await supabase.from("activities").insert({ ...basePayload, item_type: "atividade" }).select("id").single();
         }
+        // Degrada por coluna ausente, como o AddProjectDialog já faz: melhor
+        // criar o item sem um campo do que abortar no meio e deixar metade da
+        // EAP no banco. A falha em `phases` acima mostrou que ambientes
+        // divergem — aqui a proteção vale para qualquer coluna, não só uma.
+        for (let i = 0; i < 6 && res.error; i++) {
+          const miss = /Could not find the '([^']+)' column/.exec(res.error.message)?.[1];
+          if (!miss || !(miss in basePayload)) break;
+          delete basePayload[miss];
+          droppedCols.add(miss);
+          res = await supabase.from("activities").insert(basePayload).select("id").single();
+        }
         if (res.error) throw res.error;
         codeIdMap[node.code] = res.data.id;
       }
@@ -339,6 +368,18 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         toast({
           title: "Tipo 'Fase/Entrega' pendente no banco",
           description: "Os agrupadores aninhados viraram atividade (ainda agrupam por terem subitens). Aplique a migration de item_type na VM.",
+        });
+      }
+      if (droppedCols.size > 0) {
+        toast({
+          title: "Importado sem alguns campos",
+          description: `Este banco não tem: ${Array.from(droppedCols).join(", ")}. Os itens foram criados sem esses campos — aplique as migrations pendentes na VM e reimporte se precisar deles.`,
+        });
+      }
+      if (!phasesHasWbs) {
+        toast({
+          title: "Código da EAP no título das fases",
+          description: "A coluna wbs_code ainda não existe em 'phases' neste banco, então o código foi mantido no título (ex.: \"1 Planejamento\").",
         });
       }
       toast({

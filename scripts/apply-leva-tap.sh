@@ -8,6 +8,12 @@ set -e
 # implantado.
 #
 # ORDEM (há dependência real entre elas):
+#   0) wbs_code                 coluna wbs_code em activities e phases, com
+#                               backfill do prefixo do título. É DÍVIDA ANTIGA
+#                               (migration de maio nunca aplicada): sem ela a
+#                               importação de EAP falha na primeira fase com
+#                               "Could not find the 'wbs_code' column of
+#                               'phases'". Vem primeiro por ser o bug visível.
 #   1) pages_rls_and_versions   RLS de project_pages + page_versions + page_id
 #                               no envelope de fluxo. A 4 depende desta.
 #   2) project_files_bucket     bucket privado dos arquivos de projeto.
@@ -54,6 +60,7 @@ $PSQL -t -c "SELECT to_regclass('public.document_flows');" | grep -q document_fl
 }
 echo "  ✓ document_flows presente"
 
+run 20260512013359 "supabase/migrations/20260512013359_0d23dad5-dd70-4dd9-bf05-9011ec5f18c5.sql" "wbs_code em activities e phases"
 run 20260801100000 "supabase/migrations/20260801100000_pages_rls_and_versions.sql"      "RLS de páginas + versões"
 run 20260801110000 "supabase/migrations/20260801110000_project_files_bucket.sql"        "Bucket privado de arquivos"
 run 20260801120000 "supabase/migrations/20260801120000_page_comments.sql"               "Comentários por página"
@@ -70,6 +77,11 @@ $PSQL -c "SELECT
             to_regclass('public.page_versions')            AS page_versions,
             to_regclass('public.page_comments')            AS page_comments,
             to_regclass('public.project_charter_versions') AS charter_versions;"
+
+echo "── wbs_code (importação de EAP depende disto) ──"
+$PSQL -c "SELECT table_name, column_name FROM information_schema.columns
+          WHERE table_schema='public' AND column_name='wbs_code'
+            AND table_name IN ('phases','activities') ORDER BY 1;"
 
 echo "── colunas do TAP ──"
 $PSQL -c "SELECT column_name FROM information_schema.columns
