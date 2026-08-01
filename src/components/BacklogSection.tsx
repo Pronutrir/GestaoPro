@@ -139,12 +139,15 @@ export const BacklogSection = ({
   // de 760px e a última coluna — a de ações — saía da tela, exigindo rolagem
   // lateral para chegar ao botão de arquivar. Agora cada coluna encolhe até um
   // mínimo ainda legível e a tabela cabe na largura disponível.
+  // Máximos mais enxutos: as colunas de dado não precisam crescer sem limite —
+  // a folga vai para o título, que é o que a pessoa lê. Prazo e Horas seguram
+  // conteúdo curto ("20/07/2026", "55h") e não justificam largura de sobra.
   const BACKLOG_COLS: { id: string; label: string; width: string; align?: "center" | "left" }[] = [
-    { id: "priority", label: "Prioridade", width: "minmax(84px,132px)", align: "left" },
-    { id: "status", label: "Status", width: "minmax(92px,148px)", align: "left" },
-    { id: "assigned_to", label: "Responsável", width: "minmax(96px,180px)", align: "left" },
-    { id: "end_date", label: "Prazo", width: "minmax(64px,116px)", align: "left" },
-    { id: "hours", label: "Horas", width: "minmax(56px,96px)", align: "left" },
+    { id: "priority", label: "Prioridade", width: "minmax(80px,108px)", align: "left" },
+    { id: "status", label: "Status", width: "minmax(88px,124px)", align: "left" },
+    { id: "assigned_to", label: "Responsável", width: "minmax(96px,168px)", align: "left" },
+    { id: "end_date", label: "Prazo", width: "minmax(64px,96px)", align: "left" },
+    { id: "hours", label: "Horas", width: "minmax(48px,68px)", align: "left" },
   ];
   const BACKLOG_COLS_DEFAULT = ["priority", "status", "assigned_to", "end_date"];
   const backlogColsKey = `backlog-cols:${projectId}`;
@@ -537,9 +540,10 @@ export const BacklogSection = ({
   };
   // Muda o tipo de um item.
   const handleChangeType = async (activity: Activity, kind: Kind, hasChildren: boolean) => {
-    // Folha (atividade/marco) não pode ter filhos.
-    if ((kind === "atividade" || kind === "marco") && hasChildren) {
-      toast({ title: "Não é possível", description: "Este item tem subitens; só Fase/Entrega agrupa.", variant: "destructive" });
+    // Atividade agora pode agrupar (o nível é que define o rótulo). Só Marco
+    // segue barrado com filhos: é folha de controle por definição.
+    if (kind === "marco" && hasChildren) {
+      toast({ title: "Não é possível", description: "Este item tem subitens; Marco não agrupa.", variant: "destructive" });
       return;
     }
     const patch = kind === "marco"
@@ -619,7 +623,8 @@ export const BacklogSection = ({
 
     const kind = resolveKind(activity, hasChildren);
     const kindMeta = KIND_META[kind];
-    // Fase disponível em qualquer nível; item com filhos só pode ser Fase.
+    // Item com filhos pode ser Fase ou Atividade (o nível é que define o
+    // rótulo); só Marco fica de fora, por ser folha de controle.
     const typeOptions: Kind[] = eapTypeOptions({ hasChildren });
     const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
     const dc = dependencyCounts.get(activity.id);
@@ -699,7 +704,11 @@ export const BacklogSection = ({
           className={`grid items-center gap-2 border-b px-3 py-2.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
             isSelected ? "bg-primary/5" : ""
           }`}
-          style={{ gridTemplateColumns: backlogGrid, paddingLeft: 12 + depth * 22 }}
+          // O recuo de profundidade NÃO vai aqui: padding na linha encolhe a
+          // área do grid e empurra TODAS as colunas para a direita, tanto mais
+          // quanto mais fundo o item — era o que desalinhava as linhas do
+          // cabeçalho. O recuo é aplicado só na coluna do título, abaixo.
+          style={{ gridTemplateColumns: backlogGrid }}
           onClick={() => { if (!isEditingTitle) onEditActivity(activity); }}
         >
           {/* col: expand */}
@@ -740,8 +749,11 @@ export const BacklogSection = ({
             </button>
           )}
 
-          {/* col: ícone de tipo (clicável) + título + código EAP + deps */}
-          <div className="flex items-center gap-2 min-w-0">
+          {/* col: ícone de tipo (clicável) + título + código EAP + deps.
+              O recuo por profundidade vive AQUI, dentro da coluna do título:
+              assim a hierarquia continua legível sem deslocar as demais
+              colunas, que permanecem alinhadas com o cabeçalho. */}
+          <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: depth * 18 }}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -965,8 +977,9 @@ export const BacklogSection = ({
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-primary/10 text-primary shrink-0">
             {phaseId ? <Layers className="w-3.5 h-3.5" /> : <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />}
           </span>
-          <h4 className="text-[13px] font-semibold text-foreground">{phaseTitle}</h4>
-          <div className="flex items-center gap-3 ml-auto">
+          <h4 className="text-[13px] font-semibold text-foreground truncate">{phaseTitle}</h4>
+          {/* gap-2 (não 3) para o "⋯" cair sobre a coluna de ações das linhas. */}
+          <div className="flex items-center gap-2 ml-auto shrink-0">
             {progTotal > 0 && (
               <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
                 <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
@@ -1104,7 +1117,8 @@ export const BacklogSection = ({
               </h4>
             )}
           </div>
-          <div className="flex items-center gap-3 ml-auto">
+          {/* gap-2: mesmo alinhamento do cabeçalho de fase real. */}
+          <div className="flex items-center gap-2 ml-auto shrink-0">
             {progTotal > 0 && (
               <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
                 <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
