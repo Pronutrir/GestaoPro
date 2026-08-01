@@ -55,7 +55,12 @@ export function eapLevel(wbsCode?: string | null): number | null {
   if (!raw) return null;
   // Só numeração pontuada conta. "Anexo A" ou "" não definem nível.
   if (!/^\d+(\.\d+)*$/.test(raw)) return null;
-  return raw.split(".").length;
+  // "1.0", "2.0.0" são nível 1 com zero decorativo — formato comum em EAP
+  // exportada de planilha. Sem descartar os zeros à direita, "1.0" seria lido
+  // como nível 2 e a fase do topo viraria atividade.
+  const parts = raw.split(".");
+  while (parts.length > 1 && parts[parts.length - 1] === "0") parts.pop();
+  return parts.length;
 }
 
 /**

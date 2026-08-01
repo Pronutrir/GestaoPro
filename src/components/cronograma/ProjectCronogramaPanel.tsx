@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState, useCallback, Fragment, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { resolveEapKind } from "@/lib/eapModel";
 import { supabase } from "@/integrations/supabase/client";
 import { computeActivityProgress } from "@/lib/activityProgress";
 import {
@@ -745,6 +746,21 @@ export function ProjectCronogramaPanel({
     return m;
   }, [activities]);
 
+  /**
+   * Agrupa? Passa pela fonte única (lib/eapModel) em vez de testar item_type
+   * na mão.
+   *
+   * O teste direto `item_type === "fase" || "pacote"` ignorava a regra por
+   * nível: itens de nível 1 gravados como 'atividade' não eram reconhecidos
+   * como fase (9 no banco) e itens de nível 2+ gravados como 'fase' agrupavam
+   * indevidamente (17). Era por isso que o cronograma mostrava só marcos e
+   * atividades, sem as fases.
+   */
+  const isGroupRow = useCallback(
+    (a: any) => resolveEapKind(a, (childrenByParent.get(a?.id) || []).length > 0) === "fase",
+    [childrenByParent],
+  );
+
   const activityById = useMemo(() => {
     const m = new Map<string, any>();
     activities.forEach((a) => m.set(a.id, a));
@@ -828,7 +844,7 @@ export function ProjectCronogramaPanel({
 
     activities.forEach((a) => {
       // Fase E pacote de trabalho são agrupadores: datas derivadas dos filhos.
-      if (a.item_type !== "fase" && a.item_type !== "pacote") return;
+      if (!isGroupRow(a)) return;
       const descendants = collectDescendants(a.id);
       const starts = descendants
         .filter((d) => d.start_date)
@@ -873,7 +889,7 @@ export function ProjectCronogramaPanel({
   const isHiddenByCollapse = useCallback((a: any): boolean => {
     let current = a.parent_id ? activityById.get(a.parent_id) : null;
     while (current) {
-      if ((current.item_type === "fase" || current.item_type === "pacote") && collapsedPhases.has(current.id)) return true;
+      if (isGroupRow(current) && collapsedPhases.has(current.id)) return true;
       current = current.parent_id ? activityById.get(current.parent_id) : null;
     }
     return false;
@@ -1186,7 +1202,7 @@ export function ProjectCronogramaPanel({
       .map(r => {
         let s: Date | null = null;
         let e: Date | null = null;
-        const isGroup = r.a.item_type === "fase" || r.a.item_type === "pacote";
+        const isGroup = isGroupRow(r.a);
         const derived = isGroup ? phaseDerivedDates.get(r.a.id) : null;
         if (isGroup && (derived?.start || derived?.end)) {
           // Agrupador (fase/pacote) com filhos datados: deriva do intervalo deles.
@@ -1203,7 +1219,7 @@ export function ProjectCronogramaPanel({
 
     const undated = visibleRows
       .filter(r => {
-        const isGroup = r.a.item_type === "fase" || r.a.item_type === "pacote";
+        const isGroup = isGroupRow(r.a);
         if (isGroup) {
           const d = phaseDerivedDates.get(r.a.id);
           // Agrupador só é "sem data" se nem os filhos nem ele próprio têm datas.
@@ -1320,7 +1336,7 @@ export function ProjectCronogramaPanel({
                 <Diamond className="h-2.5 w-2.5 fill-orange-500 text-orange-500" />
                 Marco
               </Badge>
-            ) : (a.item_type === "fase" || a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0) ? (
+            ) : isGroupRow(a) ? (
               <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-primary/10 text-primary border-primary/30 shrink-0 gap-1">
                 <Layers className="h-2.5 w-2.5" />
                 Fase / Entrega
@@ -1714,7 +1730,7 @@ export function ProjectCronogramaPanel({
     for (const { a } of rows) {
       const isGroup =
         !a.is_milestone &&
-        (a.item_type === "fase" || a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0);
+        isGroupRow(a);
       if (isGroup) continue;
 
       if (!(a.start_date && a.end_date)) undated++;
@@ -1961,7 +1977,7 @@ export function ProjectCronogramaPanel({
                 // com filhos). Modelo unificado (lib/eapModel).
                 const isPhase =
                   !a.is_milestone &&
-                  (a.item_type === "fase" || a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0);
+                  isGroupRow(a);
                 const isGroup = isPhase;
                 const isSubactivity = !isGroup && !!a.parent_id;
                 const isMilestone = !!a.is_milestone;
@@ -2188,7 +2204,7 @@ export function ProjectCronogramaPanel({
                   // Agrupador = Fase/Entrega (cobre 'fase', 'pacote' legado, filhos).
                   const isPhase =
                     !a.is_milestone &&
-                    (a.item_type === "fase" || a.item_type === "pacote" || (childrenByParent.get(a.id) || []).length > 0);
+                    isGroupRow(a);
                   const isGroup = isPhase;
                   const isSubactivity = !isGroup && !!a.parent_id;
 

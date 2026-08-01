@@ -85,10 +85,15 @@ const parseFlexible = (text: string): TreeNode[] => {
         if (prev) prev.title = `${prev.title} ${r.title}`.trim();
         continue;
       }
+      // Zeros à direita são decorativos: "1.0" é nível 1, não 2. Formato comum
+      // em EAP exportada de planilha — sem isso a fase do topo virava atividade
+      // e os filhos ficavam sem pai.
       const parts = r.explicitCode.split(".");
+      while (parts.length > 1 && parts[parts.length - 1] === "0") parts.pop();
+      const code = parts.join(".");
       const depth = parts.length;
       const parentCode = depth > 1 ? parts.slice(0, depth - 1).join(".") : null;
-      nodes.push({ code: r.explicitCode, title: r.title, depth, role: "atividade", parentCode });
+      nodes.push({ code, title: r.title, depth, role: "atividade", parentCode });
     }
 
     // Pai ausente (colaram só um ramo, ex.: começa em 2.3.1 sem 2.3): cria o
@@ -153,9 +158,15 @@ const parseFlexible = (text: string): TreeNode[] => {
   // Antes o papel vinha da função ("tem filho → Fase"), o que fazia
   // "1 / 1.1 / 1.1.1" virar Fase, Fase, Atividade. A leitura da EAP é
   // "1. Fase / 1.1 Entrega / 1.1.1 Atividade": o nível é que decide.
+  // Quem tem filhos NUNCA é marco, mesmo com "Milestone" no título: um marco é
+  // ponto no tempo e não agrupa. EAPs reais usam "Milestone 1 - Lançamento"
+  // como nome da FASE, e tratar isso como marco quebrava o agrupamento inteiro
+  // — no Backlog e no Cronograma os filhos ficavam órfãos.
+  const temFilhos = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
   for (const n of nodes) {
-    if (isMilestoneTitle(n.title)) n.role = "marco";
-    else n.role = n.depth === 1 ? "fase" : "atividade";
+    if (n.depth === 1) n.role = "fase";
+    else if (isMilestoneTitle(n.title) && !temFilhos.has(n.code)) n.role = "marco";
+    else n.role = "atividade";
   }
 
   return nodes;
