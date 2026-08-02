@@ -22,16 +22,30 @@ function TaskRefView({ node, deleteNode }: any) {
   const cachedTitle: string = node.attrs.title || "Atividade";
   const [act, setAct] = useState<ActivityState | null>(null);
   const [loading, setLoading] = useState(true);
+  /** A consulta falhou — diferente de "a atividade não existe". */
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const { data } = await supabase
+      // FK EXPLÍCITA no join: `activities` tem DUAS chaves para
+      // `workflow_stages` (workflow_stage_id e last_progress_stage_id), então
+      // `workflow_stages(...)` é ambíguo e o PostgREST devolve PGRST201 em vez
+      // de dados. O cartão lia isso como "atividade não existe" e mostrava
+      // "Removida" para tarefa recém-criada.
+      const { data, error } = await supabase
         .from("activities")
-        .select("id, title, status, workflow_stage_id, workflow_stages(title, color)")
+        .select("id, title, status, workflow_stage_id, workflow_stages!activities_workflow_stage_id_fkey(title, color)")
         .eq("id", activityId)
         .maybeSingle();
       if (!alive) return;
+      if (error) {
+        // Falha de consulta não é o mesmo que atividade inexistente. Sem isto,
+        // qualquer erro (rede, permissão, join) virava "Removida".
+        setLoadError(true);
+        setLoading(false);
+        return;
+      }
       if (data) {
         setAct({
           id: data.id,
@@ -80,9 +94,19 @@ function TaskRefView({ node, deleteNode }: any) {
             {title}
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
-            {!loading && !act && (
+            {/* "Removida" afirma exclusão — só quando a consulta funcionou e
+                voltou vazia. Erro de leitura vira "Sem conexão", que é o que
+                de fato aconteceu; dizer "Removida" ali é acusar sumiço de uma
+                tarefa que pode estar intacta. */}
+            {!loading && !act && !loadError && (
               <Badge variant="outline" className="h-4 px-1.5 text-[10px] text-destructive border-destructive/40">
                 Removida
+              </Badge>
+            )}
+            {!loading && loadError && (
+              <Badge variant="outline" className="h-4 px-1.5 text-[10px] text-muted-foreground border-muted-foreground/40"
+                     title="Não foi possível ler o estado desta tarefa. A tarefa pode estar normal — recarregue a página.">
+                Sem conexão
               </Badge>
             )}
             {act?.stage_title && (
