@@ -69,27 +69,25 @@ const PropertyRow = ({ icon, label, children, wide, iconClassName }: {
 // tinha hierarquia: Status ao lado de Tempo, Líder ao lado de Custo — assuntos
 // diferentes disputando a mesma linha, e o olho lia em zigue-zague. Cada faixa
 // responde UMA pergunta, na ordem em que se preenche.
-const FieldBand = ({ step, title, children, tone = "default" }: {
-  step: number; title: string; children: React.ReactNode; tone?: "default" | "primary";
+const FieldBand = ({ step, title, children }: {
+  step: number; title: string; children: React.ReactNode;
 }) => (
   <div className="rounded-lg border border-border overflow-hidden">
     {/* ARDÓSIA em vez de azul: a faixa AGRUPA campos, não pede clique. Com o
         primary aqui, o topo de cada card competia com botões e links — e o
         azul, aparecendo em tudo, deixava de significar "acionável".
-        As TRÊS faixas usam a mesma paleta: antes a 1 era azul e as outras
-        cinza-neutro, famílias diferentes brigando no mesmo card.
+        As TRÊS faixas são IDÊNTICAS: mesmo fundo, mesmo número sólido. O
+        número ordena a leitura, não hierarquiza — nenhuma seção é mais
+        importante que as outras.
 
-        A distinção da primeira vem do NÚMERO (preenchido × contorno), não de
-        um fundo diferente. Nada de opacidade fracionada aqui: classes como
-        `text-band/80` não são geradas neste projeto, e o elemento acabava sem
-        cor nenhuma — foi o que deixou as faixas 2 e 3 cinza-neutro. */}
+        Nada de opacidade fracionada aqui: classes como `text-band/80` não são
+        geradas neste projeto, e o elemento acabava sem cor nenhuma. */}
     <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider border-b border-border bg-band-soft text-band">
-      <span className={cn(
-        "inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold shrink-0",
-        tone === "primary"
-          ? "bg-band text-band-foreground"
-          : "border border-band text-band",
-      )}>
+      {/* Número SÓLIDO nas três. O contorno usado nas faixas 2 e 3 tinha peso
+          visual muito menor que o quadrado cheio da 1 — com o mesmo fundo, o
+          olho ainda lia a primeira como "diferente das outras". Agora as três
+          são idênticas: a numeração ordena, sem hierarquia de destaque. */}
+      <span className="inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold shrink-0 bg-band text-band-foreground">
         {step}
       </span>
       {title}
@@ -1465,7 +1463,7 @@ export const EditActivityDialog = ({
               return (
               <div className="space-y-2.5">
                 {/* ---- FAIXA 1: O QUE É (status, tipo, dependências, EAP) ---- */}
-                <FieldBand step={1} title="O que é" tone="primary">
+                <FieldBand step={1} title="O que é">
                   {/* Status / Etapa */}
                   {workflowStages.length > 0 && (
                      <PropertyRow iconClassName="text-primary" icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
