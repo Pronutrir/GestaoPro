@@ -129,7 +129,9 @@ export function SortableKanbanCard({
   onToggle: () => void;
   onDuplicate?: () => void;
   onMoveToStage?: (stageId: string) => void;
-  moveTargets?: { id: string; title: string; color: string }[];
+  /** Mesmo formato de KanbanCardBase — `hidden` marca coluna oculta para o
+   *  menu avisar. Sem ele aqui, o selo não chegava pelo card arrastável. */
+  moveTargets?: { id: string; title: string; color: string; hidden?: boolean }[];
   onLinkParent?: () => void;
   isAdmin?: boolean;
   isBlocked?: boolean;

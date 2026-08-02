@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -45,7 +44,6 @@ import {
   ChevronDown,
   ChevronsRight,
   ChevronsLeft,
-  SlidersHorizontal,
   Flag,
   Building2,
   Tag as TagIcon,
@@ -88,8 +86,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuCheckboxItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -128,7 +124,6 @@ import {
   EMPTY_COLUMN_FILTER,
   columnFilterActive,
   DEFAULT_CARD_FIELDS,
-  CARD_FIELD_GROUPS,
   type GroupByValue,
   type CardFields,
   type WorkflowStage,
@@ -143,10 +138,11 @@ import { KanbanCard, SortableKanbanCard } from "./kanban/KanbanCard";
 import {
   SortableColumn,
   DroppableColumn,
-  AddStageColumn,
+  StageListButton,
   FilterOptionList,
   ColumnFilterPanel,
 } from "./kanban/KanbanColumn";
+import { VisoesMenu } from "./kanban/VisoesMenu";
 import { ActivityDetailPanel } from "./kanban/ActivityDetailPanel";
 import { selectInChunks } from "@/lib/chunkedIn";
 
@@ -2567,7 +2563,11 @@ export const ActivityKanban = ({
         )}
 
         <div className="ml-auto flex items-center gap-2">
-        {/* Agrupar em raias (swimlanes) — menu clicável de critérios */}
+        {/* VISÕES — Raias e Campos do card num botão só (ver VisoesMenu).
+            "Minhas" saiu da régua: era botão aqui E linha dentro de Filtros,
+            duplicando o mesmo estado (e acendendo o badge de um painel que a
+            pessoa nem abriu). Ficou onde ele de fato pertence — em Filtros,
+            porque reduz QUAIS tarefas aparecem. O atalho M segue igual. */}
         {(() => {
           const laneOptions: { id: typeof groupBy; label: string; icon: React.ReactNode }[] = [
             { id: "none", label: "Sem raias", icon: <XIcon className="w-3.5 h-3.5" /> },
@@ -2580,43 +2580,17 @@ export const ActivityKanban = ({
             { id: "blocked", label: "Por bloqueio", icon: <AlertCircle className="w-3.5 h-3.5" /> },
             { id: "customGroup", label: "Por time", icon: <Users className="w-3.5 h-3.5" /> },
           ];
-          const current = laneOptions.find((o) => o.id === groupBy) ?? laneOptions[0];
           return (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant={groupBy !== "none" ? "default" : "outline"}
-                  size="sm"
-                  className="h-7 gap-1.5 text-xs"
-                  title="Agrupar cards em raias horizontais"
-                >
-                  <Layers className="w-3.5 h-3.5 shrink-0" />
-                  {groupBy === "none" ? "Raias" : current.label}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Agrupar em raias
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {laneOptions.map((o) => (
-                  <DropdownMenuItem
-                    key={o.id}
-                    onSelect={() => setGroupBy(o.id)}
-                    className="gap-2 text-xs"
-                  >
-                    <span className="text-muted-foreground">{o.icon}</span>
-                    <span className="flex-1">{o.label}</span>
-                    {groupBy === o.id && <Check className="w-3.5 h-3.5 text-primary" />}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setManageGroupsOpen(true)} className="gap-2 text-xs">
-                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="flex-1">Gerenciar times…</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <VisoesMenu
+              laneOptions={laneOptions}
+              groupBy={groupBy}
+              onGroupByChange={(id) => setGroupBy(id as typeof groupBy)}
+              onManageGroups={() => setManageGroupsOpen(true)}
+              cardFields={cardFields}
+              onToggleCardField={toggleCardField}
+              onRestoreCardFields={() => setCardFields(DEFAULT_CARD_FIELDS)}
+              alerta={hiddenStages.some((s) => (countByStage.get(s.id) ?? 0) > 0)}
+            />
           );
         })()}
         {/* "Por time" depende de existir um time cadastrado, mas o cadastro
@@ -2636,59 +2610,6 @@ export const ActivityKanban = ({
             {laneGroups.length === 0 ? "Criar um time" : `Times (${laneGroups.length})`}
           </Button>
         )}
-        <Button
-          variant={onlyMine ? "default" : "outline"}
-          size="sm"
-          className="h-7 gap-1.5 text-xs"
-          title="Mostrar apenas minhas tarefas (Líder, Participante ou Criador)"
-          onClick={() => setOnlyMine((v) => !v)}
-        >
-          <User className="w-3.5 h-3.5" />
-          Minhas
-        </Button>
-        {/* Configuração do card: liga/desliga cada informação exibida */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" title="Configurar o que aparece nos cards">
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Card
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-64 p-0" collisionPadding={12}>
-            <div className="flex items-center justify-between px-3 py-2.5 border-b">
-              <span className="text-sm font-semibold">Exibição do card</span>
-              <button
-                type="button"
-                onClick={() => setCardFields(DEFAULT_CARD_FIELDS)}
-                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                title="Restaurar padrão"
-              >
-                Restaurar
-              </button>
-            </div>
-            <div className="max-h-[min(420px,60vh)] overflow-y-auto py-1">
-              {CARD_FIELD_GROUPS.map((grp) => (
-                <div key={grp.group}>
-                  <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {grp.group}
-                  </div>
-                  {grp.items.map((it) => (
-                    <label
-                      key={it.key}
-                      className="flex items-center justify-between px-3 py-1.5 text-[13px] cursor-pointer hover:bg-muted/50"
-                    >
-                      <span className={cardFields[it.key] ? "" : "text-muted-foreground"}>{it.label}</span>
-                      <Switch
-                        checked={cardFields[it.key]}
-                        onCheckedChange={() => toggleCardField(it.key)}
-                      />
-                    </label>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
         </div>
       </div>
       <DndContext
@@ -2886,18 +2807,18 @@ export const ActivityKanban = ({
             return (
               <>
                 {visibleStages.map((stage, idx) => renderColumn(stage, idx))}
-                {/* As colunas ocultas viraram um popover DENTRO do "Nova
-                    coluna": o cartão tracejado solto na régua poluía o quadro
-                    com uma informação ocasional. Quem não gerencia o projeto
-                    não vê nem o botão — e também não podia reexibir nada. */}
+                {/* "Colunas" fica no fim da fila — Linear e Notion mantêm o
+                    acesso a criar/administrar coluna exatamente aqui, onde a
+                    posição já ensina a ação. Recebe TODAS as colunas: oculta
+                    e visível na mesma lista, como no Notion. */}
                 {(isAdmin || canCreate) && (
-                  <AddStageColumn
+                  <StageListButton
                     projectId={projectId}
                     onChanged={fetchStages}
-                    hiddenStages={hiddenStages}
+                    stages={stages}
                     countByStage={countByStage}
                     canManage={isAdmin || canCreate}
-                    onShowStage={(id) => handleToggleStageVisible(id, false)}
+                    onToggleVisible={handleToggleStageVisible}
                   />
                 )}
               </>
