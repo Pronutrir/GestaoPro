@@ -1308,12 +1308,41 @@ export default function ProjectDetailsPage() {
                     <Pencil className="w-3.5 h-3.5" />
                   </Button>
                 )}
-                {project.owner && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">Líder:</span>
-                    <span className="font-medium text-foreground">{project.owner}</span>
-                  </div>
-                )}
+                {/* O topo mostrava só o Líder, embora Gestor exista na ficha e
+                    pese em permissão (hasProjectWideAccess). Quando as duas
+                    funções são da MESMA pessoa, repetir o nome em dois blocos é
+                    ruído: colapsa em "Líder e Gestor:" com um nome só. */}
+                {(() => {
+                  const lider = project.owner?.trim() || "";
+                  const gestor = project.manager?.trim() || "";
+                  if (!lider && !gestor) return null;
+
+                  if (lider && gestor && lider === gestor) {
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">Líder e Gestor:</span>
+                        <span className="font-medium text-foreground">{lider}</span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      {lider && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-muted-foreground">Líder:</span>
+                          <span className="font-medium text-foreground">{lider}</span>
+                        </div>
+                      )}
+                      {gestor && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-muted-foreground">Gestor:</span>
+                          <span className="font-medium text-foreground">{gestor}</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 {project.due_date && (() => {
                   const { dueDate, diffDays, isOverdue, isUrgent } = getProjectDeadlineInfo(project.due_date);
                   return (

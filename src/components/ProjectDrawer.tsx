@@ -22,6 +22,9 @@ interface Project {
   budget_planned: number;
   budget_used: number;
   owner: string | null;
+  /** Gestor do projeto. Vem de projects.manager — as páginas que abrem o
+   *  drawer usam select('*'), então o dado já chegava; faltava exibir. */
+  manager?: string | null;
   blockers: string | null;
   category?: string;
   program?: string | null;
@@ -139,14 +142,31 @@ export function ProjectDrawer({ project, assigneeAvatarMap = {}, open, onOpenCha
             </div>
           )}
 
-          {/* Owner */}
-          {project.owner && (
-            <div className="flex items-center gap-2 text-sm">
-              <Users className="w-4 h-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Líder:</span>
-              <span>{project.owner}</span>
-            </div>
-          )}
+          {/* Líder e Gestor — mesma regra do cabeçalho do projeto: mesma
+              pessoa nos dois papéis vira uma linha só, em vez de repetir
+              o nome. O drawer mostrava apenas o Líder. */}
+          {(() => {
+            const lider = project.owner?.trim() || "";
+            const gestor = project.manager?.trim() || "";
+            if (!lider && !gestor) return null;
+
+            const linha = (rotulo: string, nome: string) => (
+              <div className="flex items-center gap-2 text-sm">
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{rotulo}:</span>
+                <span>{nome}</span>
+              </div>
+            );
+
+            if (lider && gestor && lider === gestor) return linha("Líder e Gestor", lider);
+
+            return (
+              <>
+                {lider && linha("Líder", lider)}
+                {gestor && linha("Gestor", gestor)}
+              </>
+            );
+          })()}
 
           {/* Assignees */}
           {project.assignees.length > 0 && (

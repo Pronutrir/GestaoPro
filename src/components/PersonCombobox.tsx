@@ -6,7 +6,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ChevronsUpDown, Check, UserPlus } from "lucide-react";
+import { ChevronsUpDown, Check, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Person {
@@ -99,6 +99,27 @@ export function PersonCombobox({
           </span>
         ) : (
           <span className="text-muted-foreground">{placeholder}</span>
+        )}
+        {/* Limpar direto no campo. Antes só existia o item "Remover seleção"
+            DENTRO da lista: para tirar alguém era preciso abrir o combobox e
+            achar a primeira linha — a ação existia, mas ninguém encontrava.
+            É <span> e não <button> porque este trigger já é um <button>. */}
+        {selected && onClear && !disabled && (
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label="Remover seleção"
+            title="Remover seleção"
+            className="ml-auto shrink-0 rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClear(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault(); e.stopPropagation(); onClear();
+              }
+            }}
+          >
+            <X className="w-3.5 h-3.5" />
+          </span>
         )}
         <ChevronsUpDown className="w-4 h-4 opacity-50 shrink-0" />
       </Button>
