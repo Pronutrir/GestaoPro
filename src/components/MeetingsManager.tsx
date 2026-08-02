@@ -36,6 +36,7 @@ import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 import { selectInChunks } from "@/lib/chunkedIn";
+import { PersonCombobox } from "@/components/PersonCombobox";
 
 // meeting_types ainda fora dos tipos gerados (migration 20260802130000
 // pendente na VM). Mesmo padrão usado em PageComments.
@@ -575,11 +576,23 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
               <AIAssistButton value={form.title} onChange={(v) => setForm({ ...form, title: v })} context="meeting_title" />
             </div>
           )}
-          <Input
-            placeholder="Proponente / Responsável pela reunião"
-            value={form.responsible}
-            onChange={(e) => setForm({ ...form, responsible: e.target.value })}
-          />
+          {/* Também era texto livre — mesmo problema do responsável da ação. */}
+          <div className="grid gap-1.5">
+            <Label className="text-xs text-muted-foreground">Proponente / Responsável</Label>
+            <PersonCombobox
+              people={profiles.map((p) => ({
+                id: p.id,
+                full_name: p.full_name || p.email || "Sem nome",
+                sector: p.sector,
+                role_title: p.role_title,
+                avatar_url: p.avatar_url,
+              }))}
+              value={profiles.find((p) => p.full_name === form.responsible)?.id ?? null}
+              placeholder="Quem conduz a reunião"
+              onSelect={(p) => setForm({ ...form, responsible: p.full_name })}
+              onClear={() => setForm({ ...form, responsible: "" })}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs text-muted-foreground">Data</Label>
@@ -1004,11 +1017,24 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                             onChange={(e) => setNewAction({ ...newAction, description: e.target.value })}
                             className="text-sm h-8 col-span-1"
                           />
-                          <Input
+                          {/* Era Input de texto livre: dava para digitar
+                              qualquer coisa, e a ação nascia com um
+                              "responsável" que não existe no sistema — logo,
+                              sem ninguém para notificar. Agora escolhe da
+                              lista real de pessoas. */}
+                          <PersonCombobox
+                            people={profiles.map((p) => ({
+                              id: p.id,
+                              full_name: p.full_name || p.email || "Sem nome",
+                              sector: p.sector,
+                              role_title: p.role_title,
+                              avatar_url: p.avatar_url,
+                            }))}
+                            value={profiles.find((p) => p.full_name === newAction.assigned_to)?.id ?? null}
                             placeholder="Responsável"
-                            value={newAction.assigned_to}
-                            onChange={(e) => setNewAction({ ...newAction, assigned_to: e.target.value })}
-                            className="text-sm h-8"
+                            className="h-8 text-sm"
+                            onSelect={(p) => setNewAction({ ...newAction, assigned_to: p.full_name })}
+                            onClear={() => setNewAction({ ...newAction, assigned_to: "" })}
                           />
                           <div className="flex gap-1">
                             <DateField
