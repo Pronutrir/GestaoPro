@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { EditPhaseDialog } from "@/components/EditPhaseDialog";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -39,7 +40,18 @@ import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from
 import { resolveEapKind, eapTypeOptions, type EapKind } from "@/lib/eapModel";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 
-interface Phase { id: string; title: string; }
+interface Phase {
+  id: string;
+  title: string;
+  // Campos opcionais: a query da página usa select("*"), mas o ambiente pode
+  // não ter as colunas (migrations pendentes) — o diálogo degrada por campo.
+  description?: string | null;
+  wbs_code?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  actual_start_date?: string | null;
+  actual_end_date?: string | null;
+}
 interface WorkflowStage { id: string; title: string; display_order: number; color: string; }
 interface Activity {
   id: string;
@@ -423,6 +435,14 @@ export const BacklogSection = ({
     return [];
   };
   const lanes = groupBy === "phase" ? [] : buildLanes();
+
+  // Fase aberta para edição. Guarda o objeto inteiro (vem da prop `phases`),
+  // para o diálogo já abrir preenchido sem uma segunda consulta.
+  const [editingPhase, setEditingPhase] = useState<Phase | null>(null);
+  const openPhase = (id: string, _titulo: string) => {
+    const p = phases.find((x) => x.id === id);
+    if (p) setEditingPhase(p);
+  };
 
   const togglePhase = (id: string) => {
     setCollapsedPhases((prev) => {
@@ -962,20 +982,25 @@ export const BacklogSection = ({
 
     return (
       <div key={key}>
-        {/* A FAIXA INTEIRA abre e fecha a fase. Antes só o chevron de 20px
-            respondia ao clique — o título e o resto pareciam clicáveis e não
-            eram, então "clicar na fase" simplesmente não fazia nada. */}
+        {/* Mesmo gesto da linha de atividade: o CLIQUE abre a fase, o CHEVRON
+            colapsa. Antes só o chevron respondia (alvo de 20px) e não havia
+            como abrir a fase — ela nem tinha tela própria. */}
         <div
           className={cn(
             "flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50",
             phaseId && "cursor-pointer hover:bg-muted/70 transition-colors",
           )}
-          onClick={() => { if (phaseId) togglePhase(phaseId); }}
+          onClick={() => { if (phaseId) openPhase(phaseId, phaseTitle); }}
         >
           {phaseId ? (
-            <span className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground shrink-0">
+            <button
+              type="button"
+              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
+              title={isCollapsed ? "Expandir" : "Recolher"}
+              onClick={(e) => { e.stopPropagation(); togglePhase(phaseId); }}
+            >
               {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </span>
+            </button>
           ) : (
             <span className="w-5 shrink-0" />
           )}
@@ -1018,6 +1043,10 @@ export const BacklogSection = ({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem onSelect={() => openPhase(phaseId, phaseTitle)}>
+                    <Pencil className="w-3.5 h-3.5 mr-2" /> Abrir fase
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     disabled={!isAdmin}
                     className={isAdmin ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
@@ -1083,10 +1112,10 @@ export const BacklogSection = ({
 
     return (
       <div key={phaseAct.id}>
-        {/* Faixa inteira colapsa, igual à fase real. */}
+        {/* Mesmo gesto da fase real: clique abre, chevron colapsa. */}
         <div
           className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
-          onClick={() => toggleParent(phaseAct.id)}
+          onClick={() => onEditActivity(phaseAct)}
         >
           <button
             type="button"
@@ -1533,6 +1562,34 @@ export const BacklogSection = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edição da fase — o resumo compara o planejado da fase com o que as
+          atividades dela de fato somam. */}
+      <EditPhaseDialog
+        phase={editingPhase}
+        open={!!editingPhase}
+        onOpenChange={(o) => { if (!o) setEditingPhase(null); }}
+        onSaved={onDataChanged}
+        canEdit={isAdmin}
+        resumo={(() => {
+          if (!editingPhase) return undefined;
+          const acts = (topLevelByPhase.get(editingPhase.id) || []);
+          const todas: Activity[] = [];
+          const coletar = (list: Activity[]) => list.forEach((a) => {
+            todas.push(a);
+            coletar(childrenByParent.get(a.id) || []);
+          });
+          coletar(acts);
+          const datas = todas.flatMap((a) => [a.start_date, a.end_date]).filter(Boolean) as string[];
+          return {
+            total: todas.length,
+            concluidas: todas.filter((a) => a.status === "completed").length,
+            horas: todas.reduce((s, a) => s + (Number((a as any).hours) || 0), 0),
+            inicio: datas.length ? datas.slice().sort()[0] : null,
+            fim: datas.length ? datas.slice().sort().slice(-1)[0] : null,
+          };
+        })()}
+      />
 
       {/* Permanent Delete Confirmation */}
       <AlertDialog open={!!permanentDeleteId} onOpenChange={(open) => !open && setPermanentDeleteId(null)}>

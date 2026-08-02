@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DateField } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils";
 import { getAvatarInitials } from "@/lib/avatarLookup";
 import {
@@ -275,7 +276,9 @@ export const CharterFlowPanel = ({ projectId, status, canManage, onChanged }: Pr
 
             <div className="space-y-1.5">
               <Label className="text-xs">Prazo (opcional)</Label>
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-9" />
+              {/* DateField: o input nativo mostra mm/dd/aaaa em navegador com
+                  idioma inglês, invertendo dia e mês em silêncio. */}
+              <DateField value={dueDate} onChange={setDueDate} />
             </div>
 
             <div className="space-y-1.5">
