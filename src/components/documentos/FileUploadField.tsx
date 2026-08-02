@@ -12,7 +12,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, Link as LinkIcon, X, FileText, Loader2 } from "lucide-react";
+import { Upload, X, FileText, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { MAX_UPLOAD_BYTES, formatSize, safeFileName, fileExtension } from "@/lib/documentCenter";
@@ -119,10 +119,14 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
             Usar link
           </Button>
         </div>
-        <button type="button" className="text-[12px] text-muted-foreground hover:text-foreground"
-          onClick={() => setLinkMode(false)}>
-          ← enviar um arquivo
-        </button>
+        {/* Só se chega aqui por FALLBACK (bucket ausente), nunca por escolha.
+            Voltar levaria a um upload que falha de novo — em vez do botão,
+            explica o que está acontecendo e o que o link não permite. */}
+        <p className="text-[11px] text-muted-foreground">
+          O envio de arquivo ainda não está habilitado neste ambiente. Documento
+          por link pode receber ciência e aprovação, mas <strong>não assinatura</strong>:
+          um arquivo fora do sistema pode ser trocado depois de assinado.
+        </p>
       </div>
     );
   }
@@ -151,6 +155,12 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
         </span>
       ) : (
         <>
+          {/* Sem atalho para "usar um link externo": ele desfazia a melhoria
+              num clique e levava a um documento que NÃO pode ser assinado
+              (link pode ser trocado pelo dono, e o hash falha em silêncio).
+              O modo link continua existindo como FALLBACK automático, quando o
+              bucket ainda não foi criado no ambiente — ali não é escolha, é a
+              única forma de cadastrar. */}
           <Upload className="w-5 h-5 mx-auto mb-2 text-muted-foreground" />
           <p className="text-[13px] text-foreground mb-1">
             Arraste o arquivo aqui ou{" "}
@@ -159,11 +169,9 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
               escolha do computador
             </button>
           </p>
-          <button type="button"
-            className="text-[12px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-            onClick={() => setLinkMode(true)}>
-            <LinkIcon className="w-3 h-3" /> ou usar um link externo
-          </button>
+          <p className="text-[11px] text-muted-foreground">
+            O arquivo fica no projeto, com acesso controlado — e pode ser assinado.
+          </p>
         </>
       )}
     </div>
