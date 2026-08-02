@@ -188,6 +188,9 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   /** Ações de TODAS as reuniões do projeto — base do painel do topo. */
   const [allActions, setAllActions] = useState<MeetingAction[]>([]);
   const [notifyingId, setNotifyingId] = useState<string | null>(null);
+  /** Filtros do painel — os números viraram botões. null = sem filtro. */
+  const [filtroAcoes, setFiltroAcoes] = useState<"abertas" | "atrasadas" | "concluidas" | null>(null);
+  const [filtroPessoa, setFiltroPessoa] = useState<string | null>(null);
   /** O que já foi promovido nesta sessão, por linha: evita criar a mesma
    *  atividade duas vezes num clique repetido. Não persiste — as tabelas de
    *  destino não guardam a origem, e inventar esse vínculo exigiria migration
@@ -568,6 +571,25 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     fetchDetails(meetingId);
   };
 
+  /** Os dois filtros do painel se COMBINAM: clicar em "atrasadas" e depois
+   *  numa pessoa mostra as atrasadas daquela pessoa. */
+  const acoesFiltradas = useMemo(() => {
+    if (!filtroAcoes && !filtroPessoa) return [];
+    const hoje = new Date().toISOString().slice(0, 10);
+    return allActions
+      .filter((a) => {
+        if (filtroPessoa && (a.assigned_to || "").trim() !== filtroPessoa) return false;
+        if (filtroAcoes === "abertas") return !a.is_completed;
+        if (filtroAcoes === "concluidas") return a.is_completed;
+        if (filtroAcoes === "atrasadas") {
+          return !a.is_completed && !!a.due_date && a.due_date.slice(0, 10) < hoje;
+        }
+        return true; // só filtro por pessoa: mostra tudo dela
+      })
+      // Prazo mais próximo primeiro; sem prazo vai para o fim.
+      .sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999"));
+  }, [allActions, filtroAcoes, filtroPessoa]);
+
   return (
     <Card className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -591,26 +613,39 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
           sem nenhuma, seria uma faixa de zeros ocupando o topo. */}
       {painel.total > 0 && (
         <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+          {/* Os números eram só leitura: informavam "3 atrasadas" e deixavam a
+              pessoa procurando quais são, reunião por reunião. Agora cada um
+              filtra a lista abaixo — clicar de novo desliga. */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div className="rounded-md bg-background border border-border/60 px-3 py-2">
-              <p className="text-xl font-semibold tabular-nums leading-tight">{painel.abertas}</p>
-              <p className="text-[11px] text-muted-foreground">ações abertas</p>
-            </div>
-            <div className="rounded-md bg-background border border-border/60 px-3 py-2">
-              <p className={`text-xl font-semibold tabular-nums leading-tight ${painel.atrasadas > 0 ? "text-destructive" : ""}`}>
-                {painel.atrasadas}
-              </p>
-              <p className="text-[11px] text-muted-foreground">atrasadas</p>
-            </div>
+            {([
+              { id: "abertas",   n: painel.abertas,   label: "ações abertas", cor: "" },
+              { id: "atrasadas", n: painel.atrasadas, label: "atrasadas",     cor: painel.atrasadas > 0 ? "text-destructive" : "" },
+              { id: "concluidas", n: painel.concluidas, label: "concluídas",  cor: "text-success" },
+            ] as const).map((c) => {
+              const ativo = filtroAcoes === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setFiltroAcoes(ativo ? null : c.id)}
+                  title={ativo ? "Clique para remover o filtro" : `Ver ${c.label}`}
+                  className={cn(
+                    "rounded-md border px-3 py-2 text-left transition-colors",
+                    ativo
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "border-border/60 bg-background hover:border-primary/40 hover:bg-muted/50",
+                  )}
+                >
+                  <p className={cn("text-xl font-semibold tabular-nums leading-tight", c.cor)}>{c.n}</p>
+                  <p className="text-[11px] text-muted-foreground">{c.label}</p>
+                </button>
+              );
+            })}
+            {/* Reuniões não filtra ação nenhuma — é contagem de outra coisa.
+                Fica como número, sem fingir que é clicável. */}
             <div className="rounded-md bg-background border border-border/60 px-3 py-2">
               <p className="text-xl font-semibold tabular-nums leading-tight">{meetings.length}</p>
               <p className="text-[11px] text-muted-foreground">reuniões</p>
-            </div>
-            <div className="rounded-md bg-background border border-border/60 px-3 py-2">
-              <p className="text-xl font-semibold tabular-nums leading-tight text-success">
-                {painel.total > 0 ? Math.round((painel.concluidas / painel.total) * 100) : 0}%
-              </p>
-              <p className="text-[11px] text-muted-foreground">concluídas</p>
             </div>
           </div>
 
@@ -620,27 +655,95 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                 Por responsável
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {painel.pessoas.map((p) => (
-                  <span
-                    key={p.nome}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background px-2 py-1 text-[11px]"
-                  >
-                    <Avatar className="h-4 w-4 shrink-0">
-                      {(() => {
-                        const avatar = resolveAvatarFromLookup(p.nome, p.nome, assigneeAvatarMap);
-                        return avatar ? <AvatarImage src={avatar} alt={p.nome} /> : null;
-                      })()}
-                      <AvatarFallback className="text-[8px]">{getAvatarInitials(p.nome)}</AvatarFallback>
-                    </Avatar>
-                    <span className="max-w-[130px] truncate">{p.nome}</span>
-                    {p.atrasadas > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-destructive font-medium tabular-nums">
-                        <AlertTriangle className="w-3 h-3" />{p.atrasadas}
+                {painel.pessoas.map((p) => {
+                  const ativo = filtroPessoa === p.nome;
+                  return (
+                    <button
+                      key={p.nome}
+                      type="button"
+                      onClick={() => setFiltroPessoa(ativo ? null : p.nome)}
+                      title={ativo ? "Clique para remover o filtro" : `Ver as ações de ${p.nome}`}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors",
+                        ativo
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "border-border/60 bg-background hover:border-primary/40",
+                      )}
+                    >
+                      <Avatar className="h-4 w-4 shrink-0">
+                        {(() => {
+                          const avatar = resolveAvatarFromLookup(p.nome, p.nome, assigneeAvatarMap);
+                          return avatar ? <AvatarImage src={avatar} alt={p.nome} /> : null;
+                        })()}
+                        <AvatarFallback className="text-[8px]">{getAvatarInitials(p.nome)}</AvatarFallback>
+                      </Avatar>
+                      <span className="max-w-[130px] truncate">{p.nome}</span>
+                      {p.atrasadas > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-destructive font-medium tabular-nums">
+                          <AlertTriangle className="w-3 h-3" />{p.atrasadas}
+                        </span>
+                      )}
+                      <span className="text-muted-foreground tabular-nums">{p.abertas} aberta{p.abertas > 1 ? "s" : ""}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Resultado do filtro: a lista das ações em si, com a reunião de
+              origem — sem isto o clique acenderia o cartão e nada mais. */}
+          {(filtroAcoes || filtroPessoa) && (
+            <div className="rounded-md border border-border/60 bg-background">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-border/60">
+                <span className="text-[11px] font-medium text-foreground">
+                  {acoesFiltradas.length} {acoesFiltradas.length === 1 ? "ação" : "ações"}
+                  {filtroPessoa ? ` de ${filtroPessoa}` : ""}
+                  {filtroAcoes === "atrasadas" ? " atrasada(s)" : filtroAcoes === "concluidas" ? " concluída(s)" : filtroAcoes === "abertas" ? " em aberto" : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setFiltroAcoes(null); setFiltroPessoa(null); }}
+                  className="ml-auto text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" /> limpar
+                </button>
+              </div>
+              <div className="max-h-64 overflow-y-auto divide-y divide-border/50">
+                {acoesFiltradas.length === 0 && (
+                  <p className="px-3 py-3 text-[12px] text-muted-foreground">Nenhuma ação neste filtro.</p>
+                )}
+                {acoesFiltradas.map((a) => {
+                  const reuniao = meetings.find((m) => m.id === a.meeting_id);
+                  const atrasada = !a.is_completed && a.due_date && a.due_date.slice(0, 10) < new Date().toISOString().slice(0, 10);
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      // Leva à reunião de origem: sem isso a ação apareceria
+                      // solta, sem o contexto em que foi combinada.
+                      onClick={() => { setExpandedId(a.meeting_id); fetchDetails(a.meeting_id); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors"
+                    >
+                      <span className={cn("text-[12.5px] flex-1 min-w-0 truncate", a.is_completed && "line-through text-muted-foreground")}>
+                        {a.description}
                       </span>
-                    )}
-                    <span className="text-muted-foreground tabular-nums">{p.abertas} aberta{p.abertas > 1 ? "s" : ""}</span>
-                  </span>
-                ))}
+                      {a.assigned_to && !filtroPessoa && (
+                        <span className="text-[11px] text-muted-foreground shrink-0 max-w-[120px] truncate">{a.assigned_to}</span>
+                      )}
+                      {a.due_date && (
+                        <span className={cn("text-[11px] tabular-nums shrink-0", atrasada ? "text-destructive font-medium" : "text-muted-foreground")}>
+                          {new Date(a.due_date).toLocaleDateString("pt-BR")}
+                        </span>
+                      )}
+                      {reuniao && (
+                        <span className="text-[10px] text-muted-foreground shrink-0 max-w-[110px] truncate hidden sm:inline">
+                          {reuniao.title}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
