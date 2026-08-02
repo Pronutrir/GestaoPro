@@ -34,15 +34,17 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    /* ARDÓSIA — cinza com viés azul, para AGRUPAR sem pedir clique.
+    /* BAND — cinza com viés azul, para AGRUPAR sem pedir clique.
+       O nome NÃO é "slate": essa é a paleta nativa do Tailwind, e o token
+       colidia com ela — bg-slate-soft e text-slate/80 nunca eram gerados.
        Os neutros acima são cinza puro (0% de saturação) e o primary é o azul
        de ação. Faltava um tom no meio: usado nos cabeçalhos das faixas do
        formulário, que precisam se distinguir do fundo sem competir com botões
        e links. Guardar o primary para o que é acionável faz ele voltar a
        significar "clique aqui". */
-    --slate: 215 25% 40%;
-    --slate-foreground: 0 0% 100%;
-    --slate-soft: 215 30% 95%;
+    --band: 215 25% 40%;
+    --band-foreground: 0 0% 100%;
+    --band-soft: 215 30% 95%;
 
     --border: 0 0% 91%;
     --input: 0 0% 91%;
@@ -106,9 +108,9 @@
 
     /* Ardósia no escuro: clareia para manter contraste sobre o fundo escuro,
        e o "soft" vira uma camada sutil em vez de quase branco. */
-    --slate: 215 25% 68%;
-    --slate-foreground: 217 33% 12%;
-    --slate-soft: 217 25% 20%;
+    --band: 215 25% 68%;
+    --band-foreground: 217 33% 12%;
+    --band-soft: 217 25% 20%;
 
     --border: 217 33% 20%;
     --input: 217 33% 20%;

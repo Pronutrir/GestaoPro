@@ -77,19 +77,18 @@ const FieldBand = ({ step, title, children, tone = "default" }: {
         primary aqui, o topo de cada card competia com botões e links — e o
         azul, aparecendo em tudo, deixava de significar "acionável".
         As TRÊS faixas usam a mesma paleta: antes a 1 era azul e as outras
-        cinza-neutro, famílias diferentes brigando no mesmo card. A hierarquia
-        agora vem da INTENSIDADE (preenchida × contorno), não da cor. */}
-    <div className={cn(
-      "flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider border-b",
-      tone === "primary"
-        ? "bg-slate-soft text-slate border-slate/20"
-        : "bg-slate-soft/40 text-slate/80 border-slate/15",
-    )}>
+        cinza-neutro, famílias diferentes brigando no mesmo card.
+
+        A distinção da primeira vem do NÚMERO (preenchido × contorno), não de
+        um fundo diferente. Nada de opacidade fracionada aqui: classes como
+        `text-band/80` não são geradas neste projeto, e o elemento acabava sem
+        cor nenhuma — foi o que deixou as faixas 2 e 3 cinza-neutro. */}
+    <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider border-b border-border bg-band-soft text-band">
       <span className={cn(
         "inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold shrink-0",
         tone === "primary"
-          ? "bg-slate text-slate-foreground"
-          : "border border-slate/40 text-slate/80",
+          ? "bg-band text-band-foreground"
+          : "border border-band text-band",
       )}>
         {step}
       </span>
