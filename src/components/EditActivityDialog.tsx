@@ -435,7 +435,6 @@ export const EditActivityDialog = ({
   // Popover de responsável por subatividade: guarda o id da sub com o popover
   // aberto (controlado) para que ele feche ao escolher uma opção.
   const [openAssigneeSubId, setOpenAssigneeSubId] = useState<string | null>(null);
-  const [showRealDates, setShowRealDates] = useState(false);
   const [hoursPopoverOpen, setHoursPopoverOpen] = useState(false);
   const [generatingWbs, setGeneratingWbs] = useState(false);
   // Campos OPCIONAIS revelados manualmente pelo "+ Adicionar campo" nesta sessão.
@@ -760,7 +759,6 @@ export const EditActivityDialog = ({
         wbs_code: (act as any).wbs_code || "",
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
-      setShowRealDates(false);
       // Campos opcionais revelados são por-atividade: ao trocar de card, recolhe
       // de volta os que estavam vazios (os com valor reaparecem pela regra de visibilidade).
       setRevealedFields(new Set());
@@ -1839,36 +1837,24 @@ export const EditActivityDialog = ({
                         )}
                       </div>
   
-                      {/* EXECUÇÃO REAL — na MESMA linha, à direita do planejado */}
+                      {/* EXECUÇÃO REAL — sempre visível, na fileira de baixo.
+                          Era um "+ datas reais" que escondia os campos atrás de
+                          um clique: com a importação passando a trazer início e
+                          fim reais da planilha, o dado chegava preenchido e o
+                          bloco continuava colapsado. Há espaço na linha, e
+                          planejado × real lado a lado é o par que se compara. */}
                       {!formData.is_milestone && (() => {
                         const hasReal = !!(formData.actual_start_date || formData.actual_end_date);
-                        const expanded = showRealDates || hasReal;
-                        if (!expanded) {
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => setShowRealDates(true)}
-                              title="Registrar as datas em que a atividade realmente começou e terminou"
-                              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors self-start"
-                            >
-                              <Plus className="w-3 h-3" /> datas reais
-                            </button>
-                          );
-                        }
                         const v = endVariance(formData.actual_end_date || null, (act as any)?.baseline_end_date, formData.end_date);
                         const tone = v !== null ? varianceTone(v) : null;
-                        // Sem datas preenchidas o X apenas recolhe. Com datas, ele
-                        // seria a unica forma de destruir o dado (o preenchimento
-                        // automatico foi removido), entao confirma antes.
-                        const closeReal = () => {
-                          if (hasReal) {
-                            const ok = window.confirm(
-                              "Limpar as datas reais preenchidas? Esta acao apaga inicio e termino reais."
-                            );
-                            if (!ok) return;
-                            setFormData((prev) => ({ ...prev, actual_start_date: "", actual_end_date: "" }));
-                          }
-                          setShowRealDates(false);
+                        // Limpar só aparece com data preenchida: é a única forma
+                        // de apagar o dado, então confirma antes.
+                        const limparReal = () => {
+                          const ok = window.confirm(
+                            "Limpar as datas reais preenchidas? Esta acao apaga inicio e termino reais."
+                          );
+                          if (!ok) return;
+                          setFormData((prev) => ({ ...prev, actual_start_date: "", actual_end_date: "" }));
                         };
                         return (
                           <div className="flex flex-wrap items-center gap-1.5 text-xs pt-2 border-t border-dashed border-border/70">
@@ -1892,14 +1878,16 @@ export const EditActivityDialog = ({
                                 {v > 0 ? `${Math.abs(v)}d de atraso` : v < 0 ? `${Math.abs(v)}d adiantado` : "no prazo"}
                               </span>
                             )}
-                            <button
-                              type="button"
-                              onClick={closeReal}
-                              title={hasReal ? "Limpar datas reais" : "Fechar"}
-                              className="text-muted-foreground hover:text-foreground shrink-0"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
+                            {hasReal && (
+                              <button
+                                type="button"
+                                onClick={limparReal}
+                                title="Limpar datas reais"
+                                className="text-muted-foreground hover:text-foreground shrink-0"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         );
                       })()}
