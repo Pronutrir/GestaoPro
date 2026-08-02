@@ -1237,16 +1237,14 @@ export function DroppableColumn({
 }
 
 /**
- * Marcador das colunas ocultas, ao fim do quadro.
+ * Lista de colunas ocultas — conteúdo do popover ancorado em "Nova coluna".
  *
- * Ocultar grava em `workflow_stages.is_visible`, que é do PROJETO: a coluna
- * some para todo mundo e não sobrava nenhum rastro — nem contador, nem menção.
- * Uma tarefa podia ficar com um status cuja coluna ninguém enxerga.
- *
- * O número de tarefas dentro é o que faz a pessoa olhar: "2 ocultas" é uma
- * informação; "Em Teste (3)" é um problema.
+ * Antes era um cartão fixo na régua do quadro: um bloco tracejado permanente
+ * para uma informação ocasional, poluindo a faixa onde ficam as colunas de
+ * verdade. Virou popover porque reexibir coluna é ação rara; o que precisa
+ * ficar sempre visível é só o aviso quando há TAREFA presa numa oculta.
  */
-export function HiddenStagesMarker({
+function HiddenStagesList({
   stages, countByStage, canManage, onShow,
 }: {
   stages: { id: string; title: string; color: string }[];
@@ -1254,22 +1252,15 @@ export function HiddenStagesMarker({
   canManage: boolean;
   onShow: (id: string) => void;
 }) {
-  if (stages.length === 0) return null;
-
   const comTarefas = stages.filter((s) => (countByStage.get(s.id) ?? 0) > 0);
 
   return (
-    <div className="shrink-0 self-start pt-3 pl-2 w-[168px]">
-      <div className={cn(
-        "rounded-lg border border-dashed px-2.5 py-2 flex flex-col gap-1.5",
-        comTarefas.length > 0 ? "border-warning/50 bg-warning/5" : "border-border",
-      )}>
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-          <EyeOff className="w-3 h-3 shrink-0" />
-          {stages.length} {stages.length === 1 ? "coluna oculta" : "colunas ocultas"}
-        </span>
+    <div className="flex flex-col gap-0.5">
+      <span className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {stages.length} {stages.length === 1 ? "coluna oculta" : "colunas ocultas"}
+      </span>
 
-        {stages.map((s) => {
+      {stages.map((s) => {
           const n = countByStage.get(s.id) ?? 0;
           return (
             <button
@@ -1281,7 +1272,7 @@ export function HiddenStagesMarker({
                 ? `Mostrar "${s.title}" para todos do projeto`
                 : "Só quem gerencia o projeto pode reexibir colunas"}
               className={cn(
-                "flex items-center gap-1.5 text-[11px] rounded px-1 py-0.5 text-left min-w-0",
+                "flex items-center gap-1.5 text-[11px] rounded px-1.5 py-1 text-left min-w-0",
                 canManage ? "hover:bg-muted cursor-pointer" : "cursor-default",
               )}
             >
@@ -1296,22 +1287,38 @@ export function HiddenStagesMarker({
           );
         })}
 
-        {comTarefas.length > 0 && (
-          <span className="text-[10px] text-warning leading-snug">
-            {comTarefas.length === 1 ? "Há tarefa" : "Há tarefas"} nessas colunas —
-            ninguém as vê no quadro.
-          </span>
-        )}
-      </div>
+      {comTarefas.length > 0 && (
+        <span className="px-1.5 pt-1 text-[10px] text-warning leading-snug">
+          {comTarefas.length === 1 ? "Há tarefa" : "Há tarefas"} nessas colunas —
+          ninguém as vê no quadro.
+        </span>
+      )}
     </div>
   );
 }
 
-export function AddStageColumn({ projectId, onChanged }: { projectId: string; onChanged?: () => void }) {
+export function AddStageColumn({
+  projectId, onChanged, hiddenStages = [], countByStage, canManage = false, onShowStage,
+}: {
+  projectId: string;
+  onChanged?: () => void;
+  /** Colunas com is_visible=false: entram no popover deste botão, em vez de
+   *  ocuparem um cartão próprio na régua do quadro. */
+  hiddenStages?: { id: string; title: string; color: string }[];
+  countByStage?: Map<string, number>;
+  canManage?: boolean;
+  onShowStage?: (id: string) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [hiddenOpen, setHiddenOpen] = useState(false);
+
+  const contagem = countByStage ?? new Map<string, number>();
+  // Coluna oculta VAZIA é só arrumação; com tarefa dentro é problema — tem
+  // gente com status que ninguém enxerga no quadro. Só esse caso ganha cor.
+  const presas = hiddenStages.filter((s) => (contagem.get(s.id) ?? 0) > 0).length;
 
   return (
-    <div className="shrink-0 self-start pt-3 pl-2">
+    <div className="shrink-0 self-start pt-3 pl-2 flex flex-col items-start gap-1">
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -1321,6 +1328,35 @@ export function AddStageColumn({ projectId, onChanged }: { projectId: string; on
         <Plus className="w-3 h-3" />
         Nova coluna
       </button>
+
+      {hiddenStages.length > 0 && (
+        <Popover open={hiddenOpen} onOpenChange={setHiddenOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              title="Colunas ocultas neste quadro"
+              className={cn(
+                "inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded-md transition-colors whitespace-nowrap",
+                presas > 0
+                  ? "text-warning hover:bg-warning/10 font-medium"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+              )}
+            >
+              <EyeOff className="w-3 h-3 shrink-0" />
+              {hiddenStages.length} {hiddenStages.length === 1 ? "oculta" : "ocultas"}
+              {presas > 0 && <span className="tabular-nums">· {presas} c/ tarefa</span>}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-56 p-1.5">
+            <HiddenStagesList
+              stages={hiddenStages}
+              countByStage={contagem}
+              canManage={canManage}
+              onShow={(id) => { onShowStage?.(id); setHiddenOpen(false); }}
+            />
+          </PopoverContent>
+        </Popover>
+      )}
 
       <Dialog
         open={open}

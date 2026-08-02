@@ -144,7 +144,6 @@ import {
   SortableColumn,
   DroppableColumn,
   AddStageColumn,
-  HiddenStagesMarker,
   FilterOptionList,
   ColumnFilterPanel,
 } from "./kanban/KanbanColumn";
@@ -2887,14 +2886,19 @@ export const ActivityKanban = ({
             return (
               <>
                 {visibleStages.map((stage, idx) => renderColumn(stage, idx))}
-                <HiddenStagesMarker
-                  stages={hiddenStages}
-                  countByStage={countByStage}
-                  canManage={isAdmin || canCreate}
-                  onShow={(id) => handleToggleStageVisible(id, false)}
-                />
+                {/* As colunas ocultas viraram um popover DENTRO do "Nova
+                    coluna": o cartão tracejado solto na régua poluía o quadro
+                    com uma informação ocasional. Quem não gerencia o projeto
+                    não vê nem o botão — e também não podia reexibir nada. */}
                 {(isAdmin || canCreate) && (
-                  <AddStageColumn projectId={projectId} onChanged={fetchStages} />
+                  <AddStageColumn
+                    projectId={projectId}
+                    onChanged={fetchStages}
+                    hiddenStages={hiddenStages}
+                    countByStage={countByStage}
+                    canManage={isAdmin || canCreate}
+                    onShowStage={(id) => handleToggleStageVisible(id, false)}
+                  />
                 )}
               </>
             );
