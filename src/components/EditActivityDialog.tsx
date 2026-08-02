@@ -1439,19 +1439,20 @@ export const EditActivityDialog = ({
             {act && (() => {
               // ---- Visibilidade dos campos OPCIONAIS (auto-colapso) ----
               // Regra: aparece se tem valor, é rollup de Fase, ou foi revelado pelo "+".
-              const hasHours = parseHoursInput(formData.hours) > 0;
-              const hasCost = parseFloat(formData.cost || "0") > 0;
               const hasWbs = !!formData.wbs_code.trim();
-              // Marco não tem horas/custo; Fase com filhos mostra sempre (rollup somado).
-              const showHours = !formData.is_milestone && (hasHours || hasSubActivities || revealedFields.has("hours"));
-              const showCost = !formData.is_milestone && (hasCost || hasSubActivities || revealedFields.has("cost"));
+              // Tempo e custo são SEMPRE visíveis (exceto em marco, que não tem
+              // nem um nem outro). Eram opcionais atrás do "+ Adicionar campo",
+              // mas são o esforço e o dinheiro da EAP — a faixa se chama
+              // "Esforço" e abria vazia, só com um botão. Some o motivo original
+              // do colapso agora que a importação traz horas e custo da
+              // planilha: o dado chegava preenchido e o campo seguia escondido.
+              const showHours = !formData.is_milestone;
+              const showCost = !formData.is_milestone;
               const showWbs = hasWbs || revealedFields.has("wbs");
               // Chips do "+ Adicionar campo": só os que estão ocultos no momento.
               // Dependências não entra: passou a ser sempre visível (é informação de
               // sequenciamento, não campo opcional — quem não vê, não sabe que existe).
               const hiddenChips: { key: OptionalFieldKey; label: string; icon: React.ReactNode }[] = [
-                !showHours && { key: "hours" as const, label: "Tempo", icon: <Clock className="w-3 h-3" /> },
-                !showCost && { key: "cost" as const, label: "Custo", icon: <DollarSign className="w-3 h-3" /> },
                 !showWbs && { key: "wbs" as const, label: "Código EAP", icon: <Hash className="w-3 h-3" /> },
               ].filter(Boolean) as { key: OptionalFieldKey; label: string; icon: React.ReactNode }[];
               return (
@@ -1764,18 +1765,25 @@ export const EditActivityDialog = ({
                   {/* Datas — planejado e execução real na MESMA linha.
                       Meia coluna por padrão (Início→Vencimento cabe); só ocupa a
                       linha inteira quando o bloco de datas reais está expandido. */}
-                  {/* Sempre em linha inteira: com as 4 datas abertas, meia coluna
-                      espremia cada campo até ficarem ilegíveis. Planejado e real
-                      passam a ocupar FILEIRAS próprias, uma sobre a outra. */}
+                  {/* Linha inteira, com planejado e real LADO A LADO: os quatro
+                      chips cabem na largura e quebrar para baixo desperdiçava a
+                      metade direita. `flex-wrap` no container preserva o
+                      comportamento em tela estreita — aí sim cai para a segunda
+                      fileira, em vez de espremer os campos. */}
                   <PropertyRow
                     wide
                     iconClassName="text-primary"
                     icon={<Calendar className="w-3.5 h-3.5" />}
                     label={formData.is_milestone ? "Data" : "Prazo"}
                   >
-                    <div className="flex flex-col gap-2 w-full min-h-[32px]">
-                      {/* PLANEJADO — chips compactos com calendário */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 w-full min-h-[32px]">
+                      {/* PLANEJADO — chips compactos com calendário. O rótulo
+                          "Previsto" espelha o "Real" ao lado: os dois pares ficam
+                          nomeados do mesmo jeito, e a comparação fica óbvia. */}
                       <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        {!formData.is_milestone && (
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">Previsto</span>
+                        )}
                         <DateChip
                           value={formData.is_milestone ? formData.end_date : formData.start_date}
                           onChange={(v) =>
@@ -1785,8 +1793,14 @@ export const EditActivityDialog = ({
                                 : { ...formData, start_date: v }
                             )
                           }
+                          // "Início/Término previsto" para casar com o par real
+                          // ao lado: "Início → Vencimento" não deixava claro que
+                          // são o mesmo par, um planejado e outro realizado.
+                          // Rótulo curto no chip: quem diz "previsto" é o rótulo
+                          // da fileira. Repetir a palavra em cada chip estourava
+                          // a largura e empurrava o par real para baixo.
                           placeholder={formData.is_milestone ? "Data do marco" : "Início"}
-                          tooltip={formData.is_milestone ? "Definir data do marco" : "Definir data de início"}
+                          tooltip={formData.is_milestone ? "Definir data do marco" : "Definir início previsto"}
                           invalid={dateRangeInvalid}
                         />
                         {!formData.is_milestone && (
@@ -1795,8 +1809,8 @@ export const EditActivityDialog = ({
                             <DateChip
                               value={formData.end_date}
                               onChange={(v) => setFormData({ ...formData, end_date: v })}
-                              placeholder="Vencimento"
-                              tooltip="Definir data de vencimento"
+                              placeholder="Término"
+                              tooltip="Definir término previsto"
                               invalid={dateRangeInvalid}
                             />
                           </>
@@ -1856,20 +1870,23 @@ export const EditActivityDialog = ({
                           if (!ok) return;
                           setFormData((prev) => ({ ...prev, actual_start_date: "", actual_end_date: "" }));
                         };
+                        // Separador VERTICAL: fica ao LADO do planejado, não
+                        // embaixo — a borda superior tracejada dividia fileiras
+                        // que não existem mais.
                         return (
-                          <div className="flex flex-wrap items-center gap-1.5 text-xs pt-2 border-t border-dashed border-border/70">
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs sm:pl-4 sm:border-l sm:border-dashed sm:border-border/70">
                             <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">Real</span>
                             <DateChip
                               value={formData.actual_start_date}
                               onChange={(v) => setFormData({ ...formData, actual_start_date: v })}
-                              placeholder="Início real"
+                              placeholder="Início"
                               tooltip="Definir início real"
                             />
                             <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                             <DateChip
                               value={formData.actual_end_date}
                               onChange={(v) => setFormData({ ...formData, actual_end_date: v })}
-                              placeholder="Término real"
+                              placeholder="Término"
                               tooltip="Definir término real"
                             />
                             {v !== null && tone && (
@@ -1896,9 +1913,10 @@ export const EditActivityDialog = ({
   
                 </FieldBand>
   
-                {/* ---- FAIXA 3: ESFORÇO (tempo, custo, campos opcionais) ---- */}
+                {/* ---- FAIXA 3: ESFORÇO (tempo, custo, campos opcionais) ----
+                    Tempo e Custo ocupam meia coluna cada, lado a lado. */}
                 <FieldBand step={3} title="Esforço">
-                  {/* Tempo (opcional — colapsa quando vazio) */}
+                  {/* Tempo — sempre visível (exceto em marco). */}
                   {showHours && (
                     <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -1996,7 +2014,7 @@ export const EditActivityDialog = ({
                     </PropertyRow>
                   )}
   
-                  {/* Custo (opcional — colapsa quando vazio) */}
+                  {/* Custo — sempre visível (exceto em marco). */}
                   {showCost && (
                     <PropertyRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Custo">
                       {hasSubActivities ? (
