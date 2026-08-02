@@ -73,15 +73,23 @@ const FieldBand = ({ step, title, children, tone = "default" }: {
   step: number; title: string; children: React.ReactNode; tone?: "default" | "primary";
 }) => (
   <div className="rounded-lg border border-border overflow-hidden">
+    {/* ARDÓSIA em vez de azul: a faixa AGRUPA campos, não pede clique. Com o
+        primary aqui, o topo de cada card competia com botões e links — e o
+        azul, aparecendo em tudo, deixava de significar "acionável".
+        As TRÊS faixas usam a mesma paleta: antes a 1 era azul e as outras
+        cinza-neutro, famílias diferentes brigando no mesmo card. A hierarquia
+        agora vem da INTENSIDADE (preenchida × contorno), não da cor. */}
     <div className={cn(
       "flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider border-b",
       tone === "primary"
-        ? "bg-primary/10 text-primary border-primary/20"
-        : "bg-muted/50 text-muted-foreground border-border",
+        ? "bg-slate-soft text-slate border-slate/20"
+        : "bg-slate-soft/40 text-slate/80 border-slate/15",
     )}>
       <span className={cn(
         "inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold shrink-0",
-        tone === "primary" ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground",
+        tone === "primary"
+          ? "bg-slate text-slate-foreground"
+          : "border border-slate/40 text-slate/80",
       )}>
         {step}
       </span>

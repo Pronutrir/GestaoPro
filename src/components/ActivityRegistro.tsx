@@ -346,24 +346,37 @@ export const ActivityRegistro = ({
     }
     if (buf) parts.push(buf);
 
-    return parts.map((p, idx) =>
-      typeof p === "string" ? <span key={idx}>{p}</span>
-        : (
-          <span
-            key={idx}
-            className={cn(
-              "font-medium rounded px-1",
-              onPrimary
-                // No balão azul: herda a cor do texto do balão e usa um véu
-                // claro por trás, em vez de azul sobre azul.
-                ? "bg-primary-foreground/20 text-primary-foreground"
-                : "bg-primary/10 text-primary",
-            )}
-          >
-            {p.m}
-          </span>
-        ),
-    );
+    return parts.map((p, idx) => {
+      if (typeof p === "string") return <span key={idx}>{p}</span>;
+
+      // Menção A MIM é a única que pede ação — só ela mantém o fundo. As
+      // demais usam PESO, não cor: com várias pessoas citadas, um fundo por
+      // nome transformava a mensagem numa sequência de etiquetas.
+      const paraMim = normName(p.m.slice(1)) === normName(authorName);
+
+      return (
+        <span
+          key={idx}
+          className={cn(
+            "font-semibold",
+            paraMim
+              ? cn(
+                  "rounded px-1",
+                  onPrimary
+                    ? "bg-primary-foreground/25 text-primary-foreground"
+                    : "bg-primary/15 text-primary",
+                )
+              // No balão próprio não há contraste de cor disponível (o texto já
+              // é claro sobre azul), então o sublinhado fino é o que distingue.
+              : onPrimary
+                ? "underline decoration-primary-foreground/50 underline-offset-2"
+                : "text-primary",
+          )}
+        >
+          {p.m}
+        </span>
+      );
+    });
   };
 
   return (
