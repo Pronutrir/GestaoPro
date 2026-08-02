@@ -1894,14 +1894,24 @@ export const ActivityKanban = ({
     return () => window.removeEventListener("keydown", onKey);
   }, [canCreate, onOpenCreateTask, stages]);
 
-  /** Destinos do "Mover para →": QUALQUER coluna criada no projeto — inclui
-   *  Backlog (o card passa a aparecer na seção Backlog, é um destino legítimo
-   *  e nomeado) e colunas ocultas do quadro. */
+  /** Destinos do "Mover para →": as mesmas colunas que o seletor de status do
+   *  diálogo de edição oferece, com a MESMA marcação.
+   *
+   *  Antes o Kanban listava coluna oculta sem nenhum sinal, enquanto a edição
+   *  listava a mesma coluna com o selo "oculta" — dois tratamentos para o mesmo
+   *  dado. Aqui a coluna oculta continua sendo um destino possível (é assim que
+   *  se aposenta uma etapa sem perder o histórico), mas `hidden` faz o menu
+   *  avisar que o cartão vai sumir do quadro. */
   const moveTargets = useMemo(
     () =>
       [...stages]
         .sort((a, b) => a.display_order - b.display_order)
-        .map((s) => ({ id: s.id, title: getStageDisplayTitle(s.title), color: s.color })),
+        .map((s) => ({
+          id: s.id,
+          title: getStageDisplayTitle(s.title),
+          color: s.color,
+          hidden: s.is_visible === false,
+        })),
     [stages],
   );
 

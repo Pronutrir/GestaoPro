@@ -35,6 +35,7 @@ import {
   Flag,
   Link2,
   Layers,
+  EyeOff,
 } from "lucide-react";
 import { type DraggableSyntheticListeners } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
@@ -261,8 +262,10 @@ function KanbanCardBase({
   onDuplicate?: () => void;
   /** Move o card para outra coluna do quadro (substitui o antigo "mover para backlog"). */
   onMoveToStage?: (stageId: string) => void;
-  /** Todas as colunas criadas no projeto, destinos do "Mover para →". */
-  moveTargets?: { id: string; title: string; color: string }[];
+  /** Colunas do projeto, destinos do "Mover para →". `hidden` = coluna oculta
+   *  no quadro: continua sendo destino, mas o menu avisa (mesmo selo que o
+   *  seletor de status do diálogo de edição usa). */
+  moveTargets?: { id: string; title: string; color: string; hidden?: boolean }[];
   onLinkParent?: () => void;
   dragListeners?: DraggableSyntheticListeners;
   isAdmin?: boolean;
@@ -501,6 +504,19 @@ function KanbanCardBase({
                             >
                               <span className="w-2 h-2 rounded-full mr-2 shrink-0" style={{ backgroundColor: s.color }} />
                               <span className="truncate">{s.title}</span>
+                              {/* Mesmo selo do seletor de status na edição: a
+                                  coluna existe no fluxo mas não aparece no
+                                  quadro, então mover para cá some com o card
+                                  do Kanban de todo mundo. Escolher às cegas
+                                  era o problema. */}
+                              {s.hidden && s.id !== activity.workflow_stage_id && (
+                                <span
+                                  className="ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] text-warning"
+                                  title="Esta coluna está oculta no quadro: a tarefa não aparecerá no Kanban."
+                                >
+                                  <EyeOff className="w-3 h-3" /> oculta
+                                </span>
+                              )}
                               {s.id === activity.workflow_stage_id && (
                                 <Check className="w-3 h-3 ml-auto text-primary shrink-0" />
                               )}

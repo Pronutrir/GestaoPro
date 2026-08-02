@@ -384,7 +384,7 @@ export function SortableColumn({
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onMoveToStage: (activityId: string, stageId: string) => void;
-  moveTargets?: { id: string; title: string; color: string }[];
+  moveTargets?: { id: string; title: string; color: string; hidden?: boolean }[];
   onDuplicateActivity?: (activityId: string) => void;
   onToggleBlocked: (activityId: string) => void;
   onLinkParent?: (activityId: string, currentParentId: string | null) => void;
