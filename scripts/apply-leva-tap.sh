@@ -26,6 +26,10 @@ set -e
 #                               URGENTE: o botão antigo já foi escondido pelo
 #                               código, então esses projetos estão exibindo
 #                               orçamento zerado até isto rodar.
+#   6) phases_dates             datas na fase, para a importação de EAP guardar
+#                               o intervalo planejado que vem da planilha.
+#   7) activity_comments_rich   anexo, resposta e reação na conversa da
+#                               atividade, com bucket privado próprio.
 #
 # Idempotente: rodar de novo não duplica nada.
 # Rodar NA VM: PGPASSWORD=... ./scripts/apply-leva-tap.sh
@@ -67,6 +71,7 @@ run 20260801120000 "supabase/migrations/20260801120000_page_comments.sql"       
 run 20260801140000 "supabase/migrations/20260801140000_tap_flow_and_versions.sql"       "TAP como ato formal"
 run 20260801130000 "supabase/migrations/20260801130000_migrate_legacy_budget_to_items.sql" "Orçamento legado → itens"
 run 20260801150000 "supabase/migrations/20260801150000_phases_dates.sql"                  "Datas na fase (importação de EAP)"
+run 20260802120000 "supabase/migrations/20260802120000_activity_comments_rich.sql"        "Conversa: anexo, resposta, reação"
 
 echo ""
 echo "══════════════════════════════════════════════════════════"
@@ -95,6 +100,14 @@ $PSQL -c "SELECT column_name FROM information_schema.columns
 echo "── função que notifica os participantes ──"
 $PSQL -c "SELECT proname FROM pg_proc
           WHERE proname IN ('notify_flow_participants','on_participant_resolved') ORDER BY 1;"
+
+echo "── conversa da atividade + bucket de anexos ──"
+$PSQL -c "SELECT column_name FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='activity_comments'
+            AND column_name IN ('attachments','reply_to_id','reactions','edited_at')
+          ORDER BY 1;"
+$PSQL -c "SELECT id, public FROM storage.buckets
+          WHERE id IN ('project-files','activity-attachments') ORDER BY 1;"
 
 echo "── orçamento: soma dos itens deve bater com o campo antigo ──"
 $PSQL -c "SELECT p.title,
