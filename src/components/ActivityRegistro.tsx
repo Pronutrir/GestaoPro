@@ -274,7 +274,7 @@ export const ActivityRegistro = ({
       toast({
         title: semBucket ? "Anexos ainda não habilitados" : "Falha ao anexar",
         description: semBucket
-          ? "Rode scripts/apply-comments-rich.sh na VM."
+          ? "Falta criar o bucket de anexos: rode scripts/apply-leva-tap.sh na VM."
           : error.message,
         variant: "destructive",
       });
@@ -399,7 +399,7 @@ export const ActivityRegistro = ({
       // Coluna ausente (migration pendente) ou falha: desfaz o otimista.
       setComments((prev) => prev.map((x) => (x.id === c.id ? c : x)));
       if (/reactions/i.test(error.message)) {
-        toast({ title: "Reações ainda não habilitadas", description: "Rode scripts/apply-comments-rich.sh na VM." });
+        toast({ title: "Reações ainda não habilitadas", description: "Rode scripts/apply-leva-tap.sh na VM." });
       }
     }
   };

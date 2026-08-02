@@ -62,7 +62,7 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
       toast({
         title: missingBucket ? "Upload ainda não habilitado" : "Falha no upload",
         description: missingBucket
-          ? "Rode scripts/apply-project-files.sh na VM. Enquanto isso, use o link."
+          ? "Rode scripts/apply-leva-tap.sh na VM. Enquanto isso, use o link."
           : error.message,
         variant: "destructive",
       });
