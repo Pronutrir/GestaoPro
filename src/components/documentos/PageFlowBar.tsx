@@ -133,17 +133,23 @@ export function PageFlowBar({ projectId, pageId, pageTitle, getPlainText, canMan
       role: p.role,
       position: ROLE_META[p.role].blocking ? p.position : 999,
       is_blocking: ROLE_META[p.role].blocking,
-      status: "notificado",
-      notified_at: new Date().toISOString(),
+      // 'pendente': quem marca como notificado é a função que cria o aviso.
+      status: "pendente",
     }));
     await sb.from("document_participants").insert(rows);
     await logEvent(flow.id, "enviado", {
       detail: `${rows.length} participante(s) · ${FLOW_KINDS[data.kind].label}`,
     });
 
+    const { data: avisados, error: notifyErr } = await (sb as any)
+      .rpc("notify_flow_participants", { _flow_id: flow.id });
+
     toast({
       title: "Documento enviado",
-      description: `${rows.length} pessoa(s) receberão o pedido de ${FLOW_KINDS[data.kind].short}.`,
+      description: notifyErr
+        ? `Circulando para ${rows.length} pessoa(s). Aviso automático indisponível neste ambiente — avise manualmente.`
+        : `${avisados ?? 0} pessoa(s) avisada(s) agora; as demais quando chegar a vez.`,
+      variant: notifyErr ? "destructive" : undefined,
     });
     setStartOpen(false);
     void fetchFlows();
