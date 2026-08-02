@@ -37,6 +37,7 @@ import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 import { selectInChunks } from "@/lib/chunkedIn";
 import { PersonCombobox } from "@/components/PersonCombobox";
+import { cn } from "@/lib/utils";
 
 // meeting_types ainda fora dos tipos gerados (migration 20260802130000
 // pendente na VM). Mesmo padrão usado em PageComments.
@@ -122,6 +123,54 @@ interface MeetingType {
   asks_phase: boolean;
 }
 
+/**
+ * Botões de promover na linha — o mesmo gesto do 💡 no Registro da atividade.
+ * Discretos por padrão (só o contorno), ganham cor no hover; quando já
+ * promovido, o ícone fica preenchido e o botão desabilita.
+ */
+function PromoverBotoes({
+  onAtividade, onLicao, onRisco, feitos,
+}: {
+  onAtividade?: () => void;
+  onLicao?: () => void;
+  onRisco?: () => void;
+  feitos: string[];
+}) {
+  // Classes COMPLETAS, nunca montadas por interpolação: o Tailwind varre o
+  // código-fonte estaticamente, então `hover:${cor}` não geraria nada e o
+  // botão ficaria sem cor no hover — falha silenciosa que passa no build.
+  const btn = (
+    key: string, label: string, feito: string,
+    Icon: typeof Zap, ativo: string, hover: string, onClick?: () => void,
+  ) => {
+    if (!onClick) return null;
+    const pronto = feitos.includes(feito);
+    return (
+      <button
+        key={key}
+        type="button"
+        disabled={pronto}
+        onClick={onClick}
+        title={pronto ? `Já virou ${label.toLowerCase()}` : label}
+        className={cn(
+          "h-6 w-6 rounded flex items-center justify-center transition-colors shrink-0",
+          pronto ? `${ativo} cursor-default` : `text-muted-foreground hover:bg-muted ${hover}`,
+        )}
+      >
+        <Icon className={cn("w-3.5 h-3.5", pronto && "fill-current")} />
+      </button>
+    );
+  };
+
+  return (
+    <span className="flex items-center gap-0.5 shrink-0">
+      {btn("a", "Virar atividade no Kanban", "atividade", Zap, "text-primary", "hover:text-primary", onAtividade)}
+      {btn("l", "Virar lição aprendida", "licao", Lightbulb, "text-warning", "hover:text-warning", onLicao)}
+      {btn("r", "Virar risco", "risco", AlertTriangle, "text-destructive", "hover:text-destructive", onRisco)}
+    </span>
+  );
+}
+
 export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateBlocker, onCreateLesson, canManageProject = false }: MeetingsManagerProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -139,6 +188,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   /** Ações de TODAS as reuniões do projeto — base do painel do topo. */
   const [allActions, setAllActions] = useState<MeetingAction[]>([]);
   const [notifyingId, setNotifyingId] = useState<string | null>(null);
+  /** O que já foi promovido nesta sessão, por linha: evita criar a mesma
+   *  atividade duas vezes num clique repetido. Não persiste — as tabelas de
+   *  destino não guardam a origem, e inventar esse vínculo exigiria migration
+   *  para um ganho pequeno. */
+  const [promovidos, setPromovidos] = useState<Record<string, string[]>>({});
   const [newDecision, setNewDecision] = useState("");
   const [newAction, setNewAction] = useState({ description: "", assigned_to: "", due_date: "" });
   const assigneeAvatarMap = useAssigneeAvatarLookup([
@@ -444,19 +498,69 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   const handlePromoteToActivity = async (action: MeetingAction, meetingId: string) => {
     if (onCreateActivity) {
       await onCreateActivity(action.description, action.assigned_to || undefined);
+      marcarPromovido(`acao:${action.id}`, "atividade");
       toast({ title: "Atividade criada no Kanban!" });
     }
   };
-  const handleSaveAsLesson = async (meeting: Meeting) => {
+
+  /**
+   * PROMOVER — mesmo gesto do 💡 no Registro da atividade: um ícone na própria
+   * linha, sem menu nem tela nova.
+   *
+   * Antes só a AÇÃO virava atividade. A decisão — que é o registro do que foi
+   * combinado, e de onde nascem retrabalho e aprendizado — ficava gravada e
+   * nunca mais era lida. A ata só virava lição por um botão grande separado.
+   *
+   * A linha NÃO some depois de promovida: a reunião é registro histórico do que
+   * foi dito. Ganha só uma marca, para ninguém promover duas vezes.
+   */
+  const marcarPromovido = (chave: string, destino: "atividade" | "licao" | "risco") => {
+    setPromovidos((prev) => ({ ...prev, [chave]: [...(prev[chave] || []), destino] }));
+  };
+
+  const jaPromovido = (chave: string, destino: string) =>
+    (promovidos[chave] || []).includes(destino);
+
+  const promoverParaAtividade = async (chave: string, texto: string, responsavel?: string) => {
+    if (!onCreateActivity) return;
+    const ok = await appConfirm({
+      title: "Criar atividade no Kanban?",
+      description: texto.slice(0, 160),
+      confirmText: "Criar atividade",
+    });
+    if (!ok) return;
+    await onCreateActivity(texto, responsavel);
+    marcarPromovido(chave, "atividade");
+    toast({ title: "Atividade criada no Kanban!" });
+  };
+
+  const promoverParaLicao = async (chave: string, texto: string) => {
     if (!onCreateLesson) return;
-    // Antes isto fatiava a ata pelos marcadores da retrospectiva
-    // ("**O que foi ruim:**"), formato que só existia no template de Scrum.
-    // Fora dele, o corte pegava pedaço errado do texto. Agora a ata inteira
-    // vai como o problema, e quem edita a lição refina — melhor que adivinhar.
-    const ata = (meeting.minutes || "").trim();
-    if (!ata) return;
-    await onCreateLesson(ata, "");
-    toast({ title: "Lição criada a partir da ata!" });
+    const ok = await appConfirm({
+      title: "Registrar como Lição Aprendida?",
+      description: texto.slice(0, 160),
+      confirmText: "Criar lição",
+    });
+    if (!ok) return;
+    // O texto vai como "problema" e a sugestão fica vazia — quem edita a lição
+    // na aba Lições refina. Adivinhar qual parte é problema e qual é sugestão
+    // foi o que quebrou na versão anterior (fatiava por marcador de Scrum).
+    await onCreateLesson(texto, "");
+    marcarPromovido(chave, "licao");
+    toast({ title: "Lição criada!", description: "Disponível na aba Lições do projeto." });
+  };
+
+  const promoverParaRisco = async (chave: string, texto: string) => {
+    if (!onCreateBlocker) return;
+    const ok = await appConfirm({
+      title: "Registrar como risco do projeto?",
+      description: texto.slice(0, 160),
+      confirmText: "Criar risco",
+    });
+    if (!ok) return;
+    await onCreateBlocker(texto);
+    marcarPromovido(chave, "risco");
+    toast({ title: "Risco registrado!" });
   };
 
   const handleDeleteAction = async (id: string, meetingId: string) => {
@@ -873,28 +977,25 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                       </div>
                     )}
 
-                    {/* Minutes */}
+                    {/* Ata — o "Salvar como Lição Aprendida" era um botão
+                        grande solto embaixo (e antes disso só aparecia no tipo
+                        Retrospective, cerimônia que ninguém usava). Virou ícone
+                        no cabeçalho da seção, como nas decisões e ações. */}
                     {meeting.minutes && (
                       <div>
-                        <h4 className="text-xs font-semibold text-muted-foreground mb-1">📝 Ata</h4>
+                        <h4 className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+                          📝 Ata
+                          {canEditMeeting && (
+                            <span className="ml-auto">
+                              <PromoverBotoes
+                                feitos={promovidos[`ata:${meeting.id}`] || []}
+                                onLicao={onCreateLesson && (() => promoverParaLicao(`ata:${meeting.id}`, meeting.minutes || ""))}
+                              />
+                            </span>
+                          )}
+                        </h4>
                         <p className="text-sm text-foreground whitespace-pre-wrap">{meeting.minutes}</p>
                       </div>
-                    )}
-
-                    {/* Virar lição: estava preso ao tipo "Retrospective", ou
-                        seja, só aparecia numa cerimônia de Scrum que ninguém
-                        usava. Aprendizado sai de qualquer reunião com ata —
-                        principalmente do Encerramento. */}
-                    {meeting.minutes && onCreateLesson && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5"
-                        onClick={() => handleSaveAsLesson(meeting)}
-                      >
-                        <Lightbulb className="w-3.5 h-3.5" />
-                        Salvar como Lição Aprendida
-                      </Button>
                     )}
 
                     {/* Decisions */}
@@ -904,23 +1005,25 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                       </h4>
                       <div className="space-y-1">
                         {meetingDecisions.map((d) => (
-                          <div key={d.id} className="flex items-center justify-between text-sm p-2 bg-accent/20 rounded group">
-                            <span>{d.description}</span>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                              {canEditMeeting && onCreateActivity && (
-                                <Button size="icon" variant="ghost" className="h-6 w-6" title="Gerar Tarefa" onClick={async () => {
-                                  await onCreateActivity(d.description);
-                                  toast({ title: "Tarefa criada a partir da decisão!" });
-                                }}>
-                                  <Zap className="w-3 h-3 text-primary" />
-                                </Button>
-                              )}
-                              {canEditMeeting && (
-                                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDeleteDecision(d.id, meeting.id)}>
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              )}
-                            </div>
+                          <div key={d.id} className="flex items-center gap-2 text-sm p-2 bg-accent/20 rounded">
+                            <span className="flex-1 min-w-0">{d.description}</span>
+                            {/* Antes só havia "Gerar Tarefa", e escondido em
+                                opacity-0: ação que só aparece no hover não é
+                                descoberta por quem não sabe que existe.
+                                Agora as três promoções ficam visíveis. */}
+                            {canEditMeeting && (
+                              <PromoverBotoes
+                                feitos={promovidos[`dec:${d.id}`] || []}
+                                onAtividade={onCreateActivity && (() => promoverParaAtividade(`dec:${d.id}`, d.description))}
+                                onLicao={onCreateLesson && (() => promoverParaLicao(`dec:${d.id}`, d.description))}
+                                onRisco={onCreateBlocker && (() => promoverParaRisco(`dec:${d.id}`, d.description))}
+                              />
+                            )}
+                            {canEditMeeting && (
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive shrink-0" onClick={() => handleDeleteDecision(d.id, meeting.id)}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -966,8 +1069,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                       </h4>
                       <div className="space-y-1">
                         {meetingActions.map((a) => (
-                          <div key={a.id} className="flex items-center justify-between text-sm p-2 bg-accent/20 rounded group">
-                            <div className="flex items-center gap-2">
+                          <div key={a.id} className="flex items-center gap-2 text-sm p-2 bg-accent/20 rounded">
+                            <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
                               <button
                                 className={`w-4 h-4 rounded border flex items-center justify-center ${a.is_completed ? "bg-primary border-primary text-primary-foreground" : "border-border"}`}
                                 onClick={() => canEditMeeting && handleToggleAction(a, meeting.id)}
@@ -995,13 +1098,18 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                               {a.due_date && <Badge variant="secondary" className="text-[10px]">📅 {new Date(a.due_date).toLocaleDateString("pt-BR")}</Badge>}
                             </div>
                             {canEditMeeting && (
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                                {onCreateActivity && !a.activity_id && (
-                                  <Button size="icon" variant="ghost" className="h-6 w-6" title="Criar atividade no Kanban" onClick={() => handlePromoteToActivity(a, meeting.id)}>
-                                    <Zap className="w-3 h-3 text-primary" />
-                                  </Button>
-                                )}
-                                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDeleteAction(a.id, meeting.id)}>
+                              <div className="flex items-center gap-1">
+                                <PromoverBotoes
+                                  feitos={[
+                                    ...(promovidos[`acao:${a.id}`] || []),
+                                    // activity_id gravado = já foi promovida em
+                                    // outra sessão; o estado local não saberia.
+                                    ...(a.activity_id ? ["atividade"] : []),
+                                  ]}
+                                  onAtividade={onCreateActivity && (() => handlePromoteToActivity(a, meeting.id))}
+                                  onLicao={onCreateLesson && (() => promoverParaLicao(`acao:${a.id}`, a.description))}
+                                />
+                                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive shrink-0" onClick={() => handleDeleteAction(a.id, meeting.id)}>
                                   <Trash2 className="w-3 h-3" />
                                 </Button>
                               </div>
