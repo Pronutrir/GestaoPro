@@ -915,7 +915,9 @@ export function SortableColumn({
                   onToggleCollapse(stage.id);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
-                title="Recolher coluna"
+                // "só para você": recolher grava no localStorage, ao contrário
+                // do "Ocultar para todos" do menu, que muda o quadro da equipe.
+                title="Recolher coluna (só para você)"
               >
                 <ChevronsLeft className="w-3.5 h-3.5" />
               </button>
@@ -1064,15 +1066,30 @@ export function SortableColumn({
                       ? "Incluir no progresso"
                       : "Remover do progresso"}
                   </DropdownMenuItem>
+                  {/* "para todos" no rótulo: ocultar grava em workflow_stages,
+                      que é do PROJETO — some do quadro da equipe inteira. Fica a
+                      um clique do "Recolher", que é só seu (localStorage), e os
+                      dois soavam iguais. */}
                   <DropdownMenuItem
                     className="focus:bg-muted/60 focus:text-foreground"
                     onSelect={(e) => {
                       e.preventDefault();
+                      // Com cartões dentro, confirma: some do quadro de todo
+                      // mundo sem deixar rastro, e as tarefas continuam lá.
+                      if (stage.is_visible && stageActivities.length > 0) {
+                        const n = stageActivities.length;
+                        const ok = window.confirm(
+                          `"${stage.title}" tem ${n} ${n === 1 ? "tarefa" : "tarefas"} e vai sumir do quadro de TODOS do projeto.\n\n` +
+                          `As tarefas continuam existindo e mantêm o status — só deixam de aparecer aqui.\n\n` +
+                          `Para limpar apenas a sua visão, use "Recolher coluna".`
+                        );
+                        if (!ok) return;
+                      }
                       onToggleStageVisible(stage.id, stage.is_visible);
                     }}
                   >
                     {stage.is_visible ? <EyeOff className="w-3.5 h-3.5 mr-2" /> : <Eye className="w-3.5 h-3.5 mr-2" />}
-                    {stage.is_visible ? "Ocultar coluna" : "Mostrar coluna"}
+                    {stage.is_visible ? "Ocultar para todos" : "Mostrar para todos"}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -1215,6 +1232,77 @@ export function DroppableColumn({
       }`}
     >
       {children}
+    </div>
+  );
+}
+
+/**
+ * Marcador das colunas ocultas, ao fim do quadro.
+ *
+ * Ocultar grava em `workflow_stages.is_visible`, que é do PROJETO: a coluna
+ * some para todo mundo e não sobrava nenhum rastro — nem contador, nem menção.
+ * Uma tarefa podia ficar com um status cuja coluna ninguém enxerga.
+ *
+ * O número de tarefas dentro é o que faz a pessoa olhar: "2 ocultas" é uma
+ * informação; "Em Teste (3)" é um problema.
+ */
+export function HiddenStagesMarker({
+  stages, countByStage, canManage, onShow,
+}: {
+  stages: { id: string; title: string; color: string }[];
+  countByStage: Map<string, number>;
+  canManage: boolean;
+  onShow: (id: string) => void;
+}) {
+  if (stages.length === 0) return null;
+
+  const comTarefas = stages.filter((s) => (countByStage.get(s.id) ?? 0) > 0);
+
+  return (
+    <div className="shrink-0 self-start pt-3 pl-2 w-[168px]">
+      <div className={cn(
+        "rounded-lg border border-dashed px-2.5 py-2 flex flex-col gap-1.5",
+        comTarefas.length > 0 ? "border-warning/50 bg-warning/5" : "border-border",
+      )}>
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+          <EyeOff className="w-3 h-3 shrink-0" />
+          {stages.length} {stages.length === 1 ? "coluna oculta" : "colunas ocultas"}
+        </span>
+
+        {stages.map((s) => {
+          const n = countByStage.get(s.id) ?? 0;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              disabled={!canManage}
+              onClick={() => canManage && onShow(s.id)}
+              title={canManage
+                ? `Mostrar "${s.title}" para todos do projeto`
+                : "Só quem gerencia o projeto pode reexibir colunas"}
+              className={cn(
+                "flex items-center gap-1.5 text-[11px] rounded px-1 py-0.5 text-left min-w-0",
+                canManage ? "hover:bg-muted cursor-pointer" : "cursor-default",
+              )}
+            >
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.color }} />
+              <span className="truncate">{s.title}</span>
+              {n > 0 && (
+                <span className="ml-auto shrink-0 tabular-nums text-warning font-medium">
+                  {n}
+                </span>
+              )}
+            </button>
+          );
+        })}
+
+        {comTarefas.length > 0 && (
+          <span className="text-[10px] text-warning leading-snug">
+            {comTarefas.length === 1 ? "Há tarefa" : "Há tarefas"} nessas colunas —
+            ninguém as vê no quadro.
+          </span>
+        )}
+      </div>
     </div>
   );
 }

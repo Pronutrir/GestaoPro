@@ -25,7 +25,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { GutPriorityField } from "@/components/GutPriorityField";
 import { GutPrioritySelector } from "@/components/GutPrioritySelector";
 import { GUT_META, gutLabel, gutScore, normalizeGut, type GutLevel } from "@/lib/gutPriority";
-import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon, Wand2 } from "lucide-react";
+import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon, Wand2, EyeOff } from "lucide-react";
 import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -454,7 +454,7 @@ export const EditActivityDialog = ({
   const [members, setMembers] = useState<PersonOption[]>([]);
   const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
   const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
-  const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean }[]>([]);
+  const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean; is_visible?: boolean }[]>([]);
   const [currentStageId, setCurrentStageId] = useState("");
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false);
   const [creatorName, setCreatorName] = useState<string | null>(null);
@@ -717,9 +717,13 @@ export const EditActivityDialog = ({
 
     if (projectId) {
       // Always refetch workflow stages when dialog opens (catches newly created columns)
-      supabase.from("workflow_stages").select("id, title, color, display_order, is_final")
+      // is_visible entra na consulta para o seletor AVISAR quando a coluna não
+      // aparece no quadro. A opção continua na lista de propósito: a tarefa
+      // pode já estar nela, e removê-la deixaria o campo sem valor válido —
+      // trocaria um problema de visibilidade por um de dado.
+      supabase.from("workflow_stages").select("id, title, color, display_order, is_final, is_visible")
         .eq("project_id", projectId).order("display_order").then(({ data }) => {
-          if (data) setWorkflowStages(data);
+          if (data) setWorkflowStages(data as any);
         });
 
       supabase.from("project_members").select("user_id").eq("project_id", projectId).then(({ data: memberData }) => {
@@ -1479,6 +1483,15 @@ export const EditActivityDialog = ({
                           >
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: workflowStages.find(s => s.id === currentStageId)?.color || "hsl(var(--muted-foreground))" }} />
                             <span className="truncate">{workflowStages.find(s => s.id === currentStageId)?.title || "Sem coluna"}</span>
+                            {/* A tarefa JÁ ESTÁ numa coluna oculta: some do
+                                quadro sem nenhum sinal. Avisar aqui é o mínimo
+                                — é o estado em que a pessoa mais precisa saber. */}
+                            {workflowStages.find(s => s.id === currentStageId)?.is_visible === false && (
+                              <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-warning"
+                                    title="Esta coluna está oculta no quadro: a tarefa não aparece no Kanban.">
+                                <EyeOff className="w-3 h-3" /> oculta
+                              </span>
+                            )}
                             <ChevronDown className="w-3 h-3 opacity-60 ml-auto shrink-0" />
                           </button>
                         </PopoverTrigger>
@@ -1530,8 +1543,18 @@ export const EditActivityDialog = ({
                                 }
                               }}
                             >
-                              <span className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
-                              {stage.title}
+                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: stage.color }} />
+                              <span className="truncate">{stage.title}</span>
+                              {/* A coluna existe no fluxo mas não aparece no
+                                  quadro: mover a tarefa para cá faz ela sumir
+                                  do Kanban de todo mundo. Escolher às cegas era
+                                  o problema — a marca aqui é o aviso. */}
+                              {stage.is_visible === false && (
+                                <span className="ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] text-warning"
+                                      title="Esta coluna está oculta no quadro: a tarefa não aparecerá no Kanban.">
+                                  <EyeOff className="w-3 h-3" /> oculta
+                                </span>
+                              )}
                             </button>
                           ))}
                         </PopoverContent>

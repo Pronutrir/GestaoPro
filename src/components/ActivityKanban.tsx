@@ -144,6 +144,7 @@ import {
   SortableColumn,
   DroppableColumn,
   AddStageColumn,
+  HiddenStagesMarker,
   FilterOptionList,
   ColumnFilterPanel,
 } from "./kanban/KanbanColumn";
@@ -1824,6 +1825,27 @@ export const ActivityKanban = ({
 
 
   const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
+
+  /**
+   * Colunas ocultas e quantas tarefas há em cada uma.
+   *
+   * Ocultar é do PROJETO (workflow_stages.is_visible), então a coluna some para
+   * todo mundo — e sem rastro algum no quadro. Pior: a tarefa continua com
+   * aquele status e some junto, sem aparecer em lugar nenhum. O marcador ao
+   * fim do quadro existe para isso não ser silencioso.
+   */
+  const hiddenStages = useMemo(
+    () => stages.filter((s) => s.display_order > 0 && s.is_visible === false),
+    [stages],
+  );
+  const countByStage = useMemo(() => {
+    const m = new Map<string, number>();
+    activities.forEach((a) => {
+      if (!a.workflow_stage_id) return;
+      m.set(a.workflow_stage_id, (m.get(a.workflow_stage_id) ?? 0) + 1);
+    });
+    return m;
+  }, [activities]);
   /**
    * Atalhos de teclado do quadro (referência: Linear).
    *  N  nova tarefa na primeira coluna
@@ -2855,6 +2877,12 @@ export const ActivityKanban = ({
             return (
               <>
                 {visibleStages.map((stage, idx) => renderColumn(stage, idx))}
+                <HiddenStagesMarker
+                  stages={hiddenStages}
+                  countByStage={countByStage}
+                  canManage={isAdmin || canCreate}
+                  onShow={(id) => handleToggleStageVisible(id, false)}
+                />
                 {(isAdmin || canCreate) && (
                   <AddStageColumn projectId={projectId} onChanged={fetchStages} />
                 )}
