@@ -72,6 +72,7 @@ run 20260801140000 "supabase/migrations/20260801140000_tap_flow_and_versions.sql
 run 20260801130000 "supabase/migrations/20260801130000_migrate_legacy_budget_to_items.sql" "Orçamento legado → itens"
 run 20260801150000 "supabase/migrations/20260801150000_phases_dates.sql"                  "Datas na fase (importação de EAP)"
 run 20260802120000 "supabase/migrations/20260802120000_activity_comments_rich.sql"        "Conversa: anexo, resposta, reação"
+run 20260802130000 "supabase/migrations/20260802130000_meetings_actions_and_types.sql"    "Reuniões: tipos, gravação e ações"
 
 echo ""
 echo "══════════════════════════════════════════════════════════"
@@ -82,7 +83,12 @@ echo "── tabelas que deviam existir agora ──"
 $PSQL -c "SELECT
             to_regclass('public.page_versions')            AS page_versions,
             to_regclass('public.page_comments')            AS page_comments,
-            to_regclass('public.project_charter_versions') AS charter_versions;"
+            to_regclass('public.project_charter_versions') AS charter_versions,
+            to_regclass('public.meeting_types')            AS meeting_types;"
+
+echo "── tipos de reunião semeados (6 por projeto) ──"
+$PSQL -c "SELECT count(*) AS tipos, count(DISTINCT project_id) AS projetos
+          FROM public.meeting_types;"
 
 echo "── wbs_code (importação de EAP depende disto) ──"
 $PSQL -c "SELECT table_name, column_name FROM information_schema.columns

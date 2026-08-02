@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { DateField } from "@/components/ui/date-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,8 @@ import {
   Building2,
   Briefcase,
   Lightbulb,
+  Bell,
+  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +35,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
+import { selectInChunks } from "@/lib/chunkedIn";
+
+// meeting_types ainda fora dos tipos gerados (migration 20260802130000
+// pendente na VM). Mesmo padrão usado em PageComments.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sb = supabase as any;
 
 interface Meeting {
   id: string;
@@ -49,7 +57,11 @@ interface Meeting {
   created_at: string;
   created_by: string | null;
   responsible: string | null;
-  meeting_type?: string;
+  /** Colunas da migration 20260802130000 — opcionais porque o schema da VM
+   *  ainda pode ser o antigo (ver typesAvailable). */
+  meeting_type_id?: string | null;
+  recording_url?: string | null;
+  transcript?: string | null;
 }
 
 interface MeetingDecision {
@@ -91,21 +103,23 @@ interface MeetingsManagerProps {
   canManageProject?: boolean;
 }
 
-const MEETING_TYPES = [
-  { value: "general", label: "Geral" },
-  { value: "daily", label: "Daily Scrum" },
-  { value: "planning", label: "Sprint Planning" },
-  { value: "review", label: "Sprint Review" },
-  { value: "retrospective", label: "Sprint Retrospective" },
-];
-
-const MEETING_TYPE_COLORS: Record<string, string> = {
-  general: "bg-muted text-muted-foreground",
-  daily: "bg-primary/20 text-primary",
-  planning: "bg-blue-500/20 text-blue-700",
-  review: "bg-emerald-500/20 text-emerald-700",
-  retrospective: "bg-purple-500/20 text-purple-700",
-};
+/**
+ * Os tipos de reunião eram CONSTANTES aqui: Daily Scrum, Sprint Planning,
+ * Sprint Review, Sprint Retrospective — cerimônias de Scrum, cada uma trocando
+ * os campos do formulário ("O que fiz ontem?", "O que foi bom/ruim?").
+ *
+ * A metodologia daqui é por atividades/EAP, não por sprint: conferido no banco
+ * em 02/08/2026, zero sprints cadastradas. Os tipos viraram DADO
+ * (tabela meeting_types), editáveis por projeto, e o formulário passou a ser
+ * um só — o tipo é apenas classificação, para filtrar e contar.
+ */
+interface MeetingType {
+  id: string;
+  label: string;
+  display_order: number;
+  is_default: boolean;
+  asks_phase: boolean;
+}
 
 export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateBlocker, onCreateLesson, canManageProject = false }: MeetingsManagerProps) => {
   const { toast } = useToast();
@@ -118,6 +132,12 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   const [editingId, setEditingId] = useState<string | null>(null);
   const [decisions, setDecisions] = useState<Record<string, MeetingDecision[]>>({});
   const [actions, setActions] = useState<Record<string, MeetingAction[]>>({});
+  const [types, setTypes] = useState<MeetingType[]>([]);
+  /** false enquanto a migration de meeting_types não rodou na VM. */
+  const [typesAvailable, setTypesAvailable] = useState(true);
+  /** Ações de TODAS as reuniões do projeto — base do painel do topo. */
+  const [allActions, setAllActions] = useState<MeetingAction[]>([]);
+  const [notifyingId, setNotifyingId] = useState<string | null>(null);
   const [newDecision, setNewDecision] = useState("");
   const [newAction, setNewAction] = useState({ description: "", assigned_to: "", due_date: "" });
   const assigneeAvatarMap = useAssigneeAvatarLookup([
@@ -136,27 +156,66 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     phase_id: "",
     participants: [] as string[],
     responsible: "",
-    meeting_type: "general",
-    // Daily fields
-    daily_yesterday: "",
-    daily_today: "",
-    daily_impediment: "",
-    // Retro fields
-    retro_good: "",
-    retro_bad: "",
-    retro_improve: "",
+    meeting_type_id: "",
+    recording_url: "",
+    transcript: "",
   });
 
   const getProfile = (id: string) => profiles.find((p) => p.id === id);
 
+  /** Painel: as duas perguntas de quem gerencia são "o que está aberto" e
+   *  "o que já venceu". O resto é contexto. */
+  const painel = useMemo(() => {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const abertas = allActions.filter((a) => !a.is_completed);
+    const atrasadas = abertas.filter((a) => a.due_date && a.due_date.slice(0, 10) < hoje);
+
+    // Responsável é TEXTO livre (assigned_to), não FK — mesma escolha do resto
+    // do sistema. Agrupa pelo nome como está gravado.
+    const porPessoa = new Map<string, { abertas: number; atrasadas: number }>();
+    for (const a of abertas) {
+      const quem = (a.assigned_to || "").trim();
+      if (!quem) continue;
+      const cur = porPessoa.get(quem) || { abertas: 0, atrasadas: 0 };
+      cur.abertas += 1;
+      if (a.due_date && a.due_date.slice(0, 10) < hoje) cur.atrasadas += 1;
+      porPessoa.set(quem, cur);
+    }
+
+    return {
+      abertas: abertas.length,
+      atrasadas: atrasadas.length,
+      concluidas: allActions.length - abertas.length,
+      total: allActions.length,
+      pessoas: Array.from(porPessoa.entries())
+        .map(([nome, v]) => ({ nome, ...v }))
+        // Quem tem atraso primeiro: é o que exige ação de quem está olhando.
+        .sort((a, b) => b.atrasadas - a.atrasadas || b.abertas - a.abertas),
+    };
+  }, [allActions]);
+
   useEffect(() => {
     fetchMeetings();
     fetchProfiles();
+    fetchTypes();
   }, [projectId]);
 
   const fetchProfiles = async () => {
     const { data } = await supabase.from("profiles").select("id, email, full_name, sector, role_title, avatar_url");
     if (data) setProfiles(data);
+  };
+
+  /** Enquanto a migration não roda na VM a tabela não existe: em vez de quebrar
+   *  a aba, o seletor de tipo simplesmente não aparece e o resto funciona. */
+  const fetchTypes = async () => {
+    const { data, error } = await sb
+      .from("meeting_types")
+      .select("id, label, display_order, is_default, asks_phase")
+      .eq("project_id", projectId)
+      .order("display_order");
+    if (error) { setTypesAvailable(false); return; }
+    setTypesAvailable(true);
+    setTypes(data || []);
   };
 
   const fetchMeetings = async () => {
@@ -166,7 +225,24 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       .eq("project_id", projectId)
       .eq("is_trashed", false)
       .order("meeting_date", { ascending: false });
-    if (data) setMeetings(data);
+    if (data) {
+      setMeetings(data);
+      void fetchAllActions(data.map((m) => m.id));
+    }
+  };
+
+  /** O painel precisa das ações de TODAS as reuniões — fetchDetails só busca
+   *  as da reunião aberta. Lotes de 50 ids: acima disso o `in.(…)` estoura o
+   *  limite de URL do proxy e vira 502 (ver lib/chunkedIn). */
+  const fetchAllActions = async (ids: string[]) => {
+    if (!ids.length) { setAllActions([]); return; }
+    const rows = await selectInChunks<MeetingAction>(ids, (chunk) =>
+      supabase
+        .from("meeting_actions")
+        .select("id, meeting_id, description, assigned_to, due_date, activity_id, is_completed")
+        .in("meeting_id", chunk),
+    );
+    setAllActions(rows);
   };
 
   const fetchDetails = async (meetingId: string) => {
@@ -188,7 +264,14 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   };
 
   const resetForm = () => {
-    setForm({ title: "", meeting_date: "", start_time: "", end_time: "", location: "", agenda: "", minutes: "", phase_id: "", participants: [], responsible: "", meeting_type: "general", daily_yesterday: "", daily_today: "", daily_impediment: "", retro_good: "", retro_bad: "", retro_improve: "" });
+    setForm({
+      title: "", meeting_date: "", start_time: "", end_time: "", location: "",
+      agenda: "", minutes: "", phase_id: "", participants: [], responsible: "",
+      // Já abre no tipo marcado como padrão do projeto ("Alinhamento"), que é
+      // o caso mais frequente — evita um clique na maioria das criações.
+      meeting_type_id: types.find((t) => t.is_default)?.id || "",
+      recording_url: "", transcript: "",
+    });
     setEditingId(null);
     setShowForm(false);
   };
@@ -199,14 +282,6 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       return;
     }
 
-    // Build minutes from template fields
-    let computedMinutes = form.minutes || "";
-    if (form.meeting_type === "daily") {
-      computedMinutes = `**O que fiz ontem:**\n${form.daily_yesterday}\n\n**O que farei hoje:**\n${form.daily_today}\n\n**Impedimentos:**\n${form.daily_impediment}`;
-    } else if (form.meeting_type === "retrospective") {
-      computedMinutes = `**O que foi bom:**\n${form.retro_good}\n\n**O que foi ruim:**\n${form.retro_bad}\n\n**O que melhorar:**\n${form.retro_improve}`;
-    }
-
     const payload: any = {
       project_id: projectId,
       title: form.title,
@@ -215,53 +290,59 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       end_time: form.end_time || null,
       location: form.location || null,
       agenda: form.agenda || null,
-      minutes: computedMinutes || null,
+      minutes: form.minutes || null,
       phase_id: form.phase_id || null,
       participants: form.participants,
       responsible: form.responsible || null,
-      meeting_type: form.meeting_type,
     };
+
+    // Colunas da migration 20260802130000. Enquanto ela não roda na VM, o
+    // PostgREST devolve PGRST204 e o insert inteiro falharia — por isso vão
+    // num payload à parte, removido e reenviado se o schema for antigo.
+    if (typesAvailable) {
+      payload.meeting_type_id = form.meeting_type_id || null;
+      payload.recording_url = form.recording_url || null;
+      payload.transcript = form.transcript || null;
+    }
 
     if (!editingId) {
       payload.created_by = user?.id || null;
     }
 
+    const semColunasNovas = () => {
+      const p = { ...payload };
+      delete p.meeting_type_id; delete p.recording_url; delete p.transcript;
+      return p;
+    };
+    const colunaAusente = (msg?: string | null) =>
+      !!msg && /Could not find the '(meeting_type_id|recording_url|transcript)' column/i.test(msg);
+
     if (editingId) {
-      const { error } = await supabase.from("meetings").update(payload).eq("id", editingId);
+      let { error } = await supabase.from("meetings").update(payload).eq("id", editingId);
+      if (colunaAusente(error?.message)) {
+        setTypesAvailable(false);
+        ({ error } = await supabase.from("meetings").update(semColunasNovas()).eq("id", editingId));
+      }
       if (error) { toast({ title: "Erro ao atualizar", variant: "destructive" }); return; }
       toast({ title: "Reunião atualizada!" });
     } else {
-      const { error } = await supabase.from("meetings").insert(payload);
+      let { error } = await supabase.from("meetings").insert(payload);
+      if (colunaAusente(error?.message)) {
+        setTypesAvailable(false);
+        ({ error } = await supabase.from("meetings").insert(semColunasNovas()));
+      }
       if (error) { toast({ title: "Erro ao criar", variant: "destructive" }); return; }
       toast({ title: "Reunião criada!" });
-
-      // Auto-create blocker from daily impediment
-      if (form.meeting_type === "daily" && form.daily_impediment.trim() && onCreateBlocker) {
-        await onCreateBlocker(form.daily_impediment.trim());
-        toast({ title: "Impedimento registrado como risco!" });
-      }
     }
     resetForm();
     fetchMeetings();
   };
 
   const handleEdit = (m: Meeting) => {
-    // Parse daily/retro fields from minutes if applicable
-    let daily_yesterday = "", daily_today = "", daily_impediment = "";
-    let retro_good = "", retro_bad = "", retro_improve = "";
-    
-    if (m.meeting_type === "daily" && m.minutes) {
-      const parts = m.minutes.split(/\*\*[^*]+\*\*\n?/);
-      daily_yesterday = parts[1]?.trim() || "";
-      daily_today = parts[2]?.trim() || "";
-      daily_impediment = parts[3]?.trim() || "";
-    } else if (m.meeting_type === "retrospective" && m.minutes) {
-      const parts = m.minutes.split(/\*\*[^*]+\*\*\n?/);
-      retro_good = parts[1]?.trim() || "";
-      retro_bad = parts[2]?.trim() || "";
-      retro_improve = parts[3]?.trim() || "";
-    }
-    
+    // A ata era REMONTADA a partir dos campos da cerimônia ("**O que fiz
+    // ontem:**\n…"), e a edição desmontava de volta por regex. Com formulário
+    // único, minutes é texto direto — reuniões antigas gravadas no formato
+    // antigo continuam legíveis, só aparecem como um texto só.
     setForm({
       title: m.title,
       meeting_date: m.meeting_date ? m.meeting_date.slice(0, 16) : "",
@@ -273,13 +354,9 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       phase_id: m.phase_id || "",
       participants: m.participants || [],
       responsible: m.responsible || "",
-      meeting_type: m.meeting_type || "general",
-      daily_yesterday,
-      daily_today,
-      daily_impediment,
-      retro_good,
-      retro_bad,
-      retro_improve,
+      meeting_type_id: m.meeting_type_id || types.find((t) => t.is_default)?.id || "",
+      recording_url: m.recording_url || "",
+      transcript: m.transcript || "",
     });
     setEditingId(m.id);
     setShowForm(true);
@@ -319,6 +396,33 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     fetchDetails(meetingId);
   };
 
+  /** Dispara a notificação das ações abertas — uma por pessoa, não por ação
+   *  (ver /api/meetings/notify-actions). É explícito e não automático: a ata
+   *  costuma ser escrita aos poucos, e avisar a cada digitação seria spam. */
+  const handleNotifyActions = async (meetingId: string) => {
+    setNotifyingId(meetingId);
+    try {
+      const res = await fetch("/api/meetings/notify-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meetingId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: "Não foi possível avisar", description: data?.error, variant: "destructive" });
+        return;
+      }
+      toast({
+        title: data.created > 0
+          ? `${data.created} ${data.created === 1 ? "pessoa avisada" : "pessoas avisadas"}`
+          : "Ninguém para avisar",
+        description: data.created > 0 ? undefined : "As ações abertas não têm responsável, ou são suas.",
+      });
+    } finally {
+      setNotifyingId(null);
+    }
+  };
+
   const handleAddAction = async (meetingId: string) => {
     if (!newAction.description.trim()) return;
     await supabase.from("meeting_actions").insert({
@@ -344,12 +448,14 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   };
   const handleSaveAsLesson = async (meeting: Meeting) => {
     if (!onCreateLesson) return;
-    // Extract retro content from minutes
-    const parts = (meeting.minutes || "").split(/\*\*[^*]+\*\*\n?/);
-    const bad = parts[2]?.trim() || "Problema identificado na retrospectiva";
-    const improve = parts[3]?.trim() || "";
-    await onCreateLesson(bad, improve);
-    toast({ title: "Lição aprendida criada a partir da retrospectiva!" });
+    // Antes isto fatiava a ata pelos marcadores da retrospectiva
+    // ("**O que foi ruim:**"), formato que só existia no template de Scrum.
+    // Fora dele, o corte pegava pedaço errado do texto. Agora a ata inteira
+    // vai como o problema, e quem edita a lição refina — melhor que adivinhar.
+    const ata = (meeting.minutes || "").trim();
+    if (!ata) return;
+    await onCreateLesson(ata, "");
+    toast({ title: "Lição criada a partir da ata!" });
   };
 
   const handleDeleteAction = async (id: string, meetingId: string) => {
@@ -375,25 +481,90 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
         </Button>
       </div>
 
+      {/* PAINEL — responde "o que ficou pendente e com quem" sem obrigar a
+          abrir reunião por reunião. Só aparece quando há ação: num projeto
+          sem nenhuma, seria uma faixa de zeros ocupando o topo. */}
+      {painel.total > 0 && (
+        <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="rounded-md bg-background border border-border/60 px-3 py-2">
+              <p className="text-xl font-semibold tabular-nums leading-tight">{painel.abertas}</p>
+              <p className="text-[11px] text-muted-foreground">ações abertas</p>
+            </div>
+            <div className="rounded-md bg-background border border-border/60 px-3 py-2">
+              <p className={`text-xl font-semibold tabular-nums leading-tight ${painel.atrasadas > 0 ? "text-destructive" : ""}`}>
+                {painel.atrasadas}
+              </p>
+              <p className="text-[11px] text-muted-foreground">atrasadas</p>
+            </div>
+            <div className="rounded-md bg-background border border-border/60 px-3 py-2">
+              <p className="text-xl font-semibold tabular-nums leading-tight">{meetings.length}</p>
+              <p className="text-[11px] text-muted-foreground">reuniões</p>
+            </div>
+            <div className="rounded-md bg-background border border-border/60 px-3 py-2">
+              <p className="text-xl font-semibold tabular-nums leading-tight text-success">
+                {painel.total > 0 ? Math.round((painel.concluidas / painel.total) * 100) : 0}%
+              </p>
+              <p className="text-[11px] text-muted-foreground">concluídas</p>
+            </div>
+          </div>
+
+          {painel.pessoas.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                Por responsável
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {painel.pessoas.map((p) => (
+                  <span
+                    key={p.nome}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background px-2 py-1 text-[11px]"
+                  >
+                    <Avatar className="h-4 w-4 shrink-0">
+                      {(() => {
+                        const avatar = resolveAvatarFromLookup(p.nome, p.nome, assigneeAvatarMap);
+                        return avatar ? <AvatarImage src={avatar} alt={p.nome} /> : null;
+                      })()}
+                      <AvatarFallback className="text-[8px]">{getAvatarInitials(p.nome)}</AvatarFallback>
+                    </Avatar>
+                    <span className="max-w-[130px] truncate">{p.nome}</span>
+                    {p.atrasadas > 0 && (
+                      <span className="inline-flex items-center gap-0.5 text-destructive font-medium tabular-nums">
+                        <AlertTriangle className="w-3 h-3" />{p.atrasadas}
+                      </span>
+                    )}
+                    <span className="text-muted-foreground tabular-nums">{p.abertas} aberta{p.abertas > 1 ? "s" : ""}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {showForm && (
         <div className="space-y-3 p-4 bg-card rounded-lg border border-border shadow-sm">
-          {/* Meeting Type Selector */}
-          <div className="flex gap-2 flex-wrap">
-            {MEETING_TYPES.map((t) => (
-              <button
-                key={t.value}
-                type="button"
-                className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
-                  form.meeting_type === t.value
-                    ? `${MEETING_TYPE_COLORS[t.value]} border-current ring-2 ring-current/20`
-                    : "border-border text-muted-foreground hover:border-foreground/30"
-                }`}
-                onClick={() => setForm({ ...form, meeting_type: t.value, title: form.title || t.label })}
+          {/* Tipo — seletor, não abas: com 6 tipos as abas ocupavam duas linhas,
+              e a lista é editável (pode crescer). Some por completo enquanto a
+              migration de meeting_types não rodou na VM. */}
+          {typesAvailable && types.length > 0 && (
+            <div className="grid gap-1.5">
+              <Label className="text-xs text-muted-foreground">Tipo</Label>
+              <Select
+                value={form.meeting_type_id}
+                onValueChange={(v) => setForm({ ...form, meeting_type_id: v })}
               >
-                {t.label}
-              </button>
-            ))}
-          </div>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {types.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <Input
             placeholder="Título da reunião *"
             value={form.title}
@@ -506,69 +677,55 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
               </div>
             )}
           </div>
-          {/* Template-specific fields */}
-          {form.meeting_type === "daily" && (
-            <div className="space-y-2 p-3 bg-primary/5 rounded-lg border border-primary/20">
-              <p className="text-xs font-semibold text-primary">🏃 Daily Scrum</p>
-              <Textarea placeholder="O que fiz ontem?" value={form.daily_yesterday} onChange={(e) => setForm({ ...form, daily_yesterday: e.target.value })} rows={2} />
-              <Textarea placeholder="O que farei hoje?" value={form.daily_today} onChange={(e) => setForm({ ...form, daily_today: e.target.value })} rows={2} />
-              <Textarea placeholder="Há algum impedimento?" value={form.daily_impediment} onChange={(e) => setForm({ ...form, daily_impediment: e.target.value })} rows={2} className="border-destructive/30" />
-              {form.daily_impediment.trim() && (
-                <p className="text-[10px] text-destructive">⚠️ O impedimento será registrado automaticamente como risco ao salvar</p>
-              )}
+          {/* Formulário ÚNICO. Antes cada tipo trocava os campos (o Daily
+              perguntava "o que fiz ontem?"), o que fazia a aba inteira mudar de
+              forma conforme o botão clicado. Agora o tipo é só classificação, e
+              o que organiza a tela é o TEMPO: o que se preenche antes da
+              reunião e o que se preenche depois. */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Pauta</span>
+              <AIAssistButton value={form.agenda} onChange={(v) => setForm({ ...form, agenda: v })} context="meeting_agenda" />
             </div>
-          )}
+            <Textarea placeholder="O que será tratado" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={2} />
+          </div>
 
-          {form.meeting_type === "planning" && (
-            <div className="p-3 bg-blue-500/5 rounded-lg border border-blue-500/20">
-              <p className="text-xs font-semibold text-blue-700 mb-2">📋 Sprint Planning</p>
-              <p className="text-xs text-muted-foreground">Use a aba "Backlog" para selecionar e mover atividades para o Kanban durante esta reunião.</p>
-              <div className="flex justify-end mt-1">
-                <AIAssistButton value={form.agenda} onChange={(v) => setForm({ ...form, agenda: v })} context="meeting_agenda" />
-              </div>
-              <Textarea placeholder="Pauta / Objetivos da Sprint" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={3} />
-            </div>
-          )}
-
-          {form.meeting_type === "review" && (
-            <div className="p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
-              <p className="text-xs font-semibold text-emerald-700 mb-2">🎯 Sprint Review</p>
-              <p className="text-xs text-muted-foreground mb-2">Registre o incremento do produto. Anexe links ou documentos pela aba "Entregas".</p>
-              <div className="flex justify-end mb-1">
+          <div className="pt-1 border-t border-border/60">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground pt-2 pb-1.5">
+              Depois da reunião
+            </p>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Ata</span>
                 <AIAssistButton value={form.minutes} onChange={(v) => setForm({ ...form, minutes: v })} context="meeting_minutes" />
               </div>
-              <Textarea placeholder="Ata da Review / Incremento entregue" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} rows={3} />
+              <Textarea placeholder="O que foi decidido" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} rows={3} />
             </div>
-          )}
 
-          {form.meeting_type === "retrospective" && (
-            <div className="space-y-2 p-3 bg-purple-500/5 rounded-lg border border-purple-500/20">
-              <p className="text-xs font-semibold text-purple-700">🔄 Sprint Retrospective</p>
-              <Textarea placeholder="O que foi bom?" value={form.retro_good} onChange={(e) => setForm({ ...form, retro_good: e.target.value })} rows={2} />
-              <Textarea placeholder="O que foi ruim?" value={form.retro_bad} onChange={(e) => setForm({ ...form, retro_bad: e.target.value })} rows={2} />
-              <Textarea placeholder="O que melhorar?" value={form.retro_improve} onChange={(e) => setForm({ ...form, retro_improve: e.target.value })} rows={2} />
-              <p className="text-[10px] text-purple-600">💡 Após salvar, você poderá converter em Lição Aprendida</p>
-            </div>
-          )}
-
-          {form.meeting_type === "general" && (
-            <>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">Pauta</span>
-                  <AIAssistButton value={form.agenda} onChange={(v) => setForm({ ...form, agenda: v })} context="meeting_agenda" />
+            {/* Gravação por LINK e não upload: uma reunião de 1h passa de
+                500 MB, e o vídeo já vive no Meet/Teams/Zoom que o gerou. */}
+            {typesAvailable && (
+              <div className="grid md:grid-cols-2 gap-2 mt-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Gravação</Label>
+                  <Input
+                    placeholder="https://… link do vídeo"
+                    value={form.recording_url}
+                    onChange={(e) => setForm({ ...form, recording_url: e.target.value })}
+                  />
                 </div>
-                <Textarea placeholder="Pauta" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={2} />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">Ata / Registro</span>
-                  <AIAssistButton value={form.minutes} onChange={(v) => setForm({ ...form, minutes: v })} context="meeting_minutes" />
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Transcrição</Label>
+                  <Textarea
+                    placeholder="Cole aqui a transcrição"
+                    value={form.transcript}
+                    onChange={(e) => setForm({ ...form, transcript: e.target.value })}
+                    rows={2}
+                  />
                 </div>
-                <Textarea placeholder="Ata / Registro" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} rows={3} />
               </div>
-            </>
-          )}
+            )}
+          </div>
 
           <Button onClick={handleSubmit}>{editingId ? "Atualizar" : "Criar Reunião"}</Button>
         </div>
@@ -596,9 +753,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-foreground">{meeting.title}</p>
-                        {meeting.meeting_type && meeting.meeting_type !== "general" && (
-                          <Badge className={`text-[10px] ${MEETING_TYPE_COLORS[meeting.meeting_type || "general"]}`}>
-                            {MEETING_TYPES.find(t => t.value === meeting.meeting_type)?.label}
+                        {/* Sem cor por tipo: a lista é editável, então não há
+                            paleta fixa que dê conta. O rótulo basta. */}
+                        {meeting.meeting_type_id && (
+                          <Badge variant="outline" className="text-[10px] font-normal">
+                            {types.find((t) => t.id === meeting.meeting_type_id)?.label}
                           </Badge>
                         )}
                       </div>
@@ -709,12 +868,15 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                       </div>
                     )}
 
-                    {/* Retrospective → Save as Lesson */}
-                    {meeting.meeting_type === "retrospective" && meeting.minutes && onCreateLesson && (
+                    {/* Virar lição: estava preso ao tipo "Retrospective", ou
+                        seja, só aparecia numa cerimônia de Scrum que ninguém
+                        usava. Aprendizado sai de qualquer reunião com ata —
+                        principalmente do Encerramento. */}
+                    {meeting.minutes && onCreateLesson && (
                       <Button
                         size="sm"
                         variant="outline"
-                        className="gap-1.5 text-purple-700 border-purple-500/30 hover:bg-purple-500/10"
+                        className="gap-1.5"
                         onClick={() => handleSaveAsLesson(meeting)}
                       >
                         <Lightbulb className="w-3.5 h-3.5" />
@@ -772,6 +934,22 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                     <div>
                       <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
                         <Zap className="w-3 h-3" /> Ações
+                        {/* A ata terminava nela mesma: a ação era gravada com
+                            responsável e ninguém era avisado. Só aparece quando
+                            há ação aberta COM responsável — sem isso não há a
+                            quem notificar. */}
+                        {canEditMeeting && meetingActions.some((a) => !a.is_completed && a.assigned_to) && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 ml-auto gap-1 text-[11px] font-normal"
+                            disabled={notifyingId === meeting.id}
+                            onClick={() => handleNotifyActions(meeting.id)}
+                          >
+                            <Bell className="w-3 h-3" />
+                            {notifyingId === meeting.id ? "enviando…" : "Avisar responsáveis"}
+                          </Button>
+                        )}
                       </h4>
                       <div className="space-y-1">
                         {meetingActions.map((a) => (
