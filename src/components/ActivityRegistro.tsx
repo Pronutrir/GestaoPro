@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import {
   Pencil, Trash2, Send, MessageSquare, Cog, Lightbulb, Check, X, AtSign,
+  Paperclip, Reply,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -25,12 +26,25 @@ import { AIAssistButton } from "@/components/AIAssistButton";
  * Uma nota pode ser promovida a Lição Aprendida (lessons_learned).
  */
 
+/** Anexo de uma mensagem. `path` guarda o caminho no bucket privado — a URL
+ *  de leitura é assinada na hora, porque link fixo não funciona ali. */
+export interface CommentAttachment {
+  path: string;
+  name: string;
+  type: string;
+  size: number | null;
+}
+
 interface Comment {
   id: string;
   activity_id: string;
   content: string;
   author: string | null;
   created_at: string;
+  attachments?: CommentAttachment[] | null;
+  reply_to_id?: string | null;
+  reactions?: Record<string, string[]> | null;
+  edited_at?: string | null;
 }
 interface AuditEntry {
   id: string;
@@ -44,6 +58,15 @@ interface AuditEntry {
 interface Person { id: string; full_name: string; avatar_url: string | null; }
 
 type Tab = "chat" | "history";
+
+/**
+ * Reações disponíveis — poucas de propósito.
+ *
+ * Servem para responder sem gerar mais uma mensagem, que é o ruído que mais
+ * atrapalha quando muita gente participa: 👍 concordo, 👀 estou vendo,
+ * ✅ feito. Uma paleta grande viraria decoração e diluiria o significado.
+ */
+const REACOES = ["👍", "👀", "✅"] as const;
 
 const FIELD_LABELS: Record<string, string> = {
   title: "Título", description: "Descrição", status: "Status",
@@ -82,6 +105,17 @@ export const ActivityRegistro = ({
   const [editing, setEditing] = useState<Comment | null>(null);
   const [editText, setEditText] = useState("");
   const [promotingId, setPromotingId] = useState<string | null>(null);
+
+  // ── anexos e resposta ──
+  /** Anexos já enviados ao storage, aguardando o envio da mensagem. */
+  const [pendingAnexos, setPendingAnexos] = useState<CommentAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  /** Mensagem sendo respondida (mostra a citação acima do campo). */
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
+  /** path → URL assinada. O bucket é privado: link fixo não funciona. */
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const fileRef = useRef<HTMLInputElement>(null);
 
   // ── estado do autocomplete de @menção ──
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -137,6 +171,27 @@ export const ActivityRegistro = ({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [comments, tab]);
+
+  // URLs assinadas dos anexos. O bucket é privado, então a URL vale por tempo
+  // limitado e precisa ser pedida — guardar link fixo no banco não funcionaria.
+  useEffect(() => {
+    const paths = comments
+      .flatMap((c) => c.attachments ?? [])
+      .map((a) => a.path)
+      .filter((p) => p && !signedUrls[p]);
+    if (paths.length === 0) return;
+
+    let alive = true;
+    supabase.storage.from("activity-attachments")
+      .createSignedUrls(Array.from(new Set(paths)), 3600)
+      .then(({ data }) => {
+        if (!alive || !data) return;
+        const novo: Record<string, string> = {};
+        data.forEach((d: any) => { if (d.path && d.signedUrl) novo[d.path] = d.signedUrl; });
+        if (Object.keys(novo).length) setSignedUrls((prev) => ({ ...prev, ...novo }));
+      });
+    return () => { alive = false; };
+  }, [comments, signedUrls]);
 
   // Ajusta a altura da textarea ao conteúdo (auto-grow até o máximo do CSS).
   const autoGrow = useCallback(() => {
@@ -200,16 +255,79 @@ export const ActivityRegistro = ({
     return found;
   };
 
+  /**
+   * Envia um arquivo para o bucket privado da conversa.
+   *
+   * Print de tela é o caso mais comum, e por isso o Ctrl+V também chama aqui:
+   * obrigar a salvar em disco antes de anexar é atrito onde não precisa haver.
+   */
+  const uploadAnexo = async (file: File): Promise<CommentAttachment | null> => {
+    if (!projectId) {
+      toast({ title: "Anexo indisponível", description: "Esta conversa não está vinculada a um projeto.", variant: "destructive" });
+      return null;
+    }
+    const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
+    const path = `${projectId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error } = await supabase.storage.from("activity-attachments").upload(path, file);
+    if (error) {
+      const semBucket = /bucket|not found/i.test(error.message);
+      toast({
+        title: semBucket ? "Anexos ainda não habilitados" : "Falha ao anexar",
+        description: semBucket
+          ? "Rode scripts/apply-comments-rich.sh na VM."
+          : error.message,
+        variant: "destructive",
+      });
+      return null;
+    }
+    return { path, name: file.name, type: file.type || "arquivo", size: file.size };
+  };
+
+  const anexarArquivos = async (files: FileList | File[]) => {
+    const lista = Array.from(files).slice(0, 5); // teto por mensagem
+    if (lista.length === 0) return;
+    setUploading(true);
+    const enviados: CommentAttachment[] = [];
+    for (const f of lista) {
+      const a = await uploadAnexo(f);
+      if (a) enviados.push(a);
+    }
+    setUploading(false);
+    if (enviados.length > 0) setPendingAnexos((prev) => [...prev, ...enviados]);
+  };
+
   const send = async () => {
-    if (!text.trim() || locked) return;
+    // Anexo sozinho é mensagem válida: um print às vezes diz tudo.
+    if ((!text.trim() && pendingAnexos.length === 0) || locked) return;
     setSaving(true);
     const body = text.trim();
-    const { error } = await supabase.from("activity_comments").insert({
+
+    const payload: Record<string, any> = {
       activity_id: activityId, content: body, author: authorName,
-    });
+    };
+    if (pendingAnexos.length > 0) payload.attachments = pendingAnexos;
+    if (replyTo) payload.reply_to_id = replyTo.id;
+
+    let { error } = await supabase.from("activity_comments").insert(payload);
+    // Colunas novas podem não existir ainda: reenvia só com o texto em vez de
+    // impedir a mensagem. O anexo se perde, e o aviso diz isso.
+    if (error && /attachments|reply_to_id/i.test(error.message)) {
+      ({ error } = await supabase.from("activity_comments").insert({
+        activity_id: activityId, content: body, author: authorName,
+      }));
+      if (!error && (pendingAnexos.length > 0 || replyTo)) {
+        toast({
+          title: "Mensagem enviada sem os extras",
+          description: "Anexo e resposta ainda não estão habilitados neste ambiente.",
+        });
+      }
+    }
+
     setSaving(false);
     if (error) { toast({ title: "Erro ao enviar", variant: "destructive" }); return; }
     setText("");
+    setPendingAnexos([]);
+    setReplyTo(null);
     setMentionOpen(false);
     if (taRef.current) taRef.current.style.height = "40px"; // reset altura
     fetchComments();
@@ -259,10 +377,45 @@ export const ActivityRegistro = ({
     }
   };
 
+  /**
+   * Liga/desliga a minha reação. Guarda QUEM reagiu, não só quantos — sem a
+   * lista não dá para saber se já reagi, nem para desfazer.
+   */
+  const toggleReacao = async (c: Comment, emoji: string) => {
+    if (!user?.id || locked) return;
+    const atual = { ...(c.reactions ?? {}) };
+    const quem = atual[emoji] ?? [];
+    atual[emoji] = quem.includes(user.id)
+      ? quem.filter((id) => id !== user.id)
+      : [...quem, user.id];
+    if (atual[emoji].length === 0) delete atual[emoji];
+
+    // Otimista: reação precisa responder na hora, senão a pessoa clica de novo.
+    setComments((prev) => prev.map((x) => (x.id === c.id ? { ...x, reactions: atual } : x)));
+
+    const { error } = await supabase
+      .from("activity_comments").update({ reactions: atual } as any).eq("id", c.id);
+    if (error) {
+      // Coluna ausente (migration pendente) ou falha: desfaz o otimista.
+      setComments((prev) => prev.map((x) => (x.id === c.id ? c : x)));
+      if (/reactions/i.test(error.message)) {
+        toast({ title: "Reações ainda não habilitadas", description: "Rode scripts/apply-comments-rich.sh na VM." });
+      }
+    }
+  };
+
   const saveEdit = async () => {
     if (!editing || !editText.trim() || !isOwn(editing.author)) { setEditing(null); return; }
-    const { error } = await supabase
-      .from("activity_comments").update({ content: editText.trim() }).eq("id", editing.id);
+    // edited_at sustenta o selo "editada": numa conversa que decide trabalho,
+    // mensagem reescrita em silêncio é problema.
+    let { error } = await supabase
+      .from("activity_comments")
+      .update({ content: editText.trim(), edited_at: new Date().toISOString() } as any)
+      .eq("id", editing.id);
+    if (error && /edited_at/i.test(error.message)) {
+      ({ error } = await supabase
+        .from("activity_comments").update({ content: editText.trim() }).eq("id", editing.id));
+    }
     if (error) { toast({ title: "Erro ao editar", variant: "destructive" }); return; }
     setEditing(null); setEditText("");
     fetchComments();
@@ -453,10 +606,99 @@ export const ActivityRegistro = ({
                       "max-w-full rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]",
                       mine ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-muted rounded-tl-sm text-foreground",
                     )}>
+                      {/* Citação da mensagem respondida: numa conversa com
+                          várias pessoas, "concordo" sem referência não diz
+                          concordar com quê. */}
+                      {c.reply_to_id && (() => {
+                        const alvo = comments.find((x) => x.id === c.reply_to_id);
+                        return (
+                          <div className={cn(
+                            "mb-1.5 pl-2 border-l-2 text-[11.5px] leading-snug",
+                            mine ? "border-primary-foreground/50 text-primary-foreground/85" : "border-primary/40 text-muted-foreground",
+                          )}>
+                            <span className="font-medium">{alvo?.author ?? "Mensagem"}</span>
+                            {alvo ? ` · ${alvo.content.slice(0, 60)}${alvo.content.length > 60 ? "…" : ""}` : " · removida"}
+                          </div>
+                        );
+                      })()}
+
                       {renderBody(c.content, mine)}
+
+                      {/* Anexos. Imagem aparece na conversa (é o ponto de colar
+                          um print); os demais viram link com o nome do arquivo. */}
+                      {(c.attachments ?? []).length > 0 && (
+                        <div className="mt-1.5 flex flex-col gap-1.5">
+                          {(c.attachments ?? []).map((a) => {
+                            const url = signedUrls[a.path];
+                            const isImg = /^image\//.test(a.type);
+                            if (isImg) {
+                              return url ? (
+                                <a key={a.path} href={url} target="_blank" rel="noopener noreferrer">
+                                  <img src={url} alt={a.name}
+                                    className="max-h-52 w-auto rounded-lg border border-border/50 object-contain" />
+                                </a>
+                              ) : (
+                                <div key={a.path} className="h-24 rounded-lg bg-background/20 animate-pulse" />
+                              );
+                            }
+                            return (
+                              <a key={a.path} href={url || "#"} target="_blank" rel="noopener noreferrer"
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11.5px] max-w-full",
+                                  mine ? "border-primary-foreground/30 hover:bg-primary-foreground/10" : "border-border hover:bg-background/60",
+                                )}>
+                                <Paperclip className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{a.name}</span>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Reações e "editada" ficam FORA do balão: são metadados
+                        da mensagem, não conteúdo dela. */}
+                    <div className={cn("flex items-center gap-1.5 mt-0.5", mine && "flex-row-reverse")}>
+                      {REACOES.map((emoji) => {
+                        const quem = (c.reactions ?? {})[emoji] ?? [];
+                        if (quem.length === 0) return null;
+                        const euReagi = !!user?.id && quem.includes(user.id);
+                        return (
+                          <button key={emoji} type="button" onClick={() => toggleReacao(c, emoji)}
+                            title={`${quem.length} pessoa(s)`}
+                            className={cn(
+                              "inline-flex items-center gap-0.5 rounded-full border px-1.5 text-[11px] transition-colors",
+                              euReagi ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted",
+                            )}>
+                            {emoji} <span className="tabular-nums">{quem.length}</span>
+                          </button>
+                        );
+                      })}
+                      {c.edited_at && (
+                        <span className="text-[10px] text-muted-foreground" title={`Editada em ${fmtTime(c.edited_at)}`}>
+                          editada
+                        </span>
+                      )}
                     </div>
                     {/* ações */}
                     <div className={cn("flex gap-0.5 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity", mine && "flex-row-reverse")}>
+                      {!locked && (
+                        <>
+                          <button type="button" title="Responder"
+                            onClick={() => { setReplyTo(c); taRef.current?.focus(); }}
+                            className="text-muted-foreground hover:bg-muted rounded p-1">
+                            <Reply className="w-3 h-3" />
+                          </button>
+                          {/* Reagir sem gerar mais uma mensagem. */}
+                          {REACOES.map((emoji) => (
+                            <button key={emoji} type="button" title={`Reagir ${emoji}`}
+                              onClick={() => toggleReacao(c, emoji)}
+                              className="text-[11px] leading-none hover:bg-muted rounded p-1">
+                              {emoji}
+                            </button>
+                          ))}
+                        </>
+                      )}
                       {projectId && !locked && (
                         <button type="button" title="Promover a Lição Aprendida" onClick={() => promoteToLesson(c)} disabled={promotingId === c.id}
                           className="text-amber-600 hover:bg-amber-500/10 rounded p-1"><Lightbulb className="w-3.5 h-3.5" /></button>
@@ -495,7 +737,77 @@ export const ActivityRegistro = ({
                   ))}
                 </div>
               )}
-              <div className="flex items-end gap-2 rounded-xl border border-border bg-background focus-within:ring-1 focus-within:ring-primary/40 p-1.5">
+              {/* Respondendo a alguém: a citação fica acima do campo, com saída
+                  visível — senão a pessoa escreve sem perceber que está em modo
+                  resposta. */}
+              {replyTo && (
+                <div className="flex items-start gap-2 mb-1.5 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-[12px]">
+                  <Reply className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium">{replyTo.author ?? "Mensagem"}</span>
+                    <span className="text-muted-foreground">
+                      {" · "}{replyTo.content.slice(0, 70)}{replyTo.content.length > 70 ? "…" : ""}
+                    </span>
+                  </div>
+                  <button type="button" onClick={() => setReplyTo(null)} title="Cancelar resposta"
+                    className="text-muted-foreground hover:text-foreground shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Anexos já enviados, aguardando a mensagem. */}
+              {(pendingAnexos.length > 0 || uploading) && (
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                  {pendingAnexos.map((a) => (
+                    <span key={a.path}
+                      className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2 py-1 text-[11.5px]">
+                      <Paperclip className="w-3 h-3 shrink-0" />
+                      <span className="truncate max-w-[140px]">{a.name}</span>
+                      <button type="button" title="Remover anexo"
+                        onClick={() => setPendingAnexos((prev) => prev.filter((x) => x.path !== a.path))}
+                        className="text-muted-foreground hover:text-destructive">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {uploading && (
+                    <span className="inline-flex items-center gap-1 text-[11.5px] text-muted-foreground px-2 py-1">
+                      enviando…
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => { if (e.target.files) void anexarArquivos(e.target.files); e.target.value = ""; }}
+              />
+
+              <div
+                className={cn(
+                  "flex items-end gap-2 rounded-xl border bg-background focus-within:ring-1 focus-within:ring-primary/40 p-1.5 transition-colors",
+                  dragOver ? "border-primary bg-primary/5" : "border-border",
+                )}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  if (e.dataTransfer.files?.length) void anexarArquivos(e.dataTransfer.files);
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  title="Anexar arquivo ou imagem"
+                  className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
                 <textarea
                   ref={taRef}
                   value={text}
@@ -508,6 +820,15 @@ export const ActivityRegistro = ({
                       if (e.key === "Escape") { setMentionOpen(false); return; }
                     }
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+                  }}
+                  // Ctrl+V de print é o caso mais comum: obrigar a salvar em
+                  // disco antes de anexar é atrito onde não precisa haver.
+                  onPaste={(e) => {
+                    const arquivos = Array.from(e.clipboardData?.files ?? []);
+                    if (arquivos.length > 0) {
+                      e.preventDefault();
+                      void anexarArquivos(arquivos);
+                    }
                   }}
                   placeholder="Escreva uma mensagem…"
                   rows={1}
@@ -524,12 +845,14 @@ export const ActivityRegistro = ({
                     className="h-9 w-9 shrink-0"
                   />
                 )}
-                <Button size="icon" className="h-9 w-9 shrink-0 rounded-lg" onClick={send} disabled={saving || !text.trim()}>
+                {/* Anexo sozinho já é mensagem: um print às vezes diz tudo. */}
+                <Button size="icon" className="h-9 w-9 shrink-0 rounded-lg" onClick={send}
+                  disabled={saving || uploading || (!text.trim() && pendingAnexos.length === 0)}>
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
               <div className="flex items-center gap-1 mt-1 px-1 text-[10.5px] text-muted-foreground">
-                <AtSign className="w-3 h-3" /> Enter envia · Shift+Enter quebra linha · @ notifica
+                <AtSign className="w-3 h-3" /> Enter envia · Shift+Enter quebra linha · @ notifica · cole ou arraste para anexar
               </div>
             </div>
           )}
