@@ -1308,39 +1308,24 @@ export default function ProjectDetailsPage() {
                     <Pencil className="w-3.5 h-3.5" />
                   </Button>
                 )}
-                {/* O topo mostrava só o Líder, embora Gestor exista na ficha e
-                    pese em permissão (hasProjectWideAccess). Quando as duas
-                    funções são da MESMA pessoa, repetir o nome em dois blocos é
-                    ruído: colapsa em "Líder e Gestor:" com um nome só. */}
+                {/* UMA pessoa só no topo: mostrar Líder e Gestor lado a lado
+                    enchia a barra sem acrescentar — quem olha o cabeçalho quer
+                    saber a quem recorrer, não o organograma. A ficha continua
+                    com os dois campos.
+
+                    Cai para o Líder quando não há Gestor: em 02/08/2026, 41 dos
+                    52 projetos têm líder e nenhum gestor — mostrar só o gestor
+                    deixaria a maioria dos cabeçalhos sem pessoa nenhuma. */}
                 {(() => {
-                  const lider = project.owner?.trim() || "";
                   const gestor = project.manager?.trim() || "";
-                  if (!lider && !gestor) return null;
-
-                  if (lider && gestor && lider === gestor) {
-                    return (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-muted-foreground">Líder e Gestor:</span>
-                        <span className="font-medium text-foreground">{lider}</span>
-                      </div>
-                    );
-                  }
-
+                  const lider = project.owner?.trim() || "";
+                  const quem = gestor || lider;
+                  if (!quem) return null;
                   return (
-                    <>
-                      {lider && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-muted-foreground">Líder:</span>
-                          <span className="font-medium text-foreground">{lider}</span>
-                        </div>
-                      )}
-                      {gestor && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-muted-foreground">Gestor:</span>
-                          <span className="font-medium text-foreground">{gestor}</span>
-                        </div>
-                      )}
-                    </>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground">{gestor ? "Gestor:" : "Líder:"}</span>
+                      <span className="font-medium text-foreground">{quem}</span>
+                    </div>
                   );
                 })()}
                 {project.due_date && (() => {

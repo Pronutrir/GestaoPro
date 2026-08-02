@@ -142,29 +142,20 @@ export function ProjectDrawer({ project, assigneeAvatarMap = {}, open, onOpenCha
             </div>
           )}
 
-          {/* Líder e Gestor — mesma regra do cabeçalho do projeto: mesma
-              pessoa nos dois papéis vira uma linha só, em vez de repetir
-              o nome. O drawer mostrava apenas o Líder. */}
+          {/* Uma pessoa só — mesma regra do cabeçalho do projeto: o Gestor
+              responde pelo projeto; o Líder entra apenas quando não há gestor
+              definido (a maioria dos projetos hoje). */}
           {(() => {
-            const lider = project.owner?.trim() || "";
             const gestor = project.manager?.trim() || "";
-            if (!lider && !gestor) return null;
-
-            const linha = (rotulo: string, nome: string) => (
+            const lider = project.owner?.trim() || "";
+            const quem = gestor || lider;
+            if (!quem) return null;
+            return (
               <div className="flex items-center gap-2 text-sm">
                 <Users className="w-4 h-4 text-muted-foreground" />
-                <span className="text-muted-foreground">{rotulo}:</span>
-                <span>{nome}</span>
+                <span className="text-muted-foreground">{gestor ? "Gestor" : "Líder"}:</span>
+                <span>{quem}</span>
               </div>
-            );
-
-            if (lider && gestor && lider === gestor) return linha("Líder e Gestor", lider);
-
-            return (
-              <>
-                {lider && linha("Líder", lider)}
-                {gestor && linha("Gestor", gestor)}
-              </>
             );
           })()}
 
