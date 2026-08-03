@@ -172,10 +172,14 @@ BEGIN
 END $$;
 
 -- Exatamente um alvo: ou arquivo, ou página. Nunca os dois, nunca nenhum.
+-- Guarda tambem contra a versao v2 (criada em 20260801140000_tap_flow): se o
+-- TAP ja rodou, esta constraint foi substituida pela de 3 alvos. Recria-la
+-- aqui, numa reaplicacao, rejeitaria todo fluxo de TAP em silencio.
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'document_flows_one_target'
+    SELECT 1 FROM pg_constraint
+    WHERE conname IN ('document_flows_one_target', 'document_flows_one_target_v2')
   ) THEN
     ALTER TABLE public.document_flows
       ADD CONSTRAINT document_flows_one_target
