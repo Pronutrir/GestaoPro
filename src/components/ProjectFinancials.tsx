@@ -642,6 +642,13 @@ export const ProjectFinancials = ({
               </DialogContent>
             </Dialog>
 
+            {/* Só no modo legado. Este diálogo grava em projects.budget_planned,
+                campo que o painel novo IGNORA — lá o planejado é a soma dos itens
+                da Composição. Fora do fallback ele virava armadilha: o número era
+                salvo, não aparecia em lugar nenhum e furava a linha de base.
+                Os valores que já existiam no campo antigo foram convertidos em
+                item pela migration 20260801130000. */}
+            {budgetUnavailable && (
             <Dialog open={budgetDialogOpen} onOpenChange={setBudgetDialogOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setNewBudgetPlanned(String(budgetPlanned || "")); setNewBudgetUsed(String(budgetUsed || "")); }}>
@@ -666,6 +673,7 @@ export const ProjectFinancials = ({
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            )}
         </>
       </div>
 

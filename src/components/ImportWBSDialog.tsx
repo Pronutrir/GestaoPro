@@ -2,11 +2,14 @@
 import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Upload, Layers, Circle, Diamond, ClipboardList, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import {
+  splitColumns, pareceCabecalho, detectarColunas, lerLinha, statusPorDatas,
+  type ColValues,
+} from "@/lib/wbsColumns";
 
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
@@ -18,6 +21,8 @@ interface TreeNode {
   depth: number;         // 1 = topo
   role: EapRole;         // resolvido por posição + palavra-chave
   parentCode: string | null;
+  /** Datas, horas, custo e responsável lidos das colunas da planilha. */
+  vals?: ColValues;
 }
 
 interface ImportWBSDialogProps {
@@ -31,8 +36,32 @@ const ROLE_META: Record<EapRole, { label: string; short: string; icon: JSX.Eleme
   marco:     { label: "Marco",        short: "Marco", icon: <Diamond className="w-3 h-3" />,  cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
 };
 
+/** "2026-08-01" → "01/08". Só o dia importa na prévia; o ano polui. */
+const fmtDia = (iso?: string) => {
+  if (!iso) return "—";
+  const [, m, d] = iso.split("-");
+  return `${d}/${m}`;
+};
+
 const isMilestoneTitle = (t: string) =>
   /(^|\s)(marco|milestone)(\s|:|$)/i.test(t) || /🏁|\[m\]/i.test(t);
+
+/**
+ * Papel de cada nó: nível 1 = Fase, demais = Atividade, marco só em folha.
+ *
+ * Quem tem filhos NUNCA é marco, mesmo com "Milestone" no título — marco é
+ * ponto no tempo e não agrupa. EAPs reais usam "Milestone 1 - Lançamento" como
+ * nome da FASE, e tratar isso como marco quebrava o agrupamento inteiro: no
+ * Backlog e no Cronograma os filhos ficavam sem pai visível.
+ */
+const aplicarPapeis = (nodes: TreeNode[]) => {
+  const temFilhos = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
+  for (const n of nodes) {
+    if (n.depth === 1) n.role = "fase";
+    else if (isMilestoneTitle(n.title) && !temFilhos.has(n.code)) n.role = "marco";
+    else n.role = "atividade";
+  }
+};
 
 /* ------------------------------------------------------------------ */
 /*  Parser FLEXÍVEL: aceita código numérico (1.2.3), bullets (• - – *)  */
@@ -40,37 +69,118 @@ const isMilestoneTitle = (t: string) =>
 /*  códigos normalizados (1, 1.1, 1.1.2...).                            */
 /* ------------------------------------------------------------------ */
 const parseFlexible = (text: string): TreeNode[] => {
+  // MODO PLANILHA: quando vem com TAB, as colunas são lidas antes de tudo.
+  // Sem isto o TAB virava espaço e datas/horas entravam no TÍTULO — a
+  // informação não era só perdida, sujava o nome da tarefa.
+  const grid = splitColumns(text);
+  if (grid) {
+    const temCab = pareceCabecalho(grid[0]);
+    const roles = detectarColunas(grid, temCab);
+    const corpo = temCab ? grid.slice(1) : grid;
+    const linhas = corpo
+      .map((row) => ({ vals: lerLinha(row, roles), row }))
+      .filter((x) => (x.vals.titulo || "").trim().length > 0);
+
+    const nodes: TreeNode[] = [];
+    for (const { vals } of linhas) {
+      if (!vals.codigo) continue; // sem código não há como posicionar na árvore
+      const parts = vals.codigo.split(".");
+      while (parts.length > 1 && parts[parts.length - 1] === "0") parts.pop();
+      const code = parts.join(".");
+      const depth = parts.length;
+      nodes.push({
+        code,
+        title: (vals.titulo || "").trim(),
+        depth,
+        role: "atividade",
+        parentCode: depth > 1 ? parts.slice(0, -1).join(".") : null,
+        vals,
+      });
+    }
+    aplicarPapeis(nodes);
+    nodes.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+    return nodes;
+  }
+
   const rawLines = text.split("\n").map((l) => l.replace(/\t/g, "  ")).filter((l) => l.trim().length > 0);
   if (rawLines.length === 0) return [];
 
-  // 1) Se a MAIORIA das linhas tem código numérico, usa o modo "código".
-  const numRe = /^\s*(\d+(?:\.\d+)*)\.?\s+(.+)$/;
-  const numbered = rawLines.filter((l) => numRe.test(l));
-  const useNumbered = numbered.length >= Math.ceil(rawLines.length * 0.6);
+  // Aceita "1.1 Título", "1.1. Título", "1.1) Título" e "1.1 - Título".
+  // O separador opcional depois do código evita que uma EAP colada do Word,
+  // que costuma usar ")" ou "-", deixe de ser reconhecida como numerada.
+  const numRe = /^\s*(\d+(?:\.\d+)*)\s*[.)]?\s*[-–—]?\s+(.+)$/;
 
   type Raw = { indent: number; title: string; explicitCode: string | null };
   const raws: Raw[] = rawLines.map((line) => {
     const indent = line.length - line.trimStart().length;
     let body = line.trim();
     let explicitCode: string | null = null;
-    const m = body.match(/^(\d+(?:\.\d+)*)\.?\s+(.+)$/);
+    const m = body.match(numRe);
     if (m) { explicitCode = m[1]; body = m[2].trim(); }
     // remove marcadores de bullet no início
     body = body.replace(/^[•\-–—*•]+\s*/, "").trim();
     return { indent, title: body, explicitCode };
   }).filter((r) => r.title.length > 0);
 
+  // Decide o modo pelo que REALMENTE foi extraído, não por um segundo teste
+  // sobre o texto cru. E o critério é "existe hierarquia numérica de verdade"
+  // (algum código com ponto), não uma maioria de 60%: uma EAP numerada colada
+  // junto com linhas de observação caía no modo indentação e, sem recuo no
+  // texto, virava uma lista plana — todos os itens irmãos na raiz, com a
+  // numeração original descartada e recriada como 1,2,3… Era o defeito que
+  // achatava a estrutura inteira na importação.
+  const withCode = raws.filter((r) => r.explicitCode);
+  const useNumbered =
+    withCode.length > 0 &&
+    withCode.some((r) => r.explicitCode!.includes(".")) &&
+    withCode.length >= Math.ceil(raws.length * 0.3);
+
   const nodes: TreeNode[] = [];
 
   if (useNumbered) {
     // Modo código: a profundidade vem do número de segmentos do código.
+    // Linha sem código é continuação do título anterior (título que quebrou em
+    // duas linhas ao ser colado). Antes ela era simplesmente descartada e o
+    // texto sumia da importação sem aviso.
     for (const r of raws) {
-      if (!r.explicitCode) continue; // ignora linhas sem código neste modo
+      if (!r.explicitCode) {
+        const prev = nodes[nodes.length - 1];
+        if (prev) prev.title = `${prev.title} ${r.title}`.trim();
+        continue;
+      }
+      // Zeros à direita são decorativos: "1.0" é nível 1, não 2. Formato comum
+      // em EAP exportada de planilha — sem isso a fase do topo virava atividade
+      // e os filhos ficavam sem pai.
       const parts = r.explicitCode.split(".");
+      while (parts.length > 1 && parts[parts.length - 1] === "0") parts.pop();
+      const code = parts.join(".");
       const depth = parts.length;
       const parentCode = depth > 1 ? parts.slice(0, depth - 1).join(".") : null;
-      nodes.push({ code: r.explicitCode, title: r.title, depth, role: "atividade", parentCode });
+      nodes.push({ code, title: r.title, depth, role: "atividade", parentCode });
     }
+
+    // Pai ausente (colaram só um ramo, ex.: começa em 2.3.1 sem 2.3): cria o
+    // ancestral que falta para segurar os filhos, senão o item nasce solto na
+    // raiz e a hierarquia se perde. Título provisório, para renomear depois.
+    const existing = new Set(nodes.map((n) => n.code));
+    const missing: TreeNode[] = [];
+    for (const n of nodes) {
+      let code = n.parentCode;
+      while (code && !existing.has(code) && !missing.some((m) => m.code === code)) {
+        const parts = code.split(".");
+        missing.push({
+          code,
+          title: `(sem título) ${code}`,
+          depth: parts.length,
+          role: "fase",
+          parentCode: parts.length > 1 ? parts.slice(0, -1).join(".") : null,
+        });
+        code = parts.length > 1 ? parts.slice(0, -1).join(".") : null;
+      }
+    }
+    nodes.push(...missing);
+    // Reordena por código para a árvore sair na ordem natural da EAP.
+    nodes.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   } else {
     // Modo indentação/bullets: a profundidade vem do recuo. Gera códigos.
     // Pilha de ancestrais: cada nível guarda { indent, count, code }.
@@ -103,15 +213,15 @@ const parseFlexible = (text: string): TreeNode[] => {
     }
   }
 
-  // 2) Resolve o PAPEL EAP (modelo unificado, profundidade livre):
-  //    - QUALQUER nó com filhos = Fase/Entrega (agrupa, em qualquer nível)
-  //    - folha: marco se o título indicar; senão atividade
-  const hasChildren = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
-  for (const n of nodes) {
-    if (hasChildren.has(n.code)) n.role = "fase";
-    else if (isMilestoneTitle(n.title)) n.role = "marco";
-    else n.role = "atividade";
-  }
+  // 2) Resolve o PAPEL EAP pelo NÍVEL (mesma regra de lib/eapModel):
+  //    nível 1 (1, 2, 3…)  = Fase/Entrega
+  //    nível 2+ (1.1, …)   = Atividade — mesmo que agrupe
+  //    marco vence quando o título indica
+  //
+  // Antes o papel vinha da função ("tem filho → Fase"), o que fazia
+  // "1 / 1.1 / 1.1.1" virar Fase, Fase, Atividade. A leitura da EAP é
+  // "1. Fase / 1.1 Entrega / 1.1.1 Atividade": o nível é que decide.
+  aplicarPapeis(nodes);
 
   return nodes;
 };
@@ -199,6 +309,11 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     if (!t) return;
     setSelectedTemplate(id);
     setText(t.text);
+    // Volta para "Colar texto" ao escolher um modelo: é lá que o texto fica
+    // visível e editável. Ficar na aba de modelos escondia o que havia sido
+    // carregado — a pessoa via só um "✓" e não percebia que ainda faltava
+    // confirmar em "Importar N itens", então parecia que nada acontecia.
+    setTab("paste");
   };
 
   const handleImport = async () => {
@@ -206,8 +321,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     setImporting(true);
     try {
       // Nível 1 agrupador = "fase do projeto" (tabela phases). Agrupadores
-      // ANINHADOS (fase em profundidade > 1) viram activities com item_type='fase'
-      // — Fase/Entrega vive na árvore de atividades em qualquer nível.
+      // Com a regra por nível, "fase" só existe em depth 1 — os filtros abaixo
+      // são equivalentes a depth===1 / depth>1, e ficam explícitos assim.
       const phases = tree.filter((n) => n.role === "fase" && n.depth === 1);
       const nonPhase = tree.filter((n) => !(n.role === "fase" && n.depth === 1));
 
@@ -223,17 +338,79 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         .eq("project_id", projectId).order("display_order", { ascending: true });
       const backlogStageId =
         stagesData?.find((s) => s.display_order === 0)?.id ?? stagesData?.[0]?.id ?? null;
+      // Item com data real vai direto para a coluna certa: quem já terminou não
+      // deve nascer no Backlog. `is_final` marca a coluna de conclusão; a de
+      // andamento é a do meio (display_order 2 no fluxo padrão).
+      const finalStageId = (stagesData as any[])?.find((s) => s.is_final)?.id
+        ?? (stagesData as any[])?.slice(-1)[0]?.id ?? null;
+      const emAndamentoStageId = (stagesData as any[])?.find((s) => s.display_order === 2)?.id ?? null;
 
+      // Responsável: casa por nome ou e-mail, tolerante a acento e caixa — os
+      // campos de pessoa no sistema são texto livre, não FK.
+      const normPessoa = (s: string) =>
+        s.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+      const { data: perfis } = await supabase
+        .from("profiles").select("full_name, email").eq("is_active", true);
+      const pessoaPorNome = new Map<string, string>();
+      for (const p of (perfis as any[]) || []) {
+        if (p.full_name) pessoaPorNome.set(normPessoa(p.full_name), p.full_name);
+        if (p.email) pessoaPorNome.set(normPessoa(p.email), p.full_name || p.email);
+      }
+      // Nomes da planilha sem conta no sistema: importa sem responsável e avisa
+      // no fim, em vez de travar a importação inteira por causa de um nome.
+      const naoEncontrados = new Set<string>();
+
+      // `phases` NÃO tem wbs_code em todos os ambientes — só `activities` tem.
+      // Gravar a coluna direto quebrava a importação inteira na primeira fase
+      // ("Could not find the 'wbs_code' column of 'phases'"), sem criar nada.
+      // Detecta uma vez e reusa: se a coluna não existe, o código volta para o
+      // título, que é onde ele aparece hoje nessas bases.
+      let phasesHasWbs = true;
+      // Idem para as datas: a migration que as cria pode não ter rodado ainda.
+      let phasesHasDates = true;
+      // Colunas que o banco não tinha e foram descartadas para a importação
+      // seguir. Avisadas no fim: silenciar faria o item nascer sem o campo sem
+      // ninguém saber (ex.: sem código EAP, que define o papel Fase/Atividade).
+      const droppedCols = new Set<string>();
       const phaseIdMap: Record<string, string> = {};
       for (const phase of phases) {
-        const { data, error } = await supabase.from("phases").insert({
+        const base: Record<string, any> = {
           project_id: projectId,
-          title: `${phase.code} ${phase.title}`,
+          // Título limpo quando há wbs_code: o código vive na coluna própria.
+          // Concatenar os dois gravava a numeração dentro do texto, e renumerar
+          // a EAP exigiria reescrever o título de cada item à mão.
+          title: phasesHasWbs ? phase.title : `${phase.code} ${phase.title}`,
           display_order: phaseOrder++,
-          wbs_code: phase.code,
-        }).select("id").single();
-        if (error) throw error;
-        phaseIdMap[phase.code] = data.id;
+        };
+        if (phasesHasWbs) base.wbs_code = phase.code;
+        // Datas da linha da fase, quando a planilha as traz. É dado diferente
+        // da soma dos filhos: esta é a data PLANEJADA para a fase, e a
+        // divergência entre as duas é justamente o que interessa ver.
+        if (phasesHasDates && phase.vals) {
+          const v = phase.vals;
+          if (v.start_date) base.start_date = v.start_date;
+          if (v.end_date) base.end_date = v.end_date;
+          if (v.actual_start_date) base.actual_start_date = v.actual_start_date;
+          if (v.actual_end_date) base.actual_end_date = v.actual_end_date;
+        }
+
+        let res = await supabase.from("phases").insert(base as any).select("id").single();
+        if (res.error && /wbs_code/i.test(res.error.message)) {
+          phasesHasWbs = false;
+          delete base.wbs_code;
+          base.title = `${phase.code} ${phase.title}`;
+          res = await supabase.from("phases").insert(base as any).select("id").single();
+        }
+        // Datas ausentes em phases: descarta as quatro de uma vez (vêm da mesma
+        // migration) e segue — a fase sem data ainda é melhor que nenhuma fase.
+        if (res.error && /(start_date|end_date)/i.test(res.error.message)) {
+          phasesHasDates = false;
+          for (const c of ["start_date", "end_date", "actual_start_date", "actual_end_date"]) delete base[c];
+          droppedCols.add("datas da fase");
+          res = await supabase.from("phases").insert(base as any).select("id").single();
+        }
+        if (res.error) throw res.error;
+        phaseIdMap[phase.code] = res.data.id;
       }
 
       const codeIdMap: Record<string, string> = {};
@@ -260,22 +437,64 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         const itemType = node.role === "fase" ? "fase" : "atividade";
         const basePayload: any = {
           project_id: projectId,
-          title: `${node.code} ${node.title}`,
+          // Idem às fases: título limpo, código em wbs_code.
+          title: node.title,
           phase_id: phaseId,
           parent_id: parentId,
           display_order: phaseOrderCounter[phaseKey]++,
           wbs_code: node.code,
           item_type: itemType,
           is_milestone: node.role === "marco",
-          // Nasce no Backlog, pendente — igual a criação manual (segue o fluxo).
+          // Nasce no Backlog — igual a criação manual (segue o fluxo).
           workflow_stage_id: backlogStageId,
           status: "pending",
         };
+
+        // Colunas da planilha. O status reflete as datas REAIS: importar um
+        // histórico e ver tudo como "pendente" obrigaria a refazer o trabalho
+        // à mão, item por item.
+        const v = node.vals;
+        if (v) {
+          if (v.start_date) basePayload.start_date = v.start_date;
+          if (v.end_date) basePayload.end_date = v.end_date;
+          if (v.actual_start_date) basePayload.actual_start_date = v.actual_start_date;
+          if (v.actual_end_date) basePayload.actual_end_date = v.actual_end_date;
+          if (v.hours != null) basePayload.hours = v.hours;
+          if (v.cost != null) basePayload.cost = v.cost;
+
+          const st = statusPorDatas(v);
+          basePayload.status = st;
+          if (st === "completed") {
+            basePayload.completed_at = `${v.actual_end_date}T12:00:00.000Z`;
+            if (finalStageId) basePayload.workflow_stage_id = finalStageId;
+          } else if (st === "in_progress" && emAndamentoStageId) {
+            basePayload.workflow_stage_id = emAndamentoStageId;
+          }
+
+          // Responsável só entra se casar com alguém do sistema. Nome solto
+          // viraria texto que nenhuma tela consegue resolver em pessoa.
+          if (v.responsavel) {
+            const achado = pessoaPorNome.get(normPessoa(v.responsavel));
+            if (achado) basePayload.assigned_to = achado;
+            else naoEncontrados.add(v.responsavel);
+          }
+        }
 
         let res = await supabase.from("activities").insert(basePayload).select("id").single();
         if (res.error && /item_type/i.test(res.error.message) && itemType === "fase") {
           pacoteUnsupported = true;
           res = await supabase.from("activities").insert({ ...basePayload, item_type: "atividade" }).select("id").single();
+        }
+        // Degrada por coluna ausente, como o AddProjectDialog já faz: melhor
+        // criar o item sem um campo do que abortar no meio e deixar metade da
+        // EAP no banco. A falha em `phases` acima mostrou que ambientes
+        // divergem — aqui a proteção vale para qualquer coluna, não só uma.
+        for (let i = 0; i < 6 && res.error; i++) {
+          const miss = /Could not find the '([^']+)' column/.exec(res.error.message)?.[1];
+          if (!miss || !(miss in basePayload)) break;
+          delete basePayload[miss];
+          droppedCols.add(miss);
+          res = await supabase.from("activities").insert(basePayload).select("id").single();
         }
         if (res.error) throw res.error;
         codeIdMap[node.code] = res.data.id;
@@ -287,15 +506,41 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           description: "Os agrupadores aninhados viraram atividade (ainda agrupam por terem subitens). Aplique a migration de item_type na VM.",
         });
       }
+      if (droppedCols.size > 0) {
+        toast({
+          title: "Importado sem alguns campos",
+          description: `Este banco não tem: ${Array.from(droppedCols).join(", ")}. Os itens foram criados sem esses campos — aplique as migrations pendentes na VM e reimporte se precisar deles.`,
+        });
+      }
+      if (naoEncontrados.size > 0) {
+        toast({
+          title: "Responsáveis não encontrados",
+          description: `Sem conta no sistema: ${Array.from(naoEncontrados).slice(0, 6).join(", ")}${naoEncontrados.size > 6 ? ` e mais ${naoEncontrados.size - 6}` : ""}. Os itens foram criados sem responsável.`,
+        });
+      }
+      if (!phasesHasWbs) {
+        toast({
+          title: "Código da EAP no título das fases",
+          description: "A coluna wbs_code ainda não existe em 'phases' neste banco, então o código foi mantido no título (ex.: \"1 Planejamento\").",
+        });
+      }
       toast({
         title: "EAP importada!",
         description: `${counts.fase} fase(s)/entrega(s), ${counts.atividade} atividade(s) e ${counts.marco} marco(s) criados.`,
       });
       resetAndClose();
       onDataChanged();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao importar EAP:", error);
-      toast({ title: "Erro ao importar EAP", variant: "destructive" });
+      // A inserção não é transacional: se falhar no meio, o que já entrou está
+      // gravado. Atualizar mesmo no erro evita a tela mostrar um backlog vazio
+      // enquanto o banco tem itens — antes o refetch só rodava no sucesso.
+      onDataChanged();
+      toast({
+        title: "Erro ao importar EAP",
+        description: `${error?.message || "Falha desconhecida."} Parte dos itens pode ter sido criada — confira o backlog antes de tentar de novo.`,
+        variant: "destructive",
+      });
     } finally {
       setImporting(false);
     }
@@ -319,7 +564,9 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <DialogTitle className="text-base font-semibold">Importar EAP</DialogTitle>
           <p className="text-[13px] text-muted-foreground mt-0.5">
-            Cole sua estrutura em qualquer formato ou comece de um modelo.
+            Cole sua estrutura em qualquer formato ou comece de um modelo.{" "}
+            <span className="text-foreground">Nível 1 vira Fase; do 1.1 em diante, Atividade.</span>{" "}
+            Colando de planilha, as colunas de data, horas e responsável são reconhecidas.
           </p>
         </DialogHeader>
 
@@ -346,11 +593,22 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           {/* Entrada */}
           <div className="p-6 md:border-r flex flex-col min-h-0">
             {tab === "paste" ? (
-              <Textarea
+              // textarea nativa: o wrapper de UI força whiteSpace/overflowWrap
+              // inline e reajusta altura no onChange, o que atrapalhava a
+              // digitação e a colagem neste campo (que é monoespaçado, de
+              // muitas linhas e vive dentro de um flex com min-h-0).
+              // `h-full` explícito: com `flex-1 min-h-0` a altura colapsava a
+              // zero e o campo ficava sem área clicável.
+              <textarea
                 value={text}
                 onChange={(e) => { setText(e.target.value); setSelectedTemplate(null); }}
-                className="flex-1 min-h-0 resize-none font-mono text-[13px] leading-relaxed"
-                placeholder={"1. Fase\n1.1 Entrega\n1.1.1 Atividade\n\nou com bullets e recuo:\n• Fase\n   - Atividade"}
+                spellCheck={false}
+                autoFocus
+                className="h-full w-full min-h-[240px] resize-none rounded-md border border-input bg-muted/50 px-3 py-2 font-mono text-[13px] leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                // O placeholder ensina a regra: nível 1 é Fase, o resto é
+                // Atividade. Antes rotulava "1.1 Entrega", o que contradizia o
+                // que a importação de fato produz.
+                placeholder={"1. Planejamento        ← nível 1 vira Fase\n1.1 Levantar requisitos  ← 1.1 em diante viram Atividade\n1.2 Aprovar escopo\n2. Execução\n2.1 Desenvolver\n\nou com bullets e recuo:\n• Planejamento\n   - Levantar requisitos"}
               />
             ) : (
               <div className="overflow-y-auto space-y-2 -mx-1 px-1">
@@ -372,17 +630,22 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                     {selectedTemplate === t.id && <span className="ml-auto text-primary text-sm">✓</span>}
                   </button>
                 ))}
-                <button
-                  type="button"
-                  onClick={resetAndClose}
-                  className="w-full flex items-center gap-3 text-left border border-dashed rounded-lg p-3 hover:bg-muted/50"
-                >
-                  <span className="w-9 h-9 rounded-md bg-muted flex items-center justify-center text-lg shrink-0">📄</span>
-                  <span>
-                    <span className="block text-[13px] font-medium">EAP em branco</span>
-                    <span className="block text-xs text-muted-foreground">Montar item a item no Backlog</span>
-                  </span>
-                </button>
+                {/* Não é uma opção de importação: só fecha o diálogo. Estava
+                    com a mesma aparência dos modelos acima, então clicar nele
+                    parecia escolher um modelo — o modal fechava, nada era
+                    criado e nada explicava o porquê. Agora é texto com um link,
+                    não mais um cartão irmão dos modelos. */}
+                <p className="text-xs text-muted-foreground pt-1">
+                  Prefere montar item a item?{" "}
+                  <button
+                    type="button"
+                    onClick={resetAndClose}
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    Feche e use “Nova Atividade”
+                  </button>
+                  .
+                </p>
               </div>
             )}
           </div>
@@ -405,6 +668,25 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                     </span>
                     <span className="text-[11px] font-mono text-muted-foreground shrink-0">{n.code}</span>
                     <span className="text-[13px] truncate">{n.title}</span>
+                    {/* O que veio das colunas: conferir aqui evita descobrir
+                        que a data entrou errada só depois de importar. */}
+                    {n.vals && (
+                      <span className="ml-auto flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
+                        {(n.vals.start_date || n.vals.end_date) && (
+                          <span className="font-mono">
+                            {fmtDia(n.vals.start_date)}→{fmtDia(n.vals.end_date)}
+                          </span>
+                        )}
+                        {n.vals.hours != null && <span className="font-mono">{n.vals.hours}h</span>}
+                        {n.vals.actual_end_date && (
+                          <span className="px-1 rounded border border-success/40 text-success">concluída</span>
+                        )}
+                        {!n.vals.actual_end_date && n.vals.actual_start_date && (
+                          <span className="px-1 rounded border border-warning/40 text-warning">em andamento</span>
+                        )}
+                        {n.vals.responsavel && <span className="truncate max-w-[90px]">{n.vals.responsavel}</span>}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>

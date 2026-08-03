@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
 import { DateField } from "@/components/ui/date-field";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { CharterFlowPanel, type CharterStatus } from "@/components/charter/CharterFlowPanel";
+import { OrigemDemanda } from "@/components/charter/OrigemDemanda";
 import {
   FileText, Save, ClipboardList, CheckCircle2, Ban, FileDown,
 } from "lucide-react";
@@ -180,6 +182,19 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
   const [memberRows, setMemberRows] = useState<MemberRow[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   const [addingMember, setAddingMember] = useState(false);
+
+  // Estado do TAP como coluna, não mais derivado de approved_at ser nulo: agora
+  // existe "em aprovação", que antes não tinha onde caber.
+  const [charterStatus, setCharterStatus] = useState<CharterStatus>("rascunho");
+  const reloadCharterStatus = useCallback(async () => {
+    const { data: row, error } = await supabase
+      .from("projects").select("charter_status").eq("id", projectId).maybeSingle();
+    // Migration pendente na VM: cai no estado derivado do carimbo, como antes.
+    if (error || !row) return;
+    const s = (row as any).charter_status as CharterStatus | null;
+    if (s) setCharterStatus(s);
+  }, [projectId]);
+  useEffect(() => { reloadCharterStatus(); }, [reloadCharterStatus]);
 
   // Guarda o charter_data cru vindo do banco. O formulário só conhece um
   // subconjunto das chaves; sem esta base, salvar apagaria as demais (ex.:
@@ -369,38 +384,10 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
 
   const isApproved = !!data.approved_at;
 
-  // Aprovar = trava o TAP (carimbo quem/quando). Só gestor/admin.
-  const handleApprove = async () => {
-    setSaving(true);
-    const stamp = {
-      ...data,
-      approved_at: new Date().toISOString(),
-      approved_by: user?.id || null,
-      approved_by_name: (user as any)?.user_metadata?.full_name || user?.email || null,
-    };
-    const { error } = await supabase
-      .from("projects")
-      .update({ charter_data: { ...rawCharterRef.current, __charter: true, ...stamp } } as any)
-      .eq("id", projectId);
-    setSaving(false);
-    if (error) { toast({ title: "Erro ao aprovar TAP", description: error.message, variant: "destructive" }); return; }
-    setData(stamp);
-    setEditing(false);
-    toast({ title: "TAP aprovado!", description: "O termo foi bloqueado para edição." });
-  };
-
-  const handleReopen = async () => {
-    setSaving(true);
-    const reopened = { ...data, approved_at: null, approved_by: null, approved_by_name: null };
-    const { error } = await supabase
-      .from("projects")
-      .update({ charter_data: { ...rawCharterRef.current, __charter: true, ...reopened } } as any)
-      .eq("id", projectId);
-    setSaving(false);
-    if (error) { toast({ title: "Erro ao reabrir TAP", description: error.message, variant: "destructive" }); return; }
-    setData(reopened);
-    toast({ title: "TAP reaberto para edição." });
-  };
+  // Aprovar e reabrir saíram daqui: viraram atos com trilha, participantes e
+  // notificação, orquestrados por /api/charter/flow e operados pelo
+  // CharterFlowPanel. Antes eram dois updates diretos no JSONB, sem validação e
+  // sem registro de quem reabriu.
 
   const handleExportPDF = () => {
     // Usa o diálogo de impressão do navegador (com CSS @media print já aplicado).
@@ -476,21 +463,28 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             </>
           ) : !canManage ? (
             <span className="text-xs text-muted-foreground self-center">Somente leitura</span>
-          ) : isApproved ? (
-            <Button size="sm" variant="outline" onClick={handleReopen} disabled={saving} className="gap-1">
-              <ClipboardList className="w-4 h-4" /> Reabrir para editar
+          ) : charterStatus === "rascunho" || charterStatus === "recusado" ? (
+            // "Aprovar TAP" saiu daqui: aprovar virou um ATO, não um clique de
+            // quem edita. Quem conduz envia para os aprovadores designados
+            // (painel abaixo); quem aprova é quem foi designado.
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="gap-1">
+              <ClipboardList className="w-4 h-4" /> Editar campos
             </Button>
-          ) : (
-            <>
-              <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="gap-1">
-                <ClipboardList className="w-4 h-4" /> Editar campos
-              </Button>
-              <Button size="sm" onClick={handleApprove} disabled={saving} className="gap-1">
-                <CheckCircle2 className="w-4 h-4" /> Aprovar TAP
-              </Button>
-            </>
-          )}
+          ) : null}
         </div>
+      </div>
+
+      {/* De qual demanda este projeto nasceu (só se veio do roadmap). */}
+      <OrigemDemanda projectId={projectId} />
+
+      {/* Circulação para aprovação: estado, aprovadores e trilha. */}
+      <div className="print:hidden">
+        <CharterFlowPanel
+          projectId={projectId}
+          status={charterStatus}
+          canManage={canManage}
+          onChanged={() => { reloadCharterStatus(); onMembersChanged?.(); }}
+        />
       </div>
 
       {/* Cabeçalho geral */}

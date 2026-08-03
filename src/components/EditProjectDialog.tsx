@@ -318,10 +318,18 @@ export const EditProjectDialog = ({
       };
 
       const extendedUpdatePayload: Record<string, any> = {};
+      // Omitir vazio protege contra apagar coluna que talvez nem exista neste
+      // ambiente (o payload estendido é tolerante a schema desatualizado).
       const assignOptional = (key: string, value: unknown) => {
         if (value === null || value === undefined) return;
         if (typeof value === "string" && value.trim() === "") return;
         extendedUpdatePayload[key] = value;
+      };
+      // ...mas para campo de PESSOA, "vazio" é uma escolha do usuário: ele
+      // limpou o Gestor de propósito. Com assignOptional, o campo saía do
+      // UPDATE e o gestor antigo continuava gravado — remover não removia.
+      const assignPerson = (key: string, value: string) => {
+        extendedUpdatePayload[key] = value.trim() === "" ? null : value;
       };
 
       assignOptional("gravity", formData.gravity);
@@ -331,8 +339,8 @@ export const EditProjectDialog = ({
       assignOptional("program", formData.program);
       assignOptional("actual_start_date", formData.actual_start_date);
       assignOptional("actual_end_date", formData.actual_end_date);
-      assignOptional("sponsor", formData.sponsor);
-      assignOptional("manager", formData.manager);
+      assignPerson("sponsor", formData.sponsor);
+      assignPerson("manager", formData.manager);
       assignOptional("sector", formData.sector);
       assignOptional("objective", formData.objective);
       assignOptional("problem_statement", formData.problem_statement);

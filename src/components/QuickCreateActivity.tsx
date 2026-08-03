@@ -31,9 +31,11 @@ interface QuickCreateActivityProps {
 }
 
 const KIND_META: Record<Kind, { label: string; icon: JSX.Element; hint: string }> = {
-  fase: { label: "Fase / Entrega", icon: <Layers className="w-3.5 h-3.5" />, hint: "Agrupa outros itens (qualquer nível)." },
-  atividade: { label: "Atividade", icon: <Circle className="w-3.5 h-3.5" />, hint: "Trabalho executável (folha)." },
-  marco: { label: "Marco", icon: <Diamond className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />, hint: "Ponto único no tempo." },
+  fase: { label: "Fase / Entrega", icon: <Layers className="w-3.5 h-3.5" />, hint: "Nível 1 da EAP (1, 2, 3…). Agrupa entregas." },
+  atividade: { label: "Atividade", icon: <Circle className="w-3.5 h-3.5" />, hint: "Do 1.1 em diante. Pode ter subitens." },
+  // fill-current: herda a cor do botão. Com âmbar fixo, o ícone sumia quando o
+  // botão ficava com fundo âmbar sólido (selecionado).
+  marco: { label: "Marco", icon: <Diamond className="w-3.5 h-3.5 fill-current" />, hint: "Ponto único no tempo." },
 };
 
 // Pode ser pai: agrupador (fase/pacote) OU qualquer item que já tem filhos
@@ -102,7 +104,7 @@ export const QuickCreateActivity = ({
     return (data as { id: string }).id;
   };
 
-  const handleCreate = async (openDetails: boolean) => {
+  const handleCreate = async (after: "close" | "details" | "continue") => {
     if (!title.trim()) return;
     if (disabledReason) {
       toast({ title: "Não é possível criar", description: disabledReason, variant: "destructive" });
@@ -113,14 +115,16 @@ export const QuickCreateActivity = ({
     setSaving(false);
     if (!id) return;
     onCreated();
-    if (openDetails) {
+    if (after === "details") {
       onOpenChange(false);
       onOpenDetails(id);
-    } else {
+    } else if (after === "continue") {
       // criação contínua: limpa e mantém aberto
       setTitle("");
       setTimeout(() => inputRef.current?.focus(), 30);
       toast({ title: "Criada", description: title.trim() });
+    } else {
+      onOpenChange(false);
     }
   };
 
@@ -144,8 +148,10 @@ export const QuickCreateActivity = ({
               ref={inputRef}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCreate(false); } }}
-              placeholder="Ex: Levantar requisitos — Enter cria e continua"
+              // Enter mantém aberto de propósito: digitar título + Enter em
+              // sequência é o gesto de quem está montando a lista de uma vez.
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCreate("continue"); } }}
+              placeholder="Ex: Levantar requisitos"
               className="h-9"
             />
           </div>
@@ -177,12 +183,22 @@ export const QuickCreateActivity = ({
                     key={k}
                     type="button"
                     onClick={() => setKind(k)}
-                    className={`flex-1 inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-                      active ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                    aria-pressed={active}
+                    // Selecionado em cor sólida: com `bg-background` o botão
+                    // ativo ficava branco sobre o trilho cinza-claro e não se
+                    // lia como marcado — parecia apenas mais claro que os outros.
+                    // min-w-0 + truncate: sem isso "Fase / Entrega" não encolhe
+                    // e o trio empurra a largura do diálogo inteiro.
+                    className={`flex-1 min-w-0 inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors border ${
+                      active
+                        ? (k === "marco"
+                            ? "border-amber-500 bg-amber-500 text-white shadow-sm"
+                            : "border-primary bg-primary text-primary-foreground shadow-sm")
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60"
                     }`}
                   >
-                    {KIND_META[k].icon}
-                    {KIND_META[k].label}
+                    <span className="shrink-0">{KIND_META[k].icon}</span>
+                    <span className="truncate">{KIND_META[k].label}</span>
                   </button>
                 );
               })}
@@ -191,11 +207,21 @@ export const QuickCreateActivity = ({
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-2">
-          <Button variant="outline" onClick={() => handleCreate(true)} disabled={!title.trim() || saving}>
-            Criar e abrir detalhes
+        {/* "Criar" fecha, que é o que se espera de um botão de confirmação —
+            antes ele mantinha o diálogo aberto e a única saída era clicar fora.
+            A criação em sequência ficou no Enter (anunciado no placeholder e na
+            dica abaixo): um terceiro botão aqui estourava a largura do diálogo
+            e criava rolagem horizontal, cortando o próprio "Criar".
+            O rodapé já quebra em linhas por padrão (ver ui/dialog). */}
+        <DialogFooter>
+          <span className="mr-auto text-[11px] text-muted-foreground self-center">
+            <kbd className="px-1 py-0.5 rounded border border-border bg-muted font-mono text-[10px]">Enter</kbd>
+            {" "}cria e mantém aberto
+          </span>
+          <Button variant="outline" onClick={() => handleCreate("details")} disabled={!title.trim() || saving}>
+            Criar e abrir
           </Button>
-          <Button onClick={() => handleCreate(false)} disabled={!title.trim() || saving}>
+          <Button onClick={() => handleCreate("close")} disabled={!title.trim() || saving}>
             {saving ? "Criando..." : "Criar"}
           </Button>
         </DialogFooter>

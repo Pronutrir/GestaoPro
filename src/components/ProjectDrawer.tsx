@@ -22,6 +22,9 @@ interface Project {
   budget_planned: number;
   budget_used: number;
   owner: string | null;
+  /** Gestor do projeto. Vem de projects.manager — as páginas que abrem o
+   *  drawer usam select('*'), então o dado já chegava; faltava exibir. */
+  manager?: string | null;
   blockers: string | null;
   category?: string;
   program?: string | null;
@@ -139,14 +142,22 @@ export function ProjectDrawer({ project, assigneeAvatarMap = {}, open, onOpenCha
             </div>
           )}
 
-          {/* Owner */}
-          {project.owner && (
-            <div className="flex items-center gap-2 text-sm">
-              <Users className="w-4 h-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Líder:</span>
-              <span>{project.owner}</span>
-            </div>
-          )}
+          {/* Uma pessoa só — mesma regra do cabeçalho do projeto: o Gestor
+              responde pelo projeto; o Líder entra apenas quando não há gestor
+              definido (a maioria dos projetos hoje). */}
+          {(() => {
+            const gestor = project.manager?.trim() || "";
+            const lider = project.owner?.trim() || "";
+            const quem = gestor || lider;
+            if (!quem) return null;
+            return (
+              <div className="flex items-center gap-2 text-sm">
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{gestor ? "Gestor" : "Líder"}:</span>
+                <span>{quem}</span>
+              </div>
+            );
+          })()}
 
           {/* Assignees */}
           {project.assignees.length > 0 && (

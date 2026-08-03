@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -45,7 +44,6 @@ import {
   ChevronDown,
   ChevronsRight,
   ChevronsLeft,
-  SlidersHorizontal,
   Flag,
   Building2,
   Tag as TagIcon,
@@ -88,8 +86,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuCheckboxItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -128,7 +124,6 @@ import {
   EMPTY_COLUMN_FILTER,
   columnFilterActive,
   DEFAULT_CARD_FIELDS,
-  CARD_FIELD_GROUPS,
   type GroupByValue,
   type CardFields,
   type WorkflowStage,
@@ -143,11 +138,13 @@ import { KanbanCard, SortableKanbanCard } from "./kanban/KanbanCard";
 import {
   SortableColumn,
   DroppableColumn,
-  AddStageColumn,
+  StageListButton,
   FilterOptionList,
   ColumnFilterPanel,
 } from "./kanban/KanbanColumn";
+import { VisoesMenu } from "./kanban/VisoesMenu";
 import { ActivityDetailPanel } from "./kanban/ActivityDetailPanel";
+import { selectInChunks } from "@/lib/chunkedIn";
 
 // Compat: o tipo CardFields morava aqui antes do fatiamento (Fase 4).
 // Valores (DEFAULT_CARD_FIELDS etc.) agora só em kanban/shared — re-exportar
@@ -1028,37 +1025,50 @@ export const ActivityKanban = ({
         });
       // Contagem de comentários e anexos por atividade: os dois sinais mais
       // universais de card no mercado ("tem discussão aqui", "tem arquivo").
-      supabase
-        .from("activity_comments")
-        .select("activity_id")
-        .in("activity_id", ids)
-        .eq("is_trashed", false)
-        .then(({ data }) => {
+      // Em lotes: com muitas atividades a lista de ids estoura o limite de URL
+      // do proxy e a requisição volta 502 (ver lib/chunkedIn).
+      selectInChunks<{ activity_id: string }>(ids, (batch) =>
+        supabase
+          .from("activity_comments")
+          .select("activity_id")
+          .in("activity_id", batch)
+          .eq("is_trashed", false),
+      )
+        .then((data) => {
           const map = new Map<string, number>();
           (data || []).forEach((c) => {
             map.set(c.activity_id, (map.get(c.activity_id) || 0) + 1);
           });
           setCommentCounts(map);
-        });
-      supabase
-        .from("project_documents")
-        .select("activity_id")
-        .in("activity_id", ids)
-        .eq("is_trashed", false)
-        .then(({ data }) => {
+        })
+        .catch(() => setCommentCounts(new Map()));
+      selectInChunks<{ activity_id: string | null }>(ids, (batch) =>
+        supabase
+          .from("project_documents")
+          .select("activity_id")
+          .in("activity_id", batch)
+          .eq("is_trashed", false),
+      )
+        .then((data) => {
           const map = new Map<string, number>();
           (data || []).forEach((d) => {
             if (d.activity_id) map.set(d.activity_id, (map.get(d.activity_id) || 0) + 1);
           });
           setAttachmentCounts(map);
-        });
-      supabase
-        .from("task_relations")
-        .select("id, source_activity_id, target_activity_id, relation_type")
-        .or(
-          `source_activity_id.in.(${ids.join(",")}),target_activity_id.in.(${ids.join(",")})`,
-        )
-        .then(({ data }) => {
+        })
+        .catch(() => setAttachmentCounts(new Map()));
+      // Este era o pior caso: o `.or()` monta a lista de ids DUAS vezes na mesma
+      // URL, então estourava o limite do proxy com metade das atividades. Em
+      // lotes, cada requisição carrega no máximo 2×50 ids.
+      selectInChunks<{ id: string; source_activity_id: string; target_activity_id: string; relation_type: string }>(
+        ids,
+        (batch) =>
+          supabase
+            .from("task_relations")
+            .select("id, source_activity_id, target_activity_id, relation_type")
+            .or(`source_activity_id.in.(${batch.join(",")}),target_activity_id.in.(${batch.join(",")})`),
+      )
+        .then((data) => {
           const titleById = new Map<string, string>();
           activities.forEach((a) => titleById.set(a.id, a.title));
           const map = new Map<
@@ -1087,7 +1097,8 @@ export const ActivityKanban = ({
             push(r.target_activity_id, r.source_activity_id, r.id, r.relation_type);
           });
           setRelationCounts(map);
-        });
+        })
+        .catch(() => setRelationCounts(new Map()));
     } else {
       setDependencyCounts(new Map());
       setWaitingOnCounts(new Map());
@@ -1809,6 +1820,27 @@ export const ActivityKanban = ({
 
 
   const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
+
+  /**
+   * Colunas ocultas e quantas tarefas há em cada uma.
+   *
+   * Ocultar é do PROJETO (workflow_stages.is_visible), então a coluna some para
+   * todo mundo — e sem rastro algum no quadro. Pior: a tarefa continua com
+   * aquele status e some junto, sem aparecer em lugar nenhum. O marcador ao
+   * fim do quadro existe para isso não ser silencioso.
+   */
+  const hiddenStages = useMemo(
+    () => stages.filter((s) => s.display_order > 0 && s.is_visible === false),
+    [stages],
+  );
+  const countByStage = useMemo(() => {
+    const m = new Map<string, number>();
+    activities.forEach((a) => {
+      if (!a.workflow_stage_id) return;
+      m.set(a.workflow_stage_id, (m.get(a.workflow_stage_id) ?? 0) + 1);
+    });
+    return m;
+  }, [activities]);
   /**
    * Atalhos de teclado do quadro (referência: Linear).
    *  N  nova tarefa na primeira coluna
@@ -1857,14 +1889,24 @@ export const ActivityKanban = ({
     return () => window.removeEventListener("keydown", onKey);
   }, [canCreate, onOpenCreateTask, stages]);
 
-  /** Destinos do "Mover para →": QUALQUER coluna criada no projeto — inclui
-   *  Backlog (o card passa a aparecer na seção Backlog, é um destino legítimo
-   *  e nomeado) e colunas ocultas do quadro. */
+  /** Destinos do "Mover para →": as mesmas colunas que o seletor de status do
+   *  diálogo de edição oferece, com a MESMA marcação.
+   *
+   *  Antes o Kanban listava coluna oculta sem nenhum sinal, enquanto a edição
+   *  listava a mesma coluna com o selo "oculta" — dois tratamentos para o mesmo
+   *  dado. Aqui a coluna oculta continua sendo um destino possível (é assim que
+   *  se aposenta uma etapa sem perder o histórico), mas `hidden` faz o menu
+   *  avisar que o cartão vai sumir do quadro. */
   const moveTargets = useMemo(
     () =>
       [...stages]
         .sort((a, b) => a.display_order - b.display_order)
-        .map((s) => ({ id: s.id, title: getStageDisplayTitle(s.title), color: s.color })),
+        .map((s) => ({
+          id: s.id,
+          title: getStageDisplayTitle(s.title),
+          color: s.color,
+          hidden: s.is_visible === false,
+        })),
     [stages],
   );
 
@@ -2116,7 +2158,7 @@ export const ActivityKanban = ({
             ref={searchInputRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar tarefa...  ( / )"
+            placeholder="Buscar tarefa..."
             className="h-7 pl-8 pr-7 text-xs"
           />
           {search && (
@@ -2129,60 +2171,6 @@ export const ActivityKanban = ({
             </button>
           )}
         </div>
-
-        {/* VISÕES SALVAS — combinação nomeada de filtros+raia+ordenação+campos,
-            compartilhada com o projeto. Só aparece com a migration aplicada. */}
-        {!viewsUnavailable && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant={activeView ? "default" : "outline"}
-                size="sm"
-                className="h-7 gap-1.5 text-xs max-w-[180px]"
-                title="Visões salvas do quadro"
-              >
-                <Eye className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{activeView ? activeView.name : "Visões"}</span>
-                {viewDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Visão modificada — dá para atualizar no menu" />}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-60">
-              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                Visões do projeto
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {views.length === 0 && (
-                <div className="px-2 py-3 text-center text-xs text-muted-foreground">Nenhuma visão salva ainda</div>
-              )}
-              {views.map((v) => (
-                <DropdownMenuItem key={v.id} onSelect={() => applyView(v)} className="gap-2 text-xs">
-                  <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="flex-1 truncate">{v.name}</span>
-                  {activeViewId === v.id && <Check className="w-3.5 h-3.5 text-primary" />}
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => { setSaveViewName(""); setSaveViewOpen(true); }} className="gap-2 text-xs">
-                <Plus className="w-3.5 h-3.5 text-muted-foreground" /> Salvar visão atual…
-              </DropdownMenuItem>
-              {activeView && viewDirty && activeView.created_by === myId && (
-                <DropdownMenuItem onSelect={updateActiveView} className="gap-2 text-xs">
-                  <Check className="w-3.5 h-3.5 text-muted-foreground" /> Atualizar &ldquo;{activeView.name}&rdquo;
-                </DropdownMenuItem>
-              )}
-              {activeView && (
-                <DropdownMenuItem onSelect={() => setActiveViewId(null)} className="gap-2 text-xs text-muted-foreground">
-                  <XIcon className="w-3.5 h-3.5" /> Sair da visão
-                </DropdownMenuItem>
-              )}
-              {activeView && activeView.created_by === myId && (
-                <DropdownMenuItem onSelect={() => deleteView(activeView)} className="gap-2 text-xs text-destructive focus:text-destructive">
-                  <Trash2 className="w-3.5 h-3.5" /> Excluir &ldquo;{activeView.name}&rdquo;
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
 
         {/* FILTROS — um único painel com tudo */}
         {(() => {
@@ -2575,7 +2563,11 @@ export const ActivityKanban = ({
         )}
 
         <div className="ml-auto flex items-center gap-2">
-        {/* Agrupar em raias (swimlanes) — menu clicável de critérios */}
+        {/* VISÕES — Raias e Campos do card num botão só (ver VisoesMenu).
+            "Minhas" saiu da régua: era botão aqui E linha dentro de Filtros,
+            duplicando o mesmo estado (e acendendo o badge de um painel que a
+            pessoa nem abriu). Ficou onde ele de fato pertence — em Filtros,
+            porque reduz QUAIS tarefas aparecem. O atalho M segue igual. */}
         {(() => {
           const laneOptions: { id: typeof groupBy; label: string; icon: React.ReactNode }[] = [
             { id: "none", label: "Sem raias", icon: <XIcon className="w-3.5 h-3.5" /> },
@@ -2588,43 +2580,17 @@ export const ActivityKanban = ({
             { id: "blocked", label: "Por bloqueio", icon: <AlertCircle className="w-3.5 h-3.5" /> },
             { id: "customGroup", label: "Por time", icon: <Users className="w-3.5 h-3.5" /> },
           ];
-          const current = laneOptions.find((o) => o.id === groupBy) ?? laneOptions[0];
           return (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant={groupBy !== "none" ? "default" : "outline"}
-                  size="sm"
-                  className="h-7 gap-1.5 text-xs"
-                  title="Agrupar cards em raias horizontais"
-                >
-                  <Layers className="w-3.5 h-3.5 shrink-0" />
-                  {groupBy === "none" ? "Raias" : current.label}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Agrupar em raias
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {laneOptions.map((o) => (
-                  <DropdownMenuItem
-                    key={o.id}
-                    onSelect={() => setGroupBy(o.id)}
-                    className="gap-2 text-xs"
-                  >
-                    <span className="text-muted-foreground">{o.icon}</span>
-                    <span className="flex-1">{o.label}</span>
-                    {groupBy === o.id && <Check className="w-3.5 h-3.5 text-primary" />}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setManageGroupsOpen(true)} className="gap-2 text-xs">
-                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="flex-1">Gerenciar times…</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <VisoesMenu
+              laneOptions={laneOptions}
+              groupBy={groupBy}
+              onGroupByChange={(id) => setGroupBy(id as typeof groupBy)}
+              onManageGroups={() => setManageGroupsOpen(true)}
+              cardFields={cardFields}
+              onToggleCardField={toggleCardField}
+              onRestoreCardFields={() => setCardFields(DEFAULT_CARD_FIELDS)}
+              alerta={hiddenStages.some((s) => (countByStage.get(s.id) ?? 0) > 0)}
+            />
           );
         })()}
         {/* "Por time" depende de existir um time cadastrado, mas o cadastro
@@ -2644,59 +2610,6 @@ export const ActivityKanban = ({
             {laneGroups.length === 0 ? "Criar um time" : `Times (${laneGroups.length})`}
           </Button>
         )}
-        <Button
-          variant={onlyMine ? "default" : "outline"}
-          size="sm"
-          className="h-7 gap-1.5 text-xs"
-          title="Mostrar apenas minhas tarefas (Líder, Participante ou Criador)"
-          onClick={() => setOnlyMine((v) => !v)}
-        >
-          <User className="w-3.5 h-3.5" />
-          Minhas
-        </Button>
-        {/* Configuração do card: liga/desliga cada informação exibida */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" title="Configurar o que aparece nos cards">
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Card
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-64 p-0" collisionPadding={12}>
-            <div className="flex items-center justify-between px-3 py-2.5 border-b">
-              <span className="text-sm font-semibold">Exibição do card</span>
-              <button
-                type="button"
-                onClick={() => setCardFields(DEFAULT_CARD_FIELDS)}
-                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                title="Restaurar padrão"
-              >
-                Restaurar
-              </button>
-            </div>
-            <div className="max-h-[min(420px,60vh)] overflow-y-auto py-1">
-              {CARD_FIELD_GROUPS.map((grp) => (
-                <div key={grp.group}>
-                  <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {grp.group}
-                  </div>
-                  {grp.items.map((it) => (
-                    <label
-                      key={it.key}
-                      className="flex items-center justify-between px-3 py-1.5 text-[13px] cursor-pointer hover:bg-muted/50"
-                    >
-                      <span className={cardFields[it.key] ? "" : "text-muted-foreground"}>{it.label}</span>
-                      <Switch
-                        checked={cardFields[it.key]}
-                        onCheckedChange={() => toggleCardField(it.key)}
-                      />
-                    </label>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
         </div>
       </div>
       <DndContext
@@ -2894,8 +2807,19 @@ export const ActivityKanban = ({
             return (
               <>
                 {visibleStages.map((stage, idx) => renderColumn(stage, idx))}
+                {/* "Colunas" fica no fim da fila — Linear e Notion mantêm o
+                    acesso a criar/administrar coluna exatamente aqui, onde a
+                    posição já ensina a ação. Recebe TODAS as colunas: oculta
+                    e visível na mesma lista, como no Notion. */}
                 {(isAdmin || canCreate) && (
-                  <AddStageColumn projectId={projectId} onChanged={fetchStages} />
+                  <StageListButton
+                    projectId={projectId}
+                    onChanged={fetchStages}
+                    stages={stages}
+                    countByStage={countByStage}
+                    canManage={isAdmin || canCreate}
+                    onToggleVisible={handleToggleStageVisible}
+                  />
                 )}
               </>
             );
@@ -3016,35 +2940,6 @@ export const ActivityKanban = ({
           }}
         />
       )}
-
-      {/* Salvar visão — nome + snapshot da exibição atual. */}
-      <Dialog open={saveViewOpen} onOpenChange={setSaveViewOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="w-4 h-4 text-primary" /> Salvar visão
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="view-name" className="text-xs text-muted-foreground">Nome da visão</Label>
-            <Input
-              id="view-name"
-              value={saveViewName}
-              onChange={(e) => setSaveViewName(e.target.value)}
-              placeholder="Ex.: Reunião de sexta"
-              autoFocus
-              onKeyDown={(e) => { if (e.key === "Enter") saveNewView(); }}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Guarda filtros, raias, ordenação e campos do card como estão agora. Visível para todos do projeto.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setSaveViewOpen(false)}>Cancelar</Button>
-            <Button onClick={saveNewView} disabled={!saveViewName.trim()}>Salvar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Bloquear atividade — o card NÃO sai da coluna ("block in place"),
           para continuar contando no WIP e no tempo por etapa. */}

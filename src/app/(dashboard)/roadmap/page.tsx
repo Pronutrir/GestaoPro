@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus } from "lucide-react";
 import { ESTAGIOS, statusLabels } from "@/components/roadmap/criterios";
+import { PROJECT_STATUS } from "@/lib/projectStatus";
 import { RoadmapTable } from "@/components/roadmap/RoadmapTable";
 import { RoadmapDrawer } from "@/components/roadmap/RoadmapDrawer";
 import { RoadmapItemDetails } from "@/components/roadmap/RoadmapItemDetails";
@@ -45,17 +46,93 @@ const Roadmap = () => {
 
   const projetizarMutation = useMutation({
     mutationFn: async (item: RoadmapItem) => {
-      const { data: project, error: pErr } = await supabase
-        .from("projects")
-        .insert({
-          title: item.title,
-          description: item.description || "",
-          status: "ideacao",
-          priority: "medium",
-        })
-        .select("id")
-        .single();
-      if (pErr) throw pErr;
+      // A solicitação já respondeu quase tudo o que o TAP pergunta. Antes só
+      // título e descrição eram copiados e o resto era redigitado do zero —
+      // processo atual, problemas, resultado esperado, custo e prazo ficavam
+      // para trás, junto com a evidência que justificou a aprovação.
+      const problemas = [
+        item.processo_atual ? `Processo atual: ${item.processo_atual}` : null,
+        Array.isArray(item.problemas) && item.problemas.length
+          ? `Problemas: ${item.problemas.join("; ")}`
+          : null,
+        item.problemas_outro || null,
+      ].filter(Boolean).join("\n\n");
+
+      const justificativa = [
+        item.custo_atual ? `Custo atual estimado: R$ ${item.custo_atual}/mês` : null,
+        item.horas_semana ? `${item.horas_semana} h/semana gastas hoje` : null,
+        item.pessoas_envolvidas ? `${item.pessoas_envolvidas} pessoa(s) envolvida(s)` : null,
+        item.motivo_prazo ? `Motivo do prazo: ${item.motivo_prazo}` : null,
+      ].filter(Boolean).join("\n");
+
+      const payload: Record<string, any> = {
+        title: item.title,
+        description: item.description || "",
+        status: PROJECT_STATUS.IDEACAO,
+        // Setor é obrigatório na criação manual; sem ele o projeto nascia
+        // órfão de área. A solicitação já traz isso.
+        sector: item.area || null,
+        objective: item.title,
+        problem_statement: problemas || null,
+        expected_benefits: item.resultado_esperado || null,
+        justification: justificativa || null,
+        scope: item.minimo_entregavel || null,
+        due_date: item.data_necessaria || null,
+        sponsor: item.solicitante_nome || null,
+        // O TAP lê de charter_data, não das colunas nativas. Sem isto a aba
+        // nasceria vazia mesmo com os campos do projeto preenchidos, e tudo
+        // teria de ser redigitado — que é justamente o que a herança evita.
+        charter_data: {
+          __charter: true,
+          sponsor: item.solicitante_nome || "",
+          justification: justificativa || "",
+          // O que veio da solicitação, dito como origem: quem abrir o TAP
+          // precisa saber que isto foi herdado e merece revisão.
+          assumptions: item.observacoes || "",
+          constraints: item.motivo_prazo || "",
+          smart_specific: item.title || "",
+          smart_measurable: item.resultado_esperado || "",
+          smart_temporal: item.data_necessaria
+            ? `Necessário até ${new Date(item.data_necessaria).toLocaleDateString("pt-BR")}`
+            : "",
+          approvals: [],
+          benefits_table: [],
+          approved_at: null,
+          approved_by: null,
+          approved_by_name: null,
+          // Rastreabilidade: de qual demanda este projeto nasceu.
+          origin_roadmap_item_id: item.id,
+        },
+      };
+
+      // Degrada se alguma coluna não existir no ambiente (mesmo padrão do
+      // AddProjectDialog): melhor criar o projeto sem um campo do que falhar.
+      let project: { id: string } | null = null;
+      let attempt = { ...payload };
+      for (let i = 0; i < 12; i++) {
+        const { data, error } = await supabase
+          .from("projects").insert(attempt as any).select("id").single();
+        if (!error) { project = data as { id: string }; break; }
+        const miss = /Could not find the '([^']+)' column/.exec(error.message)?.[1];
+        if (!miss || !(miss in attempt)) throw error;
+        delete attempt[miss];
+      }
+      if (!project) throw new Error("Não foi possível criar o projeto.");
+
+      // Sem membro, só admin/gestor enxergava o projeto recém-criado: quem
+      // projetizou perdia acesso ao que acabou de criar.
+      const { data: auth } = await supabase.auth.getUser();
+      if (auth?.user?.id) {
+        await supabase.from("project_members").insert({
+          project_id: project.id,
+          user_id: auth.user.id,
+          invitation_status: "accepted",
+          can_create: true,
+          can_edit: true,
+          can_delete: true,
+          can_move: true,
+        } as any);
+      }
 
       const { error: rErr } = await supabase
         .from("roadmap_items" as any)

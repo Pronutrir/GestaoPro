@@ -25,7 +25,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { GutPriorityField } from "@/components/GutPriorityField";
 import { GutPrioritySelector } from "@/components/GutPrioritySelector";
 import { GUT_META, gutLabel, gutScore, normalizeGut, type GutLevel } from "@/lib/gutPriority";
-import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon, Wand2 } from "lucide-react";
+import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon, Wand2, EyeOff } from "lucide-react";
 import { BookOpen } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -69,20 +69,25 @@ const PropertyRow = ({ icon, label, children, wide, iconClassName }: {
 // tinha hierarquia: Status ao lado de Tempo, Líder ao lado de Custo — assuntos
 // diferentes disputando a mesma linha, e o olho lia em zigue-zague. Cada faixa
 // responde UMA pergunta, na ordem em que se preenche.
-const FieldBand = ({ step, title, children, tone = "default" }: {
-  step: number; title: string; children: React.ReactNode; tone?: "default" | "primary";
+const FieldBand = ({ step, title, children }: {
+  step: number; title: string; children: React.ReactNode;
 }) => (
   <div className="rounded-lg border border-border overflow-hidden">
-    <div className={cn(
-      "flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider border-b",
-      tone === "primary"
-        ? "bg-primary/10 text-primary border-primary/20"
-        : "bg-muted/50 text-muted-foreground border-border",
-    )}>
-      <span className={cn(
-        "inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold shrink-0",
-        tone === "primary" ? "bg-primary text-primary-foreground" : "bg-muted-foreground/20 text-muted-foreground",
-      )}>
+    {/* ARDÓSIA em vez de azul: a faixa AGRUPA campos, não pede clique. Com o
+        primary aqui, o topo de cada card competia com botões e links — e o
+        azul, aparecendo em tudo, deixava de significar "acionável".
+        As TRÊS faixas são IDÊNTICAS: mesmo fundo, mesmo número sólido. O
+        número ordena a leitura, não hierarquiza — nenhuma seção é mais
+        importante que as outras.
+
+        Nada de opacidade fracionada aqui: classes como `text-band/80` não são
+        geradas neste projeto, e o elemento acabava sem cor nenhuma. */}
+    <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider border-b border-border bg-band-soft text-band">
+      {/* Número SÓLIDO nas três. O contorno usado nas faixas 2 e 3 tinha peso
+          visual muito menor que o quadrado cheio da 1 — com o mesmo fundo, o
+          olho ainda lia a primeira como "diferente das outras". Agora as três
+          são idênticas: a numeração ordena, sem hierarquia de destaque. */}
+      <span className="inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold shrink-0 bg-band text-band-foreground">
         {step}
       </span>
       {title}
@@ -435,7 +440,6 @@ export const EditActivityDialog = ({
   // Popover de responsável por subatividade: guarda o id da sub com o popover
   // aberto (controlado) para que ele feche ao escolher uma opção.
   const [openAssigneeSubId, setOpenAssigneeSubId] = useState<string | null>(null);
-  const [showRealDates, setShowRealDates] = useState(false);
   const [hoursPopoverOpen, setHoursPopoverOpen] = useState(false);
   const [generatingWbs, setGeneratingWbs] = useState(false);
   // Campos OPCIONAIS revelados manualmente pelo "+ Adicionar campo" nesta sessão.
@@ -450,7 +454,7 @@ export const EditActivityDialog = ({
   const [members, setMembers] = useState<PersonOption[]>([]);
   const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
   const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
-  const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean }[]>([]);
+  const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean; is_visible?: boolean }[]>([]);
   const [currentStageId, setCurrentStageId] = useState("");
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false);
   const [creatorName, setCreatorName] = useState<string | null>(null);
@@ -713,9 +717,13 @@ export const EditActivityDialog = ({
 
     if (projectId) {
       // Always refetch workflow stages when dialog opens (catches newly created columns)
-      supabase.from("workflow_stages").select("id, title, color, display_order, is_final")
+      // is_visible entra na consulta para o seletor AVISAR quando a coluna não
+      // aparece no quadro. A opção continua na lista de propósito: a tarefa
+      // pode já estar nela, e removê-la deixaria o campo sem valor válido —
+      // trocaria um problema de visibilidade por um de dado.
+      supabase.from("workflow_stages").select("id, title, color, display_order, is_final, is_visible")
         .eq("project_id", projectId).order("display_order").then(({ data }) => {
-          if (data) setWorkflowStages(data);
+          if (data) setWorkflowStages(data as any);
         });
 
       supabase.from("project_members").select("user_id").eq("project_id", projectId).then(({ data: memberData }) => {
@@ -760,7 +768,6 @@ export const EditActivityDialog = ({
         wbs_code: (act as any).wbs_code || "",
       });
       setCurrentStageId((act as any).workflow_stage_id || "");
-      setShowRealDates(false);
       // Campos opcionais revelados são por-atividade: ao trocar de card, recolhe
       // de volta os que estavam vazios (os com valor reaparecem pela regra de visibilidade).
       setRevealedFields(new Set());
@@ -1441,25 +1448,26 @@ export const EditActivityDialog = ({
             {act && (() => {
               // ---- Visibilidade dos campos OPCIONAIS (auto-colapso) ----
               // Regra: aparece se tem valor, é rollup de Fase, ou foi revelado pelo "+".
-              const hasHours = parseHoursInput(formData.hours) > 0;
-              const hasCost = parseFloat(formData.cost || "0") > 0;
               const hasWbs = !!formData.wbs_code.trim();
-              // Marco não tem horas/custo; Fase com filhos mostra sempre (rollup somado).
-              const showHours = !formData.is_milestone && (hasHours || hasSubActivities || revealedFields.has("hours"));
-              const showCost = !formData.is_milestone && (hasCost || hasSubActivities || revealedFields.has("cost"));
+              // Tempo e custo são SEMPRE visíveis (exceto em marco, que não tem
+              // nem um nem outro). Eram opcionais atrás do "+ Adicionar campo",
+              // mas são o esforço e o dinheiro da EAP — a faixa se chama
+              // "Esforço" e abria vazia, só com um botão. Some o motivo original
+              // do colapso agora que a importação traz horas e custo da
+              // planilha: o dado chegava preenchido e o campo seguia escondido.
+              const showHours = !formData.is_milestone;
+              const showCost = !formData.is_milestone;
               const showWbs = hasWbs || revealedFields.has("wbs");
               // Chips do "+ Adicionar campo": só os que estão ocultos no momento.
               // Dependências não entra: passou a ser sempre visível (é informação de
               // sequenciamento, não campo opcional — quem não vê, não sabe que existe).
               const hiddenChips: { key: OptionalFieldKey; label: string; icon: React.ReactNode }[] = [
-                !showHours && { key: "hours" as const, label: "Tempo", icon: <Clock className="w-3 h-3" /> },
-                !showCost && { key: "cost" as const, label: "Custo", icon: <DollarSign className="w-3 h-3" /> },
                 !showWbs && { key: "wbs" as const, label: "Código EAP", icon: <Hash className="w-3 h-3" /> },
               ].filter(Boolean) as { key: OptionalFieldKey; label: string; icon: React.ReactNode }[];
               return (
               <div className="space-y-2.5">
                 {/* ---- FAIXA 1: O QUE É (status, tipo, dependências, EAP) ---- */}
-                <FieldBand step={1} title="O que é" tone="primary">
+                <FieldBand step={1} title="O que é">
                   {/* Status / Etapa */}
                   {workflowStages.length > 0 && (
                      <PropertyRow iconClassName="text-primary" icon={<ArrowRightLeft className="w-3.5 h-3.5" />} label="Status">
@@ -1475,6 +1483,15 @@ export const EditActivityDialog = ({
                           >
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: workflowStages.find(s => s.id === currentStageId)?.color || "hsl(var(--muted-foreground))" }} />
                             <span className="truncate">{workflowStages.find(s => s.id === currentStageId)?.title || "Sem coluna"}</span>
+                            {/* A tarefa JÁ ESTÁ numa coluna oculta: some do
+                                quadro sem nenhum sinal. Avisar aqui é o mínimo
+                                — é o estado em que a pessoa mais precisa saber. */}
+                            {workflowStages.find(s => s.id === currentStageId)?.is_visible === false && (
+                              <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-warning"
+                                    title="Esta coluna está oculta no quadro: a tarefa não aparece no Kanban.">
+                                <EyeOff className="w-3 h-3" /> oculta
+                              </span>
+                            )}
                             <ChevronDown className="w-3 h-3 opacity-60 ml-auto shrink-0" />
                           </button>
                         </PopoverTrigger>
@@ -1526,8 +1543,18 @@ export const EditActivityDialog = ({
                                 }
                               }}
                             >
-                              <span className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
-                              {stage.title}
+                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: stage.color }} />
+                              <span className="truncate">{stage.title}</span>
+                              {/* A coluna existe no fluxo mas não aparece no
+                                  quadro: mover a tarefa para cá faz ela sumir
+                                  do Kanban de todo mundo. Escolher às cegas era
+                                  o problema — a marca aqui é o aviso. */}
+                              {stage.is_visible === false && (
+                                <span className="ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] text-warning"
+                                      title="Esta coluna está oculta no quadro: a tarefa não aparecerá no Kanban.">
+                                  <EyeOff className="w-3 h-3" /> oculta
+                                </span>
+                              )}
                             </button>
                           ))}
                         </PopoverContent>
@@ -1556,10 +1583,13 @@ export const EditActivityDialog = ({
                         end_date: kind === "marco" ? "" : formData.end_date,
                       });
   
-                    // Só Fase/Entrega agrupa. Item com subitens não pode virar folha.
+                    // Atividade também pode agrupar: o que define o rótulo é o
+                    // NÍVEL na EAP, não o fato de ter subitens. Só Marco segue
+                    // barrado com filhos — marco é folha de controle, um marco
+                    // que agrupa não faz sentido.
                     const kindDisabledReason = (kind: Kind): string | null => {
-                      if (hasSubActivities && kind !== "fase")
-                        return "Este item tem subitens; só Fase/Entrega agrupa.";
+                      if (hasSubActivities && kind === "marco")
+                        return "Este item tem subitens; Marco não agrupa.";
                       return null;
                     };
                     const KIND_OPTIONS: {
@@ -1569,26 +1599,30 @@ export const EditActivityDialog = ({
                       hint: string;
                       activeCls: string;
                     }[] = [
+                      // O selecionado usa cor SÓLIDA. Com bg-primary/10 sobre o
+                      // trilho bg-muted/30 o realce quase sumia — o botão ativo
+                      // ficava só "um pouco mais claro" que os outros e não se
+                      // lia como marcado.
                       {
                         kind: "fase",
                         label: "Fase / Entrega",
                         icon: <Layers className="w-3.5 h-3.5" />,
-                        hint: "Agrupa outros itens (em qualquer nível). Datas, horas e custo derivam dos filhos.",
-                        activeCls: "border-primary bg-primary/10 text-primary",
+                        hint: "Nível 1 da EAP (1, 2, 3…). Agrupa entregas; datas, horas e custo derivam dos filhos.",
+                        activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
                       },
                       {
                         kind: "atividade",
                         label: "Atividade",
                         icon: <Circle className="w-3.5 h-3.5" />,
-                        hint: "Trabalho executável (folha da EAP), com estimativa e intervalo de datas próprios.",
-                        activeCls: "border-primary bg-primary/10 text-primary",
+                        hint: "Do nível 1.1 em diante. Pode ter subitens — aí horas e custo somam dos filhos.",
+                        activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
                       },
                       {
                         kind: "marco",
                         label: "Marco",
-                        icon: <Diamond className={`w-3.5 h-3.5 ${itemKind === "marco" ? "fill-amber-500" : ""}`} />,
+                        icon: <Diamond className={`w-3.5 h-3.5 ${itemKind === "marco" ? "fill-current" : ""}`} />,
                         hint: "Ponto único no tempo (uma data, sem intervalo). Não tem horas nem custo.",
-                        activeCls: "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                        activeCls: "border-amber-500 bg-amber-500 text-white shadow-sm",
                       },
                     ];
                     return (
@@ -1692,7 +1726,7 @@ export const EditActivityDialog = ({
                             "h-7 px-2.5 text-xs gap-1.5 shrink-0",
                             !formData.wbs_code.trim() && "text-primary border-primary/40 bg-primary/5 hover:bg-primary/10"
                           )}
-                          title="Gerar o próximo código com base no item pai (ou fase) e nos irmãos. Fase/Entrega agrupa (qualquer nível); Atividade e Marco são folhas. Formato por posição: 1, 1.1, 1.1.1…"
+                          title="Gerar o próximo código com base no item pai (ou fase) e nos irmãos. O nível define o papel: 1, 2, 3… são Fase; 1.1, 1.1.1… são Atividade."
                         >
                           <Wand2 className="w-3.5 h-3.5" />
                           {formData.wbs_code.trim() ? "Regerar" : "Gerar"}
@@ -1759,18 +1793,25 @@ export const EditActivityDialog = ({
                   {/* Datas — planejado e execução real na MESMA linha.
                       Meia coluna por padrão (Início→Vencimento cabe); só ocupa a
                       linha inteira quando o bloco de datas reais está expandido. */}
-                  {/* Sempre em linha inteira: com as 4 datas abertas, meia coluna
-                      espremia cada campo até ficarem ilegíveis. Planejado e real
-                      passam a ocupar FILEIRAS próprias, uma sobre a outra. */}
+                  {/* Linha inteira, com planejado e real LADO A LADO: os quatro
+                      chips cabem na largura e quebrar para baixo desperdiçava a
+                      metade direita. `flex-wrap` no container preserva o
+                      comportamento em tela estreita — aí sim cai para a segunda
+                      fileira, em vez de espremer os campos. */}
                   <PropertyRow
                     wide
                     iconClassName="text-primary"
                     icon={<Calendar className="w-3.5 h-3.5" />}
                     label={formData.is_milestone ? "Data" : "Prazo"}
                   >
-                    <div className="flex flex-col gap-2 w-full min-h-[32px]">
-                      {/* PLANEJADO — chips compactos com calendário */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 w-full min-h-[32px]">
+                      {/* PLANEJADO — chips compactos com calendário. O rótulo
+                          "Previsto" espelha o "Real" ao lado: os dois pares ficam
+                          nomeados do mesmo jeito, e a comparação fica óbvia. */}
                       <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        {!formData.is_milestone && (
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">Previsto</span>
+                        )}
                         <DateChip
                           value={formData.is_milestone ? formData.end_date : formData.start_date}
                           onChange={(v) =>
@@ -1780,8 +1821,14 @@ export const EditActivityDialog = ({
                                 : { ...formData, start_date: v }
                             )
                           }
+                          // "Início/Término previsto" para casar com o par real
+                          // ao lado: "Início → Vencimento" não deixava claro que
+                          // são o mesmo par, um planejado e outro realizado.
+                          // Rótulo curto no chip: quem diz "previsto" é o rótulo
+                          // da fileira. Repetir a palavra em cada chip estourava
+                          // a largura e empurrava o par real para baixo.
                           placeholder={formData.is_milestone ? "Data do marco" : "Início"}
-                          tooltip={formData.is_milestone ? "Definir data do marco" : "Definir data de início"}
+                          tooltip={formData.is_milestone ? "Definir data do marco" : "Definir início previsto"}
                           invalid={dateRangeInvalid}
                         />
                         {!formData.is_milestone && (
@@ -1790,8 +1837,8 @@ export const EditActivityDialog = ({
                             <DateChip
                               value={formData.end_date}
                               onChange={(v) => setFormData({ ...formData, end_date: v })}
-                              placeholder="Vencimento"
-                              tooltip="Definir data de vencimento"
+                              placeholder="Término"
+                              tooltip="Definir término previsto"
                               invalid={dateRangeInvalid}
                             />
                           </>
@@ -1832,51 +1879,42 @@ export const EditActivityDialog = ({
                         )}
                       </div>
   
-                      {/* EXECUÇÃO REAL — na MESMA linha, à direita do planejado */}
+                      {/* EXECUÇÃO REAL — sempre visível, na fileira de baixo.
+                          Era um "+ datas reais" que escondia os campos atrás de
+                          um clique: com a importação passando a trazer início e
+                          fim reais da planilha, o dado chegava preenchido e o
+                          bloco continuava colapsado. Há espaço na linha, e
+                          planejado × real lado a lado é o par que se compara. */}
                       {!formData.is_milestone && (() => {
                         const hasReal = !!(formData.actual_start_date || formData.actual_end_date);
-                        const expanded = showRealDates || hasReal;
-                        if (!expanded) {
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => setShowRealDates(true)}
-                              title="Registrar as datas em que a atividade realmente começou e terminou"
-                              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors self-start"
-                            >
-                              <Plus className="w-3 h-3" /> datas reais
-                            </button>
-                          );
-                        }
                         const v = endVariance(formData.actual_end_date || null, (act as any)?.baseline_end_date, formData.end_date);
                         const tone = v !== null ? varianceTone(v) : null;
-                        // Sem datas preenchidas o X apenas recolhe. Com datas, ele
-                        // seria a unica forma de destruir o dado (o preenchimento
-                        // automatico foi removido), entao confirma antes.
-                        const closeReal = () => {
-                          if (hasReal) {
-                            const ok = window.confirm(
-                              "Limpar as datas reais preenchidas? Esta acao apaga inicio e termino reais."
-                            );
-                            if (!ok) return;
-                            setFormData((prev) => ({ ...prev, actual_start_date: "", actual_end_date: "" }));
-                          }
-                          setShowRealDates(false);
+                        // Limpar só aparece com data preenchida: é a única forma
+                        // de apagar o dado, então confirma antes.
+                        const limparReal = () => {
+                          const ok = window.confirm(
+                            "Limpar as datas reais preenchidas? Esta acao apaga inicio e termino reais."
+                          );
+                          if (!ok) return;
+                          setFormData((prev) => ({ ...prev, actual_start_date: "", actual_end_date: "" }));
                         };
+                        // Separador VERTICAL: fica ao LADO do planejado, não
+                        // embaixo — a borda superior tracejada dividia fileiras
+                        // que não existem mais.
                         return (
-                          <div className="flex flex-wrap items-center gap-1.5 text-xs pt-2 border-t border-dashed border-border/70">
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs sm:pl-4 sm:border-l sm:border-dashed sm:border-border/70">
                             <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">Real</span>
                             <DateChip
                               value={formData.actual_start_date}
                               onChange={(v) => setFormData({ ...formData, actual_start_date: v })}
-                              placeholder="Início real"
+                              placeholder="Início"
                               tooltip="Definir início real"
                             />
                             <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                             <DateChip
                               value={formData.actual_end_date}
                               onChange={(v) => setFormData({ ...formData, actual_end_date: v })}
-                              placeholder="Término real"
+                              placeholder="Término"
                               tooltip="Definir término real"
                             />
                             {v !== null && tone && (
@@ -1885,14 +1923,16 @@ export const EditActivityDialog = ({
                                 {v > 0 ? `${Math.abs(v)}d de atraso` : v < 0 ? `${Math.abs(v)}d adiantado` : "no prazo"}
                               </span>
                             )}
-                            <button
-                              type="button"
-                              onClick={closeReal}
-                              title={hasReal ? "Limpar datas reais" : "Fechar"}
-                              className="text-muted-foreground hover:text-foreground shrink-0"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
+                            {hasReal && (
+                              <button
+                                type="button"
+                                onClick={limparReal}
+                                title="Limpar datas reais"
+                                className="text-muted-foreground hover:text-foreground shrink-0"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         );
                       })()}
@@ -1901,9 +1941,10 @@ export const EditActivityDialog = ({
   
                 </FieldBand>
   
-                {/* ---- FAIXA 3: ESFORÇO (tempo, custo, campos opcionais) ---- */}
+                {/* ---- FAIXA 3: ESFORÇO (tempo, custo, campos opcionais) ----
+                    Tempo e Custo ocupam meia coluna cada, lado a lado. */}
                 <FieldBand step={3} title="Esforço">
-                  {/* Tempo (opcional — colapsa quando vazio) */}
+                  {/* Tempo — sempre visível (exceto em marco). */}
                   {showHours && (
                     <PropertyRow icon={<Clock className="w-3.5 h-3.5" />} label="Tempo">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -2001,7 +2042,7 @@ export const EditActivityDialog = ({
                     </PropertyRow>
                   )}
   
-                  {/* Custo (opcional — colapsa quando vazio) */}
+                  {/* Custo — sempre visível (exceto em marco). */}
                   {showCost && (
                     <PropertyRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Custo">
                       {hasSubActivities ? (

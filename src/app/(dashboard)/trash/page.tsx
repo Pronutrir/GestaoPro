@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   Trash2, RotateCcw, Search, Inbox, FolderKanban, ListChecks, AlertTriangle, Layers,
   ShieldCheck, Calendar, FileText, Lightbulb, BookOpen, Package, MessageSquare,
+  NotebookPen,
 } from "lucide-react";
 
 type Module = {
@@ -23,7 +24,7 @@ type Module = {
   table:
     | "projects" | "activities" | "risks" | "assumptions" | "meetings"
     | "project_documents" | "lessons_learned" | "user_stories"
-    | "delivery_packages" | "activity_comments" | "phases";
+    | "delivery_packages" | "activity_comments" | "phases" | "project_pages";
   titleField: string;
   subtitleField?: string;
   icon: any;
@@ -37,6 +38,9 @@ const MODULES: Module[] = [
   { key: "assumptions", label: "Premissas", table: "assumptions", titleField: "description", icon: ShieldCheck },
   { key: "meetings", label: "Reuniões", table: "meetings", titleField: "title", subtitleField: "agenda", icon: Calendar },
   { key: "project_documents", label: "Documentos", table: "project_documents", titleField: "file_name", subtitleField: "description", icon: FileText },
+  // Páginas escritas no editor já eram marcadas como descartadas, mas não
+  // apareciam em lugar nenhum: ficavam órfãs no banco, sem como restaurar.
+  { key: "project_pages", label: "Documentos escritos", table: "project_pages", titleField: "title", icon: NotebookPen },
   { key: "lessons_learned", label: "Lições", table: "lessons_learned", titleField: "problem", subtitleField: "solution", icon: Lightbulb },
   { key: "user_stories", label: "Histórias", table: "user_stories", titleField: "title", subtitleField: "narrative", icon: BookOpen },
   { key: "delivery_packages", label: "Pacotes", table: "delivery_packages", titleField: "title", subtitleField: "description", icon: Package },

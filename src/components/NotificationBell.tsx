@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Bell, Check, AlertTriangle, Clock, Info, BellRing, X, Ban, UserPlus } from "lucide-react";
+import { Bell, Check, AlertTriangle, Clock, Info, BellRing, X, Ban, UserPlus, FileSignature, AtSign } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -139,7 +139,11 @@ export const NotificationBell = () => {
     // Convites são resolvidos pelos botões Aceitar/Recusar, não navegam.
     if (n.type === "project_invite") return;
     if (n.project_id) {
-      const query = n.activity_id ? `?activity=${n.activity_id}` : "";
+      // Pedido de assinatura leva à aba onde se assina; menção, à atividade.
+      // Sem isto o aviso parava na visão geral e a pessoa procurava sozinha.
+      const query = n.type === "flow_pending"
+        ? "?tab=tap"
+        : n.activity_id ? `?activity=${n.activity_id}` : "";
       setIsOpen(false);
       router.push(`/project/${n.project_id}${query}`);
     }
@@ -150,13 +154,32 @@ export const NotificationBell = () => {
     if (!uid) return;
     const unreadIds = notifications.filter((n) => !n.is_read).map((n) => n.id);
     if (unreadIds.length === 0) return;
+    // SEM `ids` de propósito: assim a rota marca todas as não lidas a que o
+    // usuário tem acesso, e não só as que couberam nesta tela. A listagem traz
+    // as 300 mais recentes de um acervo bem maior — mandar os ids visíveis
+    // deixaria as antigas não lidas para trás, e o contador nunca zeraria.
     const response = await fetch("/api/notifications/mark-read", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: unreadIds }),
+      body: JSON.stringify({}),
     });
     if (!response.ok) {
-      toast({ title: "Erro", description: "Não foi possível marcar as notificações.", variant: "destructive" });
+      // A rota grava em lotes; se um falhar no meio, os anteriores já foram
+      // gravados. Refaz o fetch mesmo no erro para a lista refletir o banco em
+      // vez de continuar mostrando como não lida algo que já foi marcado.
+      const partial = await response
+        .json()
+        .then((body) => (typeof body?.updated === "number" ? body.updated : 0))
+        .catch(() => 0);
+      if (partial > 0) fetchNotifications();
+      toast({
+        title: "Erro",
+        description:
+          partial > 0
+            ? `${partial} notificações foram marcadas antes da falha. Tente novamente.`
+            : "Não foi possível marcar as notificações.",
+        variant: "destructive",
+      });
       return;
     }
     fetchNotifications();
@@ -188,6 +211,22 @@ export const NotificationBell = () => {
       case "project_invite":
         return {
           icon: <UserPlus className="w-4 h-4" />,
+          color: "text-primary",
+          bg: "bg-primary/10 border-primary/30",
+          pulse: true,
+        };
+      // Pedido de assinatura/aprovação: destaque próprio porque exige AÇÃO da
+      // pessoa, não é só informação — antes caía no ícone genérico de "info".
+      case "flow_pending":
+        return {
+          icon: <FileSignature className="w-4 h-4" />,
+          color: "text-primary",
+          bg: "bg-primary/10 border-primary/30",
+          pulse: true,
+        };
+      case "activity_mention":
+        return {
+          icon: <AtSign className="w-4 h-4" />,
           color: "text-primary",
           bg: "bg-primary/10 border-primary/30",
           pulse: true,

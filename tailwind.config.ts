@@ -38,6 +38,16 @@ export default {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
         },
+        // Ardósia: agrupa sem pedir clique (ver comentário em index.css).
+        // `<alpha-value>` é obrigatório para as variantes com opacidade
+        // (text-band/80, border-band/40) existirem — sem ele o Tailwind gera
+        // só a cor cheia e as classes com barra somem em silêncio, deixando o
+        // elemento sem cor nenhuma.
+        band: {
+          DEFAULT: "hsl(var(--band) / <alpha-value>)",
+          foreground: "hsl(var(--band-foreground) / <alpha-value>)",
+          soft: "hsl(var(--band-soft) / <alpha-value>)",
+        },
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",

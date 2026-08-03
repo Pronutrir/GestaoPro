@@ -15,14 +15,13 @@ import { EditActivityDialog } from "@/components/EditActivityDialog";
 import { ImportWBSDialog } from "@/components/ImportWBSDialog";
 import { ProjectCronogramaPanel } from "@/components/cronograma/ProjectCronogramaPanel";
 import { LessonsLearned } from "@/components/LessonsLearned";
-import { DocumentManager } from "@/components/DocumentManager";
+import { DocumentCenter } from "@/components/documentos/DocumentCenter";
 import { ProjectCharter } from "@/components/ProjectCharter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { BacklogSection } from "@/components/BacklogSection";
 import { QuickCreateActivity } from "@/components/QuickCreateActivity";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
-import { CreatePhaseDialog } from "@/components/CreatePhaseDialog";
 import { MeetingsManager } from "@/components/MeetingsManager";
 
 import { RisksManager } from "@/components/RisksManager";
@@ -33,7 +32,6 @@ import { UserStoriesBoard } from "@/components/UserStoriesBoard";
 import { SHOW_USER_STORIES, SHOW_CALENDAR } from "@/lib/featureFlags";
 import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
-import { ProjectDocuments } from "@/components/documents/ProjectDocuments";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, GanttChart, BookOpen, FileText, Flag,
@@ -57,6 +55,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { getProjectDeadlineInfo, formatProjectDueDate } from "@/lib/projectDeadline";
 import { normalizeProjectTabs } from "@/lib/projectTabs";
+import { selectInChunks, mutateInChunks } from "@/lib/chunkedIn";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
@@ -118,7 +117,6 @@ const SUPPORTED_PROJECT_TABS = [
   "timeline",
   "calendar",
   "documents",
-  "docpages",
   "stories",
   "tap",
   "meetings",
@@ -132,6 +130,10 @@ const SUPPORTED_PROJECT_TABS = [
 
 const LEGACY_PROJECT_TAB_ALIASES: Record<string, typeof SUPPORTED_PROJECT_TABS[number]> = {
   list: "backlog",
+  // "Páginas" virou uma visão dentro de Documentos (Central de Documentos).
+  // Links salvos, preferências gravadas por usuário e permissões de aba já
+  // existentes continuam válidos — passam a apontar para a aba única.
+  docpages: "documents",
 };
 
 const sanitizeVisibleProjectTabs = (tabs: string[] | null | undefined) => {
@@ -186,7 +188,6 @@ export default function ProjectDetailsPage() {
   const [createTaskStageId, setCreateTaskStageId] = useState<string | null>(null);
   const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
   const [createTaskParentId, setCreateTaskParentId] = useState<string | null>(null);
-  const [showAddPhase, setShowAddPhase] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
@@ -286,6 +287,21 @@ export default function ProjectDetailsPage() {
   // Abre direto (sem passar por openEditActivity) para não esbarrar na guarda
   // de permissão de edição — a notificação pode ser de uma atividade de outra
   // pessoa, e o usuário precisa ao menos visualizá-la. O próprio dialog cuida
+  // Deep-link de ABA (?tab=tap, ?tab=documents…). Sem isto, um aviso de "assine
+  // este TAP" levava só à visão geral do projeto e a pessoa ainda precisava
+  // caçar onde estava o pedido.
+  const openedTabRef = useRef<string | null>(null);
+  useEffect(() => {
+    const tabParam = searchParams?.get("tab");
+    if (!tabParam || openedTabRef.current === tabParam) return;
+    // Respeita alias legado (docpages → documents) e o que o usuário pode ver.
+    const alvo = normalizeProjectTabs([tabParam])[0];
+    if (alvo && visibleTabs.includes(alvo)) {
+      openedTabRef.current = tabParam;
+      setActiveTab(alvo);
+    }
+  }, [searchParams, visibleTabs]);
+
   // do que é editável.
   const openedDeepLinkRef = useRef<string | null>(null);
   useEffect(() => {
@@ -305,6 +321,28 @@ export default function ProjectDetailsPage() {
     setEditingActivity(target);
     setEditActivityDialogOpen(true);
   }, [activities, searchParams]);
+
+  // O cartão de tarefa dentro de um documento escrito ("/tarefa") dispara
+  // `open-activity` ao clicar em Abrir. Até agora ninguém escutava esse evento
+  // e o botão não fazia nada. Abre igual ao deep-link de notificação: sem
+  // passar pela guarda de edição, porque abrir para VER não é editar — o
+  // próprio dialog decide o que fica editável.
+  useEffect(() => {
+    const onOpenActivity = (e: Event) => {
+      const detail = (e as CustomEvent<{ activityId?: string }>).detail;
+      if (!detail?.activityId) return;
+      const target = activities.find((a) => a.id === detail.activityId);
+      if (!target) {
+        toast.error("Atividade não encontrada — pode ter sido excluída ou arquivada.");
+        return;
+      }
+      setEditActivityInitialTab("details");
+      setEditingActivity(target);
+      setEditActivityDialogOpen(true);
+    };
+    window.addEventListener("open-activity", onOpenActivity);
+    return () => window.removeEventListener("open-activity", onOpenActivity);
+  }, [activities, toast]);
 
   const fetchPendingChangeRequests = useCallback(async () => {
     if (!id) return;
@@ -721,13 +759,19 @@ export default function ProjectDetailsPage() {
 
     const allIds = Array.from(new Set([...memberIds, ...assignedIds]));
     if (allIds.length > 0) {
-      const { data: profilesById } = await supabase
-        .from("profiles")
-        .select("id, full_name, sector, avatar_url, email")
-        .in("id", allIds);
+      // Em lotes: esta lista junta membros e responsáveis de TODAS as atividades,
+      // então cresce com o projeto e pode estourar o limite de URL do proxy
+      // (ver lib/chunkedIn).
+      const profilesById = await selectInChunks<{ id: string; full_name: string | null; sector: string | null; avatar_url: string | null; email: string | null }>(
+        allIds,
+        (batch) => supabase
+          .from("profiles")
+          .select("id, full_name, sector, avatar_url, email")
+          .in("id", batch),
+      ).catch(() => []);
 
-      (profilesById || []).forEach((profile) => {
-        mergedById.set(profile.id, profile as { id: string; full_name: string | null; sector: string | null; avatar_url: string | null; email: string | null });
+      profilesById.forEach((profile) => {
+        mergedById.set(profile.id, profile);
       });
     }
 
@@ -1019,7 +1063,11 @@ export default function ProjectDetailsPage() {
       }
     }
 
-    const { error: updateActivitiesError } = await (supabase.from("activities").update(updatePayload) as any).in("id", idsToUpdate);
+    // Em lotes: concluir um item com muitos descendentes gera uma lista longa,
+    // que estoura o limite de URL do proxy (ver lib/chunkedIn).
+    const { error: updateActivitiesError } = await mutateInChunks(idsToUpdate, (batch) =>
+      (supabase.from("activities").update(updatePayload) as any).in("id", batch),
+    );
     if (updateActivitiesError) {
       toast.error(`Erro ao atualizar atividade(s): ${updateActivitiesError.message}`);
       return;
@@ -1030,8 +1078,9 @@ export default function ProjectDetailsPage() {
     });
 
     if (updatePayload.workflow_stage_id) {
-      const { error: updateStoriesError } = await (supabase.from("user_stories").update({ stage_id: updatePayload.workflow_stage_id }) as any)
-        .in("activity_id", idsToUpdate);
+      const { error: updateStoriesError } = await mutateInChunks(idsToUpdate, (batch) =>
+        (supabase.from("user_stories").update({ stage_id: updatePayload.workflow_stage_id }) as any)
+          .in("activity_id", batch));
       if (updateStoriesError) {
         toast.error(`Erro ao atualizar estágio das histórias: ${updateStoriesError.message}`);
       }
@@ -1138,7 +1187,11 @@ export default function ProjectDetailsPage() {
       newIds.forEach(nid => idsToTrash.add(nid));
       frontier = newIds;
     }
-    const { error } = await (supabase.from("activities").update({ is_trashed: true, trashed_at: trashedAt } as any) as any).in("id", Array.from(idsToTrash));
+    // Em lotes: arquivar uma fase leva junto todos os descendentes, e essa
+    // lista cresce sem teto (ver lib/chunkedIn).
+    const { error } = await mutateInChunks(Array.from(idsToTrash), (batch) =>
+      (supabase.from("activities").update({ is_trashed: true, trashed_at: trashedAt } as any) as any).in("id", batch),
+    );
     if (error) {
       toast.error("Não foi possível arquivar a atividade.", { description: error.message });
       return;
@@ -1156,9 +1209,8 @@ export default function ProjectDetailsPage() {
         action: {
           label: "Desfazer",
           onClick: async () => {
-            const { error: undoError } = await (
-              supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any) as any
-            ).in("id", trashedIds);
+            const { error: undoError } = await mutateInChunks(trashedIds, (batch) =>
+              (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any) as any).in("id", batch));
             if (undoError) {
               toast.error("Não foi possível desfazer.", { description: undoError.message });
               return;
@@ -1256,12 +1308,26 @@ export default function ProjectDetailsPage() {
                     <Pencil className="w-3.5 h-3.5" />
                   </Button>
                 )}
-                {project.owner && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">Líder:</span>
-                    <span className="font-medium text-foreground">{project.owner}</span>
-                  </div>
-                )}
+                {/* UMA pessoa só no topo: mostrar Líder e Gestor lado a lado
+                    enchia a barra sem acrescentar — quem olha o cabeçalho quer
+                    saber a quem recorrer, não o organograma. A ficha continua
+                    com os dois campos.
+
+                    Cai para o Líder quando não há Gestor: em 02/08/2026, 41 dos
+                    52 projetos têm líder e nenhum gestor — mostrar só o gestor
+                    deixaria a maioria dos cabeçalhos sem pessoa nenhuma. */}
+                {(() => {
+                  const gestor = project.manager?.trim() || "";
+                  const lider = project.owner?.trim() || "";
+                  const quem = gestor || lider;
+                  if (!quem) return null;
+                  return (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground">{gestor ? "Gestor:" : "Líder:"}</span>
+                      <span className="font-medium text-foreground">{quem}</span>
+                    </div>
+                  );
+                })()}
                 {project.due_date && (() => {
                   const { dueDate, diffDays, isOverdue, isUrgent } = getProjectDeadlineInfo(project.due_date);
                   return (
@@ -1344,7 +1410,6 @@ export default function ProjectDetailsPage() {
                   { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-rose-500" },
                 ]),
                 { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-blue-500" },
-                { value: "docpages", label: "Páginas", icon: <NotebookPen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-pink-500" },
                 ...(SHOW_USER_STORIES ? [
                   { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-fuchsia-500" },
                 ] : []),
@@ -1476,17 +1541,19 @@ export default function ProjectDetailsPage() {
               </TabsContent>
             )}
 
+            {/* CENTRAL DE DOCUMENTOS — as antigas abas "Documentos" e "Páginas"
+                fundidas. Eram metades do mesmo trabalho: uma escrevia e não
+                distribuía, a outra distribuía e não escrevia. A escolha entre
+                escrever e enviar arquivo virou sub-navegação, não aba do
+                projeto. A rota antiga (?tab=docpages) continua abrindo aqui. */}
             <TabsContent value="documents" className="mt-0">
-              <DocumentManager
+              <DocumentCenter
                 projectId={id!}
                 phases={phases}
                 activities={activities.map(a => ({ id: a.id, title: a.title }))}
                 canManageProject={isAdmin}
+                onActivityCreated={fetchProjectData}
               />
-            </TabsContent>
-
-            <TabsContent value="docpages" className="mt-0">
-              <ProjectDocuments projectId={id!} onActivityCreated={fetchProjectData} />
             </TabsContent>
 
             <TabsContent value="stories" className="mt-0">
@@ -1673,7 +1740,6 @@ export default function ProjectDetailsPage() {
                   : !canWrite ? "Seu acesso a este projeto é somente leitura."
                   : "Você não tem permissão para arquivar atividades neste projeto."
                 }
-                onCreatePhase={() => setShowAddPhase(true)}
                 hasActiveFilters={!!listSearch || listStatusFilter !== "all" || listPriorityFilter !== "all"}
               />
             </TabsContent>
@@ -1732,13 +1798,6 @@ export default function ProjectDetailsPage() {
             projectLocked={isProjectConcluded}
           />
         )}
-        <CreatePhaseDialog
-          open={showAddPhase}
-          onOpenChange={setShowAddPhase}
-          projectId={id!}
-          existingPhasesCount={phases.length}
-          onCreated={() => fetchProjectData()}
-        />
         <QuickCreateActivity
           open={showQuickCreate}
           onOpenChange={setShowQuickCreate}

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,12 +8,13 @@ import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Diamond,
-  Rows3, MoreHorizontal,
+  Rows3, MoreHorizontal, Pencil,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { EditPhaseDialog } from "@/components/EditPhaseDialog";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -38,7 +40,18 @@ import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from
 import { resolveEapKind, eapTypeOptions, type EapKind } from "@/lib/eapModel";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 
-interface Phase { id: string; title: string; }
+interface Phase {
+  id: string;
+  title: string;
+  // Campos opcionais: a query da página usa select("*"), mas o ambiente pode
+  // não ter as colunas (migrations pendentes) — o diálogo degrada por campo.
+  description?: string | null;
+  wbs_code?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  actual_start_date?: string | null;
+  actual_end_date?: string | null;
+}
 interface WorkflowStage { id: string; title: string; display_order: number; color: string; }
 interface Activity {
   id: string;
@@ -60,6 +73,8 @@ interface Activity {
   workflow_stage_id?: string | null;
   item_type?: string | null;
   is_milestone?: boolean | null;
+  /** Código da EAP: define o papel (nível 1 = Fase, 2+ = Atividade). */
+  wbs_code?: string | null;
 }
 
 interface BacklogSectionProps {
@@ -75,14 +90,13 @@ interface BacklogSectionProps {
    *  Quando vem preenchido, o botão fica DESABILITADO com este texto no
    *  tooltip em vez de sumir — some sem explicação vira "não consigo excluir". */
   deleteBlockedReason?: string;
-  onCreatePhase?: () => void;
   hasActiveFilters?: boolean;
 }
 
 export const BacklogSection = ({
   projectId, activities, phases,
   onEditActivity, onDeleteActivity, onToggleActivity,
-  onDataChanged, isAdmin = false, deleteBlockedReason, onCreatePhase, hasActiveFilters,
+  onDataChanged, isAdmin = false, deleteBlockedReason, hasActiveFilters,
 }: BacklogSectionProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -133,12 +147,19 @@ export const BacklogSection = ({
 
   // Colunas selecionáveis do backlog (o usuário escolhe o que ver). Persistido
   // por projeto, mesmo padrão da tabela de subatividades.
+  // Largura elástica (minmax) em vez de fixa: com valores fixos a soma passava
+  // de 760px e a última coluna — a de ações — saía da tela, exigindo rolagem
+  // lateral para chegar ao botão de arquivar. Agora cada coluna encolhe até um
+  // mínimo ainda legível e a tabela cabe na largura disponível.
+  // Máximos mais enxutos: as colunas de dado não precisam crescer sem limite —
+  // a folga vai para o título, que é o que a pessoa lê. Prazo e Horas seguram
+  // conteúdo curto ("20/07/2026", "55h") e não justificam largura de sobra.
   const BACKLOG_COLS: { id: string; label: string; width: string; align?: "center" | "left" }[] = [
-    { id: "priority", label: "Prioridade", width: "132px", align: "left" },
-    { id: "status", label: "Status", width: "148px", align: "left" },
-    { id: "assigned_to", label: "Responsável", width: "180px", align: "left" },
-    { id: "end_date", label: "Prazo", width: "116px", align: "left" },
-    { id: "hours", label: "Horas", width: "96px", align: "left" },
+    { id: "priority", label: "Prioridade", width: "minmax(80px,108px)", align: "left" },
+    { id: "status", label: "Status", width: "minmax(88px,124px)", align: "left" },
+    { id: "assigned_to", label: "Responsável", width: "minmax(96px,168px)", align: "left" },
+    { id: "end_date", label: "Prazo", width: "minmax(64px,96px)", align: "left" },
+    { id: "hours", label: "Horas", width: "minmax(48px,68px)", align: "left" },
   ];
   const BACKLOG_COLS_DEFAULT = ["priority", "status", "assigned_to", "end_date"];
   const backlogColsKey = `backlog-cols:${projectId}`;
@@ -160,9 +181,45 @@ export const BacklogSection = ({
       return next;
     });
   };
-  const activeCols = BACKLOG_COLS.filter((c) => visibleCols.includes(c.id));
-  // Grid: [expand 20][check 26][tarefa flex][...colunas][ações 68]
-  const backlogGrid = `20px 26px minmax(220px,1fr) ${activeCols.map((c) => c.width).join(" ")} 68px`;
+  // Largura real do container (não da janela): o backlog também aparece dentro
+  // de painéis estreitos, onde uma media query da viewport erraria.
+  const tableRef = useRef<HTMLDivElement>(null);
+  const [tableWidth, setTableWidth] = useState(0);
+  useEffect(() => {
+    const el = tableRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => setTableWidth(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Quando o espaço aperta, some com as colunas menos essenciais em vez de
+  // criar rolagem lateral. Ordem de descarte = da menos para a mais decisiva
+  // na leitura do backlog; tarefa e ações nunca saem.
+  const DROP_ORDER = ["hours", "end_date", "assigned_to", "status", "priority"];
+  const chosenCols = BACKLOG_COLS.filter((c) => visibleCols.includes(c.id));
+  const activeCols = (() => {
+    // 0 = ainda não medido (primeiro render): mostra tudo e deixa o
+    // ResizeObserver corrigir, em vez de piscar escondendo colunas.
+    if (tableWidth === 0) return chosenCols;
+    const FIXED = 20 + 26 + 32 + 120; // expand + check + ações + mínimo da Tarefa
+    const minOf = (c: { width: string }) => Number(c.width.match(/minmax\((\d+)px/)?.[1] ?? 0);
+    let cols = [...chosenCols];
+    const fits = () => FIXED + cols.reduce((s, c) => s + minOf(c), 0) + 8 * (3 + cols.length) <= tableWidth;
+    for (const id of DROP_ORDER) {
+      if (fits()) break;
+      cols = cols.filter((c) => c.id !== id);
+    }
+    return cols;
+  })();
+
+  // Grid: [expand 20][check 26][tarefa flex][...colunas][ações 32]
+  // Ações agora é um único "⋯" (antes eram dois botões, daí os 60px): a folga
+  // volta para o título, que é o que a pessoa lê.
+  // O mínimo da coluna Tarefa é baixo de propósito: ela tem `truncate`, então
+  // encolher corta o texto com reticências — o que é preferível a empurrar a
+  // coluna de ações para fora da tela.
+  const backlogGrid = `20px 26px minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
 
   useEffect(() => {
     const ids = activities.map((a) => a.id);
@@ -379,6 +436,14 @@ export const BacklogSection = ({
   };
   const lanes = groupBy === "phase" ? [] : buildLanes();
 
+  // Fase aberta para edição. Guarda o objeto inteiro (vem da prop `phases`),
+  // para o diálogo já abrir preenchido sem uma segunda consulta.
+  const [editingPhase, setEditingPhase] = useState<Phase | null>(null);
+  const openPhase = (id: string, _titulo: string) => {
+    const p = phases.find((x) => x.id === id);
+    if (p) setEditingPhase(p);
+  };
+
   const togglePhase = (id: string) => {
     setCollapsedPhases((prev) => {
       const n = new Set(prev);
@@ -495,9 +560,10 @@ export const BacklogSection = ({
   };
   // Muda o tipo de um item.
   const handleChangeType = async (activity: Activity, kind: Kind, hasChildren: boolean) => {
-    // Folha (atividade/marco) não pode ter filhos.
-    if ((kind === "atividade" || kind === "marco") && hasChildren) {
-      toast({ title: "Não é possível", description: "Este item tem subitens; só Fase/Entrega agrupa.", variant: "destructive" });
+    // Atividade agora pode agrupar (o nível é que define o rótulo). Só Marco
+    // segue barrado com filhos: é folha de controle por definição.
+    if (kind === "marco" && hasChildren) {
+      toast({ title: "Não é possível", description: "Este item tem subitens; Marco não agrupa.", variant: "destructive" });
       return;
     }
     const patch = kind === "marco"
@@ -526,7 +592,7 @@ export const BacklogSection = ({
   // Cabeçalho de colunas alinhado com o grid das linhas.
   const ColumnHeader = () => (
     <div
-      className="grid items-center gap-3 px-3 py-2 bg-muted/40 border-b border-border text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+      className="grid items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
       style={{ gridTemplateColumns: backlogGrid }}
     >
       <span /><span />
@@ -577,7 +643,8 @@ export const BacklogSection = ({
 
     const kind = resolveKind(activity, hasChildren);
     const kindMeta = KIND_META[kind];
-    // Fase disponível em qualquer nível; item com filhos só pode ser Fase.
+    // Item com filhos pode ser Fase ou Atividade (o nível é que define o
+    // rótulo); só Marco fica de fora, por ser folha de controle.
     const typeOptions: Kind[] = eapTypeOptions({ hasChildren });
     const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
     const dc = dependencyCounts.get(activity.id);
@@ -654,10 +721,14 @@ export const BacklogSection = ({
     return (
       <div key={activity.id}>
         <div
-          className={`grid items-center gap-3 border-b px-3 py-2.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
+          className={`grid items-center gap-2 border-b px-3 py-2.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
             isSelected ? "bg-primary/5" : ""
           }`}
-          style={{ gridTemplateColumns: backlogGrid, paddingLeft: 12 + depth * 22 }}
+          // O recuo de profundidade NÃO vai aqui: padding na linha encolhe a
+          // área do grid e empurra TODAS as colunas para a direita, tanto mais
+          // quanto mais fundo o item — era o que desalinhava as linhas do
+          // cabeçalho. O recuo é aplicado só na coluna do título, abaixo.
+          style={{ gridTemplateColumns: backlogGrid }}
           onClick={() => { if (!isEditingTitle) onEditActivity(activity); }}
         >
           {/* col: expand */}
@@ -698,8 +769,11 @@ export const BacklogSection = ({
             </button>
           )}
 
-          {/* col: ícone de tipo (clicável) + título + código EAP + deps */}
-          <div className="flex items-center gap-2 min-w-0">
+          {/* col: ícone de tipo (clicável) + título + código EAP + deps.
+              O recuo por profundidade vive AQUI, dentro da coluna do título:
+              assim a hierarquia continua legível sem deslocar as demais
+              colunas, que permanecem alinhadas com o cabeçalho. */}
+          <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: depth * 18 }}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -774,38 +848,50 @@ export const BacklogSection = ({
           {/* colunas selecionáveis, na ordem de BACKLOG_COLS */}
           {activeCols.map((c) => renderCol(c.id))}
 
-          {/* col: ações (aparecem no hover) */}
-          <span className="flex items-center gap-0.5 justify-end shrink-0">
-            <button
-              type="button"
-              className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Adicionar subitem (torna-o uma Fase/Entrega)"
-              onClick={(e) => {
-                e.stopPropagation();
-                setQuickAddKey(`parent:${activity.id}`);
-                setQuickAddTitle("");
-                setCollapsedParents((prev) => { const n = new Set(prev); n.delete(activity.id); return n; });
-              }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-            {/* Arquivar: sempre presente. Sem permissão/projeto concluído ele
-                fica desabilitado COM o motivo — sumir levava a "não consigo
-                excluir esta atividade" sem pista nenhuma do porquê. */}
-            <button
-              type="button"
-              disabled={!isAdmin}
-              className={cn(
-                "h-6 w-6 flex items-center justify-center rounded transition-opacity opacity-0 group-hover:opacity-100",
-                isAdmin
-                  ? "text-destructive hover:bg-destructive/10"
-                  : "text-muted-foreground/40 cursor-not-allowed",
-              )}
-              onClick={(e) => { e.stopPropagation(); if (isAdmin) onDeleteActivity(activity.id); }}
-              title={isAdmin ? "Arquivar atividade" : (deleteBlockedReason || "Você não tem permissão para arquivar esta atividade")}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+          {/* col: ações — um "⋯" em vez de ícones soltos. Dois ícones por linha
+              viravam ruído numa lista longa, e o menu acomoda ações novas sem
+              alargar a coluna. O gatilho fica sempre visível (atenuado em
+              repouso): escondê-lo no hover deixava a ação indescobrível. */}
+          <span className="flex items-center justify-end shrink-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-opacity opacity-45 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 data-[state=open]:bg-muted"
+                  title="Ações da tarefa"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setQuickAddKey(`parent:${activity.id}`);
+                    setQuickAddTitle("");
+                    setCollapsedParents((prev) => { const n = new Set(prev); n.delete(activity.id); return n; });
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-2" /> Adicionar subitem
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onEditActivity(activity)}>
+                  <Pencil className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {/* Desabilitado COM o motivo em vez de oculto: sumir levava a
+                    "não consigo excluir" sem pista nenhuma do porquê. */}
+                <DropdownMenuItem
+                  disabled={!isAdmin}
+                  className={isAdmin ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
+                  title={isAdmin ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta atividade")}
+                  // preventDefault: sem ele o menu fecha e leva o foco junto,
+                  // brigando com o diálogo de confirmação que abre em seguida.
+                  onSelect={(e) => { e.preventDefault(); if (isAdmin) onDeleteActivity(activity.id); }}
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </span>
         </div>
 
@@ -815,12 +901,14 @@ export const BacklogSection = ({
           </div>
         )}
 
+        {/* Recuo igual ao das linhas (12 + depth*22), um nível abaixo do pai:
+            o campo cai sob os irmãos que vai criar, não deslocado deles. */}
         {quickAddOpen && (
-          <div style={{ marginLeft: 8 + (depth + 1) * 20 }} className="flex items-center gap-2 px-3 py-2 my-1 border border-dashed border-primary/40 rounded-lg bg-primary/5">
+          <div style={{ paddingLeft: 12 + (depth + 1) * 22 }} className="flex items-center gap-2 pr-3 py-1.5 border-b bg-primary/5">
             <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
             <Input
               autoFocus
-              placeholder="Título do subitem — Enter cria e continua · Esc fecha"
+              placeholder="Título do subitem — Enter cria · Esc fecha"
               value={quickAddTitle}
               onChange={(e) => setQuickAddTitle(e.target.value)}
               onKeyDown={(e) => {
@@ -836,6 +924,53 @@ export const BacklogSection = ({
     );
   };
 
+  /**
+   * Arquiva UMA fase (soft-delete, igual ao resto do sistema).
+   *
+   * Faltava: o cabeçalho da fase real só tinha "+ Tarefa", enquanto a fase
+   * virtual (atividade com item_type='fase') já tinha o botão de arquivar. Quem
+   * criasse uma fase ficava sem saída — a única opção era "Arquivar todas as
+   * fases", que é tudo ou nada.
+   *
+   * As atividades da fase NÃO são apagadas: perdem o vínculo e caem em
+   * "Sem fase", que é reversível. Apagar tarefa junto com o agrupador seria
+   * destrutivo demais para uma ação de um clique.
+   */
+  const handleDeletePhase = async (phaseId: string, phaseTitle: string) => {
+    const acts = topLevelByPhase.get(phaseId) || [];
+    const ok = await appConfirm({
+      title: `Arquivar a fase "${phaseTitle}"?`,
+      description: acts.length > 0
+        ? `${acts.length} ${acts.length === 1 ? "tarefa vai" : "tarefas vão"} para "Sem fase". Nada é excluído — dá para restaurar em Arquivo.`
+        : "A fase vai para o Arquivo e pode ser restaurada de lá.",
+      confirmText: "Arquivar fase",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    // Solta as tarefas antes de arquivar: se a fase sumir com elas ainda
+    // apontando, elas somem da tela sem estarem arquivadas.
+    if (acts.length > 0) {
+      const { error: unlinkError } = await supabase
+        .from("activities").update({ phase_id: null } as any).eq("phase_id", phaseId);
+      if (unlinkError) {
+        toast({ title: "Erro ao soltar as tarefas da fase", description: unlinkError.message, variant: "destructive" });
+        return;
+      }
+    }
+
+    const { error } = await supabase
+      .from("phases")
+      .update({ is_trashed: true, trashed_at: new Date().toISOString() } as any)
+      .eq("id", phaseId);
+    if (error) {
+      toast({ title: "Erro ao arquivar a fase", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Fase arquivada", description: "Pode ser restaurada em Arquivo." });
+    onDataChanged();
+  };
+
   const renderPhaseGroup = (phaseId: string | null, phaseTitle: string) => {
     const key = phaseId || "none";
     const acts = topLevelByPhase.get(key) || [];
@@ -847,12 +982,22 @@ export const BacklogSection = ({
 
     return (
       <div key={key}>
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50">
+        {/* Mesmo gesto da linha de atividade: o CLIQUE abre a fase, o CHEVRON
+            colapsa. Antes só o chevron respondia (alvo de 20px) e não havia
+            como abrir a fase — ela nem tinha tela própria. */}
+        <div
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50",
+            phaseId && "cursor-pointer hover:bg-muted/70 transition-colors",
+          )}
+          onClick={() => { if (phaseId) openPhase(phaseId, phaseTitle); }}
+        >
           {phaseId ? (
             <button
               type="button"
               className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-              onClick={() => togglePhase(phaseId)}
+              title={isCollapsed ? "Expandir" : "Recolher"}
+              onClick={(e) => { e.stopPropagation(); togglePhase(phaseId); }}
             >
               {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
@@ -862,8 +1007,11 @@ export const BacklogSection = ({
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-primary/10 text-primary shrink-0">
             {phaseId ? <Layers className="w-3.5 h-3.5" /> : <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />}
           </span>
-          <h4 className="text-[13px] font-semibold text-foreground">{phaseTitle}</h4>
-          <div className="flex items-center gap-3 ml-auto">
+          <h4 className="text-[13px] font-semibold text-foreground truncate">{phaseTitle}</h4>
+          {/* gap-2 (não 3) para o "⋯" cair sobre a coluna de ações das linhas.
+              stopPropagation: a faixa toda colapsa a fase, então sem isto
+              clicar em "+ Tarefa" fecharia o grupo junto. */}
+          <div className="flex items-center gap-2 ml-auto shrink-0" onClick={(e) => e.stopPropagation()}>
             {progTotal > 0 && (
               <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
                 <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
@@ -880,6 +1028,36 @@ export const BacklogSection = ({
             >
               <Plus className="w-3.5 h-3.5" /> Tarefa
             </Button>
+            {/* Só na fase real: "Sem fase" é grupo virtual, não existe no banco
+                e portanto não há o que arquivar. */}
+            {phaseId && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted"
+                    title="Ações da fase"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem onSelect={() => openPhase(phaseId, phaseTitle)}>
+                    <Pencil className="w-3.5 h-3.5 mr-2" /> Abrir fase
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={!isAdmin}
+                    className={isAdmin ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
+                    title={isAdmin ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
+                    onSelect={(e) => { e.preventDefault(); if (isAdmin) handleDeletePhase(phaseId, phaseTitle); }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar fase
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
 
@@ -893,11 +1071,18 @@ export const BacklogSection = ({
               acts.map((a) => renderActivityRow(a, 0))
             )}
             {quickAddOpen && (
-              <div className="flex items-center gap-2 mx-2 my-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
-                <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+              // Mesmo grid das linhas de tarefa: o campo cai exatamente sob a
+              // coluna "Tarefa". Antes era um flex com margem própria, então o
+              // input começava num ponto e as tarefas em outro.
+              <div
+                className="grid items-center gap-2 border-b px-3 py-2 bg-primary/5"
+                style={{ gridTemplateColumns: backlogGrid }}
+              >
+                <span />
+                <Plus className="w-3.5 h-3.5 text-primary justify-self-center" />
                 <Input
                   autoFocus
-                  placeholder="Título — Enter cria e continua · Esc fecha"
+                  placeholder="Título — Enter cria · Esc fecha"
                   value={quickAddTitle}
                   onChange={(e) => setQuickAddTitle(e.target.value)}
                   onKeyDown={(e) => {
@@ -905,7 +1090,7 @@ export const BacklogSection = ({
                     if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
                   }}
                   onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
-                  className="h-8 text-sm"
+                  className="h-7 text-sm"
                 />
               </div>
             )}
@@ -927,11 +1112,15 @@ export const BacklogSection = ({
 
     return (
       <div key={phaseAct.id}>
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50">
+        {/* Mesmo gesto da fase real: clique abre, chevron colapsa. */}
+        <div
+          className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+          onClick={() => onEditActivity(phaseAct)}
+        >
           <button
             type="button"
             className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-            onClick={() => toggleParent(phaseAct.id)}
+            onClick={(e) => { e.stopPropagation(); toggleParent(phaseAct.id); }}
           >
             {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -956,7 +1145,8 @@ export const BacklogSection = ({
             ) : (
               <h4
                 className="text-[13px] font-semibold text-foreground cursor-pointer truncate"
-                onClick={() => onEditActivity(phaseAct)}
+                // stopPropagation: a faixa colapsa, o título abre os detalhes.
+                onClick={(e) => { e.stopPropagation(); onEditActivity(phaseAct); }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   setEditingTitleId(phaseAct.id);
@@ -968,7 +1158,9 @@ export const BacklogSection = ({
               </h4>
             )}
           </div>
-          <div className="flex items-center gap-3 ml-auto">
+          {/* gap-2: mesmo alinhamento do cabeçalho de fase real.
+              stopPropagation: a faixa colapsa; os botões daqui não devem. */}
+          <div className="flex items-center gap-2 ml-auto shrink-0" onClick={(e) => e.stopPropagation()}>
             {progTotal > 0 && (
               <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
                 <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
@@ -989,18 +1181,34 @@ export const BacklogSection = ({
             >
               <Plus className="w-3.5 h-3.5" /> Tarefa
             </Button>
-            <button
-              type="button"
-              disabled={!isAdmin}
-              className={cn(
-                "h-7 w-7 flex items-center justify-center rounded",
-                isAdmin ? "text-destructive hover:bg-destructive/10" : "text-muted-foreground/40 cursor-not-allowed",
-              )}
-              title={isAdmin ? "Arquivar fase (as subtarefas vão junto)" : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
-              onClick={(e) => { e.stopPropagation(); if (isAdmin) onDeleteActivity(phaseAct.id); }}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {/* "+ Tarefa" continua exposto (é a ação principal da fase); o
+                resto vai para o menu, como nas linhas. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted"
+                  title="Ações da fase"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem onSelect={() => onEditActivity(phaseAct)}>
+                  <Pencil className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={!isAdmin}
+                  className={isAdmin ? "text-destructive focus:text-destructive focus:bg-destructive/10" : ""}
+                  title={isAdmin ? undefined : (deleteBlockedReason || "Você não tem permissão para arquivar esta fase")}
+                  onSelect={(e) => { e.preventDefault(); if (isAdmin) onDeleteActivity(phaseAct.id); }}
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Arquivar fase
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -1014,11 +1222,16 @@ export const BacklogSection = ({
               subs.map((s) => renderActivityRow(s, 0))
             )}
             {quickAddOpen && (
-              <div className="flex items-center gap-2 mx-2 my-2 px-3 py-2 border border-dashed border-primary/40 rounded-lg bg-primary/5">
-                <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+              // Mesmo grid das linhas: o campo alinha com a coluna "Tarefa".
+              <div
+                className="grid items-center gap-2 border-b px-3 py-2 bg-primary/5"
+                style={{ gridTemplateColumns: backlogGrid }}
+              >
+                <span />
+                <Plus className="w-3.5 h-3.5 text-primary justify-self-center" />
                 <Input
                   autoFocus
-                  placeholder="Título — Enter cria e continua · Esc fecha"
+                  placeholder="Título — Enter cria · Esc fecha"
                   value={quickAddTitle}
                   onChange={(e) => setQuickAddTitle(e.target.value)}
                   onKeyDown={(e) => {
@@ -1145,19 +1358,22 @@ export const BacklogSection = ({
       )}
 
       {/* Phase groups — tabela única com cabeçalho de colunas no topo */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
+      {/* Sem rolagem lateral: as colunas são elásticas (minmax em BACKLOG_COLS)
+          e encolhem até caber. Antes as larguras eram fixas e somavam ~760px,
+          então a coluna de AÇÕES — a última — saía da tela e o botão de
+          arquivar ficava inalcançável. */}
+      <div ref={tableRef} className="rounded-lg border border-border bg-card overflow-hidden">
+        {/* Sem botão de criar fase aqui: a entrada do backlog é "Nova
+            Atividade" (ou importar a EAP, que já cria as fases). Fase avulsa
+            criada antes de existir qualquer tarefa só produzia um agrupador
+            vazio que o usuário depois não sabia como remover. */}
         {phases.length === 0 && backlogActs.length === 0 && (
           <div className="p-8 text-center">
             <Inbox className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-            <p className="text-muted-foreground text-sm">Nenhuma fase ou atividade ainda</p>
-            <p className="text-muted-foreground/60 text-xs mt-1 mb-4">
-              Crie uma fase para começar a organizar pacotes e atividades
+            <p className="text-muted-foreground text-sm">Nenhuma atividade ainda</p>
+            <p className="text-muted-foreground/60 text-xs mt-1">
+              Use <span className="font-medium">Nova Atividade</span> para começar, ou <span className="font-medium">Importar EAP</span> para trazer a estrutura pronta.
             </p>
-            {onCreatePhase && (
-              <Button type="button" size="sm" onClick={onCreatePhase} className="gap-1.5">
-                <Plus className="w-3.5 h-3.5" /> Criar primeira fase
-              </Button>
-            )}
           </div>
         )}
 
@@ -1172,17 +1388,17 @@ export const BacklogSection = ({
           const progPct = progTotal > 0 ? Math.round((progDone / progTotal) * 100) : 0;
           return (
             <div key={lane.id}>
-              <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50">
-                <button
-                  type="button"
-                  className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-                  onClick={() => toggleLane(lane.id)}
-                >
+              {/* Faixa inteira colapsa, igual às fases. */}
+              <div
+                className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+                onClick={() => toggleLane(lane.id)}
+              >
+                <span className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground shrink-0">
                   {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
+                </span>
                 <h4 className="text-[13px] font-semibold text-foreground truncate">{lane.label}</h4>
                 <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{lane.items.length}</span>
-                <div className="flex items-center gap-3 ml-auto">
+                <div className="flex items-center gap-3 ml-auto" onClick={(e) => e.stopPropagation()}>
                   {progTotal > 0 && (
                     <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
                       <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
@@ -1213,10 +1429,13 @@ export const BacklogSection = ({
         {/* Atividades-fase (item_type='fase') em qualquer nível top-level viram cards de fase virtuais */}
         {groupBy === "phase" && virtualPhaseActs.map((vp) => renderVirtualPhase(vp))}
 
-        {/* "Sem fase" reaproveita renderPhaseGroup(null, ...): mesmo comportamento de uma fase
-            real, inclusive continuar visível quando esvazia (antes desaparecia com a última
-            tarefa solta, junto com o único "+ Tarefa" daquele grupo). */}
-        {groupBy === "phase" && renderPhaseGroup(null, "Sem fase")}
+        {/* "Sem fase" só aparece quando REALMENTE tem tarefa solta: um grupo
+            vazio permanente é ruído, ainda mais num backlog organizado por fases.
+            Ele existia sempre porque era o único "+ Tarefa" para criar item sem
+            fase — mas isso já é coberto pelo "Nova Atividade" no topo, que
+            cria no nível principal. */}
+        {groupBy === "phase" && (topLevelByPhase.get("none") || []).length > 0 &&
+          renderPhaseGroup(null, "Sem fase")}
       </div>
 
       {/* Trash Section */}
@@ -1343,6 +1562,34 @@ export const BacklogSection = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edição da fase — o resumo compara o planejado da fase com o que as
+          atividades dela de fato somam. */}
+      <EditPhaseDialog
+        phase={editingPhase}
+        open={!!editingPhase}
+        onOpenChange={(o) => { if (!o) setEditingPhase(null); }}
+        onSaved={onDataChanged}
+        canEdit={isAdmin}
+        resumo={(() => {
+          if (!editingPhase) return undefined;
+          const acts = (topLevelByPhase.get(editingPhase.id) || []);
+          const todas: Activity[] = [];
+          const coletar = (list: Activity[]) => list.forEach((a) => {
+            todas.push(a);
+            coletar(childrenByParent.get(a.id) || []);
+          });
+          coletar(acts);
+          const datas = todas.flatMap((a) => [a.start_date, a.end_date]).filter(Boolean) as string[];
+          return {
+            total: todas.length,
+            concluidas: todas.filter((a) => a.status === "completed").length,
+            horas: todas.reduce((s, a) => s + (Number((a as any).hours) || 0), 0),
+            inicio: datas.length ? datas.slice().sort()[0] : null,
+            fim: datas.length ? datas.slice().sort().slice(-1)[0] : null,
+          };
+        })()}
+      />
 
       {/* Permanent Delete Confirmation */}
       <AlertDialog open={!!permanentDeleteId} onOpenChange={(open) => !open && setPermanentDeleteId(null)}>

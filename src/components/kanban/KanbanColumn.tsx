@@ -22,6 +22,7 @@ import {
   X as XIcon,
   Eye,
   EyeOff,
+  List,
   ChevronDown,
   ChevronsRight,
   ChevronsLeft,
@@ -384,7 +385,7 @@ export function SortableColumn({
   onDeleteActivity: (activityId: string) => void;
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   onMoveToStage: (activityId: string, stageId: string) => void;
-  moveTargets?: { id: string; title: string; color: string }[];
+  moveTargets?: { id: string; title: string; color: string; hidden?: boolean }[];
   onDuplicateActivity?: (activityId: string) => void;
   onToggleBlocked: (activityId: string) => void;
   onLinkParent?: (activityId: string, currentParentId: string | null) => void;
@@ -915,7 +916,9 @@ export function SortableColumn({
                   onToggleCollapse(stage.id);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
-                title="Recolher coluna"
+                // "só para você": recolher grava no localStorage, ao contrário
+                // do "Ocultar para todos" do menu, que muda o quadro da equipe.
+                title="Recolher coluna (só para você)"
               >
                 <ChevronsLeft className="w-3.5 h-3.5" />
               </button>
@@ -927,12 +930,14 @@ export function SortableColumn({
                 className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Criação INLINE na coluna, não diálogo: digitar o título e dar
-                  // Enter é o gesto padrão (Trello/Linear/Notion) e o form inline
-                  // já existia aqui — só estava inalcançável, porque
-                  // onOpenCreateTask sempre vinha preenchido e abria o modal.
-                  // O formulário completo continua a um clique, dentro do inline.
-                  setShowQuickAdd((v) => !v);
+                  // Abre a tela de edição de sempre. Houve uma tentativa de
+                  // trocar por um formulário inline na coluna; na prática o
+                  // inline só cobria título/fase/EAP e escondia o resto atrás
+                  // de mais um clique, então voltou a abrir a tela completa.
+                  // O inline segue disponível como fallback se a tela não for
+                  // passada por quem usa a coluna.
+                  if (onOpenCreateTask) onOpenCreateTask(stage.id);
+                  else setShowQuickAdd((v) => !v);
                 }}
                 title="Criar atividade nesta coluna"
               >
@@ -1062,15 +1067,30 @@ export function SortableColumn({
                       ? "Incluir no progresso"
                       : "Remover do progresso"}
                   </DropdownMenuItem>
+                  {/* "para todos" no rótulo: ocultar grava em workflow_stages,
+                      que é do PROJETO — some do quadro da equipe inteira. Fica a
+                      um clique do "Recolher", que é só seu (localStorage), e os
+                      dois soavam iguais. */}
                   <DropdownMenuItem
                     className="focus:bg-muted/60 focus:text-foreground"
                     onSelect={(e) => {
                       e.preventDefault();
+                      // Com cartões dentro, confirma: some do quadro de todo
+                      // mundo sem deixar rastro, e as tarefas continuam lá.
+                      if (stage.is_visible && stageActivities.length > 0) {
+                        const n = stageActivities.length;
+                        const ok = window.confirm(
+                          `"${stage.title}" tem ${n} ${n === 1 ? "tarefa" : "tarefas"} e vai sumir do quadro de TODOS do projeto.\n\n` +
+                          `As tarefas continuam existindo e mantêm o status — só deixam de aparecer aqui.\n\n` +
+                          `Para limpar apenas a sua visão, use "Recolher coluna".`
+                        );
+                        if (!ok) return;
+                      }
                       onToggleStageVisible(stage.id, stage.is_visible);
                     }}
                   >
                     {stage.is_visible ? <EyeOff className="w-3.5 h-3.5 mr-2" /> : <Eye className="w-3.5 h-3.5 mr-2" />}
-                    {stage.is_visible ? "Ocultar coluna" : "Mostrar coluna"}
+                    {stage.is_visible ? "Ocultar para todos" : "Mostrar para todos"}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -1217,20 +1237,125 @@ export function DroppableColumn({
   );
 }
 
-export function AddStageColumn({ projectId, onChanged }: { projectId: string; onChanged?: () => void }) {
+/**
+ * "Colunas" — a lista completa do quadro, no fim da fila de colunas.
+ *
+ * Substitui o par "＋ Nova coluna" + "👁 N ocultas", que eram duas entradas
+ * separadas para o mesmo assunto. Pior: a coluna oculta ficava pendurada no
+ * botão de CRIAR, que é lugar de criação, não de administração.
+ *
+ * O padrão veio do Notion: coluna oculta não tem marcador próprio — ela mora
+ * na mesma lista das visíveis, apagada e com o olho cortado, cada uma com seu
+ * toggle. "Nova coluna" passa a ser a última linha da lista.
+ */
+export function StageListButton({
+  projectId, onChanged, stages = [], countByStage, canManage = false, onToggleVisible,
+}: {
+  projectId: string;
+  onChanged?: () => void;
+  /** TODAS as colunas do projeto, visíveis e ocultas, em display_order. */
+  stages?: { id: string; title: string; color: string; is_visible?: boolean }[];
+  countByStage?: Map<string, number>;
+  canManage?: boolean;
+  onToggleVisible?: (id: string, isVisible: boolean) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+
+  const contagem = countByStage ?? new Map<string, number>();
+  const ocultas = stages.filter((s) => s.is_visible === false);
+  // Coluna oculta VAZIA é só arrumação; com tarefa dentro é problema — tem
+  // gente com status que ninguém enxerga no quadro. Só esse caso ganha cor.
+  const presas = ocultas.filter((s) => (contagem.get(s.id) ?? 0) > 0).length;
 
   return (
-    <div className="shrink-0 self-start pt-3 pl-2">
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title="Adicionar uma coluna ao quadro"
-        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors whitespace-nowrap"
-      >
-        <Plus className="w-3 h-3" />
-        Nova coluna
-      </button>
+    <div className="shrink-0 self-start pt-3 pl-2 flex flex-col items-start gap-1">
+      <Popover open={listOpen} onOpenChange={setListOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            title="Colunas do quadro"
+            className={cn(
+              "inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap",
+              presas > 0
+                ? "text-warning hover:bg-warning/10"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+            )}
+          >
+            <List className="w-3 h-3 shrink-0" />
+            Colunas
+            {presas > 0 && <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" />}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-64 p-1.5">
+          <div className="flex flex-col gap-0.5">
+            <span className="px-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Colunas do quadro
+            </span>
+
+            {stages.map((s) => {
+              const n = contagem.get(s.id) ?? 0;
+              const oculta = s.is_visible === false;
+              return (
+                <div
+                  key={s.id}
+                  className={cn(
+                    "flex items-center gap-1.5 text-[12px] rounded px-1.5 py-1 min-w-0",
+                    oculta && "text-muted-foreground",
+                  )}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.color }} />
+                  <span className="truncate flex-1">{s.title}</span>
+                  {/* A contagem só aparece na oculta: numa coluna visível ela
+                      já está no cabeçalho, aqui seria repetição. */}
+                  {oculta && n > 0 && (
+                    <span className="shrink-0 tabular-nums text-warning font-medium text-[11px]">{n}</span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!canManage}
+                    onClick={() => canManage && onToggleVisible?.(s.id, !oculta)}
+                    title={
+                      !canManage
+                        ? "Só quem gerencia o projeto pode mostrar ou ocultar colunas"
+                        : oculta
+                          ? `Mostrar "${s.title}" para todos do projeto`
+                          : `Ocultar "${s.title}" para todos do projeto`
+                    }
+                    className={cn(
+                      "shrink-0 rounded p-0.5 transition-colors",
+                      canManage ? "hover:bg-muted cursor-pointer" : "cursor-default opacity-50",
+                      oculta && "text-warning",
+                    )}
+                  >
+                    {oculta ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 opacity-60" />}
+                  </button>
+                </div>
+              );
+            })}
+
+            {presas > 0 && (
+              <span className="px-1.5 pt-1 text-[10px] text-warning leading-snug">
+                Há tarefa em coluna oculta — ninguém a vê no quadro.
+              </span>
+            )}
+
+            {canManage && (
+              <>
+                <div className="h-px bg-border my-1" />
+                <button
+                  type="button"
+                  onClick={() => { setListOpen(false); setOpen(true); }}
+                  className="flex items-center gap-1.5 text-[12px] rounded px-1.5 py-1 text-left hover:bg-muted transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5 shrink-0" />
+                  Nova coluna
+                </button>
+              </>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
 
       <Dialog
         open={open}

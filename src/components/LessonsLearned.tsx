@@ -13,6 +13,18 @@ import { useToast } from "@/hooks/use-toast";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
+import { useAuth } from "@/contexts/AuthContext";
+import { LessonPromptCard } from "@/components/licoes/LessonPromptCard";
+import { LessonLifecycle } from "@/components/licoes/LessonLifecycle";
+import { LessonInsights } from "@/components/licoes/LessonInsights";
+import {
+  TRIGGER_META, relevantLessons,
+  type LessonPrompt, type Lesson as LessonType,
+} from "@/lib/lessons";
+
+// Tabela e colunas novas ainda fora dos tipos gerados (migration pendente).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const sb = supabase as any;
 
 interface Lesson {
   id: string;
@@ -69,9 +81,118 @@ export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
     phase_id: "",
   });
 
+  // ===== Captura por evento e entrega no momento certo =====
+  const { user, profile } = useAuth();
+  const [prompts, setPrompts] = useState<LessonPrompt[]>([]);
+  const [blockers, setBlockers] = useState<{ reason: string | null; days: number | null; title: string }[]>([]);
+  const [people, setPeople] = useState<{ id: string; full_name: string; sector: string | null; role_title?: string | null; avatar_url?: string | null }[]>([]);
+  const [promptsUnavailable, setPromptsUnavailable] = useState(false);
+
   useEffect(() => {
     fetchLessons();
+    fetchPrompts();
   }, [projectId]);
+
+  const fetchPrompts = async () => {
+    // Gera os convites a partir dos eventos do projeto — mesmo padrão do
+    // generate_overdue_notifications: chamado ao abrir, idempotente, sem cron.
+    await sb.rpc("generate_lesson_prompts", { p_project_id: projectId }).then(() => {}, () => {});
+
+    const [promptRes, blockRes, peopleRes] = await Promise.all([
+      sb.from("lesson_prompts").select("*").eq("project_id", projectId)
+        .eq("status", "pendente").order("impact_days", { ascending: false }),
+      sb.from("activities").select("title, blocked_reason, blocked_days_total")
+        .eq("project_id", projectId).eq("is_trashed", false).gt("blocked_days_total", 0),
+      supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url")
+        .not("full_name", "is", null).order("full_name"),
+    ]);
+
+    if (promptRes.error && /lesson_prompts|does not exist|schema cache/i.test(promptRes.error.message || "")) {
+      setPromptsUnavailable(true);
+      return;
+    }
+    setPromptsUnavailable(false);
+    setPrompts((promptRes.data as LessonPrompt[]) || []);
+    if (!blockRes.error) {
+      setBlockers(((blockRes.data as { title: string; blocked_reason: string | null; blocked_days_total: number | null }[]) || [])
+        .map((b) => ({ title: b.title, reason: b.blocked_reason, days: b.blocked_days_total })));
+    }
+    setPeople((peopleRes.data as { id: string; full_name: string; sector: string | null }[]) || []);
+  };
+
+  /** Registra a lição a partir do convite, com o contexto já vinculado. */
+  const registerFromPrompt = async (p: LessonPrompt, data: { problem: string; suggestion: string }) => {
+    const meta = TRIGGER_META[p.trigger_type] ?? TRIGGER_META.bloqueio;
+    const { data: created, error } = await sb.from("lessons_learned").insert({
+      project_id: projectId,
+      phase_id: p.phase_id,
+      category: meta.category,
+      problem: data.problem,
+      suggestion: data.suggestion || null,
+      impact: p.impact_days ? `${p.impact_days} dia(s)` : null,
+      reported_by: profile?.full_name ?? null,
+      reported_by_id: user?.id ?? null,
+      source_activity_id: p.activity_id,
+      source_trigger: p.trigger_type,
+      impact_days: p.impact_days,
+      lifecycle: "identificada",
+    }).select("id").single();
+
+    if (error) {
+      toast({ title: "Erro ao registrar a lição", description: error.message, variant: "destructive" });
+      return;
+    }
+    await sb.from("lesson_prompts")
+      .update({ status: "respondido", lesson_id: created.id, responded_at: new Date().toISOString() })
+      .eq("id", p.id);
+    toast({ title: "Lição registrada", description: "Atribua uma ação para que ela vire mudança de verdade." });
+    fetchLessons();
+    fetchPrompts();
+  };
+
+  const dismissPrompt = async (p: LessonPrompt) => {
+    await sb.from("lesson_prompts")
+      .update({ status: "dispensado", responded_at: new Date().toISOString() })
+      .eq("id", p.id);
+    fetchPrompts();
+  };
+
+  /** Atribui dono e ação — a lição sai de "identificada". */
+  const assignAction = async (lessonId: string, ownerId: string, ownerName: string, action: string) => {
+    const { error } = await sb.from("lessons_learned").update({
+      lifecycle: "acao_atribuida",
+      owner_id: ownerId,
+      owner_name: ownerName,
+      action_text: action,
+    }).eq("id", lessonId);
+    if (error) {
+      toast({ title: "Erro ao atribuir", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Ação atribuída", description: `${ownerName} ficou responsável pela mudança.` });
+    fetchLessons();
+  };
+
+  /** Marca como aplicada — com quem verificou e quando. */
+  const applyLesson = async (lessonId: string) => {
+    const ok = await appConfirm({
+      title: "Marcar como aplicada",
+      description: "Confirma que a mudança foi feita? O registro guarda seu nome e a data como verificação.",
+      confirmText: "Confirmar",
+    });
+    if (!ok) return;
+    const { error } = await sb.from("lessons_learned").update({
+      lifecycle: "aplicada",
+      applied_at: new Date().toISOString(),
+      applied_by_name: profile?.full_name ?? null,
+    }).eq("id", lessonId);
+    if (error) {
+      toast({ title: "Erro ao aplicar", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Lição aplicada", description: "Agora ela é aprendizado, não só registro." });
+    fetchLessons();
+  };
 
   const fetchLessons = async () => {
     const { data, error } = await supabase
@@ -241,6 +362,18 @@ export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
           </div>
         )}
       </div>
+
+      {/* Ciclo: identificada → ação atribuída → aplicada. Sem ação, é só
+          registro — e fica visível como pendência em vez de sumir na lista. */}
+      {!showProject && !promptsUnavailable && (
+        <LessonLifecycle
+          lesson={lesson as LessonType}
+          people={people}
+          canManage
+          onAssign={(ownerId, ownerName, action) => assignAction(lesson.id, ownerId, ownerName, action)}
+          onApply={() => applyLesson(lesson.id)}
+        />
+      )}
     </div>
   );
 
@@ -311,6 +444,42 @@ export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
               </select>
             )}
           </div>
+
+          {/* A ENTREGA — a parte que a evidência aponta como mais importante.
+              Ao escolher fase e categoria, o que já se aprendeu ali aparece
+              sozinho: ninguém precisa saber que a lição existe para encontrá-la.
+              Sem IA e sem busca. */}
+          {(() => {
+            const related = relevantLessons(lessons as LessonType[], {
+              phaseId: form.phase_id || null,
+              category: form.category,
+              excludeId: editingId ?? undefined,
+            });
+            if (related.length === 0) return null;
+            return (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+                <p className="text-[12px] font-semibold text-primary mb-2 flex items-center gap-1.5">
+                  <Lightbulb className="w-3.5 h-3.5" />
+                  Já aprendemos isto por aqui
+                </p>
+                <div className="space-y-1.5">
+                  {related.map((l) => (
+                    <div key={l.id} className="text-[12px]">
+                      <p className="text-foreground truncate" title={l.problem}>{l.problem}</p>
+                      {l.suggestion && (
+                        <p className="text-muted-foreground truncate" title={l.suggestion}>
+                          → {l.suggestion}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10.5px] text-muted-foreground mt-2">
+                  Lições da mesma fase ou categoria, priorizando as que viraram mudança.
+                </p>
+              </div>
+            );
+          })()}
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground">Problema *</span>
@@ -342,9 +511,36 @@ export const LessonsLearned = ({ projectId, phases }: LessonsLearnedProps) => {
 
       {!showGlobal && (
         <>
+          {/* O sistema perguntando: convites gerados pelos eventos do projeto.
+              Vêm ordenados pelo impacto em dias — o que mais custou primeiro. */}
+          {prompts.length > 0 && (
+            <div className="space-y-2">
+              {prompts.slice(0, 3).map((p) => (
+                <LessonPromptCard
+                  key={p.id}
+                  prompt={p}
+                  onRegister={(data) => registerFromPrompt(p, data)}
+                  onDismiss={() => dismissPrompt(p)}
+                />
+              ))}
+              {prompts.length > 3 && (
+                <p className="text-[11px] text-muted-foreground text-center">
+                  e mais {prompts.length - 3} evento(s) aguardando registro
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Padrões e métricas de aplicação */}
+          <LessonInsights lessons={lessons as LessonType[]} blockers={blockers} />
+
           {lessons.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
-              Nenhuma lição registrada ainda
+              {promptsUnavailable
+                ? "Nenhuma lição registrada ainda"
+                : prompts.length > 0
+                  ? "Nenhuma lição registrada ainda — comece pelos eventos detectados acima."
+                  : "Nenhuma lição registrada ainda"}
             </p>
           ) : (
             <div className="space-y-3 max-h-[400px] overflow-y-auto">

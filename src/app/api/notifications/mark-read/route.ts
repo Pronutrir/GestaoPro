@@ -17,6 +17,20 @@ type ActivityRow = {
   participants: string[] | null;
 };
 
+// PostgREST recebe `in.(...)` na QUERY STRING, então uma lista longa de ids vira
+// uma URL longa — e o proxy à frente do Supabase corta em ~3,7 KB, devolvendo
+// 502 antes de a requisição chegar ao banco. Com 199 não lidas a URL passava de
+// 7 KB e o "Ler todas" falhava sempre.
+//
+// 50 ids ≈ 1,9 KB de URL: metade do limite medido, com folga para o host mudar.
+const ID_CHUNK = 50;
+
+const chunk = <T,>(items: T[], size: number): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+};
+
 // Marca notificações como lidas usando service role (o RLS bloqueia o update
 // direto do browser, mesmo padrão da leitura em ../route.ts). Body opcional:
 // { ids?: string[] }. Sem ids => marca todas as notificações do usuário.
@@ -70,12 +84,21 @@ export async function POST(request: Request) {
     // notificação), restringe já na consulta em vez de carregar todas as não
     // lidas do sistema para filtrar em memória. canAccess continua sendo o
     // guarda de permissão — isto é só escopo.
+    // Em lotes: ver ID_CHUNK. Sem isso a própria leitura já estourava a URL.
     (requestedIds && requestedIds.length > 0
-      ? adminClient
-          .from('notifications')
-          .select('id, project_id, activity_id, target_user_id')
-          .eq('is_read', false)
-          .in('id', requestedIds)
+      ? Promise.all(
+          chunk(requestedIds, ID_CHUNK).map((ids) =>
+            adminClient
+              .from('notifications')
+              .select('id, project_id, activity_id, target_user_id')
+              .eq('is_read', false)
+              .in('id', ids),
+          ),
+        ).then((parts) => {
+          const failed = parts.find((part) => part.error);
+          if (failed?.error) return { data: null, error: failed.error };
+          return { data: parts.flatMap((part) => part.data || []), error: null };
+        })
       : adminClient
           .from('notifications')
           .select('id, project_id, activity_id, target_user_id')
@@ -145,32 +168,44 @@ export async function POST(request: Request) {
     return NextResponse.json({ updated: 0 });
   }
 
-  const { error: updateError } = await adminClient
-    .from('notifications')
-    .update({ is_read: true, read_at: new Date().toISOString() })
-    .in('id', idsToMark);
+  // Em lotes: ver ID_CHUNK. Sequencial de propósito — o proxy corta a URL, e
+  // disparar 4 UPDATEs simultâneos na mesma tabela só troca um problema por
+  // outro. São poucas centenas de linhas, o custo é irrelevante.
+  const isMissingReadAt = (error: { code?: string; message: string }) =>
+    error.code === '42703' || error.code === 'PGRST204' || /read_at/i.test(error.message);
 
-  // Fallback caso a migration do read_at ainda não tenha sido aplicada no banco
-  // (coluna inexistente => 42703 / PGRST204). O check não pode depender dela.
-  if (updateError) {
-    const missingColumn =
-      updateError.code === '42703' ||
-      updateError.code === 'PGRST204' ||
-      /read_at/i.test(updateError.message);
+  const batches = chunk(idsToMark, ID_CHUNK);
+  // Um único carimbo para todas as linhas: marcadas no mesmo ato, mesma hora.
+  const readAt = new Date().toISOString();
+  let updated = 0;
+  // Uma vez detectada a ausência da coluna, os lotes seguintes já vão sem ela.
+  let hasReadAtColumn = true;
 
-    if (!missingColumn) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
-    }
-
-    const { error: retryError } = await adminClient
+  for (const ids of batches) {
+    let { error } = await adminClient
       .from('notifications')
-      .update({ is_read: true })
-      .in('id', idsToMark);
+      .update(hasReadAtColumn ? { is_read: true, read_at: readAt } : { is_read: true })
+      .in('id', ids);
 
-    if (retryError) {
-      return NextResponse.json({ error: retryError.message }, { status: 500 });
+    // Fallback caso a migration do read_at ainda não tenha sido aplicada no
+    // banco. O check não pode depender dela.
+    if (error && hasReadAtColumn && isMissingReadAt(error)) {
+      hasReadAtColumn = false;
+      ({ error } = await adminClient
+        .from('notifications')
+        .update({ is_read: true })
+        .in('id', ids));
     }
+
+    if (error) {
+      // Os lotes anteriores já foram gravados: informa o parcial em vez de
+      // fingir que nada aconteceu, senão a UI reexibe como não lidas algo que
+      // já está lido no banco.
+      return NextResponse.json({ error: error.message, updated }, { status: 500 });
+    }
+
+    updated += ids.length;
   }
 
-  return NextResponse.json({ updated: idsToMark.length });
+  return NextResponse.json({ updated });
 }

@@ -196,7 +196,7 @@ export function DocumentFlowPanel({
         )}
         {isTerminal(flow.status) && flow.file_hash && (
           <span className="ml-auto text-[10px] text-muted-foreground font-mono truncate max-w-[220px]"
-                title={`Impressão digital do arquivo (SHA-256): ${flow.file_hash}`}>
+                title={`Impressão digital do ${flow.page_id ? "texto" : "arquivo"} no envio (SHA-256): ${flow.file_hash}`}>
             SHA-256 {flow.file_hash.slice(0, 12)}…
           </span>
         )}
