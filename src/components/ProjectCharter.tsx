@@ -20,6 +20,7 @@ import { AIAssistButton, AIContext } from "@/components/AIAssistButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { BaselineBlock } from "@/components/BaselineBlock";
+import { cn } from "@/lib/utils";
 
 /* -------- AutoTextarea: cresce conforme conteúdo -------- */
 const AutoTextarea = ({
@@ -157,40 +158,72 @@ const TextField = ({
   );
 };
 
-/* -------- Section header faixa azul-marinho -------- */
-const SectionHeader = ({ n, title, status }: {
-  n: number; title: string; status?: { preenchidos: number; total: number };
-}) => (
-  <div className="bg-primary/10 text-foreground px-4 py-2 rounded-t-md flex items-center gap-3 border-b border-primary/20">
-    <span className="text-xs font-bold bg-primary/15 text-primary rounded px-2 py-0.5">{n}</span>
-    <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">{title}</h3>
-    {status && (
-      <span className={`ml-auto text-[11px] font-mono tabular-nums shrink-0 print:hidden ${
-        status.preenchidos === 0 ? "text-muted-foreground"
-          : status.preenchidos === status.total ? "text-success"
-          : "text-warning"
-      }`}>
-        {status.preenchidos === 0
-          ? "em branco"
-          : status.preenchidos === status.total
-            ? `✓ ${status.total}`
-            : `${status.preenchidos} de ${status.total}`}
-      </span>
-    )}
-  </div>
-);
-
-const SectionBlock = ({ n, title, children, status }: {
+/**
+ * Seção do TAP — uma LINHA que expande, não um cartão.
+ *
+ * Antes cada seção era um Card com cabeçalho, borda e espaçamento próprios.
+ * Seção vazia ocupava a mesma altura de uma cheia: o TAP anunciava o vazio em
+ * tamanho real, e o olho percorria seis blocos para descobrir que cinco não
+ * tinham nada. Agora a vazia é uma linha de 40px.
+ *
+ * Abre por padrão o que tem conteúdo; o que está em branco fica fechado com
+ * um "+ preencher" — o mesmo dado que antes acusava ("em branco") agora
+ * convida. Na impressão tudo aparece aberto: o PDF é o documento.
+ */
+const SectionBlock = ({ n, title, children, status, editing }: {
   n: number; title: string; children: React.ReactNode;
-  /** "3 de 4" / "em branco" no canto do cabeçalho — sem isso o TAP mostrava
-   *  seções vazias sem dizer que estavam vazias. */
   status?: { preenchidos: number; total: number };
-}) => (
-  <Card className="overflow-hidden border-primary/20 print:break-inside-avoid">
-    <SectionHeader n={n} title={title} status={status} />
-    <div className="p-4 space-y-3 bg-card">{children}</div>
-  </Card>
-);
+  /** Editando, tudo abre: seção fechada seria campo impossível de preencher. */
+  editing?: boolean;
+}) => {
+  const vazia = !!status && status.preenchidos === 0;
+  const completa = !!status && status.preenchidos === status.total;
+  // null = ninguém clicou ainda, então segue o conteúdo: fechada se vazia.
+  // Guardar só `useState(!vazia)` congelaria a decisão na primeira renderização
+  // — a seção continuaria fechada mesmo depois de preenchida.
+  const [manual, setManual] = useState<boolean | null>(null);
+  const aberta = editing || (manual ?? !vazia);
+  const setAberta = (fn: (v: boolean) => boolean) => setManual(fn(aberta));
+
+  return (
+    <div className="border-b border-border last:border-b-0 print:break-inside-avoid">
+      <button
+        type="button"
+        onClick={() => setAberta((v) => !v)}
+        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors print:hidden"
+      >
+        <span className="text-[10px] text-muted-foreground w-2.5 shrink-0">{aberta ? "▾" : "▸"}</span>
+        <span className={cn(
+          "w-5 h-5 rounded text-[10.5px] font-bold font-mono flex items-center justify-center shrink-0",
+          vazia ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary",
+        )}>{n}</span>
+        <span className={cn("flex-1 min-w-0 text-[13.5px] truncate", vazia ? "text-muted-foreground" : "font-medium")}>
+          {title}
+        </span>
+        {status && (
+          <span className={cn(
+            "text-[11px] font-mono tabular-nums shrink-0",
+            vazia ? "text-primary" : completa ? "text-success" : "text-warning",
+          )}>
+            {/* "+ preencher" em vez de "em branco": mesma informação, mas
+                acionável — a linha vira o convite para escrever. */}
+            {vazia ? "+ preencher" : completa ? `✓ ${status.total}` : `${status.preenchidos} de ${status.total}`}
+          </span>
+        )}
+      </button>
+
+      {/* Cabeçalho só da impressão — o botão some no PDF. */}
+      <div className="hidden print:flex items-center gap-3 px-4 py-2 bg-primary/10 border-b border-primary/20">
+        <span className="text-xs font-bold bg-primary/15 text-primary rounded px-2 py-0.5">{n}</span>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">{title}</h3>
+      </div>
+
+      <div className={cn("px-4 pb-4 pt-1 space-y-3", aberta ? "" : "hidden print:block")}>
+        {children}
+      </div>
+    </div>
+  );
+};
 
 /**
  * O TAP abria com 7 seções e ~20 campos vazios de uma vez. Medido em
@@ -615,11 +648,15 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
         )}
       </Card>
 
+      {/* Todas as seções num CARD só — lista contínua em vez de oito cartões
+          soltos, cada um com sua borda e sua margem. */}
+      <Card className="overflow-hidden">
+
       {/* CAMADA 1 — O ESSENCIAL. Os seis campos que autorizam o projeto:
           os quatro que a equipe já preenche (>70% de uso) mais objetivo e
           fora do escopo, que o mercado trata como indispensáveis e que hoje
           ficavam no fim de um formulário longo, com 0% de preenchimento. */}
-      <SectionBlock n={1} title="O essencial" status={{ preenchidos: completude.essenciais, total: 6 }}>
+      <SectionBlock n={1} title="O essencial" status={{ preenchidos: completude.essenciais, total: 6 }} editing={editing}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-3">
           <Field label="Título do Projeto"><p className="text-sm font-semibold">{project.title}</p></Field>
           <Field label="Gestor do Projeto">
@@ -646,24 +683,27 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
         </div>
       </SectionBlock>
 
-      {/* Porta da camada 2. Some na impressão — no PDF o TAP sai inteiro. */}
+      {/* Porta da camada 2 — mesma altura das linhas de seção, para a lista
+          não quebrar. Some na impressão: no PDF o TAP sai inteiro. */}
       <button
         type="button"
         onClick={() => setDetalhado((v) => !v)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors text-sm text-muted-foreground print:hidden"
+        className="w-full flex items-center gap-2.5 px-4 py-2.5 border-b border-border last:border-b-0 bg-muted/30 hover:bg-muted/60 transition-colors text-left print:hidden"
       >
-        <span className="text-xs">{detalhado ? "▾" : "▸"}</span>
-        <span className={detalhado ? "text-primary font-medium" : ""}>Detalhar o TAP</span>
-        <span className="ml-auto text-[11px] font-mono">
+        <span className="text-[10px] text-muted-foreground w-2.5 shrink-0">{detalhado ? "▾" : "▸"}</span>
+        <span className={cn("flex-1 text-[13.5px]", detalhado ? "text-primary font-medium" : "text-muted-foreground")}>
+          Detalhar o TAP
+        </span>
+        <span className="text-[11px] font-mono text-muted-foreground shrink-0">
           {completude.total - 6} campos · PMBOK
         </span>
       </button>
 
       {/* CAMADA 2 — as seções do PMBOK, as mesmas de sempre. */}
-      <div className={detalhado ? "space-y-4" : "hidden print:block print:space-y-4"}>
+      <div className={detalhado ? "" : "hidden print:block"}>
 
       {/* 2. IDENTIFICAÇÃO */}
-      <SectionBlock n={2} title="Identificação do Projeto" status={completude.porSecao[2]}>
+      <SectionBlock n={2} title="Identificação do Projeto" status={completude.porSecao[2]} editing={editing}>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
           <Field label="Código">
             <TextField editing={editing} value={data.code || ""} onChange={(v) => setData({ ...data, code: v })} placeholder="Ex: PRJ-2025-001" multiline={false} />
@@ -711,7 +751,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       {/* 2. PROBLEMA / JUSTIFICATIVA */}
-      <SectionBlock n={3} title="Problema / Justificativa" status={completude.porSecao[3]}>
+      <SectionBlock n={3} title="Problema / Justificativa" status={completude.porSecao[3]} editing={editing}>
         <Field label="Situação atual / Problema">
           <TextField editing={editing} value={form.problem_statement} onChange={(v) => setForm({ ...form, problem_statement: v })} placeholder="Descreva a situação atual e o problema a ser resolvido..." rows={3} aiContext="tap_problem" />
         </Field>
@@ -721,7 +761,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       {/* 3. OBJETIVO SMART */}
-      <SectionBlock n={4} title="Objetivo SMART" status={completude.porSecao[4]}>
+      <SectionBlock n={4} title="Objetivo SMART" status={completude.porSecao[4]} editing={editing}>
         <div className="overflow-x-auto -mx-1 px-1">
           <table className="w-full text-sm border border-border rounded-md overflow-hidden">
             <tbody>
@@ -746,7 +786,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       {/* 4. ESCOPO */}
-      <SectionBlock n={5} title="Escopo do Projeto" status={completude.porSecao[5]}>
+      <SectionBlock n={5} title="Escopo do Projeto" status={completude.porSecao[5]} editing={editing}>
         <div className="overflow-x-auto -mx-1 px-1">
           <table className="w-full text-sm border border-border rounded-md overflow-hidden">
             <thead>
@@ -788,7 +828,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       {/* 5. PREMISSAS E RESTRIÇÕES (recuperado do PMBOK) */}
-      <SectionBlock n={6} title="Premissas e Restrições" status={completude.porSecao[6]}>
+      <SectionBlock n={6} title="Premissas e Restrições" status={completude.porSecao[6]} editing={editing}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Premissas</div>
@@ -816,7 +856,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       {/* 6. BENEFÍCIOS E CRITÉRIOS DE SUCESSO */}
-      <SectionBlock n={7} title="Benefícios Esperados e Critérios de Sucesso" status={completude.porSecao[7]}>
+      <SectionBlock n={7} title="Benefícios Esperados e Critérios de Sucesso" status={completude.porSecao[7]} editing={editing}>
         <div className="overflow-x-auto -mx-1 px-1">
           <table className="w-full text-sm border border-border rounded-md overflow-hidden">
             <thead>
@@ -966,7 +1006,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       {/* 8. APROVAÇÕES */}
-      <SectionBlock n={8} title="Aprovações Formais">
+      <SectionBlock n={8} title="Aprovações Formais" editing={editing}>
         {/* A matriz RACI vira operação aqui: quem é "A" na equipe é quem dá o
             aval final do projeto, então já entra como aprovador em vez de ser
             cadastrado de novo à mão. */}
@@ -1041,6 +1081,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       </div>{/* fim da camada 2 */}
+      </Card>{/* fim da lista de seções */}
 
       {/* CSS de impressão */}
       <style>{`
