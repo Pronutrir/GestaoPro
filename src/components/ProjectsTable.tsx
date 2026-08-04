@@ -112,11 +112,19 @@ export function ProjectsTable({
   const [fPrazo, setFPrazo] = useState<string>("");
   /** parado | andando | quase | pronto | sem — faixas de progresso. */
   const [fProgresso, setFProgresso] = useState<string>("");
-  const [soAlerta, setSoAlerta] = useState(false);
+  /**
+   * Situação: o recorte por GRAVIDADE, a mesma da faixa lateral da linha.
+   *
+   * Era um botão solto "Precisa de atenção" ao lado dos seletores — dois
+   * mecanismos diferentes na mesma barra para a mesma função. Virou seletor
+   * porque a pergunta tem mais de duas respostas: "o que já falhou" é
+   * diferente de "o que merece olhar", e ambos de "o que está em dia".
+   */
+  const [fSituacao, setFSituacao] = useState<string>("");
 
   const limparTudo = () => {
     setFDono(""); setFSetor(""); setFTipo(""); setFPrioridade("");
-    setFPrazo(""); setFProgresso(""); setSoAlerta(false);
+    setFPrazo(""); setFProgresso(""); setFSituacao("");
   };
 
   // Opções vêm dos projetos EM TELA, não de uma lista fixa: filtro que
@@ -169,6 +177,28 @@ export function ProjectsTable({
     return (m?.atrasadas ?? 0) * 1000 + (dias >= 30 ? dias : 0);
   };
 
+  /**
+   * Gravidade da linha — alimenta a faixa lateral E o filtro de Situação, para
+   * os dois nunca discordarem.
+   *
+   * VERMELHO é reservado ao que já falhou de fato: tarefa atrasada. Prazo
+   * vencido e progresso 0% ficam em âmbar — já têm cor própria na coluna de
+   * prazo e na barra, e somá-los ao vermelho pintava 58% da tabela.
+   *
+   * Projeto CONCLUÍDO nunca entra em alerta: é dado a revisar, não trabalho
+   * a fazer.
+   */
+  const gravidadeDe = (p: TableProject): "alta" | "media" | "baixa" => {
+    if (p.status === "concluido") return "baixa";
+    const m = metrics[p.id];
+    if (m && m.atrasadas > 0) return "alta";
+    const dias = diasSemMovimento(p.updated_at);
+    const vencido = !!p.due_date && p.due_date.slice(0, 10) < new Date().toISOString().slice(0, 10);
+    if (vencido || (m && m.total > 0 && m.percent === 0)
+      || (dias !== null && dias >= 30) || faixaPrazo(p) === "vence30") return "media";
+    return "baixa";
+  };
+
   const linhas = useMemo(() => {
     const val = (p: TableProject): string | number => {
       switch (sort.key) {
@@ -190,10 +220,13 @@ export function ProjectsTable({
       if (fPrioridade && p.priority !== fPrioridade) return false;
       if (fPrazo && faixaPrazo(p) !== fPrazo) return false;
       if (fProgresso && faixaProgresso(p) !== fProgresso) return false;
-      // "Precisa de atenção" = tarefa atrasada OU parado há 30+ dias. É o
-      // mesmo critério da coluna Alertas, para o filtro não discordar do que
-      // a tabela mostra.
-      if (soAlerta && pesoAlerta(p) === 0) return false;
+      // Situação usa a MESMA função da faixa lateral: o filtro nunca discorda
+      // da cor que a linha mostra.
+      if (fSituacao) {
+        const g = gravidadeDe(p);
+        if (fSituacao === "atencao" && g === "baixa") return false;
+        if (fSituacao !== "atencao" && g !== fSituacao) return false;
+      }
       return true;
     });
 
@@ -204,7 +237,7 @@ export function ProjectsTable({
         : String(va).localeCompare(String(vb));
       return sort.dir === "desc" ? -cmp : cmp;
     });
-  }, [projects, metrics, sort, fDono, fSetor, fTipo, fPrioridade, fPrazo, fProgresso, soAlerta]);
+  }, [projects, metrics, sort, fDono, fSetor, fTipo, fPrioridade, fPrazo, fProgresso, fSituacao]);
 
   const Th = ({ k, children, className }: { k: SortKey; children: React.ReactNode; className?: string }) => (
     <th className={cn("text-left font-medium px-3 py-2 whitespace-nowrap", className)}>
@@ -230,8 +263,13 @@ export function ProjectsTable({
   }
 
   const hoje = new Date().toISOString().slice(0, 10);
-  const comAlerta = projects.filter((p) => pesoAlerta(p) > 0).length;
-  const temFiltro = !!fDono || !!fSetor || !!fTipo || !!fPrioridade || !!fPrazo || !!fProgresso || soAlerta;
+  /** Quantos projetos em cada gravidade — vira a contagem nas opções do
+   *  seletor de Situação, para ninguém escolher às cegas. */
+  const contagem = projects.reduce(
+    (acc, p) => { acc[gravidadeDe(p)] += 1; return acc; },
+    { alta: 0, media: 0, baixa: 0 } as Record<"alta" | "media" | "baixa", number>,
+  );
+  const temFiltro = !!fDono || !!fSetor || !!fTipo || !!fPrioridade || !!fPrazo || !!fProgresso || !!fSituacao;
 
   return (
     <>
@@ -307,24 +345,26 @@ export function ProjectsTable({
         <option value="sem">Sem atividades</option>
       </select>
 
-      {/* Só aparece se houver o que mostrar — botão que sempre resulta em
-          lista vazia é armadilha. */}
-      {comAlerta > 0 && (
-        <button
-          type="button"
-          onClick={() => setSoAlerta((v) => !v)}
-          className={cn(
-            "h-8 inline-flex items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
-            soAlerta
-              ? "border-destructive bg-destructive/10 text-destructive"
-              : "border-border text-foreground hover:border-destructive/50 hover:bg-destructive/5",
-          )}
-        >
-          <AlertTriangle className="w-3.5 h-3.5" />
-          Precisa de atenção
-          <span className="tabular-nums">{comAlerta}</span>
-        </button>
-      )}
+      {/* SITUAÇÃO — era um botão solto "Precisa de atenção". Virou seletor
+          pelo mesmo motivo dos outros: dois mecanismos diferentes na mesma
+          barra confundem, e a pergunta tem mais de duas respostas.
+          A contagem em cada opção evita escolher às cegas. */}
+      <select
+        value={fSituacao}
+        onChange={(e) => setFSituacao(e.target.value)}
+        className={cn(
+          "h-8 rounded-md border px-2 text-xs transition-colors",
+          fSituacao
+            ? "border-destructive bg-destructive/5 text-destructive font-medium"
+            : "border-border bg-background text-foreground hover:border-primary/50",
+        )}
+      >
+        <option value="">Qualquer situação</option>
+        <option value="atencao">⚠ Precisa de atenção ({contagem.alta + contagem.media})</option>
+        <option value="alta">Com tarefa atrasada ({contagem.alta})</option>
+        <option value="media">Merece olhar ({contagem.media})</option>
+        <option value="baixa">Em dia ({contagem.baixa})</option>
+      </select>
 
       {temFiltro && (
         <button
@@ -362,29 +402,9 @@ export function ProjectsTable({
             const vencido = !!p.due_date && p.due_date.slice(0, 10) < hoje && p.status !== "concluido";
             const avatar = p.owner ? resolveAvatarFromLookup(p.owner, p.owner, assigneeAvatarMap) : null;
 
-            // Gravidade da linha, na ordem em que alguém age: o que já falhou
-            // vem antes do que só merece acompanhamento.
-            //
-            // Projeto CONCLUÍDO nunca entra em alerta. Sem essa exceção, 16 dos
-            // 24 projetos ficavam vermelhos — dois terços da tabela, o que anula
-            // o propósito da cor. Um projeto encerrado com pendência é dado a
-            // revisar, não trabalho a fazer: ele aparece na coluna de alertas,
-            // que continua mostrando o número, mas não pinta a linha.
-            //
-            // VERMELHO é reservado ao que já falhou de fato: tarefa atrasada.
-            // Prazo vencido e progresso 0% ficam em ÂMBAR — merecem olhar, mas
-            // já têm cor própria na coluna de prazo e na barra, e somá-los ao
-            // vermelho pintava 58% da tabela. Alerta que cobre a maioria das
-            // linhas deixa de ser alerta.
-            const encerrado = p.status === "concluido";
-            const gravidade: "alta" | "media" | "baixa" = encerrado
-              ? "baixa"
-              : m && m.atrasadas > 0
-                ? "alta"
-                : vencido || (m && m.total > 0 && m.percent === 0)
-                  || (dias !== null && dias >= 30) || faixaPrazo(p) === "vence30"
-                  ? "media"
-                  : "baixa";
+            // Mesma função do filtro de Situação — a faixa lateral e o filtro
+            // nunca discordam porque leem do mesmo lugar.
+            const gravidade = gravidadeDe(p);
 
             return (
               <tr
