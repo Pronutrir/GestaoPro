@@ -5,6 +5,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
+import { ChevronsLeft } from "lucide-react";
 import { SortableProjectCard } from "./SortableProjectCard";
 import {
   AlertDialog,
@@ -16,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Project {
   id: string;
@@ -54,6 +55,13 @@ export const ProjectColumn = ({
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   /** Coluna vazia aberta por clique — volta a colapsar ao recarregar. */
   const [expandidaManual, setExpandidaManual] = useState(false);
+
+  // Recebeu projeto? A abertura manual deixa de fazer sentido — a coluna abre
+  // por ter conteúdo. Sem isto, esvaziá-la de novo a deixaria presa aberta,
+  // com o estado antigo mandando.
+  useEffect(() => {
+    if (projects.length > 0 && expandidaManual) setExpandidaManual(false);
+  }, [projects.length, expandidaManual]);
   const { setNodeRef, isOver } = useDroppable({ id: `column-${status}` });
 
   const handleDeleteClick = (projectId: string) => {
@@ -115,6 +123,19 @@ export const ProjectColumn = ({
           <Badge variant="secondary" className="rounded-full">
             {projects.length}
           </Badge>
+          {/* Volta a colapsar. Sem isto, abrir uma coluna vazia era caminho só
+              de ida: ela ficava ocupando a largura de uma coluna cheia até
+              recarregar a página. */}
+          {expandidaManual && projects.length === 0 && (
+            <button
+              type="button"
+              onClick={() => setExpandidaManual(false)}
+              title="Recolher coluna vazia"
+              className="hidden lg:inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
