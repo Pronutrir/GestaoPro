@@ -600,32 +600,33 @@ function KanbanCardBase({
                   </div>
                 )}
 
-                {/* Barra de andamento (calculada pelo Kanban) */}
+                {/* Barra de andamento (calculada pelo Kanban).
+                    UMA LINHA SÓ — barra + %, sem wrapper. Envolver isto numa
+                    div de bloco acrescentava altura em TODO card, mesmo sem
+                    divergência: o card ficava mais alto para acomodar um aviso
+                    que quase nunca aparece. */}
                 {cardFields.progress && !isQualityProject && (
-                <div className="mb-2" title={progressTooltip}>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-[5px] rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
-                        style={{ width: `${progressBarWidth}%` }}
-                      />
-                    </div>
-                    <span className={`text-[10px] tabular-nums shrink-0 ${
-                      progressInfo.divergente ? "text-destructive font-medium" : "text-muted-foreground"
-                    }`}>
-                      {progressBadge}
-                    </span>
+                <div
+                  className="mb-2 flex items-center gap-2"
+                  title={progressTooltip}
+                >
+                  <div className="flex-1 h-[5px] rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
+                      style={{ width: `${progressBarWidth}%` }}
+                    />
                   </div>
-                  {/* Coluna "Concluída" com subatividade aberta: antes a barra
-                      ficava verde em 100% e o problema passava em silêncio.
-                      Não bloqueia — há motivo legítimo para fechar assim —,
-                      só para de esconder. */}
+                  {/* Divergência (coluna concluída com subatividade aberta) cabe
+                      aqui mesmo: o ícone entra ao lado do número, sem criar
+                      linha nova. O texto completo fica no tooltip. */}
                   {progressInfo.divergente && progressInfo.subs && (
-                    <p className="mt-1 text-[10px] text-destructive flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3 shrink-0" />
-                      concluída com {progressInfo.subs.total - progressInfo.subs.feitas} em aberto
-                    </p>
+                    <AlertCircle className="w-3 h-3 text-destructive shrink-0" />
                   )}
+                  <span className={`text-[10px] tabular-nums shrink-0 ${
+                    progressInfo.divergente ? "text-destructive font-medium" : "text-muted-foreground"
+                  }`}>
+                    {progressBadge}
+                  </span>
                 </div>
                 )}
 
