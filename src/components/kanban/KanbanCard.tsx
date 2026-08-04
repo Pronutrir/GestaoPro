@@ -602,19 +602,30 @@ function KanbanCardBase({
 
                 {/* Barra de andamento (calculada pelo Kanban) */}
                 {cardFields.progress && !isQualityProject && (
-                <div
-                  className="mb-2 flex items-center gap-2"
-                  title={progressTooltip}
-                >
-                  <div className="flex-1 h-[5px] rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
-                      style={{ width: `${progressBarWidth}%` }}
-                    />
+                <div className="mb-2" title={progressTooltip}>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-[5px] rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${progressBarColor} transition-all ${progressPaused ? "opacity-50" : ""}`}
+                        style={{ width: `${progressBarWidth}%` }}
+                      />
+                    </div>
+                    <span className={`text-[10px] tabular-nums shrink-0 ${
+                      progressInfo.divergente ? "text-destructive font-medium" : "text-muted-foreground"
+                    }`}>
+                      {progressBadge}
+                    </span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
-                    {progressBadge}
-                  </span>
+                  {/* Coluna "Concluída" com subatividade aberta: antes a barra
+                      ficava verde em 100% e o problema passava em silêncio.
+                      Não bloqueia — há motivo legítimo para fechar assim —,
+                      só para de esconder. */}
+                  {progressInfo.divergente && progressInfo.subs && (
+                    <p className="mt-1 text-[10px] text-destructive flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      concluída com {progressInfo.subs.total - progressInfo.subs.feitas} em aberto
+                    </p>
+                  )}
                 </div>
                 )}
 

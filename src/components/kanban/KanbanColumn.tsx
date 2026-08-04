@@ -66,7 +66,6 @@ import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { computeCardAging, CARD_AGING_CLASSES } from "@/lib/cardAging";
 import { cn } from "@/lib/utils";
 import {
-  progressLabelFromPercent,
   getStageDisplayTitle,
   STAGE_PRESET_COLORS,
   SORT_CRITERIA,
@@ -490,42 +489,10 @@ export function SortableColumn({
     return memo;
   }, [activities, childrenByParent]);
 
-  const descendantProgressById = useMemo(() => {
-    const memo = new Map<string, { sum: number; count: number }>();
-
-    const walk = (id: string, seen = new Set<string>()): { sum: number; count: number } => {
-      if (memo.has(id)) return memo.get(id)!;
-      if (seen.has(id)) return { sum: 0, count: 0 };
-
-      const nextSeen = new Set(seen);
-      nextSeen.add(id);
-
-      const children = childrenByParent.get(id) || [];
-      let sum = 0;
-      let count = 0;
-
-      children.forEach((child) => {
-        const info = computeActivityProgress(child.workflow_stage_id, allStages, child.last_progress_stage_id);
-        const pct = info.paused ? 0 : (info.percent ?? 0);
-        sum += pct;
-        count += 1;
-
-        const deep = walk(child.id, nextSeen);
-        sum += deep.sum;
-        count += deep.count;
-      });
-
-      const result = { sum, count };
-      memo.set(id, result);
-      return result;
-    };
-
-    activities.forEach((a) => {
-      memo.set(a.id, walk(a.id));
-    });
-
-    return memo;
-  }, [activities, childrenByParent, allStages]);
+  // (Removido: descendantProgressById — média recursiva do % dos descendentes.
+  //  Era uma SEGUNDA fórmula de progresso, que dava número diferente do card
+  //  no fluxo principal e nunca sinalizava divergência. O cálculo agora é um
+  //  só, em computeActivityProgress.)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     // Em raias (laneId presente) a coluna nao e reordenavel — evita ids de dnd
@@ -629,15 +596,19 @@ export function SortableColumn({
     const externalChildren = allChildren.filter((child) => !stageActivityIds.has(child.id));
     const subActivityStatusSummary =
       descendantSummaryById.get(activity.id) || { completed: 0, pending: 0 };
-    const parentProgress = (() => {
-      const deepProgress = descendantProgressById.get(activity.id);
-      const totalSubs = deepProgress?.count || 0;
-      if (totalSubs === 0) {
-        return computeActivityProgress(activity.workflow_stage_id, allStages, activity.last_progress_stage_id);
-      }
-      const percent = Math.max(0, Math.min(100, Math.round((deepProgress!.sum / totalSubs))));
-      return { percent, paused: false, label: progressLabelFromPercent(percent) } as ActivityProgress;
-    })();
+    // Progresso do pai: uma fonte só (computeActivityProgress), passando os
+    // filhos diretos. Antes aqui havia um cálculo próprio — média do % dos
+    // descendentes — que dava número diferente do card no fluxo principal e
+    // nunca sinalizava "concluída com subatividade aberta".
+    const parentProgress = computeActivityProgress(
+      activity.workflow_stage_id,
+      allStages,
+      activity.last_progress_stage_id,
+      (childrenByParent.get(activity.id) || []).map((c: any) => ({
+        status: c.status,
+        workflow_stage_id: c.workflow_stage_id,
+      })),
+    );
     const expanded = expandedIds.has(activity.id);
     const isMirrorParent = !stageActivityIds.has(activity.id) && inlineChildren.length > 0;
     const parentAct = activity.parent_id ? activities.find((p) => p.id === activity.parent_id) : null;

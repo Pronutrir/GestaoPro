@@ -615,6 +615,19 @@ export const ActivityKanban = ({
     return s;
   }, [activities]);
 
+  /** Filhos por pai — a barra de progresso passa a medir trabalho feito
+   *  (subatividades concluídas) em vez de posição no quadro. */
+  const filhosPorPai = useMemo(() => {
+    const m = new Map<string, { status?: string | null; workflow_stage_id?: string | null }[]>();
+    activities.forEach((a) => {
+      if (!a.parent_id) return;
+      const arr = m.get(a.parent_id) || [];
+      arr.push({ status: a.status, workflow_stage_id: a.workflow_stage_id });
+      m.set(a.parent_id, arr);
+    });
+    return m;
+  }, [activities]);
+
   // Tipo EAP de uma atividade (fonte única: lib/eapModel). Três papéis:
   // Fase/Entrega (agrupa; cobre 'pacote' legado e itens com filhos), Atividade, Marco.
   const activityEapType = useCallback((a: Activity): string => {
@@ -2676,7 +2689,7 @@ export const ActivityKanban = ({
                       }}
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
-                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id)}
+                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id, filhosPorPai.get(activity.id))}
                       cardFields={cardFields}
                       hoursStat={hoursStatsByActivity.get(activity.id)}
                       profilesMap={profilesMap}
@@ -2870,7 +2883,7 @@ export const ActivityKanban = ({
               onDelete={() => {}}
               onToggle={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
-              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id)}
+              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id, filhosPorPai.get(activeActivity.id))}
               cardFields={cardFields}
               profilesMap={profilesMap}
               profileAvatarMap={profileAvatarMap}
