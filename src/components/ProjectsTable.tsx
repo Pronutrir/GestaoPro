@@ -41,32 +41,22 @@ export interface TableMetrics {
 }
 
 /**
- * Estágios com o mesmo peso de cor das bolinhas do quadro — mesmo estágio,
- * mesma cor nas duas visões.
+ * Estágio: PONTO colorido + texto normal.
  *
- * "Concluído" fica CINZA de propósito: é o estado que não pede ação, e verde
- * forte aqui competiria com o verde de "em dia", que é o que importa olhar.
+ * Antes era fundo + texto colorido + contorno — três camadas de cor para um
+ * dado que é classificação, não urgência. Com seis elementos coloridos por
+ * linha, o estágio competia com o alerta, que é o que precisa saltar.
+ *
+ * A cor continua identificando o estágio de relance; só para de gritar.
  */
-const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
-  ideacao: { label: "Ideação", cls: "bg-amber-500/20 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30" },
-  poc: { label: "POC", cls: "bg-sky-500/20 text-sky-800 dark:text-sky-300 ring-1 ring-sky-500/30" },
-  mvp: { label: "MVP", cls: "bg-indigo-500/20 text-indigo-800 dark:text-indigo-300 ring-1 ring-indigo-500/30" },
-  blocked: { label: "Bloqueio", cls: "bg-rose-500/20 text-rose-800 dark:text-rose-300 ring-1 ring-rose-500/30" },
-  drawer: { label: "Gaveta", cls: "bg-slate-500/20 text-slate-700 dark:text-slate-300 ring-1 ring-slate-500/30" },
-  "em-execucao": { label: "Execução", cls: "bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30" },
-  concluido: { label: "Concluído", cls: "bg-muted text-muted-foreground ring-1 ring-border" },
-};
-
-/**
- * Cor da barra por faixa de progresso. Antes toda barra era azul, inclusive
- * em 0% — e uma barra vazia e cinza sumia no meio da tabela, que é
- * exatamente o caso de um projeto parado.
- */
-const corProgresso = (pct: number): string => {
-  if (pct >= 80) return "bg-success";
-  if (pct >= 40) return "bg-primary";
-  if (pct > 0) return "bg-warning";
-  return "bg-destructive";
+const STATUS_LABEL: Record<string, { label: string; dot: string }> = {
+  ideacao: { label: "Ideação", dot: "bg-amber-500" },
+  poc: { label: "POC", dot: "bg-sky-500" },
+  mvp: { label: "MVP", dot: "bg-indigo-500" },
+  blocked: { label: "Bloqueio", dot: "bg-rose-500" },
+  drawer: { label: "Gaveta", dot: "bg-slate-400" },
+  "em-execucao": { label: "Execução", dot: "bg-emerald-500" },
+  concluido: { label: "Concluído", dot: "bg-muted-foreground/50" },
 };
 
 /** A base usa GUT (crítica/urgente/alta/média/baixa) e o legado high/medium/low. */
@@ -398,7 +388,7 @@ export function ProjectsTable({
           {linhas.map((p) => {
             const m = metrics[p.id];
             const dias = diasSemMovimento(p.updated_at);
-            const st = STATUS_LABEL[p.status] ?? { label: p.status, cls: "bg-muted text-muted-foreground" };
+            const st = STATUS_LABEL[p.status] ?? { label: p.status, dot: "bg-muted-foreground/50" };
             const vencido = !!p.due_date && p.due_date.slice(0, 10) < hoje && p.status !== "concluido";
             const avatar = p.owner ? resolveAvatarFromLookup(p.owner, p.owner, assigneeAvatarMap) : null;
 
@@ -413,13 +403,12 @@ export function ProjectsTable({
                 className={cn(
                   // Zebra: com 7 colunas o olho pula de linha sem ela.
                   "border-b border-border/50 last:border-b-0 even:bg-muted/20 hover:bg-muted/50 transition-colors cursor-pointer",
-                  // Faixa lateral de 3px pela gravidade — permite varrer a
-                  // tabela sem ler nada. Fina de propósito: colorir a linha
-                  // inteira viraria um semáforo e cansaria a leitura.
+                  // Faixa lateral de 3px — SÓ o vermelho, para varrer a coluna
+                  // e achar o que exige ação. Verde e âmbar saíram: pintar
+                  // também o que está bem faz a tabela inteira ter cor, e aí a
+                  // faixa deixa de ser um sinal e vira decoração.
                   "border-l-[3px]",
-                  gravidade === "alta" ? "border-l-destructive"
-                    : gravidade === "media" ? "border-l-warning"
-                    : "border-l-success/40",
+                  gravidade === "alta" ? "border-l-destructive" : "border-l-transparent",
                 )}
               >
                 <td className="px-3 py-2 max-w-[240px]">
@@ -431,7 +420,8 @@ export function ProjectsTable({
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap", st.cls)}>
+                  <span className="inline-flex items-center gap-1.5 text-[12px] whitespace-nowrap">
+                    <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", st.dot)} />
                     {st.label}
                   </span>
                 </td>
@@ -454,33 +444,32 @@ export function ProjectsTable({
                 <td className="px-3 py-2">
                   {m && m.total > 0 ? (
                     <span className="inline-flex items-center gap-2">
+                      {/* Barra CINZA: ela já informa pelo comprimento. Pintar
+                          de vermelho o que já é visivelmente curto é dizer duas
+                          vezes — e era mais uma cor competindo com o alerta. */}
                       <span className="h-1.5 w-16 rounded-full bg-muted overflow-hidden shrink-0">
                         {/* Largura mínima de 3% para a barra em 0% existir
                             visualmente — sem isso, "parado" fica idêntico a
                             "sem dado". */}
                         <span
-                          className={cn("block h-full rounded-full transition-all", corProgresso(m.percent))}
+                          className="block h-full rounded-full bg-muted-foreground/60 transition-all"
                           style={{ width: `${Math.max(m.percent, 3)}%` }}
                         />
                       </span>
-                      <span className={cn(
-                        "tabular-nums text-[11px] font-medium",
-                        m.percent === 0 ? "text-destructive"
-                          : m.percent >= 100 ? "text-success"
-                          : "text-muted-foreground",
-                      )}>
+                      <span className="tabular-nums text-[11px] text-foreground/80">
                         {m.percent}%
                       </span>
                     </span>
                   ) : <span className="text-muted-foreground/50 text-[11px]">sem atividades</span>}
                 </td>
-                {/* Só o que sai do normal ganha cor: prazo em dia continua em
-                    texto comum. Se tudo é colorido, nada chama atenção. */}
+                {/* SÓ a data vencida ganha cor. "Vence em 30 dias" saiu: é
+                    informação de planejamento, não de urgência, e sozinha
+                    respondia por metade das datas coloridas — 16 de 24 no
+                    total, o que fez a exceção virar regra. Quem procura por
+                    isso tem o filtro "Qualquer prazo". */}
                 <td className={cn(
                   "px-3 py-2 whitespace-nowrap tabular-nums",
-                  vencido ? "text-destructive font-semibold"
-                    : faixaPrazo(p) === "vence30" ? "text-warning font-medium"
-                    : "text-muted-foreground",
+                  vencido ? "text-destructive font-semibold" : "text-foreground/80",
                 )}>
                   {p.due_date ? formatProjectDueDate(p.due_date) : <span className="text-muted-foreground/50">—</span>}
                 </td>
