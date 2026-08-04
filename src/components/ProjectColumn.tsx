@@ -6,7 +6,7 @@ import {
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
 import { ChevronsLeft } from "lucide-react";
-import { SortableProjectCard } from "./SortableProjectCard";
+import { SortableProjectCard, type CardMetrics } from "./SortableProjectCard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +38,8 @@ interface ProjectColumnProps {
   onStatusChange: (projectId: string, newStatus: string) => void;
   onCardClick?: (project: Project) => void;
   isAdmin?: boolean;
+  /** Progresso e atrasos por projeto — o card mostra o que já existe no banco. */
+  metrics?: Record<string, CardMetrics>;
 }
 
 export const ProjectColumn = ({
@@ -50,6 +52,7 @@ export const ProjectColumn = ({
   onStatusChange,
   onCardClick,
   isAdmin = false,
+  metrics,
 }: ProjectColumnProps) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
@@ -153,6 +156,7 @@ export const ProjectColumn = ({
               <SortableProjectCard
                 key={project.id}
                 project={project}
+                metrics={metrics?.[project.id]}
                 assigneeAvatarMap={assigneeAvatarMap}
                 onEdit={onEdit}
                 onDeleteClick={handleDeleteClick}

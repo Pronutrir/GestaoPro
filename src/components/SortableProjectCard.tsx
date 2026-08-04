@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { GripVertical, MoreVertical, Pencil, Trash2, Calendar, Hourglass } from "lucide-react";
+import { GripVertical, MoreVertical, Pencil, Trash2, Calendar, Hourglass, AlertTriangle } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -23,6 +23,14 @@ interface Project {
   updated_at?: string | null;
 }
 
+/** Progresso e atrasos derivados das atividades do projeto. */
+export interface CardMetrics {
+  total: number;
+  concluidas: number;
+  atrasadas: number;
+  percent: number;
+}
+
 interface SortableProjectCardProps {
   project: Project;
   assigneeAvatarMap?: Record<string, string>;
@@ -30,6 +38,7 @@ interface SortableProjectCardProps {
   onDeleteClick: (id: string) => void;
   onCardClick?: (project: Project) => void;
   isAdmin?: boolean;
+  metrics?: CardMetrics;
 }
 
 const priorityColors: Record<string, string> = {
@@ -96,7 +105,7 @@ export const diasSemMovimento = (updatedAt?: string | null): number | null => {
   return Math.floor((Date.now() - t) / 86400000);
 };
 
-export const SortableProjectCard = ({ project, assigneeAvatarMap = {}, onEdit, onDeleteClick, onCardClick, isAdmin = false }: SortableProjectCardProps) => {
+export const SortableProjectCard = ({ project, assigneeAvatarMap = {}, onEdit, onDeleteClick, onCardClick, isAdmin = false, metrics }: SortableProjectCardProps) => {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging, setActivatorNodeRef,
   } = useSortable({ id: project.id });
@@ -164,6 +173,17 @@ export const SortableProjectCard = ({ project, assigneeAvatarMap = {}, onEdit, o
                 {formatProjectDueDate(project.due_date)}
               </div>
             )}
+            {/* Tarefas atrasadas — 8 dos 24 projetos ativos têm, e isso não
+                aparecia em tela nenhuma. É o sinal que muda uma decisão. */}
+            {metrics && metrics.atrasadas > 0 && (
+              <div
+                className="flex items-center gap-1 text-xs font-medium text-destructive"
+                title={`${metrics.atrasadas} tarefa(s) com prazo vencido`}
+              >
+                <AlertTriangle className="w-3 h-3" />
+                {metrics.atrasadas}
+              </div>
+            )}
             {/* Tempo parado — o dado que faltava. Sem ele todas as colunas
                 parecem igualmente saudáveis, e um pipeline serve justamente
                 para mostrar onde o trabalho empaca. */}
@@ -196,6 +216,18 @@ export const SortableProjectCard = ({ project, assigneeAvatarMap = {}, onEdit, o
             ))}
           </div>
         </div>
+
+        {/* Progresso real das atividades. Só aparece quando HÁ atividade —
+            uma barra em 0% para projeto sem tarefa nenhuma informa errado:
+            sugere trabalho parado onde não há trabalho cadastrado. */}
+        {metrics && metrics.total > 0 && (
+          <div className="flex items-center gap-2" title={`${metrics.concluidas} de ${metrics.total} atividades concluídas`}>
+            <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${metrics.percent}%` }} />
+            </div>
+            <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{metrics.percent}%</span>
+          </div>
+        )}
       </div>
     </Card>
   );

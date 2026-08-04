@@ -13,6 +13,8 @@ import {
   Lightbulb,
   Rocket,
   Search,
+  LayoutGrid,
+  Table as TableIcon,
 } from 'lucide-react';
 import { ProjectColumn } from '@/components/ProjectColumn';
 import { ProjectDrawer } from '@/components/ProjectDrawer';
@@ -30,12 +32,30 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { buildAvatarLookupMap } from '@/lib/avatarLookup';
+import { selectInChunks } from '@/lib/chunkedIn';
+import { ProjectsTable } from '@/components/ProjectsTable';
 
 interface Project {
   id: string; title: string; description: string | null; status: string; priority: string;
   due_date: string | null; assignees: string[]; budget_planned: number; budget_used: number;
   owner: string | null; blockers: string | null; display_order: number;
   category?: string; program?: string | null;
+  // Campos que já vinham do select('*') e nunca chegavam à tela. Medido em
+  // 04/08/2026: 100% dos projetos têm dono, setor, tipo e início; 79% têm GUT.
+  updated_at?: string | null;
+  start_date?: string | null;
+  sector?: string | null;
+  project_type?: string | null;
+  priority_score?: number | null;
+  manager?: string | null;
+}
+
+/** Métricas derivadas das atividades — progresso real e tarefas atrasadas. */
+export interface ProjectMetrics {
+  total: number;
+  concluidas: number;
+  atrasadas: number;
+  percent: number;
 }
 
 const looksLikeUuid = (value: string) =>
@@ -93,6 +113,17 @@ function ProjectsContent() {
   const { isAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
+  const [metrics, setMetrics] = useState<Record<string, ProjectMetrics>>({});
+  /** Quadro (arrastar) ou Tabela (comparar). Persiste — a escolha de visão é
+   *  hábito de trabalho, não decisão a repetir a cada acesso. */
+  const [viewMode, setViewMode] = useState<'board' | 'table'>('board');
+  useEffect(() => {
+    const saved = window.localStorage.getItem('projects-view');
+    if (saved === 'table' || saved === 'board') setViewMode(saved);
+  }, []);
+  useEffect(() => {
+    try { window.localStorage.setItem('projects-view', viewMode); } catch { /* quota */ }
+  }, [viewMode]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -113,6 +144,40 @@ function ProjectsContent() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  /**
+   * Progresso e atrasos por projeto, derivados das atividades.
+   *
+   * Medido em 04/08/2026: 8 dos 24 projetos ativos têm tarefa atrasada — e
+   * isso não aparecia em tela nenhuma. Uma consulta só para todos os projetos,
+   * em lotes de 50 ids (o `in.(…)` estoura a URL do proxy acima disso).
+   */
+  const fetchMetrics = async (ids: string[]) => {
+    if (!ids.length) { setMetrics({}); return; }
+    const rows = await selectInChunks<{ project_id: string; status: string | null; end_date: string | null }>(
+      ids,
+      (chunk) => supabase
+        .from('activities')
+        .select('project_id, status, end_date')
+        .eq('is_trashed', false)
+        .in('project_id', chunk),
+    );
+    const hoje = new Date().toISOString().slice(0, 10);
+    const acc: Record<string, ProjectMetrics> = {};
+    for (const r of rows) {
+      if (!r.project_id) continue;
+      const m = acc[r.project_id] || { total: 0, concluidas: 0, atrasadas: 0, percent: 0 };
+      m.total += 1;
+      const feita = (r.status || '').toLowerCase() === 'completed';
+      if (feita) m.concluidas += 1;
+      else if (r.end_date && r.end_date.slice(0, 10) < hoje) m.atrasadas += 1;
+      acc[r.project_id] = m;
+    }
+    Object.values(acc).forEach((m) => {
+      m.percent = m.total > 0 ? Math.round((m.concluidas / m.total) * 100) : 0;
+    });
+    setMetrics(acc);
+  };
+
   const fetchProjects = async () => {
     try {
       const { data, error } = await supabase
@@ -125,6 +190,7 @@ function ProjectsContent() {
       if (error) throw error;
       const filtered = await filterProjects(data || []);
       setProjects(filtered);
+      void fetchMetrics(filtered.map((p) => p.id));
 
       const assigneeValues = filtered
         .flatMap((project) => Array.isArray(project.assignees) ? project.assignees : [])
@@ -377,20 +443,59 @@ function ProjectsContent() {
         ))}
       </div>
 
-      {statusFilter && (
-        <div className="mb-4 flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Filtrando por:</span>
-          <Button variant="outline" size="sm" onClick={() => handleStatusFilter(null)} className="gap-2">
-            {statusCards.find((s) => s.key === statusFilter)?.label}{' '}
-            <span className="text-xs">×</span>
-          </Button>
+      {/* Quadro e Tabela convivem: o quadro é melhor para MOVER um projeto de
+          estágio, a tabela para COMPARAR muitos. Cabem ~6 cartões numa tela
+          contra ~20 linhas. */}
+      <div className="mb-4 flex items-center gap-2 flex-wrap">
+        <div className="inline-flex rounded-md border border-border overflow-hidden">
+          {([
+            { id: 'board', label: 'Quadro', Icon: LayoutGrid },
+            { id: 'table', label: 'Tabela', Icon: TableIcon },
+          ] as const).map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setViewMode(id)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                viewMode === id
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {label}
+            </button>
+          ))}
         </div>
+
+        {statusFilter && (
+          <>
+            <span className="text-sm text-muted-foreground ml-2">Filtrando por:</span>
+            <Button variant="outline" size="sm" onClick={() => handleStatusFilter(null)} className="gap-2">
+              {statusCards.find((s) => s.key === statusFilter)?.label}{' '}
+              <span className="text-xs">×</span>
+            </Button>
+          </>
+        )}
+      </div>
+
+      {viewMode === 'table' && !isLoading && (
+        <ProjectsTable
+          projects={
+            statusFilter
+              ? filteredProjects.filter((p) => p.status === statusFilter)
+              : filteredProjects
+          }
+          metrics={metrics}
+          assigneeAvatarMap={assigneeAvatarMap}
+          onRowClick={(p) => { setDrawerProject(p as Project); setDrawerOpen(true); }}
+        />
       )}
 
       {/* Pipeline Board */}
       {isLoading ? (
         <PipelineSkeleton />
-      ) : (
+      ) : viewMode === 'table' ? null : (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -418,6 +523,7 @@ function ProjectsContent() {
                   title={s.label}
                   status={s.key}
                   projects={s.projects}
+                  metrics={metrics}
                   assigneeAvatarMap={assigneeAvatarMap}
                   onEdit={(p: Project) => { setEditingProject(p); setEditDialogOpen(true); }}
                   onDelete={handleDelete}
