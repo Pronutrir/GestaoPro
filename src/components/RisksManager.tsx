@@ -112,6 +112,9 @@ export const RisksManager = ({ projectId, canManageProject = false }: RisksManag
   const [rootCause, setRootCause] = useState("");
   const [responseStrategy, setResponseStrategy] = useState<string>("Mitigar");
   const [contingencyPlan, setContingencyPlan] = useState("");
+  /** Camada 2 do formulário: fechada ao criar, aberta ao editar (quem edita
+   *  já está tratando o risco, e é aí que estes campos importam). */
+  const [detalhar, setDetalhar] = useState(false);
   const [showMatrix, setShowMatrix] = useState(false);
   const [matrixFilter, setMatrixFilter] = useState<{ prob: string; imp: string } | null>(null);
 
@@ -128,6 +131,7 @@ export const RisksManager = ({ projectId, canManageProject = false }: RisksManag
     setOccurred("nao"); setContramedida("");
     setCategory("Técnico"); setRootCause(""); setResponseStrategy("Mitigar");
     setContingencyPlan("");
+    setDetalhar(false);
     setEditingId(null); setShowForm(false);
   };
 
@@ -163,6 +167,8 @@ export const RisksManager = ({ projectId, canManageProject = false }: RisksManag
 
   const handleEdit = (item: Risk) => {
     setEditingId(item.id);
+    // Editar = tratar: os campos de tratamento já abrem.
+    setDetalhar(true);
     setDescription(item.description);
     setResponsible(item.responsible || "");
     setProbability(item.probability);
@@ -283,74 +289,31 @@ export const RisksManager = ({ projectId, canManageProject = false }: RisksManag
             )}
           </div>
 
+          {/* ESSENCIAL — o que faz um risco existir: o que pode dar errado e
+              quão grave é. Medido em 04/08/2026: com 6 campos marcados como
+              obrigatórios, a base tinha ZERO riscos em 52 projetos.
+              (Os asteriscos eram só visuais: handleSave só validava a
+              descrição — o formulário parecia mais exigente do que era.) */}
           <div className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
-              <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Categoria</label>
-              <Input value={category} onChange={e => setCategory(e.target.value)} placeholder="Ex: Técnico, Externo, Financeiro..." list="risk-categories" />
-              <datalist id="risk-categories">
-                {CATEGORIES.map(c => <option key={c} value={c} />)}
-              </datalist>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
-              <label className="text-sm font-medium text-right md:text-right"><span className="text-destructive">*</span> Descrição</label>
-              <div className="space-y-1">
-                <div className="flex justify-end">
-                  <AIAssistButton value={description} onChange={setDescription} context="risk_description" />
-                </div>
-                <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} />
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">O que pode dar errado</label>
+                <AIAssistButton value={description} onChange={setDescription} context="risk_description" />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-start gap-3">
-              <label className="text-sm font-medium text-right pt-2">Causa Raiz</label>
-              <div className="space-y-1">
-                <div className="flex justify-end">
-                  <AIAssistButton value={rootCause} onChange={setRootCause} context="tap_root_cause" />
-                </div>
-                <Textarea value={rootCause} onChange={e => setRootCause(e.target.value)} rows={2} placeholder="Origem fundamental do risco" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
-              <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Responsável</label>
-              <Input value={responsible} onChange={e => setResponsible(e.target.value)} placeholder="Nome do responsável" />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
-              <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Estratégia</label>
-              <Input value={responseStrategy} onChange={e => setResponseStrategy(e.target.value)} placeholder="Ex: Evitar, Mitigar, Transferir, Aceitar..." list="risk-strategies" />
-              <datalist id="risk-strategies">
-                {RESPONSE_STRATEGIES.map(s => <option key={s.value} value={s.label} />)}
-              </datalist>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-start gap-3">
-              <label className="text-sm font-medium text-right pt-2">Plano de Contingência</label>
-              <div className="space-y-1">
-                <div className="flex justify-end">
-                  <AIAssistButton value={contingencyPlan} onChange={setContingencyPlan} context="risk_mitigation" />
-                </div>
-                <Textarea value={contingencyPlan} onChange={e => setContingencyPlan(e.target.value)} rows={2} placeholder="Ações caso o risco se materialize" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3">
-              <label className="text-sm font-medium text-right"><span className="text-destructive">*</span> Status</label>
-              <Input value={status} onChange={e => setStatus(e.target.value)} placeholder="Ex: Monitorar, Mitigar, Aceitar..." list="risk-statuses" />
-              <datalist id="risk-statuses">
-                <option value="monitorar" />
-                <option value="mitigar" />
-                <option value="aceitar" />
-                <option value="transferir" />
-                <option value="eliminar" />
-              </datalist>
+              <Textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                rows={2}
+                placeholder="Ex.: o fornecedor não liberar o ambiente de homologação a tempo"
+                autoFocus
+              />
             </div>
           </div>
 
-          {/* Matriz interativa */}
+          {/* Matriz interativa — dois selects viraram um clique, e a severidade
+              aparece na hora, que é a informação que faz alguém agir. */}
           <div className="pt-2 border-t border-border/50">
-            <p className="text-sm font-medium mb-3"><span className="text-destructive">*</span> Nível - Avaliação do Risco</p>
+            <p className="text-sm font-medium mb-3">Probabilidade × Impacto</p>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-sm">
                 <thead>
@@ -390,39 +353,93 @@ export const RisksManager = ({ projectId, canManageProject = false }: RisksManag
             <p className="text-[11px] text-muted-foreground mt-2">Clique em uma célula para selecionar o nível de risco.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-center gap-3 pt-2 border-t border-border/50">
-            <label className="text-sm font-medium text-right">Ocorreu</label>
-            <div className="flex gap-1">
-              <Button
-                type="button"
-                size="sm"
-                variant={occurred === "sim" ? "default" : "outline"}
-                onClick={() => setOccurred("sim")}
-                className="rounded-r-none"
-              >Sim</Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={occurred === "nao" ? "default" : "outline"}
-                onClick={() => setOccurred("nao")}
-                className="rounded-l-none"
-              >Não</Button>
-            </div>
-          </div>
+          {/* DETALHAR — tudo que só se sabe quando alguém vai TRATAR o risco.
+              Responsável saiu do essencial de propósito: no instante em que se
+              percebe um risco quase nunca se sabe quem vai cuidar dele, e
+              exigir isso trava o registro no momento em que a informação está
+              mais fresca. Abre sozinho ao editar um risco existente. */}
+          <button
+            type="button"
+            onClick={() => setDetalhar(v => !v)}
+            className="w-full flex items-center gap-2 pt-3 border-t border-border/50 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <span className="text-xs">{detalhar ? "▾" : "▸"}</span>
+            <span className={detalhar ? "text-primary font-medium" : ""}>Detalhar o risco</span>
+            <span className="ml-auto text-[11px] font-mono">7 campos</span>
+          </button>
 
-          <div className="grid grid-cols-1 md:grid-cols-[120px_1fr] items-start gap-3">
-            <label className="text-sm font-medium text-right pt-2">Contramedida</label>
-            <div className="space-y-1">
-              <div className="flex justify-end">
-                <AIAssistButton value={contramedida} onChange={setContramedida} context="risk_mitigation" />
+          {detalhar && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Categoria</label>
+                  <Input value={category} onChange={e => setCategory(e.target.value)} placeholder="Técnico, Externo, Financeiro…" list="risk-categories" />
+                  <datalist id="risk-categories">
+                    {CATEGORIES.map(c => <option key={c} value={c} />)}
+                  </datalist>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Responsável</label>
+                  <Input value={responsible} onChange={e => setResponsible(e.target.value)} placeholder="Quem vai tratar" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Estratégia</label>
+                  <Input value={responseStrategy} onChange={e => setResponseStrategy(e.target.value)} placeholder="Evitar, Mitigar, Transferir, Aceitar…" list="risk-strategies" />
+                  <datalist id="risk-strategies">
+                    {RESPONSE_STRATEGIES.map(s => <option key={s.value} value={s.label} />)}
+                  </datalist>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Status</label>
+                  <Input value={status} onChange={e => setStatus(e.target.value)} placeholder="Monitorar, Mitigar, Aceitar…" list="risk-statuses" />
+                  <datalist id="risk-statuses">
+                    <option value="monitorar" /><option value="mitigar" /><option value="aceitar" />
+                    <option value="transferir" /><option value="eliminar" />
+                  </datalist>
+                </div>
               </div>
-              <Textarea value={contramedida} onChange={e => setContramedida(e.target.value)} rows={3} placeholder="Plano de ação para responder ao risco" />
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground">Causa raiz</label>
+                  <AIAssistButton value={rootCause} onChange={setRootCause} context="tap_root_cause" />
+                </div>
+                <Textarea value={rootCause} onChange={e => setRootCause(e.target.value)} rows={2} placeholder="Origem fundamental do risco" />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground">Contramedida</label>
+                  <AIAssistButton value={contramedida} onChange={setContramedida} context="risk_mitigation" />
+                </div>
+                <Textarea value={contramedida} onChange={e => setContramedida(e.target.value)} rows={2} placeholder="Plano de ação para responder ao risco" />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground">Plano de contingência</label>
+                  <AIAssistButton value={contingencyPlan} onChange={setContingencyPlan} context="risk_mitigation" />
+                </div>
+                <Textarea value={contingencyPlan} onChange={e => setContingencyPlan(e.target.value)} rows={2} placeholder="Ações caso o risco se materialize" />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-medium text-muted-foreground">Já ocorreu?</label>
+                <div className="flex gap-1">
+                  <Button type="button" size="sm" variant={occurred === "sim" ? "default" : "outline"}
+                    onClick={() => setOccurred("sim")} className="rounded-r-none h-7 text-xs">Sim</Button>
+                  <Button type="button" size="sm" variant={occurred === "nao" ? "default" : "outline"}
+                    onClick={() => setOccurred("nao")} className="rounded-l-none h-7 text-xs">Não</Button>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-3 border-t border-border/50">
             <Button size="sm" variant="ghost" onClick={resetForm}>Cancelar</Button>
-            <Button size="sm" onClick={handleSave}>{editingId ? "Salvar" : "Salvar e adicionar novo"}</Button>
+            <Button size="sm" onClick={handleSave} disabled={!description.trim()}>
+              {editingId ? "Salvar" : "Registrar risco"}
+            </Button>
           </div>
         </Card>
       )}
