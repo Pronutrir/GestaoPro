@@ -52,6 +52,8 @@ export const ProjectColumn = ({
 }: ProjectColumnProps) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+  /** Coluna vazia aberta por clique — volta a colapsar ao recarregar. */
+  const [expandidaManual, setExpandidaManual] = useState(false);
   const { setNodeRef, isOver } = useDroppable({ id: `column-${status}` });
 
   const handleDeleteClick = (projectId: string) => {
@@ -69,8 +71,44 @@ export const ProjectColumn = ({
 
   const projectIds = projects.map((p) => p.id);
 
+  /**
+   * Coluna vazia COLAPSA numa faixa fina com o nome na vertical.
+   *
+   * Medido em 04/08/2026: 3 dos 7 estágios (MVP, Bloqueio, Gaveta) estão
+   * zerados — 43% da largura da tela exibindo "Arraste aqui". A faixa mantém
+   * o funil legível de ponta a ponta (quem precisa saber que MVP existe
+   * continua vendo) sem consumir o espaço de uma coluna cheia.
+   *
+   * Expande sozinha ao arrastar algo por cima (isOver) — senão não haveria
+   * onde soltar, que é justamente o propósito de uma coluna vazia.
+   */
+  const colapsada = projects.length === 0 && !isOver && !expandidaManual;
+
+  if (colapsada) {
+    return (
+      <div className="hidden lg:flex">
+        <button
+          type="button"
+          onClick={() => setExpandidaManual(true)}
+          title={`${title} — sem projetos. Clique para abrir.`}
+          ref={setNodeRef}
+          className="w-8 min-h-[160px] rounded-lg border border-dashed border-border/50 bg-card/40 hover:bg-muted/50 hover:border-border transition-colors flex items-center justify-center py-3"
+        >
+          <span
+            className="text-[10px] text-muted-foreground/70 tracking-wide whitespace-nowrap"
+            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            {title} · 0
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-4">
+    // lg:flex-1 + min-w-0: no desktop o container é flex, então cada coluna
+    // com conteúdo divide o espaço que sobra das faixas colapsadas.
+    <div className="flex flex-col gap-4 lg:flex-1 lg:min-w-0">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-foreground">{title}</h3>

@@ -398,8 +398,17 @@ function ProjectsContent() {
           onDragEnd={handleDragEnd}
           onDragCancel={() => setActiveProjectId(null)}
         >
+          {/* No desktop vira FLEX para a coluna vazia poder encolher: com
+              grid-cols-7 todas teriam a mesma largura, e a faixa fina não
+              existiria. Abaixo de lg segue grid — em tela estreita o
+              empilhamento é o que funciona, e o desperdício de largura só
+              aparece no desktop. */}
           <div
-            className={`grid gap-6 ${statusFilter ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-7'}`}
+            className={
+              statusFilter
+                ? "grid gap-6 grid-cols-1"
+                : "grid gap-6 grid-cols-1 md:grid-cols-2 lg:flex lg:items-start lg:gap-4"
+            }
           >
             {statusCards
               .filter((s) => !statusFilter || statusFilter === s.key)

@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { GripVertical, MoreVertical, Pencil, Trash2, Calendar } from "lucide-react";
+import { GripVertical, MoreVertical, Pencil, Trash2, Calendar, Hourglass } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -18,6 +18,9 @@ interface Project {
   priority: string;
   due_date: string | null;
   assignees: string[];
+  /** Última alteração — base do indicador de tempo parado. Vem do
+   *  select('*') da página; opcional para não quebrar quem monta o tipo. */
+  updated_at?: string | null;
 }
 
 interface SortableProjectCardProps {
@@ -82,6 +85,17 @@ export const ProjectCardPreview = ({ project, assigneeAvatarMap = {} }: { projec
   );
 };
 
+/**
+ * Dias sem alteração. Só vira sinal a partir de 30 dias: abaixo disso é ritmo
+ * normal de trabalho, e um alerta que aparece sempre deixa de ser alerta.
+ */
+export const diasSemMovimento = (updatedAt?: string | null): number | null => {
+  if (!updatedAt) return null;
+  const t = new Date(updatedAt).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.floor((Date.now() - t) / 86400000);
+};
+
 export const SortableProjectCard = ({ project, assigneeAvatarMap = {}, onEdit, onDeleteClick, onCardClick, isAdmin = false }: SortableProjectCardProps) => {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging, setActivatorNodeRef,
@@ -138,7 +152,7 @@ export const SortableProjectCard = ({ project, assigneeAvatarMap = {}, onEdit, o
         </div>
 
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge className={`${priorityColors[project.priority]} text-xs`}>
               {project.priority === "high" && "Alta"}
               {project.priority === "medium" && "Média"}
@@ -150,6 +164,24 @@ export const SortableProjectCard = ({ project, assigneeAvatarMap = {}, onEdit, o
                 {formatProjectDueDate(project.due_date)}
               </div>
             )}
+            {/* Tempo parado — o dado que faltava. Sem ele todas as colunas
+                parecem igualmente saudáveis, e um pipeline serve justamente
+                para mostrar onde o trabalho empaca. */}
+            {(() => {
+              const dias = diasSemMovimento(project.updated_at);
+              if (dias === null || dias < 30) return null;
+              return (
+                <div
+                  className={`flex items-center gap-1 text-xs font-medium ${
+                    dias >= 90 ? "text-destructive" : "text-warning"
+                  }`}
+                  title={`Sem alteração há ${dias} dias`}
+                >
+                  <Hourglass className="w-3 h-3" />
+                  {dias}d
+                </div>
+              );
+            })()}
           </div>
 
           <div className="flex -space-x-2">
