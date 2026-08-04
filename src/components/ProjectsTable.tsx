@@ -211,7 +211,7 @@ export function ProjectsTable({
       <button
         type="button"
         onClick={() => toggleSort(k)}
-        className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+        className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-foreground/80 hover:text-foreground transition-colors"
       >
         {children}
         {sort.key === k && (sort.dir === "asc"
@@ -241,7 +241,7 @@ export function ProjectsTable({
       <select
         value={fDono}
         onChange={(e) => setFDono(e.target.value)}
-        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fDono ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
+        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fDono ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-foreground hover:border-primary/50")}
       >
         <option value="">Todos os donos</option>
         {donos.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -250,7 +250,7 @@ export function ProjectsTable({
       <select
         value={fSetor}
         onChange={(e) => setFSetor(e.target.value)}
-        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fSetor ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
+        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fSetor ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-foreground hover:border-primary/50")}
       >
         <option value="">Todos os setores</option>
         {setores.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -262,7 +262,7 @@ export function ProjectsTable({
         <select
           value={fTipo}
           onChange={(e) => setFTipo(e.target.value)}
-          className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fTipo ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
+          className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fTipo ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-foreground hover:border-primary/50")}
         >
           <option value="">Todos os tipos</option>
           {tipos.map((t) => <option key={t} value={t}>{TYPE_LABEL[t] || t}</option>)}
@@ -273,7 +273,7 @@ export function ProjectsTable({
         <select
           value={fPrioridade}
           onChange={(e) => setFPrioridade(e.target.value)}
-          className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fPrioridade ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
+          className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fPrioridade ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-foreground hover:border-primary/50")}
         >
           <option value="">Toda prioridade</option>
           {prioridades.map((p) => (
@@ -285,7 +285,7 @@ export function ProjectsTable({
       <select
         value={fPrazo}
         onChange={(e) => setFPrazo(e.target.value)}
-        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fPrazo ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
+        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fPrazo ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-foreground hover:border-primary/50")}
       >
         <option value="">Qualquer prazo</option>
         <option value="vencido">Vencido</option>
@@ -297,7 +297,7 @@ export function ProjectsTable({
       <select
         value={fProgresso}
         onChange={(e) => setFProgresso(e.target.value)}
-        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fProgresso ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
+        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fProgresso ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-foreground hover:border-primary/50")}
       >
         <option value="">Qualquer progresso</option>
         <option value="parado">Não começou (0%)</option>
@@ -317,7 +317,7 @@ export function ProjectsTable({
             "h-8 inline-flex items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
             soAlerta
               ? "border-destructive bg-destructive/10 text-destructive"
-              : "border-border text-muted-foreground hover:text-foreground hover:bg-muted",
+              : "border-border text-foreground hover:border-destructive/50 hover:bg-destructive/5",
           )}
         >
           <AlertTriangle className="w-3.5 h-3.5" />
@@ -336,7 +336,7 @@ export function ProjectsTable({
         </button>
       )}
 
-      <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+      <span className="ml-auto text-xs font-medium text-foreground/70 tabular-nums">
         {linhas.length} de {projects.length}
       </span>
     </div>
@@ -405,7 +405,7 @@ export function ProjectsTable({
                 <td className="px-3 py-2 max-w-[240px]">
                   <span className="font-medium text-foreground truncate block" title={p.title}>{p.title}</span>
                   {p.project_type && (
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-[11px] text-muted-foreground">
                       {TYPE_LABEL[p.project_type] || p.project_type}
                     </span>
                   )}
@@ -422,11 +422,13 @@ export function ProjectsTable({
                         {avatar ? <AvatarImage src={avatar} alt={p.owner} /> : null}
                         <AvatarFallback className="text-[8px]">{getAvatarInitials(p.owner)}</AvatarFallback>
                       </Avatar>
-                      <span className="truncate text-muted-foreground">{p.owner}</span>
+                      <span className="truncate text-foreground/90">{p.owner}</span>
                     </span>
                   ) : <span className="text-muted-foreground/50">—</span>}
                 </td>
-                <td className="px-3 py-2 text-muted-foreground hidden md:table-cell">
+                {/* Setor e dono são CONTEÚDO, não rótulo: ficam em texto
+                    normal. text-muted-foreground é para o que é secundário. */}
+                <td className="px-3 py-2 text-foreground/90 hidden md:table-cell">
                   {p.sector || <span className="text-muted-foreground/50">—</span>}
                 </td>
                 <td className="px-3 py-2">
