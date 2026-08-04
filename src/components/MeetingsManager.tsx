@@ -37,6 +37,7 @@ import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
 import { selectInChunks } from "@/lib/chunkedIn";
 import { PersonCombobox } from "@/components/PersonCombobox";
+import { VinculoSelect } from "@/components/VinculoSelect";
 import { cn } from "@/lib/utils";
 
 // meeting_types ainda fora dos tipos gerados (migration 20260802130000
@@ -183,6 +184,9 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   const [decisions, setDecisions] = useState<Record<string, MeetingDecision[]>>({});
   const [actions, setActions] = useState<Record<string, MeetingAction[]>>({});
   const [types, setTypes] = useState<MeetingType[]>([]);
+  const [atividades, setAtividades] = useState<{ id: string; title: string; wbs_code?: string | null; parent_id?: string | null }[]>([]);
+  /** false enquanto a coluna meetings.activity_id não existe na VM. */
+  const [vinculoAtividadeOk, setVinculoAtividadeOk] = useState(true);
   /** false enquanto a migration de meeting_types não rodou na VM. */
   const [typesAvailable, setTypesAvailable] = useState(true);
   /** Ações de TODAS as reuniões do projeto — base do painel do topo. */
@@ -212,6 +216,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     agenda: "",
     minutes: "",
     phase_id: "",
+    activity_id: "",
     participants: [] as string[],
     responsible: "",
     meeting_type_id: "",
@@ -256,11 +261,25 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     fetchMeetings();
     fetchProfiles();
     fetchTypes();
+    fetchAtividades();
   }, [projectId]);
 
   const fetchProfiles = async () => {
     const { data } = await supabase.from("profiles").select("id, email, full_name, sector, role_title, avatar_url");
     if (data) setProfiles(data);
+  };
+
+  /** Atividades do projeto — destinos do vínculo, além das fases. O seletor
+   *  oferecia só as 5 fases enquanto 827 atividades ficavam inalcançáveis. */
+  const fetchAtividades = async () => {
+    const { data } = await supabase
+      .from("activities")
+      .select("id, title, wbs_code, parent_id")
+      .eq("project_id", projectId)
+      .eq("is_trashed", false)
+      .order("wbs_code", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true });
+    setAtividades(data || []);
   };
 
   /** Enquanto a migration não roda na VM a tabela não existe: em vez de quebrar
@@ -324,7 +343,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   const resetForm = () => {
     setForm({
       title: "", meeting_date: "", start_time: "", end_time: "", location: "",
-      agenda: "", minutes: "", phase_id: "", participants: [], responsible: "",
+      agenda: "", minutes: "", phase_id: "", activity_id: "", participants: [], responsible: "",
       // Já abre no tipo marcado como padrão do projeto ("Alinhamento"), que é
       // o caso mais frequente — evita um clique na maioria das criações.
       meeting_type_id: types.find((t) => t.is_default)?.id || "",
@@ -362,6 +381,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       payload.recording_url = form.recording_url || null;
       payload.transcript = form.transcript || null;
     }
+    // Coluna da migration 20260804120000 (vínculo com atividade), com a mesma
+    // degradação: sem ela, a reunião salva só com a fase — como antes.
+    if (vinculoAtividadeOk) {
+      payload.activity_id = form.activity_id || null;
+    }
 
     if (!editingId) {
       payload.created_by = user?.id || null;
@@ -370,15 +394,16 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     const semColunasNovas = () => {
       const p = { ...payload };
       delete p.meeting_type_id; delete p.recording_url; delete p.transcript;
+      delete p.activity_id;
       return p;
     };
     const colunaAusente = (msg?: string | null) =>
-      !!msg && /Could not find the '(meeting_type_id|recording_url|transcript)' column/i.test(msg);
+      !!msg && /Could not find the '(meeting_type_id|recording_url|transcript|activity_id)' column/i.test(msg);
 
     if (editingId) {
       let { error } = await supabase.from("meetings").update(payload).eq("id", editingId);
       if (colunaAusente(error?.message)) {
-        setTypesAvailable(false);
+        setTypesAvailable(false); setVinculoAtividadeOk(false);
         ({ error } = await supabase.from("meetings").update(semColunasNovas()).eq("id", editingId));
       }
       if (error) { toast({ title: "Erro ao atualizar", variant: "destructive" }); return; }
@@ -386,7 +411,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     } else {
       let { error } = await supabase.from("meetings").insert(payload);
       if (colunaAusente(error?.message)) {
-        setTypesAvailable(false);
+        setTypesAvailable(false); setVinculoAtividadeOk(false);
         ({ error } = await supabase.from("meetings").insert(semColunasNovas()));
       }
       if (error) { toast({ title: "Erro ao criar", variant: "destructive" }); return; }
@@ -410,6 +435,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       agenda: m.agenda || "",
       minutes: m.minutes || "",
       phase_id: m.phase_id || "",
+      activity_id: (m as any).activity_id || "",
       participants: m.participants || [],
       responsible: m.responsible || "",
       meeting_type_id: m.meeting_type_id || types.find((t) => t.is_default)?.id || "",
@@ -835,17 +861,18 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
               />
             </div>
           </div>
-          {phases.length > 0 && (
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={form.phase_id}
-              onChange={(e) => setForm({ ...form, phase_id: e.target.value })}
-            >
-              <option value="">Fase (opcional)</option>
-              {phases.map((p) => (
-                <option key={p.id} value={p.id}>{p.title}</option>
-              ))}
-            </select>
+          {/* Vínculo: fase OU atividade num campo só. Antes só oferecia as
+              fases do projeto — 5 opções contra 827 atividades invisíveis. */}
+          {(phases.length > 0 || atividades.length > 0) && (
+            <VinculoSelect
+              fases={phases}
+              atividades={atividades}
+              faseId={form.phase_id}
+              atividadeId={form.activity_id}
+              atividadeDisponivel={vinculoAtividadeOk}
+              onChange={({ faseId, atividadeId }) =>
+                setForm({ ...form, phase_id: faseId, activity_id: atividadeId })}
+            />
           )}
           {/* Participants */}
           <div className="space-y-2">
