@@ -40,14 +40,33 @@ export interface TableMetrics {
   percent: number;
 }
 
+/**
+ * Estágios com o mesmo peso de cor das bolinhas do quadro — mesmo estágio,
+ * mesma cor nas duas visões.
+ *
+ * "Concluído" fica CINZA de propósito: é o estado que não pede ação, e verde
+ * forte aqui competiria com o verde de "em dia", que é o que importa olhar.
+ */
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
-  ideacao: { label: "Ideação", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
-  poc: { label: "POC", cls: "bg-sky-500/15 text-sky-700 dark:text-sky-400" },
-  mvp: { label: "MVP", cls: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400" },
-  blocked: { label: "Bloqueio", cls: "bg-rose-500/15 text-rose-700 dark:text-rose-400" },
-  drawer: { label: "Gaveta", cls: "bg-slate-500/15 text-slate-700 dark:text-slate-300" },
-  "em-execucao": { label: "Execução", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
-  concluido: { label: "Concluído", cls: "bg-muted text-muted-foreground" },
+  ideacao: { label: "Ideação", cls: "bg-amber-500/20 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30" },
+  poc: { label: "POC", cls: "bg-sky-500/20 text-sky-800 dark:text-sky-300 ring-1 ring-sky-500/30" },
+  mvp: { label: "MVP", cls: "bg-indigo-500/20 text-indigo-800 dark:text-indigo-300 ring-1 ring-indigo-500/30" },
+  blocked: { label: "Bloqueio", cls: "bg-rose-500/20 text-rose-800 dark:text-rose-300 ring-1 ring-rose-500/30" },
+  drawer: { label: "Gaveta", cls: "bg-slate-500/20 text-slate-700 dark:text-slate-300 ring-1 ring-slate-500/30" },
+  "em-execucao": { label: "Execução", cls: "bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30" },
+  concluido: { label: "Concluído", cls: "bg-muted text-muted-foreground ring-1 ring-border" },
+};
+
+/**
+ * Cor da barra por faixa de progresso. Antes toda barra era azul, inclusive
+ * em 0% — e uma barra vazia e cinza sumia no meio da tabela, que é
+ * exatamente o caso de um projeto parado.
+ */
+const corProgresso = (pct: number): string => {
+  if (pct >= 80) return "bg-success";
+  if (pct >= 40) return "bg-primary";
+  if (pct > 0) return "bg-warning";
+  return "bg-destructive";
 };
 
 /** A base usa GUT (crítica/urgente/alta/média/baixa) e o legado high/medium/low. */
@@ -343,11 +362,45 @@ export function ProjectsTable({
             const vencido = !!p.due_date && p.due_date.slice(0, 10) < hoje && p.status !== "concluido";
             const avatar = p.owner ? resolveAvatarFromLookup(p.owner, p.owner, assigneeAvatarMap) : null;
 
+            // Gravidade da linha, na ordem em que alguém age: o que já falhou
+            // vem antes do que só merece acompanhamento.
+            //
+            // Projeto CONCLUÍDO nunca entra em alerta. Sem essa exceção, 16 dos
+            // 24 projetos ficavam vermelhos — dois terços da tabela, o que anula
+            // o propósito da cor. Um projeto encerrado com pendência é dado a
+            // revisar, não trabalho a fazer: ele aparece na coluna de alertas,
+            // que continua mostrando o número, mas não pinta a linha.
+            //
+            // VERMELHO é reservado ao que já falhou de fato: tarefa atrasada.
+            // Prazo vencido e progresso 0% ficam em ÂMBAR — merecem olhar, mas
+            // já têm cor própria na coluna de prazo e na barra, e somá-los ao
+            // vermelho pintava 58% da tabela. Alerta que cobre a maioria das
+            // linhas deixa de ser alerta.
+            const encerrado = p.status === "concluido";
+            const gravidade: "alta" | "media" | "baixa" = encerrado
+              ? "baixa"
+              : m && m.atrasadas > 0
+                ? "alta"
+                : vencido || (m && m.total > 0 && m.percent === 0)
+                  || (dias !== null && dias >= 30) || faixaPrazo(p) === "vence30"
+                  ? "media"
+                  : "baixa";
+
             return (
               <tr
                 key={p.id}
                 onClick={() => onRowClick?.(p)}
-                className="border-b border-border/50 last:border-b-0 hover:bg-muted/40 transition-colors cursor-pointer"
+                className={cn(
+                  // Zebra: com 7 colunas o olho pula de linha sem ela.
+                  "border-b border-border/50 last:border-b-0 even:bg-muted/20 hover:bg-muted/50 transition-colors cursor-pointer",
+                  // Faixa lateral de 3px pela gravidade — permite varrer a
+                  // tabela sem ler nada. Fina de propósito: colorir a linha
+                  // inteira viraria um semáforo e cansaria a leitura.
+                  "border-l-[3px]",
+                  gravidade === "alta" ? "border-l-destructive"
+                    : gravidade === "media" ? "border-l-warning"
+                    : "border-l-success/40",
+                )}
               >
                 <td className="px-3 py-2 max-w-[240px]">
                   <span className="font-medium text-foreground truncate block" title={p.title}>{p.title}</span>
@@ -377,35 +430,54 @@ export function ProjectsTable({
                   {p.sector || <span className="text-muted-foreground/50">—</span>}
                 </td>
                 <td className="px-3 py-2">
-                  {m ? (
+                  {m && m.total > 0 ? (
                     <span className="inline-flex items-center gap-2">
-                      <span className="h-1 w-14 rounded-full bg-muted overflow-hidden shrink-0">
-                        <span className="block h-full bg-primary rounded-full" style={{ width: `${m.percent}%` }} />
+                      <span className="h-1.5 w-16 rounded-full bg-muted overflow-hidden shrink-0">
+                        {/* Largura mínima de 3% para a barra em 0% existir
+                            visualmente — sem isso, "parado" fica idêntico a
+                            "sem dado". */}
+                        <span
+                          className={cn("block h-full rounded-full transition-all", corProgresso(m.percent))}
+                          style={{ width: `${Math.max(m.percent, 3)}%` }}
+                        />
                       </span>
-                      <span className="tabular-nums text-muted-foreground text-[11px]">{m.percent}%</span>
+                      <span className={cn(
+                        "tabular-nums text-[11px] font-medium",
+                        m.percent === 0 ? "text-destructive"
+                          : m.percent >= 100 ? "text-success"
+                          : "text-muted-foreground",
+                      )}>
+                        {m.percent}%
+                      </span>
                     </span>
-                  ) : <span className="text-muted-foreground/50">—</span>}
+                  ) : <span className="text-muted-foreground/50 text-[11px]">sem atividades</span>}
                 </td>
-                <td className={cn("px-3 py-2 whitespace-nowrap tabular-nums", vencido ? "text-destructive font-medium" : "text-muted-foreground")}>
+                {/* Só o que sai do normal ganha cor: prazo em dia continua em
+                    texto comum. Se tudo é colorido, nada chama atenção. */}
+                <td className={cn(
+                  "px-3 py-2 whitespace-nowrap tabular-nums",
+                  vencido ? "text-destructive font-semibold"
+                    : faixaPrazo(p) === "vence30" ? "text-warning font-medium"
+                    : "text-muted-foreground",
+                )}>
                   {p.due_date ? formatProjectDueDate(p.due_date) : <span className="text-muted-foreground/50">—</span>}
                 </td>
                 <td className="px-3 py-2">
-                  <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    {/* Pílula em vez de texto: o alerta precisa ter peso de
+                        etiqueta, não de nota de rodapé. */}
                     {m && m.atrasadas > 0 && (
-                      <span className="inline-flex items-center gap-1 text-destructive font-medium text-[11px]"
+                      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-destructive font-bold text-[10px]"
                             title={`${m.atrasadas} tarefa(s) com prazo vencido`}>
                         <AlertTriangle className="w-3 h-3" />{m.atrasadas}
                       </span>
                     )}
                     {dias !== null && dias >= 30 && (
-                      <span className={cn("inline-flex items-center gap-1 font-medium text-[11px]",
-                        dias >= 90 ? "text-destructive" : "text-warning")}
+                      <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-bold text-[10px]",
+                        dias >= 90 ? "bg-destructive/15 text-destructive" : "bg-warning/15 text-warning")}
                             title={`Sem alteração há ${dias} dias`}>
                         <Hourglass className="w-3 h-3" />{dias}d
                       </span>
-                    )}
-                    {m && m.total === 0 && (
-                      <span className="text-[11px] text-muted-foreground/70">sem atividades</span>
                     )}
                     {/* Silêncio quando está tudo bem: um traço em toda linha
                         saudável só cria ruído na coluna que deve chamar
