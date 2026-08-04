@@ -13,7 +13,7 @@
  */
 import { useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowUp, ArrowDown, Hourglass, AlertTriangle } from "lucide-react";
+import { ArrowUp, ArrowDown, Hourglass, AlertTriangle, X } from "lucide-react";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { formatProjectDueDate } from "@/lib/projectDeadline";
 import { diasSemMovimento } from "@/components/SortableProjectCard";
@@ -73,6 +73,26 @@ export function ProjectsTable({
   // alfabeto".
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "alertas", dir: "desc" });
 
+  /**
+   * Filtros das colunas que a tabela introduziu. A busca por título e o
+   * filtro de estágio já vêm da página; aqui entram os recortes que só
+   * existem nesta visão — dono, setor e "só o que precisa de atenção".
+   */
+  const [fDono, setFDono] = useState<string>("");
+  const [fSetor, setFSetor] = useState<string>("");
+  const [soAlerta, setSoAlerta] = useState(false);
+
+  // Opções vêm dos projetos EM TELA, não de uma lista fixa: filtro que
+  // oferece valor sem resultado é filtro que mente.
+  const donos = useMemo(
+    () => Array.from(new Set(projects.map((p) => p.owner).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)),
+    [projects],
+  );
+  const setores = useMemo(
+    () => Array.from(new Set(projects.map((p) => p.sector).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)),
+    [projects],
+  );
+
   const toggleSort = (key: SortKey) => {
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
   };
@@ -98,14 +118,24 @@ export function ProjectsTable({
         default: return (p.title || "").toLowerCase();
       }
     };
-    return [...projects].sort((a, b) => {
+    const visiveis = projects.filter((p) => {
+      if (fDono && p.owner !== fDono) return false;
+      if (fSetor && p.sector !== fSetor) return false;
+      // "Precisa de atenção" = tarefa atrasada OU parado há 30+ dias. É o
+      // mesmo critério da coluna Alertas, para o filtro não discordar do que
+      // a tabela mostra.
+      if (soAlerta && pesoAlerta(p) === 0) return false;
+      return true;
+    });
+
+    return visiveis.sort((a, b) => {
       const va = val(a), vb = val(b);
       const cmp = typeof va === "number" && typeof vb === "number"
         ? va - vb
         : String(va).localeCompare(String(vb));
       return sort.dir === "desc" ? -cmp : cmp;
     });
-  }, [projects, metrics, sort]);
+  }, [projects, metrics, sort, fDono, fSetor, soAlerta]);
 
   const Th = ({ k, children, className }: { k: SortKey; children: React.ReactNode; className?: string }) => (
     <th className={cn("text-left font-medium px-3 py-2 whitespace-nowrap", className)}>
@@ -131,8 +161,66 @@ export function ProjectsTable({
   }
 
   const hoje = new Date().toISOString().slice(0, 10);
+  const comAlerta = projects.filter((p) => pesoAlerta(p) > 0).length;
+  const temFiltro = !!fDono || !!fSetor || soAlerta;
 
   return (
+    <>
+    {/* Filtros da tabela. Busca por título e estágio já vêm da página — aqui
+        entram só os recortes que esta visão introduziu. */}
+    <div className="flex items-center gap-2 flex-wrap mb-3">
+      <select
+        value={fDono}
+        onChange={(e) => setFDono(e.target.value)}
+        className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+      >
+        <option value="">Todos os donos</option>
+        {donos.map((d) => <option key={d} value={d}>{d}</option>)}
+      </select>
+
+      <select
+        value={fSetor}
+        onChange={(e) => setFSetor(e.target.value)}
+        className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+      >
+        <option value="">Todos os setores</option>
+        {setores.map((s) => <option key={s} value={s}>{s}</option>)}
+      </select>
+
+      {/* Só aparece se houver o que mostrar — botão que sempre resulta em
+          lista vazia é armadilha. */}
+      {comAlerta > 0 && (
+        <button
+          type="button"
+          onClick={() => setSoAlerta((v) => !v)}
+          className={cn(
+            "h-8 inline-flex items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+            soAlerta
+              ? "border-destructive bg-destructive/10 text-destructive"
+              : "border-border text-muted-foreground hover:text-foreground hover:bg-muted",
+          )}
+        >
+          <AlertTriangle className="w-3.5 h-3.5" />
+          Precisa de atenção
+          <span className="tabular-nums">{comAlerta}</span>
+        </button>
+      )}
+
+      {temFiltro && (
+        <button
+          type="button"
+          onClick={() => { setFDono(""); setFSetor(""); setSoAlerta(false); }}
+          className="h-8 inline-flex items-center gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <X className="w-3.5 h-3.5" /> limpar
+        </button>
+      )}
+
+      <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+        {linhas.length} de {projects.length}
+      </span>
+    </div>
+
     <div className="rounded-lg border border-border bg-card overflow-x-auto">
       <table className="w-full text-[13px]">
         <thead className="bg-muted/40 border-b border-border">
@@ -226,8 +314,25 @@ export function ProjectsTable({
               </tr>
             );
           })}
+          {/* Filtro sem resultado: dizer que não há e oferecer a saída, em vez
+              de uma tabela vazia que parece defeito. */}
+          {linhas.length === 0 && (
+            <tr>
+              <td colSpan={7} className="px-3 py-8 text-center">
+                <p className="text-sm text-muted-foreground mb-2">Nenhum projeto com esses filtros.</p>
+                <button
+                  type="button"
+                  onClick={() => { setFDono(""); setFSetor(""); setSoAlerta(false); }}
+                  className="text-xs text-primary hover:underline"
+                >
+                  limpar filtros
+                </button>
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
+    </>
   );
 }
