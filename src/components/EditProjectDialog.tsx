@@ -482,6 +482,10 @@ export const EditProjectDialog = ({
         const missingResponsibles = Array.from(responsibleIds).filter((uid) => !currentMemberIds.has(uid));
         if (missingResponsibles.length > 0) {
           const { error: respErr } = await supabase.from("project_members").insert(
+            // Aqui "accepted" é CORRETO, ao contrário dos demais membros: quem
+            // é designado Líder ou Gestor não está sendo convidado a
+            // participar — foi nomeado ao cargo e já responde pelo projeto.
+            // Deixar pendente permitiria "recusar" um cargo já atribuído.
             missingResponsibles.map((uid) => ({
               project_id: project.id,
               user_id: uid,
@@ -502,12 +506,18 @@ export const EditProjectDialog = ({
         // Insere novos (sem repetir quem já entrou como Líder/Gestor)
         const newOnes = team.filter((m) => !m.persisted && !responsibleIds.has(m.user_id));
         if (newOnes.length > 0) {
+          // O membro entra como CONVIDADO, não como aceito. Antes gravava
+          // invitation_status="accepted" com responded_at preenchido: o sistema
+          // registrava que a pessoa respondeu sem ela ter respondido, enquanto
+          // a própria tela prometia "novos membros recebem um convite".
+          // O aceite existe e funciona — vem da notificação, pela RPC
+          // respond_project_invite_v2 (ver NotificationBell).
           const rows = newOnes.map((m) => ({
             project_id: project.id,
             user_id: m.user_id,
             sector: m.sector,
-            invitation_status: "accepted" as const,
-            responded_at: new Date().toISOString(),
+            invitation_status: "pending" as const,
+            invited_at: new Date().toISOString(),
             invited_by: user?.id ?? null,
             can_create: true,
             can_edit: false,
@@ -518,6 +528,23 @@ export const EditProjectDialog = ({
           const { error: memErr } = await supabase.from("project_members").insert(rows);
           if (memErr) {
             throw memErr;
+          }
+
+          // A notificação é o convite: é por ela que a pessoa aceita ou recusa
+          // (NotificationBell → respond_project_invite_v2). Fica junto do
+          // insert dos novos membros — sem ela, o membro ficaria "aguardando"
+          // para sempre, sem nunca saber que foi convidado.
+          const { error: notificationError } = await supabase.from("notifications").insert(
+            newOnes.map((m) => ({
+              project_id: project.id,
+              target_user_id: m.user_id,
+              type: "project_invite",
+              title: `Convite para o projeto: ${formData.title}`,
+              message: `Você foi convidado(a) para participar de "${formData.title}". Aceite ou recuse por aqui.`,
+            }))
+          );
+          if (notificationError) {
+            notifySyncError = notificationError.message || "Falha ao enviar notificações.";
           }
         }
 
@@ -531,19 +558,6 @@ export const EditProjectDialog = ({
               supabase.from("project_members").update({ raci: m.raci }).eq("id", m.id),
             ),
           );
-
-          const { error: notificationError } = await supabase.from("notifications").insert(
-            newOnes.map((m) => ({
-              project_id: project.id,
-              target_user_id: m.user_id,
-              type: "project_invite",
-              title: `Você foi adicionado(a) ao projeto: ${formData.title}`,
-              message: `Seu acesso ao projeto "${formData.title}" já está ativo.`,
-            }))
-          );
-          if (notificationError) {
-            notifySyncError = notificationError.message || "Falha ao enviar notificações.";
-          }
         }
       } catch (teamErr: any) {
         teamSyncError = teamErr?.message || "Falha ao sincronizar equipe.";
@@ -900,6 +914,19 @@ export const EditProjectDialog = ({
                         {m.sector && (
                           <span className="px-2 py-0.5 rounded-full bg-muted text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
                             {m.sector}
+                          </span>
+                        )}
+                        {/* Situação do convite. Sem isto o "aguardando" seria
+                            invisível: a lista mostrava todo mundo igual, como
+                            se já tivesse aceitado. */}
+                        {m.invitation_status !== "accepted" && (
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-full text-[10px] font-semibold border",
+                            m.invitation_status === "declined"
+                              ? "bg-destructive/10 text-destructive border-destructive/30"
+                              : "bg-warning/10 text-warning border-warning/30",
+                          )}>
+                            {m.invitation_status === "declined" ? "Recusou" : "Aguardando aceite"}
                           </span>
                         )}
                       </div>
