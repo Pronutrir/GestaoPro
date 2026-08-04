@@ -50,6 +50,13 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   concluido: { label: "Concluído", cls: "bg-muted text-muted-foreground" },
 };
 
+/** A base usa GUT (crítica/urgente/alta/média/baixa) e o legado high/medium/low. */
+const PRIORIDADE_LABEL: Record<string, string> = {
+  critica: "Crítica", urgente: "Urgente", alta: "Alta", media: "Média",
+  baixa: "Baixa", pendente: "Pendente",
+  high: "Alta", medium: "Média", low: "Baixa",
+};
+
 const TYPE_LABEL: Record<string, string> = {
   estrategico: "Estratégico",
   operacional: "Operacional",
@@ -80,7 +87,18 @@ export function ProjectsTable({
    */
   const [fDono, setFDono] = useState<string>("");
   const [fSetor, setFSetor] = useState<string>("");
+  const [fTipo, setFTipo] = useState<string>("");
+  const [fPrioridade, setFPrioridade] = useState<string>("");
+  /** vencido | vence30 | sem — recortes de prazo que exigem ação diferente. */
+  const [fPrazo, setFPrazo] = useState<string>("");
+  /** parado | andando | quase | pronto | sem — faixas de progresso. */
+  const [fProgresso, setFProgresso] = useState<string>("");
   const [soAlerta, setSoAlerta] = useState(false);
+
+  const limparTudo = () => {
+    setFDono(""); setFSetor(""); setFTipo(""); setFPrioridade("");
+    setFPrazo(""); setFProgresso(""); setSoAlerta(false);
+  };
 
   // Opções vêm dos projetos EM TELA, não de uma lista fixa: filtro que
   // oferece valor sem resultado é filtro que mente.
@@ -92,6 +110,34 @@ export function ProjectsTable({
     () => Array.from(new Set(projects.map((p) => p.sector).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)),
     [projects],
   );
+  const tipos = useMemo(
+    () => Array.from(new Set(projects.map((p) => p.project_type).filter(Boolean) as string[])).sort(),
+    [projects],
+  );
+  const prioridades = useMemo(
+    () => Array.from(new Set(projects.map((p) => p.priority).filter(Boolean) as string[])).sort(),
+    [projects],
+  );
+
+  /** Recorte de prazo do projeto — cada um pede uma ação diferente. */
+  const faixaPrazo = (p: TableProject): string => {
+    if (!p.due_date) return "sem";
+    const d = p.due_date.slice(0, 10);
+    const hj = new Date().toISOString().slice(0, 10);
+    if (d < hj && p.status !== "concluido") return "vencido";
+    const em30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    return d <= em30 ? "vence30" : "ok";
+  };
+
+  /** Faixa de progresso. "sem" é diferente de 0%: um não tem trabalho
+   *  cadastrado, o outro tem e não começou — decisões distintas. */
+  const faixaProgresso = (p: TableProject): string => {
+    const m = metrics[p.id];
+    if (!m || m.total === 0) return "sem";
+    if (m.percent === 0) return "parado";
+    if (m.percent >= 100) return "pronto";
+    return m.percent >= 70 ? "quase" : "andando";
+  };
 
   const toggleSort = (key: SortKey) => {
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
@@ -121,6 +167,10 @@ export function ProjectsTable({
     const visiveis = projects.filter((p) => {
       if (fDono && p.owner !== fDono) return false;
       if (fSetor && p.sector !== fSetor) return false;
+      if (fTipo && p.project_type !== fTipo) return false;
+      if (fPrioridade && p.priority !== fPrioridade) return false;
+      if (fPrazo && faixaPrazo(p) !== fPrazo) return false;
+      if (fProgresso && faixaProgresso(p) !== fProgresso) return false;
       // "Precisa de atenção" = tarefa atrasada OU parado há 30+ dias. É o
       // mesmo critério da coluna Alertas, para o filtro não discordar do que
       // a tabela mostra.
@@ -135,7 +185,7 @@ export function ProjectsTable({
         : String(va).localeCompare(String(vb));
       return sort.dir === "desc" ? -cmp : cmp;
     });
-  }, [projects, metrics, sort, fDono, fSetor, soAlerta]);
+  }, [projects, metrics, sort, fDono, fSetor, fTipo, fPrioridade, fPrazo, fProgresso, soAlerta]);
 
   const Th = ({ k, children, className }: { k: SortKey; children: React.ReactNode; className?: string }) => (
     <th className={cn("text-left font-medium px-3 py-2 whitespace-nowrap", className)}>
@@ -162,7 +212,7 @@ export function ProjectsTable({
 
   const hoje = new Date().toISOString().slice(0, 10);
   const comAlerta = projects.filter((p) => pesoAlerta(p) > 0).length;
-  const temFiltro = !!fDono || !!fSetor || soAlerta;
+  const temFiltro = !!fDono || !!fSetor || !!fTipo || !!fPrioridade || !!fPrazo || !!fProgresso || soAlerta;
 
   return (
     <>
@@ -172,7 +222,7 @@ export function ProjectsTable({
       <select
         value={fDono}
         onChange={(e) => setFDono(e.target.value)}
-        className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fDono ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
       >
         <option value="">Todos os donos</option>
         {donos.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -181,10 +231,61 @@ export function ProjectsTable({
       <select
         value={fSetor}
         onChange={(e) => setFSetor(e.target.value)}
-        className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fSetor ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
       >
         <option value="">Todos os setores</option>
         {setores.map((s) => <option key={s} value={s}>{s}</option>)}
+      </select>
+
+      {/* Só entra na barra o filtro com mais de um valor na base: um seletor
+          com uma opção só ocupa espaço e nunca muda nada. */}
+      {tipos.length > 1 && (
+        <select
+          value={fTipo}
+          onChange={(e) => setFTipo(e.target.value)}
+          className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fTipo ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
+        >
+          <option value="">Todos os tipos</option>
+          {tipos.map((t) => <option key={t} value={t}>{TYPE_LABEL[t] || t}</option>)}
+        </select>
+      )}
+
+      {prioridades.length > 1 && (
+        <select
+          value={fPrioridade}
+          onChange={(e) => setFPrioridade(e.target.value)}
+          className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fPrioridade ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
+        >
+          <option value="">Toda prioridade</option>
+          {prioridades.map((p) => (
+            <option key={p} value={p}>{PRIORIDADE_LABEL[p] || p}</option>
+          ))}
+        </select>
+      )}
+
+      <select
+        value={fPrazo}
+        onChange={(e) => setFPrazo(e.target.value)}
+        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fPrazo ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
+      >
+        <option value="">Qualquer prazo</option>
+        <option value="vencido">Vencido</option>
+        <option value="vence30">Vence em 30 dias</option>
+        <option value="ok">No prazo</option>
+        <option value="sem">Sem prazo</option>
+      </select>
+
+      <select
+        value={fProgresso}
+        onChange={(e) => setFProgresso(e.target.value)}
+        className={cn("h-8 rounded-md border px-2 text-xs transition-colors", fProgresso ? "border-primary bg-primary/5 text-primary font-medium" : "border-border bg-background text-muted-foreground hover:text-foreground")}
+      >
+        <option value="">Qualquer progresso</option>
+        <option value="parado">Não começou (0%)</option>
+        <option value="andando">Em andamento</option>
+        <option value="quase">Quase pronto (70%+)</option>
+        <option value="pronto">Concluído (100%)</option>
+        <option value="sem">Sem atividades</option>
       </select>
 
       {/* Só aparece se houver o que mostrar — botão que sempre resulta em
@@ -209,7 +310,7 @@ export function ProjectsTable({
       {temFiltro && (
         <button
           type="button"
-          onClick={() => { setFDono(""); setFSetor(""); setSoAlerta(false); }}
+          onClick={limparTudo}
           className="h-8 inline-flex items-center gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
         >
           <X className="w-3.5 h-3.5" /> limpar
@@ -322,7 +423,7 @@ export function ProjectsTable({
                 <p className="text-sm text-muted-foreground mb-2">Nenhum projeto com esses filtros.</p>
                 <button
                   type="button"
-                  onClick={() => { setFDono(""); setFSetor(""); setSoAlerta(false); }}
+                  onClick={limparTudo}
                   className="text-xs text-primary hover:underline"
                 >
                   limpar filtros
