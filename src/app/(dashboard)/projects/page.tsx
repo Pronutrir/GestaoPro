@@ -17,7 +17,6 @@ import {
   Table as TableIcon,
 } from 'lucide-react';
 import { ProjectColumn } from '@/components/ProjectColumn';
-import { ProjectDrawer } from '@/components/ProjectDrawer';
 import { AddProjectDialog } from '@/components/AddProjectDialog';
 import { EditProjectDialog } from '@/components/EditProjectDialog';
 import { ProjectCardPreview } from '@/components/SortableProjectCard';
@@ -127,8 +126,6 @@ function ProjectsContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [drawerProject, setDrawerProject] = useState<Project | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [assigneeAvatarMap, setAssigneeAvatarMap] = useState<Record<string, string>>({});
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const statusFilter = searchParams.get('status');
@@ -488,7 +485,11 @@ function ProjectsContent() {
           }
           metrics={metrics}
           assigneeAvatarMap={assigneeAvatarMap}
-          onRowClick={(p) => { setDrawerProject(p as Project); setDrawerOpen(true); }}
+          onRowClick={(p) => {
+            // Direto no projeto, como o card já fazia: a prévia em modal era um
+            // passo a mais para chegar no mesmo lugar.
+            router.push(`/project/${p.id}`);
+          }}
         />
       )}
 
@@ -549,7 +550,6 @@ function ProjectsContent() {
         onOpenChange={setEditDialogOpen}
         onProjectUpdated={fetchProjects}
       />
-      <ProjectDrawer project={drawerProject} assigneeAvatarMap={assigneeAvatarMap} open={drawerOpen} onOpenChange={setDrawerOpen} />
     </div>
   );
 }
