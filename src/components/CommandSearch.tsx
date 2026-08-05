@@ -39,7 +39,7 @@ const pages: SearchResult[] = [
   { id: "timeline", title: "Cronograma", type: "page", url: "/timeline", description: "Visão temporal", minRole: "user" },
   { id: "team", title: "Equipe", type: "page", url: "/team", description: "Membros da equipe", minRole: "user" },
   { id: "reports", title: "Relatórios", type: "page", url: "/reports", description: "Análises e métricas", minRole: "gestor" },
-  { id: "blocked", title: "Bloqueios", type: "page", url: "/blocked", description: "Projetos bloqueados", minRole: "user" },
+  { id: "blocked", title: "Pendências", type: "page", url: "/pendencias", description: "Vencidas e em aberto, incluindo bloqueadas", minRole: "user" },
   { id: "quality", title: "Gestão da Qualidade", type: "page", url: "/quality", description: "Pipeline de qualidade", minRole: "user" },
   { id: "calendar", title: "Calendário", type: "page", url: "/calendar", description: "Agenda e conflitos", minRole: "user" },
   { id: "settings", title: "Configurações", type: "page", url: "/settings", description: "Preferências", minRole: "admin" },

@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ProjectColumn } from "@/components/ProjectColumn";
-import { ProjectDrawer } from "@/components/ProjectDrawer";
 import { AddProjectDialog } from "@/components/AddProjectDialog";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { PipelineSkeleton } from "@/components/SkeletonScreens";
@@ -43,8 +42,6 @@ const QualityManagement = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [drawerProject, setDrawerProject] = useState<Project | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const statusFilter = searchParams.get("status");
 
   const handleStatusFilter = (status: string | null) => {
@@ -194,7 +191,6 @@ const QualityManagement = () => {
         )}
 
         <EditProjectDialog project={editingProject} open={editDialogOpen} onOpenChange={setEditDialogOpen} onProjectUpdated={fetchProjects} />
-        <ProjectDrawer project={drawerProject} open={drawerOpen} onOpenChange={setDrawerOpen} />
       </div>
     
   );

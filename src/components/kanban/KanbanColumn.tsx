@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { DateField } from "@/components/ui/date-field";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -23,6 +23,7 @@ import {
   Eye,
   EyeOff,
   List,
+  Lock,
   ChevronDown,
   ChevronsRight,
   ChevronsLeft,
@@ -66,11 +67,12 @@ import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { computeCardAging, CARD_AGING_CLASSES } from "@/lib/cardAging";
 import { cn } from "@/lib/utils";
 import {
-  progressLabelFromPercent,
   getStageDisplayTitle,
   STAGE_PRESET_COLORS,
   SORT_CRITERIA,
   DEFAULT_BOARD_SORT,
+  isValidSortValue,
+  sortTravaArrasto,
   MIN_COLUMN_WIDTH,
   EMPTY_COLUMN_FILTER,
   columnFilterActive,
@@ -423,8 +425,18 @@ export function SortableColumn({
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
 }) {
-  // Ordenação por coluna, independente das demais (comportamento original).
-  const [colSort, setColSort] = useState<string>(DEFAULT_BOARD_SORT);
+  // Ordenação por coluna, independente das demais. PERSISTE: antes voltava ao
+  // padrão a cada recarregamento — quem escolhia "por prazo" reencontrava a
+  // coluna na ordem antiga no dia seguinte, sem entender por quê.
+  const colSortKey = `kanban-col-sort:${stage.id}`;
+  const [colSort, setColSort] = useState<string>(() => {
+    if (typeof window === "undefined") return DEFAULT_BOARD_SORT;
+    const saved = window.localStorage.getItem(colSortKey);
+    return isValidSortValue(saved) ? saved : DEFAULT_BOARD_SORT;
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(colSortKey, colSort); } catch { /* quota */ }
+  }, [colSort, colSortKey]);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickTitle, setQuickTitle] = useState("");
   const [quickPhase, setQuickPhase] = useState("");
@@ -490,42 +502,10 @@ export function SortableColumn({
     return memo;
   }, [activities, childrenByParent]);
 
-  const descendantProgressById = useMemo(() => {
-    const memo = new Map<string, { sum: number; count: number }>();
-
-    const walk = (id: string, seen = new Set<string>()): { sum: number; count: number } => {
-      if (memo.has(id)) return memo.get(id)!;
-      if (seen.has(id)) return { sum: 0, count: 0 };
-
-      const nextSeen = new Set(seen);
-      nextSeen.add(id);
-
-      const children = childrenByParent.get(id) || [];
-      let sum = 0;
-      let count = 0;
-
-      children.forEach((child) => {
-        const info = computeActivityProgress(child.workflow_stage_id, allStages, child.last_progress_stage_id);
-        const pct = info.paused ? 0 : (info.percent ?? 0);
-        sum += pct;
-        count += 1;
-
-        const deep = walk(child.id, nextSeen);
-        sum += deep.sum;
-        count += deep.count;
-      });
-
-      const result = { sum, count };
-      memo.set(id, result);
-      return result;
-    };
-
-    activities.forEach((a) => {
-      memo.set(a.id, walk(a.id));
-    });
-
-    return memo;
-  }, [activities, childrenByParent, allStages]);
+  // (Removido: descendantProgressById — média recursiva do % dos descendentes.
+  //  Era uma SEGUNDA fórmula de progresso, que dava número diferente do card
+  //  no fluxo principal e nunca sinalizava divergência. O cálculo agora é um
+  //  só, em computeActivityProgress.)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     // Em raias (laneId presente) a coluna nao e reordenavel — evita ids de dnd
@@ -559,6 +539,20 @@ export function SortableColumn({
     const [criterion, dir = "asc"] = colSort.split(":");
     const cmp = (a: Activity, b: Activity): number => {
       switch (criterion) {
+        // Ordem definida por quem arrasta — gravada em display_order e
+        // compartilhada com o projeto inteiro (como no Linear). Card sem
+        // posição vai para o fim, não para o topo.
+        //
+        // 760 das 1.317 atividades ainda não têm posição definida (nunca foram
+        // arrastadas). Todas empatariam, então o desempate é explícito por data
+        // de criação — mais antigo primeiro. Sem isso a ordem dependeria da
+        // estabilidade do sort, que é garantida mas não óbvia para quem lê.
+        case "manual": {
+          const oa = a.display_order ?? 999999;
+          const ob = b.display_order ?? 999999;
+          if (oa !== ob) return oa - ob;
+          return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+        }
         case "wbs": {
           const pA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
           const pB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
@@ -629,15 +623,19 @@ export function SortableColumn({
     const externalChildren = allChildren.filter((child) => !stageActivityIds.has(child.id));
     const subActivityStatusSummary =
       descendantSummaryById.get(activity.id) || { completed: 0, pending: 0 };
-    const parentProgress = (() => {
-      const deepProgress = descendantProgressById.get(activity.id);
-      const totalSubs = deepProgress?.count || 0;
-      if (totalSubs === 0) {
-        return computeActivityProgress(activity.workflow_stage_id, allStages, activity.last_progress_stage_id);
-      }
-      const percent = Math.max(0, Math.min(100, Math.round((deepProgress!.sum / totalSubs))));
-      return { percent, paused: false, label: progressLabelFromPercent(percent) } as ActivityProgress;
-    })();
+    // Progresso do pai: uma fonte só (computeActivityProgress), passando os
+    // filhos diretos. Antes aqui havia um cálculo próprio — média do % dos
+    // descendentes — que dava número diferente do card no fluxo principal e
+    // nunca sinalizava "concluída com subatividade aberta".
+    const parentProgress = computeActivityProgress(
+      activity.workflow_stage_id,
+      allStages,
+      activity.last_progress_stage_id,
+      (childrenByParent.get(activity.id) || []).map((c: any) => ({
+        status: c.status,
+        workflow_stage_id: c.workflow_stage_id,
+      })),
+    );
     const expanded = expandedIds.has(activity.id);
     const isMirrorParent = !stageActivityIds.has(activity.id) && inlineChildren.length > 0;
     const parentAct = activity.parent_id ? activities.find((p) => p.id === activity.parent_id) : null;
@@ -890,17 +888,31 @@ export function SortableColumn({
                   // seta no item ativo — clicar no ativo inverte.
                   return SORT_CRITERIA.map((c) => {
                     const isActive = activeCrit === c.id;
-                    const nextDir = isActive ? (activeDir === "asc" ? "desc" : "asc") : c.defaultDir;
+                    // Manual não tem direção: inverter uma ordem que a pessoa
+                    // montou à mão não significa nada.
+                    const nextDir = c.id === "manual"
+                      ? "asc"
+                      : isActive ? (activeDir === "asc" ? "desc" : "asc") : c.defaultDir;
                     return (
                       <DropdownMenuItem
                         key={c.id}
                         onSelect={() => setColSort(`${c.id}:${nextDir}`)}
                         className="gap-2 text-xs"
+                        // Avisa ANTES de escolher: com critério automático a
+                        // ordem se recalcula e arrastar deixa de valer. Jira
+                        // documenta a mesma limitação, mas sem avisar.
+                        title={c.travaArrasto ? "Enquanto ativo, arrastar cards não altera a ordem" : undefined}
                       >
                         <span className={cn("flex-1", isActive && "font-medium text-primary")}>{c.label}</span>
-                        {isActive && (activeDir === "asc"
+                        {c.travaArrasto && (
+                          <Lock className="w-3 h-3 text-muted-foreground/60 shrink-0" />
+                        )}
+                        {isActive && c.id !== "manual" && (activeDir === "asc"
                           ? <ArrowUp className="w-3.5 h-3.5 text-primary shrink-0" />
                           : <ArrowDown className="w-3.5 h-3.5 text-primary shrink-0" />)}
+                        {isActive && c.id === "manual" && (
+                          <Check className="w-3.5 h-3.5 text-primary shrink-0" />
+                        )}
                       </DropdownMenuItem>
                     );
                   });

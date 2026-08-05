@@ -23,7 +23,7 @@ import {
   Table2, GanttChart, ExternalLink, AlertTriangle, AlertCircle, CalendarOff,
   CalendarDays, Settings2, Filter, FolderKanban, Search, X,
   ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, ChevronDown, Layers, Diamond, GripVertical,
-  Info,
+  Info, Flag, Link2Off, GitBranch,
 } from "lucide-react";
 import {
   DndContext,
@@ -51,10 +51,14 @@ import {
   startOfYear, endOfYear, addMonths,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { calculateCriticalPath } from "@/lib/criticalPath";
+import { calculateScheduleSlack } from "@/lib/criticalPath";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { isHoliday, isOnVacation, type Holiday, type WorkSchedule } from "@/lib/workCalendar";
 
@@ -511,8 +515,11 @@ export function ProjectCronogramaPanel({
   };
 
   // ===== CPM real =====
-  const criticalSet = useMemo(
-    () => calculateCriticalPath(
+  // Traz junto o que o cálculo teve de descartar (ciclo, sem data) e as
+  // ligações que as datas desrespeitam. Sem isso a tela não distingue
+  // "sem folga" de "não foi possível calcular".
+  const schedule = useMemo(
+    () => calculateScheduleSlack(
       activities.map(a => ({ id: a.id, start_date: a.start_date, end_date: a.end_date })),
       deps.map(d => ({
         predecessor_id: d.predecessor_id,
@@ -523,6 +530,7 @@ export function ProjectCronogramaPanel({
     ),
     [activities, deps]
   );
+  const criticalSet = schedule.critical;
 
   // ===== Folgas CPM (Total e Livre) =====
   const slackMetricsById = useMemo(() => {
@@ -1201,6 +1209,92 @@ export function ProjectCronogramaPanel({
     fetchData();
     toast({ title: "Datas atualizadas", description: `${format(parseISO(startISO), "dd/MM/yy")} → ${format(parseISO(endISO), "dd/MM/yy")}` });
   }, [toast, fetchData]);
+
+  // ===== Setas de dependência =====
+  // 41 ligações desenhadas ao mesmo tempo viram um emaranhado ilegível. Só a
+  // cadeia da linha sob o cursor é traçada; "ver todas" existe para quem quiser.
+  const [hoverRowId, setHoverRowId] = useState<string | null>(null);
+  const [verTodasSetas, setVerTodasSetas] = useState(false);
+
+  /** Vizinhança direta da linha sob o cursor: ela, suas predecessoras e sucessoras. */
+  const cadeiaDoHover = useMemo(() => {
+    const set = new Set<string>();
+    if (!hoverRowId) return set;
+    set.add(hoverRowId);
+    deps.forEach(d => {
+      if (d.predecessor_id === hoverRowId) set.add(d.successor_id);
+      if (d.successor_id === hoverRowId) set.add(d.predecessor_id);
+    });
+    return set;
+  }, [hoverRowId, deps]);
+
+  // ===== Linha de base =====
+  const [congelando, setCongelando] = useState(false);
+  const [confirmarBase, setConfirmarBase] = useState(false);
+
+  const baselineStats = useMemo(() => {
+    const comDatas = activities.filter(a => a.start_date && a.end_date);
+    const congeladas = comDatas.filter(a => a.baseline_start_date && a.baseline_end_date);
+    const desviosAbs: number[] = [];
+    congeladas.forEach(a => {
+      const d = differenceInDays(parseISO(a.end_date.slice(0, 10)), parseISO(a.baseline_end_date.slice(0, 10)));
+      if (Number.isFinite(d)) desviosAbs.push(d);
+    });
+    // Média aritmética simples do desvio de término, em dias. Positivo = atrasou.
+    const desvioMedio = desviosAbs.length
+      ? Math.round(desviosAbs.reduce((s, v) => s + v, 0) / desviosAbs.length)
+      : null;
+    return { total: comDatas.length, congeladas: congeladas.length, desvioMedio };
+  }, [activities]);
+
+  /**
+   * Congela a linha de base: copia start/end atuais para as colunas baseline_*.
+   * É um ato deliberado — recongelar apaga a régua contra a qual o desvio é
+   * medido, por isso passa por confirmação e grava em lote só o que tem data.
+   */
+  const congelarLinhaDeBase = useCallback(async () => {
+    const alvo = activities.filter(a => a.start_date && a.end_date);
+    if (alvo.length === 0) {
+      toast({ title: "Nada a congelar", description: "Nenhuma atividade com data definida.", variant: "destructive" });
+      return;
+    }
+    setCongelando(true);
+    try {
+      // Em lotes: o proxy corta a URL por volta de 3,7 KB e o .in() viaja na
+      // query string. 50 ids é o teto seguro já usado no resto do projeto.
+      const CHUNK = 50;
+      for (let i = 0; i < alvo.length; i += CHUNK) {
+        const lote = alvo.slice(i, i + CHUNK);
+        const updates = lote.map(a =>
+          supabase.from("activities")
+            .update({ baseline_start_date: a.start_date, baseline_end_date: a.end_date })
+            .eq("id", a.id)
+        );
+        const res = await Promise.all(updates);
+        const erro = res.find(r => r.error);
+        if (erro?.error) {
+          // PGRST204 = coluna ausente: a migration da linha de base não rodou.
+          const semColuna = erro.error.code === "PGRST204";
+          toast({
+            title: semColuna ? "Linha de base indisponível" : "Erro ao congelar",
+            description: semColuna
+              ? "As colunas de linha de base ainda não existem no banco."
+              : erro.error.message,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      setConfirmarBase(false);
+      fetchData();
+      toast({
+        title: "Linha de base congelada",
+        description: `${alvo.length} ${alvo.length === 1 ? "atividade" : "atividades"} — o desvio passa a ser medido a partir de agora.`,
+      });
+    } finally {
+      setCongelando(false);
+    }
+  }, [activities, toast, fetchData]);
 
   /** Inicia o arraste de uma barra (folha, não-marco). DAY_W converte px→dias. */
   const startBarDrag = useCallback((
@@ -2231,6 +2325,72 @@ export function ProjectCronogramaPanel({
                   );
                 })()}
 
+                {/* Setas de dependência. SVG único sobre as barras: uma seta por
+                    ligação seria dezenas de nós; um path por ligação num só SVG
+                    mantém o custo baixo. pointer-events-none para não roubar o
+                    arraste das barras que ficam por baixo. */}
+                {(() => {
+                  const geom = new Map<string, { left: number; width: number; top: number }>();
+                  ganttData.all.forEach(({ a, s }, rowIdx) => {
+                    if (!s) return;
+                    const depth = depthById.get(a.id) ?? 0;
+                    const off = Math.min(24, depth * 6);
+                    const si = ganttData.days.findIndex(d => d.toDateString() === s.toDateString());
+                    if (si < 0) return;
+                    const ei = ganttData.days.findIndex(
+                      d => d.toDateString() === (ganttData.all[rowIdx].e ?? s).toDateString());
+                    const l = Math.max(0, si) * DAY_W + off;
+                    const w = Math.max(2, Math.max(2, ((ei < 0 ? si : ei) - si + 1)) * DAY_W - 2 - off);
+                    geom.set(a.id, { left: l, width: w, top: rowIdx * ROW_H + BAR_TOP + BAR_H / 2 });
+                  });
+
+                  const visiveis = deps.filter(d => {
+                    if (!geom.has(d.predecessor_id) || !geom.has(d.successor_id)) return false;
+                    if (verTodasSetas) return true;
+                    return hoverRowId === d.predecessor_id || hoverRowId === d.successor_id;
+                  });
+                  if (visiveis.length === 0) return null;
+
+                  const violadaSet = new Set(schedule.violadas.map(v => `${v.predecessor_id}>${v.successor_id}`));
+                  const H = ganttData.all.length * ROW_H;
+
+                  return (
+                    <svg className="absolute inset-0 pointer-events-none z-[15]"
+                      width="100%" height={H} style={{ overflow: "visible" }}>
+                      <defs>
+                        <marker id="cr-seta" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                          <path d="M0,0 L6,3 L0,6 z" fill="hsl(var(--foreground) / 0.55)" />
+                        </marker>
+                        <marker id="cr-seta-viol" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                          <path d="M0,0 L6,3 L0,6 z" fill="hsl(var(--destructive))" />
+                        </marker>
+                      </defs>
+                      {visiveis.map((d, i) => {
+                        const p = geom.get(d.predecessor_id)!;
+                        const s2 = geom.get(d.successor_id)!;
+                        const viol = violadaSet.has(`${d.predecessor_id}>${d.successor_id}`);
+                        // Rota em cotovelo: sai da direita da predecessora, desce/sobe
+                        // no meio do vão e entra pela esquerda da sucessora. Quando a
+                        // sucessora começa antes (o caso violado), contorna por baixo.
+                        const x1 = p.left + p.width, y1 = p.top;
+                        const x2 = s2.left, y2 = s2.top;
+                        const folga = 10;
+                        const dPath = x2 >= x1 + folga
+                          ? `M${x1},${y1} H${x1 + folga} V${y2} H${x2}`
+                          : `M${x1},${y1} H${x1 + folga} V${y1 + ROW_H / 2} H${x2 - folga} V${y2} H${x2}`;
+                        return (
+                          <path key={`${d.predecessor_id}-${d.successor_id}-${i}`}
+                            d={dPath} fill="none"
+                            stroke={viol ? "hsl(var(--destructive))" : "hsl(var(--foreground) / 0.55)"}
+                            strokeWidth={viol ? 1.75 : 1.25}
+                            strokeDasharray={viol ? "4 2" : undefined}
+                            markerEnd={`url(#${viol ? "cr-seta-viol" : "cr-seta"})`} />
+                        );
+                      })}
+                    </svg>
+                  );
+                })()}
+
                 {ganttData.all.map(({ a, s, e }, rowIdx) => {
                   const depth = depthById.get(a.id) ?? 0;
                   const hierarchyOffset = Math.min(24, depth * 6);
@@ -2264,6 +2424,25 @@ export function ProjectCronogramaPanel({
                     left = Math.max(0, left);
                   }
                   const isCritical = criticalSet.has(a.id);
+                  const inCycle = schedule.cycles.has(a.id);
+                  // Linha de base: barra fina cinza sob a atual. Só desenha se a
+                  // base foi congelada E difere do plano — barras coincidentes
+                  // não informam nada e só somariam ruído em 300 linhas.
+                  const baseGeom = (() => {
+                    const bStart = a.baseline_start_date?.slice(0, 10);
+                    const bEnd = a.baseline_end_date?.slice(0, 10);
+                    if (!bStart || !bEnd) return null;
+                    if (bStart === a.start_date?.slice(0, 10) && bEnd === a.end_date?.slice(0, 10)) return null;
+                    const bsD = parseISO(bStart);
+                    const beD = parseISO(bEnd);
+                    const bs = ganttData.days.findIndex(d => d.toDateString() === bsD.toDateString());
+                    const be = ganttData.days.findIndex(d => d.toDateString() === beD.toDateString());
+                    if (bs < 0 || be < 0) return null; // base fora da janela visível
+                    return {
+                      left: bs * DAY_W + hierarchyOffset,
+                      width: Math.max(2, (be - bs + 1) * DAY_W - 2 - hierarchyOffset),
+                    };
+                  })();
                   const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
                   const isCompleted = stageInfo?.is_final || a.status === "completed";
                   const isOverdue = isOverdueByRule(a, !!isCompleted);
@@ -2285,7 +2464,28 @@ export function ProjectCronogramaPanel({
                     !a.is_milestone && !isGroup && width >= BAR_W_FOR_INNER_DATES;
 
                   return (
-                    <div key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`} className="relative border-b" style={{ height: ROW_H }}>
+                    <div
+                      key={`${a.project_id}:${a.item_type ?? "atividade"}:${a.id}:${rowIdx}`}
+                      className={cn(
+                        "relative border-b transition-colors",
+                        // A cadeia acesa marca a linha inteira: sem isso, a seta
+                        // aponta para uma barra que o olho ainda precisa procurar.
+                        !verTodasSetas && hoverRowId && cadeiaDoHover.has(a.id) && "bg-primary/5",
+                      )}
+                      style={{ height: ROW_H }}
+                      onMouseEnter={() => setHoverRowId(a.id)}
+                      onMouseLeave={() => setHoverRowId(prev => (prev === a.id ? null : prev))}
+                    >
+                      {/* Linha de base: fita fina colada ao pé da barra atual. Fica
+                          atrás (z-0) e sem eventos — é régua de comparação, não alvo.
+                          A barra descolar da fita É o desvio, sem precisar de número. */}
+                      {baseGeom && !a.is_milestone && (
+                        <div
+                          className="absolute rounded-sm bg-muted-foreground/45 pointer-events-none z-0"
+                          style={{ left: baseGeom.left, width: baseGeom.width, top: BAR_TOP + BAR_H + 1, height: 3 }}
+                          title={`Linha de base: ${format(parseISO(a.baseline_start_date!.slice(0, 10)), "dd/MM")} → ${format(parseISO(a.baseline_end_date!.slice(0, 10)), "dd/MM")}`}
+                        />
+                      )}
                       <TooltipProvider delayDuration={150}>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -2324,7 +2524,15 @@ export function ProjectCronogramaPanel({
                                 // z-10: a barra sempre cobre uma etiqueta de datas que
                                 // porventura invada seu espaço vindo da linha ao lado.
                                 drag ? "cursor-grabbing ring-2 ring-primary/60 z-20" : "cursor-grab z-10",
-                                "bg-muted-foreground/25 border border-border",
+                                "bg-muted-foreground/25",
+                                // Caminho crítico = CONTORNO, não preenchimento. A cor de
+                                // dentro já significa progresso/atraso/conclusão; pintar a
+                                // barra de vermelho colidiria com "atrasada".
+                                isCritical
+                                  ? "border-2 border-destructive"
+                                  : inCycle
+                                    ? "border-2 border-dashed border-amber-500"
+                                    : "border border-border",
                               )}
                                 onMouseDown={(ev) => startBarDrag(ev, a, "move", DAY_W)}
                                 onClick={() => { if (!barDrag) openFromCronograma(a); }}
@@ -2390,6 +2598,24 @@ export function ProjectCronogramaPanel({
                                 <span>{responsible}</span>
                               </div>
                               <div>📊 {progress}% {isCritical && <span className="text-red-400 font-semibold ml-1">• Caminho crítico</span>}</div>
+                              {/* Folga só faz sentido para quem NÃO é crítica: em quem é,
+                                  ela é zero por definição e repetir seria ruído. */}
+                              {!isCritical && !inCycle && (() => {
+                                const f = schedule.totalSlack.get(a.id);
+                                return typeof f === "number" && f > 0
+                                  ? <div>🕓 Folga de {f} {f === 1 ? "dia" : "dias"}</div>
+                                  : null;
+                              })()}
+                              {inCycle && (
+                                <div className="text-amber-400 font-semibold">
+                                  ⚠ Dependência circular — sem cálculo de folga
+                                </div>
+                              )}
+                              {baseGeom && (
+                                <div className="text-muted-foreground">
+                                  ▭ Base: {format(parseISO(a.baseline_start_date!.slice(0, 10)), "dd/MM")} → {format(parseISO(a.baseline_end_date!.slice(0, 10)), "dd/MM")}
+                                </div>
+                              )}
                               {a.is_milestone && <div>🎯 Marco</div>}
                               {isPhase && <div>📚 Fase / Entrega — datas derivadas dos filhos</div>}
                             </div>
@@ -2455,6 +2681,45 @@ export function ProjectCronogramaPanel({
           <Button variant="default" size="sm" className="h-9 gap-1.5" onClick={handleScrollToToday}>
             <CalendarDays className="h-4 w-4" /> Hoje
           </Button>
+
+          {/* Setas: por padrão só a cadeia sob o cursor. Este botão mostra tudo
+              de uma vez, para quem quer a malha inteira. */}
+          {deps.length > 0 && (
+            <Button
+              variant={verTodasSetas ? "secondary" : "outline"} size="sm" className="h-9 gap-1.5"
+              onClick={() => setVerTodasSetas(v => !v)}
+              title="Por padrão, as setas aparecem só na linha sob o cursor"
+            >
+              <GitBranch className="h-4 w-4" />
+              {verTodasSetas ? "Ocultar setas" : "Ver todas as setas"}
+              <span className="tabular-nums text-muted-foreground">{deps.length}</span>
+            </Button>
+          )}
+
+          {/* Linha de base. O rótulo muda com o estado: sem base é um convite a
+              criar a régua; com base, mostra a cobertura e o desvio médio. */}
+          <Button
+            variant="outline" size="sm" className="h-9 gap-1.5"
+            onClick={() => setConfirmarBase(true)}
+            disabled={congelando || baselineStats.total === 0}
+            title="Copia as datas atuais para a linha de base — o desvio passa a ser medido a partir dela"
+          >
+            <Flag className="h-4 w-4" />
+            {baselineStats.congeladas > 0 ? "Recongelar base" : "Congelar linha de base"}
+          </Button>
+          {baselineStats.congeladas > 0 && (
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              base em {baselineStats.congeladas}/{baselineStats.total}
+              {baselineStats.desvioMedio !== null && baselineStats.desvioMedio !== 0 && (
+                <span className={cn(
+                  "ml-1.5 font-semibold",
+                  baselineStats.desvioMedio > 0 ? "text-destructive" : "text-emerald-600",
+                )}>
+                  {baselineStats.desvioMedio > 0 ? "+" : ""}{baselineStats.desvioMedio}d
+                </span>
+              )}
+            </span>
+          )}
 
           {/* Presets de zoom */}
           <div className="inline-flex border rounded-lg overflow-hidden bg-card">
@@ -2686,8 +2951,79 @@ export function ProjectCronogramaPanel({
   return (
     <div className="space-y-4">
       {Toolbar}
+
+      {/* Avisos do cálculo. Só aparece quando há o que avisar — em cronograma
+          saudável não ocupa espaço. Antes, tudo isto falhava em silêncio: a
+          atividade simplesmente sumia do caminho crítico sem explicação. */}
+      {mode === "gantt" && (schedule.violadas.length > 0 || schedule.cycles.size > 0 || schedule.semData.size > 0) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[12px]">
+          <span className="inline-flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="h-3.5 w-3.5" /> Avisos do cálculo
+          </span>
+          {schedule.violadas.length > 0 && (
+            <span className="inline-flex items-center gap-1 text-foreground/80"
+              title="A sucessora começa antes do que a ligação permite. A dependência existe, mas as datas a ignoram.">
+              <Link2Off className="h-3.5 w-3.5 text-destructive" />
+              <b className="tabular-nums">{schedule.violadas.length}</b>
+              {schedule.violadas.length === 1 ? " dependência desrespeitada" : " dependências desrespeitadas"}
+            </span>
+          )}
+          {schedule.cycles.size > 0 && (
+            <span className="inline-flex items-center gap-1 text-foreground/80"
+              title="A→B→A. Sem ordem possível, estas atividades ficam fora do cálculo de folga.">
+              <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+              <b className="tabular-nums">{schedule.cycles.size}</b> em dependência circular
+            </span>
+          )}
+          {schedule.semData.size > 0 && (
+            <span className="inline-flex items-center gap-1 text-foreground/80"
+              title="Têm dependência mas não têm data: saem do cálculo. Se for uma predecessora, o caminho crítico sai menor do que a realidade.">
+              <CalendarOff className="h-3.5 w-3.5 text-muted-foreground" />
+              <b className="tabular-nums">{schedule.semData.size}</b> sem data no cálculo
+            </span>
+          )}
+        </div>
+      )}
+
       {mode === "table" && TableView}
       {mode === "gantt" && GanttBlock}
+
+      <AlertDialog open={confirmarBase} onOpenChange={setConfirmarBase}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {baselineStats.congeladas > 0 ? "Recongelar a linha de base?" : "Congelar a linha de base?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  As datas atuais de <b>{baselineStats.total}</b>{" "}
+                  {baselineStats.total === 1 ? "atividade" : "atividades"} viram a régua
+                  contra a qual todo desvio passa a ser medido.
+                </p>
+                {baselineStats.congeladas > 0 && (
+                  <p className="text-destructive">
+                    Já existe base em {baselineStats.congeladas}{" "}
+                    {baselineStats.congeladas === 1 ? "atividade" : "atividades"}
+                    {baselineStats.desvioMedio !== null && baselineStats.desvioMedio !== 0 && (
+                      <> com desvio médio de {baselineStats.desvioMedio > 0 ? "+" : ""}{baselineStats.desvioMedio} dias</>
+                    )}. Recongelar <b>apaga esse histórico</b> — o desvio volta a zero.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={congelando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); congelarLinhaDeBase(); }}
+              disabled={congelando}
+            >
+              {congelando ? "Congelando…" : baselineStats.congeladas > 0 ? "Recongelar" : "Congelar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

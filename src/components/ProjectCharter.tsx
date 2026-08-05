@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useLayoutEffect, useCallback, useMemo } from "react";
 import { DateField } from "@/components/ui/date-field";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import { AIAssistButton, AIContext } from "@/components/AIAssistButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { BaselineBlock } from "@/components/BaselineBlock";
+import { cn } from "@/lib/utils";
 
 /* -------- AutoTextarea: cresce conforme conteúdo -------- */
 const AutoTextarea = ({
@@ -61,6 +62,8 @@ interface MemberRow {
   sector: string | null;
   invitation_status: "pending" | "accepted" | "declined";
   decline_reason: string | null;
+  /** Papel na matriz RACI, definido na ficha do projeto. */
+  raci?: string | null;
 }
 const inviteBadge = (s: MemberRow["invitation_status"]) => {
   if (s === "accepted") return { label: "Aceito", cls: "bg-success/15 text-success border-success/40" };
@@ -155,20 +158,95 @@ const TextField = ({
   );
 };
 
-/* -------- Section header faixa azul-marinho -------- */
-const SectionHeader = ({ n, title }: { n: number; title: string }) => (
-  <div className="bg-primary/10 text-foreground px-4 py-2 rounded-t-md flex items-center gap-3 border-b border-primary/20">
-    <span className="text-xs font-bold bg-primary/15 text-primary rounded px-2 py-0.5">{n}</span>
-    <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">{title}</h3>
-  </div>
-);
+/**
+ * Seção do TAP — uma LINHA que expande, não um cartão.
+ *
+ * Antes cada seção era um Card com cabeçalho, borda e espaçamento próprios.
+ * Seção vazia ocupava a mesma altura de uma cheia: o TAP anunciava o vazio em
+ * tamanho real, e o olho percorria seis blocos para descobrir que cinco não
+ * tinham nada. Agora a vazia é uma linha de 40px.
+ *
+ * Abre por padrão o que tem conteúdo; o que está em branco fica fechado com
+ * um "+ preencher" — o mesmo dado que antes acusava ("em branco") agora
+ * convida. Na impressão tudo aparece aberto: o PDF é o documento.
+ */
+const SectionBlock = ({ n, title, children, status, editing }: {
+  n: number; title: string; children: React.ReactNode;
+  status?: { preenchidos: number; total: number };
+  /** Editando, tudo abre: seção fechada seria campo impossível de preencher. */
+  editing?: boolean;
+}) => {
+  const vazia = !!status && status.preenchidos === 0;
+  const completa = !!status && status.preenchidos === status.total;
+  // null = ninguém clicou ainda, então segue o conteúdo: fechada se vazia.
+  // Guardar só `useState(!vazia)` congelaria a decisão na primeira renderização
+  // — a seção continuaria fechada mesmo depois de preenchida.
+  const [manual, setManual] = useState<boolean | null>(null);
+  const aberta = editing || (manual ?? !vazia);
+  const setAberta = (fn: (v: boolean) => boolean) => setManual(fn(aberta));
 
-const SectionBlock = ({ n, title, children }: { n: number; title: string; children: React.ReactNode }) => (
-  <Card className="overflow-hidden border-primary/20 print:break-inside-avoid">
-    <SectionHeader n={n} title={title} />
-    <div className="p-4 space-y-3 bg-card">{children}</div>
-  </Card>
-);
+  return (
+    <div className="border-b border-border last:border-b-0 print:break-inside-avoid">
+      <button
+        type="button"
+        onClick={() => setAberta((v) => !v)}
+        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors print:hidden"
+      >
+        <span className="text-[10px] text-muted-foreground w-2.5 shrink-0">{aberta ? "▾" : "▸"}</span>
+        <span className={cn(
+          "w-5 h-5 rounded text-[10.5px] font-bold font-mono flex items-center justify-center shrink-0",
+          vazia ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary",
+        )}>{n}</span>
+        <span className={cn("flex-1 min-w-0 text-[13.5px] truncate", vazia ? "text-muted-foreground" : "font-medium")}>
+          {title}
+        </span>
+        {status && (
+          <span className={cn(
+            "text-[11px] font-mono tabular-nums shrink-0",
+            vazia ? "text-primary" : completa ? "text-success" : "text-warning",
+          )}>
+            {/* "+ preencher" em vez de "em branco": mesma informação, mas
+                acionável — a linha vira o convite para escrever. */}
+            {vazia ? "+ preencher" : completa ? `✓ ${status.total}` : `${status.preenchidos} de ${status.total}`}
+          </span>
+        )}
+      </button>
+
+      {/* Cabeçalho só da impressão — o botão some no PDF. */}
+      <div className="hidden print:flex items-center gap-3 px-4 py-2 bg-primary/10 border-b border-primary/20">
+        <span className="text-xs font-bold bg-primary/15 text-primary rounded px-2 py-0.5">{n}</span>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">{title}</h3>
+      </div>
+
+      <div className={cn("px-4 pb-4 pt-1 space-y-3", aberta ? "" : "hidden print:block")}>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * O TAP abria com 7 seções e ~20 campos vazios de uma vez. Medido em
+ * 02/08/2026: 13 desses campos tinham 0% de preenchimento nos 52 projetos —
+ * não por desleixo, mas porque pedir tudo na abertura contraria o próprio
+ * PMBOK, em que o TAP AUTORIZA e o plano detalha.
+ *
+ * Agora abre com o essencial e o resto fica atrás de "Detalhar o TAP".
+ * Nada é removido: só muda o que já vem aberto. Nenhum campo vira
+ * obrigatório — o TAP informa o que falta e deixa seguir.
+ */
+const preenchido = (v: unknown) =>
+  Array.isArray(v) ? v.length > 0 : !!(v && String(v).trim());
+
+/** Nomes curtos das seções, para o aviso "Em branco: …" caber numa linha. */
+const SECAO_NOMES: Record<number, string> = {
+  2: "Identificação",
+  3: "Problema",
+  4: "Objetivo SMART",
+  5: "Escopo",
+  6: "Premissas",
+  7: "Benefícios",
+};
 
 /* ============================================================ */
 export const ProjectCharter = ({ projectId, project, phases, members, onMembersChanged }: ProjectCharterProps) => {
@@ -217,6 +295,52 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     out_of_scope: project.out_of_scope || "",
     expected_benefits: project.expected_benefits || "",
   });
+
+  /** Camada 2 do TAP (as seções do PMBOK). Fechada por padrão — ver comentário
+   *  em `preenchido`. Abre sozinha se já houver conteúdo lá dentro: esconder
+   *  o que a pessoa escreveu seria pior que mostrar campo vazio. */
+  const [detalhado, setDetalhado] = useState(false);
+
+  /** Completude por seção — alimenta a barra do topo e o "3 de 4" de cada
+   *  cabeçalho. Conta o que EXISTE, nunca bloqueia. */
+  const completude = useMemo(() => {
+    const secoes = [
+      { n: 2, campos: [data.code, data.sponsor, data.authority, data.start_date || project.start_date] },
+      { n: 3, campos: [form.problem_statement, data.justification] },
+      { n: 4, campos: [data.smart_specific, data.smart_measurable, data.smart_achievable, data.smart_relevant, data.smart_temporal] },
+      { n: 5, campos: [form.scope, form.out_of_scope] },
+      { n: 6, campos: [data.assumptions, data.constraints] },
+      { n: 7, campos: [form.expected_benefits, data.benefits_table] },
+    ].map((s) => ({
+      n: s.n,
+      total: s.campos.length,
+      preenchidos: s.campos.filter(preenchido).length,
+    }));
+
+    // O essencial entra na conta do topo para a barra refletir o TAP inteiro.
+    const essenciais = [
+      project.title, (project as any).manager || project.owner, project.due_date,
+      form.objective, project.budget_planned, form.out_of_scope,
+    ].filter(preenchido).length;
+
+    const totalCampos = 6 + secoes.reduce((n, s) => n + s.total, 0);
+    const totalPreenchidos = essenciais + secoes.reduce((n, s) => n + s.preenchidos, 0);
+
+    return {
+      porSecao: Object.fromEntries(secoes.map((s) => [s.n, { preenchidos: s.preenchidos, total: s.total }])),
+      essenciais,
+      preenchidos: totalPreenchidos,
+      total: totalCampos,
+      pct: Math.round((totalPreenchidos / totalCampos) * 100),
+      // Lista para o aviso ao aprovar — informa, não impede.
+      faltando: secoes.filter((s) => s.preenchidos < s.total),
+    };
+  }, [data, form, project]);
+
+  // Conteúdo pré-existente nas seções do PMBOK abre a camada 2 sozinha.
+  useEffect(() => {
+    if (completude.preenchidos > completude.essenciais) setDetalhado(true);
+  }, [completude.preenchidos, completude.essenciais]);
 
   useEffect(() => {
     setForm({
@@ -279,7 +403,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       supabase.from("risks").select("id, description, probability, impact, status").eq("project_id", projectId).eq("is_trashed", false).order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
       supabase.from("user_roles").select("user_id").eq("role", "admin"),
-      supabase.from("project_members").select("id, user_id, invitation_status, decline_reason").eq("project_id", projectId),
+      supabase.from("project_members").select("id, user_id, invitation_status, decline_reason, raci").eq("project_id", projectId),
     ]);
     if (r.data) setRisks(r.data);
     const adminIds = new Set((adminRoles.data || []).map((x: any) => x.user_id));
@@ -295,6 +419,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           sector: p?.sector || null,
           invitation_status: (m.invitation_status as MemberRow["invitation_status"]) || "pending",
           decline_reason: m.decline_reason || null,
+          raci: m.raci || null,
         };
       });
       setMemberRows(rows);
@@ -500,10 +625,86 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
         </div>
       </Card>
 
-      {/* 1. IDENTIFICAÇÃO */}
-      <SectionBlock n={1} title="Identificação do Projeto">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
+      {/* Completude — informa o que falta sem obrigar nada. Some na impressão:
+          o TAP em PDF é o documento, não o formulário. */}
+      <Card className="p-3 print:hidden">
+        <div className="flex items-center gap-3 flex-wrap mb-2">
+          <span className="text-sm font-semibold">Termo de Abertura</span>
+          <span className="text-[11px] font-mono tabular-nums text-muted-foreground">
+            {completude.preenchidos} de {completude.total} campos
+          </span>
+        </div>
+        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+          <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${completude.pct}%` }} />
+        </div>
+
+        {/* Informa o que falta — NUNCA bloqueia. Campo obrigatório travaria a
+            abertura do projeto, que é o oposto do que se quer aqui. */}
+        {completude.faltando.length > 0 && (
+          <p className="mt-2 text-[11px] text-muted-foreground leading-snug">
+            Em branco: {completude.faltando.map((s) => SECAO_NOMES[s.n]).filter(Boolean).join(" · ")}
+            {" — "}o TAP pode ser aprovado assim mesmo.
+          </p>
+        )}
+      </Card>
+
+      {/* Todas as seções num CARD só — lista contínua em vez de oito cartões
+          soltos, cada um com sua borda e sua margem. */}
+      <Card className="overflow-hidden">
+
+      {/* CAMADA 1 — O ESSENCIAL. Os seis campos que autorizam o projeto:
+          os quatro que a equipe já preenche (>70% de uso) mais objetivo e
+          fora do escopo, que o mercado trata como indispensáveis e que hoje
+          ficavam no fim de um formulário longo, com 0% de preenchimento. */}
+      <SectionBlock n={1} title="O essencial" status={{ preenchidos: completude.essenciais, total: 6 }} editing={editing}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-3">
           <Field label="Título do Projeto"><p className="text-sm font-semibold">{project.title}</p></Field>
+          <Field label="Gestor do Projeto">
+            <p className="text-sm">{(project as any).manager || project.owner || <span className="italic text-muted-foreground">Não definido</span>}</p>
+          </Field>
+          <Field label="Prazo previsto">
+            <p className="text-sm">{formatDate(project.due_date)}</p>
+          </Field>
+          <div className="md:col-span-3">
+            <Field label="Objetivo — em uma frase">
+              <TextField editing={editing} value={form.objective} onChange={(v) => setForm({ ...form, objective: v })}
+                placeholder="O que este projeto entrega, e para quê" rows={2} aiContext="tap_objective" />
+            </Field>
+          </div>
+          <Field label="Orçamento previsto">
+            <p className="text-sm">{project.budget_planned ? `R$ ${Number(project.budget_planned).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}</p>
+          </Field>
+          <div className="md:col-span-2">
+            <Field label="Fora do escopo">
+              <TextField editing={editing} value={form.out_of_scope} onChange={(v) => setForm({ ...form, out_of_scope: v })}
+                placeholder="O que este projeto NÃO vai fazer" rows={2} />
+            </Field>
+          </div>
+        </div>
+      </SectionBlock>
+
+      {/* Porta da camada 2 — mesma altura das linhas de seção, para a lista
+          não quebrar. Some na impressão: no PDF o TAP sai inteiro. */}
+      <button
+        type="button"
+        onClick={() => setDetalhado((v) => !v)}
+        className="w-full flex items-center gap-2.5 px-4 py-2.5 border-b border-border last:border-b-0 bg-muted/30 hover:bg-muted/60 transition-colors text-left print:hidden"
+      >
+        <span className="text-[10px] text-muted-foreground w-2.5 shrink-0">{detalhado ? "▾" : "▸"}</span>
+        <span className={cn("flex-1 text-[13.5px]", detalhado ? "text-primary font-medium" : "text-muted-foreground")}>
+          Detalhar o TAP
+        </span>
+        <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+          {completude.total - 6} campos · PMBOK
+        </span>
+      </button>
+
+      {/* CAMADA 2 — as seções do PMBOK, as mesmas de sempre. */}
+      <div className={detalhado ? "" : "hidden print:block"}>
+
+      {/* 2. IDENTIFICAÇÃO */}
+      <SectionBlock n={2} title="Identificação do Projeto" status={completude.porSecao[2]} editing={editing}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
           <Field label="Código">
             <TextField editing={editing} value={data.code || ""} onChange={(v) => setData({ ...data, code: v })} placeholder="Ex: PRJ-2025-001" multiline={false} />
           </Field>
@@ -550,7 +751,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       {/* 2. PROBLEMA / JUSTIFICATIVA */}
-      <SectionBlock n={2} title="Problema / Justificativa">
+      <SectionBlock n={3} title="Problema / Justificativa" status={completude.porSecao[3]} editing={editing}>
         <Field label="Situação atual / Problema">
           <TextField editing={editing} value={form.problem_statement} onChange={(v) => setForm({ ...form, problem_statement: v })} placeholder="Descreva a situação atual e o problema a ser resolvido..." rows={3} aiContext="tap_problem" />
         </Field>
@@ -560,7 +761,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       {/* 3. OBJETIVO SMART */}
-      <SectionBlock n={3} title="Objetivo SMART">
+      <SectionBlock n={4} title="Objetivo SMART" status={completude.porSecao[4]} editing={editing}>
         <div className="overflow-x-auto -mx-1 px-1">
           <table className="w-full text-sm border border-border rounded-md overflow-hidden">
             <tbody>
@@ -585,7 +786,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       {/* 4. ESCOPO */}
-      <SectionBlock n={4} title="Escopo do Projeto">
+      <SectionBlock n={5} title="Escopo do Projeto" status={completude.porSecao[5]} editing={editing}>
         <div className="overflow-x-auto -mx-1 px-1">
           <table className="w-full text-sm border border-border rounded-md overflow-hidden">
             <thead>
@@ -627,7 +828,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       {/* 5. PREMISSAS E RESTRIÇÕES (recuperado do PMBOK) */}
-      <SectionBlock n={5} title="Premissas e Restrições">
+      <SectionBlock n={6} title="Premissas e Restrições" status={completude.porSecao[6]} editing={editing}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Premissas</div>
@@ -655,7 +856,7 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       </SectionBlock>
 
       {/* 6. BENEFÍCIOS E CRITÉRIOS DE SUCESSO */}
-      <SectionBlock n={6} title="Benefícios Esperados e Critérios de Sucesso">
+      <SectionBlock n={7} title="Benefícios Esperados e Critérios de Sucesso" status={completude.porSecao[7]} editing={editing}>
         <div className="overflow-x-auto -mx-1 px-1">
           <table className="w-full text-sm border border-border rounded-md overflow-hidden">
             <thead>
@@ -804,8 +1005,39 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
         )}
       </SectionBlock>
 
-      {/* 7. APROVAÇÕES */}
-      <SectionBlock n={7} title="Aprovações Formais">
+      {/* 8. APROVAÇÕES */}
+      <SectionBlock n={8} title="Aprovações Formais" editing={editing}>
+        {/* A matriz RACI vira operação aqui: quem é "A" na equipe é quem dá o
+            aval final do projeto, então já entra como aprovador em vez de ser
+            cadastrado de novo à mão. */}
+        {(() => {
+          const aprovador = memberRows.find((m) => m.raci === "A");
+          if (!aprovador) return null;
+          const jaConsta = (data.approvals || []).some(
+            (ap) => ap.name.trim().toLowerCase() === aprovador.full_name.trim().toLowerCase(),
+          );
+          return (
+            <div className="flex items-center gap-2 flex-wrap rounded-md border border-primary/30 bg-primary/5 px-3 py-2 print:hidden">
+              <span className="text-xs text-muted-foreground">Aprovador definido na equipe:</span>
+              <span className="text-sm font-medium">{aprovador.full_name}</span>
+              {jaConsta ? (
+                <span className="text-[11px] text-success ml-auto">já está na lista</span>
+              ) : editing ? (
+                <Button
+                  type="button" size="sm" variant="outline" className="h-7 text-xs ml-auto"
+                  onClick={() => setData({
+                    ...data,
+                    approvals: [...(data.approvals || []), { role: "Aprovador", name: aprovador.full_name, date: "" }],
+                  })}
+                >
+                  Incluir nas aprovações
+                </Button>
+              ) : (
+                <span className="text-[11px] text-muted-foreground ml-auto">edite o TAP para incluir</span>
+              )}
+            </div>
+          );
+        })()}
         <div className="overflow-x-auto -mx-1 px-1">
           <table className="w-full text-sm border border-border rounded-md overflow-hidden">
             <thead>
@@ -847,6 +1079,9 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           </Button>
         )}
       </SectionBlock>
+
+      </div>{/* fim da camada 2 */}
+      </Card>{/* fim da lista de seções */}
 
       {/* CSS de impressão */}
       <style>{`

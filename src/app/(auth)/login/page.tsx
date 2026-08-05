@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
-import { LayoutDashboard } from 'lucide-react';
+import { BrandLogo } from '@/components/BrandLogo';
 import { toast } from 'sonner';
 
 function LoginErrorToast() {
@@ -80,11 +80,13 @@ export default function LoginPage() {
       </Suspense>
       <Card className="w-full max-w-md p-8 shadow-lg border-border">
         <div className="flex flex-col items-center space-y-6">
-          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-md">
-            <LayoutDashboard className="w-8 h-8 text-primary-foreground" />
-          </div>
+          {/* A marca de verdade, a mesma do topo do sistema. Antes era um
+              ícone genérico do lucide num quadrado azul e o nome em
+              minúsculas ("gestaopro") — a tela de entrada não parecia o
+              mesmo produto. */}
+          <BrandLogo size={56} showLabel={false} />
           <div className="text-center space-y-2">
-            <h1 className="text-2xl font-bold text-foreground">gestaopro</h1>
+            <h1 className="text-2xl font-bold text-foreground">Gestão Pro</h1>
             <p className="text-sm text-muted-foreground">Por favor, faça login para continuar</p>
           </div>
 

@@ -73,6 +73,8 @@ run 20260801130000 "supabase/migrations/20260801130000_migrate_legacy_budget_to_
 run 20260801150000 "supabase/migrations/20260801150000_phases_dates.sql"                  "Datas na fase (importação de EAP)"
 run 20260802120000 "supabase/migrations/20260802120000_activity_comments_rich.sql"        "Conversa: anexo, resposta, reação"
 run 20260802130000 "supabase/migrations/20260802130000_meetings_actions_and_types.sql"    "Reuniões: tipos, gravação e ações"
+run 20260804120000 "supabase/migrations/20260804120000_vinculo_atividade.sql"             "Vínculo com atividade (reunião, lição, orçamento)"
+run 20260805100000 "supabase/migrations/20260805100000_pendencias_acionaveis.sql"         "Pendências: responsável na ação de reunião, dono e prazo na lição"
 
 echo ""
 echo "══════════════════════════════════════════════════════════"

@@ -196,6 +196,19 @@ export default function ProjectDetailsPage() {
   const [sprintGoal, setSprintGoal] = useState("");
   const [activeSprintId, setActiveSprintId] = useState<string | null>(null);
   const [members, setMembers] = useState<{ full_name: string; sector: string | null }[]>([]);
+  const [risks, setRisks] = useState<{ id: string; probability: string; impact: string; status: string }[]>([]);
+
+  /** Resumo dos riscos para o cabeçalho. "Crítico" segue a mesma regra da
+   *  matriz do RisksManager: alto impacto com alta probabilidade, ou já
+   *  ocorrido. Risco eliminado/aceito sai da conta — não exige ação. */
+  const riscosResumo = useMemo(() => {
+    const abertos = risks.filter((r) => !["eliminar", "aceitar"].includes((r.status || "").toLowerCase()));
+    const criticos = abertos.filter((r) => {
+      if ((r.status || "").toLowerCase() === "ocorreu") return true;
+      return r.impact === "high" && r.probability === "high";
+    });
+    return { abertos: abertos.length, criticos: criticos.length };
+  }, [risks]);
   const [profilesMap, setProfilesMap] = useState<Record<string, string>>({});
   const [profileAvatarMap, setProfileAvatarMap] = useState<Record<string, string>>({});
   // Mapa nome/id da pessoa -> setor, para a raia "por setor" do Kanban.
@@ -370,6 +383,7 @@ export default function ProjectDetailsPage() {
     if (id) {
       fetchActiveSprint();
       fetchMembers();
+      fetchRisks();
       void supabase
         .rpc("generate_overdue_notifications", { p_project_id: id })
         .then(({ error }) => {
@@ -734,6 +748,20 @@ export default function ProjectDetailsPage() {
       supabase.removeChannel(accessChannel);
     };
   }, [authLoading, id, currentUser?.id, isAdmin, loadAccess]);
+
+  /** Riscos abertos do projeto — alimentam o indicador do cabeçalho.
+   *  Antes o risco não entrava em NENHUM indicador: registrar não mudava nada
+   *  em tela alguma, o que é o motivo mais forte para ninguém registrar
+   *  (medido em 04/08/2026: zero riscos em 52 projetos). */
+  const fetchRisks = async () => {
+    const { data, error } = await supabase
+      .from("risks")
+      .select("id, probability, impact, status")
+      .eq("project_id", id!)
+      .eq("is_trashed", false);
+    if (error) return; // degrada em silêncio: indicador some, aba continua
+    setRisks(data || []);
+  };
 
   const fetchMembers = async () => {
     const [{ data: memberData }, { data: activityAssignments }] = await Promise.all([
@@ -1349,6 +1377,29 @@ export default function ProjectDetailsPage() {
                 )}
               </div>
               <div className="flex items-center gap-3 text-sm">
+                {/* Riscos ao lado do progresso: é a informação que muda uma
+                    decisão de gestão, e antes não aparecia em tela nenhuma.
+                    Só surge quando há risco aberto — projeto sem risco não
+                    ganha um "0" para ignorar. */}
+                {riscosResumo.abertos > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("risks")}
+                    title="Ver riscos do projeto"
+                    className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border transition-colors ${
+                      riscosResumo.criticos > 0
+                        ? "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/15"
+                        : "border-warning/40 bg-warning/10 text-warning hover:bg-warning/15"
+                    }`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-medium text-xs tabular-nums">
+                      {riscosResumo.criticos > 0
+                        ? `${riscosResumo.criticos} crítico${riscosResumo.criticos > 1 ? "s" : ""}`
+                        : `${riscosResumo.abertos} risco${riscosResumo.abertos > 1 ? "s" : ""}`}
+                    </span>
+                  </button>
+                )}
                 <span className="text-muted-foreground">Progresso:</span>
                 <span className="font-medium text-foreground">{completedActivities}/{activities.length} tarefas ({activityProgress.toFixed(0)}%)</span>
                 <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">

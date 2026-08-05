@@ -5,7 +5,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
-import { SortableProjectCard } from "./SortableProjectCard";
+import { ChevronsLeft } from "lucide-react";
+import { SortableProjectCard, type CardMetrics } from "./SortableProjectCard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Project {
   id: string;
@@ -37,6 +38,8 @@ interface ProjectColumnProps {
   onStatusChange: (projectId: string, newStatus: string) => void;
   onCardClick?: (project: Project) => void;
   isAdmin?: boolean;
+  /** Progresso e atrasos por projeto — o card mostra o que já existe no banco. */
+  metrics?: Record<string, CardMetrics>;
 }
 
 export const ProjectColumn = ({
@@ -49,9 +52,19 @@ export const ProjectColumn = ({
   onStatusChange,
   onCardClick,
   isAdmin = false,
+  metrics,
 }: ProjectColumnProps) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+  /** Coluna vazia aberta por clique — volta a colapsar ao recarregar. */
+  const [expandidaManual, setExpandidaManual] = useState(false);
+
+  // Recebeu projeto? A abertura manual deixa de fazer sentido — a coluna abre
+  // por ter conteúdo. Sem isto, esvaziá-la de novo a deixaria presa aberta,
+  // com o estado antigo mandando.
+  useEffect(() => {
+    if (projects.length > 0 && expandidaManual) setExpandidaManual(false);
+  }, [projects.length, expandidaManual]);
   const { setNodeRef, isOver } = useDroppable({ id: `column-${status}` });
 
   const handleDeleteClick = (projectId: string) => {
@@ -69,14 +82,63 @@ export const ProjectColumn = ({
 
   const projectIds = projects.map((p) => p.id);
 
+  /**
+   * Coluna vazia COLAPSA numa faixa fina com o nome na vertical.
+   *
+   * Medido em 04/08/2026: 3 dos 7 estágios (MVP, Bloqueio, Gaveta) estão
+   * zerados — 43% da largura da tela exibindo "Arraste aqui". A faixa mantém
+   * o funil legível de ponta a ponta (quem precisa saber que MVP existe
+   * continua vendo) sem consumir o espaço de uma coluna cheia.
+   *
+   * Expande sozinha ao arrastar algo por cima (isOver) — senão não haveria
+   * onde soltar, que é justamente o propósito de uma coluna vazia.
+   */
+  const colapsada = projects.length === 0 && !isOver && !expandidaManual;
+
+  if (colapsada) {
+    return (
+      <div className="hidden lg:flex">
+        <button
+          type="button"
+          onClick={() => setExpandidaManual(true)}
+          title={`${title} — sem projetos. Clique para abrir.`}
+          ref={setNodeRef}
+          className="w-8 min-h-[160px] rounded-lg border border-dashed border-border/50 bg-card/40 hover:bg-muted/50 hover:border-border transition-colors flex items-center justify-center py-3"
+        >
+          <span
+            className="text-[10px] text-muted-foreground/70 tracking-wide whitespace-nowrap"
+            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            {title} · 0
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-4">
+    // lg:flex-1 + min-w-0: no desktop o container é flex, então cada coluna
+    // com conteúdo divide o espaço que sobra das faixas colapsadas.
+    <div className="flex flex-col gap-4 lg:flex-1 lg:min-w-0">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-foreground">{title}</h3>
           <Badge variant="secondary" className="rounded-full">
             {projects.length}
           </Badge>
+          {/* Volta a colapsar. Sem isto, abrir uma coluna vazia era caminho só
+              de ida: ela ficava ocupando a largura de uma coluna cheia até
+              recarregar a página. */}
+          {expandidaManual && projects.length === 0 && (
+            <button
+              type="button"
+              onClick={() => setExpandidaManual(false)}
+              title="Recolher coluna vazia"
+              className="hidden lg:inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -94,6 +156,7 @@ export const ProjectColumn = ({
               <SortableProjectCard
                 key={project.id}
                 project={project}
+                metrics={metrics?.[project.id]}
                 assigneeAvatarMap={assigneeAvatarMap}
                 onEdit={onEdit}
                 onDeleteClick={handleDeleteClick}

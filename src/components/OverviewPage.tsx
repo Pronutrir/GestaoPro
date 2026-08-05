@@ -129,11 +129,12 @@ const STATUS_CARD_STYLES = {
 export function OverviewPage() {
   const router = useRouter();
   const { filterProjects, loading: authLoading } = useProjectAccess();
-  const { isAdmin, user, profile } = useAuth();
+  // user/profile saíram junto com o alternador "Minhas": eram usados só para
+  // descobrir quais atividades pertenciam à pessoa.
+  const { isAdmin } = useAuth();
   // Padrão: só o que é meu. Quem coordena troca para o portfólio inteiro num
   // clique — o contrário (abrir no todo e ter de filtrar) faz a tela abrir
   // sempre com números que não são acionáveis por quem está olhando.
-  const [somenteMinhas, setSomenteMinhas] = useState(true);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
@@ -249,17 +250,14 @@ export function OverviewPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // "Só o que é meu": os KPIs mostravam atrasos de TODOS os projetos
-  // acessíveis, sem filtrar por pessoa — num portfólio grande, um número que
-  // não diz o que fazer. O filtro é opcional porque a visão de portfólio
-  // também tem uso (quem coordena precisa dela).
-  const meusNomes = [profile?.full_name, profile?.email, user?.email]
-    .filter(Boolean)
-    .map((v) => String(v).trim().toLowerCase());
-  const ehMinha = (a: { assigned_to?: string | null }) =>
-    !!a.assigned_to && meusNomes.includes(String(a.assigned_to).trim().toLowerCase());
 
-  const escopo = somenteMinhas ? activities.filter(ehMinha) : activities;
+  // Escopo dos indicadores: TODAS as atividades do que a pessoa enxerga.
+  //
+  // Havia um alternador "Minhas / Todos os projetos" que abria em "Minhas" —
+  // o Dashboard nascia filtrado sem dizer, e um número menor que o real passa
+  // por número real. Quem quer ver só o seu tem o filtro "Apenas minhas
+  // tarefas" no Kanban, onde o recorte é por tarefa, não por painel inteiro.
+  const escopo = activities;
 
   const overdueActivities = escopo.filter(
     (activity) => activity.status !== 'completed' && activity.end_date && new Date(activity.end_date) < today,
@@ -278,7 +276,6 @@ export function OverviewPage() {
       return level === 'alta' || level === 'critica' || level === 'urgente';
     },
   );
-  const minhasCount = activities.filter(ehMinha).length;
   const totalHoursEstimated = activities.reduce((sum, activity) => sum + (activity.hours || 0), 0);
   const totalHoursTracked = timeEntries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0) / 60;
 
@@ -299,30 +296,6 @@ export function OverviewPage() {
           <div>
             <h2 className="mb-2 text-3xl font-bold text-foreground">Dashboard Geral</h2>
           </div>
-          {/* Escopo dos indicadores. Só aparece se a pessoa TEM atividade
-              atribuída — para quem não tem, alternar mostraria zero e o
-              controle seria só confusão. */}
-          {minhasCount > 0 && (
-            <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30">
-              {([[true, 'Minhas'], [false, 'Todos os projetos']] as const).map(([val, label]) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => setSomenteMinhas(val)}
-                  aria-pressed={somenteMinhas === val}
-                  className={cn(
-                    'px-3 py-1.5 text-[13px] font-medium rounded-md transition-colors border',
-                    somenteMinhas === val
-                      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60',
-                  )}
-                >
-                  {label}
-                  {val && <span className="ml-1.5 tabular-nums opacity-80">{minhasCount}</span>}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         {isLoading ? (

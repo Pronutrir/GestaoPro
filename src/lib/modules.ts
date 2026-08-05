@@ -24,7 +24,9 @@ export const ALL_MODULES: ModuleDef[] = [
   { key: "projects",    label: "Projetos" },
   { key: "team",        label: "Equipe" },
   { key: "timeline",    label: "Cronograma" },
-  { key: "blocked",     label: "Bloqueios" },
+  // Chave mantida como "blocked" de propósito: trocá-la exigiria migrar as
+  // permissões já gravadas por usuário. Só o rótulo mudou.
+  { key: "blocked",     label: "Pendências" },
   { key: "agent",       label: "Agente de IA" },
   { key: "calendario",  label: "Calendário" },
   { key: "roadmap",     label: "Roadmap" },

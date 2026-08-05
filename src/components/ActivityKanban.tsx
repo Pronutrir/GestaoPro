@@ -615,6 +615,19 @@ export const ActivityKanban = ({
     return s;
   }, [activities]);
 
+  /** Filhos por pai — a barra de progresso passa a medir trabalho feito
+   *  (subatividades concluídas) em vez de posição no quadro. */
+  const filhosPorPai = useMemo(() => {
+    const m = new Map<string, { status?: string | null; workflow_stage_id?: string | null }[]>();
+    activities.forEach((a) => {
+      if (!a.parent_id) return;
+      const arr = m.get(a.parent_id) || [];
+      arr.push({ status: a.status, workflow_stage_id: a.workflow_stage_id });
+      m.set(a.parent_id, arr);
+    });
+    return m;
+  }, [activities]);
+
   // Tipo EAP de uma atividade (fonte única: lib/eapModel). Três papéis:
   // Fase/Entrega (agrupa; cobre 'pacote' legado e itens com filhos), Atividade, Marco.
   const activityEapType = useCallback((a: Activity): string => {
@@ -1433,21 +1446,17 @@ export const ActivityKanban = ({
       }
     });
 
-    const phaseOrderMap: Record<string, number> = {};
-    phases.forEach((p, i) => {
-      phaseOrderMap[p.id] = i;
-    });
-
-    // Default sort by WBS asc (no per-column sort here; sorting is done inside each column)
-    const defaultSort = (a: Activity, b: Activity) => {
-      const phaseA = a.phase_id ? (phaseOrderMap[a.phase_id] ?? 999) : 999;
-      const phaseB = b.phase_id ? (phaseOrderMap[b.phase_id] ?? 999) : 999;
-      if (phaseA !== phaseB) return phaseA - phaseB;
-      return (a.display_order ?? 9999) - (b.display_order ?? 9999);
-    };
-
+    // Ordem base: posição manual (display_order). Quem ordena de fato é cada
+    // coluna, por sortStageItems — este passo só garante um ponto de partida
+    // estável.
+    //
+    // Antes aqui havia um sort por fase + posição, com o comentário "Default
+    // sort by WBS asc". Ele era descartado no passo seguinte, porque a coluna
+    // reordenava tudo por "updated:desc". O comentário descrevia um
+    // comportamento que não acontecia — a ordem por EAP virou uma OPÇÃO do
+    // menu de ordenação, onde ela é escolhida de propósito.
     Object.keys(map).forEach((key) => {
-      map[key].sort(defaultSort);
+      map[key].sort((a, b) => (a.display_order ?? 999999) - (b.display_order ?? 999999));
     });
 
     return map;
@@ -1587,7 +1596,42 @@ export const ActivityKanban = ({
       return;
     }
     const currentStageId = draggedActivity?.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
-    if (targetStageId === currentStageId) return;
+
+    // REORDENAR DENTRO DA COLUNA. Antes este caso só dava `return`: arrastar um
+    // card para outra posição na mesma coluna não gravava nada, e a ordem
+    // voltava ao recarregar. Jira, Linear e Trello tratam a posição como dado
+    // do quadro — é o gesto central de um Kanban.
+    if (targetStageId === currentStageId) {
+      // Só reordena se soltou SOBRE outro card; soltar no vazio da coluna não
+      // define posição nenhuma.
+      const overActivity = activities.find((a) => a.id === overId);
+      if (!overActivity || overActivity.id === activityId) return;
+
+      const naColuna = (activitiesByStage[targetStageId] || []).filter((a) => !a.parent_id);
+      const de = naColuna.findIndex((a) => a.id === activityId);
+      const para = naColuna.findIndex((a) => a.id === overId);
+      if (de < 0 || para < 0 || de === para) return;
+
+      const reordenado = [...naColuna];
+      const [movido] = reordenado.splice(de, 1);
+      reordenado.splice(para, 0, movido);
+
+      // Sem atualização otimista aqui: `activities` vem por prop, e
+      // optimisticMoves só guarda COLUNA, não posição. O onDataChanged no fim
+      // recarrega — o custo é um piscar, não uma ordem errada na tela.
+      // A ordem é do PROJETO, não preferência individual (como no Linear):
+      // grava em activities.display_order, que todos leem.
+      const resultados = await Promise.all(
+        reordenado.map((a, i) =>
+          supabase.from("activities").update({ display_order: i + 1 }).eq("id", a.id),
+        ),
+      );
+      if (resultados.some((r) => r.error)) {
+        toast({ title: "Erro ao reordenar", variant: "destructive" });
+      }
+      onDataChanged();
+      return;
+    }
 
     // A antiga "regra container" (pai com subatividades só movia por automação,
     // salvo admin) saiu: o menu "Mover para →" nunca a aplicou, então o mesmo
@@ -1805,11 +1849,18 @@ export const ActivityKanban = ({
       stages.find(s => s.display_order === 0) ||
       stages[0];
     const targetStageId = backlogStage?.id ?? stageId;
+    // Card novo entra no FIM da coluna, não no topo. Com ordem manual, "no
+    // topo" seria furar a fila que alguém montou — e o comportamento anterior
+    // (ordem por atualização) já colocava todo card novo em primeiro por
+    // acidente, não por decisão.
+    const ultimaPosicao = (activitiesByStage[targetStageId] || [])
+      .reduce((max, a) => Math.max(max, a.display_order ?? 0), 0);
     const { error } = await supabase.from("activities").insert({
       project_id: projectId,
       title,
       phase_id: phaseId,
       status: "pending",
+      display_order: ultimaPosicao + 1,
     });
     if (error) {
       toast({ title: "Erro ao criar atividade", description: error.message, variant: "destructive" });
@@ -2676,7 +2727,7 @@ export const ActivityKanban = ({
                       }}
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
-                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id)}
+                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id, filhosPorPai.get(activity.id))}
                       cardFields={cardFields}
                       hoursStat={hoursStatsByActivity.get(activity.id)}
                       profilesMap={profilesMap}
@@ -2870,7 +2921,7 @@ export const ActivityKanban = ({
               onDelete={() => {}}
               onToggle={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
-              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id)}
+              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id, filhosPorPai.get(activeActivity.id))}
               cardFields={cardFields}
               profilesMap={profilesMap}
               profileAvatarMap={profileAvatarMap}

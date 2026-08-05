@@ -267,12 +267,16 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
               profiles.find((p) => p.full_name === formData.manager)?.id ?? null,
             ].filter(Boolean) as string[],
           );
+          // Membro da equipe entra CONVIDADO, não aceito — o aceite vem da
+          // notificação (respond_project_invite_v2). Criador, Líder e Gestor
+          // são a exceção e já entraram como aceitos acima: são cargos
+          // designados, não convites.
           const rows = teamSnapshot.filter((m) => !alreadyMembers.has(m.user_id)).map((m) => ({
             project_id: createdProjectId,
             user_id: m.user_id,
             sector: m.sector,
-            invitation_status: "accepted" as const,
-            responded_at: new Date().toISOString(),
+            invitation_status: "pending" as const,
+            invited_at: new Date().toISOString(),
             invited_by: invitedBy,
             can_create: true,
             can_edit: false,
@@ -298,8 +302,8 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
               project_id: createdProjectId,
               target_user_id: m.user_id,
               type: "project_invite",
-              title: `Você foi adicionado(a) ao projeto: ${createdProjectTitle}`,
-              message: `Seu acesso ao projeto "${createdProjectTitle}" já está ativo.`,
+              title: `Convite para o projeto: ${createdProjectTitle}`,
+              message: `Você foi convidado(a) para participar de "${createdProjectTitle}". Aceite ou recuse por aqui.`,
             })),
           );
 

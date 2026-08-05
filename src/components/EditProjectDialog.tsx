@@ -31,6 +31,7 @@ import { GutPriorityField } from "@/components/GutPriorityField";
 import { UserPlus, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { gutLabel, gutScore } from "@/lib/gutPriority";
+import { cn } from "@/lib/utils";
 
 interface MemberRow {
   id: string; // project_members.id (existing) or temp uuid for pending add
@@ -40,7 +41,21 @@ interface MemberRow {
   avatar_url?: string | null;
   invitation_status: "pending" | "accepted" | "declined";
   persisted: boolean;
+  /** Papel na matriz RACI. A coluna já existia em project_members, mas nunca
+   *  teve seletor: 56 dos 71 membros ficaram gravados como "I" só porque é o
+   *  valor padrão — o sistema achava que ninguém executa e ninguém aprova. */
+  raci: RaciRole | null;
 }
+
+/** R executa · A aprova (só um) · C é consultado · I acompanha. */
+type RaciRole = "R" | "A" | "C" | "I";
+
+const RACI_OPCOES: { v: RaciRole; label: string; hint: string }[] = [
+  { v: "R", label: "R", hint: "Responsável — executa" },
+  { v: "A", label: "A", hint: "Aprova — aval final (só um por projeto)" },
+  { v: "C", label: "C", hint: "Consultado — opina antes da decisão" },
+  { v: "I", label: "I", hint: "Informado — só acompanha" },
+];
 
 interface Project {
   id: string;
@@ -117,13 +132,38 @@ export const EditProjectDialog = ({
     if (open) fetchProfiles();
   }, [open]);
 
+  /**
+   * Define o papel RACI de um membro.
+   *
+   * Regra do A único: é o consenso mais forte da literatura de RACI — dois
+   * aprovadores significa nenhum decidindo. Marcar um novo A rebaixa o
+   * anterior a C (Consultado), que é o papel mais próximo de quem antes
+   * aprovava: continua opinando, mas não dá o aval final.
+   */
+  const definirRaci = (memberId: string, papel: RaciRole | null) => {
+    setTeam((prev) => {
+      const anteriorA = papel === "A" ? prev.find((m) => m.raci === "A" && m.id !== memberId) : null;
+      if (anteriorA) {
+        toast({
+          title: "Aprovador substituído",
+          description: `${anteriorA.full_name} passou a Consultado — só uma pessoa aprova por projeto.`,
+        });
+      }
+      return prev.map((m) => {
+        if (m.id === memberId) return { ...m, raci: papel };
+        if (papel === "A" && m.raci === "A") return { ...m, raci: "C" as RaciRole };
+        return m;
+      });
+    });
+  };
+
   // Carrega equipe atual do projeto ao abrir
   useEffect(() => {
     const loadTeam = async () => {
       if (!project?.id || !open) return;
       const { data: members } = await supabase
         .from("project_members")
-        .select("id, user_id, invitation_status")
+        .select("id, user_id, invitation_status, raci")
         .eq("project_id", project.id);
       if (!members) { setTeam([]); return; }
       const ids = members.map((m: any) => m.user_id);
@@ -142,6 +182,10 @@ export const EditProjectDialog = ({
             avatar_url: p?.avatar_url || null,
             invitation_status: (m.invitation_status as MemberRow["invitation_status"]) || "pending",
             persisted: true,
+            // "I" gravado por default não é escolha de ninguém — trata como
+            // não definido, para a matriz começar honesta em vez de mentir
+            // que todo mundo é Informado.
+            raci: (m.raci === "R" || m.raci === "A" || m.raci === "C" ? m.raci : null) as RaciRole | null,
           };
         })
       );
@@ -438,6 +482,10 @@ export const EditProjectDialog = ({
         const missingResponsibles = Array.from(responsibleIds).filter((uid) => !currentMemberIds.has(uid));
         if (missingResponsibles.length > 0) {
           const { error: respErr } = await supabase.from("project_members").insert(
+            // Aqui "accepted" é CORRETO, ao contrário dos demais membros: quem
+            // é designado Líder ou Gestor não está sendo convidado a
+            // participar — foi nomeado ao cargo e já responde pelo projeto.
+            // Deixar pendente permitiria "recusar" um cargo já atribuído.
             missingResponsibles.map((uid) => ({
               project_id: project.id,
               user_id: uid,
@@ -458,35 +506,58 @@ export const EditProjectDialog = ({
         // Insere novos (sem repetir quem já entrou como Líder/Gestor)
         const newOnes = team.filter((m) => !m.persisted && !responsibleIds.has(m.user_id));
         if (newOnes.length > 0) {
+          // O membro entra como CONVIDADO, não como aceito. Antes gravava
+          // invitation_status="accepted" com responded_at preenchido: o sistema
+          // registrava que a pessoa respondeu sem ela ter respondido, enquanto
+          // a própria tela prometia "novos membros recebem um convite".
+          // O aceite existe e funciona — vem da notificação, pela RPC
+          // respond_project_invite_v2 (ver NotificationBell).
           const rows = newOnes.map((m) => ({
             project_id: project.id,
             user_id: m.user_id,
             sector: m.sector,
-            invitation_status: "accepted" as const,
-            responded_at: new Date().toISOString(),
+            invitation_status: "pending" as const,
+            invited_at: new Date().toISOString(),
             invited_by: user?.id ?? null,
             can_create: true,
             can_edit: false,
             can_delete: false,
             can_move: false,
+            raci: m.raci,
           }));
           const { error: memErr } = await supabase.from("project_members").insert(rows);
           if (memErr) {
             throw memErr;
           }
 
+          // A notificação é o convite: é por ela que a pessoa aceita ou recusa
+          // (NotificationBell → respond_project_invite_v2). Fica junto do
+          // insert dos novos membros — sem ela, o membro ficaria "aguardando"
+          // para sempre, sem nunca saber que foi convidado.
           const { error: notificationError } = await supabase.from("notifications").insert(
             newOnes.map((m) => ({
               project_id: project.id,
               target_user_id: m.user_id,
               type: "project_invite",
-              title: `Você foi adicionado(a) ao projeto: ${formData.title}`,
-              message: `Seu acesso ao projeto "${formData.title}" já está ativo.`,
+              title: `Convite para o projeto: ${formData.title}`,
+              message: `Você foi convidado(a) para participar de "${formData.title}". Aceite ou recuse por aqui.`,
             }))
           );
           if (notificationError) {
             notifySyncError = notificationError.message || "Falha ao enviar notificações.";
           }
+        }
+
+        // Papel RACI de quem JÁ era membro. Vai em UPDATEs separados porque
+        // cada linha tem um papel diferente — e falha aqui não pode derrubar
+        // o salvamento do projeto, que já foi gravado acima.
+        const paraAtualizar = team.filter((m) => m.persisted);
+        if (paraAtualizar.length > 0) {
+          await Promise.all(
+            paraAtualizar.map((m) =>
+              supabase.from("project_members").update({ raci: m.raci }).eq("id", m.id),
+            ),
+          );
         }
       } catch (teamErr: any) {
         teamSyncError = teamErr?.message || "Falha ao sincronizar equipe.";
@@ -845,6 +916,44 @@ export const EditProjectDialog = ({
                             {m.sector}
                           </span>
                         )}
+                        {/* Situação do convite. Sem isto o "aguardando" seria
+                            invisível: a lista mostrava todo mundo igual, como
+                            se já tivesse aceitado. */}
+                        {m.invitation_status !== "accepted" && (
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-full text-[10px] font-semibold border",
+                            m.invitation_status === "declined"
+                              ? "bg-destructive/10 text-destructive border-destructive/30"
+                              : "bg-warning/10 text-warning border-warning/30",
+                          )}>
+                            {m.invitation_status === "declined" ? "Recusou" : "Aguardando aceite"}
+                          </span>
+                        )}
+                      </div>
+                      {/* Matriz RACI — quem executa, aprova, é consultado ou
+                          só acompanha. Clicar no papel já marcado desmarca. */}
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        {RACI_OPCOES.map((op) => {
+                          const ativo = m.raci === op.v;
+                          return (
+                            <button
+                              key={op.v}
+                              type="button"
+                              title={op.hint}
+                              onClick={() => definirRaci(m.id, ativo ? null : op.v)}
+                              className={cn(
+                                "w-7 h-7 rounded text-[11px] font-bold transition-colors",
+                                ativo
+                                  ? op.v === "A"
+                                    ? "bg-success/15 text-success ring-1 ring-success/40"
+                                    : "bg-primary/10 text-primary ring-1 ring-primary/40"
+                                  : "text-muted-foreground/50 hover:bg-muted hover:text-foreground",
+                              )}
+                            >
+                              {op.label}
+                            </button>
+                          );
+                        })}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                       <Button
@@ -885,6 +994,8 @@ export const EditProjectDialog = ({
                         avatar_url: p.avatar_url || null,
                         invitation_status: "pending",
                         persisted: false,
+                        // Entra sem papel: quem adiciona decide na matriz.
+                        raci: null,
                       },
                     ]);
                   }}

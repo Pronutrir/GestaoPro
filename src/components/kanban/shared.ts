@@ -153,17 +153,41 @@ export const CARD_FIELD_GROUPS: { group: string; items: { key: keyof CardFields;
   ]},
 ];
 
-// Critérios de ordenação de cards — mesma lista para o padrão do quadro
-// (painel Exibição) e para o override por coluna (ícone ⇅ no cabeçalho).
-export const SORT_CRITERIA: { id: string; label: string; defaultDir: "asc" | "desc" }[] = [
-  { id: "updated", label: "Atualização", defaultDir: "desc" },
-  { id: "priority", label: "Prioridade", defaultDir: "asc" },
-  { id: "due", label: "Prazo", defaultDir: "asc" },
-  { id: "assigned", label: "Responsável", defaultDir: "asc" },
-  { id: "hours", label: "Horas", defaultDir: "desc" },
-  { id: "title", label: "Título", defaultDir: "asc" },
+/**
+ * Critérios de ordenação de cards.
+ *
+ * MANUAL é o padrão, como em Jira, Linear e Trello. O racional do Jira:
+ * "rank determina a ordem em que os itens devem ser trabalhados — nem sempre
+ * igual à prioridade". Algo pode ser alta prioridade e não urgente; algo de
+ * baixa prioridade pode ser feito antes por disponibilidade da equipe. A fila
+ * é decisão humana que nenhum campo captura sozinho.
+ *
+ * Antes o padrão era "updated:desc": o card tocado por último pulava para o
+ * topo, e a ordenação por EAP montada em ActivityKanban era descartada logo em
+ * seguida — o comentário lá dizia "Default sort by WBS asc", o que não
+ * acontecia no resultado final.
+ *
+ * `travaArrasto`: com qualquer critério automático ativo, reposicionar não faz
+ * sentido — a ordem se recalcula sozinha. Jira documenta a mesma limitação; a
+ * diferença é que aqui o menu avisa antes de a pessoa tentar.
+ */
+export const SORT_CRITERIA: { id: string; label: string; defaultDir: "asc" | "desc"; travaArrasto?: boolean }[] = [
+  { id: "manual", label: "Manual", defaultDir: "asc" },
+  { id: "wbs", label: "Estrutura (EAP)", defaultDir: "asc", travaArrasto: true },
+  { id: "priority", label: "Prioridade", defaultDir: "asc", travaArrasto: true },
+  { id: "due", label: "Prazo", defaultDir: "asc", travaArrasto: true },
+  { id: "updated", label: "Atualização", defaultDir: "desc", travaArrasto: true },
+  { id: "assigned", label: "Responsável", defaultDir: "asc", travaArrasto: true },
+  { id: "hours", label: "Horas", defaultDir: "desc", travaArrasto: true },
+  { id: "title", label: "Título", defaultDir: "asc", travaArrasto: true },
 ];
-export const DEFAULT_BOARD_SORT = "updated:desc";
+export const DEFAULT_BOARD_SORT = "manual:asc";
+
+/** true quando o critério recalcula a ordem e o arrasto perde efeito. */
+export const sortTravaArrasto = (sortValue: string): boolean => {
+  const [crit] = (sortValue || "").split(":");
+  return SORT_CRITERIA.find((c) => c.id === crit)?.travaArrasto === true;
+};
 // Valida "criterio:dir" vindo do localStorage (chave nova ou lixo antigo).
 export const isValidSortValue = (v: string | null): v is string => {
   if (!v) return false;
