@@ -373,11 +373,16 @@ export const BacklogSection = ({
   // Coleta TODAS as atividades-fase (item_type='fase') em qualquer nível top-level
   // (independente de phase_id) e as remove dos grupos normais para serem renderizadas
   // como cards-fase virtuais.
+  // Só o agrupador SEM fase vira card virtual. Antes todo item_type='fase' era
+  // arrancado do grupo, então uma Entrega ("1.1 Formalização", com phase_id
+  // preenchido) era renderizada solta no topo enquanto a fase 1 a que ela
+  // pertence exibia "Nenhuma tarefa" — a fase parecia vazia tendo uma entrega
+  // inteira dentro.
   const virtualPhaseActs: Activity[] = [];
   topLevelByPhase.forEach((arr, key) => {
     const filtered: Activity[] = [];
     for (const a of arr) {
-      if (isPhaseLikeActivity(a)) virtualPhaseActs.push(a);
+      if (isPhaseLikeActivity(a) && !a.phase_id) virtualPhaseActs.push(a);
       else filtered.push(a);
     }
     topLevelByPhase.set(key, filtered);
@@ -1113,6 +1118,11 @@ export const BacklogSection = ({
     const isEditingTitle = editingTitleId === phaseAct.id;
     const { total: progTotal, done: progDone } = groupProgress(subs);
     const progPct = progTotal > 0 ? Math.round((progDone / progTotal) * 100) : 0;
+    // A linha do agrupador desenhava Layers fixo, sem perguntar o papel — por
+    // isso Fase e Entrega ficavam visualmente idênticas mesmo depois de o
+    // modelo já as separar. Aqui ela passa a consultar resolveEapKind.
+    const groupKind = resolveEapKind(phaseAct, subs.length > 0);
+    const isEntrega = groupKind === "entrega";
 
     return (
       <div key={phaseAct.id}>
@@ -1128,9 +1138,22 @@ export const BacklogSection = ({
           >
             {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
-          <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-primary/10 text-primary shrink-0">
-            <Layers className="w-3.5 h-3.5" />
+          {/* Fase = camadas empilhadas; Entrega = pacote, em tom mais discreto.
+              A entrega está DENTRO da fase, e o peso visual precisa dizer isso. */}
+          <span className={cn(
+            "inline-flex items-center justify-center w-6 h-6 rounded-md shrink-0",
+            isEntrega ? "bg-primary/5 text-primary/75" : "bg-primary/10 text-primary",
+          )}>
+            {isEntrega ? <Package className="w-3.5 h-3.5" /> : <Layers className="w-3.5 h-3.5" />}
           </span>
+          {/* Código EAP: estava gravado e não era exibido nesta linha — só nas
+              de atividade. "1.1 Formalização" aparecia como "Formalização", e a
+              posição do item na EAP sumia justo onde a hierarquia é lida. */}
+          {!!(phaseAct as any).wbs_code && (
+            <span className="inline-flex items-center h-5 px-1.5 rounded border border-border bg-background/60 text-[11px] font-mono text-muted-foreground shrink-0" title="Código EAP">
+              {(phaseAct as any).wbs_code}
+            </span>
+          )}
           <div className="min-w-0">
             {isEditingTitle ? (
               <Input
