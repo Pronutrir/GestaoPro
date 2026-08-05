@@ -181,10 +181,22 @@ export function ProjectsTable({
   const gravidadeDe = (p: TableProject): "alta" | "media" | "baixa" => {
     if (p.status === "concluido") return "baixa";
     const m = metrics[p.id];
-    if (m && m.atrasadas > 0) return "alta";
-    const dias = diasSemMovimento(p.updated_at);
     const vencido = !!p.due_date && p.due_date.slice(0, 10) < new Date().toISOString().slice(0, 10);
-    if (vencido || (m && m.total > 0 && m.percent === 0)
+
+    // ALTA = já falhou: tarefa atrasada OU prazo do projeto vencido.
+    //
+    // O prazo vencido estava em "média", e isso produzia um caso confuso: um
+    // projeto com a data em vermelho na coluna Prazo e a faixa lateral apagada.
+    // Foi assim que apareceu na tela — a data gritava e a linha não.
+    //
+    // O receio era pintar demais (a primeira versão marcava 16 de 24), mas o
+    // custo aqui é pequeno: leva de 6 para 8 linhas, longe do ponto em que a
+    // cor deixa de significar. E um prazo estourado sem tarefa atrasada
+    // costuma ser o pior caso — sinal de que o plano parou de ser atualizado.
+    if ((m && m.atrasadas > 0) || vencido) return "alta";
+
+    const dias = diasSemMovimento(p.updated_at);
+    if ((m && m.total > 0 && m.percent === 0)
       || (dias !== null && dias >= 30) || faixaPrazo(p) === "vence30") return "media";
     return "baixa";
   };
@@ -351,7 +363,10 @@ export function ProjectsTable({
       >
         <option value="">Qualquer situação</option>
         <option value="atencao">⚠ Precisa de atenção ({contagem.alta + contagem.media})</option>
-        <option value="alta">Com tarefa atrasada ({contagem.alta})</option>
+        {/* "Atrasado" cobre os dois casos que a faixa vermelha marca: tarefa
+            atrasada e prazo do projeto vencido. Manter "Com tarefa atrasada"
+            faria o filtro prometer menos do que entrega. */}
+        <option value="alta">Atrasado ({contagem.alta})</option>
         <option value="media">Merece olhar ({contagem.media})</option>
         <option value="baixa">Em dia ({contagem.baixa})</option>
       </select>
