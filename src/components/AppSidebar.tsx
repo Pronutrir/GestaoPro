@@ -3,7 +3,7 @@ import {
   Home,
   Users,
   BarChart3,
-  AlertTriangle,
+  ListChecks,
   FolderKanban,
   Settings,
   GanttChart,
@@ -45,7 +45,10 @@ const allNavItems = [
   { path: "/qualidade", label: "Gestão da Qualidade", icon: ShieldCheck, minRole: "qualidade" as const, moduleKey: "qualidade" },
   { path: "/team", label: "Equipe", icon: Users, minRole: "user" as const, moduleKey: "team" },
   { path: "/timeline", label: "Cronograma", icon: GanttChart, minRole: "user" as const, moduleKey: "timeline" },
-  { path: "/blocked-projects", label: "Bloqueios", icon: AlertTriangle, minRole: "user" as const, moduleKey: "blocked" },
+  // Era "Bloqueios", apontando para uma tela vazia (0 atividades bloqueadas, 0
+  // projetos) enquanto 92 atividades venciam sem lugar onde aparecer. Bloqueio
+  // virou um filtro dentro de Pendências — é um tipo de pendência, não uma tela.
+  { path: "/pendencias", label: "Pendências", icon: ListChecks, minRole: "user" as const, moduleKey: "blocked" },
   { path: "/investments", label: "Gestão Financeira", icon: DollarSign, minRole: "gestor" as const, moduleKey: "investments" },
   // Visível a todos: qualquer um acompanha as demandas e edita as próprias
   // solicitações. Priorizar e mover estágio continuam restritos a gestor,
