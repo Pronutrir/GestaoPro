@@ -41,10 +41,12 @@ interface Row extends PendenciaLike {
 type Aba = "minhas" | "equipe" | "sem-dono";
 type Filtro = FaixaAtraso | "bloqueadas" | null;
 
-const FAIXA_UI: Record<FaixaAtraso, { faixa: string; texto: string; rotulo: string }> = {
-  critico: { faixa: "bg-destructive", texto: "text-destructive", rotulo: "mais de 90 dias" },
-  atencao: { faixa: "bg-warning", texto: "text-warning", rotulo: "31 a 90 dias" },
-  recente: { faixa: "bg-muted-foreground/30", texto: "text-muted-foreground", rotulo: "até 30 dias" },
+const FAIXA_UI: Record<FaixaAtraso, {
+  faixa: string; texto: string; rotulo: string; situacao: string;
+}> = {
+  critico: { faixa: "bg-destructive", texto: "text-destructive", rotulo: "mais de 90 dias", situacao: "Parada" },
+  atencao: { faixa: "bg-warning", texto: "text-warning", rotulo: "31 a 90 dias", situacao: "Atrasada" },
+  recente: { faixa: "bg-muted-foreground/30", texto: "text-muted-foreground", rotulo: "até 30 dias", situacao: "Vencida" },
 };
 
 export default function PendenciasPage() {
@@ -262,6 +264,17 @@ export default function PendenciasPage() {
         </Card>
       ) : (
         <Card className="divide-y">
+          {/* Cabeçalho: sem ele a linha é uma sequência de valores sem nome —
+              "53d" e um avatar não se explicam sozinhos. As larguras espelham
+              exatamente as da linha abaixo para as colunas ficarem alinhadas. */}
+          <div className="flex items-center gap-3 px-3 py-2 bg-muted/30 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="w-[3px] shrink-0" aria-hidden />
+            <span className="flex-1 min-w-0">Pendência</span>
+            <span className="w-16 text-right shrink-0">Prazo</span>
+            <span className="w-28 text-right shrink-0 hidden sm:block">Responsável</span>
+            <span className="w-20 text-right shrink-0 hidden md:block">Situação</span>
+            <span className="w-4 shrink-0" aria-hidden />
+          </div>
           {lista.map((r) => {
             const dias = diasDeAtraso(r.end_date);
             const faixa = faixaDeAtraso(dias);
@@ -290,7 +303,7 @@ export default function PendenciasPage() {
                   </p>
                 </div>
 
-                <span className={cn("text-xs font-semibold tabular-nums shrink-0", ui.texto)}
+                <span className={cn("w-16 text-right text-xs font-semibold tabular-nums shrink-0", ui.texto)}
                   title={`Atrasada há ${dias} dias — ${ui.rotulo}`}>
                   {dias}d
                 </span>
@@ -310,6 +323,14 @@ export default function PendenciasPage() {
                     <span className="text-xs font-medium text-destructive">sem dono</span>
                   )}
                 </div>
+
+                {/* Situação: o nome da faixa, que até aqui só existia como cor.
+                    Quem não distingue os tons — ou lê num print — precisa da
+                    palavra. Em texto, não em etiqueta: a faixa lateral já é o
+                    sinal, e uma pílula colorida por linha traria a cor de volta. */}
+                <span className={cn("w-20 text-right text-xs shrink-0 hidden md:block", ui.texto)}>
+                  {r.is_blocked ? "Bloqueada" : ui.situacao}
+                </span>
 
                 <ArrowRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground shrink-0 transition-colors" />
               </div>
