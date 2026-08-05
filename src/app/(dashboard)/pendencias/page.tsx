@@ -20,8 +20,11 @@ import {
 } from "@/components/ui/select";
 import {
   buildStagesFinais, ehPendencia, diasDeAtraso, faixaDeAtraso,
-  ordenarPorAtraso, origemDe, ORIGEM_LABEL,
+  ordenarUnificadas, ORIGEM_LABEL,
+  atividadeParaPendencia, acaoEhPendencia, acaoParaPendencia,
+  licaoEhPendencia, licaoParaPendencia,
   type PendenciaLike, type FaixaAtraso, type OrigemPendencia,
+  type PendenciaUnificada, type AcaoReuniaoLike, type LicaoLike,
 } from "@/lib/pendencias";
 
 /**
@@ -46,10 +49,10 @@ type Filtro = FaixaAtraso | "bloqueadas" | null;
 
 /** Único ponto onde o filtro de atraso é aplicado — usado na lista e na contagem
  *  de cada seletor, para as duas não divergirem. */
-const aplicaAtraso = (r: PendenciaLike, f: Filtro): boolean => {
+const aplicaAtraso = (r: PendenciaUnificada, f: Filtro): boolean => {
   if (!f) return true;
-  if (f === "bloqueadas") return r.is_blocked === true;
-  return faixaDeAtraso(diasDeAtraso(r.end_date)) === f;
+  if (f === "bloqueadas") return r.bloqueada;
+  return faixaDeAtraso(diasDeAtraso(r.prazo)) === f;
 };
 
 const FAIXA_UI: Record<FaixaAtraso, {
@@ -74,6 +77,8 @@ export default function PendenciasPage() {
   // Atividades promovidas de uma ação de reunião. O vínculo mora em
   // meeting_actions.activity_id, não em activities — por isso vem à parte.
   const [deReuniao, setDeReuniao] = useState<Set<string>>(new Set());
+  /** Pendências que não são atividade: ações de reunião e lições aprendidas. */
+  const [outras, setOutras] = useState<PendenciaUnificada[]>([]);
 
   // Só quem gerencia vê a fila sem dono: para um colaborador, uma lista de
   // tarefas de ninguém é ruído ou convite a assumir o que não é dele.
@@ -104,7 +109,8 @@ export default function PendenciasPage() {
         // descartado. Sem esta linha, um único projeto arquivado respondia por
         // 14 das 92 pendências — e as dele nasceram vencidas em ~2 anos porque
         // vieram de importação com as datas originais do plano de origem.
-        setRows(todas.filter((a) => a.projects?.is_trashed !== true && ehPendencia(a, finais)));
+        const vivas = todas.filter((a) => a.projects?.is_trashed !== true);
+        setRows(vivas.filter((a) => ehPendencia(a, finais)));
 
         const mapa: Record<string, string> = {};
         (profRes.data ?? []).forEach((p: { id: string; full_name: string | null; email: string | null }) => {
@@ -112,20 +118,55 @@ export default function PendenciasPage() {
         });
         setNomes(mapa);
 
-        // Consulta à parte e tolerante a falha: se meeting_actions ainda não
-        // existir no banco (migration da leva pendente), a tela inteira não pode
-        // cair por causa de um rótulo de origem.
-        const acoes = await supabase
+        // Título e estado do projeto: as outras fontes não os carregam, e uma
+        // pendência de reunião precisa saber a que projeto pertence.
+        const projInfo = new Map<string, string>();
+        vivas.forEach((a) => projInfo.set(a.project_id, a.projects?.title ?? "Projeto"));
+        const projRes = await supabase
+          .from("projects").select("id, title").eq("is_trashed", false);
+        (projRes.data ?? []).forEach((p: { id: string; title: string | null }) => {
+          projInfo.set(p.id, p.title ?? "Projeto");
+        });
+
+        // As duas fontes abaixo são tolerantes a falha: se a migration ainda não
+        // rodou na VM, a coluna não existe (PGRST204/42703) e a tela segue com
+        // as atividades em vez de cair inteira.
+        const extras: PendenciaUnificada[] = [];
+
+        // `assignee_id` chega com a migration 20260805100000; até lá o PostgREST
+        // devolve erro e a tela segue sem as ações — por isso o cast e o guard.
+        const acoes = await (supabase
           .from("meeting_actions")
-          .select("activity_id")
-          .not("activity_id", "is", null);
+          .select("id, description, assigned_to, assignee_id, due_date, is_completed, activity_id, meeting_id, meetings(project_id, is_trashed)") as unknown as
+          Promise<{ data: Record<string, unknown>[] | null; error: unknown }>);
         if (!acoes.error) {
-          setDeReuniao(new Set(
-            (acoes.data ?? [])
-              .map((x: { activity_id: string | null }) => x.activity_id)
-              .filter((x): x is string => !!x),
-          ));
+          const promovidas = new Set<string>();
+          (acoes.data ?? []).forEach((x) => {
+            if (x.activity_id) promovidas.add(x.activity_id as string);
+            const m = x.meetings as { project_id?: string; is_trashed?: boolean } | null;
+            // Ação já promovida a atividade sairia duas vezes — a atividade
+            // resultante já está na lista, com o rótulo "Reunião".
+            if (x.activity_id || !m?.project_id || m.is_trashed) return;
+            if (!projInfo.has(m.project_id)) return; // projeto na lixeira
+            const acao = x as unknown as AcaoReuniaoLike;
+            if (!acaoEhPendencia(acao)) return;
+            extras.push(acaoParaPendencia(acao, m.project_id, projInfo.get(m.project_id)!));
+          });
+          setDeReuniao(promovidas);
         }
+
+        const licoes = await supabase
+          .from("lessons_learned")
+          .select("id, project_id, problem, suggestion, assigned_to, due_date, is_resolved, is_trashed")
+          .eq("is_trashed", false);
+        if (!licoes.error) {
+          (licoes.data as unknown as LicaoLike[] ?? []).forEach((l) => {
+            if (!projInfo.has(l.project_id)) return;
+            if (!licaoEhPendencia(l)) return;
+            extras.push(licaoParaPendencia(l, projInfo.get(l.project_id)!));
+          });
+        }
+        setOutras(extras);
       } catch {
         toast.error("Erro ao carregar pendências");
       } finally {
@@ -135,18 +176,24 @@ export default function PendenciasPage() {
     carregar();
   }, []);
 
+  /** As três fontes viram uma lista só — daqui para baixo nada sabe de onde veio. */
+  const todasPendencias = useMemo<PendenciaUnificada[]>(
+    () => [...rows.map((r) => atividadeParaPendencia(r, deReuniao)), ...outras],
+    [rows, outras, deReuniao],
+  );
+
   // Se o colaborador não tem nada seu, abrir numa aba vazia parece tela quebrada.
   useEffect(() => {
     if (loading || !user?.id) return;
-    const minhas = rows.filter((r) => r.assigned_to === user.id).length;
-    if (minhas === 0 && rows.length > 0) setAba("equipe");
-  }, [loading, rows, user?.id]);
+    const minhas = todasPendencias.filter((r) => r.responsavelId === user.id).length;
+    if (minhas === 0 && todasPendencias.length > 0) setAba("equipe");
+  }, [loading, todasPendencias, user?.id]);
 
   const daAba = useMemo(() => {
-    if (aba === "minhas") return rows.filter((r) => r.assigned_to === user?.id);
-    if (aba === "sem-dono") return rows.filter((r) => !r.assigned_to);
-    return rows;
-  }, [rows, aba, user?.id]);
+    if (aba === "minhas") return todasPendencias.filter((r) => r.responsavelId === user?.id);
+    if (aba === "sem-dono") return todasPendencias.filter((r) => !r.responsavelId && !r.responsavelTexto);
+    return todasPendencias;
+  }, [todasPendencias, aba, user?.id]);
 
   /**
    * Cada seletor conta sobre a aba já aplicada, mas ignorando a si mesmo — assim
@@ -155,66 +202,63 @@ export default function PendenciasPage() {
    * usuário de trocar de escolha sem antes limpar.
    */
   const opcoesAtraso = useMemo(() => {
-    const base = daAba.filter((r) => (origem === "todas" ? true : origemDe(r, deReuniao) === origem))
-      .filter((r) => (projeto === "todos" ? true : r.project_id === projeto));
-    const n = (f: FaixaAtraso) => base.filter((r) => faixaDeAtraso(diasDeAtraso(r.end_date)) === f).length;
-    const bloq = base.filter((r) => r.is_blocked === true).length;
+    const base = daAba.filter((r) => (origem === "todas" || r.origem === origem))
+      .filter((r) => (projeto === "todos" || r.projectId === projeto));
+    const n = (f: FaixaAtraso) => base.filter((r) => faixaDeAtraso(diasDeAtraso(r.prazo)) === f).length;
+    const bloq = base.filter((r) => r.bloqueada).length;
     return [
       { id: "critico" as const, label: "Mais de 90 dias", n: n("critico") },
       { id: "atencao" as const, label: "31 a 90 dias", n: n("atencao") },
       { id: "recente" as const, label: "Até 30 dias", n: n("recente") },
       ...(bloq > 0 ? [{ id: "bloqueadas" as const, label: "Bloqueadas", n: bloq }] : []),
     ].filter((o) => o.n > 0 || o.id === filtro);
-  }, [daAba, origem, projeto, filtro, deReuniao]);
+  }, [daAba, origem, projeto, filtro]);
 
   const opcoesOrigem = useMemo(() => {
     const base = daAba.filter((r) => aplicaAtraso(r, filtro))
-      .filter((r) => (projeto === "todos" ? true : r.project_id === projeto));
+      .filter((r) => (projeto === "todos" || r.projectId === projeto));
     const cont = new Map<OrigemPendencia, number>();
-    base.forEach((r) => {
-      const o = origemDe(r, deReuniao);
-      cont.set(o, (cont.get(o) ?? 0) + 1);
-    });
+    base.forEach((r) => cont.set(r.origem, (cont.get(r.origem) ?? 0) + 1));
     return (Object.keys(ORIGEM_LABEL) as OrigemPendencia[])
       .map((id) => ({ id, label: ORIGEM_LABEL[id], n: cont.get(id) ?? 0 }))
       .filter((o) => o.n > 0 || o.id === origem);
-  }, [daAba, filtro, projeto, origem, deReuniao]);
+  }, [daAba, filtro, projeto, origem]);
 
   const opcoesProjeto = useMemo(() => {
     const base = daAba.filter((r) => aplicaAtraso(r, filtro))
-      .filter((r) => (origem === "todas" ? true : origemDe(r, deReuniao) === origem));
+      .filter((r) => (origem === "todas" || r.origem === origem));
     const cont = new Map<string, { titulo: string; n: number }>();
     base.forEach((r) => {
-      const at = cont.get(r.project_id) ?? { titulo: r.projects?.title ?? "Projeto", n: 0 };
+      const at = cont.get(r.projectId) ?? { titulo: r.projetoTitulo, n: 0 };
       at.n++;
-      cont.set(r.project_id, at);
+      cont.set(r.projectId, at);
     });
     // Mais pendências primeiro: numa lista de projetos, o que está pior é o que
     // se procura. Empate pelo nome para a ordem não variar entre carregamentos.
     return Array.from(cont.entries())
       .map(([id, v]) => ({ id, ...v }))
       .sort((a, b) => (b.n - a.n) || a.titulo.localeCompare(b.titulo, "pt-BR"));
-  }, [daAba, filtro, origem, deReuniao]);
+  }, [daAba, filtro, origem]);
 
   const lista = useMemo(() => {
     let l = daAba.filter((r) => aplicaAtraso(r, filtro));
-    if (origem !== "todas") l = l.filter((r) => origemDe(r, deReuniao) === origem);
-    if (projeto !== "todos") l = l.filter((r) => r.project_id === projeto);
+    if (origem !== "todas") l = l.filter((r) => r.origem === origem);
+    if (projeto !== "todos") l = l.filter((r) => r.projectId === projeto);
     const q = busca.trim().toLowerCase();
     if (q) {
       l = l.filter((r) =>
-        (r.title || "").toLowerCase().includes(q) ||
-        (r.projects?.title || "").toLowerCase().includes(q));
+        (r.titulo || "").toLowerCase().includes(q) ||
+        (r.projetoTitulo || "").toLowerCase().includes(q));
     }
-    return ordenarPorAtraso(l);
-  }, [daAba, filtro, origem, projeto, busca, deReuniao]);
+    return ordenarUnificadas(l);
+  }, [daAba, filtro, origem, projeto, busca]);
 
-  const avatares = useAssigneeAvatarLookup(lista.map((r) => r.assigned_to));
+  const avatares = useAssigneeAvatarLookup(lista.map((r) => r.responsavelId));
 
   const contarAba = (a: Aba) => {
-    if (a === "minhas") return rows.filter((r) => r.assigned_to === user?.id).length;
-    if (a === "sem-dono") return rows.filter((r) => !r.assigned_to).length;
-    return rows.length;
+    if (a === "minhas") return todasPendencias.filter((r) => r.responsavelId === user?.id).length;
+    if (a === "sem-dono") return todasPendencias.filter((r) => !r.responsavelId && !r.responsavelTexto).length;
+    return todasPendencias.length;
   };
 
   const abas: { id: Aba; label: string }[] = [
@@ -377,14 +421,18 @@ export default function PendenciasPage() {
             <span className="w-4 shrink-0" aria-hidden />
           </div>
           {lista.map((r) => {
-            const dias = diasDeAtraso(r.end_date);
+            const dias = diasDeAtraso(r.prazo);
             const faixa = faixaDeAtraso(dias);
             const ui = FAIXA_UI[faixa];
-            const dono = r.assigned_to ? (nomes[r.assigned_to] ?? "Usuário") : null;
+            // responsavelTexto é o nome digitado à mão numa ação de reunião —
+            // aparece para não perder a informação, mas não casa com "Minhas".
+            const dono = r.responsavelId
+              ? (nomes[r.responsavelId] ?? "Usuário")
+              : r.responsavelTexto;
             return (
               <div
                 key={r.id}
-                onClick={() => router.push(`/project/${r.project_id}`)}
+                onClick={() => router.push(r.href)}
                 className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/40 transition-colors cursor-pointer group"
               >
                 {/* Única cor da linha. Seis elementos coloridos por linha é o que
@@ -393,22 +441,22 @@ export default function PendenciasPage() {
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">
-                    {r.is_blocked && (
+                    {r.bloqueada && (
                       <Ban className="inline w-3.5 h-3.5 text-destructive mr-1.5 -mt-0.5" />
                     )}
-                    {r.title}
+                    {r.titulo}
                   </p>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">
-                    {r.projects?.title ?? "Projeto"}
-                    {r.end_date && <> · venceu em {format(parseISO(r.end_date.slice(0, 10)), "dd/MM/yyyy")}</>}
+                    {r.projetoTitulo}
+                    {r.prazo && <> · venceu em {format(parseISO(r.prazo.slice(0, 10)), "dd/MM/yyyy")}</>}
                   </p>
                 </div>
 
-                {/* Origem: o que a linha É, derivado do que está gravado. Não há
-                    campo de procedência em activities — "Reunião" é a única que
-                    indica vinda de outro lugar, pelo meeting_actions.activity_id. */}
+                {/* Origem: de onde a pendência veio. Reunião e Lição são
+                    procedência real — nasceram noutra tela. As demais dizem o
+                    tipo do item, porque activities não guarda procedência. */}
                 <span className="w-24 shrink-0 hidden lg:block text-xs text-muted-foreground truncate">
-                  {ORIGEM_LABEL[origemDe(r, deReuniao)]}
+                  {ORIGEM_LABEL[r.origem]}
                 </span>
 
                 <span className={cn("w-16 text-right text-xs font-semibold tabular-nums shrink-0", ui.texto)}
@@ -420,8 +468,8 @@ export default function PendenciasPage() {
                   {dono ? (
                     <>
                       <Avatar className="h-5 w-5 shrink-0">
-                        {avatares[r.assigned_to ?? ""] && (
-                          <AvatarImage src={avatares[r.assigned_to ?? ""]} alt={dono} />
+                        {r.responsavelId && avatares[r.responsavelId] && (
+                          <AvatarImage src={avatares[r.responsavelId]} alt={dono} />
                         )}
                         <AvatarFallback className="text-[9px]">{getAvatarInitials(dono)}</AvatarFallback>
                       </Avatar>
@@ -437,7 +485,7 @@ export default function PendenciasPage() {
                     palavra. Em texto, não em etiqueta: a faixa lateral já é o
                     sinal, e uma pílula colorida por linha traria a cor de volta. */}
                 <span className={cn("w-20 text-right text-xs shrink-0 hidden md:block", ui.texto)}>
-                  {r.is_blocked ? "Bloqueada" : ui.situacao}
+                  {r.bloqueada ? "Bloqueada" : ui.situacao}
                 </span>
 
                 <ArrowRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground shrink-0 transition-colors" />

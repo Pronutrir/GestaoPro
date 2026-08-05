@@ -88,14 +88,39 @@ export function ehPendencia(
  * atividade solta, que é útil, mas não é rastreamento de origem — quem criou,
  * se veio de importação ou de cópia, o banco não guarda.
  */
-export type OrigemPendencia = "reuniao" | "fase" | "subatividade" | "atividade";
+export type OrigemPendencia =
+  | "reuniao" | "licao" | "fase" | "subatividade" | "atividade";
 
 export const ORIGEM_LABEL: Record<OrigemPendencia, string> = {
   reuniao: "Reunião",
+  licao: "Lição aprendida",
   fase: "Fase / Entrega",
   subatividade: "Subatividade",
   atividade: "Atividade",
 };
+
+/**
+ * Pendência normalizada — o que a tela lista, venha de onde vier.
+ *
+ * Uma ação de reunião já É uma pendência: tem descrição, responsável, prazo e
+ * estado de conclusão. Não precisa virar atividade para contar, e tratá-la só
+ * como rótulo de atividade promovida perdia a ação que nunca foi promovida.
+ * O mesmo vale para lição com responsável e prazo.
+ */
+export interface PendenciaUnificada {
+  id: string;
+  origem: OrigemPendencia;
+  titulo: string;
+  projectId: string;
+  projetoTitulo: string;
+  responsavelId: string | null;
+  /** Nome digitado à mão, quando não há usuário vinculado (legado de reunião). */
+  responsavelTexto: string | null;
+  prazo: string | null;
+  bloqueada: boolean;
+  /** Para onde o clique leva. */
+  href: string;
+}
 
 /**
  * O vínculo com reunião mora do outro lado — `meeting_actions.activity_id` —,
@@ -151,4 +176,106 @@ export function ordenarPorAtraso<T extends PendenciaLike>(lista: T[], hojeISO?: 
     if (d !== 0) return d;
     return (a.title || "").localeCompare(b.title || "", "pt-BR");
   });
+}
+
+export function ordenarUnificadas(
+  lista: PendenciaUnificada[], hojeISO?: string,
+): PendenciaUnificada[] {
+  return [...lista].sort((a, b) => {
+    const d = diasDeAtraso(b.prazo, hojeISO) - diasDeAtraso(a.prazo, hojeISO);
+    if (d !== 0) return d;
+    return (a.titulo || "").localeCompare(b.titulo || "", "pt-BR");
+  });
+}
+
+// ── Conversores: cada fonte vira o mesmo formato ────────────────────────────
+
+export interface AcaoReuniaoLike {
+  id: string;
+  description: string | null;
+  assigned_to: string | null;
+  /** uuid — existe após a migration 20260805100000. */
+  assignee_id?: string | null;
+  due_date: string | null;
+  is_completed: boolean | null;
+  meeting_id: string;
+}
+
+export interface LicaoLike {
+  id: string;
+  project_id: string;
+  problem: string | null;
+  suggestion?: string | null;
+  assigned_to?: string | null;
+  due_date?: string | null;
+  is_resolved?: boolean | null;
+  is_trashed?: boolean | null;
+}
+
+export function atividadeParaPendencia(
+  a: PendenciaLike & { projects?: { title?: string | null } | null },
+  vindasDeReuniao?: Set<string>,
+): PendenciaUnificada {
+  return {
+    id: a.id,
+    origem: origemDe(a, vindasDeReuniao),
+    titulo: a.title,
+    projectId: a.project_id,
+    projetoTitulo: a.projects?.title ?? "Projeto",
+    responsavelId: a.assigned_to,
+    responsavelTexto: null,
+    prazo: a.end_date,
+    bloqueada: a.is_blocked === true,
+    href: `/project/${a.project_id}`,
+  };
+}
+
+/**
+ * Ação de reunião só é pendência se tiver prazo vencido e não estiver concluída.
+ * Sem prazo não há como vencer — some da lista em vez de aparecer como "0d".
+ */
+export function acaoEhPendencia(x: AcaoReuniaoLike, hojeISO?: string): boolean {
+  if (x.is_completed === true) return false;
+  return diasDeAtraso(x.due_date, hojeISO) > 0;
+}
+
+export function acaoParaPendencia(
+  x: AcaoReuniaoLike, projectId: string, projetoTitulo: string,
+): PendenciaUnificada {
+  return {
+    id: `ma:${x.id}`,
+    origem: "reuniao",
+    titulo: x.description || "Ação sem descrição",
+    projectId,
+    projetoTitulo,
+    responsavelId: x.assignee_id ?? null,
+    // assigned_to é TEXT e guarda nome digitado à mão. Só serve de rótulo
+    // quando não há usuário vinculado — não casa com "Minhas", que usa uuid.
+    responsavelTexto: x.assignee_id ? null : (x.assigned_to || null),
+    prazo: x.due_date,
+    bloqueada: false,
+    href: `/project/${projectId}?tab=reunioes&meeting=${x.meeting_id}`,
+  };
+}
+
+/** Lição sem responsável ou sem prazo é registro, não pendência. */
+export function licaoEhPendencia(l: LicaoLike, hojeISO?: string): boolean {
+  if (l.is_trashed === true || l.is_resolved === true) return false;
+  if (!l.assigned_to || !l.due_date) return false;
+  return diasDeAtraso(l.due_date, hojeISO) > 0;
+}
+
+export function licaoParaPendencia(l: LicaoLike, projetoTitulo: string): PendenciaUnificada {
+  return {
+    id: `ll:${l.id}`,
+    origem: "licao",
+    titulo: l.suggestion || l.problem || "Lição sem descrição",
+    projectId: l.project_id,
+    projetoTitulo,
+    responsavelId: l.assigned_to ?? null,
+    responsavelTexto: null,
+    prazo: l.due_date ?? null,
+    bloqueada: false,
+    href: `/project/${l.project_id}?tab=licoes`,
+  };
 }
