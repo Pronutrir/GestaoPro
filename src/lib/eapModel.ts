@@ -35,8 +35,22 @@
  * BacklogSection, ActivityKanban e ProjectCronogramaPanel.
  */
 
-/** Papéis visíveis ao usuário. */
-export type EapKind = "fase" | "atividade" | "marco";
+/**
+ * Papéis visíveis ao usuário.
+ *
+ * `fase` e `entrega` são AMBOS agrupadores e gravam item_type='fase' — o que os
+ * separa é a posição na EAP, não a função:
+ *
+ *   Fase    = nível 1 (1, 2, 3…). Etapa do ciclo de vida do projeto.
+ *   Entrega = nível 2+ que agrupa (1.1, 1.2.3…). Está DENTRO de uma fase; é o
+ *             que ela produz. No PMBOK seria "pacote de trabalho", termo que a
+ *             interface não usa por ter confundido antes.
+ *
+ * Sem essa separação, "1" e "1.1" apareciam os dois como "Fase" e a EAP ficava
+ * achatada — a entrega deixava de estar dentro da fase e virava outra fase ao
+ * lado dela.
+ */
+export type EapKind = "fase" | "entrega" | "atividade" | "marco";
 
 /** Entrada mínima para resolver o papel de um item. */
 export interface EapItemLike {
@@ -79,18 +93,26 @@ export function eapLevel(wbsCode?: string | null): number | null {
 export function resolveEapKind(item: EapItemLike, hasChildren = false): EapKind {
   if (item.is_milestone) return "marco";
 
-  const level = eapLevel(item.wbs_code);
-  if (level !== null) return level === 1 ? "fase" : "atividade";
-
-  // Sem código: mantém a regra por função, que é o que já valia para estes.
   const t = (item.item_type || "").trim().toLowerCase();
-  if (t === "fase" || t === "pacote" || hasChildren) return "fase";
-  return "atividade";
+  const agrupa = t === "fase" || t === "pacote" || hasChildren;
+
+  // COM código EAP: a posição manda. Só o nível 1 é Fase — do 1.1 em diante o
+  // item está DENTRO de uma fase, então é Entrega (se agrupa) ou Atividade.
+  const level = eapLevel(item.wbs_code);
+  if (level !== null) {
+    if (level === 1) return "fase";
+    return agrupa ? "entrega" : "atividade";
+  }
+
+  // SEM código (criado no Kanban/Backlog): não há nível, só a função. Quem
+  // agrupa é Entrega, não Fase — item criado à mão nasce dentro de algo, e
+  // chamá-lo de Fase sugeriria um nível de EAP que ele não tem.
+  return agrupa ? "entrega" : "atividade";
 }
 
-/** Só Fase/Entrega agrupa. */
+/** Só os agrupadores — Fase (nível 1) e Entrega (abaixo dela). */
 export function eapCanGroup(kind: EapKind): boolean {
-  return kind === "fase";
+  return kind === "fase" || kind === "entrega";
 }
 
 /** Folhas (não agrupam). */
@@ -105,14 +127,20 @@ export function eapIsLeaf(kind: EapKind): boolean {
  * agrupar (o nível é que define o rótulo). O que segue barrado é Marco, que é
  * folha de controle por definição — um marco com subitens não faz sentido.
  */
-export function eapTypeOptions(opts: { hasChildren?: boolean } = {}): EapKind[] {
-  if (opts.hasChildren) return ["fase", "atividade"];
-  return ["fase", "atividade", "marco"];
+export function eapTypeOptions(opts: { hasChildren?: boolean; wbsCode?: string | null } = {}): EapKind[] {
+  // O agrupador oferecido depende do NÍVEL, não da vontade: no nível 1 é Fase,
+  // abaixo dele é Entrega. Oferecer os dois deixaria escolher "Fase" para um
+  // item 1.1 — exatamente o achatamento que estamos corrigindo.
+  const level = eapLevel(opts.wbsCode);
+  const agrupador: EapKind = level === 1 ? "fase" : "entrega";
+  if (opts.hasChildren) return [agrupador, "atividade"];
+  return [agrupador, "atividade", "marco"];
 }
 
 /** Rótulos canônicos para a UI. */
 export const EAP_LABELS: Record<EapKind, string> = {
   fase: "Fase",
+  entrega: "Entrega",
   atividade: "Atividade",
   marco: "Marco",
 };
@@ -126,6 +154,9 @@ export const EAP_LABELS: Record<EapKind, string> = {
  */
 export function eapToPersisted(kind: EapKind): { item_type: "fase" | "atividade"; is_milestone: boolean } {
   if (kind === "marco") return { item_type: "atividade", is_milestone: true };
-  if (kind === "fase") return { item_type: "fase", is_milestone: false };
+  // Fase e Entrega gravam igual: os dois agrupam, e o trigger eap_nesting_rule
+  // só aceita 'fase'/'pacote' como pai. O que os distingue é o nível, lido do
+  // wbs_code na hora de exibir — não um valor diferente no banco.
+  if (kind === "fase" || kind === "entrega") return { item_type: "fase", is_milestone: false };
   return { item_type: "atividade", is_milestone: false };
 }

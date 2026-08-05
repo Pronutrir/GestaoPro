@@ -8,7 +8,7 @@ import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Diamond,
-  Rows3, MoreHorizontal, Pencil,
+  Rows3, MoreHorizontal, Pencil, Package,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -555,6 +555,10 @@ export const BacklogSection = ({
   const resolveKind = (a: Activity, hasChildren: boolean): Kind => resolveEapKind(a, hasChildren);
   const KIND_META: Record<Kind, { label: string; icon: JSX.Element; cls: string }> = {
     fase: { label: "Fase", icon: <Layers className="w-3 h-3" />, cls: "text-primary bg-primary/10 border-primary/30" },
+    // Entrega agrupa como a Fase, mas está DENTRO dela — tom mais discreto para
+    // a hierarquia se ler de relance: a fase é o marco visual, a entrega é o
+    // que ela contém.
+    entrega: { label: "Entrega", icon: <Package className="w-3 h-3" />, cls: "text-primary/80 bg-primary/5 border-primary/20" },
     atividade: { label: "Atividade", icon: <Circle className="w-3 h-3" />, cls: "text-muted-foreground bg-muted border-border" },
     marco: { label: "Marco", icon: <Diamond className="w-3 h-3 fill-amber-500 text-amber-500" />, cls: "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/40" },
   };
@@ -643,9 +647,9 @@ export const BacklogSection = ({
 
     const kind = resolveKind(activity, hasChildren);
     const kindMeta = KIND_META[kind];
-    // Item com filhos pode ser Fase ou Atividade (o nível é que define o
-    // rótulo); só Marco fica de fora, por ser folha de controle.
-    const typeOptions: Kind[] = eapTypeOptions({ hasChildren });
+    // O agrupador oferecido vem do NÍVEL: Fase só no 1, Entrega abaixo dele.
+    // Só Marco fica de fora quando há filhos, por ser folha de controle.
+    const typeOptions: Kind[] = eapTypeOptions({ hasChildren, wbsCode: activity.wbs_code });
     const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
     const dc = dependencyCounts.get(activity.id);
     const hasDeps = !!dc && (dc.pred > 0 || dc.succ > 0);

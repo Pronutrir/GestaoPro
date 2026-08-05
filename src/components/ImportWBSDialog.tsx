@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Layers, Circle, Diamond, ClipboardList, FileText } from "lucide-react";
+import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ import {
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
 /* ------------------------------------------------------------------ */
-type EapRole = "fase" | "atividade" | "marco";
+type EapRole = "fase" | "entrega" | "atividade" | "marco";
 interface TreeNode {
   code: string;          // 1, 1.1, 1.1.2...
   title: string;
@@ -31,7 +31,10 @@ interface ImportWBSDialogProps {
 }
 
 const ROLE_META: Record<EapRole, { label: string; short: string; icon: JSX.Element; cls: string }> = {
-  fase:      { label: "Fase/Entrega", short: "Fase",  icon: <Layers className="w-3 h-3" />,  cls: "bg-primary/10 text-primary border-primary/30" },
+  fase:      { label: "Fase",         short: "Fase",  icon: <Layers className="w-3 h-3" />,  cls: "bg-primary/10 text-primary border-primary/30" },
+  // Entrega agrupa como a Fase, mas está dentro dela — tom mais discreto para
+  // a hierarquia se ler de relance na pré-visualização.
+  entrega:   { label: "Entrega",      short: "Entr.", icon: <Package className="w-3 h-3" />, cls: "bg-primary/5 text-primary/80 border-primary/20" },
   atividade: { label: "Atividade",    short: "Ativ.", icon: <Circle className="w-3 h-3" />,  cls: "bg-muted text-muted-foreground border-border" },
   marco:     { label: "Marco",        short: "Marco", icon: <Diamond className="w-3 h-3" />,  cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
 };
@@ -47,14 +50,19 @@ const isMilestoneTitle = (t: string) =>
   /(^|\s)(marco|milestone)(\s|:|$)/i.test(t) || /🏁|\[m\]/i.test(t);
 
 /**
- * Papel de cada nó, pela regra que o banco impõe: quem AGRUPA é Fase, quem é
- * folha é Atividade ou Marco.
+ * Papel de cada nó. Duas perguntas independentes, que antes estavam coladas:
  *
- * O critério é ter filhos, não a profundidade. O trigger `eap_nesting_rule`
- * (migration 20260722160000, já aplicada) recusa folha com subitens, e antes
- * daqui só `depth === 1` virava Fase — então um "11.1 Go Live" com três filhos
- * saía como Atividade e derrubava a importação INTEIRA, mesmo tendo aparecido
- * na pré-visualização como válido.
+ *   NÍVEL   diz o que o item É na EAP. Só o nível 1 é Fase — "1.1" não é outra
+ *           fase, é uma ENTREGA dentro da fase 1.
+ *   FUNÇÃO  diz se pode ter filhos. O trigger `eap_nesting_rule` (migration
+ *           20260722160000, aplicada na VM) recusa folha com subitens.
+ *
+ * Antes daqui só `depth === 1` virava Fase e todo o resto virava Atividade —
+ * então um "11.1 Go Live" com três filhos saía como folha e derrubava a
+ * importação INTEIRA, mesmo aparecendo válido na pré-visualização. A primeira
+ * tentativa de conserto marcou todo agrupador como Fase, o que destravou o
+ * trigger mas achatou a EAP: "1" e "1.1" viravam ambos Fase, e a entrega
+ * deixava de estar dentro da fase.
  *
  * Quem tem filhos NUNCA é marco, mesmo com "Milestone" no título — marco é
  * ponto no tempo e não agrupa. EAPs reais usam "Milestone 1 - Lançamento" como
@@ -64,9 +72,8 @@ const isMilestoneTitle = (t: string) =>
 const aplicarPapeis = (nodes: TreeNode[]) => {
   const temFilhos = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
   for (const n of nodes) {
-    // Agrupador em qualquer nível: nível 1 é Fase por convenção da EAP, e
-    // abaixo dele o que tiver filhos também precisa agrupar.
-    if (n.depth === 1 || temFilhos.has(n.code)) n.role = "fase";
+    if (n.depth === 1) n.role = "fase";
+    else if (temFilhos.has(n.code)) n.role = "entrega";
     else if (isMilestoneTitle(n.title)) n.role = "marco";
     else n.role = "atividade";
   }
@@ -306,7 +313,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
   const tree = useMemo(() => parseFlexible(text), [text]);
   const counts = useMemo(() => {
-    const c = { fase: 0, atividade: 0, marco: 0 };
+    const c = { fase: 0, entrega: 0, atividade: 0, marco: 0 };
     tree.forEach((n) => { c[n.role]++; });
     return c;
   }, [tree]);
@@ -442,8 +449,10 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         const phaseKey = phaseId || "__none__";
         if (!(phaseKey in phaseOrderCounter)) phaseOrderCounter[phaseKey] = 0;
 
-        // Agrupador aninhado = 'fase'; marco/atividade = 'atividade' (folha).
-        const itemType = node.role === "fase" ? "fase" : "atividade";
+        // Fase e Entrega gravam igual — os dois agrupam, e o trigger só aceita
+        // 'fase'/'pacote' como pai. A diferença entre elas é o NÍVEL, lido do
+        // wbs_code na hora de exibir, não um valor distinto no banco.
+        const itemType = (node.role === "fase" || node.role === "entrega") ? "fase" : "atividade";
         const basePayload: any = {
           project_id: projectId,
           // Idem às fases: título limpo, código em wbs_code.
@@ -535,7 +544,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       }
       toast({
         title: "EAP importada!",
-        description: `${counts.fase} fase(s)/entrega(s), ${counts.atividade} atividade(s) e ${counts.marco} marco(s) criados.`,
+        description: `${counts.fase} fase(s), ${counts.entrega} entrega(s), ${counts.atividade} atividade(s) e ${counts.marco} marco(s) criados.`,
       });
       resetAndClose();
       onDataChanged();
@@ -708,6 +717,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           {tree.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               <CountBadge role="fase" n={counts.fase} />
+              {counts.entrega > 0 && <CountBadge role="entrega" n={counts.entrega} />}
               <CountBadge role="atividade" n={counts.atividade} />
               {counts.marco > 0 && <CountBadge role="marco" n={counts.marco} />}
             </div>

@@ -107,7 +107,7 @@ import {
 } from "@/lib/workflowCategory";
 import { SHOW_USER_STORIES } from "@/lib/featureFlags";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { resolveEapKind } from "@/lib/eapModel";
+import { resolveEapKind, EAP_LABELS as EAP_LABELS_CANON } from "@/lib/eapModel";
 import { ToastAction } from "@/components/ui/toast";
 import { computeCardAging, CARD_AGING_CLASSES } from "@/lib/cardAging";
 import { cn } from "@/lib/utils";
@@ -2276,7 +2276,9 @@ export const ActivityKanban = ({
             : `${filterStages.size} selecionadas`;
           const summarySector = summarySet(filterSectors);
           const summaryParticipant = summarySet(filterParticipants);
-          const EAP_LABELS: Record<string, string> = { fase: "Fase / Entrega", atividade: "Atividade", marco: "Marco", pacote: "Fase / Entrega" };
+          // 'pacote' é tipo legado do banco e nunca aparece como opção; entra
+          // aqui só para o resumo do filtro não sair vazio se vier no dado.
+          const EAP_LABELS: Record<string, string> = { ...EAP_LABELS_CANON, pacote: EAP_LABELS_CANON.entrega };
           const summaryType = filterTypes.size === 0 ? "Todos"
             : filterTypes.size === 1 ? EAP_LABELS[[...filterTypes][0]]
             : `${filterTypes.size} selecionados`;
@@ -2485,7 +2487,7 @@ export const ActivityKanban = ({
                 {/* Tipo EAP */}
                 <AccordionSection id="type" label="Tipo (EAP)" summary={summaryType} active={filterTypes.size > 0}>
                   <FilterOptionList
-                    options={(["fase", "atividade", "marco"] as const).map((t) => ({ value: t, label: EAP_LABELS[t] }))}
+                    options={(["fase", "entrega", "atividade", "marco"] as const).map((t) => ({ value: t, label: EAP_LABELS[t] }))}
                     selected={(v) => filterTypes.has(v)}
                     onToggle={(v) => toggleInSet(setFilterTypes, v)}
                   />
