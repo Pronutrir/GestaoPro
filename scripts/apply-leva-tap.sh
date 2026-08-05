@@ -8,6 +8,20 @@ set -e
 # implantado.
 #
 # ORDEM (há dependência real entre elas):
+#  -1) fix_notification_recip.  CONSERTO — único item que arruma algo já
+#                               quebrado em produção, por isso vem primeiro.
+#                               generate_overdue_notifications devolve 42883 a
+#                               cada abertura de projeto porque chama
+#                               notification_recipient_user_ids, que não existe:
+#                               a migration de 28/05 que a criava ficou fora de
+#                               todos os scripts de apply, enquanto a de 31/07,
+#                               que a invoca, foi aplicada. As notificações de
+#                               atraso não são geradas para nenhum projeto.
+#                               NÃO rodar a migration de 28/05 para resolver:
+#                               ela também redefine generate_overdue_notifications
+#                               numa versão ANTERIOR, e sobrescreveria a de 31/07
+#                               que lê a flag certa de bloqueio. Esta migration
+#                               cria só a função que falta.
 #   0) wbs_code                 coluna wbs_code em activities e phases, com
 #                               backfill do prefixo do título. É DÍVIDA ANTIGA
 #                               (migration de maio nunca aplicada): sem ela a
@@ -64,6 +78,7 @@ $PSQL -t -c "SELECT to_regclass('public.document_flows');" | grep -q document_fl
 }
 echo "  ✓ document_flows presente"
 
+run 20260805120000 "supabase/migrations/20260805120000_fix_notification_recipients.sql" "CONSERTO: notification_recipient_user_ids (RPC quebrada em produção)"
 run 20260512013359 "supabase/migrations/20260512013359_0d23dad5-dd70-4dd9-bf05-9011ec5f18c5.sql" "wbs_code em activities e phases"
 run 20260801100000 "supabase/migrations/20260801100000_pages_rls_and_versions.sql"      "RLS de páginas + versões"
 run 20260801110000 "supabase/migrations/20260801110000_project_files_bucket.sql"        "Bucket privado de arquivos"

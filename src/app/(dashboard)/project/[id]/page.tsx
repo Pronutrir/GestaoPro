@@ -387,12 +387,29 @@ export default function ProjectDetailsPage() {
       void supabase
         .rpc("generate_overdue_notifications", { p_project_id: id })
         .then(({ error }) => {
-          if (error) {
-            console.error("[project-page] generate_overdue_notifications failed", {
+          if (!error) return;
+          // 42883 = a função existe mas depende de outra que não existe
+          // (notification_recipient_user_ids). É migration faltando na VM, não
+          // defeito de código: as notificações de atraso simplesmente não são
+          // geradas. Rebaixado a warn e silencioso em produção — o usuário não
+          // pode agir sobre isso, e um erro vermelho a cada abertura de projeto
+          // vira ruído que esconde falha de verdade.
+          const migrationFaltando = error.code === "42883" || error.code === "PGRST202";
+          if (migrationFaltando && process.env.NODE_ENV === "production") return;
+          // O objeto de erro do Supabase não serializa em console.error — sem
+          // extrair os campos, o log saía como "{}" e não dizia nada.
+          const log = migrationFaltando ? console.warn : console.error;
+          log(
+            `[project-page] generate_overdue_notifications: ${error.message}`,
+            {
               projectId: id,
-              error,
-            });
-          }
+              code: error.code,
+              details: error.details,
+              hint: migrationFaltando
+                ? "Aplique 20260528193000_targeted_activity_notifications.sql na VM."
+                : error.hint,
+            },
+          );
         });
     }
 
