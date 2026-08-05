@@ -24,6 +24,8 @@ export interface PendenciaLike {
   status: string | null;
   is_blocked?: boolean | null;
   blocked_reason?: string | null;
+  parent_id?: string | null;
+  item_type?: string | null;
 }
 
 export interface StageLike {
@@ -76,6 +78,38 @@ export function ehPendencia(
   // Bloqueada conta mesmo dentro do prazo: parou de andar e alguém precisa agir.
   if (a.is_blocked === true) return true;
   return diasDeAtraso(a.end_date, hojeISO) > 0;
+}
+
+/**
+ * Origem — o que a linha É, não de onde veio.
+ *
+ * Não existe campo de procedência em `activities`. O rótulo é derivado do que
+ * já está gravado: tipo do item e vínculo com reunião. Isso separa fase de
+ * atividade solta, que é útil, mas não é rastreamento de origem — quem criou,
+ * se veio de importação ou de cópia, o banco não guarda.
+ */
+export type OrigemPendencia = "reuniao" | "fase" | "subatividade" | "atividade";
+
+export const ORIGEM_LABEL: Record<OrigemPendencia, string> = {
+  reuniao: "Reunião",
+  fase: "Fase / Entrega",
+  subatividade: "Subatividade",
+  atividade: "Atividade",
+};
+
+/**
+ * O vínculo com reunião mora do outro lado — `meeting_actions.activity_id` —,
+ * por isso vem como conjunto pronto em vez de campo da própria atividade.
+ *
+ * Ordem importa: reunião antes de tudo porque é a única procedência de verdade
+ * (veio de outro lugar); subatividade antes de fase porque uma subatividade
+ * pode carregar item_type de fase, e o vínculo com a mãe é mais específico.
+ */
+export function origemDe(a: PendenciaLike, vindasDeReuniao?: Set<string>): OrigemPendencia {
+  if (vindasDeReuniao?.has(a.id)) return "reuniao";
+  if (a.parent_id) return "subatividade";
+  if (a.item_type === "fase" || a.item_type === "pacote") return "fase";
+  return "atividade";
 }
 
 export interface ResumoPendencias {

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  AlertTriangle, Clock, UserX, Ban, Search, X, ArrowRight, CheckCircle2,
+  Ban, Search, X, ArrowRight, CheckCircle2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -16,9 +16,12 @@ import { getAvatarInitials } from "@/lib/avatarLookup";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   buildStagesFinais, ehPendencia, diasDeAtraso, faixaDeAtraso,
-  ordenarPorAtraso, resumirPendencias,
-  type PendenciaLike, type FaixaAtraso,
+  ordenarPorAtraso, origemDe, ORIGEM_LABEL,
+  type PendenciaLike, type FaixaAtraso, type OrigemPendencia,
 } from "@/lib/pendencias";
 
 /**
@@ -41,6 +44,14 @@ interface Row extends PendenciaLike {
 type Aba = "minhas" | "equipe" | "sem-dono";
 type Filtro = FaixaAtraso | "bloqueadas" | null;
 
+/** Único ponto onde o filtro de atraso é aplicado — usado na lista e na contagem
+ *  de cada seletor, para as duas não divergirem. */
+const aplicaAtraso = (r: PendenciaLike, f: Filtro): boolean => {
+  if (!f) return true;
+  if (f === "bloqueadas") return r.is_blocked === true;
+  return faixaDeAtraso(diasDeAtraso(r.end_date)) === f;
+};
+
 const FAIXA_UI: Record<FaixaAtraso, {
   faixa: string; texto: string; rotulo: string; situacao: string;
 }> = {
@@ -57,7 +68,12 @@ export default function PendenciasPage() {
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState<Aba>("minhas");
   const [filtro, setFiltro] = useState<Filtro>(null);
+  const [origem, setOrigem] = useState<OrigemPendencia | "todas">("todas");
+  const [projeto, setProjeto] = useState<string>("todos");
   const [busca, setBusca] = useState("");
+  // Atividades promovidas de uma ação de reunião. O vínculo mora em
+  // meeting_actions.activity_id, não em activities — por isso vem à parte.
+  const [deReuniao, setDeReuniao] = useState<Set<string>>(new Set());
 
   // Só quem gerencia vê a fila sem dono: para um colaborador, uma lista de
   // tarefas de ninguém é ruído ou convite a assumir o que não é dele.
@@ -72,7 +88,7 @@ export default function PendenciasPage() {
           // seleção com o próprio is_trashed e é filtrado logo abaixo.
           supabase
             .from("activities")
-            .select("id, title, project_id, wbs_code, end_date, assigned_to, workflow_stage_id, status, is_blocked, blocked_reason, projects(title, is_trashed)")
+            .select("id, title, project_id, wbs_code, end_date, assigned_to, workflow_stage_id, status, is_blocked, blocked_reason, parent_id, item_type, projects(title, is_trashed)")
             .eq("is_trashed", false),
           // `categoria` existe no banco mas ainda não nos tipos gerados; o cast
           // evita depender de regenerar os tipos para a tela funcionar.
@@ -95,6 +111,21 @@ export default function PendenciasPage() {
           mapa[p.id] = p.full_name || p.email || "Sem nome";
         });
         setNomes(mapa);
+
+        // Consulta à parte e tolerante a falha: se meeting_actions ainda não
+        // existir no banco (migration da leva pendente), a tela inteira não pode
+        // cair por causa de um rótulo de origem.
+        const acoes = await supabase
+          .from("meeting_actions")
+          .select("activity_id")
+          .not("activity_id", "is", null);
+        if (!acoes.error) {
+          setDeReuniao(new Set(
+            (acoes.data ?? [])
+              .map((x: { activity_id: string | null }) => x.activity_id)
+              .filter((x): x is string => !!x),
+          ));
+        }
       } catch {
         toast.error("Erro ao carregar pendências");
       } finally {
@@ -117,12 +148,58 @@ export default function PendenciasPage() {
     return rows;
   }, [rows, aba, user?.id]);
 
-  const resumo = useMemo(() => resumirPendencias(daAba), [daAba]);
+  /**
+   * Cada seletor conta sobre a aba já aplicada, mas ignorando a si mesmo — assim
+   * o número ao lado da opção mostra o que ela traria de volta, não o que sobrou
+   * depois dela. Um seletor que zera as próprias opções ao ser usado impede o
+   * usuário de trocar de escolha sem antes limpar.
+   */
+  const opcoesAtraso = useMemo(() => {
+    const base = daAba.filter((r) => (origem === "todas" ? true : origemDe(r, deReuniao) === origem))
+      .filter((r) => (projeto === "todos" ? true : r.project_id === projeto));
+    const n = (f: FaixaAtraso) => base.filter((r) => faixaDeAtraso(diasDeAtraso(r.end_date)) === f).length;
+    const bloq = base.filter((r) => r.is_blocked === true).length;
+    return [
+      { id: "critico" as const, label: "Mais de 90 dias", n: n("critico") },
+      { id: "atencao" as const, label: "31 a 90 dias", n: n("atencao") },
+      { id: "recente" as const, label: "Até 30 dias", n: n("recente") },
+      ...(bloq > 0 ? [{ id: "bloqueadas" as const, label: "Bloqueadas", n: bloq }] : []),
+    ].filter((o) => o.n > 0 || o.id === filtro);
+  }, [daAba, origem, projeto, filtro, deReuniao]);
+
+  const opcoesOrigem = useMemo(() => {
+    const base = daAba.filter((r) => aplicaAtraso(r, filtro))
+      .filter((r) => (projeto === "todos" ? true : r.project_id === projeto));
+    const cont = new Map<OrigemPendencia, number>();
+    base.forEach((r) => {
+      const o = origemDe(r, deReuniao);
+      cont.set(o, (cont.get(o) ?? 0) + 1);
+    });
+    return (Object.keys(ORIGEM_LABEL) as OrigemPendencia[])
+      .map((id) => ({ id, label: ORIGEM_LABEL[id], n: cont.get(id) ?? 0 }))
+      .filter((o) => o.n > 0 || o.id === origem);
+  }, [daAba, filtro, projeto, origem, deReuniao]);
+
+  const opcoesProjeto = useMemo(() => {
+    const base = daAba.filter((r) => aplicaAtraso(r, filtro))
+      .filter((r) => (origem === "todas" ? true : origemDe(r, deReuniao) === origem));
+    const cont = new Map<string, { titulo: string; n: number }>();
+    base.forEach((r) => {
+      const at = cont.get(r.project_id) ?? { titulo: r.projects?.title ?? "Projeto", n: 0 };
+      at.n++;
+      cont.set(r.project_id, at);
+    });
+    // Mais pendências primeiro: numa lista de projetos, o que está pior é o que
+    // se procura. Empate pelo nome para a ordem não variar entre carregamentos.
+    return Array.from(cont.entries())
+      .map(([id, v]) => ({ id, ...v }))
+      .sort((a, b) => (b.n - a.n) || a.titulo.localeCompare(b.titulo, "pt-BR"));
+  }, [daAba, filtro, origem, deReuniao]);
 
   const lista = useMemo(() => {
-    let l = daAba;
-    if (filtro === "bloqueadas") l = l.filter((r) => r.is_blocked === true);
-    else if (filtro) l = l.filter((r) => faixaDeAtraso(diasDeAtraso(r.end_date)) === filtro);
+    let l = daAba.filter((r) => aplicaAtraso(r, filtro));
+    if (origem !== "todas") l = l.filter((r) => origemDe(r, deReuniao) === origem);
+    if (projeto !== "todos") l = l.filter((r) => r.project_id === projeto);
     const q = busca.trim().toLowerCase();
     if (q) {
       l = l.filter((r) =>
@@ -130,7 +207,7 @@ export default function PendenciasPage() {
         (r.projects?.title || "").toLowerCase().includes(q));
     }
     return ordenarPorAtraso(l);
-  }, [daAba, filtro, busca]);
+  }, [daAba, filtro, origem, projeto, busca, deReuniao]);
 
   const avatares = useAssigneeAvatarLookup(lista.map((r) => r.assigned_to));
 
@@ -146,17 +223,8 @@ export default function PendenciasPage() {
     ...(podeVerSemDono ? [{ id: "sem-dono" as Aba, label: "Sem responsável" }] : []),
   ];
 
-  // Os cartões são filtros, não enfeite — mesmo comportamento do painel de
-  // reuniões. Todos recortam a aba atual; "sem responsável" é aba, não cartão,
-  // porque muda o conjunto e não a fatia dele.
-  const cartoes: { id: Filtro; n: number; label: string; icone: typeof Clock; destaque?: boolean }[] = [
-    { id: "critico", n: resumo.criticas, label: "mais de 90 dias", icone: AlertTriangle, destaque: true },
-    { id: "atencao", n: resumo.atencao, label: "31 a 90 dias", icone: Clock },
-    { id: "recente", n: resumo.recentes, label: "até 30 dias", icone: Clock },
-  ];
-  if (resumo.bloqueadas > 0) {
-    cartoes.push({ id: "bloqueadas", n: resumo.bloqueadas, label: "bloqueadas", icone: Ban, destaque: true });
-  }
+  const temFiltro = !!filtro || origem !== "todas" || projeto !== "todos" || !!busca.trim();
+  const limparTudo = () => { setFiltro(null); setOrigem("todas"); setProjeto("todos"); setBusca(""); };
 
   return (
     <div className="px-4 py-6 space-y-5">
@@ -178,9 +246,13 @@ export default function PendenciasPage() {
         </div>
       </div>
 
-      {/* Abas: recorte de apresentação. O conjunto por trás já veio filtrado
-          pelo RLS — quem não participa do projeto não recebeu a linha. */}
-      <div className="flex gap-1 flex-wrap">
+      {/* Uma linha só de filtros. As abas trocam o CONJUNTO (por pessoa); os
+          seletores recortam dentro dele. Ficam lado a lado, mesma altura, para
+          ficar claro que se combinam — antes eram dois controles com aparências
+          diferentes e nada indicava que atuavam juntos.
+          O conjunto por trás já veio filtrado pelo RLS: quem não participa do
+          projeto nunca recebeu a linha. */}
+      <div className="flex items-center gap-1.5 flex-wrap">
         {abas.map((t) => {
           const on = aba === t.id;
           return (
@@ -188,7 +260,7 @@ export default function PendenciasPage() {
               key={t.id}
               onClick={() => { setAba(t.id); setFiltro(null); }}
               className={cn(
-                "text-sm px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-2",
+                "h-9 text-sm px-3 rounded-lg transition-colors inline-flex items-center gap-2",
                 on ? "bg-foreground text-background font-medium"
                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
               )}
@@ -200,49 +272,77 @@ export default function PendenciasPage() {
             </button>
           );
         })}
-      </div>
 
-      <div className={cn("grid gap-3 grid-cols-2", cartoes.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
-        {cartoes.map((c) => {
-          const on = filtro === c.id;
-          const Icone = c.icone;
-          return (
-            <Card
-              key={String(c.id)}
-              onClick={() => setFiltro(on ? null : c.id)}
-              className={cn(
-                "p-3.5 cursor-pointer transition-colors",
-                on ? "ring-2 ring-primary bg-primary/5" : "hover:bg-muted/50",
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className={cn(
-                    "text-2xl font-semibold tabular-nums leading-tight",
-                    c.destaque && c.n > 0 ? "text-destructive" : "text-foreground",
-                  )}>
-                    {c.n}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{c.label}</p>
-                </div>
-                <Icone className={cn(
-                  "w-4 h-4 shrink-0",
-                  c.destaque && c.n > 0 ? "text-destructive" : "text-muted-foreground",
-                )} />
-              </div>
-            </Card>
-          );
-        })}
-      </div>
+        <span className="w-px h-5 bg-border mx-1" aria-hidden />
 
-      {filtro && (
-        <button
-          onClick={() => setFiltro(null)}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+        <Select
+          value={filtro ?? "todos"}
+          onValueChange={(v) => setFiltro(v === "todos" ? null : (v as Filtro))}
         >
-          <X className="h-3 w-3" /> limpar filtro
-        </button>
-      )}
+          <SelectTrigger className={cn("h-9 w-auto gap-1.5 text-sm",
+            filtro && "border-primary text-primary")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Atraso: todos</SelectItem>
+            {opcoesAtraso.map((o) => (
+              <SelectItem key={o.id} value={o.id}>
+                {o.label} <span className="text-muted-foreground tabular-nums">({o.n})</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Seletor só existe se houver mais de uma opção: um controle com uma
+            escolha única não é filtro, é enfeite. */}
+        {opcoesOrigem.length > 1 && (
+          <Select value={origem} onValueChange={(v) => setOrigem(v as OrigemPendencia | "todas")}>
+            <SelectTrigger className={cn("h-9 w-auto gap-1.5 text-sm",
+              origem !== "todas" && "border-primary text-primary")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Origem: todas</SelectItem>
+              {opcoesOrigem.map((o) => (
+                <SelectItem key={o.id} value={o.id}>
+                  {o.label} <span className="text-muted-foreground tabular-nums">({o.n})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {opcoesProjeto.length > 1 && (
+          <Select value={projeto} onValueChange={setProjeto}>
+            <SelectTrigger className={cn("h-9 w-auto max-w-[220px] gap-1.5 text-sm",
+              projeto !== "todos" && "border-primary text-primary")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              <SelectItem value="todos">Projeto: todos</SelectItem>
+              {opcoesProjeto.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  <span className="truncate">{p.titulo}</span>{" "}
+                  <span className="text-muted-foreground tabular-nums">({p.n})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {temFiltro && (
+          <button
+            onClick={limparTudo}
+            className="h-9 inline-flex items-center gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3 w-3" /> limpar
+          </button>
+        )}
+
+        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+          {lista.length} {lista.length === 1 ? "pendência" : "pendências"}
+        </span>
+      </div>
 
       {loading ? (
         <div className="py-16 text-center text-muted-foreground text-sm">Carregando…</div>
@@ -270,6 +370,7 @@ export default function PendenciasPage() {
           <div className="flex items-center gap-3 px-3 py-2 bg-muted/30 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <span className="w-[3px] shrink-0" aria-hidden />
             <span className="flex-1 min-w-0">Pendência</span>
+            <span className="w-24 shrink-0 hidden lg:block">Origem</span>
             <span className="w-16 text-right shrink-0">Prazo</span>
             <span className="w-28 text-right shrink-0 hidden sm:block">Responsável</span>
             <span className="w-20 text-right shrink-0 hidden md:block">Situação</span>
@@ -302,6 +403,13 @@ export default function PendenciasPage() {
                     {r.end_date && <> · venceu em {format(parseISO(r.end_date.slice(0, 10)), "dd/MM/yyyy")}</>}
                   </p>
                 </div>
+
+                {/* Origem: o que a linha É, derivado do que está gravado. Não há
+                    campo de procedência em activities — "Reunião" é a única que
+                    indica vinda de outro lugar, pelo meeting_actions.activity_id. */}
+                <span className="w-24 shrink-0 hidden lg:block text-xs text-muted-foreground truncate">
+                  {ORIGEM_LABEL[origemDe(r, deReuniao)]}
+                </span>
 
                 <span className={cn("w-16 text-right text-xs font-semibold tabular-nums shrink-0", ui.texto)}
                   title={`Atrasada há ${dias} dias — ${ui.rotulo}`}>
