@@ -47,7 +47,14 @@ const isMilestoneTitle = (t: string) =>
   /(^|\s)(marco|milestone)(\s|:|$)/i.test(t) || /🏁|\[m\]/i.test(t);
 
 /**
- * Papel de cada nó: nível 1 = Fase, demais = Atividade, marco só em folha.
+ * Papel de cada nó, pela regra que o banco impõe: quem AGRUPA é Fase, quem é
+ * folha é Atividade ou Marco.
+ *
+ * O critério é ter filhos, não a profundidade. O trigger `eap_nesting_rule`
+ * (migration 20260722160000, já aplicada) recusa folha com subitens, e antes
+ * daqui só `depth === 1` virava Fase — então um "11.1 Go Live" com três filhos
+ * saía como Atividade e derrubava a importação INTEIRA, mesmo tendo aparecido
+ * na pré-visualização como válido.
  *
  * Quem tem filhos NUNCA é marco, mesmo com "Milestone" no título — marco é
  * ponto no tempo e não agrupa. EAPs reais usam "Milestone 1 - Lançamento" como
@@ -57,8 +64,10 @@ const isMilestoneTitle = (t: string) =>
 const aplicarPapeis = (nodes: TreeNode[]) => {
   const temFilhos = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
   for (const n of nodes) {
-    if (n.depth === 1) n.role = "fase";
-    else if (isMilestoneTitle(n.title) && !temFilhos.has(n.code)) n.role = "marco";
+    // Agrupador em qualquer nível: nível 1 é Fase por convenção da EAP, e
+    // abaixo dele o que tiver filhos também precisa agrupar.
+    if (n.depth === 1 || temFilhos.has(n.code)) n.role = "fase";
+    else if (isMilestoneTitle(n.title)) n.role = "marco";
     else n.role = "atividade";
   }
 };
