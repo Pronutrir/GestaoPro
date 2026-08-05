@@ -35,7 +35,7 @@ import {
 
 interface Row extends PendenciaLike {
   wbs_code: string | null;
-  projects: { title: string } | null;
+  projects: { title: string; is_trashed: boolean | null } | null;
 }
 
 type Aba = "minhas" | "equipe" | "sem-dono";
@@ -65,9 +65,12 @@ export default function PendenciasPage() {
     const carregar = async () => {
       try {
         const [actRes, stgRes, profRes] = await Promise.all([
+          // O is_trashed de baixo é o da ATIVIDADE. Uma atividade viva dentro de
+          // um projeto descartado continua vindo — por isso o projeto entra na
+          // seleção com o próprio is_trashed e é filtrado logo abaixo.
           supabase
             .from("activities")
-            .select("id, title, project_id, wbs_code, end_date, assigned_to, workflow_stage_id, status, is_blocked, blocked_reason, projects(title)")
+            .select("id, title, project_id, wbs_code, end_date, assigned_to, workflow_stage_id, status, is_blocked, blocked_reason, projects(title, is_trashed)")
             .eq("is_trashed", false),
           // `categoria` existe no banco mas ainda não nos tipos gerados; o cast
           // evita depender de regenerar os tipos para a tela funcionar.
@@ -79,7 +82,11 @@ export default function PendenciasPage() {
 
         const finais = buildStagesFinais(stgRes.data ?? []);
         const todas = (actRes.data as unknown as Row[]) ?? [];
-        setRows(todas.filter((a) => ehPendencia(a, finais)));
+        // Projeto na lixeira não gera pendência: ninguém deve nada num projeto
+        // descartado. Sem esta linha, um único projeto arquivado respondia por
+        // 14 das 92 pendências — e as dele nasceram vencidas em ~2 anos porque
+        // vieram de importação com as datas originais do plano de origem.
+        setRows(todas.filter((a) => a.projects?.is_trashed !== true && ehPendencia(a, finais)));
 
         const mapa: Record<string, string> = {};
         (profRes.data ?? []).forEach((p: { id: string; full_name: string | null; email: string | null }) => {
