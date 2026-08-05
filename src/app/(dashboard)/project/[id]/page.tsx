@@ -1635,6 +1635,11 @@ export default function ProjectDetailsPage() {
             <TabsContent value="meetings" className="mt-0">
               <MeetingsManager
                 projectId={id!} phases={phases}
+                // Sem esta prop o componente caía no default `false` e NINGUÉM
+                // podia registrar decisão ou ação — nem admin, nem gestor. As
+                // seções apareciam como títulos vazios, sem campo de entrada e
+                // sem dizer por quê. Mesmo critério dos outros painéis da tela.
+                canManageProject={canEdit}
                 onCreateActivity={async (title, assignedTo) => {
                   if (isProjectConcluded) {
                     showProjectLockedToast("criar atividades");

@@ -1007,6 +1007,24 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                             {types.find((t) => t.id === meeting.meeting_type_id)?.label}
                           </Badge>
                         )}
+                        {/* O que falta, sem precisar abrir. A cobrança muda com a
+                            data: antes da reunião pede-se pauta; depois, ata.
+                            Cobrar ata de uma reunião que ainda não aconteceu
+                            seria ruído — e cobrar pauta depois, inútil. */}
+                        {(() => {
+                          const hoje = new Date().toISOString().slice(0, 10);
+                          const dia = meeting.meeting_date?.slice(0, 10);
+                          const jaOcorreu = !!dia && dia < hoje;
+                          const semPauta = !meeting.agenda?.trim();
+                          const semAta = !meeting.minutes?.trim();
+                          if (jaOcorreu && semAta) {
+                            return <Badge variant="outline" className="text-[10px] font-normal border-warning/40 text-warning">sem ata</Badge>;
+                          }
+                          if (!jaOcorreu && semPauta) {
+                            return <Badge variant="outline" className="text-[10px] font-normal border-warning/40 text-warning">sem pauta</Badge>;
+                          }
+                          return null;
+                        })()}
                       </div>
                       <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
                         {meeting.meeting_date && (
@@ -1018,7 +1036,12 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                         {(meeting.start_time || meeting.end_time) && (
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            {meeting.start_time?.slice(0, 5) || "?"} – {meeting.end_time?.slice(0, 5) || "?"}
+                            {/* Sem hora de fim mostra só o início. O "15:30 – ?"
+                                anterior parecia dado corrompido, quando na
+                                verdade o fim é opcional e simplesmente não foi
+                                informado. */}
+                            {meeting.start_time?.slice(0, 5)}
+                            {meeting.end_time && ` – ${meeting.end_time.slice(0, 5)}`}
                             {meeting.start_time && meeting.end_time && (() => {
                               const [sh, sm] = meeting.start_time!.split(":").map(Number);
                               const [eh, em] = meeting.end_time!.split(":").map(Number);
@@ -1077,15 +1100,32 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                 {isExpanded && (
                   <div className="border-t border-border p-4 space-y-4">
                     {/* Agenda */}
-                    {meeting.agenda && (
-                      <div>
-                        <h4 className="text-xs font-semibold text-muted-foreground mb-1">📋 Pauta</h4>
+                    {/* Pauta, Ata e Participantes sempre aparecem — apagados
+                        quando vazios. Antes sumiam por completo, e uma reunião
+                        recém-criada exibia só "Decisões" e "Ações" soltos, o
+                        que parecia tela quebrada. Vazio aqui é informação de
+                        gestão: diz o que ainda falta preencher. */}
+                    <div className={cn(!meeting.agenda?.trim() && "opacity-60")}>
+                      <h4 className="text-xs font-semibold text-muted-foreground mb-1">📋 Pauta</h4>
+                      {meeting.agenda?.trim() ? (
                         <p className="text-sm text-foreground whitespace-pre-wrap">{meeting.agenda}</p>
-                      </div>
-                    )}
+                      ) : (
+                        <p className="text-xs text-muted-foreground/70 italic">
+                          Nenhuma pauta definida.
+                          {canEditMeeting && (
+                            <button
+                              className="ml-1 not-italic text-primary hover:underline"
+                              onClick={(e) => { e.stopPropagation(); handleEdit(meeting); }}
+                            >
+                              Adicionar
+                            </button>
+                          )}
+                        </p>
+                      )}
+                    </div>
 
                     {/* Participants */}
-                    {meeting.participants?.length > 0 && (
+                    {meeting.participants?.length > 0 ? (
                       <div>
                         <h4 className="text-xs font-semibold text-muted-foreground mb-1">👥 Participantes</h4>
                         <div className="space-y-1">
@@ -1105,28 +1145,57 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                           })}
                         </div>
                       </div>
+                    ) : (
+                      <div className="opacity-60">
+                        <h4 className="text-xs font-semibold text-muted-foreground mb-1">👥 Participantes</h4>
+                        <p className="text-xs text-muted-foreground/70 italic">
+                          Ninguém indicado.
+                          {canEditMeeting && (
+                            <button
+                              className="ml-1 not-italic text-primary hover:underline"
+                              onClick={(e) => { e.stopPropagation(); handleEdit(meeting); }}
+                            >
+                              Adicionar
+                            </button>
+                          )}
+                        </p>
+                      </div>
                     )}
 
                     {/* Ata — o "Salvar como Lição Aprendida" era um botão
                         grande solto embaixo (e antes disso só aparecia no tipo
                         Retrospective, cerimônia que ninguém usava). Virou ícone
                         no cabeçalho da seção, como nas decisões e ações. */}
-                    {meeting.minutes && (
-                      <div>
-                        <h4 className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1">
-                          📝 Ata
-                          {canEditMeeting && (
-                            <span className="ml-auto">
-                              <PromoverBotoes
-                                feitos={promovidos[`ata:${meeting.id}`] || []}
-                                onLicao={onCreateLesson && (() => promoverParaLicao(`ata:${meeting.id}`, meeting.minutes || ""))}
-                              />
-                            </span>
-                          )}
-                        </h4>
+                    <div className={cn(!meeting.minutes?.trim() && "opacity-60")}>
+                      <h4 className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+                        📝 Ata
+                        {/* Promover só faz sentido com texto: sem ata não há o
+                            que virar lição. */}
+                        {canEditMeeting && meeting.minutes?.trim() && (
+                          <span className="ml-auto">
+                            <PromoverBotoes
+                              feitos={promovidos[`ata:${meeting.id}`] || []}
+                              onLicao={onCreateLesson && (() => promoverParaLicao(`ata:${meeting.id}`, meeting.minutes || ""))}
+                            />
+                          </span>
+                        )}
+                      </h4>
+                      {meeting.minutes?.trim() ? (
                         <p className="text-sm text-foreground whitespace-pre-wrap">{meeting.minutes}</p>
-                      </div>
-                    )}
+                      ) : (
+                        <p className="text-xs text-muted-foreground/70 italic">
+                          Ata não registrada.
+                          {canEditMeeting && (
+                            <button
+                              className="ml-1 not-italic text-primary hover:underline"
+                              onClick={(e) => { e.stopPropagation(); handleEdit(meeting); }}
+                            >
+                              Escrever
+                            </button>
+                          )}
+                        </p>
+                      )}
+                    </div>
 
                     {/* Decisions */}
                     <div>
@@ -1134,6 +1203,16 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                         <CheckSquare className="w-3 h-3" /> Decisões
                       </h4>
                       <div className="space-y-1">
+                        {/* Sem isto, quem não pode editar via só o título solto:
+                            nem lista, nem campo, nem explicação — parecia tela
+                            quebrada ou carregando para sempre. */}
+                        {meetingDecisions.length === 0 && (
+                          <p className="text-xs text-muted-foreground/70 italic py-1">
+                            {canEditMeeting
+                              ? "Nenhuma decisão registrada."
+                              : "Nenhuma decisão registrada. Só quem organiza a reunião ou gerencia o projeto pode adicionar."}
+                          </p>
+                        )}
                         {meetingDecisions.map((d) => (
                           <div key={d.id} className="flex items-center gap-2 text-sm p-2 bg-accent/20 rounded">
                             <span className="flex-1 min-w-0">{d.description}</span>
@@ -1198,6 +1277,13 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                         )}
                       </h4>
                       <div className="space-y-1">
+                        {meetingActions.length === 0 && (
+                          <p className="text-xs text-muted-foreground/70 italic py-1">
+                            {canEditMeeting
+                              ? "Nenhuma ação registrada."
+                              : "Nenhuma ação registrada. Só quem organiza a reunião ou gerencia o projeto pode adicionar."}
+                          </p>
+                        )}
                         {meetingActions.map((a) => (
                           <div key={a.id} className="flex items-center gap-2 text-sm p-2 bg-accent/20 rounded">
                             <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
