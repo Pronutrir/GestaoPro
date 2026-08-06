@@ -26,6 +26,9 @@ interface Notification {
   } | null;
 }
 
+/** Itens por página. O "Carregar mais" busca a próxima fatia. */
+const PAGE_SIZE = 50;
+
 export const NotificationBell = () => {
   const router = useRouter();
   const { user, isAdmin, profile } = useAuth();
@@ -33,6 +36,17 @@ export const NotificationBell = () => {
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  // Paginação: o acervo passou de 1.600 registros e antes só as primeiras
+  // cabiam na resposta — o resto era invisível, sem nada dizendo que existia.
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [onlyUnread, setOnlyUnread] = useState(false);
+  // Contagem vinda do servidor. `unreadExact=false` significa que a varredura
+  // parou no teto de segurança: aí a UI mostra "+" em vez de um número redondo
+  // que estaria errado.
+  const [serverUnread, setServerUnread] = useState(0);
+  const [unreadExact, setUnreadExact] = useState(true);
   const [declineFor, setDeclineFor] = useState<string | null>(null);
   const [declineReason, setDeclineReason] = useState("");
   const accessibleProjectIdsKey = useMemo(
@@ -85,17 +99,47 @@ export const NotificationBell = () => {
     triggerNotificationGeneration();
   }, [isOpen, triggerNotificationGeneration]);
 
-  const fetchNotifications = async () => {
+  /**
+   * Busca uma página. `append` empilha na lista em vez de substituir.
+   *
+   * A contagem de não lidas vem do SERVIDOR, não de `notifications.length`:
+   * a lista é paginada, então contar o que está carregado faria o sino mostrar
+   * menos do que existe — exatamente o que acontecia com o teto fixo antigo.
+   */
+  const fetchNotifications = async (opts: { offset?: number; append?: boolean } = {}) => {
     const uid = user?.id;
-    if (!uid) { setNotifications([]); return; }
-    const response = await fetch("/api/notifications", { cache: "no-store" });
-    if (!response.ok) {
-      setNotifications([]);
-      return;
-    }
+    if (!uid) { setNotifications([]); setServerUnread(0); return; }
 
-    const payload = await response.json();
-    setNotifications(Array.isArray(payload.notifications) ? payload.notifications : []);
+    const nextOffset = opts.offset ?? 0;
+    if (opts.append) setLoadingMore(true);
+
+    const params = new URLSearchParams({ offset: String(nextOffset), limit: String(PAGE_SIZE) });
+    if (onlyUnread) params.set("unreadOnly", "1");
+
+    try {
+      const response = await fetch(`/api/notifications?${params}`, { cache: "no-store" });
+      if (!response.ok) {
+        if (!opts.append) { setNotifications([]); setServerUnread(0); }
+        return;
+      }
+
+      const payload = await response.json();
+      const page: Notification[] = Array.isArray(payload.notifications) ? payload.notifications : [];
+
+      setNotifications((prev) => {
+        if (!opts.append) return page;
+        // Deduplica por id: o realtime pode ter inserido algo entre as páginas,
+        // o que deslocaria o offset e repetiria um item na lista.
+        const vistos = new Set(prev.map((n) => n.id));
+        return [...prev, ...page.filter((n) => !vistos.has(n.id))];
+      });
+      setHasMore(!!payload.hasMore);
+      setOffset(nextOffset + page.length);
+      setServerUnread(typeof payload.unreadCount === "number" ? payload.unreadCount : 0);
+      setUnreadExact(payload.unreadCountExact !== false);
+    } finally {
+      if (opts.append) setLoadingMore(false);
+    }
   };
 
   // Re-busca e resubscreve sempre que o auth mudar (resolve closure stale e carregamento tardio)
@@ -114,7 +158,18 @@ export const NotificationBell = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, isAdmin, accessibleProjectIdsKey]);
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  // Trocar o filtro recomeça da primeira página: o offset da lista anterior
+  // não corresponde a nada no conjunto novo.
+  useEffect(() => {
+    if (!user?.id) return;
+    void fetchNotifications();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onlyUnread]);
+
+  // Do SERVIDOR, não do que está carregado: a lista é paginada, então contar
+  // `notifications` mostraria menos do que existe de fato.
+  const unreadCount = serverUnread;
+  // Atrasadas só entre as carregadas — é sinal visual de apoio, não contagem.
   const overdueCount = notifications.filter((n) => !n.is_read && n.type === "overdue").length;
 
   // O update direto do browser é bloqueado pelo RLS (mesma razão da leitura
@@ -152,12 +207,14 @@ export const NotificationBell = () => {
   const markAllAsRead = async () => {
     const uid = user?.id;
     if (!uid) return;
-    const unreadIds = notifications.filter((n) => !n.is_read).map((n) => n.id);
-    if (unreadIds.length === 0) return;
+    // Guarda pelo contador do SERVIDOR: com a lista paginada, pode haver não
+    // lidas fora da página carregada — checar `notifications` abortaria a ação
+    // justamente quando ela é mais necessária.
+    if (unreadCount === 0) return;
     // SEM `ids` de propósito: assim a rota marca todas as não lidas a que o
-    // usuário tem acesso, e não só as que couberam nesta tela. A listagem traz
-    // as 300 mais recentes de um acervo bem maior — mandar os ids visíveis
-    // deixaria as antigas não lidas para trás, e o contador nunca zeraria.
+    // usuário tem acesso, e não só as que couberam nesta tela. A listagem é
+    // paginada — mandar os ids visíveis deixaria as antigas não lidas para
+    // trás, e o contador nunca zeraria.
     const response = await fetch("/api/notifications/mark-read", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -327,11 +384,23 @@ export const NotificationBell = () => {
             <h4 className="font-semibold text-sm text-foreground">Notificações</h4>
             {unreadCount > 0 && (
               <span className="bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
-                {unreadCount} nova{unreadCount > 1 ? "s" : ""}
+                {unreadCount}{unreadExact ? "" : "+"} nova{unreadCount > 1 ? "s" : ""}
               </span>
             )}
           </div>
           <div className="flex items-center gap-1">
+            {/* Filtro de não lidas: com acervo grande, rolar até achar a que
+                importa não é caminho. Vai ao servidor em vez de filtrar o que
+                está na tela — senão filtraria só a página carregada. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`text-xs h-7 ${onlyUnread ? "text-primary bg-primary/10" : "text-muted-foreground"}`}
+              onClick={() => setOnlyUnread((v) => !v)}
+              title={onlyUnread ? "Mostrando só as não lidas" : "Mostrar só as não lidas"}
+            >
+              {onlyUnread ? "Não lidas" : "Todas"}
+            </Button>
             {unreadCount > 0 && (
               <Button
                 variant="ghost"
@@ -454,6 +523,19 @@ export const NotificationBell = () => {
                 </div>
               );
             })
+          )}
+
+          {/* Carregar mais — o acervo passa de 1.600 e antes só a primeira
+              fatia existia para o usuário, sem nada indicando que havia resto. */}
+          {hasMore && notifications.length > 0 && (
+            <button
+              type="button"
+              disabled={loadingMore}
+              onClick={() => fetchNotifications({ offset, append: true })}
+              className="w-full py-2.5 text-xs text-primary hover:bg-muted/60 border-t border-border disabled:opacity-60"
+            >
+              {loadingMore ? "Carregando..." : "Carregar mais"}
+            </button>
           )}
         </div>
       </PopoverContent>

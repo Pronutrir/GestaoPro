@@ -24,7 +24,34 @@ type ActivityRow = {
   participants: string[] | null;
 };
 
-export async function GET() {
+/**
+ * Quantas notificações VISÍVEIS a resposta entrega por página.
+ *
+ * O corte é aplicado DEPOIS do filtro de permissão, não antes. Era esse o
+ * defeito do teto anterior: o `limit` valia sobre a tabela inteira, então um
+ * usuário comum recebia 500 linhas do banco que viravam poucas dezenas após o
+ * filtro — e não havia como pedir mais. Agora a rota varre o acervo em lotes
+ * até juntar uma página cheia de itens que a pessoa realmente pode ver.
+ */
+const PAGE_SIZE = 50;
+
+/** Lote lido do banco por volta da varredura. */
+const SCAN_CHUNK = 500;
+
+/** Teto de segurança da varredura: 20 × 500 = 10.000 linhas por requisição. */
+const MAX_SCANS = 20;
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const requestedLimit = Number(url.searchParams.get('limit'));
+  const pageSize = Number.isFinite(requestedLimit) && requestedLimit > 0
+    ? Math.min(requestedLimit, 200)
+    : PAGE_SIZE;
+  const requestedOffset = Number(url.searchParams.get('offset'));
+  const offset = Number.isFinite(requestedOffset) && requestedOffset > 0 ? requestedOffset : 0;
+  // `unreadOnly=1` alimenta o filtro da UI sem baixar o histórico já lido.
+  const unreadOnly = url.searchParams.get('unreadOnly') === '1';
+
   const userClient = await createClient();
   const {
     data: { user },
@@ -59,19 +86,25 @@ export async function GET() {
     user.email,
   ]);
 
-  // As não lidas vêm PRIMEIRO e sem depender do teto: com 1644 registros no
-  // acervo, um `limit(300)` por data escondia não lidas antigas — o usuário
-  // limpava a lista e o contador não zerava, sem nada explicando o porquê.
-  // Agora o corte só atinge o histórico já lido.
-  const fetchNotifications = async () => {
-    const withReadAt = await adminClient
-      .from('notifications')
-      .select('id, project_id, activity_id, type, title, message, is_read, created_at, read_at, target_user_id')
-      .order('is_read', { ascending: true })
-      .order('created_at', { ascending: false })
-      .limit(500);
+  // Um lote do acervo, ordenado com as não lidas primeiro. `read_at` pode não
+  // existir (migration pendente) — nesse caso relê sem a coluna.
+  const COLUMNS_WITH_READ_AT =
+    'id, project_id, activity_id, type, title, message, is_read, created_at, read_at, target_user_id';
+  const COLUMNS_LEGACY =
+    'id, project_id, activity_id, type, title, message, is_read, created_at, target_user_id';
 
-    // Fallback caso a migration do read_at ainda não tenha sido aplicada.
+  const fetchChunk = async (from: number, to: number) => {
+    const build = (columns: string) => {
+      let q = adminClient.from('notifications').select(columns);
+      if (unreadOnly) q = q.eq('is_read', false);
+      return q
+        .order('is_read', { ascending: true })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+    };
+
+    const withReadAt = await build(COLUMNS_WITH_READ_AT);
+
     const missingColumn =
       withReadAt.error &&
       (withReadAt.error.code === '42703' ||
@@ -79,17 +112,11 @@ export async function GET() {
         /read_at/i.test(withReadAt.error.message));
 
     if (!missingColumn) return withReadAt;
-
-    return adminClient
-      .from('notifications')
-      .select('id, project_id, activity_id, type, title, message, is_read, created_at, target_user_id')
-      .order('is_read', { ascending: true })
-      .order('created_at', { ascending: false })
-      .limit(500);
+    return build(COLUMNS_LEGACY);
   };
 
-  const [notificationsRes, activitiesRes, membersRes, projectsRes] = await Promise.all([
-    fetchNotifications(),
+  const [firstChunk, activitiesRes, membersRes, projectsRes] = await Promise.all([
+    fetchChunk(0, SCAN_CHUNK - 1),
     adminClient
       .from('activities')
       .select('id, project_id, assigned_to, participants')
@@ -104,9 +131,9 @@ export async function GET() {
       .eq('is_trashed', false),
   ]);
 
-  if (notificationsRes.error || activitiesRes.error || membersRes.error || projectsRes.error) {
+  if (firstChunk.error || activitiesRes.error || membersRes.error || projectsRes.error) {
     const message =
-      notificationsRes.error?.message ||
+      firstChunk.error?.message ||
       activitiesRes.error?.message ||
       membersRes.error?.message ||
       projectsRes.error?.message ||
@@ -139,7 +166,8 @@ export async function GET() {
     }
   }
 
-  const notifications = ((notificationsRes.data || []) as NotificationRow[]).filter((notification) => {
+  /** O usuário pode ver esta notificação? Mesma regra de antes. */
+  const canSee = (notification: NotificationRow) => {
     if (isAdmin) return true;
     if (notification.target_user_id === user.id) return true;
     if (notification.target_user_id) return false;
@@ -156,10 +184,76 @@ export async function GET() {
     if (anyMatchesIdentity(participants, userCandidates)) return true;
 
     return !!notification.project_id && accessibleProjectIds.has(notification.project_id);
-  }).map((notification) => ({
+  };
+
+  /**
+   * Varre o acervo em lotes até juntar a página pedida DE ITENS VISÍVEIS.
+   *
+   * A varredura é necessária porque a permissão não é expressável na consulta:
+   * depende de atividades, participantes e vínculos de projeto. Ler um lote
+   * grande e filtrar depois era o que fazia a lista parecer truncada.
+   */
+  const visiveis: NotificationRow[] = [];
+  const precisaAte = offset + pageSize;
+  let scans = 0;
+  let chunk = firstChunk;
+  let esgotou = false;
+  let varreduraIncompleta = false;
+  // Quando a varredura para cedo, ainda é preciso saber se TODAS as não lidas
+  // já foram vistas: elas vêm primeiro na ordenação, então o primeiro item já
+  // lido encontrado prova que não há mais nenhuma não lida adiante.
+  let passouDasNaoLidas = false;
+
+  while (true) {
+    const linhas = (chunk.data || []) as unknown as NotificationRow[];
+    for (const linha of linhas) {
+      if (linha.is_read) passouDasNaoLidas = true;
+      if (canSee(linha)) visiveis.push(linha);
+    }
+
+    // Lote menor que o pedido ⇒ chegou ao fim da tabela.
+    if (linhas.length < SCAN_CHUNK) {
+      esgotou = true;
+      break;
+    }
+    // Só para cedo depois de ter varrido TODAS as não lidas — senão o
+    // contador do sino sairia menor que a realidade, que foi o defeito
+    // original desta tela.
+    if (visiveis.length > precisaAte && (unreadOnly || passouDasNaoLidas)) break;
+
+    scans += 1;
+    if (scans >= MAX_SCANS) {
+      // Teto de segurança: não varre o acervo inteiro numa requisição só.
+      // `hasMore` continua true, então a UI oferece "carregar mais".
+      varreduraIncompleta = true;
+      break;
+    }
+
+    const from = scans * SCAN_CHUNK;
+    chunk = await fetchChunk(from, from + SCAN_CHUNK - 1);
+    if (chunk.error) {
+      return NextResponse.json({ error: chunk.error.message }, { status: 500 });
+    }
+  }
+
+  const pagina = visiveis.slice(offset, offset + pageSize).map((notification) => ({
     ...notification,
     read_at: notification.read_at ?? null,
   }));
 
-  return NextResponse.json({ notifications });
+  // Contagem de não lidas VISÍVEIS. É exata quando a varredura passou do
+  // último item não lido (ou chegou ao fim) — um contador que mente é pior
+  // que um que assume o próprio limite, e foi assim que esta tela enganou antes.
+  const unreadCount = visiveis.filter((n) => !n.is_read).length;
+  const unreadCountExact = esgotou || (passouDasNaoLidas && !varreduraIncompleta);
+  const hasMore = !esgotou || visiveis.length > offset + pageSize;
+
+  return NextResponse.json({
+    notifications: pagina,
+    hasMore,
+    offset,
+    limit: pageSize,
+    unreadCount,
+    unreadCountExact,
+  });
 }
