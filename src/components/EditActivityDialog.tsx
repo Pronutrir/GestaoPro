@@ -13,7 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2 } from "lucide-react";
+import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2, IndentIncrease, CornerDownRight } from "lucide-react";
+// Validação de movimento na EAP — a MESMA que o Backlog e o Kanban usam, para
+// as três telas recusarem exatamente as mesmas coisas (ciclo, self, marco).
+import { eapCanMoveInto, eapDescendantIds, type EapNodeLike } from "@/lib/eapModel";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { endVariance, varianceTone, varianceClasses } from "@/lib/dateVariance";
@@ -478,6 +481,10 @@ export const EditActivityDialog = ({
   const [openAssigneeSubId, setOpenAssigneeSubId] = useState<string | null>(null);
   const [hoursPopoverOpen, setHoursPopoverOpen] = useState(false);
   const [generatingWbs, setGeneratingWbs] = useState(false);
+  // Candidatas a "Dentro de" — a EAP do projeto inteira, para validar o
+  // movimento (ciclo/profundidade) sem ida ao servidor a cada troca.
+  const [eapNodes, setEapNodes] = useState<EapNodeLike[]>([]);
+  const [parentPickerOpen, setParentPickerOpen] = useState(false);
   // Campos OPCIONAIS revelados manualmente pelo "+ Adicionar campo" nesta sessão.
   // Um campo aparece se: já tem valor, OU foi revelado aqui. (padrão ClickUp/Jira/Linear)
   const [revealedFields, setRevealedFields] = useState<Set<OptionalFieldKey>>(new Set());
@@ -509,6 +516,24 @@ export const EditActivityDialog = ({
   useEffect(() => {
     if (formData.is_milestone && activeTab === "subtasks") setActiveTab("details");
   }, [formData.is_milestone, activeTab]);
+
+  // EAP do projeto, para o campo "Dentro de": valida o movimento no cliente
+  // (ciclo/profundidade) e mostra a árvore como ela é, em vez de uma lista
+  // alfabética onde não dá para saber ONDE o item vai parar.
+  useEffect(() => {
+    if (!open || !projectId) return;
+    let cancelado = false;
+    void supabase
+      .from("activities")
+      .select("id, title, parent_id, item_type, is_milestone, wbs_code, display_order")
+      .eq("project_id", projectId)
+      .is("trashed_at", null)
+      .then(({ data, error }) => {
+        if (cancelado || error) return;
+        setEapNodes((data || []) as EapNodeLike[]);
+      });
+    return () => { cancelado = true; };
+  }, [open, projectId]);
 
   // Horas do pai: quando há subatividades, o planejado é um rollup automático
   // (soma dos filhos diretos), somente-leitura — não existe mais divergência
@@ -1157,6 +1182,27 @@ export const EditActivityDialog = ({
         wbs_code: wbsToSave,
       };
 
+      // Trocou de pai? O trigger eap_nesting_rule só aceita agrupador
+      // ('fase'/'pacote') como pai — se o destino for folha, promove ANTES,
+      // senão o update volta como check_violation crua. Mesmo tratamento do
+      // LinkParentDialog; o rótulo exibido continua vindo do nível do wbs_code,
+      // então um "1.1" promovido segue aparecendo como Entrega, não vira Fase.
+      const novoPaiId = formData.parent_id || null;
+      const paiAnterior = (act as { parent_id?: string | null }).parent_id ?? null;
+      if (novoPaiId && novoPaiId !== paiAnterior) {
+        const { data: paiRow } = await supabase
+          .from("activities")
+          .select("id, item_type")
+          .eq("id", novoPaiId)
+          .maybeSingle();
+        const tipoPai = ((paiRow as { item_type?: string } | null)?.item_type || "atividade").toLowerCase();
+        if (paiRow && tipoPai !== "fase" && tipoPai !== "pacote") {
+          // Falha aqui não aborta o save: se o ambiente ainda não aceita 'fase'
+          // (migration de item_type pendente), o update abaixo dá o aviso certo.
+          await supabase.from("activities").update({ item_type: "fase" } as any).eq("id", novoPaiId);
+        }
+      }
+
       const compatPayload: Record<string, any> = { ...updatePayload };
       const droppedColumns: string[] = [];
       let downgradedItemType = false;
@@ -1782,6 +1828,148 @@ export const EditActivityDialog = ({
                     </div>
                   )}
   
+                  {/* Dentro de — onde o item fica na EAP. Vizinho do Código EAP
+                      porque os dois dizem a mesma coisa por vias diferentes: um
+                      pela posição real (parent_id), outro pela numeração.
+                      Só fora do createMode: na criação o pai já vem do contexto
+                      (quick-add sob um item) e o item ainda não tem descendentes
+                      para validar. */}
+                  {!createMode && (() => {
+                    const meuId = effectiveActivity?.id;
+                    if (!meuId) return null;
+
+                    // Self + descendentes: mover para lá desligaria os dois da raiz.
+                    const bloqueados = new Set<string>([meuId]);
+                    eapDescendantIds(eapNodes, [meuId]).forEach((id) => bloqueados.add(id));
+
+                    const porId = new Map(eapNodes.map((n) => [n.id, n]));
+                    const paiAtual = formData.parent_id ? porId.get(formData.parent_id) : null;
+
+                    // Árvore ordenada (pai seguido dos filhos) — a lista precisa
+                    // mostrar a hierarquia, senão não dá para saber onde se está.
+                    const filhosDe = new Map<string, EapNodeLike[]>();
+                    const raizes: EapNodeLike[] = [];
+                    eapNodes.forEach((n) => {
+                      if (n.parent_id && porId.has(n.parent_id)) {
+                        const arr = filhosDe.get(n.parent_id) || [];
+                        arr.push(n);
+                        filhosDe.set(n.parent_id, arr);
+                      } else raizes.push(n);
+                    });
+                    const linhas: Array<{ node: EapNodeLike; depth: number }> = [];
+                    const vistos = new Set<string>(); // dado já com ciclo não trava a lista
+                    const andar = (lista: EapNodeLike[], depth: number) => {
+                      for (const n of lista) {
+                        if (vistos.has(n.id)) continue;
+                        vistos.add(n.id);
+                        linhas.push({ node: n, depth });
+                        andar(filhosDe.get(n.id) || [], depth + 1);
+                      }
+                    };
+                    andar(raizes, 1);
+                    const opcoes = linhas.filter(
+                      ({ node }) => !bloqueados.has(node.id) && !node.is_milestone,
+                    );
+
+                    const escolher = (destinoId: string | null) => {
+                      const check = eapCanMoveInto(eapNodes, [meuId], destinoId);
+                      if (!check.ok) {
+                        toast({
+                          title: "Não dá para mover para aí",
+                          description: check.message,
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      // Avisa mas deixa seguir: a base já tem árvores de 6 níveis
+                      // e travar impediria justamente de reorganizá-las.
+                      if (check.warning) {
+                        toast({ title: "EAP ficando profunda", description: check.warning });
+                      }
+                      setFormData((f) => ({ ...f, parent_id: destinoId || "" }));
+                      setParentPickerOpen(false);
+                    };
+
+                    return (
+                      <PropertyRow
+                        iconClassName="text-primary"
+                        icon={<IndentIncrease className="w-3.5 h-3.5" />}
+                        label="Dentro de"
+                      >
+                        <Popover open={parentPickerOpen} onOpenChange={setParentPickerOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={readOnly}
+                              className="h-7 w-full justify-start text-xs font-normal gap-1.5 px-2.5"
+                            >
+                              {paiAtual ? (
+                                <>
+                                  <CornerDownRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                  {paiAtual.wbs_code && (
+                                    <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                                      {paiAtual.wbs_code}
+                                    </span>
+                                  )}
+                                  <span className="truncate">
+                                    {(paiAtual as { title?: string }).title || "item"}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  No topo da EAP (sem item acima)
+                                </span>
+                              )}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[380px] p-0" align="start">
+                            <div className="max-h-[280px] overflow-y-auto">
+                              <button
+                                type="button"
+                                onClick={() => escolher(null)}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-muted border-b"
+                              >
+                                No topo da EAP (sem item acima)
+                              </button>
+                              {opcoes.length === 0 ? (
+                                <p className="px-3 py-4 text-xs text-muted-foreground text-center">
+                                  Nenhum destino disponível.
+                                </p>
+                              ) : (
+                                opcoes.map(({ node, depth }) => (
+                                  <button
+                                    key={node.id}
+                                    type="button"
+                                    onClick={() => escolher(node.id)}
+                                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-xs hover:bg-muted"
+                                    style={{ paddingLeft: `${12 + (depth - 1) * 12}px` }}
+                                  >
+                                    {depth > 1 && (
+                                      <CornerDownRight className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+                                    )}
+                                    {node.wbs_code && (
+                                      <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                                        {node.wbs_code}
+                                      </span>
+                                    )}
+                                    <span className="truncate flex-1">
+                                      {(node as { title?: string }).title || "(sem título)"}
+                                    </span>
+                                    {depth >= 5 && (
+                                      <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                                    )}
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </PropertyRow>
+                    );
+                  })()}
+
                   {/* Código EAP/WBS (opcional — colapsa quando vazio) */}
                   {showWbs && (
                   <PropertyRow iconClassName="text-primary" icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">

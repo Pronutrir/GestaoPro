@@ -8,7 +8,7 @@ import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Diamond,
-  Rows3, MoreHorizontal, Pencil, Package,
+  Rows3, MoreHorizontal, Pencil, Package, IndentIncrease,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -38,6 +38,7 @@ import {
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { resolveEapKind, eapTypeOptions, type EapKind } from "@/lib/eapModel";
+import { LinkParentDialog } from "@/components/LinkParentDialog";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 
 interface Phase {
@@ -125,6 +126,12 @@ export const BacklogSection = ({
   const [editingTitleValue, setEditingTitleValue] = useState("");
   // Modo de seleção em lote: quando ativo, exibe checkboxes nas linhas
   const [selectMode, setSelectMode] = useState(false);
+  // Mover item para dentro de outro (troca parent_id). Menu de linha, não
+  // arraste: numa lista aninhada "soltar sobre" (aninha) e "soltar entre"
+  // (reordena) ficam a pixels de distância, e aninhar por engano é caro de
+  // desfazer. No Kanban o arraste faz sentido; aqui não.
+  const [moveIntoIds, setMoveIntoIds] = useState<string[] | null>(null);
+  const [moveIntoCurrentParent, setMoveIntoCurrentParent] = useState<string | null>(null);
   // Agrupar em raias (como no Kanban). "phase" preserva a árvore EAP atual;
   // as demais exibem grupos planos por dimensão. Persistido por projeto.
   type GroupBy = "phase" | "assignee" | "priority" | "status" | "type";
@@ -886,6 +893,20 @@ export const BacklogSection = ({
                 <DropdownMenuItem onSelect={() => onEditActivity(activity)}>
                   <Pencil className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
                 </DropdownMenuItem>
+                {/* Reorganizar a EAP é ação estrutural: mesma régua do Kanban
+                    (isAdmin). Desabilitado COM o motivo em vez de oculto —
+                    sumir vira "não consigo mover" sem pista do porquê. */}
+                <DropdownMenuItem
+                  disabled={!isAdmin}
+                  title={isAdmin ? undefined : "Você não tem permissão para reorganizar a EAP deste projeto"}
+                  onSelect={() => {
+                    if (!isAdmin) return;
+                    setMoveIntoIds([activity.id]);
+                    setMoveIntoCurrentParent(activity.parent_id ?? null);
+                  }}
+                >
+                  <IndentIncrease className="w-3.5 h-3.5 mr-2" /> Mover para dentro de…
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {/* Desabilitado COM o motivo em vez de oculto: sumir levava a
                     "não consigo excluir" sem pista nenhuma do porquê. */}
@@ -1322,6 +1343,18 @@ export const BacklogSection = ({
                 <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => setMoveDialogOpen(true)}>
                   <ArrowRight className="w-3.5 h-3.5" /> Mudar status ({selectedIds.size})
                 </Button>
+                {/* Mover em lote: o diálogo já valida o conjunto inteiro de uma
+                    vez (o destino não pode estar dentro de NENHUM selecionado). */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!isAdmin}
+                  title={isAdmin ? undefined : "Você não tem permissão para reorganizar a EAP deste projeto"}
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => { setMoveIntoIds([...selectedIds]); setMoveIntoCurrentParent(null); }}
+                >
+                  <IndentIncrease className="w-3.5 h-3.5" /> Mover para dentro de…
+                </Button>
               </>
             )}
             {/* Agrupar em raias — mesmo modelo do Kanban */}
@@ -1617,6 +1650,20 @@ export const BacklogSection = ({
           };
         })()}
       />
+
+      {/* Mover para dentro de outro item. A validação (ciclo, self, marco,
+          profundidade) mora em lib/eapModel — a mesma que o Kanban e a edição
+          usam, para as três telas recusarem exatamente as mesmas coisas. */}
+      {moveIntoIds && (
+        <LinkParentDialog
+          open={!!moveIntoIds}
+          onOpenChange={(o) => { if (!o) { setMoveIntoIds(null); setMoveIntoCurrentParent(null); } }}
+          projectId={projectId}
+          activityIds={moveIntoIds}
+          currentParentId={moveIntoCurrentParent}
+          onLinked={onDataChanged}
+        />
+      )}
 
       {/* Permanent Delete Confirmation */}
       <AlertDialog open={!!permanentDeleteId} onOpenChange={(open) => !open && setPermanentDeleteId(null)}>

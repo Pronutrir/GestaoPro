@@ -160,3 +160,202 @@ export function eapToPersisted(kind: EapKind): { item_type: "fase" | "atividade"
   if (kind === "fase" || kind === "entrega") return { item_type: "fase", is_milestone: false };
   return { item_type: "atividade", is_milestone: false };
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * MOVER ITEM NA EAP — validação compartilhada pelas três vias
+ *
+ * As três telas que reorganizam a EAP (campo "Dentro de" na edição, menu de
+ * linha no Backlog, arraste no Kanban) validam AQUI, e não cada uma na sua.
+ * Uma cópia divergente é o caminho para uma tela aceitar o que a outra recusa.
+ *
+ * O estrago que importa é o CICLO: se A vira filha de B e B já descende de A,
+ * o par inteiro se desliga da raiz e some das três telas de uma vez. O banco
+ * barra (trigger trg_validate_activity_hierarchy), mas só depois do clique —
+ * validar antes evita o erro cru e permite explicar o motivo.
+ *
+ * Toda travessia usa Set de visitados: se o dado JÁ estiver com um ciclo
+ * (gravado antes desta validação existir), percorrer sem isso trava a aba.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Entrada mínima para validar um movimento. */
+export interface EapNodeLike extends EapItemLike {
+  id: string;
+  parent_id?: string | null;
+}
+
+/**
+ * Profundidade a partir da qual a interface avisa (sem impedir).
+ *
+ * A base já tem árvores de 6 níveis, então BLOQUEAR invalidaria o que existe e
+ * — pior — impediria de mover justamente os itens que precisam ser consertados.
+ * O aviso é orientação, não trava.
+ */
+export const EAP_DEPTH_WARN = 5;
+
+export type EapMoveBlockReason = "self" | "cycle" | "milestone-parent" | "not-found" | "other-project";
+
+export interface EapMoveCheck {
+  /** false ⇒ o movimento não pode ser gravado (o banco também recusaria). */
+  ok: boolean;
+  reason?: EapMoveBlockReason;
+  /** Mensagem pronta para o usuário — o motivo, não o código do erro. */
+  message?: string;
+  /** Profundidade que o item passaria a ter (1 = raiz). */
+  depth?: number;
+  /** Preenchido quando passa de EAP_DEPTH_WARN: avisa, mas `ok` continua true. */
+  warning?: string;
+}
+
+/** Índice por id, para as travessias não varrerem a lista a cada salto. */
+function indexById<T extends EapNodeLike>(nodes: T[]): Map<string, T> {
+  const map = new Map<string, T>();
+  nodes.forEach((n) => map.set(n.id, n));
+  return map;
+}
+
+/**
+ * Todos os descendentes de `rootIds` (sem incluir os próprios).
+ *
+ * É o conjunto que NÃO pode ser destino: mover um item para dentro da própria
+ * subárvore é exatamente o ciclo que desliga os dois da raiz.
+ */
+export function eapDescendantIds(nodes: EapNodeLike[], rootIds: string[]): Set<string> {
+  const childrenBy = new Map<string, string[]>();
+  nodes.forEach((n) => {
+    if (!n.parent_id) return;
+    const arr = childrenBy.get(n.parent_id) || [];
+    arr.push(n.id);
+    childrenBy.set(n.parent_id, arr);
+  });
+
+  const found = new Set<string>();
+  const stack = [...rootIds];
+  const seen = new Set<string>(rootIds); // anti-ciclo: dado já corrompido não trava a UI
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const childId of childrenBy.get(current) || []) {
+      if (seen.has(childId)) continue;
+      seen.add(childId);
+      found.add(childId);
+      stack.push(childId);
+    }
+  }
+  return found;
+}
+
+/**
+ * Profundidade do item na árvore: 1 = raiz, 2 = filho de raiz, e assim por diante.
+ * Conta pelo `parent_id` real, não pelo wbs_code (que pode faltar).
+ */
+export function eapDepthOf(nodes: EapNodeLike[], id: string): number {
+  const byId = indexById(nodes);
+  let depth = 1;
+  let current = byId.get(id);
+  const seen = new Set<string>([id]);
+  while (current?.parent_id) {
+    if (seen.has(current.parent_id)) break; // ciclo pré-existente: para em vez de girar
+    seen.add(current.parent_id);
+    const parent = byId.get(current.parent_id);
+    if (!parent) break; // pai fora da lista carregada (filtro/paginação) — não conta a mais
+    depth += 1;
+    current = parent;
+  }
+  return depth;
+}
+
+/** Altura da subárvore: 1 quando o item é folha. */
+function subtreeHeight(nodes: EapNodeLike[], rootId: string): number {
+  const childrenBy = new Map<string, string[]>();
+  nodes.forEach((n) => {
+    if (!n.parent_id) return;
+    const arr = childrenBy.get(n.parent_id) || [];
+    arr.push(n.id);
+    childrenBy.set(n.parent_id, arr);
+  });
+
+  let height = 1;
+  let frontier = [rootId];
+  const seen = new Set<string>([rootId]);
+  while (frontier.length > 0) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const childId of childrenBy.get(id) || []) {
+        if (seen.has(childId)) continue;
+        seen.add(childId);
+        next.push(childId);
+      }
+    }
+    if (next.length > 0) height += 1;
+    frontier = next;
+  }
+  return height;
+}
+
+/**
+ * Pode `movingIds` virar filho de `targetParentId`?
+ *
+ * `targetParentId = null` significa "soltar na raiz" — sempre permitido.
+ * O aviso de profundidade considera a subárvore INTEIRA que vai junto: mover um
+ * ramo de 3 níveis para dentro do nível 4 chega ao 6, mesmo que o item movido
+ * sozinho parecesse raso.
+ */
+export function eapCanMoveInto(
+  nodes: EapNodeLike[],
+  movingIds: string[],
+  targetParentId: string | null,
+): EapMoveCheck {
+  if (movingIds.length === 0) return { ok: false, reason: "not-found", message: "Nenhum item selecionado." };
+  if (targetParentId === null) return { ok: true, depth: 1 };
+
+  if (movingIds.includes(targetParentId)) {
+    return {
+      ok: false,
+      reason: "self",
+      message: "Um item não pode ficar dentro de si mesmo.",
+    };
+  }
+
+  const byId = indexById(nodes);
+  const target = byId.get(targetParentId);
+  if (!target) {
+    return {
+      ok: false,
+      reason: "not-found",
+      message: "O item de destino não foi encontrado neste projeto.",
+    };
+  }
+
+  // Marco é folha de controle por definição — nunca agrupa. O trigger do banco
+  // também recusa (eap_is_group exige não-milestone).
+  if (target.is_milestone) {
+    return {
+      ok: false,
+      reason: "milestone-parent",
+      message: "Marco não agrupa: escolha uma fase, entrega ou atividade como destino.",
+    };
+  }
+
+  const descendants = eapDescendantIds(nodes, movingIds);
+  if (descendants.has(targetParentId)) {
+    return {
+      ok: false,
+      reason: "cycle",
+      message: "Esse destino está dentro do item que você está movendo — os dois sumiriam da EAP.",
+    };
+  }
+
+  // Profundidade final = onde o pai está + o ramo mais alto que vai junto.
+  const parentDepth = eapDepthOf(nodes, targetParentId);
+  const tallest = Math.max(...movingIds.map((id) => subtreeHeight(nodes, id)));
+  const depth = parentDepth + tallest;
+
+  if (depth > EAP_DEPTH_WARN) {
+    return {
+      ok: true,
+      depth,
+      warning: `A EAP chegaria ao nível ${depth}. Acima de ${EAP_DEPTH_WARN} níveis ela fica difícil de ler — considere agrupar antes.`,
+    };
+  }
+
+  return { ok: true, depth };
+}
