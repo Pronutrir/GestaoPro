@@ -485,6 +485,7 @@ export const EditActivityDialog = ({
   // movimento (ciclo/profundidade) sem ida ao servidor a cada troca.
   const [eapNodes, setEapNodes] = useState<EapNodeLike[]>([]);
   const [parentPickerOpen, setParentPickerOpen] = useState(false);
+  const [parentSearch, setParentSearch] = useState("");
   // Campos OPCIONAIS revelados manualmente pelo "+ Adicionar campo" nesta sessão.
   // Um campo aparece se: já tem valor, OU foi revelado aqui. (padrão ClickUp/Jira/Linear)
   const [revealedFields, setRevealedFields] = useState<Set<OptionalFieldKey>>(new Set());
@@ -1867,9 +1868,14 @@ export const EditActivityDialog = ({
                       }
                     };
                     andar(raizes, 1);
-                    const opcoes = linhas.filter(
-                      ({ node }) => !bloqueados.has(node.id) && !node.is_milestone,
-                    );
+                    const busca = parentSearch.trim().toLowerCase();
+                    const opcoes = linhas
+                      .filter(({ node }) => !bloqueados.has(node.id) && !node.is_milestone)
+                      .filter(({ node }) => {
+                        if (!busca) return true;
+                        const titulo = ((node as { title?: string }).title || "").toLowerCase();
+                        return titulo.includes(busca) || (node.wbs_code || "").toLowerCase().includes(busca);
+                      });
 
                     const escolher = (destinoId: string | null) => {
                       const check = eapCanMoveInto(eapNodes, [meuId], destinoId);
@@ -1888,84 +1894,130 @@ export const EditActivityDialog = ({
                       }
                       setFormData((f) => ({ ...f, parent_id: destinoId || "" }));
                       setParentPickerOpen(false);
+                      setParentSearch("");
                     };
 
                     return (
                       <PropertyRow
+                        wide
                         iconClassName="text-primary"
                         icon={<IndentIncrease className="w-3.5 h-3.5" />}
                         label="Dentro de"
                       >
-                        <Popover open={parentPickerOpen} onOpenChange={setParentPickerOpen}>
-                          <PopoverTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={readOnly}
-                              className="h-7 w-full justify-start text-xs font-normal gap-1.5 px-2.5"
-                            >
-                              {paiAtual ? (
-                                <>
-                                  <CornerDownRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                  {paiAtual.wbs_code && (
-                                    <span className="font-mono text-[10px] text-muted-foreground shrink-0">
-                                      {paiAtual.wbs_code}
+                        <div className="flex items-center gap-1.5 w-full min-w-0">
+                          <Popover
+                            open={parentPickerOpen}
+                            onOpenChange={(o) => {
+                              setParentPickerOpen(o);
+                              // Limpa ao fechar: senão reabre já filtrado pela
+                              // busca anterior e parece que a EAP encolheu.
+                              if (!o) setParentSearch("");
+                            }}
+                          >
+                            <PopoverTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={readOnly}
+                                className="h-8 flex-1 min-w-0 justify-between text-xs font-normal gap-1.5 px-2.5"
+                              >
+                                <span className="flex items-center gap-1.5 min-w-0">
+                                  {paiAtual ? (
+                                    <>
+                                      <CornerDownRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                      {paiAtual.wbs_code && (
+                                        <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                                          {paiAtual.wbs_code}
+                                        </span>
+                                      )}
+                                      <span className="truncate">
+                                        {(paiAtual as { title?: string }).title || "item"}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-muted-foreground">
+                                      No topo da EAP
                                     </span>
                                   )}
-                                  <span className="truncate">
-                                    {(paiAtual as { title?: string }).title || "item"}
-                                  </span>
-                                </>
-                              ) : (
-                                <span className="text-muted-foreground">
-                                  No topo da EAP (sem item acima)
                                 </span>
-                              )}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[380px] p-0" align="start">
-                            <div className="max-h-[280px] overflow-y-auto">
-                              <button
-                                type="button"
-                                onClick={() => escolher(null)}
-                                className="w-full text-left px-3 py-2 text-xs hover:bg-muted border-b"
-                              >
-                                No topo da EAP (sem item acima)
-                              </button>
-                              {opcoes.length === 0 ? (
-                                <p className="px-3 py-4 text-xs text-muted-foreground text-center">
-                                  Nenhum destino disponível.
-                                </p>
-                              ) : (
-                                opcoes.map(({ node, depth }) => (
-                                  <button
-                                    key={node.id}
-                                    type="button"
-                                    onClick={() => escolher(node.id)}
-                                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-xs hover:bg-muted"
-                                    style={{ paddingLeft: `${12 + (depth - 1) * 12}px` }}
-                                  >
-                                    {depth > 1 && (
-                                      <CornerDownRight className="w-3 h-3 text-muted-foreground/50 shrink-0" />
-                                    )}
-                                    {node.wbs_code && (
-                                      <span className="font-mono text-[10px] text-muted-foreground shrink-0">
-                                        {node.wbs_code}
+                                {/* Chevron: sem ele o campo parecia um rótulo
+                                    somente-leitura, não um seletor. */}
+                                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[380px] p-0" align="start">
+                              {/* Busca: a EAP de um projeto grande não cabe na
+                                  lista, e rolar até achar o destino não é caminho. */}
+                              <div className="p-2 border-b">
+                                <Input
+                                  autoFocus
+                                  value={parentSearch}
+                                  onChange={(e) => setParentSearch(e.target.value)}
+                                  placeholder="Buscar por título ou código..."
+                                  className="h-7 text-xs"
+                                />
+                              </div>
+                              <div className="max-h-[280px] overflow-y-auto">
+                                <button
+                                  type="button"
+                                  onClick={() => escolher(null)}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted border-b text-muted-foreground"
+                                >
+                                  No topo da EAP (sem item acima)
+                                </button>
+                                {opcoes.length === 0 ? (
+                                  <p className="px-3 py-4 text-xs text-muted-foreground text-center">
+                                    {parentSearch ? "Nenhum item encontrado." : "Nenhum destino disponível."}
+                                  </p>
+                                ) : (
+                                  opcoes.map(({ node, depth }) => (
+                                    <button
+                                      key={node.id}
+                                      type="button"
+                                      onClick={() => escolher(node.id)}
+                                      className={cn(
+                                        "w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-xs hover:bg-muted",
+                                        node.id === formData.parent_id && "bg-muted/60 font-medium",
+                                      )}
+                                      style={{ paddingLeft: `${12 + (depth - 1) * 12}px` }}
+                                    >
+                                      {depth > 1 && (
+                                        <CornerDownRight className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+                                      )}
+                                      {node.wbs_code && (
+                                        <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                                          {node.wbs_code}
+                                        </span>
+                                      )}
+                                      <span className="truncate flex-1">
+                                        {(node as { title?: string }).title || "(sem título)"}
                                       </span>
-                                    )}
-                                    <span className="truncate flex-1">
-                                      {(node as { title?: string }).title || "(sem título)"}
-                                    </span>
-                                    {depth >= 5 && (
-                                      <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
-                                    )}
-                                  </button>
-                                ))
-                              )}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
+                                      {depth >= 5 && (
+                                        <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                                      )}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+
+                          {/* Tirar de dentro sem abrir o seletor: era a única
+                              forma de voltar à raiz e exigia abrir a lista. */}
+                          {paiAtual && !readOnly && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                              title="Tirar de dentro (mover para o topo da EAP)"
+                              onClick={() => escolher(null)}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </PropertyRow>
                     );
                   })()}
