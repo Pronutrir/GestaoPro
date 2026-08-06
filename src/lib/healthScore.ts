@@ -17,10 +17,14 @@ export async function calculateHealthScore(projectId: string): Promise<HealthSco
   const [activitiesRes, risksRes, projectRes, stagesRes] = await Promise.all([
     // workflow_stage_id é necessário para respeitar a coluna final do Kanban:
     // sem ele, uma atividade encerrada no quadro contava como atrasada aqui.
+    // is_trashed: atividade arquivada não conta como atrasada. Sem este filtro
+    // (que a consulta de riscos logo abaixo sempre teve), arquivar uma tarefa
+    // vencida não melhorava a saúde do projeto — ela seguia pesando.
     supabase
       .from("activities")
       .select("id, status, end_date, workflow_stage_id")
-      .eq("project_id", projectId),
+      .eq("project_id", projectId)
+      .eq("is_trashed", false),
     supabase.from("risks").select("id, probability, impact, status").eq("project_id", projectId).eq("is_trashed", false),
     supabase.from("projects").select("budget_planned, budget_used, updated_at").eq("id", projectId).single(),
     supabase.from("workflow_stages").select("id, is_final").eq("project_id", projectId),

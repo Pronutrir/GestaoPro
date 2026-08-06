@@ -475,7 +475,7 @@ export default function ProjectDetailsPage() {
       const projectPromise = (async () => {
         const primary = await supabase
           .from("projects")
-          .select("created_by, owner, assignees, manager")
+          .select("created_by, owner, assignees, manager, is_trashed")
           .eq("id", id)
           .maybeSingle();
 
@@ -485,7 +485,7 @@ export default function ProjectDetailsPage() {
 
         const fallback = await supabase
           .from("projects")
-          .select("owner, assignees")
+          .select("owner, assignees, is_trashed")
           .eq("id", id)
           .maybeSingle();
 
@@ -535,8 +535,14 @@ export default function ProjectDetailsPage() {
       const hasValidMembership = !!perms?.id && normalizedInvitationStatus !== "declined";
       const hasProjectWideAccess = creatorMatch || ownerMatch || managerMatch;
 
+      // Ter uma atividade dentro de um projeto ARQUIVADO não abre a porta:
+      // quem tem vínculo formal (membro, criador, líder, participante) segue
+      // entrando para consultar o histórico, mas o acesso por tarefa solta
+      // acompanha o arquivamento do projeto.
+      const projectTrashed = projectRow?.is_trashed === true;
+
       let activityAssignmentMatch = false;
-      if (!hasValidMembership && !hasProjectWideAccess && !assigneeMatch) {
+      if (!projectTrashed && !hasValidMembership && !hasProjectWideAccess && !assigneeMatch) {
         const { data: projectActivities } = await supabase
           .from("activities")
           .select("assigned_to, participants")

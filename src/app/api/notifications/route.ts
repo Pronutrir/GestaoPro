@@ -141,14 +141,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
-  const activities = (activitiesRes.data || []) as ActivityRow[];
+  // Projetos VIVOS (`projects` já vem com is_trashed=false). Todo caminho de
+  // acesso é conferido contra esta lista: sem isso, um vínculo de membro ou uma
+  // atividade viva DENTRO de um projeto arquivado devolvia o projeto ao
+  // conjunto acessível — e notificações de projeto na lixeira voltavam ao sino.
+  const liveProjectIds = new Set<string>((projectsRes.data || []).map((p) => p.id));
+
+  // Atividades de projeto na lixeira saem já aqui: elas alimentam tanto o
+  // conjunto acessível quanto o `canSee` de notificação com activity_id.
+  const activities = ((activitiesRes.data || []) as ActivityRow[]).filter((activity) =>
+    liveProjectIds.has(activity.project_id),
+  );
   const activityById = new Map(activities.map((activity) => [activity.id, activity]));
 
   const accessibleProjectIds = new Set<string>();
 
   for (const member of membersRes.data || []) {
     const status = (member.invitation_status || 'accepted').toLowerCase();
-    if (status !== 'declined') {
+    if (status !== 'declined' && liveProjectIds.has(member.project_id)) {
       accessibleProjectIds.add(member.project_id);
     }
   }
@@ -166,8 +176,13 @@ export async function GET(request: Request) {
     }
   }
 
-  /** O usuário pode ver esta notificação? Mesma regra de antes. */
+  /** O usuário pode ver esta notificação? */
   const canSee = (notification: NotificationRow) => {
+    // Projeto na lixeira não notifica ninguém, nem o admin: arquivar o projeto
+    // é justamente o gesto de tirá-lo da frente. Vem ANTES do atalho de admin,
+    // que de outro modo devolveria o acervo inteiro ao sino.
+    if (notification.project_id && !liveProjectIds.has(notification.project_id)) return false;
+
     if (isAdmin) return true;
     if (notification.target_user_id === user.id) return true;
     if (notification.target_user_id) return false;
