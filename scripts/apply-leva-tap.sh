@@ -90,6 +90,7 @@ run 20260802120000 "supabase/migrations/20260802120000_activity_comments_rich.sq
 run 20260802130000 "supabase/migrations/20260802130000_meetings_actions_and_types.sql"    "Reuniões: tipos, gravação e ações"
 run 20260804120000 "supabase/migrations/20260804120000_vinculo_atividade.sql"             "Vínculo com atividade (reunião, lição, orçamento)"
 run 20260805100000 "supabase/migrations/20260805100000_pendencias_acionaveis.sql"         "Pendências: responsável na ação de reunião, dono e prazo na lição"
+run 20260805140000 "supabase/migrations/20260805140000_activity_owner_can_edit.sql"       "Responsável edita a própria atividade (termina o modelo já assumido no código)"
 
 echo ""
 echo "══════════════════════════════════════════════════════════"

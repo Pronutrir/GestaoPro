@@ -1845,6 +1845,9 @@ export default function ProjectDetailsPage() {
           projectId={id!} isQualityProject={isQualityProject}
           consumedMinutesByActivity={consumedMinutesByActivity}
           initialTab={editActivityInitialTab}
+          // Sem isto o diálogo deixava preencher tudo e só falhava ao salvar.
+          // Quem é responsável pela atividade edita mesmo com isto falso.
+          canEditProject={canEdit}
         />
         {project && (
           <EditActivityDialog

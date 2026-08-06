@@ -27,6 +27,7 @@ import { GutPrioritySelector } from "@/components/GutPrioritySelector";
 import { GUT_META, gutLabel, gutScore, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon, Wand2, EyeOff } from "lucide-react";
 import { BookOpen } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
@@ -201,6 +202,12 @@ interface EditActivityDialogProps {
   onBackToParent?: () => void;
   /** Minutes apontados por atividade (fonte: time_entries) para cálculo de tempo real. */
   consumedMinutesByActivity?: Record<string, number>;
+  /**
+   * Permissão de edição no PROJETO. Sem isto o diálogo deixava preencher tudo e
+   * só falhava ao salvar, com erro genérico — 34 dos 75 membros nessa situação.
+   * Quem é responsável pela atividade edita mesmo sem isto (ver `canEditThis`).
+   */
+  canEditProject?: boolean;
 }
 
 /** Parse hours as decimal from "Xh Ym" or plain number */
@@ -394,8 +401,10 @@ export const EditActivityDialog = ({
   onActivityCreated,
   parentActivityTitle, onBackToParent,
   consumedMinutesByActivity = {},
+  canEditProject = true,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
+  const { user: authUser, profile: authProfile } = useAuth();
   const ensureProjectUnlocked = () => {
     if (!projectLocked) return true;
     toast({
@@ -408,6 +417,33 @@ export const EditActivityDialog = ({
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
   const [creatingDraft, setCreatingDraft] = useState(false);
   const effectiveActivity = createMode ? draftActivity : activity;
+
+  /**
+   * Espelha a regra do banco (`can_member_action` OR `is_activity_owner`): quem
+   * é responsável ou participante edita a própria atividade mesmo sem permissão
+   * geral no projeto — modelo do Asana, e o que EditProjectDialog já assumia ao
+   * gravar novos membros com can_edit=false.
+   *
+   * Os campos são texto livre (uuid, e-mail ou nome digitado), por isso a
+   * comparação testa as três formas. Valores vazios são descartados:
+   * sem isso, um perfil sem e-mail casaria com assigned_to vazio e daria
+   * permissão a qualquer um numa atividade sem responsável.
+   */
+  const souResponsavel = (() => {
+    if (!effectiveActivity || !authUser?.id) return false;
+    const identidades = new Set(
+      [authUser.id, authProfile?.email, authProfile?.full_name]
+        .filter((v): v is string => !!v && v.trim().length > 0)
+        .map((v) => v.trim().toLowerCase()),
+    );
+    const bate = (v?: string | null) => !!v && identidades.has(v.trim().toLowerCase());
+    if (bate(effectiveActivity.assigned_to)) return true;
+    return ((effectiveActivity as { participants?: string[] }).participants ?? []).some(bate);
+  })();
+
+  // createMode: quem está criando obviamente pode preencher o que criou.
+  const canEditThis = createMode || canEditProject || souResponsavel;
+  const readOnly = !canEditThis;
   const { blockers, isBlocked: isBlockedByOthers } = useTaskBlockers(effectiveActivity?.id);
   const [formData, setFormData] = useState({
     title: "", description: "", assigned_to: "",
@@ -1050,6 +1086,18 @@ export const EditActivityDialog = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ensureProjectUnlocked()) return;
+    // Rede de segurança: os campos já estão desabilitados, mas o formulário
+    // ainda pode ser submetido por Enter. Antes o pedido ia ao banco, era
+    // recusado pelo RLS e voltava como "Erro ao salvar" — genérico o bastante
+    // para parecer falha do sistema em vez de falta de permissão.
+    if (readOnly) {
+      toast({
+        title: "Sem permissão para editar",
+        description: "Você pode ver esta atividade, mas não alterá-la. Fale com o gestor do projeto.",
+        variant: "destructive",
+      });
+      return;
+    }
     const act = createMode ? draftActivity : activity;
     if (!act) return;
     if (dateRangeInvalid) {
@@ -1365,9 +1413,41 @@ export const EditActivityDialog = ({
             </div>
           )}
         </DialogHeader>
+
+        {/* Diz ANTES por que os campos estão travados. Sem isto a pessoa
+            preenchia tudo e só descobria ao salvar, com erro genérico. */}
+        {readOnly && (
+          <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-[13px] text-warning">
+            <Lock className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>
+              <b className="font-semibold">Somente leitura.</b> Você não tem permissão
+              para editar atividades neste projeto. Se for o responsável por ela,
+              a edição libera automaticamente.
+            </span>
+          </div>
+        )}
+        {/* Quem edita só por ser responsável precisa saber de onde vem o acesso
+            — senão parece inconsistente poder mexer numa atividade e não noutra. */}
+        {!readOnly && !canEditProject && souResponsavel && (
+          <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-[13px] text-primary">
+            <UserCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>
+              Você está editando porque é <b className="font-semibold">responsável</b> por
+              esta atividade.
+            </span>
+          </div>
+        )}
+
         {/* Conversa em 400px (era 360, e o card interno tinha ~300 úteis):
             cada frase quebrava em três linhas no espaço de interação do time. */}
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-5">
+        <form onSubmit={handleSubmit} className="contents">
+        {/* fieldset em vez de `disabled` campo a campo: são dezenas de inputs,
+            e um esquecido deixaria a pessoa digitar num campo que não grava.
+            O elemento nativo desabilita tudo dentro dele de uma vez. */}
+        <fieldset
+          disabled={readOnly}
+          className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-5 border-0 p-0 m-0 min-w-0 disabled:opacity-95"
+        >
           {/* ========= COLUNA PRINCIPAL (esquerda) ========= */}
           <div className="space-y-5 min-w-0">
           {/* ============= CABEÇALHO COMPACTO (estilo ClickUp) ============= */}
@@ -2836,8 +2916,11 @@ export const EditActivityDialog = ({
               </div>
             </aside>
           )}
+        </fieldset>
 
-          <DialogFooter className="gap-2 lg:col-span-2">
+        {/* Rodapé FORA do fieldset: "Cancelar" e "Fechar" precisam funcionar
+            mesmo em somente-leitura. Só "Salvar" é desabilitado, por readOnly. */}
+        <DialogFooter className="gap-2 lg:col-span-2">
             {act && !createMode && act.status !== "completed" && (
               <Button
                 type="button"
@@ -2932,7 +3015,13 @@ export const EditActivityDialog = ({
               </Button>
             )}
             <Button type="button" variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
-            <Button type="submit">{createMode ? "Criar Atividade" : "Salvar Alterações"}</Button>
+            <Button
+              type="submit"
+              disabled={readOnly}
+              title={readOnly ? "Você não tem permissão para editar esta atividade" : undefined}
+            >
+              {createMode ? "Criar Atividade" : "Salvar Alterações"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
