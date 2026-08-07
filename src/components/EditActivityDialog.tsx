@@ -60,7 +60,10 @@ const PropertyRow = ({ icon, label, children, wide, iconClassName }: {
   /** Cor do ícone do rótulo — dá vida à informação (padrão: cinza discreto). */
   iconClassName?: string;
 }) => (
-  <div className={cn("flex flex-col gap-1 min-w-0", wide && "sm:col-span-2")}>
+  // xl:col-span-3 junto com sm:col-span-2: sem ele, um campo `wide` numa grade
+  // de 3 colunas ocuparia só 2 e deixaria um buraco na terceira. "Linha
+  // inteira" precisa valer em qualquer densidade.
+  <div className={cn("flex flex-col gap-1 min-w-0", wide && "sm:col-span-2 xl:col-span-3")}>
     <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
       <span className={cn("text-muted-foreground/70", iconClassName)}>{icon}</span>
       {label}
@@ -96,7 +99,12 @@ const FieldBand = ({ step, title, children }: {
       </span>
       {title}
     </div>
-    <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">{children}</div>
+    {/* 3 colunas a partir de xl: com o diálogo em ~1400px e a conversa levando
+        400, a coluna do formulário passa de 900px — larga o bastante para três
+        campos por linha. Em 2 colunas, Status/Dentro de/Código EAP viravam
+        três linhas e a faixa 1 não cabia numa dobra. `wide` continua ocupando
+        a linha inteira em qualquer densidade. */}
+    <div className="p-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-4 gap-y-3">{children}</div>
   </div>
 );
 
@@ -1359,36 +1367,44 @@ export const EditActivityDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      {/* grid-cols-1: o DialogContent do shadcn é `display:grid`, e o
-          `<form className="contents">` abaixo dissolve o form, promovendo o
-          <fieldset> a filho DIRETO deste grid. Como o fieldset declara duas
-          colunas (conteúdo + conversa de 400px), o próprio DialogContent
-          herdava esse rastro e passava a ter duas colunas: o cabeçalho
-          "Editar Atividade" caía na primeira, AO LADO do conteúdo, deixando
-          uma faixa vazia gigante à esquerda em vez de ficar acima dele.
-          Fixar uma coluna aqui devolve o cabeçalho ao topo; o fieldset
-          continua com as duas colunas dele, por dentro. */}
-      <DialogContent className="!max-w-[96vw] w-[96vw] h-[95vh] max-h-[95vh] overflow-y-auto grid-cols-1">
-        <DialogHeader>
-          {parentActivityTitle && onBackToParent && (
-            <button
-              type="button"
-              onClick={onBackToParent}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors mb-2 w-fit"
-              title="Voltar para a atividade principal"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span className="truncate max-w-[480px]">
-                Voltar para <span className="font-medium text-foreground">{parentActivityTitle}</span>
-              </span>
-            </button>
-          )}
-          <DialogTitle className="text-base font-semibold">
-            {createMode ? "Nova Atividade" : parentActivityTitle ? "Editar Sub-atividade" : "Editar Atividade"}
-          </DialogTitle>
+      {/* Largura: 96vw sem teto dava ~1840px numa tela de 1920 — linhas longas
+          demais para ler um formulário. O teto de 1400px é a prática de
+          ClickUp/Linear/Jira: usa a tela grande sem esticar o conteúdo.
+
+          `flex flex-col` em vez do `grid` padrão do shadcn: o corpo abaixo usa
+          `<form className="contents">`, que dissolve o form e promove o
+          <fieldset> a filho DIRETO daqui. Enquanto isto era um grid, as duas
+          colunas declaradas no fieldset vazavam para o diálogo inteiro e o
+          cabeçalho caía AO LADO do conteúdo. Em coluna flex, cada filho ocupa
+          a largura toda e as colunas do fieldset ficam contidas nele. */}
+      <DialogContent className="!max-w-[1400px] w-[96vw] h-[95vh] max-h-[95vh] overflow-hidden flex flex-col gap-3">
+        {/* Cabeçalho numa LINHA: título à esquerda, identificação à direita.
+            Empilhado, título e metadados ocupavam duas linhas e um bloco alto —
+            ~40px da primeira dobra gastos com o que já se sabe (que é a tela de
+            editar atividade). `sm:` porque em tela estreita empilhar é o certo.
+            `pr-8` abre espaço para o X de fechar, que é absoluto no canto. */}
+        <DialogHeader className="shrink-0 space-y-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4 pr-8">
+          <div className="min-w-0">
+            {parentActivityTitle && onBackToParent && (
+              <button
+                type="button"
+                onClick={onBackToParent}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors mb-1 w-fit"
+                title="Voltar para a atividade principal"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="truncate max-w-[480px]">
+                  Voltar para <span className="font-medium text-foreground">{parentActivityTitle}</span>
+                </span>
+              </button>
+            )}
+            <DialogTitle className="text-base font-semibold">
+              {createMode ? "Nova Atividade" : parentActivityTitle ? "Editar Sub-atividade" : "Editar Atividade"}
+            </DialogTitle>
+          </div>
           {act && !createMode && (
             <div
-              className="flex items-center gap-2 text-[11px] text-muted-foreground pt-0.5 min-w-0 overflow-hidden whitespace-nowrap"
+              className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0 overflow-hidden whitespace-nowrap sm:justify-end shrink-0"
               title={[
                 `Criada em ${new Date(act.created_at).toLocaleDateString("pt-BR")}`,
                 (creatorName || creatorEmail) && `por ${creatorName || creatorEmail}`,
@@ -1498,9 +1514,20 @@ export const EditActivityDialog = ({
           </div>
         )}
 
+        {/* O FORM é o grid — não mais `className="contents"`.
+            Com `contents` o form era dissolvido e o <fieldset> virava filho
+            direto do DialogContent, fazendo as duas colunas daqui vazarem para
+            o diálogo inteiro: o cabeçalho ia parar AO LADO do conteúdo, com uma
+            faixa vazia enorme à esquerda. Agora a estrutura é honesta —
+            DialogContent empilha (cabeçalho, avisos, form) e as colunas ficam
+            contidas aqui dentro.
+
+            flex-1 + overflow-y-auto: a rolagem passou para o corpo, então o
+            cabeçalho fica fixo no topo e o rodapé com "Salvar" fica sempre
+            visível na base, em vez de sumir ao rolar. */}
+        <form id="edit-activity-form" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto pr-1">
         {/* Conversa em 400px (era 360, e o card interno tinha ~300 úteis):
             cada frase quebrava em três linhas no espaço de interação do time. */}
-        <form onSubmit={handleSubmit} className="contents">
         {/* fieldset em vez de `disabled` campo a campo: são dezenas de inputs,
             e um esquecido deixaria a pessoa digitar num campo que não grava.
             O elemento nativo desabilita tudo dentro dele de uma vez. */}
@@ -1822,7 +1849,7 @@ export const EditActivityDialog = ({
                       escondido justamente de quem ainda não tinha criado nenhuma,
                       ou seja, quem mais precisava descobrir que o recurso existe. */}
                   {projectId && (
-                    <div className="min-w-0 sm:col-span-2">
+                    <div className="min-w-0 sm:col-span-2 xl:col-span-3">
                       <PropertyRow
                         wide
                         iconClassName="text-primary"
@@ -2415,7 +2442,7 @@ export const EditActivityDialog = ({
                       um controle DESABILITADO — e é a porta de entrada de Tempo,
                       Custo e Código EAP. Ganha a cor da plataforma e diz o que falta. */}
                   {hiddenChips.length > 0 && (
-                    <div className="sm:col-span-2">
+                    <div className="sm:col-span-2 xl:col-span-3">
                       <Popover open={addFieldOpen} onOpenChange={setAddFieldOpen}>
                         <PopoverTrigger asChild>
                           <button
@@ -3148,9 +3175,14 @@ export const EditActivityDialog = ({
 
           </div>
 
-          {/* ========= PAINEL LATERAL (direita) — CONVERSA ========= */}
+          {/* ========= PAINEL LATERAL (direita) — CONVERSA =========
+              A rolagem agora é do <form>, não do diálogo — então a conversa
+              gruda no topo DELE. A altura acompanha a área rolável (95vh menos
+              cabeçalho, abas e rodapé, que passaram a ser fixos), em vez do
+              desconto antigo de 150px, calculado quando o diálogo inteiro
+              rolava. */}
           {act && (
-            <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-3 lg:sticky lg:top-0 lg:h-[calc(95vh-150px)]">
+            <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-3 lg:sticky lg:top-0 lg:h-[calc(95vh-190px)]">
               {/* Card com identidade própria: a Conversa é o espaço de interação do time. */}
               <div className="rounded-xl border border-primary/25 bg-card flex-1 min-h-0 flex flex-col overflow-hidden shadow-sm">
                 {/* Faixa de destaque na cor primária */}
@@ -3176,10 +3208,16 @@ export const EditActivityDialog = ({
             </aside>
           )}
         </fieldset>
+        </form>
 
         {/* Rodapé FORA do fieldset: "Cancelar" e "Fechar" precisam funcionar
-            mesmo em somente-leitura. Só "Salvar" é desabilitado, por readOnly. */}
-        <DialogFooter className="gap-2 lg:col-span-2">
+            mesmo em somente-leitura. Só "Salvar" é desabilitado, por readOnly.
+
+            E fora do <form>, para ficar fixo na base enquanto o corpo rola —
+            antes era preciso rolar até o fim para achar "Salvar". O botão de
+            submit usa `form="edit-activity-form"` para continuar enviando o
+            formulário mesmo estando fora dele. */}
+        <DialogFooter className="gap-2 shrink-0 border-t border-border pt-3 mt-0">
             {act && !createMode && act.status !== "completed" && (
               <Button
                 type="button"
@@ -3276,13 +3314,13 @@ export const EditActivityDialog = ({
             <Button type="button" variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
             <Button
               type="submit"
+              form="edit-activity-form"
               disabled={readOnly}
               title={readOnly ? "Você não tem permissão para editar esta atividade" : undefined}
             >
               {createMode ? "Criar Atividade" : "Salvar Alterações"}
             </Button>
           </DialogFooter>
-        </form>
       </DialogContent>
       {/* Editor aninhado para sub-atividade — mesmos campos da atividade principal */}
       {editingSubActivity && (
