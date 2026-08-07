@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { DateField } from "@/components/ui/date-field";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -515,6 +515,8 @@ export const EditActivityDialog = ({
   const [lastEditorName, setLastEditorName] = useState<string | null>(null);
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "stories" | "history">(initialTab);
+  /** Última atividade carregada — distingue "trocou de card" de "recarregou o mesmo". */
+  const lastLoadedActivityIdRef = useRef<string | null>(null);
   const orderedSubActivities = useMemo(
     () => sortByWbsThenDisplayOrder(subActivities),
     [subActivities]
@@ -845,6 +847,16 @@ export const EditActivityDialog = ({
       // de volta os que estavam vazios (os com valor reaparecem pela regra de visibilidade).
       setRevealedFields(new Set());
       setRelationsCount(0);
+      // Aba volta ao início ao trocar de ATIVIDADE (não a cada recarga dos
+      // dados da mesma). `useState(initialTab)` só vale na primeira montagem, e
+      // este diálogo é reaproveitado: quem estava em Subatividades abria a
+      // próxima atividade já em Subatividades, sem ter pedido. Guardar o id
+      // anterior evita o outro extremo — perder a aba escolhida sempre que a
+      // atividade aberta é recarregada (salvar, mexer numa sub, realtime).
+      if (lastLoadedActivityIdRef.current !== act.id) {
+        lastLoadedActivityIdRef.current = act.id;
+        setActiveTab(initialTab);
+      }
       // Limpa as subs do card anterior ANTES do fetch async. Sem isso, há uma
       // janela em que o rollup roda com os filhos do card anterior aplicados ao
       // card atual — corrompendo hours/cost (ex.: abrir uma folha logo após um
@@ -1373,6 +1385,10 @@ export const EditActivityDialog = ({
       }
       setDraftActivity(null);
     }
+    // Ao fechar, esquece qual atividade estava aberta: reabrir a MESMA também
+    // começa em Detalhes. Fechar o diálogo encerra a tarefa; a próxima abertura
+    // é um começo, não a continuação da anterior.
+    if (!newOpen) lastLoadedActivityIdRef.current = null;
     onOpenChange(newOpen);
   };
 
