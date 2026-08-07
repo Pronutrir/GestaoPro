@@ -602,7 +602,7 @@ export const BacklogSection = ({
   // Cabeçalho de colunas alinhado com o grid das linhas.
   const ColumnHeader = () => (
     <div
-      className="grid items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+      className="grid items-center gap-2 px-3 py-1.5 bg-muted/40 border-b border-border text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground"
       style={{ gridTemplateColumns: backlogGrid }}
     >
       <span /><span />
@@ -728,7 +728,9 @@ export const BacklogSection = ({
     return (
       <div key={activity.id}>
         <div
-          className={`grid items-center gap-2 border-b px-3 py-2.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
+          // py-1.5 (era 2.5): com o texto em 13px e uma coluna de ícone a menos,
+          // a linha aperta sem ficar apertada — cabem ~15% mais tarefas na tela.
+          className={`grid items-center gap-2 border-b px-3 py-1.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
             isSelected ? "bg-primary/5" : ""
           }`}
           // O recuo de profundidade NÃO vai aqui: padding na linha encolhe a
@@ -751,7 +753,13 @@ export const BacklogSection = ({
             <span className="w-5" />
           )}
 
-          {/* col: checkbox (modo seleção) ou concluir */}
+          {/* col: checkbox do modo seleção (vazia fora dele) */}
+          {/* Só a caixa de seleção em lote ocupa esta coluna. O botão redondo de
+              concluir saiu daqui: eram DOIS círculos quase iguais no começo de
+              cada linha (este e o ícone de tipo), lidos como checkbox duplicado.
+              Concluir passou para o menu "⋯" da ponta direita, junto das demais
+              ações da tarefa. Fora do modo seleção a coluna fica vazia, mantendo
+              o alinhamento com o cabeçalho. */}
           {selectMode ? (
             <Checkbox
               checked={isSelected}
@@ -760,20 +768,7 @@ export const BacklogSection = ({
               aria-label={`Selecionar ${activity.title}`}
             />
           ) : (
-            <button
-              type="button"
-              className="h-6 w-6 flex items-center justify-center rounded hover:bg-success/10 shrink-0"
-              onClick={(e) => { e.stopPropagation(); onToggleActivity(activity.id, activity.status); }}
-              title={activity.status === "completed" ? "Reabrir tarefa" : "Concluir tarefa"}
-            >
-              {activity.status === "completed" ? (
-                <CheckCircle2 className="w-4 h-4 text-success" />
-              ) : (
-                // Traço mais forte que o ícone de TIPO ao lado: os dois eram
-                // círculos cinza idênticos e pareciam checkbox duplicado.
-                <Circle className="w-4 h-4 text-muted-foreground/70 [stroke-width:2.5]" />
-              )}
-            </button>
+            <span />
           )}
 
           {/* col: ícone de tipo (clicável) + título + código EAP + deps.
@@ -809,17 +804,17 @@ export const BacklogSection = ({
                   if (e.key === "Enter") handleSaveTitle(activity.id);
                   if (e.key === "Escape") setEditingTitleId(null);
                 }}
-                className="h-7 text-sm"
+                className="h-7 text-[13px]"
               />
             ) : (
               <span className="min-w-0 flex items-center gap-2">
                 {!!(activity as any).wbs_code && (
-                  <span className="inline-flex items-center h-5 px-1.5 rounded border border-border bg-muted/50 text-[11px] font-mono text-muted-foreground shrink-0" title="Código EAP">
+                  <span className="inline-flex items-center h-[18px] px-1.5 rounded border border-border bg-muted/50 text-[10.5px] font-mono text-muted-foreground shrink-0" title="Código EAP">
                     {(activity as any).wbs_code}
                   </span>
                 )}
                 <span
-                  className={`text-sm font-normal truncate ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}
+                  className={`text-[13px] font-normal truncate ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     setEditingTitleId(activity.id);
@@ -829,7 +824,7 @@ export const BacklogSection = ({
                 >
                   {activity.title}
                 </span>
-                {hasChildren && <span className="text-xs text-muted-foreground font-normal shrink-0">({subs.length})</span>}
+                {hasChildren && <span className="text-[11px] text-muted-foreground font-normal shrink-0">({subs.length})</span>}
                 {hasDeps && (
                   <span
                     className="shrink-0 text-[11px] text-primary/80"
@@ -862,6 +857,20 @@ export const BacklogSection = ({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                {/* Concluir/reabrir — PRIMEIRO item por ser a ação mais frequente
+                    numa lista de tarefas. Veio do botão redondo que ficava no
+                    começo da linha e disputava leitura com o ícone de tipo. */}
+                <DropdownMenuItem
+                  onSelect={() => onToggleActivity(activity.id, activity.status)}
+                  className={activity.status === "completed" ? "" : "text-success focus:text-success focus:bg-success/10"}
+                >
+                  {activity.status === "completed" ? (
+                    <><Circle className="w-3.5 h-3.5 mr-2" /> Reabrir tarefa</>
+                  ) : (
+                    <><CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Concluir tarefa</>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onSelect={() => {
                     setQuickAddKey(`parent:${activity.id}`);
@@ -1101,7 +1110,7 @@ export const BacklogSection = ({
                     if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
                   }}
                   onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
-                  className="h-7 text-sm"
+                  className="h-7 text-[13px]"
                 />
               </div>
             )}
@@ -1268,7 +1277,7 @@ export const BacklogSection = ({
                     if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
                   }}
                   onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
-                  className="h-8 text-sm"
+                  className="h-8 text-[13px]"
                 />
               </div>
             )}
