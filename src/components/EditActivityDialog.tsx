@@ -1383,8 +1383,14 @@ export const EditActivityDialog = ({
             ~40px da primeira dobra gastos com o que já se sabe (que é a tela de
             editar atividade). `sm:` porque em tela estreita empilhar é o certo.
             `pr-8` abre espaço para o X de fechar, que é absoluto no canto. */}
-        <DialogHeader className="shrink-0 space-y-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4 pr-8">
-          <div className="min-w-0">
+        {/* `flex-wrap` + `gap-x-3`, NÃO `justify-between`: com o diálogo em
+            1400px, jogar um bloco em cada borda deixava o título numa ponta e
+            a identificação na outra, com um vão enorme no meio — os dois se
+            referem à MESMA coisa e precisam ser lidos juntos. Agora os
+            metadados vêm logo depois do título; a linha quebra sozinha quando
+            não couber. */}
+        <DialogHeader className="shrink-0 space-y-0 sm:flex-row sm:items-center sm:flex-wrap gap-x-3 gap-y-1 pr-8">
+          <div className="min-w-0 shrink-0">
             {parentActivityTitle && onBackToParent && (
               <button
                 type="button"
@@ -1404,7 +1410,7 @@ export const EditActivityDialog = ({
           </div>
           {act && !createMode && (
             <div
-              className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0 overflow-hidden whitespace-nowrap sm:justify-end shrink-0"
+              className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0 overflow-hidden whitespace-nowrap"
               title={[
                 `Criada em ${new Date(act.created_at).toLocaleDateString("pt-BR")}`,
                 (creatorName || creatorEmail) && `por ${creatorName || creatorEmail}`,
