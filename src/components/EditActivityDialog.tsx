@@ -524,12 +524,16 @@ export const EditActivityDialog = ({
   useEffect(() => {
     if (!open || !projectId) return;
     let cancelado = false;
-    void supabase
+    // is_trashed (e não trashed_at): é o campo que este arquivo usa em todas as
+    // outras consultas, e o que existe em ambientes sem a migration nova.
+    void (supabase
       .from("activities")
       .select("id, title, parent_id, item_type, is_milestone, wbs_code, display_order")
-      .eq("project_id", projectId)
-      .is("trashed_at", null)
-      .then(({ data, error }) => {
+      .eq("project_id", projectId) as any)
+      .eq("is_trashed", false)
+      .then(({ data, error }: { data: unknown; error: unknown }) => {
+        // Falha aqui não derruba a aba: o campo "Dentro de" some e o resto do
+        // diálogo continua utilizável — degradar é melhor que quebrar.
         if (cancelado || error) return;
         setEapNodes((data || []) as EapNodeLike[]);
       });
@@ -1897,9 +1901,15 @@ export const EditActivityDialog = ({
                       setParentSearch("");
                     };
 
+                    // MEIA coluna, não `wide`. A faixa é uma grade de 2 colunas
+                    // e Status é o único outro campo de meia largura aqui —
+                    // Tipo e Dependências ocupam a linha inteira. Com este
+                    // campo em `wide`, o Status ficava sozinho na linha e o
+                    // Código EAP era empurrado para baixo, deixando um buraco à
+                    // direita. Em meia coluna os pares voltam: Status | Dentro
+                    // de, e depois o Código EAP.
                     return (
                       <PropertyRow
-                        wide
                         iconClassName="text-primary"
                         icon={<IndentIncrease className="w-3.5 h-3.5" />}
                         label="Dentro de"

@@ -41,12 +41,14 @@ export const GutPriorityField = ({ gravity, urgency, tendency, onChange, buttonC
               {meta.label}
             </span>
             {!isPending && score != null && (
-              <span className="text-xs text-muted-foreground tabular-nums">
+              <span className="text-xs text-muted-foreground tabular-nums truncate">
                 {score}/125 · G{gravity} U{urgency} T{tendency}
               </span>
             )}
             {isPending && (
-              <span className="text-xs text-muted-foreground">Clique para definir G × U × T</span>
+              // truncate: sem ele o texto transbordava a meia coluna da grade e
+              // passava POR BAIXO do chevron, que aparecia cortando a frase.
+              <span className="text-xs text-muted-foreground truncate">Clique para definir G × U × T</span>
             )}
           </span>
           <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
