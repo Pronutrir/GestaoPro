@@ -662,7 +662,7 @@ export const BacklogSection = ({
         const meta = GUT_META[gutLevel];
         return (
           <span key="priority" className="min-w-0" title={`Prioridade: ${meta.label}`}>
-            <span className={`inline-flex items-center gap-1.5 h-6 px-2.5 rounded-md border text-xs font-medium ${meta.badgeClass}`}>
+            <span className={`inline-flex items-center gap-1.5 h-5 px-2 rounded border text-[11px] font-medium ${meta.badgeClass}`}>
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dotClass}`} aria-hidden />
               {meta.label}
             </span>
@@ -674,13 +674,13 @@ export const BacklogSection = ({
           <span key="status" className="min-w-0">
             {stg ? (
               <span
-                className="inline-block max-w-full truncate text-xs font-medium px-2.5 py-1 rounded-md border"
+                className="inline-flex items-center h-5 max-w-full truncate text-[11px] font-medium px-2 rounded border"
                 style={{ borderColor: stg.color, color: stg.color, backgroundColor: `${stg.color}18` }}
                 title={`Status: ${stg.title}`}
               >
                 {stg.title}
               </span>
-            ) : <span className="text-xs text-muted-foreground/40">—</span>}
+            ) : <span className="text-[11px] text-muted-foreground/40">—</span>}
           </span>
         );
       }
@@ -693,15 +693,15 @@ export const BacklogSection = ({
               const avatar = resolveAvatarFromLookup(rawAssignee, resolvedName, profileAvatarMap);
               return (
                 <>
-                  <Avatar className="h-6 w-6 shrink-0">
+                  <Avatar className="h-5 w-5 shrink-0">
                     {avatar ? <AvatarImage src={avatar} alt={resolvedName} /> : null}
-                    <AvatarFallback className="text-[9px] font-semibold">{getAvatarInitials(resolvedName)}</AvatarFallback>
+                    <AvatarFallback className="text-[8px] font-semibold">{getAvatarInitials(resolvedName)}</AvatarFallback>
                   </Avatar>
-                  <span className="text-[13px] text-foreground/90 truncate">{resolvedName}</span>
+                  <span className="text-[12px] text-foreground/90 truncate">{resolvedName}</span>
                 </>
               );
             })() : (
-              <span className="text-[13px] text-muted-foreground/40">Sem responsável</span>
+              <span className="text-[12px] text-muted-foreground/40">Sem responsável</span>
             )}
           </span>
         );
@@ -709,7 +709,7 @@ export const BacklogSection = ({
       if (colId === "end_date") {
         const overdue = activity.end_date && activity.status !== "completed" && new Date(activity.end_date) < new Date(new Date().toDateString());
         return (
-          <span key="end_date" className={`text-[13px] tabular-nums ${overdue ? "text-destructive font-semibold" : "text-foreground/80"}`}>
+          <span key="end_date" className={`text-[12px] tabular-nums ${overdue ? "text-destructive font-semibold" : "text-foreground/80"}`}>
             {activity.end_date ? new Date(activity.end_date).toLocaleDateString("pt-BR") : <span className="text-muted-foreground/40">—</span>}
           </span>
         );
@@ -717,7 +717,7 @@ export const BacklogSection = ({
       if (colId === "hours") {
         const h = Number(activity.hours) || 0;
         return (
-          <span key="hours" className="text-[13px] tabular-nums text-foreground/80">
+          <span key="hours" className="text-[12px] tabular-nums text-foreground/80">
             {h > 0 ? `${h % 1 === 0 ? h : h.toFixed(1)}h` : <span className="text-muted-foreground/40">—</span>}
           </span>
         );
@@ -787,7 +787,7 @@ export const BacklogSection = ({
             <span
               title={`Tipo: ${kindMeta.label}`}
               aria-label={`Tipo: ${kindMeta.label}`}
-              className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md border bg-muted/60 ${kindMeta.cls}`}
+              className={`shrink-0 inline-flex items-center justify-center w-5 h-5 rounded border bg-muted/60 ${kindMeta.cls}`}
             >
               {kindMeta.icon}
             </span>
@@ -1007,7 +1007,7 @@ export const BacklogSection = ({
             como abrir a fase — ela nem tinha tela própria. */}
         <div
           className={cn(
-            "flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50",
+            "flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50",
             phaseId && "cursor-pointer hover:bg-muted/70 transition-colors",
           )}
           onClick={() => { if (phaseId) openPhase(phaseId, phaseTitle); }}
@@ -1024,8 +1024,8 @@ export const BacklogSection = ({
           ) : (
             <span className="w-5 shrink-0" />
           )}
-          <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-primary/10 text-primary shrink-0">
-            {phaseId ? <Layers className="w-3.5 h-3.5" /> : <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />}
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-primary/10 text-primary shrink-0">
+            {phaseId ? <Layers className="w-3 h-3" /> : <FolderOpen className="w-3 h-3 text-muted-foreground" />}
           </span>
           <h4 className="text-[13px] font-semibold text-foreground truncate">{phaseTitle}</h4>
           {/* gap-2 (não 3) para o "⋯" cair sobre a coluna de ações das linhas.
@@ -1095,7 +1095,7 @@ export const BacklogSection = ({
               // coluna "Tarefa". Antes era um flex com margem própria, então o
               // input começava num ponto e as tarefas em outro.
               <div
-                className="grid items-center gap-2 border-b px-3 py-2 bg-primary/5"
+                className="grid items-center gap-2 border-b px-3 py-1.5 bg-primary/5"
                 style={{ gridTemplateColumns: backlogGrid }}
               >
                 <span />
@@ -1139,7 +1139,7 @@ export const BacklogSection = ({
       <div key={phaseAct.id}>
         {/* Mesmo gesto da fase real: clique abre, chevron colapsa. */}
         <div
-          className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+          className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
           onClick={() => onEditActivity(phaseAct)}
         >
           <button
@@ -1152,16 +1152,16 @@ export const BacklogSection = ({
           {/* Fase = camadas empilhadas; Entrega = pacote, em tom mais discreto.
               A entrega está DENTRO da fase, e o peso visual precisa dizer isso. */}
           <span className={cn(
-            "inline-flex items-center justify-center w-6 h-6 rounded-md shrink-0",
+            "inline-flex items-center justify-center w-5 h-5 rounded shrink-0",
             isEntrega ? "bg-primary/5 text-primary/75" : "bg-primary/10 text-primary",
           )}>
-            {isEntrega ? <Package className="w-3.5 h-3.5" /> : <Layers className="w-3.5 h-3.5" />}
+            {isEntrega ? <Package className="w-3 h-3" /> : <Layers className="w-3 h-3" />}
           </span>
           {/* Código EAP: estava gravado e não era exibido nesta linha — só nas
               de atividade. "1.1 Formalização" aparecia como "Formalização", e a
               posição do item na EAP sumia justo onde a hierarquia é lida. */}
           {!!(phaseAct as any).wbs_code && (
-            <span className="inline-flex items-center h-5 px-1.5 rounded border border-border bg-background/60 text-[11px] font-mono text-muted-foreground shrink-0" title="Código EAP">
+            <span className="inline-flex items-center h-[18px] px-1.5 rounded border border-border bg-background/60 text-[10.5px] font-mono text-muted-foreground shrink-0" title="Código EAP">
               {(phaseAct as any).wbs_code}
             </span>
           )}
@@ -1178,7 +1178,7 @@ export const BacklogSection = ({
                   if (e.key === "Enter") handleSaveTitle(phaseAct.id);
                   if (e.key === "Escape") setEditingTitleId(null);
                 }}
-                className="h-7 text-sm font-semibold"
+                className="h-7 text-[13px] font-semibold"
               />
             ) : (
               <h4
@@ -1262,7 +1262,7 @@ export const BacklogSection = ({
             {quickAddOpen && (
               // Mesmo grid das linhas: o campo alinha com a coluna "Tarefa".
               <div
-                className="grid items-center gap-2 border-b px-3 py-2 bg-primary/5"
+                className="grid items-center gap-2 border-b px-3 py-1.5 bg-primary/5"
                 style={{ gridTemplateColumns: backlogGrid }}
               >
                 <span />
@@ -1440,7 +1440,7 @@ export const BacklogSection = ({
             <div key={lane.id}>
               {/* Faixa inteira colapsa, igual às fases. */}
               <div
-                className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
                 onClick={() => toggleLane(lane.id)}
               >
                 <span className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground shrink-0">
