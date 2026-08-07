@@ -76,6 +76,8 @@ interface Activity {
   is_milestone?: boolean | null;
   /** Código da EAP: define o papel (nível 1 = Fase, 2+ = Atividade). */
   wbs_code?: string | null;
+  /** Arquivada (soft-delete). Fica fora da árvore e das contagens. */
+  is_trashed?: boolean | null;
 }
 
 interface BacklogSectionProps {
@@ -342,7 +344,13 @@ export const BacklogSection = ({
 
   // Lista completa: TODAS as tarefas do projeto (modelo "uma coleção, várias visões").
   // O status é exibido como atributo (badge), não como filtro de tela.
-  const backlogActs = activities;
+  //
+  // ARQUIVADAS FORA: a lixeira tem tela própria (showTrash). Sem este filtro, um
+  // item arquivado continuava na árvore e no contador de filhos do pai — daí o
+  // "Receber demanda da Diretoria (3)" com três subatividades excluídas
+  // aparecendo aqui, enquanto a aba Subatividades do diálogo, que filtra
+  // corretamente, mostrava vazio. As duas telas liam a mesma coisa e discordavam.
+  const backlogActs = activities.filter((a) => !a.is_trashed);
 
   // Mapa de stage_id → {title, color} para badges
   const stageById = new Map<string, WorkflowStage>();

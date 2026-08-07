@@ -206,6 +206,35 @@ export interface EapMoveCheck {
   warning?: string;
 }
 
+/**
+ * Um item promovido a agrupador deve voltar a ser folha agora que perdeu os filhos?
+ *
+ * Criar a primeira subatividade PROMOVE o pai a `item_type='fase'` — a regra de
+ * aninhamento do banco exige agrupador para aceitar filho. Só que nada desfazia
+ * isso quando o último filho saía: o item ficava com cara de agrupador (cubo
+ * azul, rótulo Fase/Entrega) sem ter nada dentro, para sempre. A promoção era
+ * definitiva por omissão, não por decisão.
+ *
+ * NÃO rebaixa quem é agrupador por vontade do usuário: um item com código EAP
+ * de nível 1 ("1", "2") é uma Fase declarada e continua Fase mesmo vazia —
+ * esvaziar uma fase é normal no meio do planejamento. O rebaixamento existe só
+ * para desfazer a promoção automática.
+ *
+ * @param item         o PAI, depois da remoção
+ * @param aindaTemFilhos se sobrou algum filho não arquivado
+ */
+export function eapShouldDemote(item: EapItemLike, aindaTemFilhos: boolean): boolean {
+  if (aindaTemFilhos) return false;
+
+  const t = (item.item_type || "").trim().toLowerCase();
+  if (t !== "fase" && t !== "pacote") return false; // já é folha
+
+  // Fase declarada (nível 1 do código EAP) permanece fase.
+  if (eapLevel(item.wbs_code) === 1) return false;
+
+  return true;
+}
+
 /** Índice por id, para as travessias não varrerem a lista a cada salto. */
 function indexById<T extends EapNodeLike>(nodes: T[]): Map<string, T> {
   const map = new Map<string, T>();

@@ -60,6 +60,7 @@ import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
 import { buildAvatarLookupMap } from "@/lib/avatarLookup";
+import { eapShouldDemote } from "@/lib/eapModel";
 
 interface Project {
   id: string;
@@ -109,6 +110,10 @@ interface Activity {
   item_type?: string | null;
   is_milestone?: boolean | null;
   created_by?: string | null;
+  /** Código da EAP — decide se um agrupador vazio é Fase declarada. */
+  wbs_code?: string | null;
+  /** Arquivada (soft-delete). */
+  is_trashed?: boolean | null;
 }
 
 const SUPPORTED_PROJECT_TABS = [
@@ -1247,6 +1252,25 @@ export default function ProjectDetailsPage() {
       toast.error("Não foi possível arquivar a atividade.", { description: error.message });
       return;
     }
+
+    // O PAI perdeu o último filho? Volta a ser folha.
+    // Criar subatividade promove o pai a agrupador (a regra do banco exige isso
+    // para aceitar filho), mas nada desfazia quando o último saía: o item ficava
+    // com cara de agrupador, sem nada dentro, para sempre. Quem é Fase declarada
+    // (nível 1 do código EAP) não é rebaixado — ver eapShouldDemote.
+    const arquivada = activities.find((a) => a.id === activityId);
+    const paiId = arquivada?.parent_id;
+    if (paiId) {
+      const pai = activities.find((a) => a.id === paiId);
+      const sobrouFilho = activities.some(
+        (a) => a.parent_id === paiId && !idsToTrash.has(a.id) && !a.is_trashed,
+      );
+      if (pai && eapShouldDemote({ item_type: pai.item_type, wbs_code: pai.wbs_code }, sobrouFilho)) {
+        // Falha aqui não desfaz o arquivamento, que é o que o usuário pediu.
+        await supabase.from("activities").update({ item_type: "atividade" } as any).eq("id", paiId);
+      }
+    }
+
     // Desfazer: arquivar é soft-delete (is_trashed), então reverter é só
     // limpar as flags dos MESMOS ids — inclusive os descendentes que entraram
     // na cascata. Sem isto, o caminho de volta era achar cada item na Lixeira e

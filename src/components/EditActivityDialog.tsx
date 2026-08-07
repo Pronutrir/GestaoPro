@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2, IndentIncrease, CornerDownRight } from "lucide-react";
 // Validação de movimento na EAP — a MESMA que o Backlog e o Kanban usam, para
 // as três telas recusarem exatamente as mesmas coisas (ciclo, self, marco).
-import { eapCanMoveInto, eapDescendantIds, type EapNodeLike } from "@/lib/eapModel";
+import { eapCanMoveInto, eapDescendantIds, eapShouldDemote, type EapNodeLike } from "@/lib/eapModel";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { endVariance, varianceTone, varianceClasses } from "@/lib/dateVariance";
@@ -935,10 +935,51 @@ export const EditActivityDialog = ({
     onActivityUpdated();
   };
 
+  /**
+   * Remove uma subatividade — ARQUIVANDO, não apagando.
+   *
+   * Antes era `.delete()`: o dado sumia do banco sem passar pela Lixeira, sem
+   * como restaurar. O Backlog e o Kanban sempre arquivaram (`is_trashed`), então
+   * o mesmo ícone de lixeira fazia duas coisas diferentes conforme a tela. Agora
+   * as três concordam.
+   *
+   * Ao sair o último filho, o pai é rebaixado de volta a folha: a operação
+   * inversa da promoção feita em handleAddSubActivity. A regra de quando
+   * rebaixar mora em lib/eapModel (eapShouldDemote), compartilhada.
+   */
   const handleDeleteSubActivity = async (subId: string) => {
     if (!ensureProjectUnlocked()) return;
-    await supabase.from("activities").delete().eq("id", subId);
-    if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+    const act = effectiveActivity;
+
+    const { error } = await supabase
+      .from("activities")
+      .update({ is_trashed: true, trashed_at: new Date().toISOString() } as any)
+      .eq("id", subId);
+
+    if (error) {
+      toast({ title: "Não foi possível arquivar", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    if (act) {
+      const restantes = subActivities.filter((s) => s.id !== subId);
+      if (eapShouldDemote(
+        { item_type: (act as { item_type?: string }).item_type, wbs_code: formData.wbs_code },
+        restantes.length > 0,
+      )) {
+        // Falha aqui não desfaz o arquivamento: o item volta a ser folha na
+        // próxima remoção ou pela edição manual do tipo. Rebaixar é cosmético
+        // perto de perder o arquivamento que o usuário pediu.
+        const { error: demoteErr } = await supabase
+          .from("activities")
+          .update({ item_type: "atividade" } as any)
+          .eq("id", act.id);
+        if (!demoteErr) {
+          setFormData((prev) => ({ ...prev, item_type: "atividade" }));
+        }
+      }
+      fetchSubActivities(act.id);
+    }
     onActivityUpdated();
   };
 
