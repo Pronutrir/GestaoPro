@@ -1524,7 +1524,13 @@ export const EditActivityDialog = ({
             flex-1 + overflow-y-auto: a rolagem passou para o corpo, então o
             cabeçalho fica fixo no topo e o rodapé com "Salvar" fica sempre
             visível na base, em vez de sumir ao rolar. */}
-        <form id="edit-activity-form" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto pr-1">
+        {/* px-1 (não só pr-1): o anel de foco dos campos é desenhado 4px PARA
+            FORA da borda (ring-2 + ring-offset-2). Sem folga dos dois lados,
+            um campo colado na margem tem o anel cortado pelo overflow deste
+            container — era o que acontecia com "Adicionar sub-atividade", cuja
+            borda azul sumia à esquerda. O -mx-1 compensa a folga para o
+            conteúdo não encolher. */}
+        <form id="edit-activity-form" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-1 -mx-1">
         {/* Conversa em 400px (era 360, e o card interno tinha ~300 úteis):
             cada frase quebrava em três linhas no espaço de interação do time. */}
         {/* fieldset em vez de `disabled` campo a campo: são dezenas de inputs,
