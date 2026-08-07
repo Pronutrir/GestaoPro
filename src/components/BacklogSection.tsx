@@ -43,6 +43,7 @@ import {
   PRONTIDAO_LABELS, PRONTIDAO_LABELS_LONGOS,
 } from "@/lib/prontidao";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
+import { mutateInChunks } from "@/lib/chunkedIn";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 
 interface Phase {
@@ -547,13 +548,29 @@ export const BacklogSection = ({
     const ids = Array.from(selectedIds);
     const updateData: Database['public']['Tables']['activities']['Update'] = { workflow_stage_id: targetStageId };
     if (assignee && assignee !== "__none__") updateData.assigned_to = assignee;
-    await supabase.from("activities").update(updateData).in("id", ids);
+    // EM LOTES: "selecionar todas" numa fase grande manda centenas de uuids
+    // numa URL só, que o proxy corta em ~3,7 KB e devolve 502 — o usuário via
+    // a ação falhar justamente quando selecionava muito. Ver lib/chunkedIn.
+    const { error } = await mutateInChunks(ids, (batch) =>
+      supabase.from("activities").update(updateData).in("id", batch),
+    );
     setSelectedIds(new Set());
     setMoveDialogOpen(false);
     setTargetStageId("");
     setAssignee("");
     setIsMoving(false);
     onDataChanged();
+    if (error) {
+      // Não é transacional: os lotes anteriores já gravaram. Por isso o
+      // onDataChanged acima roda mesmo no erro — a tela precisa refletir o
+      // banco, não o que se esperava dele.
+      toast({
+        title: "Nem todas as tarefas foram atualizadas",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
     toast({ title: `Status de ${ids.length} tarefa(s) atualizado` });
   };
 

@@ -19,10 +19,12 @@ import {
   eapCanMoveInto,
   eapDescendantIds,
   eapDepthOf,
+  eapShouldDemote,
   resolveEapKind,
   EAP_LABELS,
   type EapNodeLike,
 } from "@/lib/eapModel";
+import { mutateInChunks } from "@/lib/chunkedIn";
 
 interface Candidate extends EapNodeLike {
   id: string;
@@ -218,12 +220,36 @@ export const LinkParentDialog = ({
         payload.phase_id = validatedParent.phase_id;
       }
 
-      const { error } = await supabase
-        .from("activities")
-        .update(payload)
-        .in("id", activityIds);
+      // Pais ANTIGOS dos itens que estão saindo — precisam ser conferidos
+      // depois do move: quem perdeu o último filho volta a ser folha.
+      const paisAntigos = new Set(
+        all.filter((a) => activityIds.includes(a.id) && a.parent_id).map((a) => a.parent_id as string),
+      );
+
+      // EM LOTES: mover em massa pelo Backlog manda todos os uuids numa URL só,
+      // que o proxy corta em ~3,7 KB. Ver lib/chunkedIn.
+      const { error } = await mutateInChunks(activityIds, (batch) =>
+        supabase.from("activities").update(payload).in("id", batch),
+      );
 
       if (error) throw error;
+
+      // Mover para dentro de outro item deixa o pai anterior possivelmente
+      // vazio. Sem isto, ele continuava com cara de agrupador (cubo azul,
+      // rótulo Fase/Entrega) sem ter nada dentro — o mesmo defeito que já foi
+      // corrigido na exclusão, e que o move reintroduzia pelo outro lado.
+      for (const paiId of paisAntigos) {
+        if (paiId === validatedParent?.id) continue; // continua sendo pai
+        const pai = all.find((a) => a.id === paiId);
+        if (!pai) continue;
+        const aindaTemFilho = all.some(
+          (a) => a.parent_id === paiId && !activityIds.includes(a.id),
+        );
+        if (eapShouldDemote({ item_type: pai.item_type, wbs_code: pai.wbs_code }, aindaTemFilho)) {
+          // Falha aqui não desfaz o move, que é o que o usuário pediu.
+          await supabase.from("activities").update({ item_type: "atividade" } as any).eq("id", paiId);
+        }
+      }
 
       const quantos = activityIds.length > 1 ? `${activityIds.length} itens` : "Item";
       toast({

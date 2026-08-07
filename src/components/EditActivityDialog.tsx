@@ -1317,6 +1317,28 @@ export const EditActivityDialog = ({
 
       if (error) throw error;
 
+      // Saiu de dentro de alguém? O pai ANTIGO pode ter ficado vazio.
+      // A promoção acima cuida do novo pai; sem esta parte, o antigo continuava
+      // com cara de agrupador sem ter nada dentro — mesmo defeito já corrigido
+      // na exclusão de subatividade, que o move reintroduzia pelo outro lado.
+      if (paiAnterior && paiAnterior !== novoPaiId) {
+        const { data: irmaos } = await supabase
+          .from("activities")
+          .select("id")
+          .eq("parent_id", paiAnterior)
+          .eq("is_trashed", false);
+        const { data: paiRow } = await supabase
+          .from("activities")
+          .select("id, item_type, wbs_code")
+          .eq("id", paiAnterior)
+          .maybeSingle();
+        const pai = paiRow as { item_type?: string; wbs_code?: string } | null;
+        if (pai && eapShouldDemote(pai, (irmaos?.length ?? 0) > 0)) {
+          // Falha aqui não desfaz o salvamento, que é o que o usuário pediu.
+          await supabase.from("activities").update({ item_type: "atividade" } as any).eq("id", paiAnterior);
+        }
+      }
+
       if (droppedColumns.length > 0) {
         toast({
           title: "Atividade salva com aviso",
