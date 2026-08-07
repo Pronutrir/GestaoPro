@@ -9,7 +9,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { DateChip } from "@/components/DateChip";
 import { PersonCombobox } from "@/components/PersonCombobox";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -2570,66 +2569,50 @@ export const EditActivityDialog = ({
                     <div className="divide-y divide-border">
                       {formData.participants.map((p, idx) => (
                         <div key={`${p}-${idx}`} className="grid grid-cols-[1fr_36px] items-center gap-2 px-3 py-2 bg-background">
-                          <Select
-                            value={p || "_none"}
-                            onValueChange={(value) => {
-                              const newName = value === "_none" ? "" : value;
-                              if (newName !== p && formData.participants.includes(newName)) return;
-                              const nextParticipants = [...formData.participants];
-                              nextParticipants[idx] = newName;
-                              setFormData({ ...formData, participants: nextParticipants });
+                          {/* PersonCombobox no lugar do Select: a lista de
+                              pessoas cresce e rolar até achar um nome não é
+                              caminho. Ele busca por nome, setor E função, com o
+                              trecho encontrado destacado — é o mesmo controle já
+                              usado no campo "Líder" logo acima, então o gesto é
+                              o mesmo nos dois lugares.
+
+                              O combobox trabalha com `id` e a lista guarda
+                              `full_name`; por isso a conversão nas duas pontas.
+                              Quem já é participante fica fora das opções, menos
+                              o desta linha (senão o próprio valor sumiria). */}
+                          <PersonCombobox
+                            people={(() => {
+                              const opcoes = allProfiles.filter(
+                                (m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name)),
+                              );
+                              // Participante gravado como texto livre (dado antigo,
+                              // sem perfil correspondente): entra como opção própria
+                              // para o campo mostrar o nome em vez do placeholder —
+                              // senão pareceria vazio e a pessoa some ao salvar.
+                              if (p && !opcoes.some((m) => m.full_name === p)) {
+                                return [{ id: `__livre__:${p}`, full_name: p }, ...opcoes];
+                              }
+                              return opcoes;
+                            })()}
+                            value={
+                              p
+                                ? allProfiles.find((m) => m.full_name === p)?.id ?? `__livre__:${p}`
+                                : null
+                            }
+                            placeholder="Selecionar pessoa..."
+                            className="h-9 text-sm"
+                            onSelect={(person) => {
+                              if (person.full_name !== p && formData.participants.includes(person.full_name)) return;
+                              const next = [...formData.participants];
+                              next[idx] = person.full_name;
+                              setFormData({ ...formData, participants: next });
                             }}
-                          >
-                            <SelectTrigger className="h-9 w-full text-sm">
-                              {(() => {
-                                const selected = allProfiles.find((m) => m.full_name === p);
-                                if (!selected && !p) {
-                                  return <div className="text-muted-foreground">Selecionar pessoa...</div>;
-                                }
-                                if (!selected && p) {
-                                  return (
-                                    <div className="flex items-center gap-2 min-w-0 w-full pr-1">
-                                      <Avatar className="h-5 w-5 shrink-0">
-                                        <AvatarFallback className="text-[9px]">{getAvatarInitials(p)}</AvatarFallback>
-                                      </Avatar>
-                                      <span className="truncate leading-none">{p}</span>
-                                    </div>
-                                  );
-                                }
-                                return (
-                                  <div className="flex items-center gap-2 min-w-0 w-full pr-1">
-                                    <Avatar className="h-5 w-5 shrink-0">
-                                      {selected?.avatar_url ? <AvatarImage src={selected.avatar_url} alt={selected.full_name} /> : null}
-                                      <AvatarFallback className="text-[9px]">{getAvatarInitials(selected?.full_name)}</AvatarFallback>
-                                    </Avatar>
-                                    <span className="truncate leading-none">{selected?.full_name}{selected?.sector ? ` — ${selected.sector}` : ""}</span>
-                                  </div>
-                                );
-                              })()}
-                            </SelectTrigger>
-                            <SelectContent
-                              position="popper"
-                              side="bottom"
-                              align="start"
-                              sideOffset={6}
-                              className="max-h-[min(320px,calc(100vh-180px))] overflow-y-auto"
-                            >
-                              <SelectItem value="_none">Selecionar pessoa...</SelectItem>
-                              {allProfiles
-                                .filter((m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name)))
-                                .map((m) => (
-                                  <SelectItem key={m.id} value={m.full_name}>
-                                    <div className="flex items-center gap-2 min-w-0 w-full">
-                                      <Avatar className="h-5 w-5 shrink-0">
-                                        {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
-                                        <AvatarFallback className="text-[9px]">{getAvatarInitials(m.full_name)}</AvatarFallback>
-                                      </Avatar>
-                                      <span className="truncate leading-none">{m.full_name}{m.sector ? ` — ${m.sector}` : ""}</span>
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
+                            onClear={() => {
+                              const next = [...formData.participants];
+                              next[idx] = "";
+                              setFormData({ ...formData, participants: next });
+                            }}
+                          />
                           <button
                             type="button"
                             className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
