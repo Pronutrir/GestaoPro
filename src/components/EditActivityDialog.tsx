@@ -1359,7 +1359,16 @@ export const EditActivityDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="!max-w-[96vw] w-[96vw] h-[95vh] max-h-[95vh] overflow-y-auto">
+      {/* grid-cols-1: o DialogContent do shadcn é `display:grid`, e o
+          `<form className="contents">` abaixo dissolve o form, promovendo o
+          <fieldset> a filho DIRETO deste grid. Como o fieldset declara duas
+          colunas (conteúdo + conversa de 400px), o próprio DialogContent
+          herdava esse rastro e passava a ter duas colunas: o cabeçalho
+          "Editar Atividade" caía na primeira, AO LADO do conteúdo, deixando
+          uma faixa vazia gigante à esquerda em vez de ficar acima dele.
+          Fixar uma coluna aqui devolve o cabeçalho ao topo; o fieldset
+          continua com as duas colunas dele, por dentro. */}
+      <DialogContent className="!max-w-[96vw] w-[96vw] h-[95vh] max-h-[95vh] overflow-y-auto grid-cols-1">
         <DialogHeader>
           {parentActivityTitle && onBackToParent && (
             <button
