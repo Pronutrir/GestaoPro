@@ -91,6 +91,7 @@ run 20260802130000 "supabase/migrations/20260802130000_meetings_actions_and_type
 run 20260804120000 "supabase/migrations/20260804120000_vinculo_atividade.sql"             "Vínculo com atividade (reunião, lição, orçamento)"
 run 20260805100000 "supabase/migrations/20260805100000_pendencias_acionaveis.sql"         "Pendências: responsável na ação de reunião, dono e prazo na lição"
 run 20260805140000 "supabase/migrations/20260805140000_activity_owner_can_edit.sql"       "Responsável edita a própria atividade (termina o modelo já assumido no código)"
+run 20260807100000 "supabase/migrations/20260807100000_meeting_agenda_templates.sql"      "Modelo de pauta por tipo de reunião (só acrescenta coluna; a tela degrada sem ela)"
 
 echo ""
 echo "══════════════════════════════════════════════════════════"

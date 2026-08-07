@@ -29,6 +29,8 @@ import {
   Bell,
   AlertTriangle,
   ListTodo,
+  ClipboardList,
+  RotateCcw,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -124,6 +126,10 @@ interface MeetingType {
   display_order: number;
   is_default: boolean;
   asks_phase: boolean;
+  /** Pauta padrão do tipo, uma linha por item. Opcional: ambiente sem a
+   *  migration de 07/08 simplesmente não traz o campo, e o formulário abre
+   *  com a pauta vazia como antes. */
+  agenda_template?: string | null;
 }
 
 /**
@@ -191,6 +197,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   const [vinculoAtividadeOk, setVinculoAtividadeOk] = useState(true);
   /** false enquanto a migration de meeting_types não rodou na VM. */
   const [typesAvailable, setTypesAvailable] = useState(true);
+  /** Avisa que a pauta apareceu sozinha — texto surgindo do nada assusta. */
+  const [pautaVeioDoModelo, setPautaVeioDoModelo] = useState(false);
   /** Ações de TODAS as reuniões do projeto — base do painel do topo. */
   const [allActions, setAllActions] = useState<MeetingAction[]>([]);
   const [notifyingId, setNotifyingId] = useState<string | null>(null);
@@ -287,14 +295,24 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   /** Enquanto a migration não roda na VM a tabela não existe: em vez de quebrar
    *  a aba, o seletor de tipo simplesmente não aparece e o resto funciona. */
   const fetchTypes = async () => {
-    const { data, error } = await sb
-      .from("meeting_types")
-      .select("id, label, display_order, is_default, asks_phase")
-      .eq("project_id", projectId)
-      .order("display_order");
+    const COM_PAUTA = "id, label, display_order, is_default, asks_phase, agenda_template";
+    const SEM_PAUTA = "id, label, display_order, is_default, asks_phase";
+
+    const buscar = (colunas: string) =>
+      sb.from("meeting_types").select(colunas).eq("project_id", projectId).order("display_order");
+
+    let { data, error } = await buscar(COM_PAUTA);
+
+    // Ambiente sem a migration de 07/08 não tem `agenda_template`: relê sem a
+    // coluna em vez de derrubar os tipos inteiros — sem isso, o seletor de tipo
+    // sumiria da tela por causa de um campo opcional.
+    if (error && /agenda_template/i.test(error.message || "")) {
+      ({ data, error } = await buscar(SEM_PAUTA));
+    }
+
     if (error) { setTypesAvailable(false); return; }
     setTypesAvailable(true);
-    setTypes(data || []);
+    setTypes((data || []) as unknown as MeetingType[]);
   };
 
   const fetchMeetings = async () => {
@@ -353,6 +371,34 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     });
     setEditingId(null);
     setShowForm(false);
+    setPautaVeioDoModelo(false);
+  };
+
+  /**
+   * Escolher o tipo TRAZ A PAUTA PADRÃO dele.
+   *
+   * As reuniões do projeto acontecem hoje fora do sistema, e o maior atrito é
+   * começar do zero: abrir uma reunião de Alinhamento e encontrar dois campos
+   * vazios, tendo que digitar a mesma pauta toda semana. No Word o modelo já
+   * está pronto — é por isso que ele vence.
+   *
+   * A pauta é COPIADA, não referenciada: a ata é registro do que foi tratado
+   * naquele dia, e mudar o modelo depois não pode reescrever o passado.
+   *
+   * NÃO sobrescreve pauta já digitada — trocar o tipo por engano não pode
+   * apagar o que a pessoa escreveu. Só preenche quando o campo está vazio.
+   */
+  const aplicarTipo = (tipoId: string) => {
+    const tipo = types.find((t) => t.id === tipoId);
+    const modelo = tipo?.agenda_template?.trim();
+    const pautaAtualVazia = !form.agenda.trim();
+
+    setForm((f) => ({
+      ...f,
+      meeting_type_id: tipoId,
+      agenda: modelo && pautaAtualVazia ? modelo : f.agenda,
+    }));
+    setPautaVeioDoModelo(!!modelo && pautaAtualVazia);
   };
 
   const handleSubmit = async () => {
@@ -659,6 +705,59 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       .sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999"));
   }, [allActions, filtroAcoes, filtroPessoa]);
 
+  /**
+   * O que ficou em aberto na ÚLTIMA reunião registrada.
+   *
+   * "Última" é a de data mais recente, não a criada por último: reunião pode
+   * ser cadastrada depois de acontecer, e o que importa aqui é a ordem dos
+   * fatos.
+   *
+   * Só ações NÃO concluídas — o objetivo é lembrar o que falta, não recapitular
+   * o que já foi feito.
+   */
+  const { pendenciasAnterior, ultimaReuniaoRotulo } = useMemo(() => {
+    const anteriores = meetings
+      .filter((m) => !!m.meeting_date)
+      .sort((a, b) => (b.meeting_date || "").localeCompare(a.meeting_date || ""));
+
+    const ultima = anteriores[0];
+    if (!ultima) return { pendenciasAnterior: [] as MeetingAction[], ultimaReuniaoRotulo: "" };
+
+    const abertas = allActions
+      .filter((a) => a.meeting_id === ultima.id && !a.is_completed)
+      .sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999"));
+
+    const data = ultima.meeting_date
+      ? new Date(ultima.meeting_date + "T00:00:00").toLocaleDateString("pt-BR")
+      : "";
+
+    return { pendenciasAnterior: abertas, ultimaReuniaoRotulo: data };
+  }, [meetings, allActions]);
+
+  /**
+   * Copia as pendências para a pauta, ACRESCENTANDO ao que já existe.
+   *
+   * Não substitui: a pauta pode ter vindo do modelo do tipo, e o usuário
+   * perderia o que já estava lá. As pendências entram no topo porque é por
+   * elas que a reunião de acompanhamento começa.
+   */
+  const levarPendenciasParaPauta = () => {
+    if (pendenciasAnterior.length === 0) return;
+    const linhas = pendenciasAnterior.map(
+      (p) => `Pendente: ${p.description}${p.assigned_to ? ` (${p.assigned_to})` : ""}`,
+    );
+    setForm((f) => {
+      const atual = f.agenda.trim();
+      const jaIncluidas = linhas.every((l) => atual.includes(l));
+      if (jaIncluidas) return f; // não duplica se clicar duas vezes
+      return { ...f, agenda: [...linhas, ...(atual ? [atual] : [])].join("\n") };
+    });
+    toast({
+      title: "Pendências na pauta",
+      description: `${pendenciasAnterior.length} item(ns) da reunião anterior.`,
+    });
+  };
+
   return (
     <Card className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -720,7 +819,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
 
           {painel.pessoas.length > 0 && (
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              <p className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
                 Por responsável
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -794,7 +893,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                       onClick={() => { setExpandedId(a.meeting_id); fetchDetails(a.meeting_id); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors"
                     >
-                      <span className={cn("text-[12.5px] flex-1 min-w-0 truncate", a.is_completed && "line-through text-muted-foreground")}>
+                      <span className={cn("text-[12px] flex-1 min-w-0 truncate", a.is_completed && "line-through text-muted-foreground")}>
                         {a.description}
                       </span>
                       {a.assigned_to && !filtroPessoa && (
@@ -806,7 +905,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                         </span>
                       )}
                       {reuniao && (
-                        <span className="text-[10px] text-muted-foreground shrink-0 max-w-[110px] truncate hidden sm:inline">
+                        <span className="text-[10.5px] text-muted-foreground shrink-0 max-w-[110px] truncate hidden sm:inline">
                           {reuniao.title}
                         </span>
                       )}
@@ -821,25 +920,95 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
 
       {showForm && (
         <div className="space-y-3 p-4 bg-card rounded-lg border border-border shadow-sm">
+          {/* O QUE FICOU DA ÚLTIMA REUNIÃO.
+              Toda reunião de acompanhamento começa com "o que ficou pendente?"
+              — hoje respondido de memória, ou consultando a ata anterior à
+              mão. O sistema já sabe: ações em aberto e vencidas estão
+              gravadas. Aparece só ao CRIAR (não ao editar uma existente) e só
+              quando há o que mostrar. É a vantagem que o Word não tem. */}
+          {!editingId && pendenciasAnterior.length > 0 && (
+            <div className="rounded-md border border-warning/40 bg-warning/5 overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-warning/30">
+                <RotateCcw className="w-3.5 h-3.5 text-warning shrink-0" />
+                <span className="text-[12px] font-medium text-warning">
+                  Ficou pendente da última reunião
+                </span>
+                <span className="text-[11px] text-muted-foreground ml-auto shrink-0">
+                  {ultimaReuniaoRotulo}
+                </span>
+              </div>
+              <div className="divide-y divide-warning/20 max-h-[168px] overflow-y-auto">
+                {pendenciasAnterior.map((p) => {
+                  const atrasada = !!p.due_date && new Date(p.due_date) < new Date(new Date().toDateString());
+                  return (
+                    <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 text-[12px]">
+                      <span className="flex-1 min-w-0 truncate" title={p.description}>{p.description}</span>
+                      {p.assigned_to && (
+                        <span className="text-[11px] text-muted-foreground shrink-0 max-w-[110px] truncate">
+                          {p.assigned_to}
+                        </span>
+                      )}
+                      {p.due_date && (
+                        <span className={cn(
+                          "text-[11px] tabular-nums shrink-0",
+                          atrasada ? "text-destructive font-medium" : "text-muted-foreground",
+                        )}>
+                          {new Date(p.due_date).toLocaleDateString("pt-BR")}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Leva as pendências para a pauta: é o primeiro item de toda
+                  reunião de acompanhamento, e transcrever à mão é o atrito
+                  que este painel existe para remover. */}
+              <button
+                type="button"
+                onClick={levarPendenciasParaPauta}
+                className="w-full px-3 py-1.5 text-[11px] text-warning hover:bg-warning/10 border-t border-warning/30 transition-colors text-left"
+              >
+                + Incluir na pauta desta reunião
+              </button>
+            </div>
+          )}
+
           {/* Tipo — seletor, não abas: com 6 tipos as abas ocupavam duas linhas,
               e a lista é editável (pode crescer). Some por completo enquanto a
               migration de meeting_types não rodou na VM. */}
           {typesAvailable && types.length > 0 && (
             <div className="grid gap-1.5">
-              <Label className="text-xs text-muted-foreground">Tipo</Label>
+              <Label className="text-[12px] text-muted-foreground">Tipo</Label>
               <Select
                 value={form.meeting_type_id}
-                onValueChange={(v) => setForm({ ...form, meeting_type_id: v })}
+                onValueChange={(v) => aplicarTipo(v)}
               >
                 <SelectTrigger className="h-9">
                   <SelectValue placeholder="Selecione o tipo" />
                 </SelectTrigger>
                 <SelectContent>
                   {types.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                    <SelectItem key={t.id} value={t.id}>
+                      <span className="flex items-center gap-2">
+                        {t.label}
+                        {/* Sinaliza quais tipos trazem pauta pronta — senão a
+                            escolha do tipo parece só uma etiqueta. */}
+                        {t.agenda_template && (
+                          <span className="text-[10.5px] text-primary">com pauta</span>
+                        )}
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {/* Diz o que aconteceu: a pauta apareceu sozinha e PODE ser
+                  editada. Sem o aviso, texto surgindo do nada assusta. */}
+              {pautaVeioDoModelo && (
+                <p className="text-[11px] text-primary flex items-center gap-1">
+                  <ClipboardList className="w-3 h-3 shrink-0" />
+                  Pauta preenchida pelo modelo deste tipo — edite à vontade.
+                </p>
+              )}
             </div>
           )}
           <Input
@@ -854,7 +1023,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
           )}
           {/* Também era texto livre — mesmo problema do responsável da ação. */}
           <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Proponente / Responsável</Label>
+            <Label className="text-[12px] text-muted-foreground">Proponente / Responsável</Label>
             <PersonCombobox
               people={profiles.map((p) => ({
                 id: p.id,
@@ -871,14 +1040,14 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs text-muted-foreground">Data</Label>
+              <Label className="text-[12px] text-muted-foreground">Data</Label>
               <DateField
                 value={form.meeting_date ? form.meeting_date.slice(0, 10) : ""}
                 onChange={(v) => setForm({ ...form, meeting_date: v })}
               />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">Local / Link</Label>
+              <Label className="text-[12px] text-muted-foreground">Local / Link</Label>
               <Input
                 placeholder="Sala 3 ou https://meet..."
                 value={form.location}
@@ -888,7 +1057,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs text-muted-foreground">Horário de Início</Label>
+              <Label className="text-[12px] text-muted-foreground">Horário de Início</Label>
               <Input
                 type="time"
                 value={form.start_time}
@@ -896,7 +1065,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
               />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">Horário de Término</Label>
+              <Label className="text-[12px] text-muted-foreground">Horário de Término</Label>
               <Input
                 type="time"
                 value={form.end_time}
@@ -919,12 +1088,12 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
           )}
           {/* Participants */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Participantes</Label>
+            <Label className="text-[12px] text-muted-foreground">Participantes</Label>
             {(() => {
               const available = profiles.filter((p) => !form.participants.includes(p.id));
               return available.length > 0 ? (
                 <Select onValueChange={(val) => addParticipant(val)}>
-                  <SelectTrigger className="text-sm h-9">
+                  <SelectTrigger className="text-[13px] h-9">
                     <SelectValue placeholder="Adicionar participante..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -938,7 +1107,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                   </SelectContent>
                 </Select>
               ) : (
-                <p className="text-xs text-muted-foreground">Todos os usuários já foram adicionados.</p>
+                <p className="text-[12px] text-muted-foreground">Todos os usuários já foram adicionados.</p>
               );
             })()}
             {form.participants.length > 0 && (
@@ -948,8 +1117,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                   return (
                     <div key={userId} className="flex items-center justify-between p-2 rounded border border-border bg-accent/10">
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium">{prof?.full_name || prof?.email || userId}</span>
-                        <div className="flex gap-2 text-xs text-muted-foreground">
+                        <span className="text-[13px] font-medium">{prof?.full_name || prof?.email || userId}</span>
+                        <div className="flex gap-2 text-[12px] text-muted-foreground">
                           {prof?.sector && (
                             <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{prof.sector}</span>
                           )}
@@ -974,19 +1143,19 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
               reunião e o que se preenche depois. */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Pauta</span>
+              <span className="text-[12px] font-medium text-muted-foreground">Pauta</span>
               <AIAssistButton value={form.agenda} onChange={(v) => setForm({ ...form, agenda: v })} context="meeting_agenda" />
             </div>
             <Textarea placeholder="O que será tratado" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={2} />
           </div>
 
           <div className="pt-1 border-t border-border/60">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground pt-2 pb-1.5">
+            <p className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground pt-2 pb-1.5">
               Depois da reunião
             </p>
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Ata</span>
+                <span className="text-[12px] font-medium text-muted-foreground">Ata</span>
                 <AIAssistButton value={form.minutes} onChange={(v) => setForm({ ...form, minutes: v })} context="meeting_minutes" />
               </div>
               <Textarea placeholder="O que foi decidido" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} rows={3} />
@@ -997,7 +1166,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
             {typesAvailable && (
               <div className="grid md:grid-cols-2 gap-2 mt-2">
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Gravação</Label>
+                  <Label className="text-[12px] text-muted-foreground">Gravação</Label>
                   <Input
                     placeholder="https://… link do vídeo"
                     value={form.recording_url}
@@ -1005,7 +1174,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Transcrição</Label>
+                  <Label className="text-[12px] text-muted-foreground">Transcrição</Label>
                   <Textarea
                     placeholder="Cole aqui a transcrição"
                     value={form.transcript}
@@ -1022,7 +1191,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       )}
 
       {meetings.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-4">Nenhuma reunião registrada</p>
+        <p className="text-[13px] text-muted-foreground text-center py-4">Nenhuma reunião registrada</p>
       ) : (
         <div className="space-y-3 max-h-[500px] overflow-y-auto">
           {meetings.map((meeting) => {
@@ -1046,7 +1215,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                         {/* Sem cor por tipo: a lista é editável, então não há
                             paleta fixa que dê conta. O rótulo basta. */}
                         {meeting.meeting_type_id && (
-                          <Badge variant="outline" className="text-[10px] font-normal">
+                          <Badge variant="outline" className="text-[10.5px] font-normal">
                             {types.find((t) => t.id === meeting.meeting_type_id)?.label}
                           </Badge>
                         )}
@@ -1061,15 +1230,15 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                           const semPauta = !meeting.agenda?.trim();
                           const semAta = !meeting.minutes?.trim();
                           if (jaOcorreu && semAta) {
-                            return <Badge variant="outline" className="text-[10px] font-normal border-warning/40 text-warning">sem ata</Badge>;
+                            return <Badge variant="outline" className="text-[10.5px] font-normal border-warning/40 text-warning">sem ata</Badge>;
                           }
                           if (!jaOcorreu && semPauta) {
-                            return <Badge variant="outline" className="text-[10px] font-normal border-warning/40 text-warning">sem pauta</Badge>;
+                            return <Badge variant="outline" className="text-[10.5px] font-normal border-warning/40 text-warning">sem pauta</Badge>;
                           }
                           return null;
                         })()}
                       </div>
-                      <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
+                      <div className="flex flex-wrap gap-2 mt-1 text-[12px] text-muted-foreground">
                         {meeting.meeting_date && (
                           <span className="flex items-center gap-1">
                             <CalendarDays className="w-3 h-3" />
@@ -1120,7 +1289,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                           </span>
                         )}
                         {meeting.phase_id && (
-                          <Badge variant="secondary" className="text-[10px]">
+                          <Badge variant="secondary" className="text-[10.5px]">
                             {phases.find((p) => p.id === meeting.phase_id)?.title}
                           </Badge>
                         )}
@@ -1149,11 +1318,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                         que parecia tela quebrada. Vazio aqui é informação de
                         gestão: diz o que ainda falta preencher. */}
                     <div className={cn(!meeting.agenda?.trim() && "opacity-60")}>
-                      <h4 className="text-xs font-semibold text-muted-foreground mb-1">📋 Pauta</h4>
+                      <h4 className="text-[12px] font-semibold text-muted-foreground mb-1">📋 Pauta</h4>
                       {meeting.agenda?.trim() ? (
-                        <p className="text-sm text-foreground whitespace-pre-wrap">{meeting.agenda}</p>
+                        <p className="text-[13px] text-foreground whitespace-pre-wrap">{meeting.agenda}</p>
                       ) : (
-                        <p className="text-xs text-muted-foreground/70 italic">
+                        <p className="text-[12px] text-muted-foreground/70 italic">
                           Nenhuma pauta definida.
                           {canEditMeeting && (
                             <button
@@ -1170,18 +1339,18 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                     {/* Participants */}
                     {meeting.participants?.length > 0 ? (
                       <div>
-                        <h4 className="text-xs font-semibold text-muted-foreground mb-1">👥 Participantes</h4>
+                        <h4 className="text-[12px] font-semibold text-muted-foreground mb-1">👥 Participantes</h4>
                         <div className="space-y-1">
                           {meeting.participants.map((pId, i) => {
                             const prof = getProfile(pId);
                             return (
-                              <div key={i} className="flex items-center gap-2 text-sm">
+                              <div key={i} className="flex items-center gap-2 text-[13px]">
                                 <span className="font-medium">{prof?.full_name || prof?.email || pId}</span>
                                 {prof?.sector && (
-                                  <Badge variant="outline" className="text-[10px] gap-1"><Building2 className="w-2.5 h-2.5" />{prof.sector}</Badge>
+                                  <Badge variant="outline" className="text-[10.5px] gap-1"><Building2 className="w-2.5 h-2.5" />{prof.sector}</Badge>
                                 )}
                                 {prof?.role_title && (
-                                  <Badge variant="secondary" className="text-[10px] gap-1"><Briefcase className="w-2.5 h-2.5" />{prof.role_title}</Badge>
+                                  <Badge variant="secondary" className="text-[10.5px] gap-1"><Briefcase className="w-2.5 h-2.5" />{prof.role_title}</Badge>
                                 )}
                               </div>
                             );
@@ -1190,8 +1359,8 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                       </div>
                     ) : (
                       <div className="opacity-60">
-                        <h4 className="text-xs font-semibold text-muted-foreground mb-1">👥 Participantes</h4>
-                        <p className="text-xs text-muted-foreground/70 italic">
+                        <h4 className="text-[12px] font-semibold text-muted-foreground mb-1">👥 Participantes</h4>
+                        <p className="text-[12px] text-muted-foreground/70 italic">
                           Ninguém indicado.
                           {canEditMeeting && (
                             <button
@@ -1210,7 +1379,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                         Retrospective, cerimônia que ninguém usava). Virou ícone
                         no cabeçalho da seção, como nas decisões e ações. */}
                     <div className={cn(!meeting.minutes?.trim() && "opacity-60")}>
-                      <h4 className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+                      <h4 className="text-[12px] font-semibold text-muted-foreground mb-1 flex items-center gap-1">
                         📝 Ata
                         {/* Promover só faz sentido com texto: sem ata não há o
                             que virar lição. */}
@@ -1224,9 +1393,9 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                         )}
                       </h4>
                       {meeting.minutes?.trim() ? (
-                        <p className="text-sm text-foreground whitespace-pre-wrap">{meeting.minutes}</p>
+                        <p className="text-[13px] text-foreground whitespace-pre-wrap">{meeting.minutes}</p>
                       ) : (
-                        <p className="text-xs text-muted-foreground/70 italic">
+                        <p className="text-[12px] text-muted-foreground/70 italic">
                           Ata não registrada.
                           {canEditMeeting && (
                             <button
@@ -1242,7 +1411,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
 
                     {/* Decisions */}
                     <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                      <h4 className="text-[12px] font-semibold text-muted-foreground mb-2 flex items-center gap-1">
                         <CheckSquare className="w-3 h-3" /> Decisões
                       </h4>
                       <div className="space-y-1">
@@ -1250,14 +1419,14 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                             nem lista, nem campo, nem explicação — parecia tela
                             quebrada ou carregando para sempre. */}
                         {meetingDecisions.length === 0 && (
-                          <p className="text-xs text-muted-foreground/70 italic py-1">
+                          <p className="text-[12px] text-muted-foreground/70 italic py-1">
                             {canEditMeeting
                               ? "Nenhuma decisão registrada."
                               : "Nenhuma decisão registrada. Só quem organiza a reunião ou gerencia o projeto pode adicionar."}
                           </p>
                         )}
                         {meetingDecisions.map((d) => (
-                          <div key={d.id} className="flex items-center gap-2 text-sm p-2 bg-accent/20 rounded">
+                          <div key={d.id} className="flex items-center gap-2 text-[13px] p-2 bg-accent/20 rounded">
                             <span className="flex-1 min-w-0">{d.description}</span>
                             {/* Antes só havia "Gerar Tarefa", e escondido em
                                 opacity-0: ação que só aparece no hover não é
@@ -1286,7 +1455,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                             value={newDecision}
                             onChange={(e) => setNewDecision(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && handleAddDecision(meeting.id)}
-                            className="text-sm h-8"
+                            className="text-[13px] h-8"
                           />
                           {newDecision.trim() && (
                             <AIAssistButton value={newDecision} onChange={setNewDecision} context="meeting_decision" size="icon" />
@@ -1300,7 +1469,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
 
                     {/* Actions */}
                     <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                      <h4 className="text-[12px] font-semibold text-muted-foreground mb-2 flex items-center gap-1">
                         <Zap className="w-3 h-3" /> Ações
                         {/* A ata terminava nela mesma: a ação era gravada com
                             responsável e ninguém era avisado. Só aparece quando
@@ -1321,27 +1490,27 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                       </h4>
                       <div className="space-y-1">
                         {meetingActions.length === 0 && (
-                          <p className="text-xs text-muted-foreground/70 italic py-1">
+                          <p className="text-[12px] text-muted-foreground/70 italic py-1">
                             {canEditMeeting
                               ? "Nenhuma ação registrada."
                               : "Nenhuma ação registrada. Só quem organiza a reunião ou gerencia o projeto pode adicionar."}
                           </p>
                         )}
                         {meetingActions.map((a) => (
-                          <div key={a.id} className="flex items-center gap-2 text-sm p-2 bg-accent/20 rounded">
+                          <div key={a.id} className="flex items-center gap-2 text-[13px] p-2 bg-accent/20 rounded">
                             <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
                               <button
                                 className={`w-4 h-4 rounded border flex items-center justify-center ${a.is_completed ? "bg-primary border-primary text-primary-foreground" : "border-border"}`}
                                 onClick={() => canEditMeeting && handleToggleAction(a, meeting.id)}
                                 disabled={!canEditMeeting}
                               >
-                                {a.is_completed && <span className="text-xs">✓</span>}
+                                {a.is_completed && <span className="text-[12px]">✓</span>}
                               </button>
                               <span className={a.is_completed ? "line-through text-muted-foreground" : ""}>
                                 {a.description}
                               </span>
                               {a.assigned_to && (
-                                <Badge variant="outline" className="text-[10px]">
+                                <Badge variant="outline" className="text-[10.5px]">
                                   <span className="inline-flex items-center gap-1 max-w-[180px]">
                                     <Avatar className="h-4 w-4 shrink-0">
                                       {(() => {
@@ -1354,7 +1523,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                                   </span>
                                 </Badge>
                               )}
-                              {a.due_date && <Badge variant="secondary" className="text-[10px]">📅 {new Date(a.due_date).toLocaleDateString("pt-BR")}</Badge>}
+                              {a.due_date && <Badge variant="secondary" className="text-[10.5px]">📅 {new Date(a.due_date).toLocaleDateString("pt-BR")}</Badge>}
                               {/* Caminho de volta: a ação virou tarefa, então
                                   daqui se chega ao trabalho. Sem este link, o
                                   vínculo existiria no banco e não na tela. */}
@@ -1362,7 +1531,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                                 <a
                                   href={`/project/${projectId}?activity=${a.activity_id}`}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline shrink-0"
+                                  className="inline-flex items-center gap-1 text-[10.5px] text-primary hover:underline shrink-0"
                                   title="Abrir a tarefa criada a partir desta ação"
                                 >
                                   <ListTodo className="w-3 h-3" /> ver tarefa
@@ -1395,7 +1564,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                             placeholder="Descrição da ação"
                             value={newAction.description}
                             onChange={(e) => setNewAction({ ...newAction, description: e.target.value })}
-                            className="text-sm h-8 col-span-1"
+                            className="text-[13px] h-8 col-span-1"
                           />
                           {/* Era Input de texto livre: dava para digitar
                               qualquer coisa, e a ação nascia com um
@@ -1412,7 +1581,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                             }))}
                             value={profiles.find((p) => p.full_name === newAction.assigned_to)?.id ?? null}
                             placeholder="Responsável"
-                            className="h-8 text-sm"
+                            className="h-8 text-[13px]"
                             onSelect={(p) => setNewAction({ ...newAction, assigned_to: p.full_name })}
                             onClear={() => setNewAction({ ...newAction, assigned_to: "" })}
                           />
@@ -1420,7 +1589,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                             <DateField
                               value={newAction.due_date}
                               onChange={(v) => setNewAction({ ...newAction, due_date: v })}
-                              className="text-sm h-8"
+                              className="text-[13px] h-8"
                             />
                             <Button size="sm" variant="outline" className="h-8" onClick={() => handleAddAction(meeting.id)}>
                               <Plus className="w-3 h-3" />
