@@ -1431,17 +1431,10 @@ export const EditActivityDialog = ({
                 {act.id.slice(0, 8)}
                 <Copy className="w-3 h-3 opacity-50" />
               </button>
-              {!!formData.wbs_code.trim() && (
-                <>
-                  <span className="opacity-50">·</span>
-                  <span
-                    className="inline-flex items-center h-5 px-1.5 rounded border border-border bg-muted/40 font-mono text-[10px] text-muted-foreground"
-                    title="Código EAP"
-                  >
-                    EAP {formData.wbs_code.trim()}
-                  </span>
-                </>
-              )}
+              {/* O código EAP NÃO se repete aqui: ele já aparece colado ao nome
+                  da atividade, logo abaixo, que é onde diz alguma coisa — "1.1.1
+                  Receber demanda da Diretoria" se lê como uma frase. Solto no
+                  cabeçalho era a mesma informação duas vezes em duas linhas. */}
               <span className="opacity-50">·</span>
               <span>
                 Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")}
