@@ -228,7 +228,11 @@ export const BacklogSection = ({
   // O mínimo da coluna Tarefa é baixo de propósito: ela tem `truncate`, então
   // encolher corta o texto com reticências — o que é preferível a empurrar a
   // coluna de ações para fora da tela.
-  const backlogGrid = `20px 26px minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
+  // A coluna de 26px é da CAIXA DE SELEÇÃO e só existe no modo seleção em lote.
+  // Ela era fixa: depois que o botão de concluir saiu dali, sobrava uma faixa
+  // vazia antes de cada tarefa e o conteúdo todo começava deslocado à direita,
+  // sem nada ocupando o espaço.
+  const backlogGrid = `20px ${selectMode ? "26px " : ""}minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
 
   useEffect(() => {
     const ids = activities.map((a) => a.id);
@@ -605,7 +609,9 @@ export const BacklogSection = ({
       className="grid items-center gap-2 px-3 py-1.5 bg-muted/40 border-b border-border text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground"
       style={{ gridTemplateColumns: backlogGrid }}
     >
-      <span /><span />
+      {/* expand + (caixa de seleção, só no modo) — espelha as células da linha */}
+      <span />
+      {selectMode && <span />}
       <span>Tarefa</span>
       {activeCols.map((c) => (
         <span key={c.id}>{c.label}</span>
@@ -753,22 +759,19 @@ export const BacklogSection = ({
             <span className="w-5" />
           )}
 
-          {/* col: checkbox do modo seleção (vazia fora dele) */}
-          {/* Só a caixa de seleção em lote ocupa esta coluna. O botão redondo de
-              concluir saiu daqui: eram DOIS círculos quase iguais no começo de
-              cada linha (este e o ícone de tipo), lidos como checkbox duplicado.
-              Concluir passou para o menu "⋯" da ponta direita, junto das demais
-              ações da tarefa. Fora do modo seleção a coluna fica vazia, mantendo
-              o alinhamento com o cabeçalho. */}
-          {selectMode ? (
+          {/* col: caixa de seleção em lote — só existe no modo seleção.
+              O botão redondo de concluir saiu daqui (eram dois círculos quase
+              iguais no começo da linha, lidos como checkbox duplicado) e a
+              coluna ficou reservada e vazia, empurrando todo o conteúdo para a
+              direita. Agora a célula não é emitida e a coluna some do grid —
+              ver backlogGrid, que também é condicional. */}
+          {selectMode && (
             <Checkbox
               checked={isSelected}
               onCheckedChange={() => toggleSelect(activity.id)}
               onClick={(e) => e.stopPropagation()}
               aria-label={`Selecionar ${activity.title}`}
             />
-          ) : (
-            <span />
           )}
 
           {/* col: ícone de tipo (clicável) + título + código EAP + deps.
@@ -1098,20 +1101,26 @@ export const BacklogSection = ({
                 className="grid items-center gap-2 border-b px-3 py-1.5 bg-primary/5"
                 style={{ gridTemplateColumns: backlogGrid }}
               >
+                {/* expand + (caixa, só no modo seleção). O ícone Plus ficava
+                    sozinho numa coluna que agora é condicional; foi para dentro
+                    da célula do título, ao lado do campo. */}
                 <span />
-                <Plus className="w-3.5 h-3.5 text-primary justify-self-center" />
-                <Input
-                  autoFocus
-                  placeholder="Título — Enter cria · Esc fecha"
-                  value={quickAddTitle}
-                  onChange={(e) => setQuickAddTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleQuickAddSubmit(phaseId, null);
-                    if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
-                  }}
-                  onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
-                  className="h-7 text-[13px]"
-                />
+                {selectMode && <span />}
+                <div className="flex items-center gap-2 min-w-0">
+                  <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <Input
+                    autoFocus
+                    placeholder="Título — Enter cria · Esc fecha"
+                    value={quickAddTitle}
+                    onChange={(e) => setQuickAddTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleQuickAddSubmit(phaseId, null);
+                      if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
+                    }}
+                    onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
+                    className="h-7 text-[13px]"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -1265,20 +1274,26 @@ export const BacklogSection = ({
                 className="grid items-center gap-2 border-b px-3 py-1.5 bg-primary/5"
                 style={{ gridTemplateColumns: backlogGrid }}
               >
+                {/* expand + (caixa, só no modo seleção). O ícone Plus ficava
+                    sozinho numa coluna que agora é condicional; foi para dentro
+                    da célula do título, ao lado do campo. */}
                 <span />
-                <Plus className="w-3.5 h-3.5 text-primary justify-self-center" />
-                <Input
-                  autoFocus
-                  placeholder="Título — Enter cria · Esc fecha"
-                  value={quickAddTitle}
-                  onChange={(e) => setQuickAddTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleQuickAddSubmit(phaseAct.phase_id, phaseAct.id);
-                    if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
-                  }}
-                  onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
-                  className="h-8 text-[13px]"
-                />
+                {selectMode && <span />}
+                <div className="flex items-center gap-2 min-w-0">
+                  <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <Input
+                    autoFocus
+                    placeholder="Título — Enter cria · Esc fecha"
+                    value={quickAddTitle}
+                    onChange={(e) => setQuickAddTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleQuickAddSubmit(phaseAct.phase_id, phaseAct.id);
+                      if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
+                    }}
+                    onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
+                    className="h-7 text-[13px]"
+                  />
+                </div>
               </div>
             )}
           </div>
