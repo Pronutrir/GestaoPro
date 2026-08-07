@@ -23,6 +23,7 @@ import { BacklogSection } from "@/components/BacklogSection";
 import { QuickCreateActivity } from "@/components/QuickCreateActivity";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { MeetingsManager } from "@/components/MeetingsManager";
+import { ProjectRegistrosTimeline } from "@/components/ProjectRegistrosTimeline";
 
 import { RisksManager } from "@/components/RisksManager";
 import { ChangeRequestsManager } from "@/components/ChangeRequestsManager";
@@ -34,7 +35,7 @@ import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
-  Layers, GanttChart, BookOpen, FileText, Flag,
+  Layers, GanttChart, BookOpen, FileText, Flag, History,
   ChevronRight, MoreHorizontal, Kanban, Users, AlertTriangle,
   Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
   NotebookPen, Search, X,
@@ -122,6 +123,7 @@ const SUPPORTED_PROJECT_TABS = [
   "timeline",
   "calendar",
   "documents",
+  "registros",
   "stories",
   "tap",
   "meetings",
@@ -1508,6 +1510,10 @@ export default function ProjectDetailsPage() {
                   { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-rose-500" },
                 ]),
                 { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-blue-500" },
+                // Registros: linha do tempo única de reuniões, documentos e
+                // lições. Não substitui as três abas — responde "o que andou
+                // neste projeto?", que hoje exige abrir as três e comparar datas.
+                { value: "registros", label: "Registros", icon: <History className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-slate-500" },
                 ...(SHOW_USER_STORIES ? [
                   { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-fuchsia-500" },
                 ] : []),
@@ -1670,13 +1676,34 @@ export default function ProjectDetailsPage() {
                 // seções apareciam como títulos vazios, sem campo de entrada e
                 // sem dizer por quê. Mesmo critério dos outros painéis da tela.
                 canManageProject={canEdit}
-                onCreateActivity={async (title, assignedTo) => {
+                // Devolve o ID da atividade criada para quem chamou poder GRAVAR
+                // O VÍNCULO. Antes retornava void: a ação de reunião virava
+                // tarefa e as duas ficavam sem ligação nenhuma — a ata não sabia
+                // que a tarefa existia, e a tarefa não sabia de onde veio.
+                // `dueDate` idem: o prazo já foi combinado na reunião.
+                onCreateActivity={async (title, assignedTo, dueDate) => {
                   if (isProjectConcluded) {
                     showProjectLockedToast("criar atividades");
-                    return;
+                    return null;
                   }
-                  await supabase.from("activities").insert({ project_id: id!, title, assigned_to: assignedTo || null, status: "pending", priority: "medium" });
+                  const { data, error } = await supabase
+                    .from("activities")
+                    .insert({
+                      project_id: id!,
+                      title,
+                      assigned_to: assignedTo || null,
+                      end_date: dueDate || null,
+                      status: "pending",
+                      priority: "medium",
+                    })
+                    .select("id")
+                    .single();
+                  if (error) {
+                    toast.error("Não foi possível criar a atividade.", { description: error.message });
+                    return null;
+                  }
                   fetchProjectData();
+                  return (data as { id: string } | null)?.id ?? null;
                 }}
                 onCreateBlocker={async (description) => {
                   await supabase.from("risks").insert({ project_id: id!, description, probability: "high", impact: "high", status: "identified", category: "impediment" });
@@ -1685,6 +1712,10 @@ export default function ProjectDetailsPage() {
                   await supabase.from("lessons_learned").insert({ project_id: id!, problem, suggestion: suggestion || null, category: "process" });
                 }}
               />
+            </TabsContent>
+
+            <TabsContent value="registros" className="mt-0">
+              <ProjectRegistrosTimeline projectId={id!} />
             </TabsContent>
 
             <TabsContent value="lessons" className="mt-0">

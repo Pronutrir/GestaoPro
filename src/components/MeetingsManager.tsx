@@ -28,6 +28,7 @@ import {
   Lightbulb,
   Bell,
   AlertTriangle,
+  ListTodo,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -100,7 +101,8 @@ interface Phase {
 interface MeetingsManagerProps {
   projectId: string;
   phases: Phase[];
-  onCreateActivity?: (title: string, assignedTo?: string) => Promise<void>;
+  /** Cria a atividade e DEVOLVE o id, para o chamador gravar o vínculo. */
+  onCreateActivity?: (title: string, assignedTo?: string, dueDate?: string | null) => Promise<string | null | void>;
   onCreateBlocker?: (description: string) => Promise<void>;
   onCreateLesson?: (problem: string, suggestion: string) => Promise<void>;
   canManageProject?: boolean;
@@ -524,12 +526,53 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     fetchDetails(meetingId);
   };
 
+  /**
+   * Ação de reunião VIRA TAREFA, com vínculo gravado.
+   *
+   * Antes a atividade era criada e a marca de "promovido" ficava só em state —
+   * ao recarregar a página sumia, e nada ligava as duas: a ata não sabia que a
+   * tarefa existia e a tarefa não sabia de onde veio. Medido no projeto: 4
+   * reuniões produziram 1 ação, e nenhuma virou trabalho rastreável.
+   *
+   * Agora grava `activity_id` na ação. O vínculo é o que faz a decisão da
+   * reunião aparecer no Kanban, em Pendências e no painel de quem é responsável.
+   * Leva junto o prazo combinado — ele já foi acordado na reunião.
+   */
   const handlePromoteToActivity = async (action: MeetingAction, meetingId: string) => {
-    if (onCreateActivity) {
-      await onCreateActivity(action.description, action.assigned_to || undefined);
-      marcarPromovido(`acao:${action.id}`, "atividade");
-      toast({ title: "Atividade criada no Kanban!" });
+    if (!onCreateActivity) return;
+    if (action.activity_id) {
+      toast({ title: "Esta ação já virou tarefa", description: "Abra a tarefa vinculada para acompanhar." });
+      return;
     }
+
+    const novoId = await onCreateActivity(
+      action.description,
+      action.assigned_to || undefined,
+      action.due_date || null,
+    );
+
+    if (typeof novoId === "string" && novoId) {
+      const { error } = await supabase
+        .from("meeting_actions")
+        .update({ activity_id: novoId } as any)
+        .eq("id", action.id);
+      // Falha ao gravar o vínculo não desfaz a tarefa criada: ela é o que o
+      // usuário pediu. Só o rastro se perde, e o aviso diz isso.
+      if (error) {
+        toast({
+          title: "Tarefa criada, sem vínculo",
+          description: "A tarefa foi criada, mas não foi possível ligá-la a esta ação.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Ação virou tarefa", description: "Aparece agora no Kanban e em Pendências." });
+      }
+    } else {
+      toast({ title: "Tarefa criada", description: "Não foi possível registrar o vínculo com a ação." });
+    }
+
+    marcarPromovido(`acao:${action.id}`, "atividade");
+    fetchDetails(meetingId);
   };
 
   /**
@@ -1312,6 +1355,19 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                                 </Badge>
                               )}
                               {a.due_date && <Badge variant="secondary" className="text-[10px]">📅 {new Date(a.due_date).toLocaleDateString("pt-BR")}</Badge>}
+                              {/* Caminho de volta: a ação virou tarefa, então
+                                  daqui se chega ao trabalho. Sem este link, o
+                                  vínculo existiria no banco e não na tela. */}
+                              {a.activity_id && (
+                                <a
+                                  href={`/project/${projectId}?activity=${a.activity_id}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline shrink-0"
+                                  title="Abrir a tarefa criada a partir desta ação"
+                                >
+                                  <ListTodo className="w-3 h-3" /> ver tarefa
+                                </a>
+                              )}
                             </div>
                             {canEditMeeting && (
                               <div className="flex items-center gap-1">

@@ -7,6 +7,10 @@ export const ALL_PROJECT_TABS = [
   // "Páginas" foi fundida em Documentos (Central de Documentos): escrever e
   // enviar arquivo são visões da mesma aba, não permissões separadas.
   { value: "documents", label: "Documentos" },
+  // Linha do tempo de reuniões, documentos e lições. É LEITURA das três fontes
+  // — quem enxerga Registros vê o que já poderia ver abrindo as abas de origem,
+  // então não abre acesso novo a nada.
+  { value: "registros", label: "Registros" },
   { value: "stories", label: "Histórias" },
   { value: "tap", label: "TAP" },
   { value: "meetings", label: "Reuniões" },
