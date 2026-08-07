@@ -38,6 +38,10 @@ import {
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { resolveEapKind, type EapKind } from "@/lib/eapModel";
+import {
+  avaliarProntidao, resumirProntidao, principaisCarencias,
+  PRONTIDAO_LABELS, PRONTIDAO_LABELS_LONGOS,
+} from "@/lib/prontidao";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 
@@ -78,6 +82,8 @@ interface Activity {
   wbs_code?: string | null;
   /** Arquivada (soft-delete). Fica fora da árvore e das contagens. */
   is_trashed?: boolean | null;
+  /** Gravidade do GUT — é o que marca a prioridade como definida. */
+  gravity?: number | null;
 }
 
 interface BacklogSectionProps {
@@ -128,6 +134,10 @@ export const BacklogSection = ({
   const [editingTitleValue, setEditingTitleValue] = useState("");
   // Modo de seleção em lote: quando ativo, exibe checkboxes nas linhas
   const [selectMode, setSelectMode] = useState(false);
+  // Recorte por prontidão — ver lib/prontidao. Não é persistido de propósito:
+  // é um recorte de trabalho ("o que preciso completar agora"), não uma
+  // preferência de visualização como as colunas ou o agrupamento.
+  const [prontidaoFilter, setProntidaoFilter] = useState<"all" | "ready" | "incomplete">("all");
   // Mover item para dentro de outro (troca parent_id). Menu de linha, não
   // arraste: numa lista aninhada "soltar sobre" (aninha) e "soltar entre"
   // (reordena) ficam a pixels de distância, e aninhar por engano é caro de
@@ -354,7 +364,37 @@ export const BacklogSection = ({
   // "Receber demanda da Diretoria (3)" com três subatividades excluídas
   // aparecendo aqui, enquanto a aba Subatividades do diálogo, que filtra
   // corretamente, mostrava vazio. As duas telas liam a mesma coisa e discordavam.
-  const backlogActs = activities.filter((a) => !a.is_trashed);
+  const backlogActs = (() => {
+    const vivas = activities.filter((a) => !a.is_trashed);
+    if (prontidaoFilter === "all") return vivas;
+
+    // Quem tem filhos não é avaliado (horas e datas são rollup), mas precisa
+    // continuar visível quando algum descendente passa no filtro — senão o
+    // ramo inteiro sumiria e o item filtrado iria junto. A montagem da árvore
+    // logo abaixo já promove a raiz quem perdeu o pai; aqui só garantimos que
+    // o agrupador não seja descartado por não ter avaliação própria.
+    const temFilho = new Set(vivas.filter((a) => a.parent_id).map((a) => a.parent_id as string));
+    const passa = (a: Activity) => {
+      const r = avaliarProntidao(a, temFilho.has(a.id));
+      if (!r.avaliavel) return null; // agrupador ou concluída: decide pelos filhos
+      return prontidaoFilter === "ready" ? r.pronta : !r.pronta;
+    };
+
+    const diretos = new Set(vivas.filter((a) => passa(a) === true).map((a) => a.id));
+    // Sobe dos itens que passaram até a raiz, mantendo os ancestrais.
+    const porId = new Map(vivas.map((a) => [a.id, a]));
+    const manter = new Set(diretos);
+    for (const id of diretos) {
+      let atual = porId.get(id);
+      const visto = new Set<string>([id]);
+      while (atual?.parent_id && !visto.has(atual.parent_id)) {
+        visto.add(atual.parent_id);
+        manter.add(atual.parent_id);
+        atual = porId.get(atual.parent_id);
+      }
+    }
+    return vivas.filter((a) => manter.has(a.id));
+  })();
 
   // Mapa de stage_id → {title, color} para badges
   const stageById = new Map<string, WorkflowStage>();
@@ -659,6 +699,9 @@ export const BacklogSection = ({
 
     const kind = resolveKind(activity, hasChildren);
     const kindMeta = KIND_META[kind];
+    // Prontidão: o que falta para esta tarefa ser executável. Agrupador não
+    // entra (horas e datas dele são rollup dos filhos) nem concluída.
+    const prontidao = avaliarProntidao(activity, hasChildren);
     const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
     const dc = dependencyCounts.get(activity.id);
     const hasDeps = !!dc && (dc.pred > 0 || dc.succ > 0);
@@ -828,6 +871,22 @@ export const BacklogSection = ({
                   {activity.title}
                 </span>
                 {hasChildren && <span className="text-[11px] text-muted-foreground font-normal shrink-0">({subs.length})</span>}
+                {/* O QUE FALTA para esta tarefa virar trabalho. Sem isto, um
+                    rascunho sem responsável nem prazo tinha exatamente a mesma
+                    aparência de uma tarefa pronta — e só abrindo dava para
+                    saber. Medido: 406 das 471 avaliáveis estão incompletas.
+                    Concluídas e agrupadores não recebem chip (não se avaliam). */}
+                {prontidao.avaliavel && !prontidao.pronta && (
+                  <span
+                    className="shrink-0 inline-flex items-center h-[17px] px-1.5 rounded text-[10px] font-medium border border-destructive/40 bg-destructive/5 text-destructive"
+                    title={`Falta preencher: ${prontidao.faltando.map((r) => PRONTIDAO_LABELS[r]).join(", ")}. Clique na tarefa para completar.`}
+                  >
+                    {/* No máximo dois rótulos: a lista completa vai no tooltip,
+                        senão o chip fica maior que o título da tarefa. */}
+                    falta {prontidao.faltando.slice(0, 2).map((r) => PRONTIDAO_LABELS[r]).join(" · ")}
+                    {prontidao.faltando.length > 2 && ` +${prontidao.faltando.length - 2}`}
+                  </span>
+                )}
                 {hasDeps && (
                   <span
                     className="shrink-0 text-[11px] text-primary/80"
@@ -1316,8 +1375,88 @@ export const BacklogSection = ({
     return { total: real.length, fase, marco, atividade };
   })();
 
+  // PRONTIDÃO do backlog: quantas tarefas têm o mínimo para virar trabalho.
+  // Sem isto, "718 tarefas" soava como 718 coisas prontas para fazer — quando
+  // a maioria é rascunho sem responsável, prazo ou prioridade.
+  //
+  // Calculado sobre TODAS as tarefas vivas, não sobre `backlogActs`: este já
+  // vem recortado pelo filtro, e o resumo passaria a descrever o recorte em vez
+  // do backlog — clicar em "Incompletas" mostraria "0 prontas", que é verdade
+  // sobre a tela e mentira sobre o projeto.
+  const prontidaoResumo = (() => {
+    const vivas = activities.filter((a) => !a.is_trashed);
+    const temFilho = new Set(vivas.filter((a) => a.parent_id).map((a) => a.parent_id as string));
+    return resumirProntidao(vivas.map((a) => ({ tarefa: a, temFilhos: temFilho.has(a.id) })));
+  })();
+  const carencias = principaisCarencias(prontidaoResumo);
+
   return (
     <div className="space-y-2.5">
+      {/* ===== PRONTIDÃO — o que falta para o backlog virar trabalho =====
+          A lista dizia quantas tarefas existem, nunca quantas estão prontas
+          para alguém pegar. As três faixas são clicáveis e recortam a lista;
+          é o que transforma centenas de pendências invisíveis numa fila. */}
+      {prontidaoResumo.total > 0 && (
+        <div className="flex items-center gap-3 flex-wrap rounded-lg border border-border bg-card px-3 py-2">
+          <span className="text-[12px] text-muted-foreground shrink-0">
+            <span className="text-foreground font-semibold tabular-nums">{prontidaoResumo.prontas}</span>
+            {" "}de{" "}
+            <span className="tabular-nums">{prontidaoResumo.total}</span> prontas para executar
+          </span>
+
+          {/* Barra: verde pronta · âmbar falta 1 campo · vermelho falta mais.
+              Proporcional, então o desequilíbrio se lê sem precisar dos números. */}
+          <span className="flex-1 min-w-[120px] h-2 rounded-full overflow-hidden flex border border-border/60">
+            {[
+              { n: prontidaoResumo.prontas, cls: "bg-success", lab: "prontas" },
+              { n: prontidaoResumo.quaseProntas, cls: "bg-warning", lab: "falta 1 campo" },
+              { n: prontidaoResumo.incompletas, cls: "bg-destructive", lab: "falta mais de 1" },
+            ].map((f) => f.n > 0 && (
+              <span
+                key={f.lab}
+                className={f.cls}
+                style={{ width: `${(f.n / prontidaoResumo.total) * 100}%` }}
+                title={`${f.n} ${f.lab}`}
+              />
+            ))}
+          </span>
+
+          {/* As duas maiores carências: é o que orienta por onde começar. */}
+          {carencias.length > 0 && (
+            <span className="text-[12px] text-muted-foreground shrink-0">
+              {carencias
+                .map((c) => `${PRONTIDAO_LABELS_LONGOS[c.requisito].replace("sem ", "falta ")} em ${c.quantidade}`)
+                .join(" · ")}
+            </span>
+          )}
+
+          {/* Recorte. "Todas" volta ao estado normal da lista. */}
+          <span className="inline-flex rounded-md border border-border overflow-hidden shrink-0 ml-auto">
+            {([
+              ["all", `Todas ${prontidaoResumo.total}`],
+              ["ready", `Prontas ${prontidaoResumo.prontas}`],
+              ["incomplete", `Incompletas ${prontidaoResumo.quaseProntas + prontidaoResumo.incompletas}`],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setProntidaoFilter(id)}
+                className={cn(
+                  "px-2.5 py-1 text-[11px] font-medium transition-colors border-r border-border last:border-r-0",
+                  prontidaoFilter === id
+                    ? id === "incomplete"
+                      ? "bg-destructive text-destructive-foreground"
+                      : "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+        </div>
+      )}
+
       {/* Barra de visão: legenda de contexto (esq.) + controles (dir.) */}
       {backlogActs.length > 0 && (
         <div className="flex items-center justify-between gap-3 flex-wrap px-0.5">
@@ -1432,13 +1571,35 @@ export const BacklogSection = ({
             Atividade" (ou importar a EAP, que já cria as fases). Fase avulsa
             criada antes de existir qualquer tarefa só produzia um agrupador
             vazio que o usuário depois não sabia como remover. */}
-        {phases.length === 0 && backlogActs.length === 0 && (
+        {phases.length === 0 && backlogActs.length === 0 && prontidaoFilter === "all" && (
           <div className="p-8 text-center">
             <Inbox className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
             <p className="text-muted-foreground text-sm">Nenhuma atividade ainda</p>
             <p className="text-muted-foreground/60 text-xs mt-1">
               Use <span className="font-medium">Nova Atividade</span> para começar, ou <span className="font-medium">Importar EAP</span> para trazer a estrutura pronta.
             </p>
+          </div>
+        )}
+
+        {/* Vazio POR CAUSA DO FILTRO — mensagem diferente da de projeto vazio.
+            "Nenhuma atividade ainda" num projeto com 718 tarefas seria mentira,
+            e esconderia que basta desligar o recorte. */}
+        {backlogActs.length === 0 && prontidaoFilter !== "all" && (
+          <div className="p-8 text-center">
+            <Inbox className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+            <p className="text-muted-foreground text-sm">
+              {prontidaoFilter === "ready"
+                ? "Nenhuma tarefa pronta para executar"
+                : "Nenhuma tarefa incompleta"}
+            </p>
+            <p className="text-muted-foreground/60 text-xs mt-1">
+              {prontidaoFilter === "ready"
+                ? "Complete responsável, prazo, prioridade e estimativa para uma tarefa aparecer aqui."
+                : "Todas as tarefas têm o mínimo preenchido."}
+            </p>
+            <Button size="sm" variant="outline" className="h-7 text-xs mt-3" onClick={() => setProntidaoFilter("all")}>
+              Ver todas
+            </Button>
           </div>
         )}
 
