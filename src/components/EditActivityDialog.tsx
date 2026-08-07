@@ -15,7 +15,11 @@ import { useToast } from "@/hooks/use-toast";
 import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2, IndentIncrease, CornerDownRight } from "lucide-react";
 // Validação de movimento na EAP — a MESMA que o Backlog e o Kanban usam, para
 // as três telas recusarem exatamente as mesmas coisas (ciclo, self, marco).
-import { eapCanMoveInto, eapDescendantIds, eapShouldDemote, type EapNodeLike } from "@/lib/eapModel";
+import {
+  eapCanMoveInto, eapCanGroup, eapDescendantIds, eapShouldDemote,
+  eapToPersisted, eapTypeOptions, resolveEapKind, EAP_LABELS,
+  type EapKind, type EapNodeLike,
+} from "@/lib/eapModel";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { endVariance, varianceTone, varianceClasses } from "@/lib/dateVariance";
@@ -1790,39 +1794,58 @@ export const EditActivityDialog = ({
                     </PropertyRow>
                   )}
   
-                  {/* Tipo do item (papéis EAP): Fase/Entrega | Atividade | Marco.
-                      Mutuamente exclusivo. Agrupador legado ('pacote') exibe como Fase. */}
+                  {/* Tipo do item (papéis EAP) — LÊ DE lib/eapModel.
+                      Este seletor era a última cópia divergente da regra: tinha
+                      lógica própria que dizia "Fase / Entrega" num botão só,
+                      justamente o achatamento corrigido em fc0da05, e mostrava
+                      papel diferente do Backlog/Kanban para o mesmo item. Agora
+                      resolveEapKind decide o papel e eapTypeOptions decide o que
+                      é oferecido: no nível 1 aparece Fase, do 1.1 em diante
+                      Entrega — nunca os dois. */}
                   {(() => {
-                    type Kind = "fase" | "atividade" | "marco";
-                    // Papel EXIBIDO: agrupador legado ('pacote' ou com subitens) vira Fase.
-                    const itemKind: Kind = formData.is_milestone
-                      ? "marco"
-                      : (formData.item_type === "fase" || formData.item_type === "pacote" || hasSubActivities)
-                        ? "fase"
-                        : "atividade";
-                    const setKind = (kind: Kind) =>
+                    type Kind = EapKind;
+                    const itemKind: Kind = resolveEapKind(
+                      {
+                        item_type: formData.item_type,
+                        is_milestone: formData.is_milestone,
+                        wbs_code: formData.wbs_code,
+                      },
+                      hasSubActivities,
+                    );
+                    const setKind = (kind: Kind) => {
+                      // eapToPersisted é a fonte do que vai ao banco: Fase e
+                      // Entrega gravam igual ('fase'), Marco é a flag.
+                      const persisted = eapToPersisted(kind);
                       setFormData({
                         ...formData,
-                        is_milestone: kind === "marco",
-                        // Marco grava como 'atividade' (o tipo é a flag is_milestone).
-                        // Fase/Entrega grava 'fase'; folha grava 'atividade'.
-                        item_type: kind === "marco" ? "atividade" : kind,
+                        is_milestone: persisted.is_milestone,
+                        item_type: persisted.item_type,
                         // Marco é um ponto no tempo — não tem intervalo de fim.
                         end_date: kind === "marco" ? "" : formData.end_date,
                       });
-  
-                    // Atividade também pode agrupar: o que define o rótulo é o
-                    // NÍVEL na EAP, não o fato de ter subitens. Só Marco segue
-                    // barrado com filhos — marco é folha de controle, um marco
-                    // que agrupa não faz sentido.
-                    const kindDisabledReason = (kind: Kind): string | null => {
-                      if (hasSubActivities && kind === "marco")
-                        return "Este item tem subitens; Marco não agrupa.";
-                      return null;
                     };
-                    const KIND_OPTIONS: {
+
+                    // Papéis VÁLIDOS para este item. O agrupador oferecido é
+                    // Fase OU Entrega conforme o nível, nunca ambos; e Marco sai
+                    // dos válidos quando há filhos (folha de controle não
+                    // agrupa) — mas continua VISÍVEL, desabilitado, ver
+                    // KIND_OPTIONS abaixo.
+                    const allowed = eapTypeOptions({
+                      hasChildren: hasSubActivities,
+                      wbsCode: formData.wbs_code,
+                    });
+                    const kindDisabledReason = (kind: Kind): string | null => {
+                      if (allowed.includes(kind)) return null;
+                      if (kind === "marco" && hasSubActivities)
+                        return "Este item tem subitens; Marco não agrupa.";
+                      if (kind === "fase")
+                        return "Fase é o nível 1 da EAP (1, 2, 3…). Este item está dentro de uma fase.";
+                      if (kind === "entrega")
+                        return "Entrega fica do nível 1.1 em diante, dentro de uma fase.";
+                      return "Indisponível para este item.";
+                    };
+                    const ALL_KINDS: {
                       kind: Kind;
-                      label: string;
                       icon: React.ReactNode;
                       hint: string;
                       activeCls: string;
@@ -1833,33 +1856,58 @@ export const EditActivityDialog = ({
                       // lia como marcado.
                       {
                         kind: "fase",
-                        label: "Fase / Entrega",
                         icon: <Layers className="w-3.5 h-3.5" />,
-                        hint: "Nível 1 da EAP (1, 2, 3…). Agrupa entregas; datas, horas e custo derivam dos filhos.",
+                        hint: "Nível 1 da EAP (1, 2, 3…). Etapa do ciclo de vida; datas, horas e custo derivam dos filhos.",
+                        activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
+                      },
+                      {
+                        kind: "entrega",
+                        icon: <Layers className="w-3.5 h-3.5" />,
+                        hint: "Do nível 1.1 em diante. Está dentro de uma fase; é o que ela produz.",
                         activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
                       },
                       {
                         kind: "atividade",
-                        label: "Atividade",
                         icon: <Circle className="w-3.5 h-3.5" />,
-                        hint: "Do nível 1.1 em diante. Pode ter subitens — aí horas e custo somam dos filhos.",
+                        hint: "Folha de trabalho: vai ao Kanban, tem horas, custo e responsável. Pode ter subitens.",
                         activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
                       },
                       {
                         kind: "marco",
-                        label: "Marco",
                         icon: <Diamond className={`w-3.5 h-3.5 ${itemKind === "marco" ? "fill-current" : ""}`} />,
                         hint: "Ponto único no tempo (uma data, sem intervalo). Não tem horas nem custo.",
                         activeCls: "border-amber-500 bg-amber-500 text-white shadow-sm",
                       },
                     ];
+                    // O que SAI do trilho e o que fica DESABILITADO são coisas
+                    // diferentes:
+                    //
+                    // • Fase e Entrega são o mesmo papel em níveis diferentes —
+                    //   só uma das duas faz sentido para este item, e mostrar a
+                    //   outra apagada sugeriria uma escolha que não existe. Some.
+                    // • Marco continua SEMPRE visível. Quando o item tem filhos
+                    //   ele fica desabilitado com o motivo no tooltip, como já
+                    //   era antes: sumir deixaria "não consigo marcar como
+                    //   marco" sem nenhuma pista do porquê.
+                    //
+                    // O papel atual nunca é filtrado — senão um item legado
+                    // gravado como Fase num nível 2 ficaria sem botão marcado.
+                    const KIND_OPTIONS = ALL_KINDS.filter(
+                      (o) =>
+                        o.kind === "marco" ||
+                        allowed.includes(o.kind) ||
+                        o.kind === itemKind,
+                    );
                     return (
                       <PropertyRow
                         iconClassName={itemKind === "marco" ? "text-amber-500" : "text-primary"}
                         icon={
                           itemKind === "marco" ? (
                             <Diamond className="w-3.5 h-3.5 fill-amber-500" />
-                          ) : itemKind === "fase" ? (
+                          ) : eapCanGroup(itemKind) ? (
+                            // Fase E Entrega usam o ícone de camadas: as duas
+                            // agrupam. Antes só "fase" acertava e a Entrega caía
+                            // no círculo de folha.
                             <Layers className="w-3.5 h-3.5" />
                           ) : (
                             <Circle className="w-3.5 h-3.5" />
@@ -1889,13 +1937,18 @@ export const EditActivityDialog = ({
                                   } ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
                                 >
                                   {opt.icon}
-                                  {opt.label}
+                                  {EAP_LABELS[opt.kind]}
                                 </button>
                               );
                             })}
                           </div>
                           {hasSubActivities && (
-                            <span className="text-[10.5px] text-primary flex items-center gap-1 min-w-0" title="Este item agrupa subitens — por isso é uma Fase/Entrega. Horas e custo são somados dos filhos (veja a aba Subatividades).">
+                            // O texto dizia "por isso é uma Fase/Entrega" —
+                            // regra ANTIGA ("quem agrupa é Fase"). Hoje o papel
+                            // vem do NÍVEL: uma Atividade pode ter subitens sem
+                            // deixar de ser Atividade. A nota agora só informa o
+                            // que é fato ali — o rollup — sem inventar a causa.
+                            <span className="text-[10.5px] text-primary flex items-center gap-1 min-w-0" title="Horas e custo deste item são a soma dos subitens (veja a aba Subatividades). O papel na EAP vem do nível do código, não de ter filhos.">
                               <Layers className="w-3 h-3 shrink-0" />
                               <span className="truncate">Agrupa {ownSubActivities.length} subitem(ns) — horas e custo somados dos filhos.</span>
                             </span>
