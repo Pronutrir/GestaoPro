@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { resolveEapKind, eapTypeOptions, type EapKind } from "@/lib/eapModel";
+import { resolveEapKind, type EapKind } from "@/lib/eapModel";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 
@@ -582,24 +582,10 @@ export const BacklogSection = ({
     atividade: { label: "Atividade", icon: <Circle className="w-3 h-3" />, cls: "text-muted-foreground bg-muted border-border" },
     marco: { label: "Marco", icon: <Diamond className="w-3 h-3 fill-amber-500 text-amber-500" />, cls: "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/40" },
   };
-  // Muda o tipo de um item.
-  const handleChangeType = async (activity: Activity, kind: Kind, hasChildren: boolean) => {
-    // Atividade agora pode agrupar (o nível é que define o rótulo). Só Marco
-    // segue barrado com filhos: é folha de controle por definição.
-    if (kind === "marco" && hasChildren) {
-      toast({ title: "Não é possível", description: "Este item tem subitens; Marco não agrupa.", variant: "destructive" });
-      return;
-    }
-    const patch = kind === "marco"
-      ? { is_milestone: true, item_type: "atividade" }
-      : { is_milestone: false, item_type: kind }; // 'fase' | 'atividade'
-    const { error } = await supabase.from("activities").update(patch as any).eq("id", activity.id);
-    if (error) {
-      toast({ title: "Erro ao mudar tipo", variant: "destructive" });
-      return;
-    }
-    onDataChanged();
-  };
+  // A troca de tipo pela linha foi removida junto com o menu do ícone: o papel
+  // na EAP não é escolha avulsa, vem do nível do código e de ter filhos. Mudar
+  // o tipo é pelo diálogo da atividade, onde o campo fica junto do Código EAP
+  // e do "Dentro de" — que são o que determina o papel.
 
   // Conta itens e concluídos de um grupo (raízes + toda a subárvore visível).
   const groupProgress = (roots: Activity[]): { total: number; done: number } => {
@@ -667,9 +653,6 @@ export const BacklogSection = ({
 
     const kind = resolveKind(activity, hasChildren);
     const kindMeta = KIND_META[kind];
-    // O agrupador oferecido vem do NÍVEL: Fase só no 1, Entrega abaixo dele.
-    // Só Marco fica de fora quando há filhos, por ser folha de controle.
-    const typeOptions: Kind[] = eapTypeOptions({ hasChildren, wbsCode: activity.wbs_code });
     const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
     const dc = dependencyCounts.get(activity.id);
     const hasDeps = !!dc && (dc.pred > 0 || dc.succ > 0);
@@ -798,31 +781,21 @@ export const BacklogSection = ({
               assim a hierarquia continua legível sem deslocar as demais
               colunas, que permanecem alinhadas com o cabeçalho. */}
           <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: depth * 18 }}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  onClick={(e) => e.stopPropagation()}
-                  title={`Tipo: ${kindMeta.label} — clique para mudar`}
-                  className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md border bg-muted/60 transition-colors hover:brightness-95 ${kindMeta.cls}`}
-                >
-                  {kindMeta.icon}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-                {typeOptions.map((k) => (
-                  <DropdownMenuItem
-                    key={k}
-                    onClick={(e) => { e.stopPropagation(); if (k !== kind) handleChangeType(activity, k, hasChildren); }}
-                    className={k === kind ? "font-semibold" : ""}
-                  >
-                    <span className="mr-2 inline-flex">{KIND_META[k].icon}</span>
-                    {KIND_META[k].label}
-                    {k === kind && <span className="ml-auto text-[10px] text-muted-foreground">atual</span>}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* INDICADOR, não menu. Era um dropdown para trocar o tipo aqui na
+                linha, mas o papel na EAP não é escolha avulsa: vem do nível do
+                código e de o item ter filhos ou não. Oferecer a troca solta
+                deixava opções sem sentido no contexto — "Entrega" para um item
+                sem código EAP, que não tem nível nenhum. Quem precisa mudar o
+                tipo faz pelo diálogo da atividade, onde o campo aparece junto do
+                Código EAP e do "Dentro de", que são o que de fato determinam o
+                papel. */}
+            <span
+              title={`Tipo: ${kindMeta.label}`}
+              aria-label={`Tipo: ${kindMeta.label}`}
+              className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md border bg-muted/60 ${kindMeta.cls}`}
+            >
+              {kindMeta.icon}
+            </span>
 
             {isEditingTitle ? (
               <Input
