@@ -9,7 +9,10 @@ import {
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Diamond,
   Rows3, MoreHorizontal, Pencil, Package, IndentIncrease,
+  User, Flag, Calendar as CalendarIcon,
 } from "lucide-react";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
@@ -145,6 +148,8 @@ export const BacklogSection = ({
   // desfazer. No Kanban o arraste faz sentido; aqui não.
   const [moveIntoIds, setMoveIntoIds] = useState<string[] | null>(null);
   const [moveIntoCurrentParent, setMoveIntoCurrentParent] = useState<string | null>(null);
+  /** Qual seletor de preenchimento em lote está aberto (um de cada vez). */
+  const [bulkField, setBulkField] = useState<"assigned_to" | "end_date" | "priority" | null>(null);
   // Agrupar em raias (como no Kanban). "phase" preserva a árvore EAP atual;
   // as demais exibem grupos planos por dimensão. Persistido por projeto.
   type GroupBy = "phase" | "assignee" | "priority" | "status" | "type";
@@ -574,6 +579,44 @@ export const BacklogSection = ({
     toast({ title: `Status de ${ids.length} tarefa(s) atualizado` });
   };
 
+  /**
+   * Aplica um campo a TODAS as tarefas selecionadas.
+   *
+   * Existe porque corrigir centenas de tarefas uma a uma não acontece — é por
+   * isso que 465 estão sem prazo e 609 sem prioridade. Com o filtro
+   * "Incompletas" ao lado, vira uma fila de trabalho: filtra, seleciona,
+   * preenche.
+   *
+   * Em lotes pelo mesmo motivo das outras ações em massa: o proxy corta a URL
+   * em ~3,7 KB (ver lib/chunkedIn).
+   */
+  const aplicarEmLote = async (
+    patch: Record<string, unknown>,
+    descricao: string,
+  ) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkField(null);
+
+    const { error } = await mutateInChunks(ids, (batch) =>
+      (supabase.from("activities").update(patch as never) as any).in("id", batch),
+    );
+
+    // Recarrega mesmo no erro: mutateInChunks não é transacional, então os
+    // lotes anteriores já gravaram e a tela precisa refletir o banco.
+    onDataChanged();
+
+    if (error) {
+      toast({
+        title: "Nem todas foram atualizadas",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: descricao, description: `${ids.length} tarefa(s) atualizada(s).` });
+  };
+
   // Quick-add inline: cria tarefa direto na fase ou como filha de outra tarefa
   const handleQuickAddSubmit = async (phaseId: string | null, parentId: string | null) => {
     const title = quickAddTitle.trim();
@@ -634,6 +677,29 @@ export const BacklogSection = ({
   // qualquer nível), Atividade (folha), Marco. 'pacote' legado aparece como Fase.
   type Kind = EapKind;
   const resolveKind = (a: Activity, hasChildren: boolean): Kind => resolveEapKind(a, hasChildren);
+  /**
+   * Níveis oferecidos no preenchimento de prioridade em lote.
+   *
+   * O GUT é G × U × T (1–5 cada), mas pedir os três fatores para dezenas de
+   * tarefas seria o oposto de agilizar. Aqui cada nível tem uma combinação
+   * fixa — classificação grossa para tirar a tarefa de "sem prioridade"; quem
+   * precisar de precisão ajusta no diálogo.
+   *
+   * Os fatores foram ESCOLHIDOS PELO SCORE que produzem, não por simetria:
+   * aplicar 4/4/4 daria 64, que a escala lê como "crítica", e o botão "Alta"
+   * entregaria outro nível do que anuncia. Conferido contra gutLabel:
+   *   2·2·2 =   8 → baixa      3·3·3 =  27 → média
+   *   4·3·3 =  36 → alta       4·4·4 =  64 → crítica
+   *   5·5·4 = 100 → urgente
+   */
+  const GUT_LOTE: Array<{ label: string; g: number; u: number; t: number; priority: string; dot: string }> = [
+    { label: "Baixa", g: 2, u: 2, t: 2, priority: "low", dot: "bg-emerald-500" },
+    { label: "Média", g: 3, u: 3, t: 3, priority: "medium", dot: "bg-amber-500" },
+    { label: "Alta", g: 4, u: 3, t: 3, priority: "high", dot: "bg-orange-500" },
+    { label: "Crítica", g: 4, u: 4, t: 4, priority: "critical", dot: "bg-red-500" },
+    { label: "Urgente", g: 5, u: 5, t: 4, priority: "urgent", dot: "bg-fuchsia-500" },
+  ];
+
   const KIND_META: Record<Kind, { label: string; icon: JSX.Element; cls: string }> = {
     fase: { label: "Fase", icon: <Layers className="w-3 h-3" />, cls: "text-primary bg-primary/10 border-primary/30" },
     // Entrega agrupa como a Fase, mas está DENTRO dela — tom mais discreto para
@@ -1516,6 +1582,99 @@ export const BacklogSection = ({
                 >
                   <IndentIncrease className="w-3.5 h-3.5" /> Mover para dentro de…
                 </Button>
+
+                {/* PREENCHER EM LOTE — o que faltava para o filtro
+                    "Incompletas" servir de fila de trabalho. Medido: faltam
+                    responsável em 332 tarefas, prazo em 465 e prioridade em
+                    609. Corrigir uma por uma não acontece; é por isso que elas
+                    estão assim. Cada botão abre um seletor e aplica ao conjunto
+                    inteiro de uma vez. */}
+                <Popover open={bulkField === "assigned_to"} onOpenChange={(o) => setBulkField(o ? "assigned_to" : null)}>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5">
+                      <User className="w-3.5 h-3.5" /> Responsável
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[260px] p-0" align="end">
+                    <div className="max-h-[280px] overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => aplicarEmLote({ assigned_to: null }, "Responsável removido")}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-muted border-b text-muted-foreground"
+                      >
+                        Sem responsável
+                      </button>
+                      {profiles.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => aplicarEmLote({ assigned_to: p.full_name }, `Responsável: ${p.full_name}`)}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted"
+                        >
+                          <Avatar className="h-5 w-5 shrink-0">
+                            {p.avatar_url ? <AvatarImage src={p.avatar_url} alt={p.full_name || ""} /> : null}
+                            <AvatarFallback className="text-[8px]">{getAvatarInitials(p.full_name)}</AvatarFallback>
+                          </Avatar>
+                          <span className="truncate">{p.full_name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Popover open={bulkField === "end_date"} onOpenChange={(o) => setBulkField(o ? "end_date" : null)}>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5">
+                      <CalendarIcon className="w-3.5 h-3.5" /> Prazo
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <CalendarPicker
+                      mode="single"
+                      locale={ptBR}
+                      onSelect={(d) => {
+                        if (!d) return;
+                        // Fuso LOCAL: toISOString à noite em UTC-3 já é o dia
+                        // seguinte, e o prazo sairia um dia à frente.
+                        const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                        aplicarEmLote({ end_date: ymd }, `Prazo: ${d.toLocaleDateString("pt-BR")}`);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => aplicarEmLote({ end_date: null }, "Prazo removido")}
+                      className="w-full px-3 py-2 text-xs text-muted-foreground hover:bg-muted border-t text-left"
+                    >
+                      Remover prazo
+                    </button>
+                  </PopoverContent>
+                </Popover>
+
+                <Popover open={bulkField === "priority"} onOpenChange={(o) => setBulkField(o ? "priority" : null)}>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5">
+                      <Flag className="w-3.5 h-3.5" /> Prioridade
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[200px] p-1" align="end">
+                    {/* Grava gravity/urgency/tendency, não o texto: é o GUT que
+                        marca a prioridade como definida (ver lib/prontidao). */}
+                    {GUT_LOTE.map((g) => (
+                      <button
+                        key={g.label}
+                        type="button"
+                        onClick={() => aplicarEmLote(
+                          { gravity: g.g, urgency: g.u, tendency: g.t, priority: g.priority },
+                          `Prioridade: ${g.label}`,
+                        )}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted"
+                      >
+                        <span className={cn("w-2 h-2 rounded-full shrink-0", g.dot)} />
+                        {g.label}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
               </>
             )}
             {/* Agrupar em raias — mesmo modelo do Kanban */}
