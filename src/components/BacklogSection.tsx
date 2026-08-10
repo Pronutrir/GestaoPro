@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Diamond,
   Rows3, MoreHorizontal, Pencil, Package, IndentIncrease,
-  User, Flag, Calendar as CalendarIcon,
+  User, Flag, Calendar as CalendarIcon, Link2,
 } from "lucide-react";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
@@ -150,6 +150,7 @@ export const BacklogSection = ({
   const [moveIntoCurrentParent, setMoveIntoCurrentParent] = useState<string | null>(null);
   /** Qual seletor de preenchimento em lote está aberto (um de cada vez). */
   const [bulkField, setBulkField] = useState<"assigned_to" | "end_date" | "priority" | null>(null);
+  const [sequenciando, setSequenciando] = useState(false);
   // Agrupar em raias (como no Kanban). "phase" preserva a árvore EAP atual;
   // as demais exibem grupos planos por dimensão. Persistido por projeto.
   type GroupBy = "phase" | "assignee" | "priority" | "status" | "type";
@@ -615,6 +616,79 @@ export const BacklogSection = ({
       return;
     }
     toast({ title: descricao, description: `${ids.length} tarefa(s) atualizada(s).` });
+  };
+
+  /**
+   * Liga as tarefas selecionadas em CADEIA: cada uma depende da anterior.
+   *
+   * O caminho crítico, a folga e a linha de base já existem no Cronograma, mas
+   * quase não têm o que calcular: 41 dependências para 825 atividades. A causa
+   * é o custo de criar uma — abrir a tarefa, achar a aba, buscar a outra,
+   * escolher o tipo. Quatro passos para uma informação de dois campos.
+   *
+   * A ordem é a da LISTA, não a de seleção: quem clica em três linhas espera
+   * que a sequência siga o que vê na tela, não a ordem dos cliques.
+   *
+   * `finish_to_start` porque é o que "esta depois daquela" significa, e o que
+   * cobre a esmagadora maioria das dependências de projeto.
+   */
+  const ligarEmSequencia = async () => {
+    const ordenadas = backlogActs
+      .filter((a) => selectedIds.has(a.id))
+      .sort((a, b) => {
+        // Mesma regra da árvore: código EAP quando existe, senão display_order.
+        const wa = (a.wbs_code || "").trim(), wb = (b.wbs_code || "").trim();
+        if (wa && wb && wa !== wb) {
+          return wa.localeCompare(wb, undefined, { numeric: true });
+        }
+        return (a.display_order ?? 9999) - (b.display_order ?? 9999);
+      });
+
+    if (ordenadas.length < 2) return;
+    setSequenciando(true);
+
+    try {
+      // Pares consecutivos: A→B, B→C, C→D.
+      const pares = ordenadas.slice(0, -1).map((a, i) => ({
+        predecessor_id: a.id,
+        successor_id: ordenadas[i + 1].id,
+        dependency_type: "finish_to_start",
+        lag_days: 0,
+      }));
+
+      // Não recria o que já existe: repetir a ação não deve duplicar o vínculo
+      // nem falhar por conflito de chave.
+      const { data: existentes } = await supabase
+        .from("task_dependencies")
+        .select("predecessor_id, successor_id")
+        .in("predecessor_id", ordenadas.map((a) => a.id));
+
+      const jaTem = new Set(
+        ((existentes || []) as Array<{ predecessor_id: string; successor_id: string }>)
+          .map((d) => `${d.predecessor_id}>${d.successor_id}`),
+      );
+      const novos = pares.filter((p) => !jaTem.has(`${p.predecessor_id}>${p.successor_id}`));
+
+      if (novos.length === 0) {
+        toast({ title: "Já estavam ligadas", description: "Nenhuma dependência nova a criar." });
+        return;
+      }
+
+      const { error } = await supabase.from("task_dependencies").insert(novos as never);
+      if (error) throw error;
+
+      toast({
+        title: `${novos.length} dependência(s) criada(s)`,
+        description: `${ordenadas[0].title} → … → ${ordenadas[ordenadas.length - 1].title}`,
+      });
+      setSelectedIds(new Set());
+      onDataChanged();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Tente novamente";
+      toast({ title: "Não foi possível ligar as tarefas", description: msg, variant: "destructive" });
+    } finally {
+      setSequenciando(false);
+    }
   };
 
   // Quick-add inline: cria tarefa direto na fase ou como filha de outra tarefa
@@ -1649,6 +1723,28 @@ export const BacklogSection = ({
                     </button>
                   </PopoverContent>
                 </Popover>
+
+                {/* LIGAR EM SEQUÊNCIA — cria a cadeia de dependências de uma
+                    vez. Medido: 41 dependências para 825 atividades, e é por
+                    isso que o caminho crítico não diz nada. Criar uma hoje
+                    custa 4 passos (abrir a tarefa, achar a aba, buscar a outra,
+                    escolher o tipo); sequenciar uma fase de 10 leva ~10 min.
+                    Aqui é um clique para toda a cadeia. */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={selectedIds.size < 2 || sequenciando}
+                  title={
+                    selectedIds.size < 2
+                      ? "Selecione ao menos duas tarefas, na ordem em que devem acontecer"
+                      : "Cada tarefa passa a depender da anterior, na ordem da lista"
+                  }
+                  className="h-7 text-xs gap-1.5"
+                  onClick={ligarEmSequencia}
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  {sequenciando ? "Ligando…" : "Ligar em sequência"}
+                </Button>
 
                 <Popover open={bulkField === "priority"} onOpenChange={(o) => setBulkField(o ? "priority" : null)}>
                   <PopoverTrigger asChild>
