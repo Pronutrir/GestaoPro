@@ -32,6 +32,13 @@
 --   • Maior prefixo vence: "1.3.4" prefere "1.3" a "1".
 --   • Empate no mesmo nível = ambíguo, fica para revisão manual.
 --   • O agrupador não pode ser descendente da própria órfã (evita ciclo).
+--
+-- Guard defensivo: o UPDATE em activities dispararia
+-- trg_prevent_activity_mutation_on_concluded_project (20260526150000) se uma
+-- órfã caísse em projeto concluído. Hoje nenhuma cai, mas o dado muda; desliga
+-- os triggers de negócio pela duração do UPDATE. Reativado logo após.
+SET session_replication_role = replica;
+
 WITH agrupadores AS (
   SELECT
     a.id,
@@ -78,6 +85,9 @@ SET parent_id = e.pai_id,
 FROM escolhida e
 WHERE a.id = e.orfa_id
   AND e.empates = 1;
+
+-- Religa os triggers de negócio.
+SET session_replication_role = origin;
 
 -- ============================================================================
 -- VERIFICAÇÃO
