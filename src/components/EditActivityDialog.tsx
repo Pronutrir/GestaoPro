@@ -18,7 +18,7 @@ import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, 
 import {
   eapCanMoveInto, eapCanGroup, eapDescendantIds, eapShouldDemote,
   eapToPersisted, eapLevel, resolveEapKind, EAP_LABELS, EAP_HINTS,
-  eapMilestoneBlockedReason, eapIsFaseLevel, EAP_FASE_LEVEL,
+  eapMilestoneBlockedReason, eapIsFaseLevel, EAP_FASE_LEVEL, isSyntheticPhaseRow,
   type EapKind, type EapNodeLike,
 } from "@/lib/eapModel";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -1206,6 +1206,18 @@ export const EditActivityDialog = ({
     }
     const act = createMode ? draftActivity : activity;
     if (!act) return;
+    // Rede final. Uma linha de fase sintética não existe em `activities`: o
+    // update casa ZERO linhas, o PostgREST não devolve erro, e este diálogo
+    // anunciava "salvo" tendo gravado nada. Falhar visivelmente é melhor que
+    // mentir — as duas camadas acima já impedem chegar aqui.
+    if (isSyntheticPhaseRow(act)) {
+      toast({
+        title: "Isto é uma fase, não uma atividade",
+        description: "Edite a fase pelo próprio painel dela — os campos aqui não se aplicam.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (dateRangeInvalid) {
       toast({
         title: "Datas inconsistentes",

@@ -62,7 +62,7 @@ import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
 import { buildAvatarLookupMap } from "@/lib/avatarLookup";
-import { eapShouldDemote } from "@/lib/eapModel";
+import { eapShouldDemote, isSyntheticPhaseRow } from "@/lib/eapModel";
 
 interface Project {
   id: string;
@@ -283,6 +283,13 @@ export default function ProjectDetailsPage() {
     activity: any,
     initialTab: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history" = "details",
   ) => {
+    // Linha sintética de fase nunca é atividade. Além de abrir um painel que
+    // não corresponde a nada ("Criada em Invalid Date") e salvar sem gravar,
+    // ela DERROTAVA os dois guards abaixo: `phase_id` é nulo na montagem,
+    // então uma fase sob solicitação de mudança não era bloqueada, e
+    // `canMutateActivity` caía num `assigned_to` inexistente. O Cronograma já
+    // roteia a fase para o editor certo; isto é a rede embaixo.
+    if (isSyntheticPhaseRow(activity)) return;
     if (isProjectConcluded) {
       showProjectLockedToast("editar atividades");
       return;

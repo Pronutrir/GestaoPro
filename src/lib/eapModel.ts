@@ -73,6 +73,37 @@
  */
 export type EapKind = "projeto" | "fase" | "entrega" | "atividade" | "marco";
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * LINHA SINTÉTICA DE FASE
+ *
+ * Fases vivem na tabela `phases`, não em `activities`. O Cronograma monta uma
+ * linha em memória para cada fase, para que ela possa agrupar e indentar junto
+ * das atividades — com id "phase:<uuid>" e o sinalizador `__isPhaseRow`.
+ *
+ * Essa linha NÃO É UMA ATIVIDADE, e tratá-la como se fosse já produziu:
+ *
+ *   • o painel de edição abrindo com "# phase:d4" e "Criada em Invalid Date";
+ *   • o seletor de Tipo dizendo "não tem código EAP nem subitens" — porque
+ *     buscar subitens de um id que não existe devolve zero;
+ *   • e o pior: SALVAR não gravava nada. O update casa zero linhas, o
+ *     PostgREST não devolve erro, e o diálogo anunciava sucesso.
+ *
+ * As duas checagens são necessárias. O mapa `activityById` do Cronograma monta
+ * um stub com o id prefixado mas SEM o sinalizador, então testar só a flag
+ * deixaria passar o caso mais difícil de perceber.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** É uma linha de fase sintética (não existe em `activities`)? */
+export function isSyntheticPhaseRow(row: any): boolean {
+  return !!row?.__isPhaseRow || String(row?.id ?? "").startsWith("phase:");
+}
+
+/** O id real em `phases`, ou null se não for linha de fase. */
+export function phaseIdFromSyntheticRow(row: any): string | null {
+  const id = String(row?.id ?? "");
+  return id.startsWith("phase:") ? id.slice("phase:".length) : null;
+}
+
 /** Entrada mínima para resolver o papel de um item. */
 export interface EapItemLike {
   item_type?: string | null;
