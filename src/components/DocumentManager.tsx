@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X, Send, Clock, CheckCircle2, XCircle, Paperclip, Search, FilePlus, ChevronsUpDown, Check, MoreHorizontal } from "lucide-react";
+import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X, Send, Clock, CheckCircle2, XCircle, Paperclip, Search, ChevronsUpDown, Check, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -89,9 +89,6 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  // Documento que está sendo SUBSTITUÍDO por uma versão nova. Diferente de
-  // editar: cria um registro novo e aposenta o anterior, preservando a trilha.
-  const [novaVersaoDe, setNovaVersaoDe] = useState<ProjectDocument | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [activityPickerOpen, setActivityPickerOpen] = useState(false);
   const [activityQuery, setActivityQuery] = useState("");
@@ -378,14 +375,10 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
     setUpload(null);
     setShowForm(false);
     setEditingId(null);
-    // Sem isto o modo "nova versão" sobreviveria ao cancelar e o próximo
-    // cadastro aposentaria um documento sem querer.
-    setNovaVersaoDe(null);
   };
 
   const startEdit = (doc: ProjectDocument) => {
     setEditingId(doc.id);
-    setNovaVersaoDe(null);
     setShowForm(true);
     setUpload(null);
     setForm({
@@ -445,28 +438,9 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
       }
       toast({ title: "Documento atualizado!" });
     } else {
-      // NOVA VERSÃO de um documento existente: a anterior não é apagada — sai
-      // da lista como versão superada, preservando a trilha de quem assinou o
-      // que. Sem isto, substituir um contrato assinado apagava a prova.
-      const base = novaVersaoDe
-        ? {
-            ...payload,
-            project_id: projectId,
-            version: (novaVersaoDe.version ?? 1) + 1,
-            supersedes_id: novaVersaoDe.id,
-            is_current: true,
-            phase_id: payload.phase_id ?? novaVersaoDe.phase_id,
-            activity_id: payload.activity_id ?? novaVersaoDe.activity_id,
-          }
-        : { ...payload, project_id: projectId };
-
-      let { error } = await sb.from("project_documents").insert(base);
-      if (error && /supersedes_id|is_current|version/i.test(error.message)) {
-        // Migration do versionamento pendente: cria como documento novo.
-        const { supersedes_id, is_current, version, ...semVersao } = base as any;
-        void supersedes_id; void is_current; void version;
-        ({ error } = await sb.from("project_documents").insert(semVersao));
-      }
+      let { error } = await sb
+        .from("project_documents")
+        .insert({ ...payload, project_id: projectId });
       if (error && isMissingColumn(error.message)) {
         ({ error } = await sb.from("project_documents").insert({ ...withoutNewCols(), project_id: projectId }));
       }
@@ -474,23 +448,7 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
         toast({ title: "Erro ao adicionar documento", description: error.message, variant: "destructive" });
         return;
       }
-
-      if (novaVersaoDe) {
-        // A anterior deixa de ser a vigente e seu fluxo em aberto é encerrado:
-        // manter alguém assinando a v1 depois da v2 existir é pior que cancelar.
-        await sb.from("project_documents")
-          .update({ is_current: false }).eq("id", novaVersaoDe.id);
-        await sb.from("document_flows")
-          .update({ status: "cancelado", finished_at: new Date().toISOString() })
-          .eq("document_id", novaVersaoDe.id).eq("status", "circulando");
-        setNovaVersaoDe(null);
-        toast({
-          title: `Versão ${(novaVersaoDe.version ?? 1) + 1} publicada`,
-          description: "A versão anterior saiu da lista e o fluxo dela foi encerrado.",
-        });
-      } else {
-        toast({ title: "Documento adicionado!" });
-      }
+      toast({ title: "Documento adicionado!" });
     }
 
     resetForm();
@@ -629,31 +587,6 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
 
       {showForm && (
         <div className="space-y-3 p-4 bg-card rounded-lg border border-border shadow-sm">
-          {/* Nova versão precisa ficar explícito: o formulário é o mesmo do
-              cadastro, e sem aviso a pessoa acha que está criando um documento
-              solto — quando na verdade vai aposentar o anterior. */}
-          {novaVersaoDe && (
-            <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-[12px]">
-              <FilePlus className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="font-medium">
-                  Nova versão de “{novaVersaoDe.file_name}” (v{(novaVersaoDe.version ?? 1) + 1})
-                </p>
-                <p className="text-muted-foreground">
-                  A versão atual sai da lista e vira histórico. Se houver fluxo em
-                  circulação, ele é encerrado — quem já assinou continua registrado.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="ml-auto shrink-0 text-muted-foreground hover:text-foreground"
-                onClick={() => { setNovaVersaoDe(null); resetForm(); }}
-                title="Cancelar nova versão"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
           {/* Upload de verdade. Antes eram três campos digitados à mão (nome,
               URL e tipo); o arquivo já sabe as três coisas. Só o modo link
               ainda pede o nome, porque uma URL externa não o informa. */}
@@ -831,21 +764,11 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                   <FileText className="w-5 h-5 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <p className="font-medium text-sm text-foreground truncate">{doc.file_name}</p>
-                    {/* Selo de versão: sem ele, "enviar nova versão" gravava o
-                        histórico e nada na tela dizia que ele existia. Só
-                        aparece a partir da v2 — "v1" em tudo seria ruído. */}
-                    {(doc.version ?? 1) > 1 && (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] shrink-0 font-mono border-primary/40 text-primary"
-                        title={`Versão ${doc.version}. As anteriores ficam no histórico.`}
-                      >
-                        v{doc.version}
-                      </Badge>
-                    )}
-                  </div>
+                  {/* Sem selo de versão: ele existia para dar visibilidade ao
+                      "enviar nova versão", removido a pedido. Todo documento
+                      fica em v1, e "v1" em tudo seria ruído. A versão continua
+                      na linha de metadados abaixo. */}
+                  <p className="font-medium text-sm text-foreground truncate">{doc.file_name}</p>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {doc.file_type && <Badge variant="outline" className="text-xs">{doc.file_type}</Badge>}
                     {doc.phase_id && (
@@ -924,12 +847,11 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                   onClick={() => void openDocument(doc)}>
                   <ExternalLink className="w-4 h-4" />
                 </Button>
-                {/* Menu com RÓTULOS, não três ícones soltos.
-                    "Enviar nova versão" era um FilePlus sem texto entre outros
-                    dois ícones parecidos — e tinha ZERO uso em 34 documentos.
-                    O recurso resolve um problema real (editar muda o registro no
-                    lugar, o que é errado depois de alguém assinar), então o
-                    problema era descoberta, não relevância. */}
+                {/* Menu com RÓTULOS, não ícones soltos: dois ícones parecidos
+                    lado a lado não dizem o que fazem.
+                    "Enviar nova versão" foi REMOVIDO a pedido (11/08). Tinha
+                    zero uso em 34 documentos e acrescentava um segundo jeito de
+                    substituir arquivo, ao lado de "Editar dados". */}
                 {canManageProject && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -944,18 +866,6 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          setNovaVersaoDe(doc);
-                          setEditingId(null);
-                          setForm({ ...emptyForm, file_name: doc.file_name, description: doc.description ?? "" });
-                          setUpload(null);
-                          setShowForm(true);
-                        }}
-                      >
-                        <FilePlus className="w-3.5 h-3.5 mr-2" />
-                        Enviar nova versão
-                      </DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => startEdit(doc)}>
                         <Pencil className="w-3.5 h-3.5 mr-2" /> Editar dados
                       </DropdownMenuItem>
