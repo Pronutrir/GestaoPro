@@ -1036,8 +1036,23 @@ export function ProjectCronogramaPanel({
     activities.forEach(a => {
       if (a.wbs_code) m.set(a.id, String(a.wbs_code));
     });
+    // AS FASES TAMBÉM. Elas vivem na tabela `phases` e entram no cronograma
+    // como linhas sintéticas com id "phase:<uuid>" — ausentes de `activities`,
+    // então a coluna EAP mostrava "—" justamente na linha que ancora a
+    // numeração. O código aparecia só grudado no título, como texto.
+    //
+    // O fallback pelo TÍTULO não é enfeite: `phases.wbs_code` não existe em
+    // toda base (migration de maio ainda pendente em algumas VMs), e nesse caso
+    // a importação grava o código no título — "1.1 Iniciação e Planejamento".
+    // Ler dali é o que faz a coluna funcionar onde a coluna do banco falta.
+    (phases || []).forEach((p: any) => {
+      const doCampo = (p?.wbs_code ?? "").toString().trim();
+      const doTitulo = (p?.title ?? "").toString().match(/^\s*(\d+(?:\.\d+)*)\b/)?.[1];
+      const code = doCampo || doTitulo;
+      if (code) m.set(`phase:${p.id}`, code);
+    });
     return m;
-  }, [activities]);
+  }, [activities, phases]);
 
   /**
    * ID curto da atividade — primeiros 7 caracteres do UUID (estável,
@@ -1487,6 +1502,24 @@ export function ProjectCronogramaPanel({
     container.scrollTo({ left: Math.max(0, idx * DAY_W - 200), behavior: "smooth" });
   };
 
+  /**
+   * Título sem o código EAP repetido na frente.
+   *
+   * Quando `phases.wbs_code` não existe, a importação grava o código NO título
+   * ("1.1 Iniciação e Planejamento"). Com a coluna EAP mostrando o mesmo
+   * código, ele aparecia duas vezes na mesma linha. Só remove quando o código
+   * do título é EXATAMENTE o que a coluna exibe — assim um título que
+   * legitimamente começa com número não é mutilado.
+   */
+  const tituloSemCodigo = useCallback((a: any) => {
+    const titulo = (a?.title ?? "").toString();
+    const naColuna = wbsById.get(a?.id);
+    if (!naColuna) return titulo;
+    const m = titulo.match(/^\s*(\d+(?:\.\d+)*)\s*[-–—.)]?\s+(.*)$/);
+    if (!m || m[1] !== naColuna) return titulo;
+    return m[2] || titulo;
+  }, [wbsById]);
+
   /** Renderiza UMA célula da tabela conforme a coluna. */
   const renderCell = (k: ColKey, ctx: any) => {
     const { a, idx, mock, id, dur, progress, preds, responsible, depth, isOverdue } = ctx;
@@ -1531,7 +1564,7 @@ export function ProjectCronogramaPanel({
               className="font-medium truncate max-w-[480px] text-left hover:underline cursor-pointer"
               title="Abrir edição da atividade"
             >
-              {a.title}
+              {tituloSemCodigo(a)}
             </button>
           </div>
         </td>
