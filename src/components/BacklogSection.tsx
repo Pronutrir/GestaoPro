@@ -8,8 +8,11 @@ import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Diamond,
-  Rows3, MoreHorizontal, Pencil,
+  Rows3, MoreHorizontal, Pencil, Package, IndentIncrease,
+  User, Flag, Calendar as CalendarIcon, Link2, X,
 } from "lucide-react";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
@@ -37,7 +40,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { resolveEapKind, eapTypeOptions, type EapKind } from "@/lib/eapModel";
+import { resolveEapKind, type EapKind } from "@/lib/eapModel";
+import {
+  avaliarProntidao, resumirProntidao, principaisCarencias,
+  PRONTIDAO_LABELS, PRONTIDAO_LABELS_LONGOS,
+} from "@/lib/prontidao";
+import { LinkParentDialog } from "@/components/LinkParentDialog";
+import { mutateInChunks } from "@/lib/chunkedIn";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 
 interface Phase {
@@ -52,7 +61,11 @@ interface Phase {
   actual_start_date?: string | null;
   actual_end_date?: string | null;
 }
-interface WorkflowStage { id: string; title: string; display_order: number; color: string; }
+interface WorkflowStage {
+  id: string; title: string; display_order: number; color: string;
+  /** Coluna final: mover para ela CONCLUI a tarefa (status + completed_at). */
+  is_final?: boolean | null;
+}
 interface Activity {
   id: string;
   title: string;
@@ -75,6 +88,10 @@ interface Activity {
   is_milestone?: boolean | null;
   /** Código da EAP: define o papel (nível 1 = Fase, 2+ = Atividade). */
   wbs_code?: string | null;
+  /** Arquivada (soft-delete). Fica fora da árvore e das contagens. */
+  is_trashed?: boolean | null;
+  /** Gravidade do GUT — é o que marca a prioridade como definida. */
+  gravity?: number | null;
 }
 
 interface BacklogSectionProps {
@@ -125,6 +142,19 @@ export const BacklogSection = ({
   const [editingTitleValue, setEditingTitleValue] = useState("");
   // Modo de seleção em lote: quando ativo, exibe checkboxes nas linhas
   const [selectMode, setSelectMode] = useState(false);
+  // Recorte por prontidão — ver lib/prontidao. Não é persistido de propósito:
+  // é um recorte de trabalho ("o que preciso completar agora"), não uma
+  // preferência de visualização como as colunas ou o agrupamento.
+  const [prontidaoFilter, setProntidaoFilter] = useState<"all" | "ready" | "incomplete">("all");
+  // Mover item para dentro de outro (troca parent_id). Menu de linha, não
+  // arraste: numa lista aninhada "soltar sobre" (aninha) e "soltar entre"
+  // (reordena) ficam a pixels de distância, e aninhar por engano é caro de
+  // desfazer. No Kanban o arraste faz sentido; aqui não.
+  const [moveIntoIds, setMoveIntoIds] = useState<string[] | null>(null);
+  const [moveIntoCurrentParent, setMoveIntoCurrentParent] = useState<string | null>(null);
+  /** Qual seletor de preenchimento em lote está aberto (um de cada vez). */
+  const [bulkField, setBulkField] = useState<"assigned_to" | "end_date" | "priority" | null>(null);
+  const [sequenciando, setSequenciando] = useState(false);
   // Agrupar em raias (como no Kanban). "phase" preserva a árvore EAP atual;
   // as demais exibem grupos planos por dimensão. Persistido por projeto.
   type GroupBy = "phase" | "assignee" | "priority" | "status" | "type";
@@ -219,7 +249,11 @@ export const BacklogSection = ({
   // O mínimo da coluna Tarefa é baixo de propósito: ela tem `truncate`, então
   // encolher corta o texto com reticências — o que é preferível a empurrar a
   // coluna de ações para fora da tela.
-  const backlogGrid = `20px 26px minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
+  // A coluna de 26px é da CAIXA DE SELEÇÃO e só existe no modo seleção em lote.
+  // Ela era fixa: depois que o botão de concluir saiu dali, sobrava uma faixa
+  // vazia antes de cada tarefa e o conteúdo todo começava deslocado à direita,
+  // sem nada ocupando o espaço.
+  const backlogGrid = `20px ${selectMode ? "26px " : ""}minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
 
   useEffect(() => {
     const ids = activities.map((a) => a.id);
@@ -274,7 +308,8 @@ export const BacklogSection = ({
     const fetchStages = async () => {
       const { data } = await supabase
         .from("workflow_stages")
-        .select("id, display_order, title, color")
+        // is_final: decide se mover para esta coluna conclui a tarefa.
+        .select("id, display_order, title, color, is_final")
         .eq("project_id", projectId)
         .order("display_order");
       if (data) {
@@ -335,7 +370,43 @@ export const BacklogSection = ({
 
   // Lista completa: TODAS as tarefas do projeto (modelo "uma coleção, várias visões").
   // O status é exibido como atributo (badge), não como filtro de tela.
-  const backlogActs = activities;
+  //
+  // ARQUIVADAS FORA: a lixeira tem tela própria (showTrash). Sem este filtro, um
+  // item arquivado continuava na árvore e no contador de filhos do pai — daí o
+  // "Receber demanda da Diretoria (3)" com três subatividades excluídas
+  // aparecendo aqui, enquanto a aba Subatividades do diálogo, que filtra
+  // corretamente, mostrava vazio. As duas telas liam a mesma coisa e discordavam.
+  const backlogActs = (() => {
+    const vivas = activities.filter((a) => !a.is_trashed);
+    if (prontidaoFilter === "all") return vivas;
+
+    // Quem tem filhos não é avaliado (horas e datas são rollup), mas precisa
+    // continuar visível quando algum descendente passa no filtro — senão o
+    // ramo inteiro sumiria e o item filtrado iria junto. A montagem da árvore
+    // logo abaixo já promove a raiz quem perdeu o pai; aqui só garantimos que
+    // o agrupador não seja descartado por não ter avaliação própria.
+    const temFilho = new Set(vivas.filter((a) => a.parent_id).map((a) => a.parent_id as string));
+    const passa = (a: Activity) => {
+      const r = avaliarProntidao(a, temFilho.has(a.id));
+      if (!r.avaliavel) return null; // agrupador ou concluída: decide pelos filhos
+      return prontidaoFilter === "ready" ? r.pronta : !r.pronta;
+    };
+
+    const diretos = new Set(vivas.filter((a) => passa(a) === true).map((a) => a.id));
+    // Sobe dos itens que passaram até a raiz, mantendo os ancestrais.
+    const porId = new Map(vivas.map((a) => [a.id, a]));
+    const manter = new Set(diretos);
+    for (const id of diretos) {
+      let atual = porId.get(id);
+      const visto = new Set<string>([id]);
+      while (atual?.parent_id && !visto.has(atual.parent_id)) {
+        visto.add(atual.parent_id);
+        manter.add(atual.parent_id);
+        atual = porId.get(atual.parent_id);
+      }
+    }
+    return vivas.filter((a) => manter.has(a.id));
+  })();
 
   // Mapa de stage_id → {title, color} para badges
   const stageById = new Map<string, WorkflowStage>();
@@ -373,11 +444,16 @@ export const BacklogSection = ({
   // Coleta TODAS as atividades-fase (item_type='fase') em qualquer nível top-level
   // (independente de phase_id) e as remove dos grupos normais para serem renderizadas
   // como cards-fase virtuais.
+  // Só o agrupador SEM fase vira card virtual. Antes todo item_type='fase' era
+  // arrancado do grupo, então uma Entrega ("1.1 Formalização", com phase_id
+  // preenchido) era renderizada solta no topo enquanto a fase 1 a que ela
+  // pertence exibia "Nenhuma tarefa" — a fase parecia vazia tendo uma entrega
+  // inteira dentro.
   const virtualPhaseActs: Activity[] = [];
   topLevelByPhase.forEach((arr, key) => {
     const filtered: Activity[] = [];
     for (const a of arr) {
-      if (isPhaseLikeActivity(a)) virtualPhaseActs.push(a);
+      if (isPhaseLikeActivity(a) && !a.phase_id) virtualPhaseActs.push(a);
       else filtered.push(a);
     }
     topLevelByPhase.set(key, filtered);
@@ -483,14 +559,155 @@ export const BacklogSection = ({
     const ids = Array.from(selectedIds);
     const updateData: Database['public']['Tables']['activities']['Update'] = { workflow_stage_id: targetStageId };
     if (assignee && assignee !== "__none__") updateData.assigned_to = assignee;
-    await supabase.from("activities").update(updateData).in("id", ids);
+
+    // `status` ACOMPANHA a coluna. Sem isto, mover em lote para "Concluída"
+    // gravava só o workflow_stage_id e o status ficava "pending" — a tarefa
+    // aparecia na coluna final com o título não riscado, e a contagem de
+    // concluídas ignorava. Medido em 11/08: 11 atividades nesse estado.
+    // O Kanban já fazia esse alinhamento ao arrastar; este caminho não.
+    const etapaDestino = allStages.find((s) => s.id === targetStageId);
+    if (etapaDestino) {
+      const ehFinal = (etapaDestino as { is_final?: boolean }).is_final === true;
+      updateData.status = ehFinal ? "completed" : "pending";
+      // completed_at só na conclusão; ao reabrir, limpa — manter a data numa
+      // tarefa que voltou ao fluxo faz o relatório contar entrega que não houve.
+      updateData.completed_at = ehFinal ? new Date().toISOString() : null;
+    }
+    // EM LOTES: "selecionar todas" numa fase grande manda centenas de uuids
+    // numa URL só, que o proxy corta em ~3,7 KB e devolve 502 — o usuário via
+    // a ação falhar justamente quando selecionava muito. Ver lib/chunkedIn.
+    const { error } = await mutateInChunks(ids, (batch) =>
+      supabase.from("activities").update(updateData).in("id", batch),
+    );
     setSelectedIds(new Set());
     setMoveDialogOpen(false);
     setTargetStageId("");
     setAssignee("");
     setIsMoving(false);
     onDataChanged();
+    if (error) {
+      // Não é transacional: os lotes anteriores já gravaram. Por isso o
+      // onDataChanged acima roda mesmo no erro — a tela precisa refletir o
+      // banco, não o que se esperava dele.
+      toast({
+        title: "Nem todas as tarefas foram atualizadas",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
     toast({ title: `Status de ${ids.length} tarefa(s) atualizado` });
+  };
+
+  /**
+   * Aplica um campo a TODAS as tarefas selecionadas.
+   *
+   * Existe porque corrigir centenas de tarefas uma a uma não acontece — é por
+   * isso que 465 estão sem prazo e 609 sem prioridade. Com o filtro
+   * "Incompletas" ao lado, vira uma fila de trabalho: filtra, seleciona,
+   * preenche.
+   *
+   * Em lotes pelo mesmo motivo das outras ações em massa: o proxy corta a URL
+   * em ~3,7 KB (ver lib/chunkedIn).
+   */
+  const aplicarEmLote = async (
+    patch: Record<string, unknown>,
+    descricao: string,
+  ) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkField(null);
+
+    const { error } = await mutateInChunks(ids, (batch) =>
+      (supabase.from("activities").update(patch as never) as any).in("id", batch),
+    );
+
+    // Recarrega mesmo no erro: mutateInChunks não é transacional, então os
+    // lotes anteriores já gravaram e a tela precisa refletir o banco.
+    onDataChanged();
+
+    if (error) {
+      toast({
+        title: "Nem todas foram atualizadas",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: descricao, description: `${ids.length} tarefa(s) atualizada(s).` });
+  };
+
+  /**
+   * Liga as tarefas selecionadas em CADEIA: cada uma depende da anterior.
+   *
+   * O caminho crítico, a folga e a linha de base já existem no Cronograma, mas
+   * quase não têm o que calcular: 41 dependências para 825 atividades. A causa
+   * é o custo de criar uma — abrir a tarefa, achar a aba, buscar a outra,
+   * escolher o tipo. Quatro passos para uma informação de dois campos.
+   *
+   * A ordem é a da LISTA, não a de seleção: quem clica em três linhas espera
+   * que a sequência siga o que vê na tela, não a ordem dos cliques.
+   *
+   * `finish_to_start` porque é o que "esta depois daquela" significa, e o que
+   * cobre a esmagadora maioria das dependências de projeto.
+   */
+  const ligarEmSequencia = async () => {
+    const ordenadas = backlogActs
+      .filter((a) => selectedIds.has(a.id))
+      .sort((a, b) => {
+        // Mesma regra da árvore: código EAP quando existe, senão display_order.
+        const wa = (a.wbs_code || "").trim(), wb = (b.wbs_code || "").trim();
+        if (wa && wb && wa !== wb) {
+          return wa.localeCompare(wb, undefined, { numeric: true });
+        }
+        return (a.display_order ?? 9999) - (b.display_order ?? 9999);
+      });
+
+    if (ordenadas.length < 2) return;
+    setSequenciando(true);
+
+    try {
+      // Pares consecutivos: A→B, B→C, C→D.
+      const pares = ordenadas.slice(0, -1).map((a, i) => ({
+        predecessor_id: a.id,
+        successor_id: ordenadas[i + 1].id,
+        dependency_type: "finish_to_start",
+        lag_days: 0,
+      }));
+
+      // Não recria o que já existe: repetir a ação não deve duplicar o vínculo
+      // nem falhar por conflito de chave.
+      const { data: existentes } = await supabase
+        .from("task_dependencies")
+        .select("predecessor_id, successor_id")
+        .in("predecessor_id", ordenadas.map((a) => a.id));
+
+      const jaTem = new Set(
+        ((existentes || []) as Array<{ predecessor_id: string; successor_id: string }>)
+          .map((d) => `${d.predecessor_id}>${d.successor_id}`),
+      );
+      const novos = pares.filter((p) => !jaTem.has(`${p.predecessor_id}>${p.successor_id}`));
+
+      if (novos.length === 0) {
+        toast({ title: "Já estavam ligadas", description: "Nenhuma dependência nova a criar." });
+        return;
+      }
+
+      const { error } = await supabase.from("task_dependencies").insert(novos as never);
+      if (error) throw error;
+
+      toast({
+        title: `${novos.length} dependência(s) criada(s)`,
+        description: `${ordenadas[0].title} → … → ${ordenadas[ordenadas.length - 1].title}`,
+      });
+      setSelectedIds(new Set());
+      onDataChanged();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Tente novamente";
+      toast({ title: "Não foi possível ligar as tarefas", description: msg, variant: "destructive" });
+    } finally {
+      setSequenciando(false);
+    }
   };
 
   // Quick-add inline: cria tarefa direto na fase ou como filha de outra tarefa
@@ -553,29 +770,42 @@ export const BacklogSection = ({
   // qualquer nível), Atividade (folha), Marco. 'pacote' legado aparece como Fase.
   type Kind = EapKind;
   const resolveKind = (a: Activity, hasChildren: boolean): Kind => resolveEapKind(a, hasChildren);
+  /**
+   * Níveis oferecidos no preenchimento de prioridade em lote.
+   *
+   * O GUT é G × U × T (1–5 cada), mas pedir os três fatores para dezenas de
+   * tarefas seria o oposto de agilizar. Aqui cada nível tem uma combinação
+   * fixa — classificação grossa para tirar a tarefa de "sem prioridade"; quem
+   * precisar de precisão ajusta no diálogo.
+   *
+   * Os fatores foram ESCOLHIDOS PELO SCORE que produzem, não por simetria:
+   * aplicar 4/4/4 daria 64, que a escala lê como "crítica", e o botão "Alta"
+   * entregaria outro nível do que anuncia. Conferido contra gutLabel:
+   *   2·2·2 =   8 → baixa      3·3·3 =  27 → média
+   *   4·3·3 =  36 → alta       4·4·4 =  64 → crítica
+   *   5·5·4 = 100 → urgente
+   */
+  const GUT_LOTE: Array<{ label: string; g: number; u: number; t: number; priority: string; dot: string }> = [
+    { label: "Baixa", g: 2, u: 2, t: 2, priority: "low", dot: "bg-emerald-500" },
+    { label: "Média", g: 3, u: 3, t: 3, priority: "medium", dot: "bg-amber-500" },
+    { label: "Alta", g: 4, u: 3, t: 3, priority: "high", dot: "bg-orange-500" },
+    { label: "Crítica", g: 4, u: 4, t: 4, priority: "critical", dot: "bg-red-500" },
+    { label: "Urgente", g: 5, u: 5, t: 4, priority: "urgent", dot: "bg-fuchsia-500" },
+  ];
+
   const KIND_META: Record<Kind, { label: string; icon: JSX.Element; cls: string }> = {
     fase: { label: "Fase", icon: <Layers className="w-3 h-3" />, cls: "text-primary bg-primary/10 border-primary/30" },
+    // Entrega agrupa como a Fase, mas está DENTRO dela — tom mais discreto para
+    // a hierarquia se ler de relance: a fase é o marco visual, a entrega é o
+    // que ela contém.
+    entrega: { label: "Entrega", icon: <Package className="w-3 h-3" />, cls: "text-primary/80 bg-primary/5 border-primary/20" },
     atividade: { label: "Atividade", icon: <Circle className="w-3 h-3" />, cls: "text-muted-foreground bg-muted border-border" },
     marco: { label: "Marco", icon: <Diamond className="w-3 h-3 fill-amber-500 text-amber-500" />, cls: "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/40" },
   };
-  // Muda o tipo de um item.
-  const handleChangeType = async (activity: Activity, kind: Kind, hasChildren: boolean) => {
-    // Atividade agora pode agrupar (o nível é que define o rótulo). Só Marco
-    // segue barrado com filhos: é folha de controle por definição.
-    if (kind === "marco" && hasChildren) {
-      toast({ title: "Não é possível", description: "Este item tem subitens; Marco não agrupa.", variant: "destructive" });
-      return;
-    }
-    const patch = kind === "marco"
-      ? { is_milestone: true, item_type: "atividade" }
-      : { is_milestone: false, item_type: kind }; // 'fase' | 'atividade'
-    const { error } = await supabase.from("activities").update(patch as any).eq("id", activity.id);
-    if (error) {
-      toast({ title: "Erro ao mudar tipo", variant: "destructive" });
-      return;
-    }
-    onDataChanged();
-  };
+  // A troca de tipo pela linha foi removida junto com o menu do ícone: o papel
+  // na EAP não é escolha avulsa, vem do nível do código e de ter filhos. Mudar
+  // o tipo é pelo diálogo da atividade, onde o campo fica junto do Código EAP
+  // e do "Dentro de" — que são o que determina o papel.
 
   // Conta itens e concluídos de um grupo (raízes + toda a subárvore visível).
   const groupProgress = (roots: Activity[]): { total: number; done: number } => {
@@ -592,10 +822,12 @@ export const BacklogSection = ({
   // Cabeçalho de colunas alinhado com o grid das linhas.
   const ColumnHeader = () => (
     <div
-      className="grid items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+      className="grid items-center gap-2 px-3 py-1.5 bg-muted/40 border-b border-border text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground"
       style={{ gridTemplateColumns: backlogGrid }}
     >
-      <span /><span />
+      {/* expand + (caixa de seleção, só no modo) — espelha as células da linha */}
+      <span />
+      {selectMode && <span />}
       <span>Tarefa</span>
       {activeCols.map((c) => (
         <span key={c.id}>{c.label}</span>
@@ -643,9 +875,9 @@ export const BacklogSection = ({
 
     const kind = resolveKind(activity, hasChildren);
     const kindMeta = KIND_META[kind];
-    // Item com filhos pode ser Fase ou Atividade (o nível é que define o
-    // rótulo); só Marco fica de fora, por ser folha de controle.
-    const typeOptions: Kind[] = eapTypeOptions({ hasChildren });
+    // Prontidão: o que falta para esta tarefa ser executável. Agrupador não
+    // entra (horas e datas dele são rollup dos filhos) nem concluída.
+    const prontidao = avaliarProntidao(activity, hasChildren);
     const stg = activity.workflow_stage_id ? stageById.get(activity.workflow_stage_id) : null;
     const dc = dependencyCounts.get(activity.id);
     const hasDeps = !!dc && (dc.pred > 0 || dc.succ > 0);
@@ -655,7 +887,7 @@ export const BacklogSection = ({
         const meta = GUT_META[gutLevel];
         return (
           <span key="priority" className="min-w-0" title={`Prioridade: ${meta.label}`}>
-            <span className={`inline-flex items-center gap-1.5 h-6 px-2.5 rounded-md border text-xs font-medium ${meta.badgeClass}`}>
+            <span className={`inline-flex items-center gap-1.5 h-5 px-2 rounded border text-[11px] font-medium ${meta.badgeClass}`}>
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dotClass}`} aria-hidden />
               {meta.label}
             </span>
@@ -667,13 +899,13 @@ export const BacklogSection = ({
           <span key="status" className="min-w-0">
             {stg ? (
               <span
-                className="inline-block max-w-full truncate text-xs font-medium px-2.5 py-1 rounded-md border"
+                className="inline-flex items-center h-5 max-w-full truncate text-[11px] font-medium px-2 rounded border"
                 style={{ borderColor: stg.color, color: stg.color, backgroundColor: `${stg.color}18` }}
                 title={`Status: ${stg.title}`}
               >
                 {stg.title}
               </span>
-            ) : <span className="text-xs text-muted-foreground/40">—</span>}
+            ) : <span className="text-[11px] text-muted-foreground/40">—</span>}
           </span>
         );
       }
@@ -686,15 +918,15 @@ export const BacklogSection = ({
               const avatar = resolveAvatarFromLookup(rawAssignee, resolvedName, profileAvatarMap);
               return (
                 <>
-                  <Avatar className="h-6 w-6 shrink-0">
+                  <Avatar className="h-5 w-5 shrink-0">
                     {avatar ? <AvatarImage src={avatar} alt={resolvedName} /> : null}
-                    <AvatarFallback className="text-[9px] font-semibold">{getAvatarInitials(resolvedName)}</AvatarFallback>
+                    <AvatarFallback className="text-[8px] font-semibold">{getAvatarInitials(resolvedName)}</AvatarFallback>
                   </Avatar>
-                  <span className="text-[13px] text-foreground/90 truncate">{resolvedName}</span>
+                  <span className="text-[12px] text-foreground/90 truncate">{resolvedName}</span>
                 </>
               );
             })() : (
-              <span className="text-[13px] text-muted-foreground/40">Sem responsável</span>
+              <span className="text-[12px] text-muted-foreground/40">Sem responsável</span>
             )}
           </span>
         );
@@ -702,7 +934,7 @@ export const BacklogSection = ({
       if (colId === "end_date") {
         const overdue = activity.end_date && activity.status !== "completed" && new Date(activity.end_date) < new Date(new Date().toDateString());
         return (
-          <span key="end_date" className={`text-[13px] tabular-nums ${overdue ? "text-destructive font-semibold" : "text-foreground/80"}`}>
+          <span key="end_date" className={`text-[12px] tabular-nums ${overdue ? "text-destructive font-semibold" : "text-foreground/80"}`}>
             {activity.end_date ? new Date(activity.end_date).toLocaleDateString("pt-BR") : <span className="text-muted-foreground/40">—</span>}
           </span>
         );
@@ -710,7 +942,7 @@ export const BacklogSection = ({
       if (colId === "hours") {
         const h = Number(activity.hours) || 0;
         return (
-          <span key="hours" className="text-[13px] tabular-nums text-foreground/80">
+          <span key="hours" className="text-[12px] tabular-nums text-foreground/80">
             {h > 0 ? `${h % 1 === 0 ? h : h.toFixed(1)}h` : <span className="text-muted-foreground/40">—</span>}
           </span>
         );
@@ -721,7 +953,9 @@ export const BacklogSection = ({
     return (
       <div key={activity.id}>
         <div
-          className={`grid items-center gap-2 border-b px-3 py-2.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
+          // py-1.5 (era 2.5): com o texto em 13px e uma coluna de ícone a menos,
+          // a linha aperta sem ficar apertada — cabem ~15% mais tarefas na tela.
+          className={`grid items-center gap-2 border-b px-3 py-1.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
             isSelected ? "bg-primary/5" : ""
           }`}
           // O recuo de profundidade NÃO vai aqui: padding na linha encolhe a
@@ -744,29 +978,19 @@ export const BacklogSection = ({
             <span className="w-5" />
           )}
 
-          {/* col: checkbox (modo seleção) ou concluir */}
-          {selectMode ? (
+          {/* col: caixa de seleção em lote — só existe no modo seleção.
+              O botão redondo de concluir saiu daqui (eram dois círculos quase
+              iguais no começo da linha, lidos como checkbox duplicado) e a
+              coluna ficou reservada e vazia, empurrando todo o conteúdo para a
+              direita. Agora a célula não é emitida e a coluna some do grid —
+              ver backlogGrid, que também é condicional. */}
+          {selectMode && (
             <Checkbox
               checked={isSelected}
               onCheckedChange={() => toggleSelect(activity.id)}
               onClick={(e) => e.stopPropagation()}
               aria-label={`Selecionar ${activity.title}`}
             />
-          ) : (
-            <button
-              type="button"
-              className="h-6 w-6 flex items-center justify-center rounded hover:bg-success/10 shrink-0"
-              onClick={(e) => { e.stopPropagation(); onToggleActivity(activity.id, activity.status); }}
-              title={activity.status === "completed" ? "Reabrir tarefa" : "Concluir tarefa"}
-            >
-              {activity.status === "completed" ? (
-                <CheckCircle2 className="w-4 h-4 text-success" />
-              ) : (
-                // Traço mais forte que o ícone de TIPO ao lado: os dois eram
-                // círculos cinza idênticos e pareciam checkbox duplicado.
-                <Circle className="w-4 h-4 text-muted-foreground/70 [stroke-width:2.5]" />
-              )}
-            </button>
           )}
 
           {/* col: ícone de tipo (clicável) + título + código EAP + deps.
@@ -774,31 +998,21 @@ export const BacklogSection = ({
               assim a hierarquia continua legível sem deslocar as demais
               colunas, que permanecem alinhadas com o cabeçalho. */}
           <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: depth * 18 }}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  onClick={(e) => e.stopPropagation()}
-                  title={`Tipo: ${kindMeta.label} — clique para mudar`}
-                  className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md border bg-muted/60 transition-colors hover:brightness-95 ${kindMeta.cls}`}
-                >
-                  {kindMeta.icon}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-                {typeOptions.map((k) => (
-                  <DropdownMenuItem
-                    key={k}
-                    onClick={(e) => { e.stopPropagation(); if (k !== kind) handleChangeType(activity, k, hasChildren); }}
-                    className={k === kind ? "font-semibold" : ""}
-                  >
-                    <span className="mr-2 inline-flex">{KIND_META[k].icon}</span>
-                    {KIND_META[k].label}
-                    {k === kind && <span className="ml-auto text-[10px] text-muted-foreground">atual</span>}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* INDICADOR, não menu. Era um dropdown para trocar o tipo aqui na
+                linha, mas o papel na EAP não é escolha avulsa: vem do nível do
+                código e de o item ter filhos ou não. Oferecer a troca solta
+                deixava opções sem sentido no contexto — "Entrega" para um item
+                sem código EAP, que não tem nível nenhum. Quem precisa mudar o
+                tipo faz pelo diálogo da atividade, onde o campo aparece junto do
+                Código EAP e do "Dentro de", que são o que de fato determinam o
+                papel. */}
+            <span
+              title={`Tipo: ${kindMeta.label}`}
+              aria-label={`Tipo: ${kindMeta.label}`}
+              className={`shrink-0 inline-flex items-center justify-center w-5 h-5 rounded border bg-muted/60 ${kindMeta.cls}`}
+            >
+              {kindMeta.icon}
+            </span>
 
             {isEditingTitle ? (
               <Input
@@ -812,17 +1026,17 @@ export const BacklogSection = ({
                   if (e.key === "Enter") handleSaveTitle(activity.id);
                   if (e.key === "Escape") setEditingTitleId(null);
                 }}
-                className="h-7 text-sm"
+                className="h-7 text-[13px]"
               />
             ) : (
               <span className="min-w-0 flex items-center gap-2">
                 {!!(activity as any).wbs_code && (
-                  <span className="inline-flex items-center h-5 px-1.5 rounded border border-border bg-muted/50 text-[11px] font-mono text-muted-foreground shrink-0" title="Código EAP">
+                  <span className="inline-flex items-center h-[18px] px-1.5 rounded border border-border bg-muted/50 text-[10.5px] font-mono text-muted-foreground shrink-0" title="Código EAP">
                     {(activity as any).wbs_code}
                   </span>
                 )}
                 <span
-                  className={`text-sm font-normal truncate ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}
+                  className={`text-[13px] font-normal truncate ${activity.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     setEditingTitleId(activity.id);
@@ -832,7 +1046,23 @@ export const BacklogSection = ({
                 >
                   {activity.title}
                 </span>
-                {hasChildren && <span className="text-xs text-muted-foreground font-normal shrink-0">({subs.length})</span>}
+                {hasChildren && <span className="text-[11px] text-muted-foreground font-normal shrink-0">({subs.length})</span>}
+                {/* O QUE FALTA para esta tarefa virar trabalho. Sem isto, um
+                    rascunho sem responsável nem prazo tinha exatamente a mesma
+                    aparência de uma tarefa pronta — e só abrindo dava para
+                    saber. Medido: 406 das 471 avaliáveis estão incompletas.
+                    Concluídas e agrupadores não recebem chip (não se avaliam). */}
+                {prontidao.avaliavel && !prontidao.pronta && (
+                  <span
+                    className="shrink-0 inline-flex items-center h-[17px] px-1.5 rounded text-[10px] font-medium border border-destructive/40 bg-destructive/5 text-destructive"
+                    title={`Falta preencher: ${prontidao.faltando.map((r) => PRONTIDAO_LABELS[r]).join(", ")}. Clique na tarefa para completar.`}
+                  >
+                    {/* No máximo dois rótulos: a lista completa vai no tooltip,
+                        senão o chip fica maior que o título da tarefa. */}
+                    falta {prontidao.faltando.slice(0, 2).map((r) => PRONTIDAO_LABELS[r]).join(" · ")}
+                    {prontidao.faltando.length > 2 && ` +${prontidao.faltando.length - 2}`}
+                  </span>
+                )}
                 {hasDeps && (
                   <span
                     className="shrink-0 text-[11px] text-primary/80"
@@ -865,6 +1095,20 @@ export const BacklogSection = ({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                {/* Concluir/reabrir — PRIMEIRO item por ser a ação mais frequente
+                    numa lista de tarefas. Veio do botão redondo que ficava no
+                    começo da linha e disputava leitura com o ícone de tipo. */}
+                <DropdownMenuItem
+                  onSelect={() => onToggleActivity(activity.id, activity.status)}
+                  className={activity.status === "completed" ? "" : "text-success focus:text-success focus:bg-success/10"}
+                >
+                  {activity.status === "completed" ? (
+                    <><Circle className="w-3.5 h-3.5 mr-2" /> Reabrir tarefa</>
+                  ) : (
+                    <><CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Concluir tarefa</>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onSelect={() => {
                     setQuickAddKey(`parent:${activity.id}`);
@@ -876,6 +1120,20 @@ export const BacklogSection = ({
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => onEditActivity(activity)}>
                   <Pencil className="w-3.5 h-3.5 mr-2" /> Abrir detalhes
+                </DropdownMenuItem>
+                {/* Reorganizar a EAP é ação estrutural: mesma régua do Kanban
+                    (isAdmin). Desabilitado COM o motivo em vez de oculto —
+                    sumir vira "não consigo mover" sem pista do porquê. */}
+                <DropdownMenuItem
+                  disabled={!isAdmin}
+                  title={isAdmin ? undefined : "Você não tem permissão para reorganizar a EAP deste projeto"}
+                  onSelect={() => {
+                    if (!isAdmin) return;
+                    setMoveIntoIds([activity.id]);
+                    setMoveIntoCurrentParent(activity.parent_id ?? null);
+                  }}
+                >
+                  <IndentIncrease className="w-3.5 h-3.5 mr-2" /> Mover para dentro de…
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {/* Desabilitado COM o motivo em vez de oculto: sumir levava a
@@ -987,7 +1245,7 @@ export const BacklogSection = ({
             como abrir a fase — ela nem tinha tela própria. */}
         <div
           className={cn(
-            "flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50",
+            "flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50",
             phaseId && "cursor-pointer hover:bg-muted/70 transition-colors",
           )}
           onClick={() => { if (phaseId) openPhase(phaseId, phaseTitle); }}
@@ -1004,8 +1262,8 @@ export const BacklogSection = ({
           ) : (
             <span className="w-5 shrink-0" />
           )}
-          <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-primary/10 text-primary shrink-0">
-            {phaseId ? <Layers className="w-3.5 h-3.5" /> : <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />}
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-primary/10 text-primary shrink-0">
+            {phaseId ? <Layers className="w-3 h-3" /> : <FolderOpen className="w-3 h-3 text-muted-foreground" />}
           </span>
           <h4 className="text-[13px] font-semibold text-foreground truncate">{phaseTitle}</h4>
           {/* gap-2 (não 3) para o "⋯" cair sobre a coluna de ações das linhas.
@@ -1075,23 +1333,29 @@ export const BacklogSection = ({
               // coluna "Tarefa". Antes era um flex com margem própria, então o
               // input começava num ponto e as tarefas em outro.
               <div
-                className="grid items-center gap-2 border-b px-3 py-2 bg-primary/5"
+                className="grid items-center gap-2 border-b px-3 py-1.5 bg-primary/5"
                 style={{ gridTemplateColumns: backlogGrid }}
               >
+                {/* expand + (caixa, só no modo seleção). O ícone Plus ficava
+                    sozinho numa coluna que agora é condicional; foi para dentro
+                    da célula do título, ao lado do campo. */}
                 <span />
-                <Plus className="w-3.5 h-3.5 text-primary justify-self-center" />
-                <Input
-                  autoFocus
-                  placeholder="Título — Enter cria · Esc fecha"
-                  value={quickAddTitle}
-                  onChange={(e) => setQuickAddTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleQuickAddSubmit(phaseId, null);
-                    if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
-                  }}
-                  onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
-                  className="h-7 text-sm"
-                />
+                {selectMode && <span />}
+                <div className="flex items-center gap-2 min-w-0">
+                  <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <Input
+                    autoFocus
+                    placeholder="Título — Enter cria · Esc fecha"
+                    value={quickAddTitle}
+                    onChange={(e) => setQuickAddTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleQuickAddSubmit(phaseId, null);
+                      if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
+                    }}
+                    onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
+                    className="h-7 text-[13px]"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -1109,12 +1373,17 @@ export const BacklogSection = ({
     const isEditingTitle = editingTitleId === phaseAct.id;
     const { total: progTotal, done: progDone } = groupProgress(subs);
     const progPct = progTotal > 0 ? Math.round((progDone / progTotal) * 100) : 0;
+    // A linha do agrupador desenhava Layers fixo, sem perguntar o papel — por
+    // isso Fase e Entrega ficavam visualmente idênticas mesmo depois de o
+    // modelo já as separar. Aqui ela passa a consultar resolveEapKind.
+    const groupKind = resolveEapKind(phaseAct, subs.length > 0);
+    const isEntrega = groupKind === "entrega";
 
     return (
       <div key={phaseAct.id}>
         {/* Mesmo gesto da fase real: clique abre, chevron colapsa. */}
         <div
-          className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+          className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
           onClick={() => onEditActivity(phaseAct)}
         >
           <button
@@ -1124,9 +1393,22 @@ export const BacklogSection = ({
           >
             {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
-          <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-primary/10 text-primary shrink-0">
-            <Layers className="w-3.5 h-3.5" />
+          {/* Fase = camadas empilhadas; Entrega = pacote, em tom mais discreto.
+              A entrega está DENTRO da fase, e o peso visual precisa dizer isso. */}
+          <span className={cn(
+            "inline-flex items-center justify-center w-5 h-5 rounded shrink-0",
+            isEntrega ? "bg-primary/5 text-primary/75" : "bg-primary/10 text-primary",
+          )}>
+            {isEntrega ? <Package className="w-3 h-3" /> : <Layers className="w-3 h-3" />}
           </span>
+          {/* Código EAP: estava gravado e não era exibido nesta linha — só nas
+              de atividade. "1.1 Formalização" aparecia como "Formalização", e a
+              posição do item na EAP sumia justo onde a hierarquia é lida. */}
+          {!!(phaseAct as any).wbs_code && (
+            <span className="inline-flex items-center h-[18px] px-1.5 rounded border border-border bg-background/60 text-[10.5px] font-mono text-muted-foreground shrink-0" title="Código EAP">
+              {(phaseAct as any).wbs_code}
+            </span>
+          )}
           <div className="min-w-0">
             {isEditingTitle ? (
               <Input
@@ -1140,7 +1422,7 @@ export const BacklogSection = ({
                   if (e.key === "Enter") handleSaveTitle(phaseAct.id);
                   if (e.key === "Escape") setEditingTitleId(null);
                 }}
-                className="h-7 text-sm font-semibold"
+                className="h-7 text-[13px] font-semibold"
               />
             ) : (
               <h4
@@ -1224,23 +1506,29 @@ export const BacklogSection = ({
             {quickAddOpen && (
               // Mesmo grid das linhas: o campo alinha com a coluna "Tarefa".
               <div
-                className="grid items-center gap-2 border-b px-3 py-2 bg-primary/5"
+                className="grid items-center gap-2 border-b px-3 py-1.5 bg-primary/5"
                 style={{ gridTemplateColumns: backlogGrid }}
               >
+                {/* expand + (caixa, só no modo seleção). O ícone Plus ficava
+                    sozinho numa coluna que agora é condicional; foi para dentro
+                    da célula do título, ao lado do campo. */}
                 <span />
-                <Plus className="w-3.5 h-3.5 text-primary justify-self-center" />
-                <Input
-                  autoFocus
-                  placeholder="Título — Enter cria · Esc fecha"
-                  value={quickAddTitle}
-                  onChange={(e) => setQuickAddTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleQuickAddSubmit(phaseAct.phase_id, phaseAct.id);
-                    if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
-                  }}
-                  onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
-                  className="h-8 text-sm"
-                />
+                {selectMode && <span />}
+                <div className="flex items-center gap-2 min-w-0">
+                  <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <Input
+                    autoFocus
+                    placeholder="Título — Enter cria · Esc fecha"
+                    value={quickAddTitle}
+                    onChange={(e) => setQuickAddTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleQuickAddSubmit(phaseAct.phase_id, phaseAct.id);
+                      if (e.key === "Escape") { setQuickAddKey(null); setQuickAddTitle(""); }
+                    }}
+                    onBlur={() => { if (!quickAddTitle.trim()) { setQuickAddKey(null); } }}
+                    className="h-7 text-[13px]"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -1263,8 +1551,88 @@ export const BacklogSection = ({
     return { total: real.length, fase, marco, atividade };
   })();
 
+  // PRONTIDÃO do backlog: quantas tarefas têm o mínimo para virar trabalho.
+  // Sem isto, "718 tarefas" soava como 718 coisas prontas para fazer — quando
+  // a maioria é rascunho sem responsável, prazo ou prioridade.
+  //
+  // Calculado sobre TODAS as tarefas vivas, não sobre `backlogActs`: este já
+  // vem recortado pelo filtro, e o resumo passaria a descrever o recorte em vez
+  // do backlog — clicar em "Incompletas" mostraria "0 prontas", que é verdade
+  // sobre a tela e mentira sobre o projeto.
+  const prontidaoResumo = (() => {
+    const vivas = activities.filter((a) => !a.is_trashed);
+    const temFilho = new Set(vivas.filter((a) => a.parent_id).map((a) => a.parent_id as string));
+    return resumirProntidao(vivas.map((a) => ({ tarefa: a, temFilhos: temFilho.has(a.id) })));
+  })();
+  const carencias = principaisCarencias(prontidaoResumo);
+
   return (
     <div className="space-y-2.5">
+      {/* ===== LINHA DE ESTADO — o que está filtrado e o que falta =====
+          Antes isto era uma faixa cheia, empilhada sobre a de contagem: duas
+          linhas falando da mesma lista, com "12" repetido cinco vezes e um
+          segmentado de filtro longe dos outros filtros.
+
+          Agora segue a ordem canônica do Helios (filtros → filtros aplicados →
+          dados): o filtro em si mora nos controles abaixo, e AQUI fica só o
+          estado. A faixa SOME quando não há filtro ativo nem carência — na
+          maior parte do tempo a tela tem uma linha a menos.
+
+          A chip resolve o alerta do Groto sobre segmentado-como-filtro: sem um
+          estado explícito de "filtro ativo", o usuário não percebe que está
+          vendo dados recortados. Aqui ela diz o que é e o ✕ desfaz. */}
+      {(prontidaoFilter !== "all" || carencias.length > 0) && prontidaoResumo.total > 0 && (
+        <div className="flex items-center gap-2.5 flex-wrap px-0.5 text-[12px] text-muted-foreground">
+          {prontidaoFilter !== "all" && (
+            <button
+              type="button"
+              onClick={() => setProntidaoFilter("all")}
+              title="Remover este filtro"
+              className={cn(
+                "inline-flex items-center gap-1.5 h-[22px] px-2 rounded-full border text-[11px] font-medium transition-colors",
+                prontidaoFilter === "incomplete"
+                  ? "border-destructive/50 bg-destructive/10 text-destructive hover:bg-destructive/15"
+                  : "border-success/50 bg-success/10 text-success hover:bg-success/15",
+              )}
+            >
+              {prontidaoFilter === "incomplete" ? "Incompletas" : "Prontas"}
+              <X className="w-3 h-3 opacity-70" />
+            </button>
+          )}
+
+          {/* As duas maiores carências: é o que orienta por onde começar. */}
+          {carencias.length > 0 && (
+            <span className="shrink-0">
+              {carencias
+                .map((c) => `${PRONTIDAO_LABELS_LONGOS[c.requisito].replace("sem ", "falta ")} em ${c.quantidade}`)
+                .join(" · ")}
+            </span>
+          )}
+
+          {/* Barra fina, à direita: proporção sem ocupar linha própria. */}
+          <span className="ml-auto flex items-center gap-2 shrink-0">
+            <span className="tabular-nums">
+              <span className="text-foreground font-semibold">{prontidaoResumo.prontas}</span>
+              {" / "}{prontidaoResumo.total} prontas
+            </span>
+            <span className="w-16 h-1.5 rounded-full overflow-hidden flex border border-border/60">
+              {[
+                { n: prontidaoResumo.prontas, cls: "bg-success", lab: "prontas" },
+                { n: prontidaoResumo.quaseProntas, cls: "bg-warning", lab: "falta 1 campo" },
+                { n: prontidaoResumo.incompletas, cls: "bg-destructive", lab: "falta mais de 1" },
+              ].map((f) => f.n > 0 && (
+                <span
+                  key={f.lab}
+                  className={f.cls}
+                  style={{ width: `${(f.n / prontidaoResumo.total) * 100}%` }}
+                  title={`${f.n} ${f.lab}`}
+                />
+              ))}
+            </span>
+          </span>
+        </div>
+      )}
+
       {/* Barra de visão: legenda de contexto (esq.) + controles (dir.) */}
       {backlogActs.length > 0 && (
         <div className="flex items-center justify-between gap-3 flex-wrap px-0.5">
@@ -1286,6 +1654,18 @@ export const BacklogSection = ({
               </>
             )}
           </p>
+          {/* Contagens diferentes precisam se explicar: "14 tarefas" acima e
+              "12 prontas" ao lado pareciam discordar. A prontidão não avalia
+              agrupadores (horas e datas vêm dos filhos) nem concluídas — o
+              tooltip diz isso onde a dúvida aparece. */}
+          {prontidaoResumo.total > 0 && prontidaoResumo.total !== typeCounts.total && (
+            <span
+              className="text-[11px] text-muted-foreground/70 cursor-help"
+              title={`${prontidaoResumo.total} entram na conta de prontidão. Fases e tarefas concluídas ficam de fora: as horas e datas de um agrupador vêm dos filhos, e cobrar prazo de algo já entregue é ruído.`}
+            >
+              ({prontidaoResumo.total} avaliáveis)
+            </span>
+          )}
 
           {/* Controles de visão */}
           <div className="flex items-center gap-1.5">
@@ -1295,8 +1675,160 @@ export const BacklogSection = ({
                 <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => setMoveDialogOpen(true)}>
                   <ArrowRight className="w-3.5 h-3.5" /> Mudar status ({selectedIds.size})
                 </Button>
+                {/* Mover em lote: o diálogo já valida o conjunto inteiro de uma
+                    vez (o destino não pode estar dentro de NENHUM selecionado). */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!isAdmin}
+                  title={isAdmin ? undefined : "Você não tem permissão para reorganizar a EAP deste projeto"}
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => { setMoveIntoIds([...selectedIds]); setMoveIntoCurrentParent(null); }}
+                >
+                  <IndentIncrease className="w-3.5 h-3.5" /> Mover para dentro de…
+                </Button>
+
+                {/* PREENCHER EM LOTE — o que faltava para o filtro
+                    "Incompletas" servir de fila de trabalho. Medido: faltam
+                    responsável em 332 tarefas, prazo em 465 e prioridade em
+                    609. Corrigir uma por uma não acontece; é por isso que elas
+                    estão assim. Cada botão abre um seletor e aplica ao conjunto
+                    inteiro de uma vez. */}
+                <Popover open={bulkField === "assigned_to"} onOpenChange={(o) => setBulkField(o ? "assigned_to" : null)}>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5">
+                      <User className="w-3.5 h-3.5" /> Responsável
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[260px] p-0" align="end">
+                    <div className="max-h-[280px] overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => aplicarEmLote({ assigned_to: null }, "Responsável removido")}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-muted border-b text-muted-foreground"
+                      >
+                        Sem responsável
+                      </button>
+                      {profiles.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => aplicarEmLote({ assigned_to: p.full_name }, `Responsável: ${p.full_name}`)}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted"
+                        >
+                          <Avatar className="h-5 w-5 shrink-0">
+                            {p.avatar_url ? <AvatarImage src={p.avatar_url} alt={p.full_name || ""} /> : null}
+                            <AvatarFallback className="text-[8px]">{getAvatarInitials(p.full_name)}</AvatarFallback>
+                          </Avatar>
+                          <span className="truncate">{p.full_name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Popover open={bulkField === "end_date"} onOpenChange={(o) => setBulkField(o ? "end_date" : null)}>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5">
+                      <CalendarIcon className="w-3.5 h-3.5" /> Prazo
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <CalendarPicker
+                      mode="single"
+                      locale={ptBR}
+                      onSelect={(d) => {
+                        if (!d) return;
+                        // Fuso LOCAL: toISOString à noite em UTC-3 já é o dia
+                        // seguinte, e o prazo sairia um dia à frente.
+                        const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                        aplicarEmLote({ end_date: ymd }, `Prazo: ${d.toLocaleDateString("pt-BR")}`);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => aplicarEmLote({ end_date: null }, "Prazo removido")}
+                      className="w-full px-3 py-2 text-xs text-muted-foreground hover:bg-muted border-t text-left"
+                    >
+                      Remover prazo
+                    </button>
+                  </PopoverContent>
+                </Popover>
+
+                {/* LIGAR EM SEQUÊNCIA — cria a cadeia de dependências de uma
+                    vez. Medido: 41 dependências para 825 atividades, e é por
+                    isso que o caminho crítico não diz nada. Criar uma hoje
+                    custa 4 passos (abrir a tarefa, achar a aba, buscar a outra,
+                    escolher o tipo); sequenciar uma fase de 10 leva ~10 min.
+                    Aqui é um clique para toda a cadeia. */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={selectedIds.size < 2 || sequenciando}
+                  title={
+                    selectedIds.size < 2
+                      ? "Selecione ao menos duas tarefas, na ordem em que devem acontecer"
+                      : "Cada tarefa passa a depender da anterior, na ordem da lista"
+                  }
+                  className="h-7 text-xs gap-1.5"
+                  onClick={ligarEmSequencia}
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  {sequenciando ? "Ligando…" : "Ligar em sequência"}
+                </Button>
+
+                <Popover open={bulkField === "priority"} onOpenChange={(o) => setBulkField(o ? "priority" : null)}>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5">
+                      <Flag className="w-3.5 h-3.5" /> Prioridade
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[200px] p-1" align="end">
+                    {/* Grava gravity/urgency/tendency, não o texto: é o GUT que
+                        marca a prioridade como definida (ver lib/prontidao). */}
+                    {GUT_LOTE.map((g) => (
+                      <button
+                        key={g.label}
+                        type="button"
+                        onClick={() => aplicarEmLote(
+                          { gravity: g.g, urgency: g.u, tendency: g.t, priority: g.priority },
+                          `Prioridade: ${g.label}`,
+                        )}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted"
+                      >
+                        <span className={cn("w-2 h-2 rounded-full shrink-0", g.dot)} />
+                        {g.label}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
               </>
             )}
+            {/* PRONTIDÃO como filtro, junto dos outros — não numa faixa
+                própria. Ele recorta a lista igual a Status e Prioridade, e
+                separá-lo sugeria que fosse outra coisa. Some quando não há
+                nada a recortar (tudo pronto ou nada avaliável). */}
+            {prontidaoResumo.total > 0 && prontidaoResumo.prontas < prontidaoResumo.total && (
+              <Select value={prontidaoFilter} onValueChange={(v) => setProntidaoFilter(v as typeof prontidaoFilter)}>
+                <SelectTrigger
+                  className={cn(
+                    "h-7 w-[132px] text-[13px] gap-1.5",
+                    prontidaoFilter === "incomplete" && "border-destructive/50 text-destructive",
+                    prontidaoFilter === "ready" && "border-success/50 text-success",
+                  )}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas {prontidaoResumo.total}</SelectItem>
+                  <SelectItem value="ready">Prontas {prontidaoResumo.prontas}</SelectItem>
+                  <SelectItem value="incomplete">
+                    Incompletas {prontidaoResumo.quaseProntas + prontidaoResumo.incompletas}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
             {/* Agrupar em raias — mesmo modelo do Kanban */}
             <Select value={groupBy} onValueChange={(v) => changeGroupBy(v as GroupBy)}>
               <SelectTrigger className="h-7 w-[136px] text-[13px] gap-1.5">
@@ -1367,13 +1899,35 @@ export const BacklogSection = ({
             Atividade" (ou importar a EAP, que já cria as fases). Fase avulsa
             criada antes de existir qualquer tarefa só produzia um agrupador
             vazio que o usuário depois não sabia como remover. */}
-        {phases.length === 0 && backlogActs.length === 0 && (
+        {phases.length === 0 && backlogActs.length === 0 && prontidaoFilter === "all" && (
           <div className="p-8 text-center">
             <Inbox className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
             <p className="text-muted-foreground text-sm">Nenhuma atividade ainda</p>
             <p className="text-muted-foreground/60 text-xs mt-1">
               Use <span className="font-medium">Nova Atividade</span> para começar, ou <span className="font-medium">Importar EAP</span> para trazer a estrutura pronta.
             </p>
+          </div>
+        )}
+
+        {/* Vazio POR CAUSA DO FILTRO — mensagem diferente da de projeto vazio.
+            "Nenhuma atividade ainda" num projeto com 718 tarefas seria mentira,
+            e esconderia que basta desligar o recorte. */}
+        {backlogActs.length === 0 && prontidaoFilter !== "all" && (
+          <div className="p-8 text-center">
+            <Inbox className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+            <p className="text-muted-foreground text-sm">
+              {prontidaoFilter === "ready"
+                ? "Nenhuma tarefa pronta para executar"
+                : "Nenhuma tarefa incompleta"}
+            </p>
+            <p className="text-muted-foreground/60 text-xs mt-1">
+              {prontidaoFilter === "ready"
+                ? "Complete responsável, prazo, prioridade e estimativa para uma tarefa aparecer aqui."
+                : "Todas as tarefas têm o mínimo preenchido."}
+            </p>
+            <Button size="sm" variant="outline" className="h-7 text-xs mt-3" onClick={() => setProntidaoFilter("all")}>
+              Ver todas
+            </Button>
           </div>
         )}
 
@@ -1390,7 +1944,7 @@ export const BacklogSection = ({
             <div key={lane.id}>
               {/* Faixa inteira colapsa, igual às fases. */}
               <div
-                className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
                 onClick={() => toggleLane(lane.id)}
               >
                 <span className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground shrink-0">
@@ -1590,6 +2144,20 @@ export const BacklogSection = ({
           };
         })()}
       />
+
+      {/* Mover para dentro de outro item. A validação (ciclo, self, marco,
+          profundidade) mora em lib/eapModel — a mesma que o Kanban e a edição
+          usam, para as três telas recusarem exatamente as mesmas coisas. */}
+      {moveIntoIds && (
+        <LinkParentDialog
+          open={!!moveIntoIds}
+          onOpenChange={(o) => { if (!o) { setMoveIntoIds(null); setMoveIntoCurrentParent(null); } }}
+          projectId={projectId}
+          activityIds={moveIntoIds}
+          currentParentId={moveIntoCurrentParent}
+          onLinked={onDataChanged}
+        />
+      )}
 
       {/* Permanent Delete Confirmation */}
       <AlertDialog open={!!permanentDeleteId} onOpenChange={(open) => !open && setPermanentDeleteId(null)}>

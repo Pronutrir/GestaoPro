@@ -19,6 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
 import { format, parseISO } from "date-fns";
 import { duplicateActivity } from "@/lib/duplicateActivity";
+import { mutateInChunks } from "@/lib/chunkedIn";
 
 interface Phase { id: string; title: string; display_order?: number | null; }
 interface WorkflowStage { id: string; title: string; color?: string | null; display_order?: number; }
@@ -244,10 +245,17 @@ export function ProjectFlatList({
       .map((a) => a.id);
     if (ids.length === 0) return;
     const completed_at = newStatus === "completed" ? new Date().toISOString() : null;
-    await (supabase.from("activities").update({ status: newStatus, completed_at } as any) as any).in("id", ids);
-    toast({ title: `${ids.length} tarefa(s) atualizada(s)` });
+    // EM LOTES: seleção grande estoura a URL no proxy (~3,7 KB) e devolve 502.
+    const { error } = await mutateInChunks(ids, (batch) =>
+      (supabase.from("activities").update({ status: newStatus, completed_at } as any) as any).in("id", batch),
+    );
     clearSelection();
     onDataChanged();
+    if (error) {
+      toast({ title: "Nem todas foram atualizadas", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: `${ids.length} tarefa(s) atualizada(s)` });
   };
   const bulkArchive = async () => {
     const selected = activities.filter((a) => selectedIds.has(a.id));
@@ -259,10 +267,16 @@ export function ProjectFlatList({
       .map((a) => a.id);
     if (ids.length === 0) return;
     if (!confirm(`Arquivar ${ids.length} tarefa(s)?`)) return;
-    await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any) as any).in("id", ids);
-    toast({ title: `${ids.length} tarefa(s) arquivada(s)` });
+    const { error } = await mutateInChunks(ids, (batch) =>
+      (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any) as any).in("id", batch),
+    );
     clearSelection();
     onDataChanged();
+    if (error) {
+      toast({ title: "Nem todas foram arquivadas", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: `${ids.length} tarefa(s) arquivada(s)` });
   };
 
   const renderCell = (a: Activity, key: ColKey) => {

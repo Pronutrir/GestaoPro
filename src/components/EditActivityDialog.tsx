@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { DateField } from "@/components/ui/date-field";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { DateChip } from "@/components/DateChip";
 import { PersonCombobox } from "@/components/PersonCombobox";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2 } from "lucide-react";
+import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2, IndentIncrease, CornerDownRight } from "lucide-react";
+// Validação de movimento na EAP — a MESMA que o Backlog e o Kanban usam, para
+// as três telas recusarem exatamente as mesmas coisas (ciclo, self, marco).
+import {
+  eapCanMoveInto, eapCanGroup, eapDescendantIds, eapShouldDemote,
+  eapToPersisted, eapTypeOptions, resolveEapKind, EAP_LABELS,
+  type EapKind, type EapNodeLike,
+} from "@/lib/eapModel";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { cascadeDates } from "@/lib/criticalPath";
 import { endVariance, varianceTone, varianceClasses } from "@/lib/dateVariance";
@@ -27,6 +33,7 @@ import { GutPrioritySelector } from "@/components/GutPrioritySelector";
 import { GUT_META, gutLabel, gutScore, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 import { History, ChevronDown, Hash, Copy, UserCircle, Lock, AlertOctagon, Wand2, EyeOff } from "lucide-react";
 import { BookOpen } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
@@ -56,7 +63,10 @@ const PropertyRow = ({ icon, label, children, wide, iconClassName }: {
   /** Cor do ícone do rótulo — dá vida à informação (padrão: cinza discreto). */
   iconClassName?: string;
 }) => (
-  <div className={cn("flex flex-col gap-1 min-w-0", wide && "sm:col-span-2")}>
+  // xl:col-span-3 junto com sm:col-span-2: sem ele, um campo `wide` numa grade
+  // de 3 colunas ocuparia só 2 e deixaria um buraco na terceira. "Linha
+  // inteira" precisa valer em qualquer densidade.
+  <div className={cn("flex flex-col gap-1 min-w-0", wide && "sm:col-span-2 xl:col-span-3")}>
     <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
       <span className={cn("text-muted-foreground/70", iconClassName)}>{icon}</span>
       {label}
@@ -92,7 +102,12 @@ const FieldBand = ({ step, title, children }: {
       </span>
       {title}
     </div>
-    <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">{children}</div>
+    {/* 3 colunas a partir de xl: com o diálogo em ~1400px e a conversa levando
+        400, a coluna do formulário passa de 900px — larga o bastante para três
+        campos por linha. Em 2 colunas, Status/Dentro de/Código EAP viravam
+        três linhas e a faixa 1 não cabia numa dobra. `wide` continua ocupando
+        a linha inteira em qualquer densidade. */}
+    <div className="p-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-4 gap-y-3">{children}</div>
   </div>
 );
 
@@ -201,6 +216,12 @@ interface EditActivityDialogProps {
   onBackToParent?: () => void;
   /** Minutes apontados por atividade (fonte: time_entries) para cálculo de tempo real. */
   consumedMinutesByActivity?: Record<string, number>;
+  /**
+   * Permissão de edição no PROJETO. Sem isto o diálogo deixava preencher tudo e
+   * só falhava ao salvar, com erro genérico — 34 dos 75 membros nessa situação.
+   * Quem é responsável pela atividade edita mesmo sem isto (ver `canEditThis`).
+   */
+  canEditProject?: boolean;
 }
 
 /** Parse hours as decimal from "Xh Ym" or plain number */
@@ -394,8 +415,10 @@ export const EditActivityDialog = ({
   onActivityCreated,
   parentActivityTitle, onBackToParent,
   consumedMinutesByActivity = {},
+  canEditProject = true,
 }: EditActivityDialogProps) => {
   const { toast } = useToast();
+  const { user: authUser, profile: authProfile } = useAuth();
   const ensureProjectUnlocked = () => {
     if (!projectLocked) return true;
     toast({
@@ -408,6 +431,33 @@ export const EditActivityDialog = ({
   const [draftActivity, setDraftActivity] = useState<Activity | null>(null);
   const [creatingDraft, setCreatingDraft] = useState(false);
   const effectiveActivity = createMode ? draftActivity : activity;
+
+  /**
+   * Espelha a regra do banco (`can_member_action` OR `is_activity_owner`): quem
+   * é responsável ou participante edita a própria atividade mesmo sem permissão
+   * geral no projeto — modelo do Asana, e o que EditProjectDialog já assumia ao
+   * gravar novos membros com can_edit=false.
+   *
+   * Os campos são texto livre (uuid, e-mail ou nome digitado), por isso a
+   * comparação testa as três formas. Valores vazios são descartados:
+   * sem isso, um perfil sem e-mail casaria com assigned_to vazio e daria
+   * permissão a qualquer um numa atividade sem responsável.
+   */
+  const souResponsavel = (() => {
+    if (!effectiveActivity || !authUser?.id) return false;
+    const identidades = new Set(
+      [authUser.id, authProfile?.email, authProfile?.full_name]
+        .filter((v): v is string => !!v && v.trim().length > 0)
+        .map((v) => v.trim().toLowerCase()),
+    );
+    const bate = (v?: string | null) => !!v && identidades.has(v.trim().toLowerCase());
+    if (bate(effectiveActivity.assigned_to)) return true;
+    return ((effectiveActivity as { participants?: string[] }).participants ?? []).some(bate);
+  })();
+
+  // createMode: quem está criando obviamente pode preencher o que criou.
+  const canEditThis = createMode || canEditProject || souResponsavel;
+  const readOnly = !canEditThis;
   const { blockers, isBlocked: isBlockedByOthers } = useTaskBlockers(effectiveActivity?.id);
   const [formData, setFormData] = useState({
     title: "", description: "", assigned_to: "",
@@ -442,6 +492,11 @@ export const EditActivityDialog = ({
   const [openAssigneeSubId, setOpenAssigneeSubId] = useState<string | null>(null);
   const [hoursPopoverOpen, setHoursPopoverOpen] = useState(false);
   const [generatingWbs, setGeneratingWbs] = useState(false);
+  // Candidatas a "Dentro de" — a EAP do projeto inteira, para validar o
+  // movimento (ciclo/profundidade) sem ida ao servidor a cada troca.
+  const [eapNodes, setEapNodes] = useState<EapNodeLike[]>([]);
+  const [parentPickerOpen, setParentPickerOpen] = useState(false);
+  const [parentSearch, setParentSearch] = useState("");
   // Campos OPCIONAIS revelados manualmente pelo "+ Adicionar campo" nesta sessão.
   // Um campo aparece se: já tem valor, OU foi revelado aqui. (padrão ClickUp/Jira/Linear)
   const [revealedFields, setRevealedFields] = useState<Set<OptionalFieldKey>>(new Set());
@@ -464,6 +519,8 @@ export const EditActivityDialog = ({
   const [lastEditorName, setLastEditorName] = useState<string | null>(null);
   const [lastEditorEmail, setLastEditorEmail] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"details" | "subtasks" | "attachments" | "comments" | "stories" | "history">(initialTab);
+  /** Última atividade carregada — distingue "trocou de card" de "recarregou o mesmo". */
+  const lastLoadedActivityIdRef = useRef<string | null>(null);
   const orderedSubActivities = useMemo(
     () => sortByWbsThenDisplayOrder(subActivities),
     [subActivities]
@@ -473,6 +530,28 @@ export const EditActivityDialog = ({
   useEffect(() => {
     if (formData.is_milestone && activeTab === "subtasks") setActiveTab("details");
   }, [formData.is_milestone, activeTab]);
+
+  // EAP do projeto, para o campo "Dentro de": valida o movimento no cliente
+  // (ciclo/profundidade) e mostra a árvore como ela é, em vez de uma lista
+  // alfabética onde não dá para saber ONDE o item vai parar.
+  useEffect(() => {
+    if (!open || !projectId) return;
+    let cancelado = false;
+    // is_trashed (e não trashed_at): é o campo que este arquivo usa em todas as
+    // outras consultas, e o que existe em ambientes sem a migration nova.
+    void (supabase
+      .from("activities")
+      .select("id, title, parent_id, item_type, is_milestone, wbs_code, display_order")
+      .eq("project_id", projectId) as any)
+      .eq("is_trashed", false)
+      .then(({ data, error }: { data: unknown; error: unknown }) => {
+        // Falha aqui não derruba a aba: o campo "Dentro de" some e o resto do
+        // diálogo continua utilizável — degradar é melhor que quebrar.
+        if (cancelado || error) return;
+        setEapNodes((data || []) as EapNodeLike[]);
+      });
+    return () => { cancelado = true; };
+  }, [open, projectId]);
 
   // Horas do pai: quando há subatividades, o planejado é um rollup automático
   // (soma dos filhos diretos), somente-leitura — não existe mais divergência
@@ -772,6 +851,16 @@ export const EditActivityDialog = ({
       // de volta os que estavam vazios (os com valor reaparecem pela regra de visibilidade).
       setRevealedFields(new Set());
       setRelationsCount(0);
+      // Aba volta ao início ao trocar de ATIVIDADE (não a cada recarga dos
+      // dados da mesma). `useState(initialTab)` só vale na primeira montagem, e
+      // este diálogo é reaproveitado: quem estava em Subatividades abria a
+      // próxima atividade já em Subatividades, sem ter pedido. Guardar o id
+      // anterior evita o outro extremo — perder a aba escolhida sempre que a
+      // atividade aberta é recarregada (salvar, mexer numa sub, realtime).
+      if (lastLoadedActivityIdRef.current !== act.id) {
+        lastLoadedActivityIdRef.current = act.id;
+        setActiveTab(initialTab);
+      }
       // Limpa as subs do card anterior ANTES do fetch async. Sem isso, há uma
       // janela em que o rollup roda com os filhos do card anterior aplicados ao
       // card atual — corrompendo hours/cost (ex.: abrir uma folha logo após um
@@ -862,10 +951,51 @@ export const EditActivityDialog = ({
     onActivityUpdated();
   };
 
+  /**
+   * Remove uma subatividade — ARQUIVANDO, não apagando.
+   *
+   * Antes era `.delete()`: o dado sumia do banco sem passar pela Lixeira, sem
+   * como restaurar. O Backlog e o Kanban sempre arquivaram (`is_trashed`), então
+   * o mesmo ícone de lixeira fazia duas coisas diferentes conforme a tela. Agora
+   * as três concordam.
+   *
+   * Ao sair o último filho, o pai é rebaixado de volta a folha: a operação
+   * inversa da promoção feita em handleAddSubActivity. A regra de quando
+   * rebaixar mora em lib/eapModel (eapShouldDemote), compartilhada.
+   */
   const handleDeleteSubActivity = async (subId: string) => {
     if (!ensureProjectUnlocked()) return;
-    await supabase.from("activities").delete().eq("id", subId);
-    if (effectiveActivity) fetchSubActivities(effectiveActivity.id);
+    const act = effectiveActivity;
+
+    const { error } = await supabase
+      .from("activities")
+      .update({ is_trashed: true, trashed_at: new Date().toISOString() } as any)
+      .eq("id", subId);
+
+    if (error) {
+      toast({ title: "Não foi possível arquivar", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    if (act) {
+      const restantes = subActivities.filter((s) => s.id !== subId);
+      if (eapShouldDemote(
+        { item_type: (act as { item_type?: string }).item_type, wbs_code: formData.wbs_code },
+        restantes.length > 0,
+      )) {
+        // Falha aqui não desfaz o arquivamento: o item volta a ser folha na
+        // próxima remoção ou pela edição manual do tipo. Rebaixar é cosmético
+        // perto de perder o arquivamento que o usuário pediu.
+        const { error: demoteErr } = await supabase
+          .from("activities")
+          .update({ item_type: "atividade" } as any)
+          .eq("id", act.id);
+        if (!demoteErr) {
+          setFormData((prev) => ({ ...prev, item_type: "atividade" }));
+        }
+      }
+      fetchSubActivities(act.id);
+    }
     onActivityUpdated();
   };
 
@@ -1050,6 +1180,18 @@ export const EditActivityDialog = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ensureProjectUnlocked()) return;
+    // Rede de segurança: os campos já estão desabilitados, mas o formulário
+    // ainda pode ser submetido por Enter. Antes o pedido ia ao banco, era
+    // recusado pelo RLS e voltava como "Erro ao salvar" — genérico o bastante
+    // para parecer falha do sistema em vez de falta de permissão.
+    if (readOnly) {
+      toast({
+        title: "Sem permissão para editar",
+        description: "Você pode ver esta atividade, mas não alterá-la. Fale com o gestor do projeto.",
+        variant: "destructive",
+      });
+      return;
+    }
     const act = createMode ? draftActivity : activity;
     if (!act) return;
     if (dateRangeInvalid) {
@@ -1109,6 +1251,27 @@ export const EditActivityDialog = ({
         wbs_code: wbsToSave,
       };
 
+      // Trocou de pai? O trigger eap_nesting_rule só aceita agrupador
+      // ('fase'/'pacote') como pai — se o destino for folha, promove ANTES,
+      // senão o update volta como check_violation crua. Mesmo tratamento do
+      // LinkParentDialog; o rótulo exibido continua vindo do nível do wbs_code,
+      // então um "1.1" promovido segue aparecendo como Entrega, não vira Fase.
+      const novoPaiId = formData.parent_id || null;
+      const paiAnterior = (act as { parent_id?: string | null }).parent_id ?? null;
+      if (novoPaiId && novoPaiId !== paiAnterior) {
+        const { data: paiRow } = await supabase
+          .from("activities")
+          .select("id, item_type")
+          .eq("id", novoPaiId)
+          .maybeSingle();
+        const tipoPai = ((paiRow as { item_type?: string } | null)?.item_type || "atividade").toLowerCase();
+        if (paiRow && tipoPai !== "fase" && tipoPai !== "pacote") {
+          // Falha aqui não aborta o save: se o ambiente ainda não aceita 'fase'
+          // (migration de item_type pendente), o update abaixo dá o aviso certo.
+          await supabase.from("activities").update({ item_type: "fase" } as any).eq("id", novoPaiId);
+        }
+      }
+
       const compatPayload: Record<string, any> = { ...updatePayload };
       const droppedColumns: string[] = [];
       let downgradedItemType = false;
@@ -1153,6 +1316,28 @@ export const EditActivityDialog = ({
       }
 
       if (error) throw error;
+
+      // Saiu de dentro de alguém? O pai ANTIGO pode ter ficado vazio.
+      // A promoção acima cuida do novo pai; sem esta parte, o antigo continuava
+      // com cara de agrupador sem ter nada dentro — mesmo defeito já corrigido
+      // na exclusão de subatividade, que o move reintroduzia pelo outro lado.
+      if (paiAnterior && paiAnterior !== novoPaiId) {
+        const { data: irmaos } = await supabase
+          .from("activities")
+          .select("id")
+          .eq("parent_id", paiAnterior)
+          .eq("is_trashed", false);
+        const { data: paiRow } = await supabase
+          .from("activities")
+          .select("id, item_type, wbs_code")
+          .eq("id", paiAnterior)
+          .maybeSingle();
+        const pai = paiRow as { item_type?: string; wbs_code?: string } | null;
+        if (pai && eapShouldDemote(pai, (irmaos?.length ?? 0) > 0)) {
+          // Falha aqui não desfaz o salvamento, que é o que o usuário pediu.
+          await supabase.from("activities").update({ item_type: "atividade" } as any).eq("id", paiAnterior);
+        }
+      }
 
       if (droppedColumns.length > 0) {
         toast({
@@ -1226,6 +1411,10 @@ export const EditActivityDialog = ({
       }
       setDraftActivity(null);
     }
+    // Ao fechar, esquece qual atividade estava aberta: reabrir a MESMA também
+    // começa em Detalhes. Fechar o diálogo encerra a tarefa; a próxima abertura
+    // é um começo, não a continuação da anterior.
+    if (!newOpen) lastLoadedActivityIdRef.current = null;
     onOpenChange(newOpen);
   };
 
@@ -1260,27 +1449,50 @@ export const EditActivityDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="!max-w-[96vw] w-[96vw] h-[95vh] max-h-[95vh] overflow-y-auto">
-        <DialogHeader>
-          {parentActivityTitle && onBackToParent && (
-            <button
-              type="button"
-              onClick={onBackToParent}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors mb-2 w-fit"
-              title="Voltar para a atividade principal"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span className="truncate max-w-[480px]">
-                Voltar para <span className="font-medium text-foreground">{parentActivityTitle}</span>
-              </span>
-            </button>
-          )}
-          <DialogTitle className="text-base font-semibold">
-            {createMode ? "Nova Atividade" : parentActivityTitle ? "Editar Sub-atividade" : "Editar Atividade"}
-          </DialogTitle>
+      {/* Largura: 96vw sem teto dava ~1840px numa tela de 1920 — linhas longas
+          demais para ler um formulário. O teto de 1400px é a prática de
+          ClickUp/Linear/Jira: usa a tela grande sem esticar o conteúdo.
+
+          `flex flex-col` em vez do `grid` padrão do shadcn: o corpo abaixo usa
+          `<form className="contents">`, que dissolve o form e promove o
+          <fieldset> a filho DIRETO daqui. Enquanto isto era um grid, as duas
+          colunas declaradas no fieldset vazavam para o diálogo inteiro e o
+          cabeçalho caía AO LADO do conteúdo. Em coluna flex, cada filho ocupa
+          a largura toda e as colunas do fieldset ficam contidas nele. */}
+      <DialogContent className="!max-w-[1400px] w-[96vw] h-[95vh] max-h-[95vh] overflow-hidden flex flex-col gap-3">
+        {/* Cabeçalho numa LINHA: título à esquerda, identificação à direita.
+            Empilhado, título e metadados ocupavam duas linhas e um bloco alto —
+            ~40px da primeira dobra gastos com o que já se sabe (que é a tela de
+            editar atividade). `sm:` porque em tela estreita empilhar é o certo.
+            `pr-8` abre espaço para o X de fechar, que é absoluto no canto. */}
+        {/* `flex-wrap` + `gap-x-3`, NÃO `justify-between`: com o diálogo em
+            1400px, jogar um bloco em cada borda deixava o título numa ponta e
+            a identificação na outra, com um vão enorme no meio — os dois se
+            referem à MESMA coisa e precisam ser lidos juntos. Agora os
+            metadados vêm logo depois do título; a linha quebra sozinha quando
+            não couber. */}
+        <DialogHeader className="shrink-0 space-y-0 sm:flex-row sm:items-center sm:flex-wrap gap-x-3 gap-y-1 pr-8">
+          <div className="min-w-0 shrink-0">
+            {parentActivityTitle && onBackToParent && (
+              <button
+                type="button"
+                onClick={onBackToParent}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors mb-1 w-fit"
+                title="Voltar para a atividade principal"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="truncate max-w-[480px]">
+                  Voltar para <span className="font-medium text-foreground">{parentActivityTitle}</span>
+                </span>
+              </button>
+            )}
+            <DialogTitle className="text-base font-semibold">
+              {createMode ? "Nova Atividade" : parentActivityTitle ? "Editar Sub-atividade" : "Editar Atividade"}
+            </DialogTitle>
+          </div>
           {act && !createMode && (
             <div
-              className="flex items-center gap-2 text-[11px] text-muted-foreground pt-0.5 min-w-0 overflow-hidden whitespace-nowrap"
+              className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0 overflow-hidden whitespace-nowrap"
               title={[
                 `Criada em ${new Date(act.created_at).toLocaleDateString("pt-BR")}`,
                 (creatorName || creatorEmail) && `por ${creatorName || creatorEmail}`,
@@ -1301,17 +1513,10 @@ export const EditActivityDialog = ({
                 {act.id.slice(0, 8)}
                 <Copy className="w-3 h-3 opacity-50" />
               </button>
-              {!!formData.wbs_code.trim() && (
-                <>
-                  <span className="opacity-50">·</span>
-                  <span
-                    className="inline-flex items-center h-5 px-1.5 rounded border border-border bg-muted/40 font-mono text-[10px] text-muted-foreground"
-                    title="Código EAP"
-                  >
-                    EAP {formData.wbs_code.trim()}
-                  </span>
-                </>
-              )}
+              {/* O código EAP NÃO se repete aqui: ele já aparece colado ao nome
+                  da atividade, logo abaixo, que é onde diz alguma coisa — "1.1.1
+                  Receber demanda da Diretoria" se lê como uma frase. Solto no
+                  cabeçalho era a mesma informação duas vezes em duas linhas. */}
               <span className="opacity-50">·</span>
               <span>
                 Criada em {new Date(act.created_at).toLocaleDateString("pt-BR")}
@@ -1365,9 +1570,58 @@ export const EditActivityDialog = ({
             </div>
           )}
         </DialogHeader>
+
+        {/* Diz ANTES por que os campos estão travados. Sem isto a pessoa
+            preenchia tudo e só descobria ao salvar, com erro genérico. */}
+        {readOnly && (
+          <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-[13px] text-warning">
+            <Lock className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>
+              <b className="font-semibold">Somente leitura.</b> Você não tem permissão
+              para editar atividades neste projeto. Se for o responsável por ela,
+              a edição libera automaticamente.
+            </span>
+          </div>
+        )}
+        {/* Quem edita só por ser responsável precisa saber de onde vem o acesso
+            — senão parece inconsistente poder mexer numa atividade e não noutra. */}
+        {!readOnly && !canEditProject && souResponsavel && (
+          <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-[13px] text-primary">
+            <UserCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>
+              Você está editando porque é <b className="font-semibold">responsável</b> por
+              esta atividade.
+            </span>
+          </div>
+        )}
+
+        {/* O FORM é o grid — não mais `className="contents"`.
+            Com `contents` o form era dissolvido e o <fieldset> virava filho
+            direto do DialogContent, fazendo as duas colunas daqui vazarem para
+            o diálogo inteiro: o cabeçalho ia parar AO LADO do conteúdo, com uma
+            faixa vazia enorme à esquerda. Agora a estrutura é honesta —
+            DialogContent empilha (cabeçalho, avisos, form) e as colunas ficam
+            contidas aqui dentro.
+
+            flex-1 + overflow-y-auto: a rolagem passou para o corpo, então o
+            cabeçalho fica fixo no topo e o rodapé com "Salvar" fica sempre
+            visível na base, em vez de sumir ao rolar. */}
+        {/* px-1 (não só pr-1): o anel de foco dos campos é desenhado 4px PARA
+            FORA da borda (ring-2 + ring-offset-2). Sem folga dos dois lados,
+            um campo colado na margem tem o anel cortado pelo overflow deste
+            container — era o que acontecia com "Adicionar sub-atividade", cuja
+            borda azul sumia à esquerda. O -mx-1 compensa a folga para o
+            conteúdo não encolher. */}
+        <form id="edit-activity-form" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-1 -mx-1">
         {/* Conversa em 400px (era 360, e o card interno tinha ~300 úteis):
             cada frase quebrava em três linhas no espaço de interação do time. */}
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-5">
+        {/* fieldset em vez de `disabled` campo a campo: são dezenas de inputs,
+            e um esquecido deixaria a pessoa digitar num campo que não grava.
+            O elemento nativo desabilita tudo dentro dele de uma vez. */}
+        <fieldset
+          disabled={readOnly}
+          className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-5 border-0 p-0 m-0 min-w-0 disabled:opacity-95"
+        >
           {/* ========= COLUNA PRINCIPAL (esquerda) ========= */}
           <div className="space-y-5 min-w-0">
           {/* ============= CABEÇALHO COMPACTO (estilo ClickUp) ============= */}
@@ -1562,39 +1816,58 @@ export const EditActivityDialog = ({
                     </PropertyRow>
                   )}
   
-                  {/* Tipo do item (papéis EAP): Fase/Entrega | Atividade | Marco.
-                      Mutuamente exclusivo. Agrupador legado ('pacote') exibe como Fase. */}
+                  {/* Tipo do item (papéis EAP) — LÊ DE lib/eapModel.
+                      Este seletor era a última cópia divergente da regra: tinha
+                      lógica própria que dizia "Fase / Entrega" num botão só,
+                      justamente o achatamento corrigido em fc0da05, e mostrava
+                      papel diferente do Backlog/Kanban para o mesmo item. Agora
+                      resolveEapKind decide o papel e eapTypeOptions decide o que
+                      é oferecido: no nível 1 aparece Fase, do 1.1 em diante
+                      Entrega — nunca os dois. */}
                   {(() => {
-                    type Kind = "fase" | "atividade" | "marco";
-                    // Papel EXIBIDO: agrupador legado ('pacote' ou com subitens) vira Fase.
-                    const itemKind: Kind = formData.is_milestone
-                      ? "marco"
-                      : (formData.item_type === "fase" || formData.item_type === "pacote" || hasSubActivities)
-                        ? "fase"
-                        : "atividade";
-                    const setKind = (kind: Kind) =>
+                    type Kind = EapKind;
+                    const itemKind: Kind = resolveEapKind(
+                      {
+                        item_type: formData.item_type,
+                        is_milestone: formData.is_milestone,
+                        wbs_code: formData.wbs_code,
+                      },
+                      hasSubActivities,
+                    );
+                    const setKind = (kind: Kind) => {
+                      // eapToPersisted é a fonte do que vai ao banco: Fase e
+                      // Entrega gravam igual ('fase'), Marco é a flag.
+                      const persisted = eapToPersisted(kind);
                       setFormData({
                         ...formData,
-                        is_milestone: kind === "marco",
-                        // Marco grava como 'atividade' (o tipo é a flag is_milestone).
-                        // Fase/Entrega grava 'fase'; folha grava 'atividade'.
-                        item_type: kind === "marco" ? "atividade" : kind,
+                        is_milestone: persisted.is_milestone,
+                        item_type: persisted.item_type,
                         // Marco é um ponto no tempo — não tem intervalo de fim.
                         end_date: kind === "marco" ? "" : formData.end_date,
                       });
-  
-                    // Atividade também pode agrupar: o que define o rótulo é o
-                    // NÍVEL na EAP, não o fato de ter subitens. Só Marco segue
-                    // barrado com filhos — marco é folha de controle, um marco
-                    // que agrupa não faz sentido.
-                    const kindDisabledReason = (kind: Kind): string | null => {
-                      if (hasSubActivities && kind === "marco")
-                        return "Este item tem subitens; Marco não agrupa.";
-                      return null;
                     };
-                    const KIND_OPTIONS: {
+
+                    // Papéis VÁLIDOS para este item. O agrupador oferecido é
+                    // Fase OU Entrega conforme o nível, nunca ambos; e Marco sai
+                    // dos válidos quando há filhos (folha de controle não
+                    // agrupa) — mas continua VISÍVEL, desabilitado, ver
+                    // KIND_OPTIONS abaixo.
+                    const allowed = eapTypeOptions({
+                      hasChildren: hasSubActivities,
+                      wbsCode: formData.wbs_code,
+                    });
+                    const kindDisabledReason = (kind: Kind): string | null => {
+                      if (allowed.includes(kind)) return null;
+                      if (kind === "marco" && hasSubActivities)
+                        return "Este item tem subitens; Marco não agrupa.";
+                      if (kind === "fase")
+                        return "Fase é o nível 1 da EAP (1, 2, 3…). Este item está dentro de uma fase.";
+                      if (kind === "entrega")
+                        return "Entrega fica do nível 1.1 em diante, dentro de uma fase.";
+                      return "Indisponível para este item.";
+                    };
+                    const ALL_KINDS: {
                       kind: Kind;
-                      label: string;
                       icon: React.ReactNode;
                       hint: string;
                       activeCls: string;
@@ -1605,33 +1878,58 @@ export const EditActivityDialog = ({
                       // lia como marcado.
                       {
                         kind: "fase",
-                        label: "Fase / Entrega",
                         icon: <Layers className="w-3.5 h-3.5" />,
-                        hint: "Nível 1 da EAP (1, 2, 3…). Agrupa entregas; datas, horas e custo derivam dos filhos.",
+                        hint: "Nível 1 da EAP (1, 2, 3…). Etapa do ciclo de vida; datas, horas e custo derivam dos filhos.",
+                        activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
+                      },
+                      {
+                        kind: "entrega",
+                        icon: <Layers className="w-3.5 h-3.5" />,
+                        hint: "Do nível 1.1 em diante. Está dentro de uma fase; é o que ela produz.",
                         activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
                       },
                       {
                         kind: "atividade",
-                        label: "Atividade",
                         icon: <Circle className="w-3.5 h-3.5" />,
-                        hint: "Do nível 1.1 em diante. Pode ter subitens — aí horas e custo somam dos filhos.",
+                        hint: "Folha de trabalho: vai ao Kanban, tem horas, custo e responsável. Pode ter subitens.",
                         activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
                       },
                       {
                         kind: "marco",
-                        label: "Marco",
                         icon: <Diamond className={`w-3.5 h-3.5 ${itemKind === "marco" ? "fill-current" : ""}`} />,
                         hint: "Ponto único no tempo (uma data, sem intervalo). Não tem horas nem custo.",
                         activeCls: "border-amber-500 bg-amber-500 text-white shadow-sm",
                       },
                     ];
+                    // O que SAI do trilho e o que fica DESABILITADO são coisas
+                    // diferentes:
+                    //
+                    // • Fase e Entrega são o mesmo papel em níveis diferentes —
+                    //   só uma das duas faz sentido para este item, e mostrar a
+                    //   outra apagada sugeriria uma escolha que não existe. Some.
+                    // • Marco continua SEMPRE visível. Quando o item tem filhos
+                    //   ele fica desabilitado com o motivo no tooltip, como já
+                    //   era antes: sumir deixaria "não consigo marcar como
+                    //   marco" sem nenhuma pista do porquê.
+                    //
+                    // O papel atual nunca é filtrado — senão um item legado
+                    // gravado como Fase num nível 2 ficaria sem botão marcado.
+                    const KIND_OPTIONS = ALL_KINDS.filter(
+                      (o) =>
+                        o.kind === "marco" ||
+                        allowed.includes(o.kind) ||
+                        o.kind === itemKind,
+                    );
                     return (
                       <PropertyRow
                         iconClassName={itemKind === "marco" ? "text-amber-500" : "text-primary"}
                         icon={
                           itemKind === "marco" ? (
                             <Diamond className="w-3.5 h-3.5 fill-amber-500" />
-                          ) : itemKind === "fase" ? (
+                          ) : eapCanGroup(itemKind) ? (
+                            // Fase E Entrega usam o ícone de camadas: as duas
+                            // agrupam. Antes só "fase" acertava e a Entrega caía
+                            // no círculo de folha.
                             <Layers className="w-3.5 h-3.5" />
                           ) : (
                             <Circle className="w-3.5 h-3.5" />
@@ -1661,13 +1959,18 @@ export const EditActivityDialog = ({
                                   } ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
                                 >
                                   {opt.icon}
-                                  {opt.label}
+                                  {EAP_LABELS[opt.kind]}
                                 </button>
                               );
                             })}
                           </div>
                           {hasSubActivities && (
-                            <span className="text-[10.5px] text-primary flex items-center gap-1 min-w-0" title="Este item agrupa subitens — por isso é uma Fase/Entrega. Horas e custo são somados dos filhos (veja a aba Subatividades).">
+                            // O texto dizia "por isso é uma Fase/Entrega" —
+                            // regra ANTIGA ("quem agrupa é Fase"). Hoje o papel
+                            // vem do NÍVEL: uma Atividade pode ter subitens sem
+                            // deixar de ser Atividade. A nota agora só informa o
+                            // que é fato ali — o rollup — sem inventar a causa.
+                            <span className="text-[10.5px] text-primary flex items-center gap-1 min-w-0" title="Horas e custo deste item são a soma dos subitens (veja a aba Subatividades). O papel na EAP vem do nível do código, não de ter filhos.">
                               <Layers className="w-3 h-3 shrink-0" />
                               <span className="truncate">Agrupa {ownSubActivities.length} subitem(ns) — horas e custo somados dos filhos.</span>
                             </span>
@@ -1682,7 +1985,7 @@ export const EditActivityDialog = ({
                       escondido justamente de quem ainda não tinha criado nenhuma,
                       ou seja, quem mais precisava descobrir que o recurso existe. */}
                   {projectId && (
-                    <div className="min-w-0 sm:col-span-2">
+                    <div className="min-w-0 sm:col-span-2 xl:col-span-3">
                       <PropertyRow
                         wide
                         iconClassName="text-primary"
@@ -1702,6 +2005,205 @@ export const EditActivityDialog = ({
                     </div>
                   )}
   
+                  {/* Dentro de — onde o item fica na EAP. Vizinho do Código EAP
+                      porque os dois dizem a mesma coisa por vias diferentes: um
+                      pela posição real (parent_id), outro pela numeração.
+                      Só fora do createMode: na criação o pai já vem do contexto
+                      (quick-add sob um item) e o item ainda não tem descendentes
+                      para validar. */}
+                  {!createMode && (() => {
+                    const meuId = effectiveActivity?.id;
+                    if (!meuId) return null;
+
+                    // Self + descendentes: mover para lá desligaria os dois da raiz.
+                    const bloqueados = new Set<string>([meuId]);
+                    eapDescendantIds(eapNodes, [meuId]).forEach((id) => bloqueados.add(id));
+
+                    const porId = new Map(eapNodes.map((n) => [n.id, n]));
+                    const paiAtual = formData.parent_id ? porId.get(formData.parent_id) : null;
+
+                    // Árvore ordenada (pai seguido dos filhos) — a lista precisa
+                    // mostrar a hierarquia, senão não dá para saber onde se está.
+                    const filhosDe = new Map<string, EapNodeLike[]>();
+                    const raizes: EapNodeLike[] = [];
+                    eapNodes.forEach((n) => {
+                      if (n.parent_id && porId.has(n.parent_id)) {
+                        const arr = filhosDe.get(n.parent_id) || [];
+                        arr.push(n);
+                        filhosDe.set(n.parent_id, arr);
+                      } else raizes.push(n);
+                    });
+                    const linhas: Array<{ node: EapNodeLike; depth: number }> = [];
+                    const vistos = new Set<string>(); // dado já com ciclo não trava a lista
+                    const andar = (lista: EapNodeLike[], depth: number) => {
+                      for (const n of lista) {
+                        if (vistos.has(n.id)) continue;
+                        vistos.add(n.id);
+                        linhas.push({ node: n, depth });
+                        andar(filhosDe.get(n.id) || [], depth + 1);
+                      }
+                    };
+                    andar(raizes, 1);
+                    const busca = parentSearch.trim().toLowerCase();
+                    const opcoes = linhas
+                      .filter(({ node }) => !bloqueados.has(node.id) && !node.is_milestone)
+                      .filter(({ node }) => {
+                        if (!busca) return true;
+                        const titulo = ((node as { title?: string }).title || "").toLowerCase();
+                        return titulo.includes(busca) || (node.wbs_code || "").toLowerCase().includes(busca);
+                      });
+
+                    const escolher = (destinoId: string | null) => {
+                      const check = eapCanMoveInto(eapNodes, [meuId], destinoId);
+                      if (!check.ok) {
+                        toast({
+                          title: "Não dá para mover para aí",
+                          description: check.message,
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      // Avisa mas deixa seguir: a base já tem árvores de 6 níveis
+                      // e travar impediria justamente de reorganizá-las.
+                      if (check.warning) {
+                        toast({ title: "EAP ficando profunda", description: check.warning });
+                      }
+                      setFormData((f) => ({ ...f, parent_id: destinoId || "" }));
+                      setParentPickerOpen(false);
+                      setParentSearch("");
+                    };
+
+                    // MEIA coluna, não `wide`. A faixa é uma grade de 2 colunas
+                    // e Status é o único outro campo de meia largura aqui —
+                    // Tipo e Dependências ocupam a linha inteira. Com este
+                    // campo em `wide`, o Status ficava sozinho na linha e o
+                    // Código EAP era empurrado para baixo, deixando um buraco à
+                    // direita. Em meia coluna os pares voltam: Status | Dentro
+                    // de, e depois o Código EAP.
+                    return (
+                      <PropertyRow
+                        iconClassName="text-primary"
+                        icon={<IndentIncrease className="w-3.5 h-3.5" />}
+                        label="Dentro de"
+                      >
+                        <div className="flex items-center gap-1.5 w-full min-w-0">
+                          <Popover
+                            open={parentPickerOpen}
+                            onOpenChange={(o) => {
+                              setParentPickerOpen(o);
+                              // Limpa ao fechar: senão reabre já filtrado pela
+                              // busca anterior e parece que a EAP encolheu.
+                              if (!o) setParentSearch("");
+                            }}
+                          >
+                            <PopoverTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={readOnly}
+                                className="h-8 flex-1 min-w-0 justify-between text-xs font-normal gap-1.5 px-2.5"
+                              >
+                                <span className="flex items-center gap-1.5 min-w-0">
+                                  {paiAtual ? (
+                                    <>
+                                      <CornerDownRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                      {paiAtual.wbs_code && (
+                                        <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                                          {paiAtual.wbs_code}
+                                        </span>
+                                      )}
+                                      <span className="truncate">
+                                        {(paiAtual as { title?: string }).title || "item"}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-muted-foreground">
+                                      No topo da EAP
+                                    </span>
+                                  )}
+                                </span>
+                                {/* Chevron: sem ele o campo parecia um rótulo
+                                    somente-leitura, não um seletor. */}
+                                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[380px] p-0" align="start">
+                              {/* Busca: a EAP de um projeto grande não cabe na
+                                  lista, e rolar até achar o destino não é caminho. */}
+                              <div className="p-2 border-b">
+                                <Input
+                                  autoFocus
+                                  value={parentSearch}
+                                  onChange={(e) => setParentSearch(e.target.value)}
+                                  placeholder="Buscar por título ou código..."
+                                  className="h-7 text-xs"
+                                />
+                              </div>
+                              <div className="max-h-[280px] overflow-y-auto">
+                                <button
+                                  type="button"
+                                  onClick={() => escolher(null)}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted border-b text-muted-foreground"
+                                >
+                                  No topo da EAP (sem item acima)
+                                </button>
+                                {opcoes.length === 0 ? (
+                                  <p className="px-3 py-4 text-xs text-muted-foreground text-center">
+                                    {parentSearch ? "Nenhum item encontrado." : "Nenhum destino disponível."}
+                                  </p>
+                                ) : (
+                                  opcoes.map(({ node, depth }) => (
+                                    <button
+                                      key={node.id}
+                                      type="button"
+                                      onClick={() => escolher(node.id)}
+                                      className={cn(
+                                        "w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-xs hover:bg-muted",
+                                        node.id === formData.parent_id && "bg-muted/60 font-medium",
+                                      )}
+                                      style={{ paddingLeft: `${12 + (depth - 1) * 12}px` }}
+                                    >
+                                      {depth > 1 && (
+                                        <CornerDownRight className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+                                      )}
+                                      {node.wbs_code && (
+                                        <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                                          {node.wbs_code}
+                                        </span>
+                                      )}
+                                      <span className="truncate flex-1">
+                                        {(node as { title?: string }).title || "(sem título)"}
+                                      </span>
+                                      {depth >= 5 && (
+                                        <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                                      )}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+
+                          {/* Tirar de dentro sem abrir o seletor: era a única
+                              forma de voltar à raiz e exigia abrir a lista. */}
+                          {paiAtual && !readOnly && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                              title="Tirar de dentro (mover para o topo da EAP)"
+                              onClick={() => escolher(null)}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </PropertyRow>
+                    );
+                  })()}
+
                   {/* Código EAP/WBS (opcional — colapsa quando vazio) */}
                   {showWbs && (
                   <PropertyRow iconClassName="text-primary" icon={<Hash className="w-3.5 h-3.5" />} label="Código EAP">
@@ -2076,7 +2578,7 @@ export const EditActivityDialog = ({
                       um controle DESABILITADO — e é a porta de entrada de Tempo,
                       Custo e Código EAP. Ganha a cor da plataforma e diz o que falta. */}
                   {hiddenChips.length > 0 && (
-                    <div className="sm:col-span-2">
+                    <div className="sm:col-span-2 xl:col-span-3">
                       <Popover open={addFieldOpen} onOpenChange={setAddFieldOpen}>
                         <PopoverTrigger asChild>
                           <button
@@ -2199,66 +2701,50 @@ export const EditActivityDialog = ({
                     <div className="divide-y divide-border">
                       {formData.participants.map((p, idx) => (
                         <div key={`${p}-${idx}`} className="grid grid-cols-[1fr_36px] items-center gap-2 px-3 py-2 bg-background">
-                          <Select
-                            value={p || "_none"}
-                            onValueChange={(value) => {
-                              const newName = value === "_none" ? "" : value;
-                              if (newName !== p && formData.participants.includes(newName)) return;
-                              const nextParticipants = [...formData.participants];
-                              nextParticipants[idx] = newName;
-                              setFormData({ ...formData, participants: nextParticipants });
+                          {/* PersonCombobox no lugar do Select: a lista de
+                              pessoas cresce e rolar até achar um nome não é
+                              caminho. Ele busca por nome, setor E função, com o
+                              trecho encontrado destacado — é o mesmo controle já
+                              usado no campo "Líder" logo acima, então o gesto é
+                              o mesmo nos dois lugares.
+
+                              O combobox trabalha com `id` e a lista guarda
+                              `full_name`; por isso a conversão nas duas pontas.
+                              Quem já é participante fica fora das opções, menos
+                              o desta linha (senão o próprio valor sumiria). */}
+                          <PersonCombobox
+                            people={(() => {
+                              const opcoes = allProfiles.filter(
+                                (m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name)),
+                              );
+                              // Participante gravado como texto livre (dado antigo,
+                              // sem perfil correspondente): entra como opção própria
+                              // para o campo mostrar o nome em vez do placeholder —
+                              // senão pareceria vazio e a pessoa some ao salvar.
+                              if (p && !opcoes.some((m) => m.full_name === p)) {
+                                return [{ id: `__livre__:${p}`, full_name: p }, ...opcoes];
+                              }
+                              return opcoes;
+                            })()}
+                            value={
+                              p
+                                ? allProfiles.find((m) => m.full_name === p)?.id ?? `__livre__:${p}`
+                                : null
+                            }
+                            placeholder="Selecionar pessoa..."
+                            className="h-9 text-sm"
+                            onSelect={(person) => {
+                              if (person.full_name !== p && formData.participants.includes(person.full_name)) return;
+                              const next = [...formData.participants];
+                              next[idx] = person.full_name;
+                              setFormData({ ...formData, participants: next });
                             }}
-                          >
-                            <SelectTrigger className="h-9 w-full text-sm">
-                              {(() => {
-                                const selected = allProfiles.find((m) => m.full_name === p);
-                                if (!selected && !p) {
-                                  return <div className="text-muted-foreground">Selecionar pessoa...</div>;
-                                }
-                                if (!selected && p) {
-                                  return (
-                                    <div className="flex items-center gap-2 min-w-0 w-full pr-1">
-                                      <Avatar className="h-5 w-5 shrink-0">
-                                        <AvatarFallback className="text-[9px]">{getAvatarInitials(p)}</AvatarFallback>
-                                      </Avatar>
-                                      <span className="truncate leading-none">{p}</span>
-                                    </div>
-                                  );
-                                }
-                                return (
-                                  <div className="flex items-center gap-2 min-w-0 w-full pr-1">
-                                    <Avatar className="h-5 w-5 shrink-0">
-                                      {selected?.avatar_url ? <AvatarImage src={selected.avatar_url} alt={selected.full_name} /> : null}
-                                      <AvatarFallback className="text-[9px]">{getAvatarInitials(selected?.full_name)}</AvatarFallback>
-                                    </Avatar>
-                                    <span className="truncate leading-none">{selected?.full_name}{selected?.sector ? ` — ${selected.sector}` : ""}</span>
-                                  </div>
-                                );
-                              })()}
-                            </SelectTrigger>
-                            <SelectContent
-                              position="popper"
-                              side="bottom"
-                              align="start"
-                              sideOffset={6}
-                              className="max-h-[min(320px,calc(100vh-180px))] overflow-y-auto"
-                            >
-                              <SelectItem value="_none">Selecionar pessoa...</SelectItem>
-                              {allProfiles
-                                .filter((m) => m.full_name && (m.full_name === p || !formData.participants.includes(m.full_name)))
-                                .map((m) => (
-                                  <SelectItem key={m.id} value={m.full_name}>
-                                    <div className="flex items-center gap-2 min-w-0 w-full">
-                                      <Avatar className="h-5 w-5 shrink-0">
-                                        {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
-                                        <AvatarFallback className="text-[9px]">{getAvatarInitials(m.full_name)}</AvatarFallback>
-                                      </Avatar>
-                                      <span className="truncate leading-none">{m.full_name}{m.sector ? ` — ${m.sector}` : ""}</span>
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
+                            onClear={() => {
+                              const next = [...formData.participants];
+                              next[idx] = "";
+                              setFormData({ ...formData, participants: next });
+                            }}
+                          />
                           <button
                             type="button"
                             className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
@@ -2809,9 +3295,14 @@ export const EditActivityDialog = ({
 
           </div>
 
-          {/* ========= PAINEL LATERAL (direita) — CONVERSA ========= */}
+          {/* ========= PAINEL LATERAL (direita) — CONVERSA =========
+              A rolagem agora é do <form>, não do diálogo — então a conversa
+              gruda no topo DELE. A altura acompanha a área rolável (95vh menos
+              cabeçalho, abas e rodapé, que passaram a ser fixos), em vez do
+              desconto antigo de 150px, calculado quando o diálogo inteiro
+              rolava. */}
           {act && (
-            <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-3 lg:sticky lg:top-0 lg:h-[calc(95vh-150px)]">
+            <aside className="lg:border-l lg:border-border lg:pl-5 min-w-0 flex flex-col gap-3 lg:sticky lg:top-0 lg:h-[calc(95vh-190px)]">
               {/* Card com identidade própria: a Conversa é o espaço de interação do time. */}
               <div className="rounded-xl border border-primary/25 bg-card flex-1 min-h-0 flex flex-col overflow-hidden shadow-sm">
                 {/* Faixa de destaque na cor primária */}
@@ -2836,8 +3327,17 @@ export const EditActivityDialog = ({
               </div>
             </aside>
           )}
+        </fieldset>
+        </form>
 
-          <DialogFooter className="gap-2 lg:col-span-2">
+        {/* Rodapé FORA do fieldset: "Cancelar" e "Fechar" precisam funcionar
+            mesmo em somente-leitura. Só "Salvar" é desabilitado, por readOnly.
+
+            E fora do <form>, para ficar fixo na base enquanto o corpo rola —
+            antes era preciso rolar até o fim para achar "Salvar". O botão de
+            submit usa `form="edit-activity-form"` para continuar enviando o
+            formulário mesmo estando fora dele. */}
+        <DialogFooter className="gap-2 shrink-0 border-t border-border pt-3 mt-0">
             {act && !createMode && act.status !== "completed" && (
               <Button
                 type="button"
@@ -2932,9 +3432,15 @@ export const EditActivityDialog = ({
               </Button>
             )}
             <Button type="button" variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
-            <Button type="submit">{createMode ? "Criar Atividade" : "Salvar Alterações"}</Button>
+            <Button
+              type="submit"
+              form="edit-activity-form"
+              disabled={readOnly}
+              title={readOnly ? "Você não tem permissão para editar esta atividade" : undefined}
+            >
+              {createMode ? "Criar Atividade" : "Salvar Alterações"}
+            </Button>
           </DialogFooter>
-        </form>
       </DialogContent>
       {/* Editor aninhado para sub-atividade — mesmos campos da atividade principal */}
       {editingSubActivity && (

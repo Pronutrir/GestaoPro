@@ -23,6 +23,7 @@ import { BacklogSection } from "@/components/BacklogSection";
 import { QuickCreateActivity } from "@/components/QuickCreateActivity";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { MeetingsManager } from "@/components/MeetingsManager";
+import { ProjectRegistrosTimeline } from "@/components/ProjectRegistrosTimeline";
 
 import { RisksManager } from "@/components/RisksManager";
 import { ChangeRequestsManager } from "@/components/ChangeRequestsManager";
@@ -34,7 +35,7 @@ import { ProjectDashboard } from "@/components/ProjectDashboard";
 import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
-  Layers, GanttChart, BookOpen, FileText, Flag,
+  Layers, GanttChart, BookOpen, FileText, Flag, History,
   ChevronRight, MoreHorizontal, Kanban, Users, AlertTriangle,
   Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
   NotebookPen, Search, X,
@@ -60,6 +61,7 @@ import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
 import { buildAvatarLookupMap } from "@/lib/avatarLookup";
+import { eapShouldDemote } from "@/lib/eapModel";
 
 interface Project {
   id: string;
@@ -109,6 +111,10 @@ interface Activity {
   item_type?: string | null;
   is_milestone?: boolean | null;
   created_by?: string | null;
+  /** Código da EAP — decide se um agrupador vazio é Fase declarada. */
+  wbs_code?: string | null;
+  /** Arquivada (soft-delete). */
+  is_trashed?: boolean | null;
 }
 
 const SUPPORTED_PROJECT_TABS = [
@@ -117,6 +123,7 @@ const SUPPORTED_PROJECT_TABS = [
   "timeline",
   "calendar",
   "documents",
+  "registros",
   "stories",
   "tap",
   "meetings",
@@ -387,12 +394,29 @@ export default function ProjectDetailsPage() {
       void supabase
         .rpc("generate_overdue_notifications", { p_project_id: id })
         .then(({ error }) => {
-          if (error) {
-            console.error("[project-page] generate_overdue_notifications failed", {
+          if (!error) return;
+          // 42883 = a função existe mas depende de outra que não existe
+          // (notification_recipient_user_ids). É migration faltando na VM, não
+          // defeito de código: as notificações de atraso simplesmente não são
+          // geradas. Rebaixado a warn e silencioso em produção — o usuário não
+          // pode agir sobre isso, e um erro vermelho a cada abertura de projeto
+          // vira ruído que esconde falha de verdade.
+          const migrationFaltando = error.code === "42883" || error.code === "PGRST202";
+          if (migrationFaltando && process.env.NODE_ENV === "production") return;
+          // O objeto de erro do Supabase não serializa em console.error — sem
+          // extrair os campos, o log saía como "{}" e não dizia nada.
+          const log = migrationFaltando ? console.warn : console.error;
+          log(
+            `[project-page] generate_overdue_notifications: ${error.message}`,
+            {
               projectId: id,
-              error,
-            });
-          }
+              code: error.code,
+              details: error.details,
+              hint: migrationFaltando
+                ? "Aplique 20260528193000_targeted_activity_notifications.sql na VM."
+                : error.hint,
+            },
+          );
         });
     }
 
@@ -458,7 +482,7 @@ export default function ProjectDetailsPage() {
       const projectPromise = (async () => {
         const primary = await supabase
           .from("projects")
-          .select("created_by, owner, assignees, manager")
+          .select("created_by, owner, assignees, manager, is_trashed")
           .eq("id", id)
           .maybeSingle();
 
@@ -468,7 +492,7 @@ export default function ProjectDetailsPage() {
 
         const fallback = await supabase
           .from("projects")
-          .select("owner, assignees")
+          .select("owner, assignees, is_trashed")
           .eq("id", id)
           .maybeSingle();
 
@@ -518,8 +542,14 @@ export default function ProjectDetailsPage() {
       const hasValidMembership = !!perms?.id && normalizedInvitationStatus !== "declined";
       const hasProjectWideAccess = creatorMatch || ownerMatch || managerMatch;
 
+      // Ter uma atividade dentro de um projeto ARQUIVADO não abre a porta:
+      // quem tem vínculo formal (membro, criador, líder, participante) segue
+      // entrando para consultar o histórico, mas o acesso por tarefa solta
+      // acompanha o arquivamento do projeto.
+      const projectTrashed = projectRow?.is_trashed === true;
+
       let activityAssignmentMatch = false;
-      if (!hasValidMembership && !hasProjectWideAccess && !assigneeMatch) {
+      if (!projectTrashed && !hasValidMembership && !hasProjectWideAccess && !assigneeMatch) {
         const { data: projectActivities } = await supabase
           .from("activities")
           .select("assigned_to, participants")
@@ -1224,6 +1254,25 @@ export default function ProjectDetailsPage() {
       toast.error("Não foi possível arquivar a atividade.", { description: error.message });
       return;
     }
+
+    // O PAI perdeu o último filho? Volta a ser folha.
+    // Criar subatividade promove o pai a agrupador (a regra do banco exige isso
+    // para aceitar filho), mas nada desfazia quando o último saía: o item ficava
+    // com cara de agrupador, sem nada dentro, para sempre. Quem é Fase declarada
+    // (nível 1 do código EAP) não é rebaixado — ver eapShouldDemote.
+    const arquivada = activities.find((a) => a.id === activityId);
+    const paiId = arquivada?.parent_id;
+    if (paiId) {
+      const pai = activities.find((a) => a.id === paiId);
+      const sobrouFilho = activities.some(
+        (a) => a.parent_id === paiId && !idsToTrash.has(a.id) && !a.is_trashed,
+      );
+      if (pai && eapShouldDemote({ item_type: pai.item_type, wbs_code: pai.wbs_code }, sobrouFilho)) {
+        // Falha aqui não desfaz o arquivamento, que é o que o usuário pediu.
+        await supabase.from("activities").update({ item_type: "atividade" } as any).eq("id", paiId);
+      }
+    }
+
     // Desfazer: arquivar é soft-delete (is_trashed), então reverter é só
     // limpar as flags dos MESMOS ids — inclusive os descendentes que entraram
     // na cascata. Sem isto, o caminho de volta era achar cada item na Lixeira e
@@ -1461,6 +1510,10 @@ export default function ProjectDetailsPage() {
                   { value: "calendar", label: "Calendário", icon: <Calendar className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-rose-500" },
                 ]),
                 { value: "documents", label: "Documentos", icon: <FileText className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-blue-500" },
+                // Registros: linha do tempo única de reuniões, documentos e
+                // lições. Não substitui as três abas — responde "o que andou
+                // neste projeto?", que hoje exige abrir as três e comparar datas.
+                { value: "registros", label: "Registros", icon: <History className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-slate-500" },
                 ...(SHOW_USER_STORIES ? [
                   { value: "stories", label: "Histórias", icon: <BookOpen className="w-4 h-4" fill="currentColor" fillOpacity={0.22} strokeWidth={2.25} />, iconColor: "text-fuchsia-500" },
                 ] : []),
@@ -1601,7 +1654,15 @@ export default function ProjectDetailsPage() {
               <DocumentCenter
                 projectId={id!}
                 phases={phases}
-                activities={activities.map(a => ({ id: a.id, title: a.title }))}
+                // wbs_code e phase_id vão junto: o seletor de atividade busca
+                // pelo código e agrupa pela fase escolhida. O `.map` antes
+                // descartava os dois, e o agrupamento não teria por onde saber.
+                activities={activities.map(a => ({
+                  id: a.id,
+                  title: a.title,
+                  wbs_code: a.wbs_code ?? null,
+                  phase_id: a.phase_id ?? null,
+                }))}
                 canManageProject={isAdmin}
                 onActivityCreated={fetchProjectData}
               />
@@ -1618,13 +1679,39 @@ export default function ProjectDetailsPage() {
             <TabsContent value="meetings" className="mt-0">
               <MeetingsManager
                 projectId={id!} phases={phases}
-                onCreateActivity={async (title, assignedTo) => {
+                // Sem esta prop o componente caía no default `false` e NINGUÉM
+                // podia registrar decisão ou ação — nem admin, nem gestor. As
+                // seções apareciam como títulos vazios, sem campo de entrada e
+                // sem dizer por quê. Mesmo critério dos outros painéis da tela.
+                canManageProject={canEdit}
+                // Devolve o ID da atividade criada para quem chamou poder GRAVAR
+                // O VÍNCULO. Antes retornava void: a ação de reunião virava
+                // tarefa e as duas ficavam sem ligação nenhuma — a ata não sabia
+                // que a tarefa existia, e a tarefa não sabia de onde veio.
+                // `dueDate` idem: o prazo já foi combinado na reunião.
+                onCreateActivity={async (title, assignedTo, dueDate) => {
                   if (isProjectConcluded) {
                     showProjectLockedToast("criar atividades");
-                    return;
+                    return null;
                   }
-                  await supabase.from("activities").insert({ project_id: id!, title, assigned_to: assignedTo || null, status: "pending", priority: "medium" });
+                  const { data, error } = await supabase
+                    .from("activities")
+                    .insert({
+                      project_id: id!,
+                      title,
+                      assigned_to: assignedTo || null,
+                      end_date: dueDate || null,
+                      status: "pending",
+                      priority: "medium",
+                    })
+                    .select("id")
+                    .single();
+                  if (error) {
+                    toast.error("Não foi possível criar a atividade.", { description: error.message });
+                    return null;
+                  }
                   fetchProjectData();
+                  return (data as { id: string } | null)?.id ?? null;
                 }}
                 onCreateBlocker={async (description) => {
                   await supabase.from("risks").insert({ project_id: id!, description, probability: "high", impact: "high", status: "identified", category: "impediment" });
@@ -1633,6 +1720,10 @@ export default function ProjectDetailsPage() {
                   await supabase.from("lessons_learned").insert({ project_id: id!, problem, suggestion: suggestion || null, category: "process" });
                 }}
               />
+            </TabsContent>
+
+            <TabsContent value="registros" className="mt-0">
+              <ProjectRegistrosTimeline projectId={id!} />
             </TabsContent>
 
             <TabsContent value="lessons" className="mt-0">
@@ -1823,6 +1914,9 @@ export default function ProjectDetailsPage() {
           projectId={id!} isQualityProject={isQualityProject}
           consumedMinutesByActivity={consumedMinutesByActivity}
           initialTab={editActivityInitialTab}
+          // Sem isto o diálogo deixava preencher tudo e só falhava ao salvar.
+          // Quem é responsável pela atividade edita mesmo com isto falso.
+          canEditProject={canEdit}
         />
         {project && (
           <EditActivityDialog

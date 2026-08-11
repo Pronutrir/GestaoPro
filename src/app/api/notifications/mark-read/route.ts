@@ -124,6 +124,18 @@ export async function POST(request: Request) {
   const activities = (activitiesRes.data || []) as ActivityRow[];
   const activityById = new Map(activities.map((activity) => [activity.id, activity]));
 
+  /**
+   * Projetos que o usuário alcança — INCLUINDO os arquivados.
+   *
+   * Esta rota é deliberadamente mais permissiva que a de listagem. Lá, projeto
+   * na lixeira não aparece; aqui, marcar como lida é o gesto de DISPENSAR o
+   * aviso. Se o vínculo com o projeto arquivado não contasse, as não lidas
+   * antigas ficariam presas e o contador nunca zeraria — o sintoma exato que
+   * "Ler todas" foi criado para resolver.
+   *
+   * `liveProjectIds` existe para o caso oposto (ver a rota GET) e não entra
+   * aqui de propósito.
+   */
   const accessibleProjectIds = new Set<string>();
   for (const member of membersRes.data || []) {
     const status = (member.invitation_status || 'accepted').toLowerCase();

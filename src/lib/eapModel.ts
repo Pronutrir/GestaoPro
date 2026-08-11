@@ -35,8 +35,22 @@
  * BacklogSection, ActivityKanban e ProjectCronogramaPanel.
  */
 
-/** Papéis visíveis ao usuário. */
-export type EapKind = "fase" | "atividade" | "marco";
+/**
+ * Papéis visíveis ao usuário.
+ *
+ * `fase` e `entrega` são AMBOS agrupadores e gravam item_type='fase' — o que os
+ * separa é a posição na EAP, não a função:
+ *
+ *   Fase    = nível 1 (1, 2, 3…). Etapa do ciclo de vida do projeto.
+ *   Entrega = nível 2+ que agrupa (1.1, 1.2.3…). Está DENTRO de uma fase; é o
+ *             que ela produz. No PMBOK seria "pacote de trabalho", termo que a
+ *             interface não usa por ter confundido antes.
+ *
+ * Sem essa separação, "1" e "1.1" apareciam os dois como "Fase" e a EAP ficava
+ * achatada — a entrega deixava de estar dentro da fase e virava outra fase ao
+ * lado dela.
+ */
+export type EapKind = "fase" | "entrega" | "atividade" | "marco";
 
 /** Entrada mínima para resolver o papel de um item. */
 export interface EapItemLike {
@@ -79,18 +93,26 @@ export function eapLevel(wbsCode?: string | null): number | null {
 export function resolveEapKind(item: EapItemLike, hasChildren = false): EapKind {
   if (item.is_milestone) return "marco";
 
-  const level = eapLevel(item.wbs_code);
-  if (level !== null) return level === 1 ? "fase" : "atividade";
-
-  // Sem código: mantém a regra por função, que é o que já valia para estes.
   const t = (item.item_type || "").trim().toLowerCase();
-  if (t === "fase" || t === "pacote" || hasChildren) return "fase";
-  return "atividade";
+  const agrupa = t === "fase" || t === "pacote" || hasChildren;
+
+  // COM código EAP: a posição manda. Só o nível 1 é Fase — do 1.1 em diante o
+  // item está DENTRO de uma fase, então é Entrega (se agrupa) ou Atividade.
+  const level = eapLevel(item.wbs_code);
+  if (level !== null) {
+    if (level === 1) return "fase";
+    return agrupa ? "entrega" : "atividade";
+  }
+
+  // SEM código (criado no Kanban/Backlog): não há nível, só a função. Quem
+  // agrupa é Entrega, não Fase — item criado à mão nasce dentro de algo, e
+  // chamá-lo de Fase sugeriria um nível de EAP que ele não tem.
+  return agrupa ? "entrega" : "atividade";
 }
 
-/** Só Fase/Entrega agrupa. */
+/** Só os agrupadores — Fase (nível 1) e Entrega (abaixo dela). */
 export function eapCanGroup(kind: EapKind): boolean {
-  return kind === "fase";
+  return kind === "fase" || kind === "entrega";
 }
 
 /** Folhas (não agrupam). */
@@ -105,14 +127,20 @@ export function eapIsLeaf(kind: EapKind): boolean {
  * agrupar (o nível é que define o rótulo). O que segue barrado é Marco, que é
  * folha de controle por definição — um marco com subitens não faz sentido.
  */
-export function eapTypeOptions(opts: { hasChildren?: boolean } = {}): EapKind[] {
-  if (opts.hasChildren) return ["fase", "atividade"];
-  return ["fase", "atividade", "marco"];
+export function eapTypeOptions(opts: { hasChildren?: boolean; wbsCode?: string | null } = {}): EapKind[] {
+  // O agrupador oferecido depende do NÍVEL, não da vontade: no nível 1 é Fase,
+  // abaixo dele é Entrega. Oferecer os dois deixaria escolher "Fase" para um
+  // item 1.1 — exatamente o achatamento que estamos corrigindo.
+  const level = eapLevel(opts.wbsCode);
+  const agrupador: EapKind = level === 1 ? "fase" : "entrega";
+  if (opts.hasChildren) return [agrupador, "atividade"];
+  return [agrupador, "atividade", "marco"];
 }
 
 /** Rótulos canônicos para a UI. */
 export const EAP_LABELS: Record<EapKind, string> = {
   fase: "Fase",
+  entrega: "Entrega",
   atividade: "Atividade",
   marco: "Marco",
 };
@@ -126,6 +154,237 @@ export const EAP_LABELS: Record<EapKind, string> = {
  */
 export function eapToPersisted(kind: EapKind): { item_type: "fase" | "atividade"; is_milestone: boolean } {
   if (kind === "marco") return { item_type: "atividade", is_milestone: true };
-  if (kind === "fase") return { item_type: "fase", is_milestone: false };
+  // Fase e Entrega gravam igual: os dois agrupam, e o trigger eap_nesting_rule
+  // só aceita 'fase'/'pacote' como pai. O que os distingue é o nível, lido do
+  // wbs_code na hora de exibir — não um valor diferente no banco.
+  if (kind === "fase" || kind === "entrega") return { item_type: "fase", is_milestone: false };
   return { item_type: "atividade", is_milestone: false };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * MOVER ITEM NA EAP — validação compartilhada pelas três vias
+ *
+ * As três telas que reorganizam a EAP (campo "Dentro de" na edição, menu de
+ * linha no Backlog, arraste no Kanban) validam AQUI, e não cada uma na sua.
+ * Uma cópia divergente é o caminho para uma tela aceitar o que a outra recusa.
+ *
+ * O estrago que importa é o CICLO: se A vira filha de B e B já descende de A,
+ * o par inteiro se desliga da raiz e some das três telas de uma vez. O banco
+ * barra (trigger trg_validate_activity_hierarchy), mas só depois do clique —
+ * validar antes evita o erro cru e permite explicar o motivo.
+ *
+ * Toda travessia usa Set de visitados: se o dado JÁ estiver com um ciclo
+ * (gravado antes desta validação existir), percorrer sem isso trava a aba.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Entrada mínima para validar um movimento. */
+export interface EapNodeLike extends EapItemLike {
+  id: string;
+  parent_id?: string | null;
+}
+
+/**
+ * Profundidade a partir da qual a interface avisa (sem impedir).
+ *
+ * A base já tem árvores de 6 níveis, então BLOQUEAR invalidaria o que existe e
+ * — pior — impediria de mover justamente os itens que precisam ser consertados.
+ * O aviso é orientação, não trava.
+ */
+export const EAP_DEPTH_WARN = 5;
+
+export type EapMoveBlockReason = "self" | "cycle" | "milestone-parent" | "not-found" | "other-project";
+
+export interface EapMoveCheck {
+  /** false ⇒ o movimento não pode ser gravado (o banco também recusaria). */
+  ok: boolean;
+  reason?: EapMoveBlockReason;
+  /** Mensagem pronta para o usuário — o motivo, não o código do erro. */
+  message?: string;
+  /** Profundidade que o item passaria a ter (1 = raiz). */
+  depth?: number;
+  /** Preenchido quando passa de EAP_DEPTH_WARN: avisa, mas `ok` continua true. */
+  warning?: string;
+}
+
+/**
+ * Um item promovido a agrupador deve voltar a ser folha agora que perdeu os filhos?
+ *
+ * Criar a primeira subatividade PROMOVE o pai a `item_type='fase'` — a regra de
+ * aninhamento do banco exige agrupador para aceitar filho. Só que nada desfazia
+ * isso quando o último filho saía: o item ficava com cara de agrupador (cubo
+ * azul, rótulo Fase/Entrega) sem ter nada dentro, para sempre. A promoção era
+ * definitiva por omissão, não por decisão.
+ *
+ * NÃO rebaixa quem é agrupador por vontade do usuário: um item com código EAP
+ * de nível 1 ("1", "2") é uma Fase declarada e continua Fase mesmo vazia —
+ * esvaziar uma fase é normal no meio do planejamento. O rebaixamento existe só
+ * para desfazer a promoção automática.
+ *
+ * @param item         o PAI, depois da remoção
+ * @param aindaTemFilhos se sobrou algum filho não arquivado
+ */
+export function eapShouldDemote(item: EapItemLike, aindaTemFilhos: boolean): boolean {
+  if (aindaTemFilhos) return false;
+
+  const t = (item.item_type || "").trim().toLowerCase();
+  if (t !== "fase" && t !== "pacote") return false; // já é folha
+
+  // Fase declarada (nível 1 do código EAP) permanece fase.
+  if (eapLevel(item.wbs_code) === 1) return false;
+
+  return true;
+}
+
+/** Índice por id, para as travessias não varrerem a lista a cada salto. */
+function indexById<T extends EapNodeLike>(nodes: T[]): Map<string, T> {
+  const map = new Map<string, T>();
+  nodes.forEach((n) => map.set(n.id, n));
+  return map;
+}
+
+/**
+ * Todos os descendentes de `rootIds` (sem incluir os próprios).
+ *
+ * É o conjunto que NÃO pode ser destino: mover um item para dentro da própria
+ * subárvore é exatamente o ciclo que desliga os dois da raiz.
+ */
+export function eapDescendantIds(nodes: EapNodeLike[], rootIds: string[]): Set<string> {
+  const childrenBy = new Map<string, string[]>();
+  nodes.forEach((n) => {
+    if (!n.parent_id) return;
+    const arr = childrenBy.get(n.parent_id) || [];
+    arr.push(n.id);
+    childrenBy.set(n.parent_id, arr);
+  });
+
+  const found = new Set<string>();
+  const stack = [...rootIds];
+  const seen = new Set<string>(rootIds); // anti-ciclo: dado já corrompido não trava a UI
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const childId of childrenBy.get(current) || []) {
+      if (seen.has(childId)) continue;
+      seen.add(childId);
+      found.add(childId);
+      stack.push(childId);
+    }
+  }
+  return found;
+}
+
+/**
+ * Profundidade do item na árvore: 1 = raiz, 2 = filho de raiz, e assim por diante.
+ * Conta pelo `parent_id` real, não pelo wbs_code (que pode faltar).
+ */
+export function eapDepthOf(nodes: EapNodeLike[], id: string): number {
+  const byId = indexById(nodes);
+  let depth = 1;
+  let current = byId.get(id);
+  const seen = new Set<string>([id]);
+  while (current?.parent_id) {
+    if (seen.has(current.parent_id)) break; // ciclo pré-existente: para em vez de girar
+    seen.add(current.parent_id);
+    const parent = byId.get(current.parent_id);
+    if (!parent) break; // pai fora da lista carregada (filtro/paginação) — não conta a mais
+    depth += 1;
+    current = parent;
+  }
+  return depth;
+}
+
+/** Altura da subárvore: 1 quando o item é folha. */
+function subtreeHeight(nodes: EapNodeLike[], rootId: string): number {
+  const childrenBy = new Map<string, string[]>();
+  nodes.forEach((n) => {
+    if (!n.parent_id) return;
+    const arr = childrenBy.get(n.parent_id) || [];
+    arr.push(n.id);
+    childrenBy.set(n.parent_id, arr);
+  });
+
+  let height = 1;
+  let frontier = [rootId];
+  const seen = new Set<string>([rootId]);
+  while (frontier.length > 0) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const childId of childrenBy.get(id) || []) {
+        if (seen.has(childId)) continue;
+        seen.add(childId);
+        next.push(childId);
+      }
+    }
+    if (next.length > 0) height += 1;
+    frontier = next;
+  }
+  return height;
+}
+
+/**
+ * Pode `movingIds` virar filho de `targetParentId`?
+ *
+ * `targetParentId = null` significa "soltar na raiz" — sempre permitido.
+ * O aviso de profundidade considera a subárvore INTEIRA que vai junto: mover um
+ * ramo de 3 níveis para dentro do nível 4 chega ao 6, mesmo que o item movido
+ * sozinho parecesse raso.
+ */
+export function eapCanMoveInto(
+  nodes: EapNodeLike[],
+  movingIds: string[],
+  targetParentId: string | null,
+): EapMoveCheck {
+  if (movingIds.length === 0) return { ok: false, reason: "not-found", message: "Nenhum item selecionado." };
+  if (targetParentId === null) return { ok: true, depth: 1 };
+
+  if (movingIds.includes(targetParentId)) {
+    return {
+      ok: false,
+      reason: "self",
+      message: "Um item não pode ficar dentro de si mesmo.",
+    };
+  }
+
+  const byId = indexById(nodes);
+  const target = byId.get(targetParentId);
+  if (!target) {
+    return {
+      ok: false,
+      reason: "not-found",
+      message: "O item de destino não foi encontrado neste projeto.",
+    };
+  }
+
+  // Marco é folha de controle por definição — nunca agrupa. O trigger do banco
+  // também recusa (eap_is_group exige não-milestone).
+  if (target.is_milestone) {
+    return {
+      ok: false,
+      reason: "milestone-parent",
+      message: "Marco não agrupa: escolha uma fase, entrega ou atividade como destino.",
+    };
+  }
+
+  const descendants = eapDescendantIds(nodes, movingIds);
+  if (descendants.has(targetParentId)) {
+    return {
+      ok: false,
+      reason: "cycle",
+      message: "Esse destino está dentro do item que você está movendo — os dois sumiriam da EAP.",
+    };
+  }
+
+  // Profundidade final = onde o pai está + o ramo mais alto que vai junto.
+  const parentDepth = eapDepthOf(nodes, targetParentId);
+  const tallest = Math.max(...movingIds.map((id) => subtreeHeight(nodes, id)));
+  const depth = parentDepth + tallest;
+
+  if (depth > EAP_DEPTH_WARN) {
+    return {
+      ok: true,
+      depth,
+      warning: `A EAP chegaria ao nível ${depth}. Acima de ${EAP_DEPTH_WARN} níveis ela fica difícil de ler — considere agrupar antes.`,
+    };
+  }
+
+  return { ok: true, depth };
 }

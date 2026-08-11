@@ -51,12 +51,14 @@ export const useProjectAccess = () => {
             .select("project_id, invitation_status")
             .eq("user_id", user.id);
 
-          const projectsPromise = candidates.length > 0
-            ? supabase
-                .from("projects")
-                .select("id, owner")
-                .eq("is_trashed", false)
-            : Promise.resolve({ data: [] as any[], error: null });
+          // Buscado SEMPRE (não só quando há candidates): é a lista de projetos
+          // vivos, usada abaixo para barrar os que estão na lixeira. Sem ela,
+          // um vínculo de membro ou uma atividade viva dentro de um projeto
+          // arquivado o traria de volta como "acessível".
+          const projectsPromise = supabase
+            .from("projects")
+            .select("id, owner")
+            .eq("is_trashed", false);
 
           const activitiesPromise = candidates.length > 0
             ? supabase
@@ -71,10 +73,16 @@ export const useProjectAccess = () => {
             activitiesPromise,
           ]);
 
+          // Projetos VIVOS. Todo caminho de acesso passa por aqui: nem vínculo
+          // de membro nem atividade atribuída ressuscitam um projeto arquivado.
+          // Era esse o furo — `projects` já vinha filtrado, mas os dois outros
+          // caminhos adicionavam ids sem consultar essa lista.
+          const vivos = new Set<string>((projectsRes.data || []).map((p: any) => p.id));
+
           const ids = new Set<string>();
           (membersRes.data || []).forEach((m: any) => {
             const status = (m.invitation_status || "accepted").toLowerCase();
-            if (status !== "declined") ids.add(m.project_id);
+            if (status !== "declined" && vivos.has(m.project_id)) ids.add(m.project_id);
           });
 
           if (candidates.length > 0) {
@@ -84,6 +92,7 @@ export const useProjectAccess = () => {
             });
 
             (activitiesRes.data || []).forEach((a: any) => {
+              if (!vivos.has(a.project_id)) return;
               const isAssignedActor = matchesIdentity(a.assigned_to, candidates);
               const isParticipantActor = Array.isArray(a.participants) && anyMatchesIdentity(a.participants, candidates);
 

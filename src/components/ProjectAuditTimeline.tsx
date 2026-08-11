@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { History, Plus, Pencil, Trash2, Search, Shield } from "lucide-react";
+import { selectInChunks } from "@/lib/chunkedIn";
 
 interface Entry {
   id: string;
@@ -78,18 +79,28 @@ export const ProjectAuditTimeline = ({ projectId }: Props) => {
       }));
 
       // 3) consultar audit_log para cada conjunto
+      // EM LOTES: o `.in()` com todos os ids de uma vez monta uma URL que o
+      // proxy corta em ~3,7 KB e devolve 502. Medido: o maior projeto tem 168
+      // atividades, o que dá ~7 KB só de uuids — já estourava hoje, e piora a
+      // cada atividade nova. Ver lib/chunkedIn.
       const childResults: Entry[][] = await Promise.all(
         childTables.map(async (t) => {
           const ids = childIdsByTable[t];
           if (!ids.length) return [];
-          const { data } = await (supabase as any)
-            .from("audit_log")
-            .select("*")
-            .eq("table_name", t)
-            .in("record_id", ids)
-            .order("created_at", { ascending: false })
-            .limit(500);
-          return data || [];
+          try {
+            return await selectInChunks<Entry>(ids, (batch) =>
+              (supabase as any)
+                .from("audit_log")
+                .select("*")
+                .eq("table_name", t)
+                .in("record_id", batch)
+                .order("created_at", { ascending: false })
+                .limit(500),
+            );
+          } catch {
+            // Uma tabela sem histórico não pode derrubar a linha do tempo toda.
+            return [];
+          }
         }),
       );
 

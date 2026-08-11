@@ -531,14 +531,18 @@ function KanbanCardBase({
                     {/* Menu enxuto por decisão de produto (29/07/2026): só ações
                         que o diálogo de edição NÃO cobre. Atribuir, Prazo e
                         Converter saíram — clicar no card já abre o diálogo, que
-                        tem os três. Aninhar fica: é o ÚNICO caminho para
-                        re-aninhar um card (o diálogo não faz). */}
+                        tem os três. Mover continua aqui porque é o caminho de um
+                        clique: o diálogo também faz (campo "Dentro de"), mas
+                        exige abrir o card e achar o campo.
+                        O arraste NÃO aninha de propósito — no Kanban ele já
+                        significa "mudar de coluna"/"reordenar", e sobrecarregar
+                        o mesmo gesto tornaria o aninhamento acidental. */}
                     {onLinkParent && (
                       <DropdownMenuItem
                         className="focus:bg-muted/60 focus:text-foreground"
                         onSelect={() => onLinkParent()}
                       >
-                        <Layers className="w-3.5 h-3.5 mr-2" /> Aninhar em uma fase
+                        <Layers className="w-3.5 h-3.5 mr-2" /> Mover para dentro de…
                       </DropdownMenuItem>
                     )}
 
