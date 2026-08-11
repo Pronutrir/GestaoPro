@@ -18,7 +18,7 @@ import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, 
 import {
   eapCanMoveInto, eapCanGroup, eapDescendantIds, eapShouldDemote,
   eapToPersisted, eapLevel, resolveEapKind, EAP_LABELS, EAP_HINTS,
-  eapMilestoneBlockedReason, eapIsFaseLevel, EAP_FASE_LEVEL, isSyntheticPhaseRow,
+  eapMilestoneBlockedReason, eapIsFaseLevel, EAP_FASE_LEVEL, isSyntheticPhaseRow, eapCodeToPersist,
   type EapKind, type EapNodeLike,
 } from "@/lib/eapModel";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -1272,7 +1272,10 @@ export const EditActivityDialog = ({
         is_milestone: formData.is_milestone,
         item_type: formData.item_type,
         progress_flag: formData.progress_flag ?? 0,
-        wbs_code: wbsToSave,
+        // Marco não tem código EAP: é ponto no cronograma, não trabalho na EAP.
+        // Marcar um item como Marco LIMPA o código que ele tinha — senão a
+        // numeração do trabalho ficaria com um vão no lugar dele.
+        wbs_code: eapCodeToPersist(formData, wbsToSave),
       };
 
       // Trocou de pai? O trigger eap_nesting_rule só aceita agrupador
@@ -1747,12 +1750,19 @@ export const EditActivityDialog = ({
               // planilha: o dado chegava preenchido e o campo seguia escondido.
               const showHours = !formData.is_milestone;
               const showCost = !formData.is_milestone;
-              const showWbs = hasWbs || revealedFields.has("wbs");
+              // Código EAP some para Marco, pelo mesmo motivo que horas e custo:
+              // marco é ponto no cronograma, não trabalho na EAP. Mostrar um
+              // campo que a gravação vai zerar seria pior que não mostrar.
+              const showWbs =
+                !formData.is_milestone && (hasWbs || revealedFields.has("wbs"));
               // Chips do "+ Adicionar campo": só os que estão ocultos no momento.
               // Dependências não entra: passou a ser sempre visível (é informação de
               // sequenciamento, não campo opcional — quem não vê, não sabe que existe).
               const hiddenChips: { key: OptionalFieldKey; label: string; icon: React.ReactNode }[] = [
-                !showWbs && { key: "wbs" as const, label: "Código EAP", icon: <Hash className="w-3 h-3" /> },
+                // Não oferece "Código EAP" para Marco: o campo não se aplica, e
+                // um chip que revela algo sem efeito é uma promessa falsa.
+                !showWbs && !formData.is_milestone &&
+                  { key: "wbs" as const, label: "Código EAP", icon: <Hash className="w-3 h-3" /> },
               ].filter(Boolean) as { key: OptionalFieldKey; label: string; icon: React.ReactNode }[];
               return (
               <div className="space-y-2.5">

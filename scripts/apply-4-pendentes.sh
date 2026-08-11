@@ -67,6 +67,11 @@ run 20260811100000 "supabase/migrations/20260811100000_alinhar_status_com_coluna
 run 20260811120000 "supabase/migrations/20260811120000_adotar_atividades_orfas.sql" \
   "atividades órfãs adotadas pelo agrupador correspondente"
 
+# Marco é do cronograma, não da EAP. Limpa o wbs_code dos marcos existentes
+# (guardando o valor em wbs_code_prev_marco) e trava a regra com um CHECK.
+run 20260811140000 "supabase/migrations/20260811140000_marco_sem_wbs_code.sql" \
+  "marco sem código EAP  ·  numeração do trabalho sem buracos"
+
 echo ""
 echo "══════════════════════════════════════════════════════════"
 echo "  VERIFICAÇÃO"
@@ -86,9 +91,16 @@ echo "── pauta por tipo de reunião ──"
 $PSQL -c "SELECT label, (agenda_template IS NOT NULL) AS tem_pauta, count(*)
           FROM public.meeting_types GROUP BY 1,2 ORDER BY 1;"
 
+echo "── marcos sem código EAP (deve dar 0 com código) ──"
+$PSQL -c "SELECT count(*) FILTER (WHERE wbs_code IS NOT NULL) AS ainda_com_codigo,
+                 count(*) FILTER (WHERE wbs_code_prev_marco IS NOT NULL) AS limpos_agora,
+                 count(*) AS marcos_total
+          FROM public.activities WHERE is_milestone = true;"
+
 echo ""
 echo "✓ Recarregue a aplicação (Ctrl+Shift+R). Passa a funcionar:"
 echo "   · importar EAP sem falhar na primeira fase"
 echo "   · notificações de atraso sendo geradas"
 echo "   · responsável salvando a própria atividade"
 echo "   · pauta preenchida ao escolher o tipo da reunião"
+echo "   · marco sem código EAP — a numeração do trabalho fica contínua"

@@ -10,7 +10,7 @@ import {
   splitColumns, pareceCabecalho, detectarColunas, lerLinha, statusPorDatas,
   type ColValues,
 } from "@/lib/wbsColumns";
-import { eapRoleForImport, eapToPersisted, eapIsFaseLevel, type EapKind } from "@/lib/eapModel";
+import { eapRoleForImport, eapToPersisted, eapIsFaseLevel, eapCodeToPersist, type EapKind } from "@/lib/eapModel";
 
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
@@ -626,7 +626,11 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           phase_id: phaseId,
           parent_id: parentId,
           display_order: phaseOrderCounter[phaseKey]++,
-          wbs_code: node.code,
+          // O código colado POSICIONA o marco (é o que diz de quem ele pende),
+          // mas não é gravado: marco é ponto no cronograma, não trabalho na
+          // EAP. Sem isso ele consumiria um número e as atividades seguintes
+          // ficariam com um vão na numeração.
+          wbs_code: eapCodeToPersist(persisted, node.code),
           item_type: persisted.item_type,
           is_milestone: persisted.is_milestone,
           // Nasce no Backlog — igual a criação manual (segue o fluxo).

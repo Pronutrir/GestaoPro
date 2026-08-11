@@ -194,6 +194,46 @@ export function eapRootCode(): string | null {
   return EAP_PROJECT_LEVEL === null ? null : "1";
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * MARCO NÃO TEM CÓDIGO EAP
+ *
+ * Marco é elemento do CRONOGRAMA, não da EAP: um ponto no tempo, sem duração,
+ * sem horas e sem custo. A EAP decompõe TRABALHO, e a regra dos 100% diz que os
+ * filhos somam 100% do trabalho do pai — somar um marco nessa conta é ruído.
+ *
+ * Dar código a ele custava duas coisas:
+ *
+ *   • a numeração do trabalho ganhava buracos. Apagar "1.1.1.3 Marco: TAP
+ *     aprovado" deixava um vão entre 1.1.1.2 e 1.1.1.4;
+ *   • mover o marco obrigava a renumerar vizinhos, por uma posição que não
+ *     representa entrega nenhuma.
+ *
+ * O marco continua ANCORADO — mantém `parent_id`, que lhe dá contexto e propaga
+ * datas. O que ele perde é a numeração: tem posição na ÁRVORE, não na EAP. E
+ * pode ficar na raiz, sem pai: "Go-live" é do projeto inteiro, não de uma fase
+ * específica (decisão de 11/08/2026).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Marco nunca carrega código EAP. */
+export function eapCodeAllowed(item: EapItemLike): boolean {
+  return !item?.is_milestone;
+}
+
+/**
+ * O `wbs_code` que deve ir ao banco: null para marco, o informado para o resto.
+ *
+ * Todo caminho que grava código passa por aqui. Foi a ausência de um ponto
+ * único assim que deixou a regra de nível espalhada em quatro cópias antes.
+ */
+export function eapCodeToPersist(
+  item: EapItemLike,
+  code?: string | null,
+): string | null {
+  if (!eapCodeAllowed(item)) return null;
+  const c = (code ?? "").trim();
+  return c || null;
+}
+
 /**
  * Resolve o papel EAP EXIBIDO de um item.
  *
