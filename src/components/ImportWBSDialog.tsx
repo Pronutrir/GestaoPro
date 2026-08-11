@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package, AlertTriangle } from "lucide-react";
+import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package, AlertTriangle, FolderTree } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,9 @@ interface ImportWBSDialogProps {
 }
 
 const ROLE_META: Record<EapRole, { label: string; short: string; icon: JSX.Element; cls: string }> = {
+  // Projeto é a raiz. Aparece na prévia para a estrutura se ler inteira, mas
+  // não vira linha — o projeto já existe na tabela `projects`.
+  projeto:   { label: "Projeto",      short: "Proj.", icon: <FolderTree className="w-3 h-3" />, cls: "bg-foreground/10 text-foreground border-foreground/25" },
   fase:      { label: "Fase",         short: "Fase",  icon: <Layers className="w-3 h-3" />,  cls: "bg-primary/10 text-primary border-primary/30" },
   // Entrega agrupa como a Fase, mas está dentro dela — tom mais discreto para
   // a hierarquia se ler de relance na pré-visualização.
@@ -419,13 +422,18 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     if (tree.length === 0) return;
     setImporting(true);
     try {
+      // A LINHA DO PROJETO NÃO É IMPORTADA. O nível 1 é o projeto, que já
+      // existe na tabela `projects` — criar uma atividade para ele produziria um
+      // item sem responsável, sem horas e que nunca conclui, duplicando o que o
+      // projeto já é. Colar uma EAP que começa em "1. NOME DO PROJETO" agora
+      // ignora essa linha em vez de virá-la uma fase.
+      const importaveis = tree.filter((n) => n.role !== "projeto");
+
       // O agrupador no nível da Fase vai para a tabela `phases`; todo o resto
-      // vira linha em `activities`. Era a quarta cópia de `depth === 1` — e a
-      // mais perigosa: se a convenção mudasse sem tocar aqui, o importador
-      // criaria uma fase para o PROJETO e nenhuma para as fases de verdade.
+      // vira linha em `activities`.
       const ehFase = (n: TreeNode) => n.role === "fase" && eapIsFaseLevel(n.depth);
-      const phases = tree.filter(ehFase);
-      const nonPhase = tree.filter((n) => !ehFase(n));
+      const phases = importaveis.filter(ehFase);
+      const nonPhase = importaveis.filter((n) => !ehFase(n));
 
       const { data: existingPhases } = await supabase
         .from("phases").select("display_order")
@@ -739,7 +747,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           <p className="text-[13px] text-muted-foreground mt-0.5">
             Cole sua estrutura em qualquer formato ou comece de um modelo.{" "}
             <span className="text-foreground">
-              Nível 1 vira Fase; do 1.1 em diante, Entrega se tiver subitens ou Atividade se não tiver.
+              O nível 1 é o próprio projeto e não é importado. <span className="font-mono">1.1</span> vira Fase,{" "}
+              <span className="font-mono">1.1.1</span> Entrega, e daí em diante Atividade.
               {" "}Para um <strong className="font-medium">Marco</strong>, comece o título com{" "}
               <code className="px-1 py-0.5 rounded bg-muted text-[12px] font-mono">Marco:</code>.
             </span>{" "}
@@ -793,17 +802,17 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 // no fim do próprio texto, deixando um degrau irregular no meio
                 // do bloco.
                 placeholder={[
-                  "1. Planejamento             ← nível 1 é Fase",
-                  "1.1 Levantar requisitos     ← agrupa: vira Entrega",
-                  "1.1.1 Entrevistar área      ← folha: vira Atividade",
-                  "1.2 Aprovar escopo          ← folha: vira Atividade",
-                  "1.3 Marco: escopo aprovado  ← vira Marco",
-                  "2. Execução",
-                  "2.1 Desenvolver",
+                  "1. Implantação do Serviço      ← o projeto: não é importado",
+                  "1.1 Iniciação e Planejamento   ← Fase",
+                  "1.1.1 Formalização do Projeto  ← agrupa: vira Entrega",
+                  "1.1.1.1 Elaborar TAP           ← folha: vira Atividade",
+                  "1.1.1.2 Marco: TAP aprovado    ← vira Marco",
+                  "1.2 Requisitos e Design        ← Fase",
+                  "1.2.1 Especificação            ← Entrega",
                   "",
                   "ou com bullets e recuo:",
-                  "• Planejamento",
-                  "   - Levantar requisitos",
+                  "• Iniciação",
+                  "   - Formalização",
                 ].join("\n")}
               />
             ) : (

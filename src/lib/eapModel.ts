@@ -71,7 +71,7 @@
  * achatada — a entrega deixava de estar dentro da fase e virava outra fase ao
  * lado dela.
  */
-export type EapKind = "fase" | "entrega" | "atividade" | "marco";
+export type EapKind = "projeto" | "fase" | "entrega" | "atividade" | "marco";
 
 /** Entrada mínima para resolver o papel de um item. */
 export interface EapItemLike {
@@ -187,12 +187,11 @@ export function resolveEapKind(item: EapItemLike, hasChildren = false): EapKind 
   const level = eapLevel(item.wbs_code);
   if (level !== null) {
     if (eapIsFaseLevel(level)) return "fase";
-    // Item ACIMA da fase, no nível do projeto. Não deveria existir como linha —
-    // o projeto é virtual — mas existe em EAP ainda não renumerada, e antes o
-    // fallback o rotulava "Entrega": um item que agrupa fases apresentado como
-    // algo que vive dentro de uma. Chamá-lo de Fase é o menos errado; ele
-    // agrupa, e é o que era antes da mudança de convenção.
-    if (eapIsProjectLevel(level)) return "fase";
+    // O nível do projeto é PROJETO, não Fase. Chamá-lo de Fase foi um remendo
+    // meu para "alinhar" duas funções, e o resultado apareceu na tela: uma EAP
+    // com uma fase só era importada como TRÊS fases — o projeto e as duas fases
+    // de verdade, todos com o mesmo rótulo.
+    if (eapIsProjectLevel(level)) return "projeto";
     return agrupa ? "entrega" : "atividade";
   }
 
@@ -234,6 +233,7 @@ export function eapMilestoneBlockedReason(hasChildren: boolean): string | null {
 
 /** Rótulos canônicos para a UI. */
 export const EAP_LABELS: Record<EapKind, string> = {
+  projeto: "Projeto",
   fase: "Fase",
   entrega: "Entrega",
   atividade: "Atividade",
@@ -246,6 +246,7 @@ export const EAP_LABELS: Record<EapKind, string> = {
  * com palavras diferentes — e a divergência é o que confunde quem planeja.
  */
 export const EAP_HINTS: Record<EapKind, string> = {
+  projeto: "Raiz da EAP (nível 1). É o projeto inteiro — não se cria nem se edita aqui.",
   fase: "Nível 1 da EAP (1, 2, 3…). Agrupa entregas.",
   entrega: "Agrupador abaixo da fase (1.1, 1.2…). Contém atividades.",
   atividade: "Trabalho executável: vai ao Kanban, tem horas e responsável.",
@@ -298,11 +299,8 @@ export function eapRoleForImport(opts: {
   // eapIsFaseLevel em vez de `depth === 1`: era a segunda cópia da regra de
   // nível, e uma cópia que discorda das outras faz a mesma EAP ter papéis
   // diferentes na importação e no Backlog.
-  //
-  // O nível do projeto entra junto pela mesma razão: `resolveEapKind` o trata
-  // como agrupador, e um teste comparando as duas pegou a divergência — a
-  // importação diria "Entrega" para o que o Backlog exibiria como "Fase".
-  if (eapIsFaseLevel(opts.depth) || eapIsProjectLevel(opts.depth)) return "fase";
+  if (eapIsProjectLevel(opts.depth)) return "projeto";
+  if (eapIsFaseLevel(opts.depth)) return "fase";
   if (opts.hasChildren) return "entrega";
   if (eapTitleDeclaresMilestone(opts.title)) return "marco";
   return "atividade";
