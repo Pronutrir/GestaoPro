@@ -284,7 +284,10 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
   const fetchAtividades = async () => {
     const { data } = await supabase
       .from("activities")
-      .select("id, title, wbs_code, parent_id")
+      // phase_id: o seletor agrupa as atividades da fase escolhida no topo.
+      // Sem ele o agrupamento não teria por onde saber a que fase cada uma
+      // pertence, e a lista voltaria a ser uma pilha única.
+      .select("id, title, wbs_code, parent_id, phase_id")
       .eq("project_id", projectId)
       .eq("is_trashed", false)
       .order("wbs_code", { ascending: true, nullsFirst: false })
@@ -427,7 +430,11 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
     if (typesAvailable) {
       payload.meeting_type_id = form.meeting_type_id || null;
       payload.recording_url = form.recording_url || null;
-      payload.transcript = form.transcript || null;
+      // `transcript` só vai ao payload quando TEM conteúdo. O campo saiu do
+      // formulário, então form.transcript fica vazio — mandar `null` apagaria
+      // a transcrição de quem já tinha gravado uma, só por ter aberto e
+      // salvado a reunião.
+      if (form.transcript?.trim()) payload.transcript = form.transcript;
     }
     // Coluna da migration 20260804120000 (vínculo com atividade), com a mesma
     // degradação: sem ela, a reunião salva só com a fase — como antes.
@@ -1163,25 +1170,22 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
 
             {/* Gravação por LINK e não upload: uma reunião de 1h passa de
                 500 MB, e o vídeo já vive no Meet/Teams/Zoom que o gerou. */}
+            {/* TRANSCRIÇÃO SAIU DO FORMULÁRIO (a pedido, 11/08).
+                Colar transcrição inteira num textarea de 2 linhas nunca foi
+                caminho — quem tem transcrição a mantém na ferramenta que a
+                gerou, e o link da gravação já leva até lá.
+
+                A COLUNA `transcript` continua no banco e é preservada ao
+                salvar: remover o campo da tela não pode apagar o que alguém
+                já gravou. Ver o payload em handleSubmit. */}
             {typesAvailable && (
-              <div className="grid md:grid-cols-2 gap-2 mt-2">
-                <div className="space-y-1">
-                  <Label className="text-[12px] text-muted-foreground">Gravação</Label>
-                  <Input
-                    placeholder="https://… link do vídeo"
-                    value={form.recording_url}
-                    onChange={(e) => setForm({ ...form, recording_url: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[12px] text-muted-foreground">Transcrição</Label>
-                  <Textarea
-                    placeholder="Cole aqui a transcrição"
-                    value={form.transcript}
-                    onChange={(e) => setForm({ ...form, transcript: e.target.value })}
-                    rows={2}
-                  />
-                </div>
+              <div className="space-y-1 mt-2">
+                <Label className="text-[12px] text-muted-foreground">Gravação</Label>
+                <Input
+                  placeholder="https://… link do vídeo"
+                  value={form.recording_url}
+                  onChange={(e) => setForm({ ...form, recording_url: e.target.value })}
+                />
               </div>
             )}
           </div>

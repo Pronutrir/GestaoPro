@@ -1,22 +1,23 @@
 'use client';
 /**
- * Seletor de VÍNCULO — fase ou atividade, num campo só.
+ * Seletor de VÍNCULO — Fase e Atividade em campos separados.
  *
- * Antes cada tela montava o seu: Reuniões, Lições e Orçamento ofereciam
- * apenas as 5 fases do projeto, deixando 827 atividades inalcançáveis;
- * Documentos tinha dois selects lado a lado, sem busca.
+ * Antes era um campo só, misturando as duas listas num dropdown. Duas razões
+ * para separar, seguindo o que Documentos já faz:
  *
- * Um campo, não dois: quem preenche quer dizer "isto é sobre X". Se X é fase
- * ou atividade é característica do X — não uma escolha que a pessoa precise
- * fazer ANTES de procurar.
+ *  1. São coisas de natureza diferente. São 4 fases por projeto e até 168
+ *     atividades — juntar faz a lista curta desaparecer dentro da longa.
+ *  2. Fase e Atividade se COMBINAM: "a ata é da fase 1, atividade 1.1.2".
+ *     Num campo só, escolher uma apagava a outra.
  *
- * A busca não é enfeite: com 827 atividades, uma lista rolável é pior que não
- * ter o campo.
+ * A Fase é <select> simples: com 4 opções, um campo de busca é mais atrito
+ * que rolar. A Atividade é combobox com busca — com 168, a lista rolável é
+ * pior que não ter o campo — e traz as da fase escolhida no topo.
  */
 import { useMemo, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ChevronsUpDown, X, Layers, ListTodo } from "lucide-react";
+import { ChevronsUpDown, X, ListTodo, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface VinculoFase {
@@ -29,6 +30,8 @@ export interface VinculoAtividade {
   title: string;
   wbs_code?: string | null;
   parent_id?: string | null;
+  /** A que fase pertence: as da fase escolhida sobem para o topo da lista. */
+  phase_id?: string | null;
 }
 
 interface Props {
@@ -50,125 +53,171 @@ export function VinculoSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
-  const faseSel = fases.find((f) => f.id === faseId);
   const ativSel = atividades.find((a) => a.id === atividadeId);
-  const selecionado = ativSel ?? faseSel;
 
   const norm = (s: string) =>
     s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-  const filtradas = useMemo(() => {
+  /**
+   * Atividades para o combobox: filtradas pela busca e agrupadas pela fase.
+   *
+   * As da fase escolhida sobem; as demais continuam acessíveis, porque um
+   * registro pode legitimamente cruzar fases — filtrar de vez seria decidir
+   * pelo usuário.
+   */
+  const grupos = useMemo(() => {
     const q = norm(query.trim());
     const base = q
-      ? atividades.filter((a) => norm(a.title).includes(q) || (a.wbs_code || "").includes(q))
+      ? atividades.filter((a) => norm(`${a.wbs_code || ""} ${a.title}`).includes(q))
       : atividades;
+
+    // Ordem da EAP: numérica, senão "1.10" viria antes de "1.2".
+    const ordenar = (arr: VinculoAtividade[]) =>
+      arr.slice().sort((x, y) => {
+        const wx = (x.wbs_code || "").trim(), wy = (y.wbs_code || "").trim();
+        if (wx && wy && wx !== wy) return wx.localeCompare(wy, undefined, { numeric: true });
+        if (wx && !wy) return -1;
+        if (!wx && wy) return 1;
+        return x.title.localeCompare(y.title);
+      });
+
     // Sem busca, corta em 50: a lista existe para escolher, não para rolar.
     // Com busca, mostra até 200 — quem digitou sabe o que procura.
-    return base.slice(0, q ? 200 : 50);
-  }, [atividades, query]);
+    const teto = q ? 200 : 50;
 
-  const fasesFiltradas = useMemo(() => {
-    const q = norm(query.trim());
-    return q ? fases.filter((f) => norm(f.title).includes(q)) : fases;
-  }, [fases, query]);
+    if (!faseId) {
+      const itens = ordenar(base).slice(0, teto);
+      return itens.length ? [{ titulo: "Atividades", itens }] : [];
+    }
 
-  const escolher = (tipo: "fase" | "atividade" | null, id: string) => {
-    if (tipo === "fase") onChange({ faseId: id, atividadeId: "" });
-    else if (tipo === "atividade") onChange({ faseId: "", atividadeId: id });
-    else onChange({ faseId: "", atividadeId: "" });
-    setOpen(false);
-    setQuery("");
-  };
+    const daFase = ordenar(base.filter((a) => a.phase_id === faseId));
+    const outras = ordenar(base.filter((a) => a.phase_id !== faseId));
+    const nomeFase = fases.find((f) => f.id === faseId)?.title || "Desta fase";
+
+    return [
+      daFase.length && { titulo: nomeFase, itens: daFase.slice(0, teto) },
+      outras.length && { titulo: "Outras fases", itens: outras.slice(0, teto) },
+    ].filter(Boolean) as Array<{ titulo: string; itens: VinculoAtividade[] }>;
+  }, [atividades, fases, query, faseId]);
+
+  const totalListado = grupos.reduce((s, g) => s + g.itens.length, 0);
 
   return (
-    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQuery(""); }}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "flex h-10 w-full items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-left",
-            className,
-          )}
-        >
-          {selecionado ? (
-            <>
-              {ativSel
-                ? <ListTodo className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                : <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-              {ativSel?.wbs_code && (
-                <span className="font-mono text-[11px] text-muted-foreground shrink-0">{ativSel.wbs_code}</span>
+    <div className={cn("grid grid-cols-1 sm:grid-cols-2 gap-3", className)}>
+      {/* FASE — <select> nativo. São 4 por projeto: um campo de busca sobre
+          quatro opções é mais atrito que rolar. Mesma decisão de Documentos. */}
+      <select
+        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+        value={faseId}
+        onChange={(e) => {
+          const nova = e.target.value;
+          // Trocar de fase NÃO limpa a atividade: ela continua válida, só
+          // deixa de estar no grupo do topo. Limpar seria perder a escolha
+          // por causa de um ajuste no campo ao lado.
+          onChange({ faseId: nova, atividadeId });
+        }}
+      >
+        <option value="">Fase (opcional)</option>
+        {fases.map((f) => (
+          <option key={f.id} value={f.id}>{f.title}</option>
+        ))}
+      </select>
+
+      {/* ATIVIDADE — combobox com busca. Somem por completo enquanto a
+          migration de activity_id não rodou, em vez de oferecer algo que não
+          tem onde ser gravado. */}
+      {atividadeDisponivel && (
+        <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQuery(""); }}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="flex h-10 w-full items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-left"
+            >
+              {ativSel ? (
+                <>
+                  <ListTodo className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  {ativSel.wbs_code && (
+                    <span className="font-mono text-[11px] text-muted-foreground shrink-0">{ativSel.wbs_code}</span>
+                  )}
+                  <span className="truncate">{ativSel.title}</span>
+                  {/* Limpar direto no campo — sem isto, desfazer exigiria abrir
+                      a lista e achar a opção "nenhuma". */}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Remover atividade"
+                    className="ml-auto shrink-0 rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange({ faseId, atividadeId: "" }); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault(); e.stopPropagation(); onChange({ faseId, atividadeId: "" });
+                      }
+                    }}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-muted-foreground truncate">{placeholder}</span>
+                  <ChevronsUpDown className="ml-auto w-4 h-4 opacity-50 shrink-0" />
+                </>
               )}
-              <span className="truncate">{selecionado.title}</span>
-              {/* Limpar direto no campo — sem isto, desfazer o vínculo exigiria
-                  abrir a lista e achar a opção "nenhum". */}
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label="Remover vínculo"
-                className="ml-auto shrink-0 rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); escolher(null, ""); }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault(); e.stopPropagation(); escolher(null, "");
-                  }
-                }}
-              >
-                <X className="w-3.5 h-3.5" />
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="text-muted-foreground">{placeholder}</span>
-              <ChevronsUpDown className="ml-auto w-4 h-4 opacity-50 shrink-0" />
-            </>
-          )}
-        </button>
-      </PopoverTrigger>
+            </button>
+          </PopoverTrigger>
 
-      <PopoverContent className="p-0 w-[--radix-popover-trigger-width] min-w-[320px]" align="start" collisionPadding={12}>
-        <Command shouldFilter={false}>
-          <CommandInput
-            placeholder="Buscar fase ou atividade…"
-            value={query}
-            onValueChange={setQuery}
-          />
-          <CommandList className="max-h-[min(340px,var(--radix-popover-content-available-height,340px))]">
-            <CommandEmpty>Nada encontrado.</CommandEmpty>
+          <PopoverContent className="p-0 w-[--radix-popover-trigger-width] min-w-[300px]" align="start" collisionPadding={12}>
+            <Command shouldFilter={false}>
+              <CommandInput
+                placeholder="Buscar por título ou código EAP…"
+                value={query}
+                onValueChange={setQuery}
+              />
+              <CommandList className="max-h-[min(300px,var(--radix-popover-content-available-height,300px))]">
+                <CommandEmpty>Nenhuma atividade encontrada.</CommandEmpty>
 
-            {fasesFiltradas.length > 0 && (
-              <CommandGroup heading="Fases do projeto">
-                {fasesFiltradas.map((f) => (
-                  <CommandItem key={f.id} value={f.id} onSelect={() => escolher("fase", f.id)} className="gap-2">
-                    <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="truncate">{f.title}</span>
-                  </CommandItem>
+                {/* CORES QUE SOBREVIVEM À SELEÇÃO.
+                    O item em foco usa bg-primary sólido, e
+                    `text-muted-foreground` fixo virava cinza sobre azul — o
+                    ícone e o código EAP sumiam justamente na linha que a pessoa
+                    está olhando. `opacity-70` e `border-current` herdam a cor do
+                    item e funcionam nos dois estados. */}
+                {grupos.map((grupo) => (
+                  <CommandGroup key={grupo.titulo} heading={grupo.titulo}>
+                    {grupo.itens.map((a) => (
+                      <CommandItem
+                        key={a.id}
+                        value={a.id}
+                        onSelect={() => {
+                          onChange({ faseId, atividadeId: a.id });
+                          setOpen(false);
+                          setQuery("");
+                        }}
+                        className="gap-2 text-[13px] py-2"
+                      >
+                        <ListTodo className="w-3.5 h-3.5 opacity-70 shrink-0" />
+                        {a.wbs_code && (
+                          <span className="font-mono text-[11px] shrink-0 rounded px-1.5 py-0.5 border border-current/25 bg-current/10 tabular-nums">
+                            {a.wbs_code}
+                          </span>
+                        )}
+                        <span className="truncate flex-1">{a.title}</span>
+                        {a.id === atividadeId && <Check className="w-4 h-4 shrink-0" />}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
                 ))}
-              </CommandGroup>
-            )}
 
-            {/* Enquanto a migration não roda, a seção some por completo em vez
-                de oferecer algo que não tem onde ser gravado. */}
-            {atividadeDisponivel && filtradas.length > 0 && (
-              <CommandGroup heading="Atividades">
-                {filtradas.map((a) => (
-                  <CommandItem key={a.id} value={a.id} onSelect={() => escolher("atividade", a.id)} className="gap-2">
-                    <ListTodo className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    {a.wbs_code && (
-                      <span className="font-mono text-[11px] text-muted-foreground shrink-0">{a.wbs_code}</span>
-                    )}
-                    <span className="truncate">{a.title}</span>
-                  </CommandItem>
-                ))}
-                {!query && atividades.length > filtradas.length && (
+                {!query && atividades.length > totalListado && (
                   <div className="px-3 py-1.5 text-[11px] text-muted-foreground">
-                    {atividades.length - filtradas.length} outras — use a busca
+                    {atividades.length - totalListado} outras — use a busca
                   </div>
                 )}
-              </CommandGroup>
-            )}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
   );
 }
