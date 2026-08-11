@@ -23,7 +23,9 @@ import { cn } from "@/lib/utils";
 interface Props {
   projectId: string;
   phases: { id: string; title: string }[];
-  activities: { id: string; title: string }[];
+  /** wbs_code e phase_id alimentam a busca e o agrupamento por fase no
+   *  seletor de atividade do DocumentManager. */
+  activities: { id: string; title: string; wbs_code?: string | null; phase_id?: string | null }[];
   canManageProject?: boolean;
   onActivityCreated?: () => void;
 }

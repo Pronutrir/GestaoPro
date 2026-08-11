@@ -5,7 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X, Send, Clock, CheckCircle2, XCircle, Paperclip, Search, FilePlus } from "lucide-react";
+import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X, Send, Clock, CheckCircle2, XCircle, Paperclip, Search, FilePlus, ChevronsUpDown, Check } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command, CommandInput, CommandList, CommandEmpty, CommandItem, CommandGroup,
+} from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -52,6 +56,10 @@ interface Phase {
 interface Activity {
   id: string;
   title: string;
+  /** Código da EAP — entra na busca e identifica a atividade na lista. */
+  wbs_code?: string | null;
+  /** A que fase pertence: as da fase escolhida sobem para o topo. */
+  phase_id?: string | null;
 }
 
 interface DocumentManagerProps {
@@ -81,6 +89,8 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
   // editar: cria um registro novo e aposenta o anterior, preservando a trilha.
   const [novaVersaoDe, setNovaVersaoDe] = useState<ProjectDocument | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [activityPickerOpen, setActivityPickerOpen] = useState(false);
+  const [activityQuery, setActivityQuery] = useState("");
   // Arquivo enviado no formulário (ou link, no modo alternativo). Guarda o
   // caminho no storage para gravar em `storage_path` — é ele que permite gerar
   // a URL assinada depois, já que o bucket é privado.
@@ -488,6 +498,56 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
    * pessoa no topo. Um termo esperando assinatura há três dias importa mais
    * que um anexo enviado hoje — e some no meio de uma lista cronológica.
    */
+  const atividadeEscolhida = useMemo(
+    () => activities.find((a) => a.id === form.activity_id) || null,
+    [activities, form.activity_id],
+  );
+
+  /**
+   * Atividades para o seletor: filtradas pela busca e agrupadas pela fase.
+   *
+   * A busca cobre título E código EAP, sem acento e sem caixa — quem procura
+   * "1.1.2" ou "reuniao" precisa achar do mesmo jeito.
+   *
+   * O agrupamento existe porque a lista antes ignorava a Fase selecionada ao
+   * lado: escolher "1 Iniciação" e ver atividades da fase 3 misturadas é ruído,
+   * e permite anexar o documento a uma combinação incoerente. As da fase
+   * escolhida sobem; as demais continuam acessíveis, porque um documento pode
+   * legitimamente cruzar fases.
+   */
+  const atividadesAgrupadas = useMemo(() => {
+    const norm = (s: string) =>
+      s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const q = norm(activityQuery.trim());
+
+    const filtradas = q
+      ? activities.filter((a) => norm(`${a.wbs_code || ""} ${a.title}`).includes(q))
+      : activities;
+
+    // Ordem da EAP: numérica, senão "1.10" viria antes de "1.2".
+    const ordenar = (arr: Activity[]) =>
+      arr.slice().sort((x, y) => {
+        const wx = (x.wbs_code || "").trim(), wy = (y.wbs_code || "").trim();
+        if (wx && wy && wx !== wy) return wx.localeCompare(wy, undefined, { numeric: true });
+        if (wx && !wy) return -1;
+        if (!wx && wy) return 1;
+        return x.title.localeCompare(y.title);
+      });
+
+    if (!form.phase_id) {
+      return filtradas.length ? [{ titulo: "Atividades", itens: ordenar(filtradas) }] : [];
+    }
+
+    const daFase = filtradas.filter((a) => a.phase_id === form.phase_id);
+    const outras = filtradas.filter((a) => a.phase_id !== form.phase_id);
+    const nomeFase = phases.find((p) => p.id === form.phase_id)?.title || "Desta fase";
+
+    return [
+      daFase.length && { titulo: nomeFase, itens: ordenar(daFase) },
+      outras.length && { titulo: "Outras fases", itens: ordenar(outras) },
+    ].filter(Boolean) as Array<{ titulo: string; itens: Activity[] }>;
+  }, [activities, phases, activityQuery, form.phase_id]);
+
   const visibleDocuments = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = q
@@ -635,11 +695,78 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                 {phases.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             )}
+            {/* Atividade: COMBOBOX com busca, não <select>.
+                Medido: o maior projeto tem 168 atividades, e a lista nativa
+                obrigava a rolar até achar. A Fase continua <select> de
+                propósito — são 4 opções, e buscar entre quatro é mais atrito
+                que rolar.
+
+                As da FASE ESCOLHIDA vêm primeiro: a lista antes ignorava a
+                fase selecionada ao lado, misturando atividades de fases
+                diferentes. Agrupa em vez de filtrar porque um documento pode
+                legitimamente cruzar fases — filtrar seria decidir pelo usuário. */}
             {activities.length > 0 && (
-              <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.activity_id} onChange={(e) => setForm({ ...form, activity_id: e.target.value })}>
-                <option value="">Atividade (opcional)</option>
-                {activities.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
-              </select>
+              <Popover open={activityPickerOpen} onOpenChange={(o) => { setActivityPickerOpen(o); if (!o) setActivityQuery(""); }}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 w-full justify-between font-normal text-sm px-3"
+                  >
+                    <span className={cn("truncate", !atividadeEscolhida && "text-muted-foreground")}>
+                      {atividadeEscolhida
+                        ? `${atividadeEscolhida.wbs_code ? atividadeEscolhida.wbs_code + " " : ""}${atividadeEscolhida.title}`
+                        : "Atividade (opcional)"}
+                    </span>
+                    <ChevronsUpDown className="w-4 h-4 opacity-50 shrink-0 ml-2" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] min-w-[280px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Buscar por título ou código EAP..."
+                      value={activityQuery}
+                      onValueChange={setActivityQuery}
+                    />
+                    <CommandList className="max-h-[260px]">
+                      <CommandEmpty>Nenhuma atividade encontrada.</CommandEmpty>
+                      {form.activity_id && (
+                        <CommandItem
+                          value="__limpar__"
+                          onSelect={() => { setForm({ ...form, activity_id: "" }); setActivityPickerOpen(false); }}
+                          className="text-muted-foreground"
+                        >
+                          Sem atividade
+                        </CommandItem>
+                      )}
+                      {atividadesAgrupadas.map((grupo) => (
+                        <CommandGroup key={grupo.titulo} heading={grupo.titulo}>
+                          {grupo.itens.map((a) => (
+                            <CommandItem
+                              key={a.id}
+                              value={a.id}
+                              onSelect={() => {
+                                setForm({ ...form, activity_id: a.id });
+                                setActivityPickerOpen(false);
+                                setActivityQuery("");
+                              }}
+                              className="gap-2"
+                            >
+                              {a.wbs_code && (
+                                <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                                  {a.wbs_code}
+                                </span>
+                              )}
+                              <span className="truncate flex-1">{a.title}</span>
+                              {a.id === form.activity_id && <Check className="w-4 h-4 text-primary shrink-0" />}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      ))}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             )}
           </div>
           <Button onClick={handleSubmit} className="gap-1">

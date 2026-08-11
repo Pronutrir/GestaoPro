@@ -1654,7 +1654,15 @@ export default function ProjectDetailsPage() {
               <DocumentCenter
                 projectId={id!}
                 phases={phases}
-                activities={activities.map(a => ({ id: a.id, title: a.title }))}
+                // wbs_code e phase_id vão junto: o seletor de atividade busca
+                // pelo código e agrupa pela fase escolhida. O `.map` antes
+                // descartava os dois, e o agrupamento não teria por onde saber.
+                activities={activities.map(a => ({
+                  id: a.id,
+                  title: a.title,
+                  wbs_code: a.wbs_code ?? null,
+                  phase_id: a.phase_id ?? null,
+                }))}
                 canManageProject={isAdmin}
                 onActivityCreated={fetchProjectData}
               />
