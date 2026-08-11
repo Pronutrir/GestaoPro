@@ -805,7 +805,20 @@ export function ProjectCronogramaPanel({
    * atividades, sem as fases.
    */
   const isGroupRow = useCallback(
-    (a: any) => resolveEapKind(a, (childrenByParent.get(a?.id) || []).length > 0) === "fase",
+    (a: any) => {
+      // A LINHA DE FASE JÁ SABE O QUE É. Ela é sintética, montada a partir da
+      // tabela `phases` — perguntar seu papel a `resolveEapKind` era dar chance
+      // de a resposta ser "não".
+      //
+      // E era: a linha recebe `wbs_code: p.wbs_code ?? null`, e a coluna
+      // `phases.wbs_code` não existe em toda base (migration de maio ainda
+      // pendente em algumas VMs). Sem código, `resolveEapKind` cai no fallback
+      // por função e devolve "entrega" — então a fase importada aparecia como
+      // atividade no cronograma, sem agrupar nada. O `__isPhaseRow` é a
+      // resposta direta, sem depender de uma coluna que pode não existir.
+      if (a?.__isPhaseRow) return true;
+      return resolveEapKind(a, (childrenByParent.get(a?.id) || []).length > 0) === "fase";
+    },
     [childrenByParent],
   );
 
