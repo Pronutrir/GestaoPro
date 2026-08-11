@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Diamond,
   Rows3, MoreHorizontal, Pencil, Package, IndentIncrease,
-  User, Flag, Calendar as CalendarIcon, Link2,
+  User, Flag, Calendar as CalendarIcon, Link2, X,
 } from "lucide-react";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
@@ -1549,67 +1549,67 @@ export const BacklogSection = ({
 
   return (
     <div className="space-y-2.5">
-      {/* ===== PRONTIDÃO — o que falta para o backlog virar trabalho =====
-          A lista dizia quantas tarefas existem, nunca quantas estão prontas
-          para alguém pegar. As três faixas são clicáveis e recortam a lista;
-          é o que transforma centenas de pendências invisíveis numa fila. */}
-      {prontidaoResumo.total > 0 && (
-        <div className="flex items-center gap-3 flex-wrap rounded-lg border border-border bg-card px-3 py-2">
-          <span className="text-[12px] text-muted-foreground shrink-0">
-            <span className="text-foreground font-semibold tabular-nums">{prontidaoResumo.prontas}</span>
-            {" "}de{" "}
-            <span className="tabular-nums">{prontidaoResumo.total}</span> prontas para executar
-          </span>
+      {/* ===== LINHA DE ESTADO — o que está filtrado e o que falta =====
+          Antes isto era uma faixa cheia, empilhada sobre a de contagem: duas
+          linhas falando da mesma lista, com "12" repetido cinco vezes e um
+          segmentado de filtro longe dos outros filtros.
 
-          {/* Barra: verde pronta · âmbar falta 1 campo · vermelho falta mais.
-              Proporcional, então o desequilíbrio se lê sem precisar dos números. */}
-          <span className="flex-1 min-w-[120px] h-2 rounded-full overflow-hidden flex border border-border/60">
-            {[
-              { n: prontidaoResumo.prontas, cls: "bg-success", lab: "prontas" },
-              { n: prontidaoResumo.quaseProntas, cls: "bg-warning", lab: "falta 1 campo" },
-              { n: prontidaoResumo.incompletas, cls: "bg-destructive", lab: "falta mais de 1" },
-            ].map((f) => f.n > 0 && (
-              <span
-                key={f.lab}
-                className={f.cls}
-                style={{ width: `${(f.n / prontidaoResumo.total) * 100}%` }}
-                title={`${f.n} ${f.lab}`}
-              />
-            ))}
-          </span>
+          Agora segue a ordem canônica do Helios (filtros → filtros aplicados →
+          dados): o filtro em si mora nos controles abaixo, e AQUI fica só o
+          estado. A faixa SOME quando não há filtro ativo nem carência — na
+          maior parte do tempo a tela tem uma linha a menos.
+
+          A chip resolve o alerta do Groto sobre segmentado-como-filtro: sem um
+          estado explícito de "filtro ativo", o usuário não percebe que está
+          vendo dados recortados. Aqui ela diz o que é e o ✕ desfaz. */}
+      {(prontidaoFilter !== "all" || carencias.length > 0) && prontidaoResumo.total > 0 && (
+        <div className="flex items-center gap-2.5 flex-wrap px-0.5 text-[12px] text-muted-foreground">
+          {prontidaoFilter !== "all" && (
+            <button
+              type="button"
+              onClick={() => setProntidaoFilter("all")}
+              title="Remover este filtro"
+              className={cn(
+                "inline-flex items-center gap-1.5 h-[22px] px-2 rounded-full border text-[11px] font-medium transition-colors",
+                prontidaoFilter === "incomplete"
+                  ? "border-destructive/50 bg-destructive/10 text-destructive hover:bg-destructive/15"
+                  : "border-success/50 bg-success/10 text-success hover:bg-success/15",
+              )}
+            >
+              {prontidaoFilter === "incomplete" ? "Incompletas" : "Prontas"}
+              <X className="w-3 h-3 opacity-70" />
+            </button>
+          )}
 
           {/* As duas maiores carências: é o que orienta por onde começar. */}
           {carencias.length > 0 && (
-            <span className="text-[12px] text-muted-foreground shrink-0">
+            <span className="shrink-0">
               {carencias
                 .map((c) => `${PRONTIDAO_LABELS_LONGOS[c.requisito].replace("sem ", "falta ")} em ${c.quantidade}`)
                 .join(" · ")}
             </span>
           )}
 
-          {/* Recorte. "Todas" volta ao estado normal da lista. */}
-          <span className="inline-flex rounded-md border border-border overflow-hidden shrink-0 ml-auto">
-            {([
-              ["all", `Todas ${prontidaoResumo.total}`],
-              ["ready", `Prontas ${prontidaoResumo.prontas}`],
-              ["incomplete", `Incompletas ${prontidaoResumo.quaseProntas + prontidaoResumo.incompletas}`],
-            ] as const).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setProntidaoFilter(id)}
-                className={cn(
-                  "px-2.5 py-1 text-[11px] font-medium transition-colors border-r border-border last:border-r-0",
-                  prontidaoFilter === id
-                    ? id === "incomplete"
-                      ? "bg-destructive text-destructive-foreground"
-                      : "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted",
-                )}
-              >
-                {label}
-              </button>
-            ))}
+          {/* Barra fina, à direita: proporção sem ocupar linha própria. */}
+          <span className="ml-auto flex items-center gap-2 shrink-0">
+            <span className="tabular-nums">
+              <span className="text-foreground font-semibold">{prontidaoResumo.prontas}</span>
+              {" / "}{prontidaoResumo.total} prontas
+            </span>
+            <span className="w-16 h-1.5 rounded-full overflow-hidden flex border border-border/60">
+              {[
+                { n: prontidaoResumo.prontas, cls: "bg-success", lab: "prontas" },
+                { n: prontidaoResumo.quaseProntas, cls: "bg-warning", lab: "falta 1 campo" },
+                { n: prontidaoResumo.incompletas, cls: "bg-destructive", lab: "falta mais de 1" },
+              ].map((f) => f.n > 0 && (
+                <span
+                  key={f.lab}
+                  className={f.cls}
+                  style={{ width: `${(f.n / prontidaoResumo.total) * 100}%` }}
+                  title={`${f.n} ${f.lab}`}
+                />
+              ))}
+            </span>
           </span>
         </div>
       )}
@@ -1635,6 +1635,18 @@ export const BacklogSection = ({
               </>
             )}
           </p>
+          {/* Contagens diferentes precisam se explicar: "14 tarefas" acima e
+              "12 prontas" ao lado pareciam discordar. A prontidão não avalia
+              agrupadores (horas e datas vêm dos filhos) nem concluídas — o
+              tooltip diz isso onde a dúvida aparece. */}
+          {prontidaoResumo.total > 0 && prontidaoResumo.total !== typeCounts.total && (
+            <span
+              className="text-[11px] text-muted-foreground/70 cursor-help"
+              title={`${prontidaoResumo.total} entram na conta de prontidão. Fases e tarefas concluídas ficam de fora: as horas e datas de um agrupador vêm dos filhos, e cobrar prazo de algo já entregue é ruído.`}
+            >
+              ({prontidaoResumo.total} avaliáveis)
+            </span>
+          )}
 
           {/* Controles de visão */}
           <div className="flex items-center gap-1.5">
@@ -1773,6 +1785,31 @@ export const BacklogSection = ({
                 </Popover>
               </>
             )}
+            {/* PRONTIDÃO como filtro, junto dos outros — não numa faixa
+                própria. Ele recorta a lista igual a Status e Prioridade, e
+                separá-lo sugeria que fosse outra coisa. Some quando não há
+                nada a recortar (tudo pronto ou nada avaliável). */}
+            {prontidaoResumo.total > 0 && prontidaoResumo.prontas < prontidaoResumo.total && (
+              <Select value={prontidaoFilter} onValueChange={(v) => setProntidaoFilter(v as typeof prontidaoFilter)}>
+                <SelectTrigger
+                  className={cn(
+                    "h-7 w-[132px] text-[13px] gap-1.5",
+                    prontidaoFilter === "incomplete" && "border-destructive/50 text-destructive",
+                    prontidaoFilter === "ready" && "border-success/50 text-success",
+                  )}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas {prontidaoResumo.total}</SelectItem>
+                  <SelectItem value="ready">Prontas {prontidaoResumo.prontas}</SelectItem>
+                  <SelectItem value="incomplete">
+                    Incompletas {prontidaoResumo.quaseProntas + prontidaoResumo.incompletas}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
             {/* Agrupar em raias — mesmo modelo do Kanban */}
             <Select value={groupBy} onValueChange={(v) => changeGroupBy(v as GroupBy)}>
               <SelectTrigger className="h-7 w-[136px] text-[13px] gap-1.5">
