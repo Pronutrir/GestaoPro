@@ -17,7 +17,8 @@ import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, 
 // as três telas recusarem exatamente as mesmas coisas (ciclo, self, marco).
 import {
   eapCanMoveInto, eapCanGroup, eapDescendantIds, eapShouldDemote,
-  eapToPersisted, eapLevel, resolveEapKind, EAP_LABELS,
+  eapToPersisted, eapLevel, resolveEapKind, EAP_LABELS, EAP_HINTS,
+  eapMilestoneBlockedReason,
   type EapKind, type EapNodeLike,
 } from "@/lib/eapModel";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -929,13 +930,24 @@ export const EditActivityDialog = ({
     // em qualquer nível. TOLERANTE: se a promoção falhar, seguimos criando o
     // subitem (o pai já funciona como agrupador por ter filhos).
     const parentType = toEapType((act as any).item_type);
-    if (parentType === "atividade" || (act as any).is_milestone) {
+    const eraMarco = !!(act as any).is_milestone;
+    if (parentType === "atividade" || eraMarco) {
       const { error: promoteErr } = await supabase
         .from("activities")
         .update({ item_type: "fase", is_milestone: false } as any)
         .eq("id", act.id);
       if (!promoteErr) {
         setFormData((prev) => ({ ...prev, item_type: "fase", is_milestone: false }));
+        // Perder o Marco é uma mudança de PAPEL, não um detalhe: o item some do
+        // filtro "Marcos" e do Cronograma. A promoção de Atividade→agrupador é
+        // muda de propósito (o rótulo já segue o nível, e nada se perde), mas
+        // deixar de ser marco em silêncio era uma decisão do sistema sem aviso.
+        if (eraMarco) {
+          toast({
+            title: "Deixou de ser Marco",
+            description: "Marco não agrupa: ao ganhar um subitem, este item virou agrupador.",
+          });
+        }
       }
     }
 
@@ -1832,10 +1844,15 @@ export const EditActivityDialog = ({
                       Este seletor era a última cópia divergente da regra: tinha
                       lógica própria que dizia "Fase / Entrega" num botão só,
                       justamente o achatamento corrigido em fc0da05, e mostrava
-                      papel diferente do Backlog/Kanban para o mesmo item. Agora
-                      resolveEapKind decide o papel e eapTypeOptions decide o que
-                      é oferecido: no nível 1 aparece Fase, do 1.1 em diante
-                      Entrega — nunca os dois. */}
+                      papel diferente do Backlog/Kanban para o mesmo item.
+                      `resolveEapKind` decide o papel exibido e `eapToPersisted`
+                      o que vai ao banco.
+
+                      Aqui os QUATRO papéis aparecem de propósito: na edição o
+                      item já tem código EAP, e esconder Fase ou Entrega conforme
+                      o nível impedia renumerar a EAP depois. A divergência é
+                      avisada logo abaixo, não bloqueada — o único bloqueio real
+                      é Marco com subitens (eapMilestoneBlockedReason). */}
                   {(() => {
                     type Kind = EapKind;
                     const itemKind: Kind = resolveEapKind(
@@ -1923,7 +1940,12 @@ export const EditActivityDialog = ({
                       {
                         kind: "marco",
                         icon: <Diamond className={`w-3.5 h-3.5 ${itemKind === "marco" ? "fill-current" : ""}`} />,
-                        hint: "Ponto único no tempo (uma data, sem intervalo). Não tem horas nem custo.",
+                        // Vem de EAP_HINTS: a criação rápida dizia só "Ponto
+                        // único no tempo." e a mesma coisa era descrita de dois
+                        // jeitos. Fase/Entrega/Atividade mantêm a dica longa
+                        // daqui — nesta tela há espaço para explicar o efeito
+                        // sobre datas e custo, que na criação não caberia.
+                        hint: EAP_HINTS.marco,
                         activeCls: "border-amber-500 bg-amber-500 text-white shadow-sm",
                       },
                     ];
@@ -1963,7 +1985,13 @@ export const EditActivityDialog = ({
                           <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30 w-fit">
                             {KIND_OPTIONS.map((opt) => {
                               const active = itemKind === opt.kind;
-                              const impedido = opt.kind === "marco" && hasSubActivities;
+                              // A regra e o motivo vêm de eapModel: é a única
+                              // restrição de tipo que vale nas três telas.
+                              const motivoBloqueio =
+                                opt.kind === "marco"
+                                  ? eapMilestoneBlockedReason(hasSubActivities)
+                                  : null;
+                              const impedido = motivoBloqueio !== null;
                               return (
                                 <button
                                   key={opt.kind}
@@ -1971,7 +1999,7 @@ export const EditActivityDialog = ({
                                   disabled={impedido}
                                   onClick={() => setKind(opt.kind)}
                                   aria-pressed={active}
-                                  title={impedido ? "Este item tem subitens; Marco não agrupa." : opt.hint}
+                                  title={motivoBloqueio ?? opt.hint}
                                   className={cn(
                                     "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border",
                                     active

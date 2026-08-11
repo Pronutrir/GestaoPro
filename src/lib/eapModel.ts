@@ -142,20 +142,23 @@ export function eapIsLeaf(kind: EapKind): boolean {
 }
 
 /**
- * Tipos oferecidos no seletor, dado o contexto.
+ * Marco pode ser escolhido? É a única restrição REAL de tipo, e a única que as
+ * três telas precisam concordar: marco é folha de controle e não agrupa, então
+ * um item com subitens não pode virar marco. O trigger do banco também recusa.
  *
- * Item com filhos deixa de ser forçado a "só Fase": Atividade agora pode
- * agrupar (o nível é que define o rótulo). O que segue barrado é Marco, que é
- * folha de controle por definição — um marco com subitens não faz sentido.
+ * Substitui `eapTypeOptions`, que devolvia a lista inteira de opções e não era
+ * chamada por ninguém: prometia decidir Fase × Entrega pelo nível, enquanto a
+ * criação (sem código ainda) decide pelo destino e a edição mostra os quatro
+ * papéis de propósito, avisando em vez de bloquear. Uma função que nenhuma tela
+ * podia obedecer não era fonte única — era uma quarta regra.
  */
-export function eapTypeOptions(opts: { hasChildren?: boolean; wbsCode?: string | null } = {}): EapKind[] {
-  // O agrupador oferecido depende do NÍVEL, não da vontade: no nível 1 é Fase,
-  // abaixo dele é Entrega. Oferecer os dois deixaria escolher "Fase" para um
-  // item 1.1 — exatamente o achatamento que estamos corrigindo.
-  const level = eapLevel(opts.wbsCode);
-  const agrupador: EapKind = level === 1 ? "fase" : "entrega";
-  if (opts.hasChildren) return [agrupador, "atividade"];
-  return [agrupador, "atividade", "marco"];
+export function eapMilestoneAllowed(hasChildren: boolean): boolean {
+  return !hasChildren;
+}
+
+/** Motivo a exibir quando Marco está bloqueado. Null quando é permitido. */
+export function eapMilestoneBlockedReason(hasChildren: boolean): string | null {
+  return hasChildren ? "Este item tem subitens; Marco não agrupa." : null;
 }
 
 /** Rótulos canônicos para a UI. */
@@ -167,12 +170,66 @@ export const EAP_LABELS: Record<EapKind, string> = {
 };
 
 /**
+ * Dica de UMA LINHA para cada papel. Fica aqui porque as três telas que
+ * escolhem tipo (criação rápida, edição, importação) descreviam o mesmo papel
+ * com palavras diferentes — e a divergência é o que confunde quem planeja.
+ */
+export const EAP_HINTS: Record<EapKind, string> = {
+  fase: "Nível 1 da EAP (1, 2, 3…). Agrupa entregas.",
+  entrega: "Agrupador abaixo da fase (1.1, 1.2…). Contém atividades.",
+  atividade: "Trabalho executável: vai ao Kanban, tem horas e responsável.",
+  marco: "Ponto único no tempo (uma data, sem intervalo). Não tem horas nem custo.",
+};
+
+/**
+ * Marco declarado pelo TÍTULO, do jeito que se escreve numa EAP colada.
+ *
+ * "Marco: TAP aprovado" · "Milestone – kickoff" · "🏁 Go-live" · "[M] Aprovação"
+ *
+ * É a única forma de declarar marco na importação: a EAP colada tem código e
+ * título, e não há coluna que carregue "é marco". A regra vivia dentro do
+ * diálogo de importação e não era mencionada em lugar nenhum da tela — está
+ * aqui para que a tela possa DOCUMENTÁ-LA a partir da mesma fonte que a aplica.
+ */
+export function eapTitleDeclaresMilestone(titulo: string): boolean {
+  const t = (titulo || "").trim();
+  if (!t) return false;
+  return /(^|\s)(marco|milestone)(\s|:|-|–|—|$)/i.test(t) || /🏁|\[m\]/i.test(t);
+}
+
+/**
  * item_type + is_milestone a gravar para cada papel escolhido.
  *
  * O agrupador é gravado como item_type='fase'. Para PROMOVER uma folha que
  * ganhou subitens sem trocar o rótulo de topo, prefira `eapGroupPersisted`,
  * que respeita o 'pacote' legado quando o banco ainda exige/aceita.
  */
+/**
+ * Papel de um item IMPORTADO, a partir de nível + filhos + título.
+ *
+ * A ordem não é negociável, e as duas primeiras regras vencem a palavra-chave:
+ *
+ *   nível 1        → Fase      (topo da EAP é fase, sempre)
+ *   tem filhos     → Entrega   (marco não agrupa)
+ *   título declara → Marco
+ *   senão          → Atividade
+ *
+ * "Quem tem filhos nunca é marco" é proposital: EAPs reais usam
+ * "Milestone 1 - Lançamento" como nome da FASE, e tratar isso como marco
+ * quebrava o agrupamento — os filhos ficavam sem pai visível no Backlog e no
+ * Cronograma.
+ */
+export function eapRoleForImport(opts: {
+  depth: number;
+  hasChildren: boolean;
+  title: string;
+}): EapKind {
+  if (opts.depth === 1) return "fase";
+  if (opts.hasChildren) return "entrega";
+  if (eapTitleDeclaresMilestone(opts.title)) return "marco";
+  return "atividade";
+}
+
 export function eapToPersisted(kind: EapKind): { item_type: "fase" | "atividade"; is_milestone: boolean } {
   if (kind === "marco") return { item_type: "atividade", is_milestone: true };
   // Fase e Entrega gravam igual: os dois agrupam, e o trigger eap_nesting_rule

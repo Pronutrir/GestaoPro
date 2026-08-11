@@ -10,11 +10,14 @@ import {
   splitColumns, pareceCabecalho, detectarColunas, lerLinha, statusPorDatas,
   type ColValues,
 } from "@/lib/wbsColumns";
+import { eapRoleForImport, eapToPersisted, type EapKind } from "@/lib/eapModel";
 
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
 /* ------------------------------------------------------------------ */
-type EapRole = "fase" | "entrega" | "atividade" | "marco";
+// Papel vem de eapModel: os quatro papéis são um vocabulário só, e um alias
+// local já havia deixado esta tela divergir das outras.
+type EapRole = EapKind;
 interface TreeNode {
   code: string;          // 1, 1.1, 1.1.2...
   title: string;
@@ -46,9 +49,6 @@ const fmtDia = (iso?: string) => {
   return `${d}/${m}`;
 };
 
-const isMilestoneTitle = (t: string) =>
-  /(^|\s)(marco|milestone)(\s|:|$)/i.test(t) || /🏁|\[m\]/i.test(t);
-
 /**
  * Papel de cada nó. Duas perguntas independentes, que antes estavam coladas:
  *
@@ -64,18 +64,18 @@ const isMilestoneTitle = (t: string) =>
  * trigger mas achatou a EAP: "1" e "1.1" viravam ambos Fase, e a entrega
  * deixava de estar dentro da fase.
  *
- * Quem tem filhos NUNCA é marco, mesmo com "Milestone" no título — marco é
- * ponto no tempo e não agrupa. EAPs reais usam "Milestone 1 - Lançamento" como
- * nome da FASE, e tratar isso como marco quebrava o agrupamento inteiro: no
- * Backlog e no Cronograma os filhos ficavam sem pai visível.
+ * A decisão em si mora em `eapRoleForImport` (lib/eapModel): a palavra-chave de
+ * marco era declarada aqui dentro e a tela não conseguia explicar ao usuário
+ * uma regra que só o parser conhecia.
  */
 const aplicarPapeis = (nodes: TreeNode[]) => {
   const temFilhos = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
   for (const n of nodes) {
-    if (n.depth === 1) n.role = "fase";
-    else if (temFilhos.has(n.code)) n.role = "entrega";
-    else if (isMilestoneTitle(n.title)) n.role = "marco";
-    else n.role = "atividade";
+    n.role = eapRoleForImport({
+      depth: n.depth,
+      hasChildren: temFilhos.has(n.code),
+      title: n.title,
+    });
   }
 };
 
@@ -600,10 +600,12 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         const phaseKey = phaseId || "__none__";
         if (!(phaseKey in phaseOrderCounter)) phaseOrderCounter[phaseKey] = 0;
 
-        // Fase e Entrega gravam igual — os dois agrupam, e o trigger só aceita
-        // 'fase'/'pacote' como pai. A diferença entre elas é o NÍVEL, lido do
-        // wbs_code na hora de exibir, não um valor distinto no banco.
-        const itemType = (node.role === "fase" || node.role === "entrega") ? "fase" : "atividade";
+        // eapToPersisted é a fonte do que vai ao banco. Fase e Entrega gravam
+        // igual — os dois agrupam, e o trigger só aceita 'fase'/'pacote' como
+        // pai; a diferença entre elas é o NÍVEL, lido do wbs_code na exibição.
+        // A conversão era duplicada aqui, então uma mudança na regra canônica
+        // não alcançava a importação.
+        const persisted = eapToPersisted(node.role);
         const basePayload: any = {
           project_id: projectId,
           // Idem às fases: título limpo, código em wbs_code.
@@ -612,8 +614,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           parent_id: parentId,
           display_order: phaseOrderCounter[phaseKey]++,
           wbs_code: node.code,
-          item_type: itemType,
-          is_milestone: node.role === "marco",
+          item_type: persisted.item_type,
+          is_milestone: persisted.is_milestone,
           // Nasce no Backlog — igual a criação manual (segue o fluxo).
           workflow_stage_id: backlogStageId,
           status: "pending",
@@ -650,7 +652,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         }
 
         let res = await supabase.from("activities").insert(basePayload).select("id").single();
-        if (res.error && /item_type/i.test(res.error.message) && itemType === "fase") {
+        if (res.error && /item_type/i.test(res.error.message) && persisted.item_type === "fase") {
           pacoteUnsupported = true;
           res = await supabase.from("activities").insert({ ...basePayload, item_type: "atividade" }).select("id").single();
         }
@@ -736,6 +738,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
             Cole sua estrutura em qualquer formato ou comece de um modelo.{" "}
             <span className="text-foreground">
               Nível 1 vira Fase; do 1.1 em diante, Entrega se tiver subitens ou Atividade se não tiver.
+              {" "}Para um <strong className="font-medium">Marco</strong>, comece o título com{" "}
+              <code className="px-1 py-0.5 rounded bg-muted text-[12px] font-mono">Marco:</code>.
             </span>{" "}
             Colando de planilha, as colunas de data, horas e responsável são reconhecidas.
           </p>
@@ -787,10 +791,11 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 // no fim do próprio texto, deixando um degrau irregular no meio
                 // do bloco.
                 placeholder={[
-                  "1. Planejamento          ← nível 1 é Fase",
-                  "1.1 Levantar requisitos  ← agrupa: vira Entrega",
-                  "1.1.1 Entrevistar área   ← folha: vira Atividade",
-                  "1.2 Aprovar escopo       ← folha: vira Atividade",
+                  "1. Planejamento             ← nível 1 é Fase",
+                  "1.1 Levantar requisitos     ← agrupa: vira Entrega",
+                  "1.1.1 Entrevistar área      ← folha: vira Atividade",
+                  "1.2 Aprovar escopo          ← folha: vira Atividade",
+                  "1.3 Marco: escopo aprovado  ← vira Marco",
                   "2. Execução",
                   "2.1 Desenvolver",
                   "",
