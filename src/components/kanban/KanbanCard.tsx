@@ -55,6 +55,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 import { getBlockedDays, formatBlockedDays } from "@/lib/blockedTime";
 import { KANBAN_TOKENS } from "@/lib/kanbanTokens";
+import { formatarDataBR, formatarDiaMes, estaAtrasado } from "@/lib/dataLocal";
 import { type ActivityProgress } from "@/lib/activityProgress";
 
 import { normalizeGut, GUT_META } from "@/lib/gutPriority";
@@ -300,8 +301,10 @@ function KanbanCardBase({
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
 }) {
-  const parseDate = (d: string) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day); };
-  const isOverdue = activity.end_date && parseDate(activity.end_date) < new Date() && activity.status !== "completed";
+  // estaAtrasado compara DIA com DIA. A conta local anterior montava a data às
+  // 00:00 e comparava com `new Date()` (com hora), então tudo que vencia HOJE
+  // aparecia atrasado a partir de 00:01 — o prazo vence no fim do dia.
+  const isOverdue = estaAtrasado(activity.end_date) && activity.status !== "completed";
 
   // O menu "..." vive num container que só aparece no hover. Ao mover o mouse
   // para dentro do dropdown o card perde o hover, e sem isto o gatilho sumiria
@@ -331,9 +334,9 @@ function KanbanCardBase({
     activity.priority
       ? `⚡ Prioridade: ${GUT_META[normalizeGut(activity.priority)].label}${activity.priority_score ? ` (${activity.priority_score})` : ""}`
       : null,
-    activity.start_date ? `📅 Início: ${parseDate(activity.start_date).toLocaleDateString("pt-BR")}` : null,
-    activity.end_date ? `📅 Fim: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}` : null,
-    isQualityProject && activity.last_update_date ? `🔄 Atualização: ${parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}` : null,
+    activity.start_date ? `📅 Início: ${formatarDataBR(activity.start_date)}` : null,
+    activity.end_date ? `📅 Fim: ${formatarDataBR(activity.end_date)}` : null,
+    isQualityProject && activity.last_update_date ? `🔄 Atualização: ${formatarDataBR(activity.last_update_date)}` : null,
     isQualityProject && activity.deadline_flag ? `🚦 Flag: ${activity.deadline_flag === "green" ? "Em dia" : activity.deadline_flag === "orange" ? "Atenção" : activity.deadline_flag === "red" ? "Vencido" : ""}` : null,
     activity.hours > 0 ? `⏱ Tempo: ${formatHours(activity.hours)}` : null,
     activity.status === "completed" ? "✅ Concluída" : null,
@@ -719,7 +722,7 @@ function KanbanCardBase({
                   )}
                   {isQualityProject && activity.last_update_date && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/5 text-primary/80">
-                      🔄 {parseDate(activity.last_update_date).toLocaleDateString("pt-BR")}
+                      🔄 {formatarDataBR(activity.last_update_date)}
                     </Badge>
                   )}
                   {SHOW_USER_STORIES && hasStory && (
@@ -878,10 +881,10 @@ function KanbanCardBase({
                       className={`ml-auto shrink-0 inline-flex items-center gap-1 text-[11px] tabular-nums ${
                         isOverdue ? "text-destructive font-semibold" : "text-muted-foreground"
                       }`}
-                      title={`Prazo: ${parseDate(activity.end_date).toLocaleDateString("pt-BR")}`}
+                      title={`Prazo: ${formatarDataBR(activity.end_date)}`}
                     >
                       {isOverdue && <AlertCircle className="w-2.5 h-2.5" />}
-                      {parseDate(activity.end_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                      {formatarDiaMes(activity.end_date)}
                     </span>
                   )}
                 </div>

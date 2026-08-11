@@ -53,6 +53,7 @@ import { getBlockedDays, formatBlockedDays } from "@/lib/blockedTime";
 import { KANBAN_TOKENS } from "@/lib/kanbanTokens";
 import { computeActivityProgress, type ActivityProgress } from "@/lib/activityProgress";
 
+import { compararData } from "@/lib/dataLocal";
 import { normalizeGut, type GutLevel } from "@/lib/gutPriority";
 
 import {
@@ -563,11 +564,12 @@ export function SortableColumn({
           return new Date(a.updated_at || a.created_at).getTime() - new Date(b.updated_at || b.created_at).getTime();
         case "priority":
           return (PRIORITY_WEIGHT[normalizeGut(a.priority)] ?? 5) - (PRIORITY_WEIGHT[normalizeGut(b.priority)] ?? 5);
-        case "due": {
-          const da = a.end_date ? new Date(a.end_date).getTime() : Infinity;
-          const db = b.end_date ? new Date(b.end_date).getTime() : Infinity;
-          return da - db;
-        }
+        // compararData ordena "YYYY-MM-DD" como texto, sem construir Date: a
+        // ordem já saía certa (o desvio de fuso era igual nos dois lados), mas
+        // virar instante para comparar dia com dia é o hábito que produziu o
+        // bug de exibição em toda parte.
+        case "due":
+          return compararData(a.end_date, b.end_date);
         case "assigned":
           return (a.assigned_to || "zzz").localeCompare(b.assigned_to || "zzz");
         case "hours":

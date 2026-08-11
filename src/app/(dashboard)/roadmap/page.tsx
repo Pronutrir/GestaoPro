@@ -16,6 +16,7 @@ import { RoadmapItemDetails } from "@/components/roadmap/RoadmapItemDetails";
 import { toast } from 'sonner';
 
 import type { RoadmapItem } from "@/components/roadmap/types";
+import { dateBR } from "@/components/roadmap/format";
 
 
 
@@ -92,8 +93,12 @@ const Roadmap = () => {
           constraints: item.motivo_prazo || "",
           smart_specific: item.title || "",
           smart_measurable: item.resultado_esperado || "",
+          // dateBR: `new Date("2026-08-14")` é meia-noite em UTC e voltava um
+          // dia no fuso de São Paulo. Aqui o estrago era maior que nas outras
+          // telas — este texto é GRAVADO no TAP, então a data errada ficava
+          // registrada no banco em vez de só aparecer errada na tela.
           smart_temporal: item.data_necessaria
-            ? `Necessário até ${new Date(item.data_necessaria).toLocaleDateString("pt-BR")}`
+            ? `Necessário até ${dateBR(item.data_necessaria) ?? ""}`
             : "",
           approvals: [],
           benefits_table: [],

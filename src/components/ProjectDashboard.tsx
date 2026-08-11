@@ -13,6 +13,7 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
   Tooltip, CartesianGrid, AreaChart, Area,
 } from "recharts";
+import { formatarDataBR, estaAtrasado, diasAte } from "@/lib/dataLocal";
 
 interface Activity {
   id: string;
@@ -82,11 +83,6 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }, []);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const sevenDaysLater = new Date(today);
-  sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
-
   const isQuality = project.category === "qualidade";
 
   const stats = useMemo(() => {
@@ -95,12 +91,14 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
     const completionRate = total > 0 ? (completed / total) * 100 : 0;
     const overdue = activities.filter(a => {
       if (a.status === "completed" || !a.end_date) return false;
-      return new Date(a.end_date) < today;
+      // end_date é coluna `date`: comparar dia com dia, senão o que vence hoje
+      // já entra como atrasado e o prazo aparece um dia antes no fuso local.
+      return estaAtrasado(a.end_date);
     });
     const nearDeadline = activities.filter(a => {
       if (a.status === "completed" || !a.end_date) return false;
-      const d = new Date(a.end_date);
-      return d >= today && d <= sevenDaysLater;
+      const n = diasAte(a.end_date);
+      return n !== null && n >= 0 && n <= 7;
     });
     const highPriority = activities.filter(a => a.priority === "high" && a.status !== "completed");
 
@@ -494,7 +492,7 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
                     </Badge>
                     {item.end_date && (
                       <span className="text-[10px] text-muted-foreground">
-                        📅 {new Date(item.end_date).toLocaleDateString("pt-BR")}
+                        📅 {formatarDataBR(item.end_date)}
                       </span>
                     )}
                   </div>

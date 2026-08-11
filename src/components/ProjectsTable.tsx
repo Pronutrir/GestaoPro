@@ -210,7 +210,8 @@ export function ProjectsTable({
         case "percent": return metrics[p.id]?.percent ?? -1;
         // Sem prazo vai para o fim, não para o topo — projeto sem data não é
         // o mais urgente.
-        case "due_date": return p.due_date ? new Date(p.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+        // Data sem hora ordena como texto — ver lib/dataLocal.
+        case "due_date": return p.due_date ? p.due_date.slice(0, 10) : "9999-12-31";
         case "alertas": return pesoAlerta(p);
         default: return (p.title || "").toLowerCase();
       }

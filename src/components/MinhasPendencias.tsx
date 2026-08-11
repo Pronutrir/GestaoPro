@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { formatarDiaMes, estaAtrasado } from "@/lib/dataLocal";
 import { FileSignature, Send, Inbox, Clock } from "lucide-react";
 
 /**
@@ -105,7 +106,9 @@ export const MinhasPendencias = () => {
     router.push(`/project/${p.projectId}?tab=${p.isCharter ? "tap" : "documents"}`);
   };
 
-  const atrasado = (d: string | null) => !!d && new Date(d) < new Date(new Date().toDateString());
+  // due_date é coluna `date` (sem hora): dia contra dia, e o prazo que vence
+  // hoje ainda não está atrasado.
+  const atrasado = (d: string | null) => estaAtrasado(d);
 
   const Linha = ({ p }: { p: Pendencia }) => (
     <button
@@ -134,7 +137,7 @@ export const MinhasPendencias = () => {
             : "text-muted-foreground border-border",
         )}>
           <Clock className="w-3 h-3" />
-          {new Date(p.dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+          {formatarDiaMes(p.dueDate)}
         </span>
       )}
     </button>
