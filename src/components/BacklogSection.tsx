@@ -61,7 +61,11 @@ interface Phase {
   actual_start_date?: string | null;
   actual_end_date?: string | null;
 }
-interface WorkflowStage { id: string; title: string; display_order: number; color: string; }
+interface WorkflowStage {
+  id: string; title: string; display_order: number; color: string;
+  /** Coluna final: mover para ela CONCLUI a tarefa (status + completed_at). */
+  is_final?: boolean | null;
+}
 interface Activity {
   id: string;
   title: string;
@@ -304,7 +308,8 @@ export const BacklogSection = ({
     const fetchStages = async () => {
       const { data } = await supabase
         .from("workflow_stages")
-        .select("id, display_order, title, color")
+        // is_final: decide se mover para esta coluna conclui a tarefa.
+        .select("id, display_order, title, color, is_final")
         .eq("project_id", projectId)
         .order("display_order");
       if (data) {
@@ -554,6 +559,20 @@ export const BacklogSection = ({
     const ids = Array.from(selectedIds);
     const updateData: Database['public']['Tables']['activities']['Update'] = { workflow_stage_id: targetStageId };
     if (assignee && assignee !== "__none__") updateData.assigned_to = assignee;
+
+    // `status` ACOMPANHA a coluna. Sem isto, mover em lote para "Concluída"
+    // gravava só o workflow_stage_id e o status ficava "pending" — a tarefa
+    // aparecia na coluna final com o título não riscado, e a contagem de
+    // concluídas ignorava. Medido em 11/08: 11 atividades nesse estado.
+    // O Kanban já fazia esse alinhamento ao arrastar; este caminho não.
+    const etapaDestino = allStages.find((s) => s.id === targetStageId);
+    if (etapaDestino) {
+      const ehFinal = (etapaDestino as { is_final?: boolean }).is_final === true;
+      updateData.status = ehFinal ? "completed" : "pending";
+      // completed_at só na conclusão; ao reabrir, limpa — manter a data numa
+      // tarefa que voltou ao fluxo faz o relatório contar entrega que não houve.
+      updateData.completed_at = ehFinal ? new Date().toISOString() : null;
+    }
     // EM LOTES: "selecionar todas" numa fase grande manda centenas de uuids
     // numa URL só, que o proxy corta em ~3,7 KB e devolve 502 — o usuário via
     // a ação falhar justamente quando selecionava muito. Ver lib/chunkedIn.

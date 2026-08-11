@@ -57,6 +57,11 @@ run 20260805140000 "supabase/migrations/20260805140000_activity_owner_can_edit.s
 run 20260807100000 "supabase/migrations/20260807100000_meeting_agenda_templates.sql" \
   "agenda_template  ·  pauta pronta por tipo de reunião"
 
+# 5) Conserta 11 atividades com status e coluna do Kanban discordando, e a
+#    coluna "Concluída" que ficou sem a flag is_final — a causa raiz delas.
+run 20260811100000 "supabase/migrations/20260811100000_alinhar_status_com_coluna.sql" \
+  "status alinhado à coluna  ·  some o 'riscado + Em Execução'"
+
 echo ""
 echo "══════════════════════════════════════════════════════════"
 echo "  VERIFICAÇÃO"
