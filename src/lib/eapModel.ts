@@ -71,7 +71,38 @@
  * achatada — a entrega deixava de estar dentro da fase e virava outra fase ao
  * lado dela.
  */
-export type EapKind = "fase" | "entrega" | "atividade" | "marco";
+export type EapKind = "projeto" | "fase" | "entrega" | "atividade" | "marco";
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * LINHA SINTÉTICA DE FASE
+ *
+ * Fases vivem na tabela `phases`, não em `activities`. O Cronograma monta uma
+ * linha em memória para cada fase, para que ela possa agrupar e indentar junto
+ * das atividades — com id "phase:<uuid>" e o sinalizador `__isPhaseRow`.
+ *
+ * Essa linha NÃO É UMA ATIVIDADE, e tratá-la como se fosse já produziu:
+ *
+ *   • o painel de edição abrindo com "# phase:d4" e "Criada em Invalid Date";
+ *   • o seletor de Tipo dizendo "não tem código EAP nem subitens" — porque
+ *     buscar subitens de um id que não existe devolve zero;
+ *   • e o pior: SALVAR não gravava nada. O update casa zero linhas, o
+ *     PostgREST não devolve erro, e o diálogo anunciava sucesso.
+ *
+ * As duas checagens são necessárias. O mapa `activityById` do Cronograma monta
+ * um stub com o id prefixado mas SEM o sinalizador, então testar só a flag
+ * deixaria passar o caso mais difícil de perceber.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** É uma linha de fase sintética (não existe em `activities`)? */
+export function isSyntheticPhaseRow(row: any): boolean {
+  return !!row?.__isPhaseRow || String(row?.id ?? "").startsWith("phase:");
+}
+
+/** O id real em `phases`, ou null se não for linha de fase. */
+export function phaseIdFromSyntheticRow(row: any): string | null {
+  const id = String(row?.id ?? "");
+  return id.startsWith("phase:") ? id.slice("phase:".length) : null;
+}
 
 /** Entrada mínima para resolver o papel de um item. */
 export interface EapItemLike {
@@ -98,15 +129,80 @@ export function eapLevel(wbsCode?: string | null): number | null {
   return parts.length;
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * QUAL NÍVEL É A FASE — o número que a convenção de numeração decide
+ *
+ * Hoje a EAP começa nas fases e o projeto fica FORA da numeração:
+ *
+ *   1        Fase
+ *   1.1      Entrega
+ *   1.1.1    Atividade
+ *
+ * A convenção alternativa (decidida em 11/08/2026, ainda não migrada) coloca o
+ * projeto no nível 1 e empurra tudo um degrau:
+ *
+ *   1        Projeto
+ *   1.1      Fase
+ *   1.1.1    Entrega
+ *   1.1.1.1  Atividade
+ *
+ * A auditoria de 11/08 achou esta regra escrita em QUATRO lugares independentes
+ * — `resolveEapKind`, `eapRoleForImport`, o painel de edição e o importador.
+ * Trocar o número exigia lembrar dos quatro, e esquecer um produziria uma tela
+ * discordando das outras sobre o papel do mesmo item: exatamente o defeito que
+ * já custou caro aqui.
+ *
+ * Agora é UM número. `eapIsFaseLevel` e `eapIsProjectLevel` são a única forma
+ * de perguntar, e a migração de convenção passa a ser a troca desta constante
+ * mais a renumeração dos dados.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Nível da EAP ocupado pela Fase.
+ *
+ * 2 desde 11/08/2026: o projeto ocupa o nível 1. Era 1 antes disso, com o
+ * projeto fora da numeração. EAPs antigas continuam legíveis — o que muda é o
+ * RÓTULO, e o botão "Renumerar EAP" (menu do Backlog) migra projeto a projeto.
+ */
+export const EAP_FASE_LEVEL = 2;
+
+/** O nível ocupado pelo projeto, quando ele está na numeração. Null se não está. */
+export const EAP_PROJECT_LEVEL: number | null =
+  EAP_FASE_LEVEL > 1 ? EAP_FASE_LEVEL - 1 : null;
+
+/** Este nível é o da Fase? */
+export function eapIsFaseLevel(level: number | null | undefined): boolean {
+  return level === EAP_FASE_LEVEL;
+}
+
+/** Este nível é o do projeto (a raiz que não é trabalho)? */
+export function eapIsProjectLevel(level: number | null | undefined): boolean {
+  return EAP_PROJECT_LEVEL !== null && level === EAP_PROJECT_LEVEL;
+}
+
+/**
+ * Código da RAIZ da EAP — "1" quando o projeto está na numeração, null quando
+ * não está.
+ *
+ * Existe para a geração automática saber de onde pendurar um item de topo. Sem
+ * isso o gerador emitia inteiros soltos ("1", "2", "3"), o que na convenção
+ * nova criaria um segundo projeto ao lado do primeiro.
+ *
+ * É sempre "1": um projeto tem uma raiz só, e ela não concorre com nada.
+ */
+export function eapRootCode(): string | null {
+  return EAP_PROJECT_LEVEL === null ? null : "1";
+}
+
 /**
  * Resolve o papel EAP EXIBIDO de um item.
  *
  * Ordem:
- *  1. is_milestone                    → Marco (vence sempre)
- *  2. tem wbs_code → nível 1          → Fase/Entrega
- *                    nível 2+         → Atividade
- *  3. sem wbs_code → agrupa           → Fase/Entrega
- *                    não agrupa       → Atividade
+ *  1. is_milestone                       → Marco (vence sempre)
+ *  2. tem wbs_code → nível da Fase       → Fase
+ *                    abaixo dela         → Entrega (agrupa) ou Atividade
+ *  3. sem wbs_code → agrupa              → Entrega
+ *                    não agrupa          → Atividade
  *
  * `hasChildren` só é consultado no caso 3, para não desfazer a regra de nível
  * em item importado que agrupa (ex.: "2.1" com subitens continua Atividade).
@@ -117,11 +213,16 @@ export function resolveEapKind(item: EapItemLike, hasChildren = false): EapKind 
   const t = (item.item_type || "").trim().toLowerCase();
   const agrupa = t === "fase" || t === "pacote" || hasChildren;
 
-  // COM código EAP: a posição manda. Só o nível 1 é Fase — do 1.1 em diante o
+  // COM código EAP: a posição manda. Só o nível da Fase é Fase — abaixo dela o
   // item está DENTRO de uma fase, então é Entrega (se agrupa) ou Atividade.
   const level = eapLevel(item.wbs_code);
   if (level !== null) {
-    if (level === 1) return "fase";
+    if (eapIsFaseLevel(level)) return "fase";
+    // O nível do projeto é PROJETO, não Fase. Chamá-lo de Fase foi um remendo
+    // meu para "alinhar" duas funções, e o resultado apareceu na tela: uma EAP
+    // com uma fase só era importada como TRÊS fases — o projeto e as duas fases
+    // de verdade, todos com o mesmo rótulo.
+    if (eapIsProjectLevel(level)) return "projeto";
     return agrupa ? "entrega" : "atividade";
   }
 
@@ -163,6 +264,7 @@ export function eapMilestoneBlockedReason(hasChildren: boolean): string | null {
 
 /** Rótulos canônicos para a UI. */
 export const EAP_LABELS: Record<EapKind, string> = {
+  projeto: "Projeto",
   fase: "Fase",
   entrega: "Entrega",
   atividade: "Atividade",
@@ -175,6 +277,7 @@ export const EAP_LABELS: Record<EapKind, string> = {
  * com palavras diferentes — e a divergência é o que confunde quem planeja.
  */
 export const EAP_HINTS: Record<EapKind, string> = {
+  projeto: "Raiz da EAP (nível 1). É o projeto inteiro — não se cria nem se edita aqui.",
   fase: "Nível 1 da EAP (1, 2, 3…). Agrupa entregas.",
   entrega: "Agrupador abaixo da fase (1.1, 1.2…). Contém atividades.",
   atividade: "Trabalho executável: vai ao Kanban, tem horas e responsável.",
@@ -224,7 +327,11 @@ export function eapRoleForImport(opts: {
   hasChildren: boolean;
   title: string;
 }): EapKind {
-  if (opts.depth === 1) return "fase";
+  // eapIsFaseLevel em vez de `depth === 1`: era a segunda cópia da regra de
+  // nível, e uma cópia que discorda das outras faz a mesma EAP ter papéis
+  // diferentes na importação e no Backlog.
+  if (eapIsProjectLevel(opts.depth)) return "projeto";
+  if (eapIsFaseLevel(opts.depth)) return "fase";
   if (opts.hasChildren) return "entrega";
   if (eapTitleDeclaresMilestone(opts.title)) return "marco";
   return "atividade";
@@ -264,11 +371,26 @@ export interface EapNodeLike extends EapItemLike {
 /**
  * Profundidade a partir da qual a interface avisa (sem impedir).
  *
- * A base já tem árvores de 6 níveis, então BLOQUEAR invalidaria o que existe e
- * — pior — impediria de mover justamente os itens que precisam ser consertados.
- * O aviso é orientação, não trava.
+ * O PMBOK não fixa número: decomponha até poder estimar custo e duração e
+ * designar um responsável. A literatura converge em 3 a 5 níveis de trabalho, e
+ * a regra 8/80 (pacote entre 8 e 80 horas) é o teste prático.
+ *
+ * O número aqui conta NÍVEIS DA ÁRVORE, então acompanha a convenção: quando o
+ * projeto entra na numeração, ele consome um nível que não é trabalho, e o
+ * orçamento de decomposição real fica um degrau abaixo. Somar EAP_PROJECT_LEVEL
+ * mantém o MESMO rigor nas duas convenções, em vez de apertar sozinho.
+ *
+ * Sem isso, uma EAP saudável — projeto → fase → entrega → atividade →
+ * subatividade — dispararia alerta sem nenhum excesso, e um aviso que aparece
+ * no caso normal é um aviso que as pessoas aprendem a ignorar.
+ *
+ * BLOQUEAR está fora de questão: a base já tem árvores de 6 níveis, e travar
+ * impediria de mover justamente os itens que precisam ser consertados.
  */
-export const EAP_DEPTH_WARN = 5;
+const EAP_DEPTH_WARN_TRABALHO = 5;
+
+export const EAP_DEPTH_WARN =
+  EAP_DEPTH_WARN_TRABALHO + (EAP_PROJECT_LEVEL ?? 0);
 
 export type EapMoveBlockReason = "self" | "cycle" | "milestone-parent" | "not-found" | "other-project";
 

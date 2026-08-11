@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
 import { EditActivityDialog } from "@/components/EditActivityDialog";
 import { ImportWBSDialog } from "@/components/ImportWBSDialog";
+import { RenumerarEapDialog } from "@/components/RenumerarEapDialog";
 import { ProjectCronogramaPanel } from "@/components/cronograma/ProjectCronogramaPanel";
 import { LessonsLearned } from "@/components/LessonsLearned";
 import { DocumentCenter } from "@/components/documentos/DocumentCenter";
@@ -36,7 +37,7 @@ import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, GanttChart, BookOpen, FileText, Flag, History,
-  ChevronRight, MoreHorizontal, Kanban, Users, AlertTriangle,
+  ChevronRight, MoreHorizontal, Kanban, Users, AlertTriangle, ListOrdered,
   Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
   NotebookPen, Search, X,
 } from "lucide-react";
@@ -61,7 +62,7 @@ import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
 import { buildAvatarLookupMap } from "@/lib/avatarLookup";
-import { eapShouldDemote } from "@/lib/eapModel";
+import { eapShouldDemote, isSyntheticPhaseRow } from "@/lib/eapModel";
 
 interface Project {
   id: string;
@@ -192,6 +193,7 @@ export default function ProjectDetailsPage() {
   const [listPriorityFilter, setListPriorityFilter] = useState("all");
   const [showAddActivity, setShowAddActivity] = useState(false);
   const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [showRenumerar, setShowRenumerar] = useState(false);
   const [createTaskStageId, setCreateTaskStageId] = useState<string | null>(null);
   const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
   const [createTaskParentId, setCreateTaskParentId] = useState<string | null>(null);
@@ -281,6 +283,13 @@ export default function ProjectDetailsPage() {
     activity: any,
     initialTab: "details" | "subtasks" | "attachments" | "comments" | "stories" | "history" = "details",
   ) => {
+    // Linha sintética de fase nunca é atividade. Além de abrir um painel que
+    // não corresponde a nada ("Criada em Invalid Date") e salvar sem gravar,
+    // ela DERROTAVA os dois guards abaixo: `phase_id` é nulo na montagem,
+    // então uma fase sob solicitação de mudança não era bloqueada, e
+    // `canMutateActivity` caía num `assigned_to` inexistente. O Cronograma já
+    // roteia a fase para o editor certo; isto é a rede embaixo.
+    if (isSyntheticPhaseRow(activity)) return;
     if (isProjectConcluded) {
       showProjectLockedToast("editar atividades");
       return;
@@ -1832,6 +1841,14 @@ export default function ProjectDetailsPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      {/* Renumerar fica no menu, não na barra: é ação rara e de
+                          mão única. Acima das destrutivas porque não é uma
+                          delas — muda códigos, não apaga nada. */}
+                      {canCreate && activities.length > 0 && (
+                        <DropdownMenuItem onClick={() => setShowRenumerar(true)}>
+                          <ListOrdered className="w-4 h-4 mr-2" /> Renumerar EAP…
+                        </DropdownMenuItem>
+                      )}
                       {phases.length > 0 && (
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
                           const ok = await appConfirm({
@@ -1943,6 +1960,13 @@ export default function ProjectDetailsPage() {
             projectLocked={isProjectConcluded}
           />
         )}
+        <RenumerarEapDialog
+          projectId={id!}
+          projectTitle={project?.title}
+          open={showRenumerar}
+          onOpenChange={setShowRenumerar}
+          onDataChanged={fetchProjectData}
+        />
         <QuickCreateActivity
           open={showQuickCreate}
           onOpenChange={setShowQuickCreate}

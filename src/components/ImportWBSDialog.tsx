@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package, AlertTriangle } from "lucide-react";
+import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package, AlertTriangle, FolderTree } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -10,7 +10,7 @@ import {
   splitColumns, pareceCabecalho, detectarColunas, lerLinha, statusPorDatas,
   type ColValues,
 } from "@/lib/wbsColumns";
-import { eapRoleForImport, eapToPersisted, type EapKind } from "@/lib/eapModel";
+import { eapRoleForImport, eapToPersisted, eapIsFaseLevel, type EapKind } from "@/lib/eapModel";
 
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
@@ -34,6 +34,9 @@ interface ImportWBSDialogProps {
 }
 
 const ROLE_META: Record<EapRole, { label: string; short: string; icon: JSX.Element; cls: string }> = {
+  // Projeto é a raiz. Aparece na prévia para a estrutura se ler inteira, mas
+  // não vira linha — o projeto já existe na tabela `projects`.
+  projeto:   { label: "Projeto",      short: "Proj.", icon: <FolderTree className="w-3 h-3" />, cls: "bg-foreground/10 text-foreground border-foreground/25" },
   fase:      { label: "Fase",         short: "Fase",  icon: <Layers className="w-3 h-3" />,  cls: "bg-primary/10 text-primary border-primary/30" },
   // Entrega agrupa como a Fase, mas está dentro dela — tom mais discreto para
   // a hierarquia se ler de relance na pré-visualização.
@@ -52,8 +55,8 @@ const fmtDia = (iso?: string) => {
 /**
  * Papel de cada nó. Duas perguntas independentes, que antes estavam coladas:
  *
- *   NÍVEL   diz o que o item É na EAP. Só o nível 1 é Fase — "1.1" não é outra
- *           fase, é uma ENTREGA dentro da fase 1.
+ *   NÍVEL   diz o que o item É na EAP. Só o nível da Fase (EAP_FASE_LEVEL) é
+ *           Fase — "1.1" não é outra fase, é uma ENTREGA dentro da fase 1.
  *   FUNÇÃO  diz se pode ter filhos. O trigger `eap_nesting_rule` (migration
  *           20260722160000, aplicada na VM) recusa folha com subitens.
  *
@@ -419,11 +422,18 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     if (tree.length === 0) return;
     setImporting(true);
     try {
-      // Nível 1 agrupador = "fase do projeto" (tabela phases). Agrupadores
-      // Com a regra por nível, "fase" só existe em depth 1 — os filtros abaixo
-      // são equivalentes a depth===1 / depth>1, e ficam explícitos assim.
-      const phases = tree.filter((n) => n.role === "fase" && n.depth === 1);
-      const nonPhase = tree.filter((n) => !(n.role === "fase" && n.depth === 1));
+      // A LINHA DO PROJETO NÃO É IMPORTADA. O nível 1 é o projeto, que já
+      // existe na tabela `projects` — criar uma atividade para ele produziria um
+      // item sem responsável, sem horas e que nunca conclui, duplicando o que o
+      // projeto já é. Colar uma EAP que começa em "1. NOME DO PROJETO" agora
+      // ignora essa linha em vez de virá-la uma fase.
+      const importaveis = tree.filter((n) => n.role !== "projeto");
+
+      // O agrupador no nível da Fase vai para a tabela `phases`; todo o resto
+      // vira linha em `activities`.
+      const ehFase = (n: TreeNode) => n.role === "fase" && eapIsFaseLevel(n.depth);
+      const phases = importaveis.filter(ehFase);
+      const nonPhase = importaveis.filter((n) => !ehFase(n));
 
       const { data: existingPhases } = await supabase
         .from("phases").select("display_order")
@@ -737,7 +747,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           <p className="text-[13px] text-muted-foreground mt-0.5">
             Cole sua estrutura em qualquer formato ou comece de um modelo.{" "}
             <span className="text-foreground">
-              Nível 1 vira Fase; do 1.1 em diante, Entrega se tiver subitens ou Atividade se não tiver.
+              O nível 1 é o próprio projeto e não é importado. <span className="font-mono">1.1</span> vira Fase,{" "}
+              <span className="font-mono">1.1.1</span> Entrega, e daí em diante Atividade.
               {" "}Para um <strong className="font-medium">Marco</strong>, comece o título com{" "}
               <code className="px-1 py-0.5 rounded bg-muted text-[12px] font-mono">Marco:</code>.
             </span>{" "}
@@ -791,17 +802,17 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 // no fim do próprio texto, deixando um degrau irregular no meio
                 // do bloco.
                 placeholder={[
-                  "1. Planejamento             ← nível 1 é Fase",
-                  "1.1 Levantar requisitos     ← agrupa: vira Entrega",
-                  "1.1.1 Entrevistar área      ← folha: vira Atividade",
-                  "1.2 Aprovar escopo          ← folha: vira Atividade",
-                  "1.3 Marco: escopo aprovado  ← vira Marco",
-                  "2. Execução",
-                  "2.1 Desenvolver",
+                  "1. Implantação do Serviço      ← o projeto: não é importado",
+                  "1.1 Iniciação e Planejamento   ← Fase",
+                  "1.1.1 Formalização do Projeto  ← agrupa: vira Entrega",
+                  "1.1.1.1 Elaborar TAP           ← folha: vira Atividade",
+                  "1.1.1.2 Marco: TAP aprovado    ← vira Marco",
+                  "1.2 Requisitos e Design        ← Fase",
+                  "1.2.1 Especificação            ← Entrega",
                   "",
                   "ou com bullets e recuo:",
-                  "• Planejamento",
-                  "   - Levantar requisitos",
+                  "• Iniciação",
+                  "   - Formalização",
                 ].join("\n")}
               />
             ) : (

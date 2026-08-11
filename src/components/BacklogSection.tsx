@@ -795,6 +795,9 @@ export const BacklogSection = ({
   ];
 
   const KIND_META: Record<Kind, { label: string; icon: JSX.Element; cls: string }> = {
+    // Projeto é a raiz virtual: não deveria aparecer como item, mas o mapa
+    // precisa cobrir todos os papéis — e EAP ainda não renumerada tem nível 1.
+    projeto: { label: "Projeto", icon: <Layers className="w-3 h-3" />, cls: "text-foreground bg-foreground/10 border-foreground/25" },
     fase: { label: "Fase", icon: <Layers className="w-3 h-3" />, cls: "text-primary bg-primary/10 border-primary/30" },
     // Entrega agrupa como a Fase, mas está DENTRO dela — tom mais discreto para
     // a hierarquia se ler de relance: a fase é o marco visual, a entrega é o

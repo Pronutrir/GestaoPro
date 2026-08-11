@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useMemo, useState, useCallback, Fragment, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { resolveEapKind } from "@/lib/eapModel";
+import { resolveEapKind, phaseIdFromSyntheticRow, isSyntheticPhaseRow } from "@/lib/eapModel";
+import { EditPhaseDialog } from "@/components/EditPhaseDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { computeActivityProgress } from "@/lib/activityProgress";
 import {
@@ -805,7 +806,20 @@ export function ProjectCronogramaPanel({
    * atividades, sem as fases.
    */
   const isGroupRow = useCallback(
-    (a: any) => resolveEapKind(a, (childrenByParent.get(a?.id) || []).length > 0) === "fase",
+    (a: any) => {
+      // A LINHA DE FASE JÁ SABE O QUE É. Ela é sintética, montada a partir da
+      // tabela `phases` — perguntar seu papel a `resolveEapKind` era dar chance
+      // de a resposta ser "não".
+      //
+      // E era: a linha recebe `wbs_code: p.wbs_code ?? null`, e a coluna
+      // `phases.wbs_code` não existe em toda base (migration de maio ainda
+      // pendente em algumas VMs). Sem código, `resolveEapKind` cai no fallback
+      // por função e devolve "entrega" — então a fase importada aparecia como
+      // atividade no cronograma, sem agrupar nada. O `__isPhaseRow` é a
+      // resposta direta, sem depender de uma coluna que pode não existir.
+      if (a?.__isPhaseRow) return true;
+      return resolveEapKind(a, (childrenByParent.get(a?.id) || []).length > 0) === "fase";
+    },
     [childrenByParent],
   );
 
@@ -1023,8 +1037,23 @@ export function ProjectCronogramaPanel({
     activities.forEach(a => {
       if (a.wbs_code) m.set(a.id, String(a.wbs_code));
     });
+    // AS FASES TAMBÉM. Elas vivem na tabela `phases` e entram no cronograma
+    // como linhas sintéticas com id "phase:<uuid>" — ausentes de `activities`,
+    // então a coluna EAP mostrava "—" justamente na linha que ancora a
+    // numeração. O código aparecia só grudado no título, como texto.
+    //
+    // O fallback pelo TÍTULO não é enfeite: `phases.wbs_code` não existe em
+    // toda base (migration de maio ainda pendente em algumas VMs), e nesse caso
+    // a importação grava o código no título — "1.1 Iniciação e Planejamento".
+    // Ler dali é o que faz a coluna funcionar onde a coluna do banco falta.
+    (phases || []).forEach((p: any) => {
+      const doCampo = (p?.wbs_code ?? "").toString().trim();
+      const doTitulo = (p?.title ?? "").toString().match(/^\s*(\d+(?:\.\d+)*)\b/)?.[1];
+      const code = doCampo || doTitulo;
+      if (code) m.set(`phase:${p.id}`, code);
+    });
     return m;
-  }, [activities]);
+  }, [activities, phases]);
 
   /**
    * ID curto da atividade — primeiros 7 caracteres do UUID (estável,
@@ -1035,8 +1064,13 @@ export function ProjectCronogramaPanel({
   const indexById = useMemo(() => {
     const m = new Map<string, string>();
     activities.forEach(a => m.set(a.id, shortIdOf(a.id)));
+    // A fase não tem id de atividade. Sem esta entrada, o fallback rodava
+    // `shortIdOf("phase:d4f2-…")` e imprimia "phase:d" na coluna ID — o
+    // "# phase:d4" que apareceu na tela. Fase não tem código de tarefa: o
+    // traço diz isso, o lixo não dizia nada.
+    (phases || []).forEach((p: any) => m.set(`phase:${p.id}`, "—"));
     return m;
-  }, [activities]);
+  }, [activities, phases]);
 
   /**
    * Linhas finais aplicadas ao Cronograma (tabela e Gantt).
@@ -1158,9 +1192,27 @@ export function ProjectCronogramaPanel({
     router.push(`/project/${pid}?tab=dependencies`);
   };
 
-  const openFromCronograma = useCallback((activity: any) => {
-    onEditActivity?.(activity);
-  }, [onEditActivity]);
+  /** Fase aberta para edição — vem da linha sintética do cronograma. */
+  const [editingPhase, setEditingPhase] = useState<any | null>(null);
+
+  /**
+   * Abre o editor certo para a linha clicada.
+   *
+   * A linha de fase é sintética (id "phase:<uuid>", montada a partir de
+   * `phases`) e NÃO existe em `activities`. Mandá-la ao editor de atividade
+   * abria "# phase:d4 · Criada em Invalid Date" — e salvar não gravava nada:
+   * o update casava zero linhas, o PostgREST não devolvia erro e o diálogo
+   * anunciava sucesso. Agora a fase vai para o editor de fase.
+   */
+  const openFromCronograma = useCallback((row: any) => {
+    const phaseId = phaseIdFromSyntheticRow(row);
+    if (phaseId) {
+      const real = (phases || []).find((p: any) => p.id === phaseId);
+      if (real) setEditingPhase(real);
+      return;
+    }
+    onEditActivity?.(row);
+  }, [onEditActivity, phases]);
 
   // ===== Redimensionar a coluna "Atividade" arrastando a divisória =====
   // Substitui o antigo slider da toolbar: o usuário puxa a borda direita da
@@ -1196,6 +1248,12 @@ export function ProjectCronogramaPanel({
 
   /** Grava start_date/end_date de uma atividade e recarrega. */
   const saveBarDates = useCallback(async (id: string, startISO: string, endISO: string) => {
+    // Fase não se arrasta: as datas dela derivam dos filhos. Hoje a barra da
+    // fase nem é arrastável, então isto não é alcançável — mas um `update`
+    // com id "phase:…" casaria zero linhas SEM erro, e a barra voltaria
+    // sozinha ao lugar sem explicação. A guarda mantém isso verdadeiro se
+    // alguém tornar a barra de grupo arrastável depois.
+    if (String(id).startsWith("phase:")) return;
     const { error } = await supabase
       .from("activities")
       .update({ start_date: startISO, end_date: endISO })
@@ -1474,6 +1532,24 @@ export function ProjectCronogramaPanel({
     container.scrollTo({ left: Math.max(0, idx * DAY_W - 200), behavior: "smooth" });
   };
 
+  /**
+   * Título sem o código EAP repetido na frente.
+   *
+   * Quando `phases.wbs_code` não existe, a importação grava o código NO título
+   * ("1.1 Iniciação e Planejamento"). Com a coluna EAP mostrando o mesmo
+   * código, ele aparecia duas vezes na mesma linha. Só remove quando o código
+   * do título é EXATAMENTE o que a coluna exibe — assim um título que
+   * legitimamente começa com número não é mutilado.
+   */
+  const tituloSemCodigo = useCallback((a: any) => {
+    const titulo = (a?.title ?? "").toString();
+    const naColuna = wbsById.get(a?.id);
+    if (!naColuna) return titulo;
+    const m = titulo.match(/^\s*(\d+(?:\.\d+)*)\s*[-–—.)]?\s+(.*)$/);
+    if (!m || m[1] !== naColuna) return titulo;
+    return m[2] || titulo;
+  }, [wbsById]);
+
   /** Renderiza UMA célula da tabela conforme a coluna. */
   const renderCell = (k: ColKey, ctx: any) => {
     const { a, idx, mock, id, dur, progress, preds, responsible, depth, isOverdue } = ctx;
@@ -1518,7 +1594,7 @@ export function ProjectCronogramaPanel({
               className="font-medium truncate max-w-[480px] text-left hover:underline cursor-pointer"
               title="Abrir edição da atividade"
             >
-              {a.title}
+              {tituloSemCodigo(a)}
             </button>
           </div>
         </td>
@@ -3024,6 +3100,16 @@ export function ProjectCronogramaPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Editor da FASE. O cronograma mostra fases como linhas, então clicar
+          numa delas precisa abrir o editor da tabela `phases` — não o de
+          atividade, onde a gravação não encontrava a linha. */}
+      <EditPhaseDialog
+        phase={editingPhase}
+        open={!!editingPhase}
+        onOpenChange={(v) => { if (!v) setEditingPhase(null); }}
+        onSaved={() => { setEditingPhase(null); fetchData(); }}
+      />
     </div>
   );
 }
