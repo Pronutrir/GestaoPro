@@ -1,6 +1,27 @@
 /**
  * Modelo EAP/WBS do GestãoPro — FONTE ÚNICA DA VERDADE.
  *
+ * ============================================================================
+ * O QUE O PMI DEFINE (estudado em 11/08/2026)
+ *
+ * O PMBOK define pacote de trabalho como "o trabalho definido no NÍVEL MAIS
+ * BAIXO da estrutura analítica, para o qual custo e duração podem ser
+ * estimados e gerenciados". E a regra dos 100% diz que a soma do trabalho no
+ * nível filho é 100% do trabalho do pai.
+ *
+ * A consequência prática: Fase, Entrega e Pacote são POSIÇÕES na árvore, não
+ * tipos que alguém escolhe. O mesmo item vira "pacote de trabalho" ou deixa de
+ * ser conforme se acrescentem subitens abaixo dele. Só o MARCO é decisão real
+ * de quem planeja — é o único que a estrutura não revela sozinha.
+ *
+ * Por isso o diálogo de edição MOSTRA o papel em vez de perguntá-lo: pedir ao
+ * usuário o que o sistema já sabe abria espaço para respostas que contradizem
+ * a árvore, e era a origem da confusão entre os quatro nomes.
+ *
+ * NOMENCLATURA: chamamos de "Atividade" o que o PMI chama de "pacote de
+ * trabalho". É o termo que a equipe lê há meses, e o PMBOK não exige o dele.
+ * ============================================================================
+ *
  * Alinhado ao PMBOK/WBS (decomposição orientada a entregas, profundidade livre)
  * e simplificado para o uso real da plataforma: a INTERFACE trabalha com apenas
  * 3 papéis, evitando a ambiguidade "Pacote × Atividade" que confundia.

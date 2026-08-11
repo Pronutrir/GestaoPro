@@ -388,8 +388,61 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       // seguir. Avisadas no fim: silenciar faria o item nascer sem o campo sem
       // ninguém saber (ex.: sem código EAP, que define o papel Fase/Atividade).
       const droppedCols = new Set<string>();
+
+      /**
+       * FASES QUE JÁ EXISTEM no projeto, indexadas pelo código EAP.
+       *
+       * O mapa era montado só com as fases criadas NESTA importação. Importar
+       * a fase 1 com os itens 1.1 e 1.2 e depois importar só o 1.3 deixava o
+       * mapa vazio: o 1.3 não achava a fase 1 e nascia SEM FASE, solto no topo.
+       * Medido em 11/08: 14 itens já estão assim no banco.
+       *
+       * O código vem de `wbs_code` quando a coluna existe; senão, do prefixo do
+       * título ("1 Iniciação" → "1"), que é onde ele aparece nas bases sem a
+       * migration. Sem esse fallback, a correção não valeria justamente nos
+       * ambientes onde o problema é mais provável.
+       */
       const phaseIdMap: Record<string, string> = {};
+      {
+        const { data: jaExistem } = await supabase
+          .from("phases")
+          .select("id, title, wbs_code")
+          .eq("project_id", projectId)
+          .eq("is_trashed", false);
+
+        for (const f of ((jaExistem as any[]) || [])) {
+          const codigo =
+            (f.wbs_code || "").trim() ||
+            // Prefixo numérico do título: "1 Iniciação", "1. Iniciação",
+            // "1.0 — Fundação". Sem match, a fase fica fora do mapa e o
+            // comportamento é o de antes — nunca pior.
+            (String(f.title || "").match(/^\s*(\d+(?:\.\d+)*)\b/)?.[1] ?? "");
+          if (!codigo) continue;
+          // Normaliza zeros decorativos: "1.0" e "1" são a mesma fase, e a
+          // planilha varia entre os dois formatos.
+          const partes = codigo.split(".");
+          while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+          const chave = partes.join(".");
+          // Primeira vence: se houver duas fases com o mesmo código (dado
+          // antigo), reaproveitar sempre a mesma é melhor que alternar.
+          if (!phaseIdMap[chave]) phaseIdMap[chave] = f.id;
+        }
+      }
+
       for (const phase of phases) {
+        // A planilha trouxe uma fase que JÁ EXISTE: reaproveita em vez de criar
+        // uma segunda com o mesmo código. Sem isto, reimportar a fase 1 para
+        // acrescentar um item duplicava a fase e dividia a EAP em duas.
+        const chaveExistente = (() => {
+          const partes = phase.code.split(".");
+          while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+          return partes.join(".");
+        })();
+        if (phaseIdMap[chaveExistente]) {
+          phaseIdMap[phase.code] = phaseIdMap[chaveExistente];
+          continue;
+        }
+
         const base: Record<string, any> = {
           project_id: projectId,
           // Título limpo quando há wbs_code: o código vive na coluna própria.
@@ -431,11 +484,26 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
       const codeIdMap: Record<string, string> = {};
       const phaseOrderCounter: Record<string, number> = {};
+      /**
+       * A fase de um item é a do ancestral mais próximo que exista no mapa.
+       *
+       * O mapa agora inclui as fases JÁ EXISTENTES no projeto (ver acima), não
+       * só as criadas nesta importação — é o que faz "1.3" achar a fase 1
+       * quando ela veio de uma importação anterior.
+       *
+       * Testa o próprio código também (`len = parts.length`): uma fase pode ser
+       * importada junto com seus filhos, e o item "1" precisa achar a fase "1".
+       */
       const findPhaseId = (node: TreeNode): string | null => {
         const parts = node.code.split(".");
-        for (let len = parts.length - 1; len >= 1; len--) {
+        for (let len = parts.length; len >= 1; len--) {
           const ancestor = parts.slice(0, len).join(".");
           if (phaseIdMap[ancestor]) return phaseIdMap[ancestor];
+          // Zeros decorativos: "1.0" no mapa é a mesma fase que "1".
+          const semZeros = [...parts.slice(0, len)];
+          while (semZeros.length > 1 && semZeros[semZeros.length - 1] === "0") semZeros.pop();
+          const chave = semZeros.join(".");
+          if (chave !== ancestor && phaseIdMap[chave]) return phaseIdMap[chave];
         }
         return null;
       };

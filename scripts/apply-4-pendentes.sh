@@ -62,6 +62,11 @@ run 20260807100000 "supabase/migrations/20260807100000_meeting_agenda_templates.
 run 20260811100000 "supabase/migrations/20260811100000_alinhar_status_com_coluna.sql" \
   "status alinhado à coluna  ·  some o 'riscado + Em Execução'"
 
+# 6) Liga as folhas que ficaram sem fase ao agrupador cujo código é prefixo do
+#    delas. Só o caso inequívoco — ver o cabeçalho da migration.
+run 20260811120000 "supabase/migrations/20260811120000_adotar_atividades_orfas.sql" \
+  "atividades órfãs adotadas pelo agrupador correspondente"
+
 echo ""
 echo "══════════════════════════════════════════════════════════"
 echo "  VERIFICAÇÃO"
