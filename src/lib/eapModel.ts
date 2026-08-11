@@ -126,8 +126,14 @@ export function eapLevel(wbsCode?: string | null): number | null {
  * mais a renumeração dos dados.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-/** Nível da EAP ocupado pela Fase. 1 enquanto o projeto está fora da numeração. */
-export const EAP_FASE_LEVEL = 1;
+/**
+ * Nível da EAP ocupado pela Fase.
+ *
+ * 2 desde 11/08/2026: o projeto ocupa o nível 1. Era 1 antes disso, com o
+ * projeto fora da numeração. EAPs antigas continuam legíveis — o que muda é o
+ * RÓTULO, e o botão "Renumerar EAP" (menu do Backlog) migra projeto a projeto.
+ */
+export const EAP_FASE_LEVEL = 2;
 
 /** O nível ocupado pelo projeto, quando ele está na numeração. Null se não está. */
 export const EAP_PROJECT_LEVEL: number | null =
@@ -141,6 +147,20 @@ export function eapIsFaseLevel(level: number | null | undefined): boolean {
 /** Este nível é o do projeto (a raiz que não é trabalho)? */
 export function eapIsProjectLevel(level: number | null | undefined): boolean {
   return EAP_PROJECT_LEVEL !== null && level === EAP_PROJECT_LEVEL;
+}
+
+/**
+ * Código da RAIZ da EAP — "1" quando o projeto está na numeração, null quando
+ * não está.
+ *
+ * Existe para a geração automática saber de onde pendurar um item de topo. Sem
+ * isso o gerador emitia inteiros soltos ("1", "2", "3"), o que na convenção
+ * nova criaria um segundo projeto ao lado do primeiro.
+ *
+ * É sempre "1": um projeto tem uma raiz só, e ela não concorre com nada.
+ */
+export function eapRootCode(): string | null {
+  return EAP_PROJECT_LEVEL === null ? null : "1";
 }
 
 /**
@@ -167,6 +187,12 @@ export function resolveEapKind(item: EapItemLike, hasChildren = false): EapKind 
   const level = eapLevel(item.wbs_code);
   if (level !== null) {
     if (eapIsFaseLevel(level)) return "fase";
+    // Item ACIMA da fase, no nível do projeto. Não deveria existir como linha —
+    // o projeto é virtual — mas existe em EAP ainda não renumerada, e antes o
+    // fallback o rotulava "Entrega": um item que agrupa fases apresentado como
+    // algo que vive dentro de uma. Chamá-lo de Fase é o menos errado; ele
+    // agrupa, e é o que era antes da mudança de convenção.
+    if (eapIsProjectLevel(level)) return "fase";
     return agrupa ? "entrega" : "atividade";
   }
 
@@ -272,7 +298,11 @@ export function eapRoleForImport(opts: {
   // eapIsFaseLevel em vez de `depth === 1`: era a segunda cópia da regra de
   // nível, e uma cópia que discorda das outras faz a mesma EAP ter papéis
   // diferentes na importação e no Backlog.
-  if (eapIsFaseLevel(opts.depth)) return "fase";
+  //
+  // O nível do projeto entra junto pela mesma razão: `resolveEapKind` o trata
+  // como agrupador, e um teste comparando as duas pegou a divergência — a
+  // importação diria "Entrega" para o que o Backlog exibiria como "Fase".
+  if (eapIsFaseLevel(opts.depth) || eapIsProjectLevel(opts.depth)) return "fase";
   if (opts.hasChildren) return "entrega";
   if (eapTitleDeclaresMilestone(opts.title)) return "marco";
   return "atividade";
