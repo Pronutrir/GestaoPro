@@ -7,7 +7,7 @@
 // misto, que um seletor "paralelo ou sequencial" não resolveria.
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -190,16 +190,34 @@ export function StartFlowDialog({ open, onOpenChange, documentName, people, onCo
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
+          {/* Prazo e Recado deixam de dividir a linha: o prazo é uma data curta
+              e o recado é texto livre, que ficava com metade da largura e uma
+              linha só — quem escrevia mais que "revisar até sexta" perdia o
+              começo da frase de vista. O prazo agora ocupa a largura que precisa
+              e o recado fica com a linha inteira, em textarea. */}
+          <div className="space-y-3">
+            <div className="space-y-1.5 max-w-[220px]">
               <Label className="text-xs">Prazo (opcional)</Label>
               <DateField value={dueDate} onChange={setDueDate} />
               <p className="text-[11px] text-muted-foreground">Sinaliza atraso; não encerra sozinho.</p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Recado (opcional)</Label>
-              <Input value={message} onChange={(e) => setMessage(e.target.value)}
-                placeholder="Ex.: revisar até sexta" />
+              <Textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={3}
+                maxLength={500}
+                placeholder="Ex.: revisar até sexta, atenção à cláusula 4"
+                className="resize-y min-h-[64px]"
+              />
+              {/* Contador só perto do limite: mostrar "0/500" desde o começo
+                  sugere uma cota a preencher. */}
+              {message.length > 400 && (
+                <p className="text-[11px] text-muted-foreground text-right tabular-nums">
+                  {message.length}/500
+                </p>
+              )}
             </div>
           </div>
         </div>

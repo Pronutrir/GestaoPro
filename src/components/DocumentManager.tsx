@@ -5,7 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X, Send, Clock, CheckCircle2, XCircle, Paperclip, Search, FilePlus, ChevronsUpDown, Check } from "lucide-react";
+import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X, Send, Clock, CheckCircle2, XCircle, Paperclip, Search, FilePlus, ChevronsUpDown, Check, MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command, CommandInput, CommandList, CommandEmpty, CommandItem, CommandGroup,
@@ -750,15 +754,21 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                                 setActivityPickerOpen(false);
                                 setActivityQuery("");
                               }}
-                              className="gap-2"
+                              className="gap-2 text-[13px] py-2"
                             >
+                              {/* Badge com fundo próprio, não texto solto: o item
+                                  selecionado usa bg-primary sólido, e um
+                                  `text-muted-foreground` fixo desaparecia no
+                                  azul — o código EAP ficava invisível justamente
+                                  na linha em foco. `currentColor` herda a cor do
+                                  item, então funciona nos dois estados. */}
                               {a.wbs_code && (
-                                <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                                <span className="font-mono text-[11px] shrink-0 rounded px-1.5 py-0.5 border border-current/25 bg-current/10 tabular-nums">
                                   {a.wbs_code}
                                 </span>
                               )}
                               <span className="truncate flex-1">{a.title}</span>
-                              {a.id === form.activity_id && <Check className="w-4 h-4 text-primary shrink-0" />}
+                              {a.id === form.activity_id && <Check className="w-4 h-4 shrink-0" />}
                             </CommandItem>
                           ))}
                         </CommandGroup>
@@ -821,7 +831,21 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                   <FileText className="w-5 h-5 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm text-foreground truncate">{doc.file_name}</p>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className="font-medium text-sm text-foreground truncate">{doc.file_name}</p>
+                    {/* Selo de versão: sem ele, "enviar nova versão" gravava o
+                        histórico e nada na tela dizia que ele existia. Só
+                        aparece a partir da v2 — "v1" em tudo seria ruído. */}
+                    {(doc.version ?? 1) > 1 && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] shrink-0 font-mono border-primary/40 text-primary"
+                        title={`Versão ${doc.version}. As anteriores ficam no histórico.`}
+                      >
+                        v{doc.version}
+                      </Badge>
+                    )}
+                  </div>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {doc.file_type && <Badge variant="outline" className="text-xs">{doc.file_type}</Badge>}
                     {doc.phase_id && (
@@ -900,43 +924,50 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                   onClick={() => void openDocument(doc)}>
                   <ExternalLink className="w-4 h-4" />
                 </Button>
+                {/* Menu com RÓTULOS, não três ícones soltos.
+                    "Enviar nova versão" era um FilePlus sem texto entre outros
+                    dois ícones parecidos — e tinha ZERO uso em 34 documentos.
+                    O recurso resolve um problema real (editar muda o registro no
+                    lugar, o que é errado depois de alguém assinar), então o
+                    problema era descoberta, não relevância. */}
                 {canManageProject && (
-                  <>
-                    {/* Nova versão: substitui mantendo a anterior no histórico.
-                        Editar muda o registro no lugar — o que é errado depois
-                        de alguém já ter assinado aquela versão. */}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8"
-                      title="Enviar nova versão (a atual vira histórico)"
-                      onClick={() => {
-                        setNovaVersaoDe(doc);
-                        setEditingId(null);
-                        setForm({ ...emptyForm, file_name: doc.file_name, description: doc.description ?? "" });
-                        setUpload(null);
-                        setShowForm(true);
-                      }}
-                    >
-                      <FilePlus className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8"
-                      onClick={() => startEdit(doc)}
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 text-destructive"
-                      onClick={() => handleDelete(doc.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        title="Ações do documento"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setNovaVersaoDe(doc);
+                          setEditingId(null);
+                          setForm({ ...emptyForm, file_name: doc.file_name, description: doc.description ?? "" });
+                          setUpload(null);
+                          setShowForm(true);
+                        }}
+                      >
+                        <FilePlus className="w-3.5 h-3.5 mr-2" />
+                        Enviar nova versão
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => startEdit(doc)}>
+                        <Pencil className="w-3.5 h-3.5 mr-2" /> Editar dados
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                        onSelect={(e) => { e.preventDefault(); handleDelete(doc.id); }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </div>
             </div>
