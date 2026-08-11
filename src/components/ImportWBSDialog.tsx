@@ -10,7 +10,7 @@ import {
   splitColumns, pareceCabecalho, detectarColunas, lerLinha, statusPorDatas,
   type ColValues,
 } from "@/lib/wbsColumns";
-import { eapRoleForImport, eapToPersisted, type EapKind } from "@/lib/eapModel";
+import { eapRoleForImport, eapToPersisted, eapIsFaseLevel, type EapKind } from "@/lib/eapModel";
 
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
@@ -52,8 +52,8 @@ const fmtDia = (iso?: string) => {
 /**
  * Papel de cada nó. Duas perguntas independentes, que antes estavam coladas:
  *
- *   NÍVEL   diz o que o item É na EAP. Só o nível 1 é Fase — "1.1" não é outra
- *           fase, é uma ENTREGA dentro da fase 1.
+ *   NÍVEL   diz o que o item É na EAP. Só o nível da Fase (EAP_FASE_LEVEL) é
+ *           Fase — "1.1" não é outra fase, é uma ENTREGA dentro da fase 1.
  *   FUNÇÃO  diz se pode ter filhos. O trigger `eap_nesting_rule` (migration
  *           20260722160000, aplicada na VM) recusa folha com subitens.
  *
@@ -419,11 +419,13 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     if (tree.length === 0) return;
     setImporting(true);
     try {
-      // Nível 1 agrupador = "fase do projeto" (tabela phases). Agrupadores
-      // Com a regra por nível, "fase" só existe em depth 1 — os filtros abaixo
-      // são equivalentes a depth===1 / depth>1, e ficam explícitos assim.
-      const phases = tree.filter((n) => n.role === "fase" && n.depth === 1);
-      const nonPhase = tree.filter((n) => !(n.role === "fase" && n.depth === 1));
+      // O agrupador no nível da Fase vai para a tabela `phases`; todo o resto
+      // vira linha em `activities`. Era a quarta cópia de `depth === 1` — e a
+      // mais perigosa: se a convenção mudasse sem tocar aqui, o importador
+      // criaria uma fase para o PROJETO e nenhuma para as fases de verdade.
+      const ehFase = (n: TreeNode) => n.role === "fase" && eapIsFaseLevel(n.depth);
+      const phases = tree.filter(ehFase);
+      const nonPhase = tree.filter((n) => !ehFase(n));
 
       const { data: existingPhases } = await supabase
         .from("phases").select("display_order")

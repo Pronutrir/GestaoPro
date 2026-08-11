@@ -18,7 +18,7 @@ import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, 
 import {
   eapCanMoveInto, eapCanGroup, eapDescendantIds, eapShouldDemote,
   eapToPersisted, eapLevel, resolveEapKind, EAP_LABELS, EAP_HINTS,
-  eapMilestoneBlockedReason,
+  eapMilestoneBlockedReason, eapIsFaseLevel, EAP_FASE_LEVEL,
   type EapKind, type EapNodeLike,
 } from "@/lib/eapModel";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -1885,10 +1885,15 @@ export const EditActivityDialog = ({
                      * senão ela concordaria sempre consigo mesma e nunca
                      * avisaria nada.
                      */
+                    // eapIsFaseLevel em vez de `nivel === 1`: esta era a
+                    // terceira cópia da regra. O texto também sai da constante,
+                    // senão a mensagem seguiria dizendo "nível 1" depois de a
+                    // convenção mudar — e explicar errado é pior que não explicar.
                     const nivel = eapLevel(formData.wbs_code);
+                    const ehNivelFase = eapIsFaseLevel(nivel);
                     const papelSugerido: EapKind = formData.is_milestone && !hasSubActivities
                       ? "marco"
-                      : nivel === 1
+                      : ehNivelFase
                         ? "fase"
                         : hasSubActivities
                           ? "entrega"
@@ -1896,12 +1901,12 @@ export const EditActivityDialog = ({
                     const motivoSugerido =
                       papelSugerido === "marco"
                         ? "está marcado como ponto no tempo"
-                        : nivel === 1
-                          ? `o código ${formData.wbs_code?.trim()} é de nível 1`
+                        : ehNivelFase
+                          ? `o código ${formData.wbs_code?.trim()} é de nível ${EAP_FASE_LEVEL}`
                           : hasSubActivities
                             ? `agrupa ${ownSubActivities.length} subitem(ns)`
                             : nivel
-                              ? `o código ${formData.wbs_code?.trim()} está abaixo do nível 1 e não agrupa`
+                              ? `o código ${formData.wbs_code?.trim()} está abaixo do nível ${EAP_FASE_LEVEL} e não agrupa`
                               : "não tem código EAP nem subitens";
 
                     /**
