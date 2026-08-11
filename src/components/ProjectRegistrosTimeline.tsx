@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatarDiaMesMisto, parseDataOuInstante } from "@/lib/dataLocal";
 import {
   CalendarDays, FileText, Lightbulb, ListTodo, Inbox, ArrowUpRight,
 } from "lucide-react";
@@ -182,7 +183,11 @@ export const ProjectRegistrosTimeline = ({ projectId }: { projectId: string }) =
   const porMes = useMemo(() => {
     const grupos = new Map<string, Registro[]>();
     for (const r of visiveis) {
-      const d = new Date(r.data);
+      // meeting_date é coluna `date`: lido como instante, uma reunião do dia 1º
+      // caía no mês ANTERIOR aqui no agrupamento.
+      // r.data é misto: meeting_date (data pura) ou created_at (timestamp). Ver
+      // parseDataOuInstante — tratar os dois igual erraria um dos lados.
+      const d = parseDataOuInstante(r.data);
       const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const arr = grupos.get(chave) || [];
       arr.push(r);
@@ -257,7 +262,7 @@ export const ProjectRegistrosTimeline = ({ projectId }: { projectId: string }) =
                     className="flex items-center gap-2.5 px-3 py-2 border-b border-border/60 last:border-b-0 hover:bg-muted/30 transition-colors group"
                   >
                     <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 w-[42px]">
-                      {new Date(r.data).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                      {formatarDiaMesMisto(r.data)}
                     </span>
                     <span className={cn("inline-flex items-center gap-1 h-[18px] px-1.5 rounded border text-[10px] font-medium shrink-0", meta.cls)}>
                       {meta.icon}{meta.label}

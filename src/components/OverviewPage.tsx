@@ -41,6 +41,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { MinhasPendencias } from '@/components/MinhasPendencias';
 import { cn } from '@/lib/utils';
+import { diasAte, estaAtrasado, formatarDataBR } from '@/lib/dataLocal';
 
 interface Project {
   id: string;
@@ -247,10 +248,6 @@ export function OverviewPage() {
   const completedActivities = activities.filter((activity) => activity.status === 'completed').length;
   const taskCompletionRate = totalActivities > 0 ? (completedActivities / totalActivities) * 100 : 0;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-
   // Escopo dos indicadores: TODAS as atividades do que a pessoa enxerga.
   //
   // Havia um alternador "Minhas / Todos os projetos" que abria em "Minhas" —
@@ -260,13 +257,13 @@ export function OverviewPage() {
   const escopo = activities;
 
   const overdueActivities = escopo.filter(
-    (activity) => activity.status !== 'completed' && activity.end_date && new Date(activity.end_date) < today,
+    (activity) => activity.status !== 'completed' && estaAtrasado(activity.end_date),
   );
   const upcomingDeadlines = escopo.filter((activity) => {
-    if (activity.status === 'completed' || !activity.end_date) return false;
-    const endDate = new Date(activity.end_date);
-    const diff = (endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-    return diff >= 0 && diff <= 7;
+    if (activity.status === 'completed') return false;
+    const dias = diasAte(activity.end_date);
+    // Sem prazo não entra na janela; `diasAte` devolve null nesse caso.
+    return dias !== null && dias >= 0 && dias <= 7;
   });
 
   const highPriorityPending = escopo.filter(
@@ -454,9 +451,9 @@ export function OverviewPage() {
                   <div className="max-h-[300px] space-y-2 overflow-y-auto">
                     {overdueActivities.slice(0, 15).map((activity) => {
                       const project = projects.find((item) => item.id === activity.project_id);
-                      const daysOverdue = Math.floor(
-                        (today.getTime() - new Date(activity.end_date!).getTime()) / (1000 * 60 * 60 * 24),
-                      );
+                      // `diasAte` já vem negativo para o que venceu; aqui o rótulo
+                      // mostra o atraso em positivo.
+                      const daysOverdue = -diasAte(activity.end_date)!;
                       return (
                         <div
                           key={activity.id}
@@ -488,9 +485,7 @@ export function OverviewPage() {
                   <div className="max-h-[300px] space-y-2 overflow-y-auto">
                     {upcomingDeadlines.slice(0, 15).map((activity) => {
                       const project = projects.find((item) => item.id === activity.project_id);
-                      const daysLeft = Math.floor(
-                        (new Date(activity.end_date!).getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-                      );
+                      const daysLeft = diasAte(activity.end_date)!;
                       return (
                         <div
                           key={activity.id}
@@ -584,7 +579,7 @@ export function OverviewPage() {
                         )}
                         {activity.end_date && (
                           <span className="whitespace-nowrap text-xs text-muted-foreground">
-                            {new Date(activity.end_date).toLocaleDateString('pt-BR')}
+                            {formatarDataBR(activity.end_date)}
                           </span>
                         )}
                         <PriorityBadge priority={activity.priority} score={rankingScore} showScore />

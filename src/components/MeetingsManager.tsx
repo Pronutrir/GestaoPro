@@ -42,6 +42,7 @@ import { selectInChunks } from "@/lib/chunkedIn";
 import { PersonCombobox } from "@/components/PersonCombobox";
 import { VinculoSelect } from "@/components/VinculoSelect";
 import { cn } from "@/lib/utils";
+import { formatarDataBR, estaAtrasado } from "@/lib/dataLocal";
 
 // meeting_types ainda fora dos tipos gerados (migration 20260802130000
 // pendente na VM). Mesmo padrão usado em PageComments.
@@ -734,9 +735,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
       .filter((a) => a.meeting_id === ultima.id && !a.is_completed)
       .sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999"));
 
-    const data = ultima.meeting_date
-      ? new Date(ultima.meeting_date + "T00:00:00").toLocaleDateString("pt-BR")
-      : "";
+    const data = formatarDataBR(ultima.meeting_date);
 
     return { pendenciasAnterior: abertas, ultimaReuniaoRotulo: data };
   }, [meetings, allActions]);
@@ -908,7 +907,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                       )}
                       {a.due_date && (
                         <span className={cn("text-[11px] tabular-nums shrink-0", atrasada ? "text-destructive font-medium" : "text-muted-foreground")}>
-                          {new Date(a.due_date).toLocaleDateString("pt-BR")}
+                          {formatarDataBR(a.due_date)}
                         </span>
                       )}
                       {reuniao && (
@@ -946,7 +945,9 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
               </div>
               <div className="divide-y divide-warning/20 max-h-[168px] overflow-y-auto">
                 {pendenciasAnterior.map((p) => {
-                  const atrasada = !!p.due_date && new Date(p.due_date) < new Date(new Date().toDateString());
+                  // due_date é coluna `date`: comparar como instante deslocava o
+                  // dia no fuso local e marcava como atrasado o que vence hoje.
+                  const atrasada = estaAtrasado(p.due_date);
                   return (
                     <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 text-[12px]">
                       <span className="flex-1 min-w-0 truncate" title={p.description}>{p.description}</span>
@@ -960,7 +961,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                           "text-[11px] tabular-nums shrink-0",
                           atrasada ? "text-destructive font-medium" : "text-muted-foreground",
                         )}>
-                          {new Date(p.due_date).toLocaleDateString("pt-BR")}
+                          {formatarDataBR(p.due_date)}
                         </span>
                       )}
                     </div>
@@ -1527,7 +1528,7 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
                                   </span>
                                 </Badge>
                               )}
-                              {a.due_date && <Badge variant="secondary" className="text-[10.5px]">📅 {new Date(a.due_date).toLocaleDateString("pt-BR")}</Badge>}
+                              {a.due_date && <Badge variant="secondary" className="text-[10.5px]">📅 {formatarDataBR(a.due_date)}</Badge>}
                               {/* Caminho de volta: a ação virou tarefa, então
                                   daqui se chega ao trabalho. Sem este link, o
                                   vínculo existiria no banco e não na tela. */}

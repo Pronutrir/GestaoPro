@@ -1,8 +1,8 @@
 'use client';
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package } from "lucide-react";
+import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -10,11 +10,14 @@ import {
   splitColumns, pareceCabecalho, detectarColunas, lerLinha, statusPorDatas,
   type ColValues,
 } from "@/lib/wbsColumns";
+import { eapRoleForImport, eapToPersisted, type EapKind } from "@/lib/eapModel";
 
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
 /* ------------------------------------------------------------------ */
-type EapRole = "fase" | "entrega" | "atividade" | "marco";
+// Papel vem de eapModel: os quatro papéis são um vocabulário só, e um alias
+// local já havia deixado esta tela divergir das outras.
+type EapRole = EapKind;
 interface TreeNode {
   code: string;          // 1, 1.1, 1.1.2...
   title: string;
@@ -46,9 +49,6 @@ const fmtDia = (iso?: string) => {
   return `${d}/${m}`;
 };
 
-const isMilestoneTitle = (t: string) =>
-  /(^|\s)(marco|milestone)(\s|:|$)/i.test(t) || /🏁|\[m\]/i.test(t);
-
 /**
  * Papel de cada nó. Duas perguntas independentes, que antes estavam coladas:
  *
@@ -64,18 +64,18 @@ const isMilestoneTitle = (t: string) =>
  * trigger mas achatou a EAP: "1" e "1.1" viravam ambos Fase, e a entrega
  * deixava de estar dentro da fase.
  *
- * Quem tem filhos NUNCA é marco, mesmo com "Milestone" no título — marco é
- * ponto no tempo e não agrupa. EAPs reais usam "Milestone 1 - Lançamento" como
- * nome da FASE, e tratar isso como marco quebrava o agrupamento inteiro: no
- * Backlog e no Cronograma os filhos ficavam sem pai visível.
+ * A decisão em si mora em `eapRoleForImport` (lib/eapModel): a palavra-chave de
+ * marco era declarada aqui dentro e a tela não conseguia explicar ao usuário
+ * uma regra que só o parser conhecia.
  */
 const aplicarPapeis = (nodes: TreeNode[]) => {
   const temFilhos = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
   for (const n of nodes) {
-    if (n.depth === 1) n.role = "fase";
-    else if (temFilhos.has(n.code)) n.role = "entrega";
-    else if (isMilestoneTitle(n.title)) n.role = "marco";
-    else n.role = "atividade";
+    n.role = eapRoleForImport({
+      depth: n.depth,
+      hasChildren: temFilhos.has(n.code),
+      title: n.title,
+    });
   }
 };
 
@@ -99,7 +99,12 @@ const parseFlexible = (text: string): TreeNode[] => {
 
     const nodes: TreeNode[] = [];
     for (const { vals } of linhas) {
-      if (!vals.codigo) continue; // sem código não há como posicionar na árvore
+      // Sem código não há como posicionar na árvore. Este descarte já custou
+      // caro: um código com ponto final ("1.") era rejeitado pelo CODIGO_RE e
+      // a fase sumia da prévia SEM AVISO — a linha estava visível no campo e
+      // ausente do resultado. O regex foi corrigido, e a prévia agora compara
+      // linhas coladas × itens reconhecidos para avisar quando sobra alguma.
+      if (!vals.codigo) continue;
       const parts = vals.codigo.split(".");
       while (parts.length > 1 && parts[parts.length - 1] === "0") parts.pop();
       const code = parts.join(".");
@@ -311,12 +316,90 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
+  /**
+   * Fases que JÁ EXISTEM no projeto, indexadas pelo código EAP.
+   *
+   * A prévia mostrava "(sem título) 1" quando o texto colado começava em "1.2":
+   * o parser inventa o ancestral que falta para a árvore não ficar quebrada.
+   * Só que se a fase 1 já existe no projeto, ela NÃO será criada — a
+   * importação a reaproveita. A prévia prometia uma fase nova que não vem.
+   *
+   * Mesma leitura que a importação faz na gravação, aqui só para a prévia
+   * dizer a verdade.
+   */
+  const [fasesExistentes, setFasesExistentes] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!open || !projectId) return;
+    let cancelado = false;
+    void supabase
+      .from("phases")
+      .select("id, title")
+      .eq("project_id", projectId)
+      .eq("is_trashed", false)
+      .then(({ data, error }) => {
+        if (cancelado || error) return;
+        const m = new Map<string, string>();
+        for (const f of ((data as any[]) || [])) {
+          // Código do prefixo do título ("1 Iniciação" → "1"). `wbs_code` não
+          // é lido aqui de propósito: a coluna não existe em toda base, e um
+          // select que falha derrubaria a prévia inteira por um enfeite.
+          const cod = String(f.title || "").match(/^\s*(\d+(?:\.\d+)*)\b/)?.[1];
+          if (!cod) continue;
+          const partes = cod.split(".");
+          while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+          const chave = partes.join(".");
+          if (!m.has(chave)) m.set(chave, String(f.title || ""));
+        }
+        setFasesExistentes(m);
+      });
+    return () => { cancelado = true; };
+  }, [open, projectId]);
+
+  /** Título da fase existente para este código, se houver. */
+  const faseExistente = (code: string): string | null => {
+    const partes = code.split(".");
+    while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+    return fasesExistentes.get(partes.join(".")) ?? null;
+  };
+
   const tree = useMemo(() => parseFlexible(text), [text]);
   const counts = useMemo(() => {
     const c = { fase: 0, entrega: 0, atividade: 0, marco: 0 };
     tree.forEach((n) => { c[n.role]++; });
     return c;
   }, [tree]);
+
+  /**
+   * Ancestrais inventados pelo parser que NÃO serão criados, porque a fase já
+   * existe no projeto. Contados à parte para o rodapé não prometer itens novos
+   * que a importação vai apenas reaproveitar.
+   */
+  const reaproveitados = useMemo(
+    () => tree.filter((n) => n.title.startsWith("(sem título)") && faseExistente(n.code)).length,
+    [tree, fasesExistentes],
+  );
+
+  /**
+   * Linhas coladas que NÃO viraram item.
+   *
+   * O parser descarta em silêncio o que não consegue posicionar na árvore, e
+   * isso já escondeu um bug: um código com ponto final ("1.") era rejeitado e
+   * a fase sumia da prévia — visível no campo, ausente do resultado, sem
+   * nenhum aviso. Comparar o que foi colado com o que foi reconhecido é a rede
+   * de segurança: se sobrar linha, a prévia diz quantas.
+   *
+   * Desconta os ancestrais INVENTADOS pelo parser (o "1" criado quando o texto
+   * começa em "1.2"), que existem na árvore sem ter linha correspondente.
+   */
+  const linhasIgnoradas = useMemo(() => {
+    const coladas = text.split("\n").filter((l) => l.trim().length > 0).length;
+    if (coladas === 0) return 0;
+    const inventados = tree.filter((n) => n.title.startsWith("(sem título)")).length;
+    // Título quebrado em duas linhas é anexado ao anterior, então a diferença
+    // pode ser legítima. Só avisa quando sobra — nunca acusa a mais.
+    return Math.max(0, coladas - (tree.length - inventados));
+  }, [text, tree]);
 
   const resetAndClose = () => { setText(""); setSelectedTemplate(null); setTab("paste"); setOpen(false); };
 
@@ -388,8 +471,61 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       // seguir. Avisadas no fim: silenciar faria o item nascer sem o campo sem
       // ninguém saber (ex.: sem código EAP, que define o papel Fase/Atividade).
       const droppedCols = new Set<string>();
+
+      /**
+       * FASES QUE JÁ EXISTEM no projeto, indexadas pelo código EAP.
+       *
+       * O mapa era montado só com as fases criadas NESTA importação. Importar
+       * a fase 1 com os itens 1.1 e 1.2 e depois importar só o 1.3 deixava o
+       * mapa vazio: o 1.3 não achava a fase 1 e nascia SEM FASE, solto no topo.
+       * Medido em 11/08: 14 itens já estão assim no banco.
+       *
+       * O código vem de `wbs_code` quando a coluna existe; senão, do prefixo do
+       * título ("1 Iniciação" → "1"), que é onde ele aparece nas bases sem a
+       * migration. Sem esse fallback, a correção não valeria justamente nos
+       * ambientes onde o problema é mais provável.
+       */
       const phaseIdMap: Record<string, string> = {};
+      {
+        const { data: jaExistem } = await supabase
+          .from("phases")
+          .select("id, title, wbs_code")
+          .eq("project_id", projectId)
+          .eq("is_trashed", false);
+
+        for (const f of ((jaExistem as any[]) || [])) {
+          const codigo =
+            (f.wbs_code || "").trim() ||
+            // Prefixo numérico do título: "1 Iniciação", "1. Iniciação",
+            // "1.0 — Fundação". Sem match, a fase fica fora do mapa e o
+            // comportamento é o de antes — nunca pior.
+            (String(f.title || "").match(/^\s*(\d+(?:\.\d+)*)\b/)?.[1] ?? "");
+          if (!codigo) continue;
+          // Normaliza zeros decorativos: "1.0" e "1" são a mesma fase, e a
+          // planilha varia entre os dois formatos.
+          const partes = codigo.split(".");
+          while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+          const chave = partes.join(".");
+          // Primeira vence: se houver duas fases com o mesmo código (dado
+          // antigo), reaproveitar sempre a mesma é melhor que alternar.
+          if (!phaseIdMap[chave]) phaseIdMap[chave] = f.id;
+        }
+      }
+
       for (const phase of phases) {
+        // A planilha trouxe uma fase que JÁ EXISTE: reaproveita em vez de criar
+        // uma segunda com o mesmo código. Sem isto, reimportar a fase 1 para
+        // acrescentar um item duplicava a fase e dividia a EAP em duas.
+        const chaveExistente = (() => {
+          const partes = phase.code.split(".");
+          while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+          return partes.join(".");
+        })();
+        if (phaseIdMap[chaveExistente]) {
+          phaseIdMap[phase.code] = phaseIdMap[chaveExistente];
+          continue;
+        }
+
         const base: Record<string, any> = {
           project_id: projectId,
           // Título limpo quando há wbs_code: o código vive na coluna própria.
@@ -431,11 +567,26 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
       const codeIdMap: Record<string, string> = {};
       const phaseOrderCounter: Record<string, number> = {};
+      /**
+       * A fase de um item é a do ancestral mais próximo que exista no mapa.
+       *
+       * O mapa agora inclui as fases JÁ EXISTENTES no projeto (ver acima), não
+       * só as criadas nesta importação — é o que faz "1.3" achar a fase 1
+       * quando ela veio de uma importação anterior.
+       *
+       * Testa o próprio código também (`len = parts.length`): uma fase pode ser
+       * importada junto com seus filhos, e o item "1" precisa achar a fase "1".
+       */
       const findPhaseId = (node: TreeNode): string | null => {
         const parts = node.code.split(".");
-        for (let len = parts.length - 1; len >= 1; len--) {
+        for (let len = parts.length; len >= 1; len--) {
           const ancestor = parts.slice(0, len).join(".");
           if (phaseIdMap[ancestor]) return phaseIdMap[ancestor];
+          // Zeros decorativos: "1.0" no mapa é a mesma fase que "1".
+          const semZeros = [...parts.slice(0, len)];
+          while (semZeros.length > 1 && semZeros[semZeros.length - 1] === "0") semZeros.pop();
+          const chave = semZeros.join(".");
+          if (chave !== ancestor && phaseIdMap[chave]) return phaseIdMap[chave];
         }
         return null;
       };
@@ -449,10 +600,12 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         const phaseKey = phaseId || "__none__";
         if (!(phaseKey in phaseOrderCounter)) phaseOrderCounter[phaseKey] = 0;
 
-        // Fase e Entrega gravam igual — os dois agrupam, e o trigger só aceita
-        // 'fase'/'pacote' como pai. A diferença entre elas é o NÍVEL, lido do
-        // wbs_code na hora de exibir, não um valor distinto no banco.
-        const itemType = (node.role === "fase" || node.role === "entrega") ? "fase" : "atividade";
+        // eapToPersisted é a fonte do que vai ao banco. Fase e Entrega gravam
+        // igual — os dois agrupam, e o trigger só aceita 'fase'/'pacote' como
+        // pai; a diferença entre elas é o NÍVEL, lido do wbs_code na exibição.
+        // A conversão era duplicada aqui, então uma mudança na regra canônica
+        // não alcançava a importação.
+        const persisted = eapToPersisted(node.role);
         const basePayload: any = {
           project_id: projectId,
           // Idem às fases: título limpo, código em wbs_code.
@@ -461,8 +614,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           parent_id: parentId,
           display_order: phaseOrderCounter[phaseKey]++,
           wbs_code: node.code,
-          item_type: itemType,
-          is_milestone: node.role === "marco",
+          item_type: persisted.item_type,
+          is_milestone: persisted.is_milestone,
           // Nasce no Backlog — igual a criação manual (segue o fluxo).
           workflow_stage_id: backlogStageId,
           status: "pending",
@@ -499,7 +652,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         }
 
         let res = await supabase.from("activities").insert(basePayload).select("id").single();
-        if (res.error && /item_type/i.test(res.error.message) && itemType === "fase") {
+        if (res.error && /item_type/i.test(res.error.message) && persisted.item_type === "fase") {
           pacoteUnsupported = true;
           res = await supabase.from("activities").insert({ ...basePayload, item_type: "atividade" }).select("id").single();
         }
@@ -585,6 +738,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
             Cole sua estrutura em qualquer formato ou comece de um modelo.{" "}
             <span className="text-foreground">
               Nível 1 vira Fase; do 1.1 em diante, Entrega se tiver subitens ou Atividade se não tiver.
+              {" "}Para um <strong className="font-medium">Marco</strong>, comece o título com{" "}
+              <code className="px-1 py-0.5 rounded bg-muted text-[12px] font-mono">Marco:</code>.
             </span>{" "}
             Colando de planilha, as colunas de data, horas e responsável são reconhecidas.
           </p>
@@ -636,10 +791,11 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 // no fim do próprio texto, deixando um degrau irregular no meio
                 // do bloco.
                 placeholder={[
-                  "1. Planejamento          ← nível 1 é Fase",
-                  "1.1 Levantar requisitos  ← agrupa: vira Entrega",
-                  "1.1.1 Entrevistar área   ← folha: vira Atividade",
-                  "1.2 Aprovar escopo       ← folha: vira Atividade",
+                  "1. Planejamento             ← nível 1 é Fase",
+                  "1.1 Levantar requisitos     ← agrupa: vira Entrega",
+                  "1.1.1 Entrevistar área      ← folha: vira Atividade",
+                  "1.2 Aprovar escopo          ← folha: vira Atividade",
+                  "1.3 Marco: escopo aprovado  ← vira Marco",
                   "2. Execução",
                   "2.1 Desenvolver",
                   "",
@@ -699,13 +855,39 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
               </div>
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto space-y-1 -mx-1 px-1">
-                {tree.map((n) => (
+                {tree.map((n) => {
+                  // Ancestral inventado pelo parser (o texto começou em "1.2",
+                  // então o "1" foi criado para a árvore não ficar quebrada).
+                  const inventado = n.title.startsWith("(sem título)");
+                  const jaExiste = inventado ? faseExistente(n.code) : null;
+                  return (
                   <div key={n.code} className="flex items-center gap-2.5 py-1" style={{ paddingLeft: (n.depth - 1) * 20 }}>
                     <span className={cn("inline-flex items-center text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0", ROLE_META[n.role].cls)}>
                       {ROLE_META[n.role].short}
                     </span>
                     <span className="text-[11px] font-mono text-muted-foreground shrink-0">{n.code}</span>
-                    <span className="text-[13px] truncate">{n.title}</span>
+                    {/* A fase JÁ EXISTE: mostra o título real e avisa que será
+                        reaproveitada. Antes dizia "(sem título) 1" e prometia
+                        uma fase nova que a importação não cria — ela reaproveita
+                        a existente. */}
+                    {jaExiste ? (
+                      <>
+                        <span className="text-[13px] truncate">{jaExiste}</span>
+                        <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded border border-success/40 bg-success/5 text-success">
+                          já existe · será reaproveitada
+                        </span>
+                      </>
+                    ) : inventado ? (
+                      <>
+                        <span className="text-[13px] truncate text-muted-foreground italic">sem título</span>
+                        <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded border border-warning/40 bg-warning/5 text-warning"
+                              title={`O código ${n.code} não estava no texto colado, mas "${tree.find((x) => x.parentCode === n.code)?.code ?? ""}" precisa dele. Será criada sem título.`}>
+                          criada automaticamente
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-[13px] truncate">{n.title}</span>
+                    )}
                     {/* O que veio das colunas: conferir aqui evita descobrir
                         que a data entrou errada só depois de importar. */}
                     {n.vals && (
@@ -726,7 +908,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                       </span>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -735,11 +918,23 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         {/* Rodapé: contadores + ações (sempre visível) */}
         <div className="flex flex-wrap items-center gap-3 px-6 py-3.5 border-t bg-muted/30 shrink-0">
           {tree.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <CountBadge role="fase" n={counts.fase} />
               {counts.entrega > 0 && <CountBadge role="entrega" n={counts.entrega} />}
               <CountBadge role="atividade" n={counts.atividade} />
               {counts.marco > 0 && <CountBadge role="marco" n={counts.marco} />}
+              {/* REDE DE SEGURANÇA: linha colada que não virou item some sem
+                  deixar rastro. Foi assim que o código com ponto final ("1.")
+                  fez a fase desaparecer da prévia sem nenhum aviso. */}
+              {linhasIgnoradas > 0 && (
+                <span
+                  className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-warning/40 bg-warning/5 text-warning text-[11px] font-medium"
+                  title="Essas linhas não têm código EAP reconhecível (ex.: numeração fora do padrão 1, 1.2, 1.2.3) e não serão importadas. Confira o texto colado."
+                >
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  {linhasIgnoradas} linha(s) não reconhecida(s)
+                </span>
+              )}
             </div>
           ) : (
             <span className="text-[13px] text-muted-foreground">Nada para importar ainda.</span>
@@ -748,7 +943,14 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
             <Button variant="outline" size="sm" onClick={resetAndClose}>Cancelar</Button>
             <Button size="sm" onClick={handleImport} disabled={tree.length === 0 || importing} className="gap-1.5">
               <Upload className="w-4 h-4" />
-              {importing ? "Importando..." : `Importar ${tree.length} ${tree.length === 1 ? "item" : "itens"}`}
+              {/* Desconta o que será REAPROVEITADO: contar a fase existente
+                  como item a importar prometia criar algo que não é criado. */}
+              {importing
+                ? "Importando..."
+                : (() => {
+                    const novos = tree.length - reaproveitados;
+                    return `Importar ${novos} ${novos === 1 ? "item" : "itens"}`;
+                  })()}
             </Button>
           </div>
         </div>

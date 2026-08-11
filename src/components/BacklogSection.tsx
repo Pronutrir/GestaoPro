@@ -47,6 +47,7 @@ import {
 } from "@/lib/prontidao";
 import { LinkParentDialog } from "@/components/LinkParentDialog";
 import { mutateInChunks } from "@/lib/chunkedIn";
+import { formatarDataBR, estaAtrasado } from "@/lib/dataLocal";
 import { GUT_META, normalizeGut, type GutLevel } from "@/lib/gutPriority";
 
 interface Phase {
@@ -932,10 +933,10 @@ export const BacklogSection = ({
         );
       }
       if (colId === "end_date") {
-        const overdue = activity.end_date && activity.status !== "completed" && new Date(activity.end_date) < new Date(new Date().toDateString());
+        const overdue = activity.status !== "completed" && estaAtrasado(activity.end_date);
         return (
           <span key="end_date" className={`text-[12px] tabular-nums ${overdue ? "text-destructive font-semibold" : "text-foreground/80"}`}>
-            {activity.end_date ? new Date(activity.end_date).toLocaleDateString("pt-BR") : <span className="text-muted-foreground/40">—</span>}
+            {activity.end_date ? formatarDataBR(activity.end_date) : <span className="text-muted-foreground/40">—</span>}
           </span>
         );
       }

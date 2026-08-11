@@ -1,6 +1,27 @@
 /**
  * Modelo EAP/WBS do GestãoPro — FONTE ÚNICA DA VERDADE.
  *
+ * ============================================================================
+ * O QUE O PMI DEFINE (estudado em 11/08/2026)
+ *
+ * O PMBOK define pacote de trabalho como "o trabalho definido no NÍVEL MAIS
+ * BAIXO da estrutura analítica, para o qual custo e duração podem ser
+ * estimados e gerenciados". E a regra dos 100% diz que a soma do trabalho no
+ * nível filho é 100% do trabalho do pai.
+ *
+ * A consequência prática: Fase, Entrega e Pacote são POSIÇÕES na árvore, não
+ * tipos que alguém escolhe. O mesmo item vira "pacote de trabalho" ou deixa de
+ * ser conforme se acrescentem subitens abaixo dele. Só o MARCO é decisão real
+ * de quem planeja — é o único que a estrutura não revela sozinha.
+ *
+ * Por isso o diálogo de edição MOSTRA o papel em vez de perguntá-lo: pedir ao
+ * usuário o que o sistema já sabe abria espaço para respostas que contradizem
+ * a árvore, e era a origem da confusão entre os quatro nomes.
+ *
+ * NOMENCLATURA: chamamos de "Atividade" o que o PMI chama de "pacote de
+ * trabalho". É o termo que a equipe lê há meses, e o PMBOK não exige o dele.
+ * ============================================================================
+ *
  * Alinhado ao PMBOK/WBS (decomposição orientada a entregas, profundidade livre)
  * e simplificado para o uso real da plataforma: a INTERFACE trabalha com apenas
  * 3 papéis, evitando a ambiguidade "Pacote × Atividade" que confundia.
@@ -121,20 +142,23 @@ export function eapIsLeaf(kind: EapKind): boolean {
 }
 
 /**
- * Tipos oferecidos no seletor, dado o contexto.
+ * Marco pode ser escolhido? É a única restrição REAL de tipo, e a única que as
+ * três telas precisam concordar: marco é folha de controle e não agrupa, então
+ * um item com subitens não pode virar marco. O trigger do banco também recusa.
  *
- * Item com filhos deixa de ser forçado a "só Fase": Atividade agora pode
- * agrupar (o nível é que define o rótulo). O que segue barrado é Marco, que é
- * folha de controle por definição — um marco com subitens não faz sentido.
+ * Substitui `eapTypeOptions`, que devolvia a lista inteira de opções e não era
+ * chamada por ninguém: prometia decidir Fase × Entrega pelo nível, enquanto a
+ * criação (sem código ainda) decide pelo destino e a edição mostra os quatro
+ * papéis de propósito, avisando em vez de bloquear. Uma função que nenhuma tela
+ * podia obedecer não era fonte única — era uma quarta regra.
  */
-export function eapTypeOptions(opts: { hasChildren?: boolean; wbsCode?: string | null } = {}): EapKind[] {
-  // O agrupador oferecido depende do NÍVEL, não da vontade: no nível 1 é Fase,
-  // abaixo dele é Entrega. Oferecer os dois deixaria escolher "Fase" para um
-  // item 1.1 — exatamente o achatamento que estamos corrigindo.
-  const level = eapLevel(opts.wbsCode);
-  const agrupador: EapKind = level === 1 ? "fase" : "entrega";
-  if (opts.hasChildren) return [agrupador, "atividade"];
-  return [agrupador, "atividade", "marco"];
+export function eapMilestoneAllowed(hasChildren: boolean): boolean {
+  return !hasChildren;
+}
+
+/** Motivo a exibir quando Marco está bloqueado. Null quando é permitido. */
+export function eapMilestoneBlockedReason(hasChildren: boolean): string | null {
+  return hasChildren ? "Este item tem subitens; Marco não agrupa." : null;
 }
 
 /** Rótulos canônicos para a UI. */
@@ -146,12 +170,66 @@ export const EAP_LABELS: Record<EapKind, string> = {
 };
 
 /**
+ * Dica de UMA LINHA para cada papel. Fica aqui porque as três telas que
+ * escolhem tipo (criação rápida, edição, importação) descreviam o mesmo papel
+ * com palavras diferentes — e a divergência é o que confunde quem planeja.
+ */
+export const EAP_HINTS: Record<EapKind, string> = {
+  fase: "Nível 1 da EAP (1, 2, 3…). Agrupa entregas.",
+  entrega: "Agrupador abaixo da fase (1.1, 1.2…). Contém atividades.",
+  atividade: "Trabalho executável: vai ao Kanban, tem horas e responsável.",
+  marco: "Ponto único no tempo (uma data, sem intervalo). Não tem horas nem custo.",
+};
+
+/**
+ * Marco declarado pelo TÍTULO, do jeito que se escreve numa EAP colada.
+ *
+ * "Marco: TAP aprovado" · "Milestone – kickoff" · "🏁 Go-live" · "[M] Aprovação"
+ *
+ * É a única forma de declarar marco na importação: a EAP colada tem código e
+ * título, e não há coluna que carregue "é marco". A regra vivia dentro do
+ * diálogo de importação e não era mencionada em lugar nenhum da tela — está
+ * aqui para que a tela possa DOCUMENTÁ-LA a partir da mesma fonte que a aplica.
+ */
+export function eapTitleDeclaresMilestone(titulo: string): boolean {
+  const t = (titulo || "").trim();
+  if (!t) return false;
+  return /(^|\s)(marco|milestone)(\s|:|-|–|—|$)/i.test(t) || /🏁|\[m\]/i.test(t);
+}
+
+/**
  * item_type + is_milestone a gravar para cada papel escolhido.
  *
  * O agrupador é gravado como item_type='fase'. Para PROMOVER uma folha que
  * ganhou subitens sem trocar o rótulo de topo, prefira `eapGroupPersisted`,
  * que respeita o 'pacote' legado quando o banco ainda exige/aceita.
  */
+/**
+ * Papel de um item IMPORTADO, a partir de nível + filhos + título.
+ *
+ * A ordem não é negociável, e as duas primeiras regras vencem a palavra-chave:
+ *
+ *   nível 1        → Fase      (topo da EAP é fase, sempre)
+ *   tem filhos     → Entrega   (marco não agrupa)
+ *   título declara → Marco
+ *   senão          → Atividade
+ *
+ * "Quem tem filhos nunca é marco" é proposital: EAPs reais usam
+ * "Milestone 1 - Lançamento" como nome da FASE, e tratar isso como marco
+ * quebrava o agrupamento — os filhos ficavam sem pai visível no Backlog e no
+ * Cronograma.
+ */
+export function eapRoleForImport(opts: {
+  depth: number;
+  hasChildren: boolean;
+  title: string;
+}): EapKind {
+  if (opts.depth === 1) return "fase";
+  if (opts.hasChildren) return "entrega";
+  if (eapTitleDeclaresMilestone(opts.title)) return "marco";
+  return "atividade";
+}
+
 export function eapToPersisted(kind: EapKind): { item_type: "fase" | "atividade"; is_milestone: boolean } {
   if (kind === "marco") return { item_type: "atividade", is_milestone: true };
   // Fase e Entrega gravam igual: os dois agrupam, e o trigger eap_nesting_rule
@@ -229,8 +307,22 @@ export function eapShouldDemote(item: EapItemLike, aindaTemFilhos: boolean): boo
   const t = (item.item_type || "").trim().toLowerCase();
   if (t !== "fase" && t !== "pacote") return false; // já é folha
 
-  // Fase declarada (nível 1 do código EAP) permanece fase.
-  if (eapLevel(item.wbs_code) === 1) return false;
+  // Fase ou Entrega DECLARADA pelo usuário permanece como está.
+  //
+  // Antes a proteção era só para o nível 1. Estava errado, e o efeito era
+  // grave: uma fase criada à mão (sem código EAP ainda) perdia o papel assim
+  // que ficasse temporariamente sem filhos — granular a EAP movendo um item
+  // fazia a fase inteira sumir do agrupamento. Relatado em 11/08.
+  //
+  // Agora QUALQUER item com código EAP válido é considerado declarado: quem
+  // digitou "1", "1.2" ou "2.1.3" disse onde ele está na estrutura, e essa
+  // afirmação não se desfaz porque o último filho saiu — a fase esvaziada é
+  // estado normal no meio do planejamento.
+  //
+  // Sobra o caso que o rebaixamento existe para tratar: item SEM código, que
+  // virou agrupador só porque alguém criou uma subatividade nele. Aí a
+  // promoção foi mesmo automática, e desfazê-la ao esvaziar é correto.
+  if (eapLevel(item.wbs_code) !== null) return false;
 
   return true;
 }

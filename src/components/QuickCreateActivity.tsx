@@ -12,8 +12,15 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Circle, Layers, Diamond, Plus } from "lucide-react";
+import { eapToPersisted, EAP_LABELS, EAP_HINTS, type EapKind } from "@/lib/eapModel";
 
-type Kind = "fase" | "atividade" | "marco";
+/**
+ * Aqui o agrupador é UMA opção só: na criação o item ainda não tem código EAP,
+ * e Fase × Entrega é diferença de NÍVEL, não de escolha. O rótulo do botão
+ * segue o destino — sem pai é Fase, dentro de algo é Entrega —, e o que vai ao
+ * banco sai de `eapToPersisted`, igual às outras telas.
+ */
+type Kind = Extract<EapKind, "fase" | "atividade" | "marco">;
 
 interface ParentOption { id: string; title: string; item_type: string | null; is_milestone?: boolean | null; parent_id?: string | null; }
 
@@ -30,12 +37,15 @@ interface QuickCreateActivityProps {
   disabledReason?: string | null;
 }
 
-const KIND_META: Record<Kind, { label: string; icon: JSX.Element; hint: string }> = {
-  fase: { label: "Fase / Entrega", icon: <Layers className="w-3.5 h-3.5" />, hint: "Nível 1 da EAP (1, 2, 3…). Agrupa entregas." },
-  atividade: { label: "Atividade", icon: <Circle className="w-3.5 h-3.5" />, hint: "Do 1.1 em diante. Pode ter subitens." },
+// Rótulo e dica saem de EAP_LABELS/EAP_HINTS: as três telas descreviam o mesmo
+// papel com palavras diferentes ("Ponto único no tempo." aqui, outra frase na
+// edição), e quem planeja lia como se fossem coisas distintas.
+const KIND_META: Record<Kind, { icon: JSX.Element }> = {
+  fase: { icon: <Layers className="w-3.5 h-3.5" /> },
+  atividade: { icon: <Circle className="w-3.5 h-3.5" /> },
   // fill-current: herda a cor do botão. Com âmbar fixo, o ícone sumia quando o
   // botão ficava com fundo âmbar sólido (selecionado).
-  marco: { label: "Marco", icon: <Diamond className="w-3.5 h-3.5 fill-current" />, hint: "Ponto único no tempo." },
+  marco: { icon: <Diamond className="w-3.5 h-3.5 fill-current" /> },
 };
 
 // Pode ser pai: agrupador (fase/pacote) OU qualquer item que já tem filhos
@@ -78,6 +88,14 @@ export const QuickCreateActivity = ({
   const kindOptions: Kind[] = ["fase", "atividade", "marco"];
   const effectiveKind: Kind = kindOptions.includes(kind) ? kind : "atividade";
 
+  // O agrupador é Fase na raiz e Entrega dentro de outro item — a mesma regra
+  // de nível que o resto do sistema aplica. O botão dizia sempre "Fase /
+  // Entrega", então criar dentro de uma fase prometia uma escolha que não
+  // existe e escondia o que o item de fato seria.
+  const papelAgrupador: EapKind = hasParent ? "entrega" : "fase";
+  const rotuloDe = (k: Kind) => EAP_LABELS[k === "fase" ? papelAgrupador : k];
+  const dicaDe = (k: Kind) => EAP_HINTS[k === "fase" ? papelAgrupador : k];
+
   const insert = async (): Promise<string | null> => {
     const t = title.trim();
     if (!t) return null;
@@ -88,12 +106,15 @@ export const QuickCreateActivity = ({
       workflow_stage_id: backlogStageId,
       status: "pending",
       priority: "medium",
-      is_milestone: effectiveKind === "marco",
-      item_type: effectiveKind === "marco" ? "atividade" : effectiveKind,
+      // eapToPersisted: a conversão papel → banco era duplicada aqui, e mudar a
+      // regra canônica não alcançava esta tela.
+      ...eapToPersisted(effectiveKind === "fase" ? papelAgrupador : effectiveKind),
     };
     // Tolerante ao CHECK: se o banco não aceita 'fase', tenta 'atividade'.
+    // Testa o que foi GRAVADO, não o papel escolhido — Entrega também grava
+    // item_type='fase' e precisava do mesmo resgate.
     let { data, error } = await supabase.from("activities").insert(patch).select("id").single();
-    if (error && effectiveKind === "fase") {
+    if (error && patch.item_type === "fase") {
       const retry = { ...patch, item_type: "atividade" };
       ({ data, error } = await supabase.from("activities").insert(retry).select("id").single());
     }
@@ -187,8 +208,8 @@ export const QuickCreateActivity = ({
                     // Selecionado em cor sólida: com `bg-background` o botão
                     // ativo ficava branco sobre o trilho cinza-claro e não se
                     // lia como marcado — parecia apenas mais claro que os outros.
-                    // min-w-0 + truncate: sem isso "Fase / Entrega" não encolhe
-                    // e o trio empurra a largura do diálogo inteiro.
+                    // min-w-0 + truncate: sem isso o rótulo mais longo não
+                    // encolhe e o trio empurra a largura do diálogo inteiro.
                     className={`flex-1 min-w-0 inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors border ${
                       active
                         ? (k === "marco"
@@ -198,12 +219,12 @@ export const QuickCreateActivity = ({
                     }`}
                   >
                     <span className="shrink-0">{KIND_META[k].icon}</span>
-                    <span className="truncate">{KIND_META[k].label}</span>
+                    <span className="truncate">{rotuloDe(k)}</span>
                   </button>
                 );
               })}
             </div>
-            <p className="text-[11px] text-muted-foreground">{KIND_META[effectiveKind].hint}</p>
+            <p className="text-[11px] text-muted-foreground">{dicaDe(effectiveKind)}</p>
           </div>
         </div>
 

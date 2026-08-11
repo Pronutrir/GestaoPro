@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
+import { estaAtrasado } from "@/lib/dataLocal";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line,
@@ -80,15 +81,12 @@ const Reports = () => {
     };
   }, [fetchAll]);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
   // Computed data
   const totalBudgetPlanned = projects.reduce((s, p) => s + (Number(p.budget_planned) || 0), 0);
   const totalBudgetUsed = projects.reduce((s, p) => s + (Number(p.budget_used) || 0), 0);
   const totalActivities = activities.length;
   const completedActivities = activities.filter(a => a.status === "completed").length;
-  const overdueActivities = activities.filter(a => a.status !== "completed" && a.end_date && new Date(a.end_date) < today);
+  const overdueActivities = activities.filter(a => a.status !== "completed" && estaAtrasado(a.end_date));
   const totalHoursTracked = timeEntries.reduce((s, e) => s + (e.duration_minutes || 0), 0) / 60;
   const totalHoursEstimated = activities.reduce((s, a) => s + (a.hours || 0), 0);
 
@@ -97,7 +95,7 @@ const Reports = () => {
     return projects.map(p => {
       const acts = activities.filter(a => a.project_id === p.id);
       const completed = acts.filter(a => a.status === "completed").length;
-      const overdue = acts.filter(a => a.status !== "completed" && a.end_date && new Date(a.end_date) < today).length;
+      const overdue = acts.filter(a => a.status !== "completed" && estaAtrasado(a.end_date)).length;
       const hours = timeEntries.filter(t => t.project_id === p.id).reduce((s, t) => s + (t.duration_minutes || 0), 0) / 60;
       const estHours = acts.reduce((s, a) => s + (a.hours || 0), 0);
       return {
@@ -274,7 +272,7 @@ const Reports = () => {
                         const m = memberMap.get(name);
                         m.tarefas++;
                         if (a.status === "completed") m.concluidas++;
-                        if (a.status !== "completed" && a.end_date && new Date(a.end_date) < today) m.atrasadas++;
+                        if (a.status !== "completed" && estaAtrasado(a.end_date)) m.atrasadas++;
                         m.horas_estimadas += a.hours || 0;
                       });
                       exportCSV(Array.from(memberMap.values()), "equipe");
@@ -291,7 +289,7 @@ const Reports = () => {
                       const m = memberMap.get(name)!;
                       m.total++;
                       if (a.status === "completed") m.done++;
-                      if (a.status !== "completed" && a.end_date && new Date(a.end_date) < today) m.overdue++;
+                      if (a.status !== "completed" && estaAtrasado(a.end_date)) m.overdue++;
                       m.hours += a.hours || 0;
                     });
                     const members = Array.from(memberMap.values()).sort((a, b) => b.total - a.total);

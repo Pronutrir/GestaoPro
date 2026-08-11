@@ -14,6 +14,7 @@ import { useProjectAccess } from "@/hooks/useProjectAccess";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useAssigneeAvatarLookup } from "@/hooks/useAssigneeAvatarLookup";
+import { estaAtrasado, formatarDataBR } from "@/lib/dataLocal";
 
 interface Activity {
   id: string;
@@ -177,9 +178,6 @@ const TeamView = () => {
     setIsLoading(false);
   };
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
   const teamMembers = useMemo(() => {
     const members = new Map<string, {
       name: string; totalTasks: number; completedTasks: number;
@@ -221,7 +219,7 @@ const TeamView = () => {
         const m = members.get(trimmed)!;
         m.totalTasks++;
         if (a.status === "completed") m.completedTasks++;
-        if (a.status !== "completed" && a.end_date && new Date(a.end_date) < today) m.overdueTasks++;
+        if (a.status !== "completed" && estaAtrasado(a.end_date)) m.overdueTasks++;
         if (a.priority === "high" && a.status !== "completed") m.highPriority++;
         if (!isParticipant) m.hoursEstimated += a.hours || 0;
         m.projects.add(a.project_id);
@@ -349,8 +347,8 @@ const TeamView = () => {
 
     const memberActivities = activities.filter(a => a.assigned_to?.trim() === selectedMember);
     const memberProjects = projects.filter(p => member.projects.has(p.id));
-    const overdue = memberActivities.filter(a => a.status !== "completed" && a.end_date && new Date(a.end_date) < today);
-    const inProgress = memberActivities.filter(a => a.status !== "completed" && !(a.end_date && new Date(a.end_date) < today));
+    const overdue = memberActivities.filter(a => a.status !== "completed" && estaAtrasado(a.end_date));
+    const inProgress = memberActivities.filter(a => a.status !== "completed" && !estaAtrasado(a.end_date));
 
     return { member, memberActivities, memberProjects, overdue, inProgress };
   }, [selectedMember, teamMembers, activities, projects]);
@@ -540,7 +538,7 @@ const TeamView = () => {
                               <span className="text-sm font-medium truncate block">{a.title}</span>
                               <span className="text-[10px] text-muted-foreground">{proj?.title || ""}</span>
                             </div>
-                            {a.end_date && <span className="text-xs text-muted-foreground ml-2">{new Date(a.end_date).toLocaleDateString("pt-BR")}</span>}
+                            {a.end_date && <span className="text-xs text-muted-foreground ml-2">{formatarDataBR(a.end_date)}</span>}
                           </div>
                         );
                       })}
@@ -709,7 +707,7 @@ const TeamView = () => {
                         {selectedMemberData.overdue.map(a => (
                           <div key={a.id} className="flex items-center justify-between p-2 bg-destructive/5 rounded-md border border-destructive/10">
                             <span className="text-sm truncate flex-1">{a.title}</span>
-                            {a.end_date && <span className="text-xs text-destructive ml-2">{new Date(a.end_date).toLocaleDateString("pt-BR")}</span>}
+                            {a.end_date && <span className="text-xs text-destructive ml-2">{formatarDataBR(a.end_date)}</span>}
                           </div>
                         ))}
                       </div>

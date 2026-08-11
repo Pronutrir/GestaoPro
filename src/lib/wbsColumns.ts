@@ -119,7 +119,51 @@ export function parseCusto(raw: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-const CODIGO_RE = /^\d+(\.\d+)*$/;
+/**
+ * Código EAP, aceitando o PONTO FINAL de numeração.
+ *
+ * "1." é como Word, Excel e PDF numeram o nível 1 — e era rejeitado pelo
+ * `/^\d+(\.\d+)*$/` anterior, que exige dígito depois de cada ponto. No modo
+ * planilha isso descartava a linha INTEIRA em silêncio (o item ficava sem
+ * código e caía no `continue` do parser): colar uma EAP começando em
+ * "1. INICIAÇÃO E PLANEJAMENTO" mostrava "0 fases", com a fase visível no
+ * campo e ausente da prévia. Relatado em 11/08.
+ *
+ * O ponto final é decoração de numeração, não parte do código — por isso
+ * `normalizarCodigo` o remove antes de usar.
+ */
+const CODIGO_RE = /^\d+(\.\d+)*\.?$/;
+
+/** Tira o ponto final decorativo: "1." → "1", "1.2." → "1.2". */
+export const normalizarCodigo = (s: string) => s.trim().replace(/\.$/, "");
+
+/**
+ * Célula que carrega CÓDIGO E TÍTULO juntos: "1. INICIAÇÃO" → { "1", "INICIAÇÃO" }.
+ *
+ * Uma EAP colada raramente é uniforme. A lista relatada em 11/08 tinha 18 linhas
+ * com TAB entre código e título e 7 só com espaços — as 7 eram justamente a fase,
+ * as duas entregas e 4 atividades. O modo planilha vence a votação (18 de 25),
+ * passa a ler TODA linha como colunas, e nas 7 sem TAB a célula 0 é a linha
+ * inteira: não casa com CODIGO_RE, a linha é descartada e o resultado é
+ * "0 fases · 18 atividades" — some exatamente a estrutura.
+ *
+ * O modo TEXTO já lidava com isso; o modo planilha assumia que o TAB sempre
+ * separa os dois. Aceita os separadores que Word e Excel produzem: "1.1 Título",
+ * "1.1. Título", "1.1) Título", "1.1 - Título".
+ *
+ * Devolve null quando não há título junto — aí a célula é só código, e quem
+ * chama segue pelo caminho normal.
+ */
+const CODIGO_COM_TITULO_RE = /^(\d+(?:\.\d+)*)\s*[.)]?\s*[-–—]?\s+(\S.*)$/;
+
+export function separarCodigoTitulo(s: string): { codigo: string; titulo: string } | null {
+  const m = (s || "").trim().match(CODIGO_COM_TITULO_RE);
+  if (!m) return null;
+  // Um título que começa com número ("2024 revisão do plano") não deve virar
+  // código: exige que o resto tenha alguma letra.
+  if (!/[a-zA-ZÀ-ÿ]/.test(m[2])) return null;
+  return { codigo: normalizarCodigo(m[1]), titulo: m[2].trim() };
+}
 
 /* ------------------------------------------------------------------ */
 /*  Detecção do papel de cada coluna                                   */
@@ -140,10 +184,21 @@ function porCabecalho(h: string): ColRole | null {
   return null;
 }
 
-/** Uma linha é cabeçalho se nenhuma célula parece dado. */
+/**
+ * Uma linha é cabeçalho se nenhuma célula parece dado.
+ *
+ * `separarCodigoTitulo` entra na conta porque a primeira linha da EAP é
+ * "1. INICIAÇÃO E PLANEJAMENTO" — uma célula só, sem TAB. Sem reconhecê-la como
+ * dado ela era tratada como cabeçalho e DESCARTADA: a fase de nível 1 sumia e
+ * sobravam as entregas órfãs, que era o segundo defeito por trás de "0 fases".
+ */
 export function pareceCabecalho(row: Row): boolean {
   const comDado = row.filter(
-    (c) => CODIGO_RE.test(c) || parseDateBR(c) !== null || parseHoras(c) !== null,
+    (c) =>
+      CODIGO_RE.test(c) ||
+      separarCodigoTitulo(c) !== null ||
+      parseDateBR(c) !== null ||
+      parseHoras(c) !== null,
   ).length;
   return comDado === 0 && row.some((c) => c.length > 0);
 }
@@ -186,8 +241,17 @@ export function detectarColunas(rows: Row[], temCabecalho: boolean): ColRole[] {
     // (é número puro), e classificar a coluna de horas como código deixaria a
     // EAP sem esforço e com um segundo "código" concorrendo. Exige ponto na
     // maioria (1.1, 2.3.4) ou ser a primeira coluna, que é onde o código vive.
-    const pontuado = taxa(i, (s) => CODIGO_RE.test(s) && s.includes("."));
-    const codigoish = taxa(i, (s) => CODIGO_RE.test(s));
+    // `separarCodigoTitulo` entra aqui porque numa colagem mista a coluna 0 tem
+    // células "1.1.2" (com TAB) e "1.2 Levantamento" (sem TAB). Contando só as
+    // primeiras, a taxa podia ficar abaixo de 0.7 e a coluna nem virava código —
+    // aí a EAP inteira era descartada, não só as linhas sem TAB.
+    const ehCodigo = (s: string) => CODIGO_RE.test(s) || separarCodigoTitulo(s) !== null;
+    const temPonto = (s: string) => {
+      const par = separarCodigoTitulo(s);
+      return par ? par.codigo.includes(".") : CODIGO_RE.test(s) && s.includes(".");
+    };
+    const pontuado = taxa(i, temPonto);
+    const codigoish = taxa(i, ehCodigo);
     if (!roles.includes("codigo") && codigoish > 0.7 && (pontuado > 0.3 || i === 0)) {
       roles[i] = "codigo"; continue;
     }
@@ -234,11 +298,26 @@ export interface ColValues {
 
 export function lerLinha(row: Row, roles: ColRole[], anoPadrao?: number): ColValues {
   const out: ColValues = {};
+  // Título extraído da célula de CÓDIGO. Fica separado de out.titulo porque a
+  // coluna dedicada de título tem precedência, e a ordem das colunas não é
+  // garantida — o código costuma vir antes, mas depender disso seria frágil.
+  let tituloDoCodigo: string | undefined;
   roles.forEach((role, i) => {
     const v = (row[i] ?? "").trim();
     if (!v) return;
     switch (role) {
-      case "codigo": if (CODIGO_RE.test(v)) out.codigo = v; break;
+      // normalizarCodigo: "1." vira "1". O ponto final é decoração de
+      // numeração (Word/Excel/PDF), não parte do código — e sem tirá-lo o
+      // split(".") produziria um segmento vazio no fim.
+      //
+      // A célula também pode trazer código E título juntos, quando a linha veio
+      // sem TAB no meio de uma colagem que tem TAB nas outras.
+      case "codigo": {
+        if (CODIGO_RE.test(v)) { out.codigo = normalizarCodigo(v); break; }
+        const par = separarCodigoTitulo(v);
+        if (par) { out.codigo = par.codigo; tituloDoCodigo = par.titulo; }
+        break;
+      }
       case "titulo": out.titulo = v; break;
       case "inicio": { const d = parseDateBR(v, anoPadrao); if (d) out.start_date = d; break; }
       case "fim": { const d = parseDateBR(v, anoPadrao); if (d) out.end_date = d; break; }
@@ -249,6 +328,7 @@ export function lerLinha(row: Row, roles: ColRole[], anoPadrao?: number): ColVal
       case "responsavel": out.responsavel = v; break;
     }
   });
+  if (!out.titulo && tituloDoCodigo) out.titulo = tituloDoCodigo;
   return out;
 }
 
