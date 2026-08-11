@@ -29,6 +29,12 @@ SET is_final = true
 WHERE lower(trim(title)) IN ('concluída', 'concluida', 'concluído', 'concluido')
   AND is_final IS DISTINCT FROM true;
 
+-- Desliga os triggers de negocio antes dos UPDATE em activities: 9 das 11
+-- divergentes estao em projetos concluidos, e o trigger
+-- trg_prevent_activity_mutation_on_concluded_project (20260526150000)
+-- abortaria a migration. Reativado logo apos o passo 3.
+SET session_replication_role = replica;
+
 -- 2) Na coluna final e não marcada como concluída → conclui.
 --    COALESCE preserva `completed_at` quando já existe: a data em que a tarefa
 --    de fato terminou vale mais que a do alinhamento. Só quem está sem data
@@ -54,6 +60,9 @@ WHERE a.workflow_stage_id = s.id
   AND s.is_final IS DISTINCT FROM true
   AND a.status = 'completed'
   AND a.is_trashed = false;
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 -- ============================================================================
 -- VERIFICAÇÃO — deve devolver ZERO linhas depois de aplicar.
