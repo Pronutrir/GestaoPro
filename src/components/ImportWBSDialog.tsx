@@ -257,57 +257,60 @@ const TEMPLATES: { id: string; emoji: string; name: string; desc: string; text: 
   {
     id: "sistema", emoji: "💻", name: "Implantação de sistema",
     desc: "Descoberta · Desenvolvimento · Homologação · Go-live",
-    text: `1. Descoberta e Requisitos
-1.1 Levantamento de requisitos
-1.1.1 Entrevistar áreas
-1.1.2 Mapear processos atuais
-1.1.3 Marco: Requisitos aprovados
-2. Desenvolvimento
-2.1 Modelagem e arquitetura
-2.2 Construção
-2.2.1 Desenvolver módulo principal
-2.2.2 Integrações
-3. Homologação
-3.1 Testes com usuários
-3.2 Ajustes finais
-4. Go-live
-4.1 Plano de implantação
-4.2 Treinamento
-4.3 Marco: Sistema em produção`,
+    text: `1. Implantação de sistema
+1.1 Descoberta e Requisitos
+1.1.1 Levantamento de requisitos
+1.1.1.1 Entrevistar áreas
+1.1.1.2 Mapear processos atuais
+1.1.1.3 Marco: Requisitos aprovados
+1.2 Desenvolvimento
+1.2.1 Modelagem e arquitetura
+1.2.2 Construção
+1.2.2.1 Desenvolver módulo principal
+1.2.2.2 Integrações
+1.3 Homologação
+1.3.1 Testes com usuários
+1.3.2 Ajustes finais
+1.4 Go-live
+1.4.1 Plano de implantação
+1.4.2 Treinamento
+1.4.3 Marco: Sistema em produção`,
   },
   {
     id: "campanha", emoji: "📣", name: "Campanha de marketing",
     desc: "Briefing · Criação · Veiculação · Análise",
-    text: `1. Briefing e Planejamento
-1.1 Definir objetivo e público
-1.2 Definir orçamento
-1.3 Marco: Briefing aprovado
-2. Criação
-2.1 Conceito e mensagem
-2.2 Produção de peças
-3. Veiculação
-3.1 Configurar canais
-3.2 Publicar e monitorar
-4. Análise
-4.1 Coletar métricas
-4.2 Relatório de resultados`,
+    text: `1. Campanha de marketing
+1.1 Briefing e Planejamento
+1.1.1 Definir objetivo e público
+1.1.2 Definir orçamento
+1.1.3 Marco: Briefing aprovado
+1.2 Criação
+1.2.1 Conceito e mensagem
+1.2.2 Produção de peças
+1.3 Veiculação
+1.3.1 Configurar canais
+1.3.2 Publicar e monitorar
+1.4 Análise
+1.4.1 Coletar métricas
+1.4.2 Relatório de resultados`,
   },
   {
     id: "processo", emoji: "🔧", name: "Melhoria de processo",
     desc: "Diagnóstico · Redesenho · Piloto · Rollout",
-    text: `1. Diagnóstico
-1.1 Mapear processo atual (AS-IS)
-1.2 Identificar gargalos
-2. Redesenho
-2.1 Desenhar processo futuro (TO-BE)
-2.2 Validar com áreas
-2.3 Marco: Novo processo aprovado
-3. Piloto
-3.1 Executar piloto
-3.2 Avaliar resultados
-4. Rollout
-4.1 Treinar equipes
-4.2 Implantar em toda a operação`,
+    text: `1. Melhoria de processo
+1.1 Diagnóstico
+1.1.1 Mapear processo atual (AS-IS)
+1.1.2 Identificar gargalos
+1.2 Redesenho
+1.2.1 Desenhar processo futuro (TO-BE)
+1.2.2 Validar com áreas
+1.2.3 Marco: Novo processo aprovado
+1.3 Piloto
+1.3.1 Executar piloto
+1.3.2 Avaliar resultados
+1.4 Rollout
+1.4.1 Treinar equipes
+1.4.2 Implantar em toda a operação`,
   },
 ];
 
@@ -749,11 +752,30 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
             <span className="text-foreground">
               O nível 1 é o próprio projeto e não é importado. <span className="font-mono">1.1</span> vira Fase,{" "}
               <span className="font-mono">1.1.1</span> Entrega, e daí em diante Atividade.
-              {" "}Para um <strong className="font-medium">Marco</strong>, comece o título com{" "}
-              <code className="px-1 py-0.5 rounded bg-muted text-[12px] font-mono">Marco:</code>.
             </span>{" "}
             Colando de planilha, as colunas de data, horas e responsável são reconhecidas.
           </p>
+
+          {/* MARCO em destaque próprio: é o único papel que o usuário DECLARA
+              (os outros vêm da posição), e as quatro marcações aceitas viviam
+              só no código — a tela citava uma. Quem colava uma EAP com "🏁" ou
+              "[M]" não tinha como saber que funcionava. */}
+          <div className="mt-2.5 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2">
+            <Diamond className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 fill-current shrink-0 mt-0.5" />
+            <p className="text-[12.5px] text-muted-foreground leading-relaxed">
+              <strong className="font-medium text-foreground">Marco</strong> é o único que você declara —
+              comece o título com{" "}
+              {["Marco:", "Milestone", "🏁", "[M]"].map((m, i) => (
+                <span key={m}>
+                  {i > 0 && " · "}
+                  <code className="px-1 py-0.5 rounded bg-muted text-[11.5px] font-mono text-foreground">{m}</code>
+                </span>
+              ))}
+              . Vale em qualquer profundidade — exceto no nível da Fase
+              (<span className="font-mono text-[11.5px]">1.2</span>), onde a posição vence:{" "}
+              <span className="font-mono text-[11.5px]">1.2 Marco: Testes</span> continua sendo Fase.
+            </p>
+          </div>
         </DialogHeader>
 
         {/* Abas segmentadas */}
