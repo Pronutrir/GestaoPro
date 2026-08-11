@@ -119,7 +119,23 @@ export function parseCusto(raw: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-const CODIGO_RE = /^\d+(\.\d+)*$/;
+/**
+ * Código EAP, aceitando o PONTO FINAL de numeração.
+ *
+ * "1." é como Word, Excel e PDF numeram o nível 1 — e era rejeitado pelo
+ * `/^\d+(\.\d+)*$/` anterior, que exige dígito depois de cada ponto. No modo
+ * planilha isso descartava a linha INTEIRA em silêncio (o item ficava sem
+ * código e caía no `continue` do parser): colar uma EAP começando em
+ * "1. INICIAÇÃO E PLANEJAMENTO" mostrava "0 fases", com a fase visível no
+ * campo e ausente da prévia. Relatado em 11/08.
+ *
+ * O ponto final é decoração de numeração, não parte do código — por isso
+ * `normalizarCodigo` o remove antes de usar.
+ */
+const CODIGO_RE = /^\d+(\.\d+)*\.?$/;
+
+/** Tira o ponto final decorativo: "1." → "1", "1.2." → "1.2". */
+export const normalizarCodigo = (s: string) => s.trim().replace(/\.$/, "");
 
 /* ------------------------------------------------------------------ */
 /*  Detecção do papel de cada coluna                                   */
@@ -238,7 +254,10 @@ export function lerLinha(row: Row, roles: ColRole[], anoPadrao?: number): ColVal
     const v = (row[i] ?? "").trim();
     if (!v) return;
     switch (role) {
-      case "codigo": if (CODIGO_RE.test(v)) out.codigo = v; break;
+      // normalizarCodigo: "1." vira "1". O ponto final é decoração de
+      // numeração (Word/Excel/PDF), não parte do código — e sem tirá-lo o
+      // split(".") produziria um segmento vazio no fim.
+      case "codigo": if (CODIGO_RE.test(v)) out.codigo = normalizarCodigo(v); break;
       case "titulo": out.titulo = v; break;
       case "inicio": { const d = parseDateBR(v, anoPadrao); if (d) out.start_date = d; break; }
       case "fim": { const d = parseDateBR(v, anoPadrao); if (d) out.end_date = d; break; }

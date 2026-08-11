@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package } from "lucide-react";
+import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -99,7 +99,12 @@ const parseFlexible = (text: string): TreeNode[] => {
 
     const nodes: TreeNode[] = [];
     for (const { vals } of linhas) {
-      if (!vals.codigo) continue; // sem código não há como posicionar na árvore
+      // Sem código não há como posicionar na árvore. Este descarte já custou
+      // caro: um código com ponto final ("1.") era rejeitado pelo CODIGO_RE e
+      // a fase sumia da prévia SEM AVISO — a linha estava visível no campo e
+      // ausente do resultado. O regex foi corrigido, e a prévia agora compara
+      // linhas coladas × itens reconhecidos para avisar quando sobra alguma.
+      if (!vals.codigo) continue;
       const parts = vals.codigo.split(".");
       while (parts.length > 1 && parts[parts.length - 1] === "0") parts.pop();
       const code = parts.join(".");
@@ -374,6 +379,27 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     () => tree.filter((n) => n.title.startsWith("(sem título)") && faseExistente(n.code)).length,
     [tree, fasesExistentes],
   );
+
+  /**
+   * Linhas coladas que NÃO viraram item.
+   *
+   * O parser descarta em silêncio o que não consegue posicionar na árvore, e
+   * isso já escondeu um bug: um código com ponto final ("1.") era rejeitado e
+   * a fase sumia da prévia — visível no campo, ausente do resultado, sem
+   * nenhum aviso. Comparar o que foi colado com o que foi reconhecido é a rede
+   * de segurança: se sobrar linha, a prévia diz quantas.
+   *
+   * Desconta os ancestrais INVENTADOS pelo parser (o "1" criado quando o texto
+   * começa em "1.2"), que existem na árvore sem ter linha correspondente.
+   */
+  const linhasIgnoradas = useMemo(() => {
+    const coladas = text.split("\n").filter((l) => l.trim().length > 0).length;
+    if (coladas === 0) return 0;
+    const inventados = tree.filter((n) => n.title.startsWith("(sem título)")).length;
+    // Título quebrado em duas linhas é anexado ao anterior, então a diferença
+    // pode ser legítima. Só avisa quando sobra — nunca acusa a mais.
+    return Math.max(0, coladas - (tree.length - inventados));
+  }, [text, tree]);
 
   const resetAndClose = () => { setText(""); setSelectedTemplate(null); setTab("paste"); setOpen(false); };
 
@@ -887,11 +913,23 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         {/* Rodapé: contadores + ações (sempre visível) */}
         <div className="flex flex-wrap items-center gap-3 px-6 py-3.5 border-t bg-muted/30 shrink-0">
           {tree.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <CountBadge role="fase" n={counts.fase} />
               {counts.entrega > 0 && <CountBadge role="entrega" n={counts.entrega} />}
               <CountBadge role="atividade" n={counts.atividade} />
               {counts.marco > 0 && <CountBadge role="marco" n={counts.marco} />}
+              {/* REDE DE SEGURANÇA: linha colada que não virou item some sem
+                  deixar rastro. Foi assim que o código com ponto final ("1.")
+                  fez a fase desaparecer da prévia sem nenhum aviso. */}
+              {linhasIgnoradas > 0 && (
+                <span
+                  className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-warning/40 bg-warning/5 text-warning text-[11px] font-medium"
+                  title="Essas linhas não têm código EAP reconhecível (ex.: numeração fora do padrão 1, 1.2, 1.2.3) e não serão importadas. Confira o texto colado."
+                >
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  {linhasIgnoradas} linha(s) não reconhecida(s)
+                </span>
+              )}
             </div>
           ) : (
             <span className="text-[13px] text-muted-foreground">Nada para importar ainda.</span>
