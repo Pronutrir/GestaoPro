@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package } from "lucide-react";
@@ -311,12 +311,69 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
+  /**
+   * Fases que JÁ EXISTEM no projeto, indexadas pelo código EAP.
+   *
+   * A prévia mostrava "(sem título) 1" quando o texto colado começava em "1.2":
+   * o parser inventa o ancestral que falta para a árvore não ficar quebrada.
+   * Só que se a fase 1 já existe no projeto, ela NÃO será criada — a
+   * importação a reaproveita. A prévia prometia uma fase nova que não vem.
+   *
+   * Mesma leitura que a importação faz na gravação, aqui só para a prévia
+   * dizer a verdade.
+   */
+  const [fasesExistentes, setFasesExistentes] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!open || !projectId) return;
+    let cancelado = false;
+    void supabase
+      .from("phases")
+      .select("id, title")
+      .eq("project_id", projectId)
+      .eq("is_trashed", false)
+      .then(({ data, error }) => {
+        if (cancelado || error) return;
+        const m = new Map<string, string>();
+        for (const f of ((data as any[]) || [])) {
+          // Código do prefixo do título ("1 Iniciação" → "1"). `wbs_code` não
+          // é lido aqui de propósito: a coluna não existe em toda base, e um
+          // select que falha derrubaria a prévia inteira por um enfeite.
+          const cod = String(f.title || "").match(/^\s*(\d+(?:\.\d+)*)\b/)?.[1];
+          if (!cod) continue;
+          const partes = cod.split(".");
+          while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+          const chave = partes.join(".");
+          if (!m.has(chave)) m.set(chave, String(f.title || ""));
+        }
+        setFasesExistentes(m);
+      });
+    return () => { cancelado = true; };
+  }, [open, projectId]);
+
+  /** Título da fase existente para este código, se houver. */
+  const faseExistente = (code: string): string | null => {
+    const partes = code.split(".");
+    while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+    return fasesExistentes.get(partes.join(".")) ?? null;
+  };
+
   const tree = useMemo(() => parseFlexible(text), [text]);
   const counts = useMemo(() => {
     const c = { fase: 0, entrega: 0, atividade: 0, marco: 0 };
     tree.forEach((n) => { c[n.role]++; });
     return c;
   }, [tree]);
+
+  /**
+   * Ancestrais inventados pelo parser que NÃO serão criados, porque a fase já
+   * existe no projeto. Contados à parte para o rodapé não prometer itens novos
+   * que a importação vai apenas reaproveitar.
+   */
+  const reaproveitados = useMemo(
+    () => tree.filter((n) => n.title.startsWith("(sem título)") && faseExistente(n.code)).length,
+    [tree, fasesExistentes],
+  );
 
   const resetAndClose = () => { setText(""); setSelectedTemplate(null); setTab("paste"); setOpen(false); };
 
@@ -767,13 +824,39 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
               </div>
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto space-y-1 -mx-1 px-1">
-                {tree.map((n) => (
+                {tree.map((n) => {
+                  // Ancestral inventado pelo parser (o texto começou em "1.2",
+                  // então o "1" foi criado para a árvore não ficar quebrada).
+                  const inventado = n.title.startsWith("(sem título)");
+                  const jaExiste = inventado ? faseExistente(n.code) : null;
+                  return (
                   <div key={n.code} className="flex items-center gap-2.5 py-1" style={{ paddingLeft: (n.depth - 1) * 20 }}>
                     <span className={cn("inline-flex items-center text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0", ROLE_META[n.role].cls)}>
                       {ROLE_META[n.role].short}
                     </span>
                     <span className="text-[11px] font-mono text-muted-foreground shrink-0">{n.code}</span>
-                    <span className="text-[13px] truncate">{n.title}</span>
+                    {/* A fase JÁ EXISTE: mostra o título real e avisa que será
+                        reaproveitada. Antes dizia "(sem título) 1" e prometia
+                        uma fase nova que a importação não cria — ela reaproveita
+                        a existente. */}
+                    {jaExiste ? (
+                      <>
+                        <span className="text-[13px] truncate">{jaExiste}</span>
+                        <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded border border-success/40 bg-success/5 text-success">
+                          já existe · será reaproveitada
+                        </span>
+                      </>
+                    ) : inventado ? (
+                      <>
+                        <span className="text-[13px] truncate text-muted-foreground italic">sem título</span>
+                        <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded border border-warning/40 bg-warning/5 text-warning"
+                              title={`O código ${n.code} não estava no texto colado, mas "${tree.find((x) => x.parentCode === n.code)?.code ?? ""}" precisa dele. Será criada sem título.`}>
+                          criada automaticamente
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-[13px] truncate">{n.title}</span>
+                    )}
                     {/* O que veio das colunas: conferir aqui evita descobrir
                         que a data entrou errada só depois de importar. */}
                     {n.vals && (
@@ -794,7 +877,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                       </span>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -816,7 +900,14 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
             <Button variant="outline" size="sm" onClick={resetAndClose}>Cancelar</Button>
             <Button size="sm" onClick={handleImport} disabled={tree.length === 0 || importing} className="gap-1.5">
               <Upload className="w-4 h-4" />
-              {importing ? "Importando..." : `Importar ${tree.length} ${tree.length === 1 ? "item" : "itens"}`}
+              {/* Desconta o que será REAPROVEITADO: contar a fase existente
+                  como item a importar prometia criar algo que não é criado. */}
+              {importing
+                ? "Importando..."
+                : (() => {
+                    const novos = tree.length - reaproveitados;
+                    return `Importar ${novos} ${novos === 1 ? "item" : "itens"}`;
+                  })()}
             </Button>
           </div>
         </div>

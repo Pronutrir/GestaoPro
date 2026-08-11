@@ -12,12 +12,12 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2, IndentIncrease, CornerDownRight } from "lucide-react";
+import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, CheckCircle2, Circle, ArrowRightLeft, Pencil, Diamond, ArrowRight, Link2, IndentIncrease, CornerDownRight, Package } from "lucide-react";
 // Validação de movimento na EAP — a MESMA que o Backlog e o Kanban usam, para
 // as três telas recusarem exatamente as mesmas coisas (ciclo, self, marco).
 import {
   eapCanMoveInto, eapCanGroup, eapDescendantIds, eapShouldDemote,
-  eapToPersisted, eapTypeOptions, resolveEapKind, EAP_LABELS,
+  eapToPersisted, eapLevel, resolveEapKind, EAP_LABELS,
   type EapKind, type EapNodeLike,
 } from "@/lib/eapModel";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -1333,6 +1333,9 @@ export const EditActivityDialog = ({
           .eq("id", paiAnterior)
           .maybeSingle();
         const pai = paiRow as { item_type?: string; wbs_code?: string } | null;
+        // eapShouldDemote só rebaixa quem NÃO tem código EAP — quem tem
+        // declarou a própria posição na estrutura, e granular a EAP não pode
+        // desfazer isso. Ver a regra em lib/eapModel.
         if (pai && eapShouldDemote(pai, (irmaos?.length ?? 0) > 0)) {
           // Falha aqui não desfaz o salvamento, que é o que o usuário pediu.
           await supabase.from("activities").update({ item_type: "atividade" } as any).eq("id", paiAnterior);
@@ -1627,7 +1630,16 @@ export const EditActivityDialog = ({
           {/* ============= CABEÇALHO COMPACTO (estilo ClickUp) ============= */}
           {/* Título grande inline */}
           <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-2 rounded-md border border-input bg-background px-2.5 py-1 shadow-sm focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
+            {/* Foco = UMA linha, a própria borda.
+                Duas tentativas anteriores empilhavam duas linhas: primeiro
+                `ring-2 ring-offset-0` (anel colado por fora da borda de 1px),
+                depois `border-primary + ring-1` — o anel do Tailwind é um
+                box-shadow desenhado PARA FORA, então continuava sendo borda +
+                anel, com a franja azul irregular sobre o branco.
+                Agora só a borda muda de cor e engrossa (border-2), com o
+                padding compensando 1px para o campo não pular de tamanho ao
+                receber foco. */}
+            <div className="flex items-center gap-2 rounded-md border border-input bg-background px-2.5 py-1 shadow-sm transition-colors focus-within:border-2 focus-within:border-primary focus-within:px-[9px] focus-within:py-[3px]">
               {!!formData.wbs_code.trim() && (
                 <span
                   className="shrink-0 inline-flex items-center h-6 px-2 rounded-md border border-border bg-muted/40 text-[11px] font-mono text-muted-foreground"
@@ -1847,6 +1859,75 @@ export const EditActivityDialog = ({
                       });
                     };
 
+                    /**
+                     * O papel que a ESTRUTURA sugere, e por quê.
+                     *
+                     * É `resolveEapKind` sem considerar o item_type gravado:
+                     * só nível do código e existência de filhos. Assim a
+                     * sugestão reflete a árvore, não o que já foi escolhido —
+                     * senão ela concordaria sempre consigo mesma e nunca
+                     * avisaria nada.
+                     */
+                    const nivel = eapLevel(formData.wbs_code);
+                    const papelSugerido: EapKind = formData.is_milestone && !hasSubActivities
+                      ? "marco"
+                      : nivel === 1
+                        ? "fase"
+                        : hasSubActivities
+                          ? "entrega"
+                          : "atividade";
+                    const motivoSugerido =
+                      papelSugerido === "marco"
+                        ? "está marcado como ponto no tempo"
+                        : nivel === 1
+                          ? `o código ${formData.wbs_code?.trim()} é de nível 1`
+                          : hasSubActivities
+                            ? `agrupa ${ownSubActivities.length} subitem(ns)`
+                            : nivel
+                              ? `o código ${formData.wbs_code?.trim()} está abaixo do nível 1 e não agrupa`
+                              : "não tem código EAP nem subitens";
+
+                    /**
+                     * As quatro opções, sempre visíveis.
+                     *
+                     * Uma versão anterior escondia Fase ou Entrega conforme o
+                     * nível, para "não oferecer escolha inválida". Mas isso
+                     * impedia o caso legítimo — renumerar a EAP depois, ou
+                     * declarar uma entrega que ainda não tem filhos. Todas
+                     * aparecem; a divergência é avisada, não impedida.
+                     */
+                    const KIND_OPTIONS: {
+                      kind: EapKind;
+                      icon: React.ReactNode;
+                      hint: string;
+                      activeCls: string;
+                    }[] = [
+                      {
+                        kind: "fase",
+                        icon: <Layers className="w-3.5 h-3.5" />,
+                        hint: "Nível 1 da EAP (1, 2, 3…). Etapa do ciclo de vida; datas, horas e custo derivam dos filhos.",
+                        activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
+                      },
+                      {
+                        kind: "entrega",
+                        icon: <Package className="w-3.5 h-3.5" />,
+                        hint: "Do nível 1.1 em diante, agrupando subitens. Está dentro de uma fase; é o que ela produz.",
+                        activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
+                      },
+                      {
+                        kind: "atividade",
+                        icon: <Circle className="w-3.5 h-3.5" />,
+                        hint: "Folha de trabalho: vai ao Kanban, tem horas, custo e responsável.",
+                        activeCls: "border-primary bg-primary text-primary-foreground shadow-sm",
+                      },
+                      {
+                        kind: "marco",
+                        icon: <Diamond className={`w-3.5 h-3.5 ${itemKind === "marco" ? "fill-current" : ""}`} />,
+                        hint: "Ponto único no tempo (uma data, sem intervalo). Não tem horas nem custo.",
+                        activeCls: "border-amber-500 bg-amber-500 text-white shadow-sm",
+                      },
+                    ];
+
                     return (
                       <PropertyRow
                         iconClassName={itemKind === "marco" ? "text-amber-500" : "text-primary"}
@@ -1865,75 +1946,67 @@ export const EditActivityDialog = ({
                         label="Tipo"
                         wide
                       >
-                        {/* O PAPEL É MOSTRADO, NÃO PERGUNTADO.
-                            O PMBOK define pacote de trabalho como "o trabalho no
-                            NÍVEL MAIS BAIXO da EAP" — ou seja, Fase, Entrega e
-                            Atividade são POSIÇÕES na árvore, não escolhas. O
-                            mesmo item muda de papel quando alguém acrescenta um
-                            subitem abaixo dele.
-
-                            Perguntar isso abria espaço para o usuário responder
-                            algo que contradiz a estrutura, e era a origem da
-                            confusão entre os quatro nomes. Só MARCO segue
-                            editável: é a única decisão que a árvore não revela.
-                            Ver lib/eapModel e as referências do PMI. */}
+                        {/* O USUÁRIO ESCOLHE; o sistema AVISA quando a escolha
+                            contraria a estrutura.
+                            O PMBOK diz que o papel na EAP vem da posição, e uma
+                            versão anterior tirou a escolha por causa disso — o
+                            campo virou indicador. Ficou travado demais: há casos
+                            legítimos em que quem planeja sabe algo que a árvore
+                            ainda não mostra (a entrega que vai ganhar subitens,
+                            o item cujo código será renumerado).
+                            Então a regra vira ORIENTAÇÃO: o papel sugerido pela
+                            estrutura aparece marcado, escolher outro é possível,
+                            e a divergência fica explícita em vez de silenciosa.
+                            Só Marco com filhos segue barrado — ali não é questão
+                            de opinião: o trigger do banco recusa. */}
                         <div className="flex flex-col gap-1.5 w-full">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={cn(
-                              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border text-xs font-medium",
-                              itemKind === "marco"
-                                ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                : "border-primary/40 bg-primary/10 text-primary",
-                            )}>
-                              {itemKind === "marco"
-                                ? <Diamond className="w-3.5 h-3.5 fill-current" />
-                                : eapCanGroup(itemKind)
-                                  ? <Layers className="w-3.5 h-3.5" />
-                                  : <Circle className="w-3.5 h-3.5" />}
-                              {EAP_LABELS[itemKind]}
-                            </span>
-
-                            {/* POR QUE é este papel. Sem o motivo, o rótulo
-                                parece arbitrário — e a pergunta "por que isto é
-                                Entrega e aquilo Atividade?" é justamente a que
-                                confundia. */}
-                            <span className="text-[11px] text-muted-foreground">
-                              {itemKind === "marco"
-                                ? "ponto no tempo, sem duração"
-                                : (() => {
-                                    const nivel = formData.wbs_code?.trim()
-                                      ? `nível ${formData.wbs_code.trim()}`
-                                      : "sem código EAP";
-                                    const filhos = hasSubActivities
-                                      ? `agrupa ${ownSubActivities.length} subitem(ns)`
-                                      : "sem subitens";
-                                    return `${nivel} · ${filhos}`;
-                                  })()}
-                            </span>
+                          <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30 w-fit">
+                            {KIND_OPTIONS.map((opt) => {
+                              const active = itemKind === opt.kind;
+                              const impedido = opt.kind === "marco" && hasSubActivities;
+                              return (
+                                <button
+                                  key={opt.kind}
+                                  type="button"
+                                  disabled={impedido}
+                                  onClick={() => setKind(opt.kind)}
+                                  aria-pressed={active}
+                                  title={impedido ? "Este item tem subitens; Marco não agrupa." : opt.hint}
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border",
+                                    active
+                                      ? opt.activeCls
+                                      : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                                    impedido && "opacity-40 cursor-not-allowed",
+                                  )}
+                                >
+                                  {opt.icon}
+                                  {EAP_LABELS[opt.kind]}
+                                </button>
+                              );
+                            })}
                           </div>
 
-                          {/* MARCO é a única escolha real: um item vira ponto de
-                              controle por decisão de quem planeja, não por
-                              posição. Barrado quando tem filhos — marco é folha
-                              de controle e não agrupa. */}
-                          <label
-                            className={cn(
-                              "inline-flex items-center gap-2 text-[11.5px] w-fit",
-                              hasSubActivities ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-                            )}
-                            title={
-                              hasSubActivities
-                                ? "Este item tem subitens; Marco não agrupa."
-                                : "Marco é um ponto no tempo: uma data, sem intervalo, horas ou custo."
-                            }
-                          >
-                            <Checkbox
-                              checked={itemKind === "marco"}
-                              disabled={hasSubActivities}
-                              onCheckedChange={(v) => setKind(v ? "marco" : "atividade")}
-                            />
-                            <span>É um marco (data única, sem duração)</span>
-                          </label>
+                          {/* AVISO, não bloqueio. A estrutura sugere um papel;
+                              se o escolhido for outro, diz qual e por quê — e
+                              oferece o ajuste em um clique. */}
+                          {papelSugerido !== itemKind && (
+                            <span className="text-[10.5px] text-warning flex items-start gap-1 min-w-0">
+                              <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                              <span>
+                                Pela estrutura, este item seria{" "}
+                                <b className="font-semibold">{EAP_LABELS[papelSugerido]}</b>
+                                {" — "}{motivoSugerido}.{" "}
+                                <button
+                                  type="button"
+                                  className="underline hover:no-underline"
+                                  onClick={() => setKind(papelSugerido)}
+                                >
+                                  Usar {EAP_LABELS[papelSugerido]}
+                                </button>
+                              </span>
+                            </span>
+                          )}
 
                           {hasSubActivities && (
                             <span className="text-[10.5px] text-muted-foreground flex items-center gap-1 min-w-0" title="Horas e custo deste item são a soma dos subitens (veja a aba Subatividades).">

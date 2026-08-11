@@ -250,8 +250,22 @@ export function eapShouldDemote(item: EapItemLike, aindaTemFilhos: boolean): boo
   const t = (item.item_type || "").trim().toLowerCase();
   if (t !== "fase" && t !== "pacote") return false; // já é folha
 
-  // Fase declarada (nível 1 do código EAP) permanece fase.
-  if (eapLevel(item.wbs_code) === 1) return false;
+  // Fase ou Entrega DECLARADA pelo usuário permanece como está.
+  //
+  // Antes a proteção era só para o nível 1. Estava errado, e o efeito era
+  // grave: uma fase criada à mão (sem código EAP ainda) perdia o papel assim
+  // que ficasse temporariamente sem filhos — granular a EAP movendo um item
+  // fazia a fase inteira sumir do agrupamento. Relatado em 11/08.
+  //
+  // Agora QUALQUER item com código EAP válido é considerado declarado: quem
+  // digitou "1", "1.2" ou "2.1.3" disse onde ele está na estrutura, e essa
+  // afirmação não se desfaz porque o último filho saiu — a fase esvaziada é
+  // estado normal no meio do planejamento.
+  //
+  // Sobra o caso que o rebaixamento existe para tratar: item SEM código, que
+  // virou agrupador só porque alguém criou uma subatividade nele. Aí a
+  // promoção foi mesmo automática, e desfazê-la ao esvaziar é correto.
+  if (eapLevel(item.wbs_code) !== null) return false;
 
   return true;
 }
