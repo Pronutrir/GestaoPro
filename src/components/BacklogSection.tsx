@@ -850,35 +850,31 @@ export const BacklogSection = ({
       {/* expand + (caixa de seleção, só no modo) — espelha as células da linha */}
       <span />
       {selectMode && <span />}
-      {/* SELEÇÃO EM LOTE AQUI, não escondida num menu "⋯".
-          Era o único item de um dropdown inteiro, com nome de comando
-          ("Selecionar em lote") em vez de um controle que se reconhece. A
-          caixa ao lado de "Tarefa" é o lugar onde toda tabela põe isso: liga a
-          seleção, e no modo ligado marca ou desmarca tudo de uma vez. */}
+      {/* MARCAR/DESMARCAR TODAS — um clique, sem etapa intermediária.
+          Antes o primeiro clique só LIGAVA o modo sem marcar nada, e um link
+          "sair" aparecia ao lado: dois passos e um deslocamento da coluna para
+          fazer o que a caixa promete. Agora marcar liga o modo E seleciona
+          tudo; desmarcar limpa e desliga. Clicar e desclicar, só isso. */}
       <span className="flex items-center gap-2">
         <Checkbox
           checked={selectMode && selectedIds.size > 0 && selectedIds.size === backlogActs.length}
           onCheckedChange={(v) => {
-            if (!selectMode) { setSelectMode(true); return; }
-            setSelectedIds(v ? new Set(backlogActs.map((a) => a.id)) : new Set());
+            if (v) {
+              setSelectMode(true);
+              setSelectedIds(new Set(backlogActs.map((a) => a.id)));
+            } else {
+              setSelectedIds(new Set());
+              setSelectMode(false);
+            }
           }}
           className="h-3.5 w-3.5"
           title={
-            !selectMode ? "Selecionar em lote"
-              : selectedIds.size === backlogActs.length ? "Desmarcar todas"
-                : "Marcar todas"
+            selectMode && selectedIds.size === backlogActs.length
+              ? "Desmarcar todas"
+              : `Selecionar todas as ${backlogActs.length}`
           }
         />
         Tarefa
-        {selectMode && (
-          <button
-            type="button"
-            onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
-            className="normal-case font-normal text-[10.5px] text-muted-foreground hover:text-foreground underline underline-offset-2"
-          >
-            sair
-          </button>
-        )}
       </span>
       {activeCols.map((c) => (
         <span key={c.id}>{c.label}</span>
@@ -1996,6 +1992,38 @@ export const BacklogSection = ({
                     ))}
                   </PopoverContent>
                 </Popover>
+
+                {/* ARQUIVAR EM LOTE — estava faltando.
+                    Ao remover "Arquivar todas as fases/atividades" do menu, eu
+                    disse que a seleção em lote resolvia. Não resolvia: dava
+                    para selecionar e mudar status, responsável, prazo e
+                    prioridade, mas NÃO para arquivar. Tirei a saída ruim sem
+                    conferir se a boa existia. */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                  disabled={!!deleteBlockedReason}
+                  title={deleteBlockedReason || "Arquivar as selecionadas"}
+                  onClick={async () => {
+                    const n = selectedIds.size;
+                    const ok = await appConfirm({
+                      title: `Arquivar ${n} ${n === 1 ? "tarefa" : "tarefas"}?`,
+                      description: "Elas saem do Backlog e podem ser restauradas na Lixeira, aqui embaixo.",
+                      confirmText: "Arquivar",
+                      destructive: true,
+                    });
+                    if (!ok) return;
+                    await aplicarEmLote(
+                      { is_trashed: true, trashed_at: new Date().toISOString() },
+                      `${n} ${n === 1 ? "tarefa arquivada" : "tarefas arquivadas"}`,
+                    );
+                    setSelectedIds(new Set());
+                    setSelectMode(false);
+                  }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Arquivar
+                </Button>
               </>
             )}
             {/* O painel "Filtros" SUBIU para a linha da busca e dos segmentos:

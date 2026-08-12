@@ -272,6 +272,9 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [importing, setImporting] = useState(false);
+  /** Selo clicado no rodapé: recorta a prévia por papel. Null = mostra tudo.
+   *  Só afeta o que se VÊ — a importação leva a árvore inteira. */
+  const [filtroPapel, setFiltroPapel] = useState<EapRole | null>(null);
 
   /**
    * Fases que JÁ EXISTEM no projeto, indexadas pelo código EAP.
@@ -358,7 +361,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     return Math.max(0, coladas - (tree.length - inventados));
   }, [text, tree]);
 
-  const resetAndClose = () => { setText(""); setOpen(false); };
+  const resetAndClose = () => { setText(""); setFiltroPapel(null); setOpen(false); };
 
 
   const handleImport = async () => {
@@ -674,11 +677,31 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     }
   };
 
-  const CountBadge = ({ role, n }: { role: EapRole; n: number }) => (
-    <span className={cn("inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full border", ROLE_META[role].cls)}>
-      {ROLE_META[role].icon} {n} {ROLE_META[role].label.toLowerCase()}{n === 1 ? "" : "s"}
-    </span>
-  );
+  /**
+   * Selo de contagem que FILTRA a prévia.
+   *
+   * Antes era texto: mostrava "4 entregas" e não havia como ver QUAIS. Numa EAP
+   * de 38 itens, saber que existem 2 marcos sem poder achá-los na lista é
+   * informação que não ajuda a conferir nada — e conferir é o que se faz nesta
+   * tela antes de importar.
+   */
+  const CountBadge = ({ role, n }: { role: EapRole; n: number }) => {
+    const ativo = filtroPapel === role;
+    return (
+      <button
+        type="button"
+        onClick={() => setFiltroPapel(ativo ? null : role)}
+        title={ativo ? "Mostrar todos" : `Ver só ${ROLE_META[role].label.toLowerCase()}s`}
+        className={cn(
+          "inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full border transition-all",
+          ROLE_META[role].cls,
+          ativo ? "ring-2 ring-offset-1 ring-current" : "hover:brightness-95 opacity-90 hover:opacity-100",
+        )}
+      >
+        {ROLE_META[role].icon} {n} {ROLE_META[role].label.toLowerCase()}{n === 1 ? "" : "s"}
+      </button>
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : resetAndClose())}>
@@ -723,7 +746,10 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
             </div>
             <textarea
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                /* Limpa o recorte ao editar: o papel filtrado pode deixar de
+                   existir no texto novo, e a prévia ficaria vazia sem dizer
+                   por quê. */
+                onChange={(e) => { setText(e.target.value); setFiltroPapel(null); }}
                 spellCheck={false}
                 autoFocus
                 className="h-full w-full min-h-[240px] resize-none rounded-md border border-input bg-muted/50 px-3 py-2 font-mono text-[13px] leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -790,7 +816,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
               </div>
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto space-y-1 -mx-1 px-1">
-                {tree.map((n) => {
+                {(filtroPapel ? tree.filter((n) => n.role === filtroPapel) : tree).map((n) => {
                   // Ancestral inventado pelo parser (o texto começou em "1.2",
                   // então o "1" foi criado para a árvore não ficar quebrada).
                   const inventado = n.title.startsWith("(sem título)");
