@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package, AlertTriangle, FolderTree } from "lucide-react";
+import { Upload, Layers, Circle, Diamond, Package, AlertTriangle, FolderTree } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -250,76 +250,10 @@ const parseFlexible = (text: string): TreeNode[] => {
   return nodes;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Modelos por tipo de projeto (para quem não tem EAP pronta).        */
-/* ------------------------------------------------------------------ */
-const TEMPLATES: { id: string; emoji: string; name: string; desc: string; text: string }[] = [
-  {
-    id: "sistema", emoji: "💻", name: "Implantação de sistema",
-    desc: "Descoberta · Desenvolvimento · Homologação · Go-live",
-    text: `1. Implantação de sistema
-1.1 Descoberta e Requisitos
-1.1.1 Levantamento de requisitos
-1.1.1.1 Entrevistar áreas
-1.1.1.2 Mapear processos atuais
-1.1.1.3 Marco: Requisitos aprovados
-1.2 Desenvolvimento
-1.2.1 Modelagem e arquitetura
-1.2.2 Construção
-1.2.2.1 Desenvolver módulo principal
-1.2.2.2 Integrações
-1.3 Homologação
-1.3.1 Testes com usuários
-1.3.2 Ajustes finais
-1.4 Go-live
-1.4.1 Plano de implantação
-1.4.2 Treinamento
-1.4.3 Marco: Sistema em produção`,
-  },
-  {
-    id: "campanha", emoji: "📣", name: "Campanha de marketing",
-    desc: "Briefing · Criação · Veiculação · Análise",
-    text: `1. Campanha de marketing
-1.1 Briefing e Planejamento
-1.1.1 Definir objetivo e público
-1.1.2 Definir orçamento
-1.1.3 Marco: Briefing aprovado
-1.2 Criação
-1.2.1 Conceito e mensagem
-1.2.2 Produção de peças
-1.3 Veiculação
-1.3.1 Configurar canais
-1.3.2 Publicar e monitorar
-1.4 Análise
-1.4.1 Coletar métricas
-1.4.2 Relatório de resultados`,
-  },
-  {
-    id: "processo", emoji: "🔧", name: "Melhoria de processo",
-    desc: "Diagnóstico · Redesenho · Piloto · Rollout",
-    text: `1. Melhoria de processo
-1.1 Diagnóstico
-1.1.1 Mapear processo atual (AS-IS)
-1.1.2 Identificar gargalos
-1.2 Redesenho
-1.2.1 Desenhar processo futuro (TO-BE)
-1.2.2 Validar com áreas
-1.2.3 Marco: Novo processo aprovado
-1.3 Piloto
-1.3.1 Executar piloto
-1.3.2 Avaliar resultados
-1.4 Rollout
-1.4.1 Treinar equipes
-1.4.2 Implantar em toda a operação`,
-  },
-];
-
 export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogProps) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"paste" | "template">("paste");
   const [text, setText] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
   /**
@@ -407,19 +341,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     return Math.max(0, coladas - (tree.length - inventados));
   }, [text, tree]);
 
-  const resetAndClose = () => { setText(""); setSelectedTemplate(null); setTab("paste"); setOpen(false); };
+  const resetAndClose = () => { setText(""); setOpen(false); };
 
-  const pickTemplate = (id: string) => {
-    const t = TEMPLATES.find((x) => x.id === id);
-    if (!t) return;
-    setSelectedTemplate(id);
-    setText(t.text);
-    // Volta para "Colar texto" ao escolher um modelo: é lá que o texto fica
-    // visível e editável. Ficar na aba de modelos escondia o que havia sido
-    // carregado — a pessoa via só um "✓" e não percebia que ainda faltava
-    // confirmar em "Importar N itens", então parecia que nada acontecia.
-    setTab("paste");
-  };
 
   const handleImport = async () => {
     if (tree.length === 0) return;
@@ -751,69 +674,39 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         {/* Cabeçalho enxuto */}
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <DialogTitle className="text-base font-semibold">Importar EAP</DialogTitle>
+          {/* UMA FRASE. Antes eram três blocos mais um aviso de Marco com três
+              linhas, falando em "profundidade", "nível da Fase" e "a posição
+              vence" — vocabulário de quem escreveu o parser, não de quem cola
+              uma EAP. A regra saiu do texto e virou o de/para ao lado do campo,
+              onde se lê comparando com o exemplo em vez de decorando. */}
           <p className="text-[13px] text-muted-foreground mt-0.5">
-            Cole sua estrutura em qualquer formato ou comece de um modelo.{" "}
-            <span className="text-foreground">
-              O nível 1 é o próprio projeto e não é importado. <span className="font-mono">1.1</span> vira Fase,{" "}
-              <span className="font-mono">1.1.1</span> Entrega, e daí em diante Atividade.
-            </span>{" "}
-            Colando de planilha, as colunas de data, horas e responsável são reconhecidas.
+            Cole a estrutura do seu projeto. De planilha, as colunas de data,
+            horas e responsável são reconhecidas.
           </p>
-
-          {/* MARCO em destaque próprio: é o único papel que o usuário DECLARA
-              (os outros vêm da posição), e as quatro marcações aceitas viviam
-              só no código — a tela citava uma. Quem colava uma EAP com "🏁" ou
-              "[M]" não tinha como saber que funcionava. */}
-          <div className="mt-2.5 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2">
-            <Diamond className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 fill-current shrink-0 mt-0.5" />
-            <p className="text-[12.5px] text-muted-foreground leading-relaxed">
-              <strong className="font-medium text-foreground">Marco</strong> é o único que você declara —
-              comece o título com{" "}
-              {["Marco:", "Milestone", "🏁", "[M]"].map((m, i) => (
-                <span key={m}>
-                  {i > 0 && " · "}
-                  <code className="px-1 py-0.5 rounded bg-muted text-[11.5px] font-mono text-foreground">{m}</code>
-                </span>
-              ))}
-              . Vale em qualquer profundidade — exceto no nível da Fase
-              (<span className="font-mono text-[11.5px]">1.2</span>), onde a posição vence:{" "}
-              <span className="font-mono text-[11.5px]">1.2 Marco: Testes</span> continua sendo Fase.
-            </p>
-          </div>
         </DialogHeader>
 
-        {/* Abas segmentadas */}
-        <div className="flex items-center gap-1 px-6 pt-3 shrink-0">
-          {([["paste", "Colar texto", <ClipboardList key="i" className="w-4 h-4" />],
-             ["template", "Usar modelo", <FileText key="i" className="w-4 h-4" />]] as const).map(([id, label, icon]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={cn(
-                "flex items-center gap-2 text-[13px] px-3 py-1.5 rounded-md transition-colors",
-                tab === id ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:bg-muted/50",
-              )}
-            >
-              {icon} {label}
-            </button>
-          ))}
-        </div>
+        {/* SEM ABAS. Eram duas — "Colar texto" e "Usar modelo" — e a segunda
+            saiu junto com os modelos: três EAPs genéricas que ocupavam metade
+            do diálogo. Quem tem uma EAP cola a sua; quem não tem não adota a
+            estrutura de um projeto alheio. Sobrou uma coisa a fazer, e uma
+            coisa só não precisa de aba para ser escolhida. */}
 
         {/* Corpo: cresce e rola internamente; footer fica ancorado */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border-t mt-3 flex-1 min-h-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border-t flex-1 min-h-0">
           {/* Entrada */}
           <div className="p-6 md:border-r flex flex-col min-h-0">
-            {tab === "paste" ? (
-              // textarea nativa: o wrapper de UI força whiteSpace/overflowWrap
-              // inline e reajusta altura no onChange, o que atrapalhava a
-              // digitação e a colagem neste campo (que é monoespaçado, de
-              // muitas linhas e vive dentro de um flex com min-h-0).
-              // `h-full` explícito: com `flex-1 min-h-0` a altura colapsava a
-              // zero e o campo ficava sem área clicável.
-              <textarea
+            {/* textarea nativa: o wrapper de UI força whiteSpace/overflowWrap
+                inline e reajusta altura no onChange, o que atrapalhava a
+                digitação e a colagem neste campo (monoespaçado, de muitas
+                linhas, dentro de um flex com min-h-0).
+                `h-full` explícito: com `flex-1 min-h-0` a altura colapsava a
+                zero e o campo ficava sem área clicável. */}
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 shrink-0">
+              Cole aqui
+            </div>
+            <textarea
                 value={text}
-                onChange={(e) => { setText(e.target.value); setSelectedTemplate(null); }}
+                onChange={(e) => setText(e.target.value)}
                 spellCheck={false}
                 autoFocus
                 className="h-full w-full min-h-[240px] resize-none rounded-md border border-input bg-muted/50 px-3 py-2 font-mono text-[13px] leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -831,68 +724,52 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                    comprimento de cada linha e quebravam no campo estreito,
                    virando um bloco confuso — e a regra que elas repetiam já
                    está escrita logo acima, no cabeçalho. */
+                /* Espelha o de/para ao lado, LINHA A LINHA: a 1ª daqui é a 1ª
+                   de lá. É o que permite ler comparando em vez de decorar uma
+                   regra escrita em texto. */
                 placeholder={[
                   "1. Implantação do Serviço",
-                  "1.1 Iniciação e Planejamento",
-                  "1.1.1 Formalização do Projeto",
+                  "1.1 Iniciação",
+                  "1.1.1 Formalização",
                   "1.1.1.1 Elaborar TAP",
                   "1.1.1.2 Marco: TAP aprovado",
-                  "1.2 Requisitos e Design",
-                  "1.2.1 Especificação",
-                  "",
-                  "ou com bullets e recuo:",
-                  "• Iniciação",
-                  "   - Formalização",
                 ].join("\n")}
               />
-            ) : (
-              <div className="overflow-y-auto space-y-2 -mx-1 px-1">
-                {TEMPLATES.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => pickTemplate(t.id)}
-                    className={cn(
-                      "w-full flex items-center gap-3 text-left border rounded-lg p-3 transition-colors",
-                      selectedTemplate === t.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
-                    )}
-                  >
-                    <span className="w-9 h-9 rounded-md bg-muted flex items-center justify-center text-lg shrink-0">{t.emoji}</span>
-                    <span className="min-w-0">
-                      <span className="block text-[13px] font-medium">{t.name}</span>
-                      <span className="block text-xs text-muted-foreground truncate">{t.desc}</span>
-                    </span>
-                    {selectedTemplate === t.id && <span className="ml-auto text-primary text-sm">✓</span>}
-                  </button>
-                ))}
-                {/* Não é uma opção de importação: só fecha o diálogo. Estava
-                    com a mesma aparência dos modelos acima, então clicar nele
-                    parecia escolher um modelo — o modal fechava, nada era
-                    criado e nada explicava o porquê. Agora é texto com um link,
-                    não mais um cartão irmão dos modelos. */}
-                <p className="text-xs text-muted-foreground pt-1">
-                  Prefere montar item a item?{" "}
-                  <button
-                    type="button"
-                    onClick={resetAndClose}
-                    className="underline underline-offset-2 hover:text-foreground"
-                  >
-                    Feche e use “Nova Atividade”
-                  </button>
-                  .
-                </p>
-              </div>
-            )}
           </div>
 
           {/* Pré-visualização em árvore */}
           <div className="p-6 flex flex-col min-h-0">
             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 shrink-0">
-              Pré-visualização
+              {tree.length === 0 ? "O que vai acontecer" : "Pré-visualização"}
             </div>
             {tree.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg text-center text-[13px] text-muted-foreground px-6">
-                A árvore aparece aqui conforme você cola o texto ou escolhe um modelo.
+              /* A ÁREA VAZIA ENSINA. Antes dizia "a árvore aparece aqui
+                 conforme você cola" — descrevia o óbvio e não explicava a
+                 regra, que estava num parágrafo lá em cima.
+                 Agora cada linha aqui corresponde à mesma linha do exemplo no
+                 campo ao lado, então lê-se comparando em vez de decorando. E
+                 some assim que há o que mostrar, dando lugar à árvore real. */
+              <div className="flex-1 border border-dashed rounded-lg p-4 flex flex-col justify-center gap-2.5">
+                {[
+                  { code: "1.", papel: "o projeto", nota: "não é importado", cls: "text-muted-foreground" },
+                  { code: "1.1", papel: "Fase" },
+                  { code: "1.1.1", papel: "Entrega" },
+                  { code: "1.1.1.1", papel: "Atividade" },
+                ].map((l) => (
+                  <div key={l.code} className="flex items-baseline gap-2.5 text-[12.5px]">
+                    <span className="font-mono text-muted-foreground w-[58px] shrink-0 tabular-nums">{l.code}</span>
+                    <span className={l.cls || "font-medium text-foreground"}>{l.papel}</span>
+                    {l.nota && <span className="text-muted-foreground/70 text-[11.5px]">— {l.nota}</span>}
+                  </div>
+                ))}
+                <div className="flex items-baseline gap-2.5 text-[12.5px] pt-2 mt-1 border-t border-dashed">
+                  <Diamond className="w-3 h-3 shrink-0 self-center text-amber-600 dark:text-amber-400 fill-current" />
+                  <span className="text-muted-foreground">
+                    Escreva{" "}
+                    <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11.5px] text-foreground">Marco:</code>
+                    {" "}no título para virar um marco
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto space-y-1 -mx-1 px-1">
