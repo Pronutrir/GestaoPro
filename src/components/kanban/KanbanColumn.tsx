@@ -373,6 +373,8 @@ export function SortableColumn({
   collapsed = false,
   onToggleCollapse,
   columnFilterSlot,
+  colSort: colSortProp,
+  onChangeColSort,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -425,19 +427,33 @@ export function SortableColumn({
   hoursStatsByActivity?: Map<string, HoursStat>;
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
+  /** Ordenação desta coluna, vinda das preferências do usuário (banco). */
+  colSort?: string;
+  onChangeColSort?: (stageId: string, value: string) => void;
 }) {
   // Ordenação por coluna, independente das demais. PERSISTE: antes voltava ao
   // padrão a cada recarregamento — quem escolhia "por prazo" reencontrava a
   // coluna na ordem antiga no dia seguinte, sem entender por quê.
+  //
+  // Desde 12/08/2026 quem guarda é o pai (preferências do usuário no banco,
+  // lib/kanbanPrefs). O estado local sobrevive como fallback para uso sem as
+  // props — sem ele, a coluna perderia a ordenação em qualquer chamada que
+  // ainda não passe o par colSort/onChangeColSort.
   const colSortKey = `kanban-col-sort:${stage.id}`;
-  const [colSort, setColSort] = useState<string>(() => {
+  const [colSortLocal, setColSortLocal] = useState<string>(() => {
     if (typeof window === "undefined") return DEFAULT_BOARD_SORT;
     const saved = window.localStorage.getItem(colSortKey);
     return isValidSortValue(saved) ? saved : DEFAULT_BOARD_SORT;
   });
-  useEffect(() => {
-    try { window.localStorage.setItem(colSortKey, colSort); } catch { /* quota */ }
-  }, [colSort, colSortKey]);
+  const controlado = colSortProp !== undefined && onChangeColSort !== undefined;
+  const colSort = controlado ? colSortProp : colSortLocal;
+  const setColSort = useCallback((v: string) => {
+    if (controlado) onChangeColSort!(stage.id, v);
+    else {
+      setColSortLocal(v);
+      try { window.localStorage.setItem(colSortKey, v); } catch { /* quota */ }
+    }
+  }, [controlado, onChangeColSort, stage.id, colSortKey]);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickTitle, setQuickTitle] = useState("");
   const [quickPhase, setQuickPhase] = useState("");
@@ -930,8 +946,9 @@ export function SortableColumn({
                   onToggleCollapse(stage.id);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
-                // "só para você": recolher grava no localStorage, ao contrário
-                // do "Ocultar para todos" do menu, que muda o quadro da equipe.
+                // "só para você": recolher é preferência pessoal (segue a
+                // pessoa entre computadores, mas só a dela), ao contrário do
+                // "Ocultar para todos" do menu, que muda o quadro da equipe.
                 title="Recolher coluna (só para você)"
               >
                 <ChevronsLeft className="w-3.5 h-3.5" />
@@ -1083,7 +1100,7 @@ export function SortableColumn({
                   </DropdownMenuItem>
                   {/* "para todos" no rótulo: ocultar grava em workflow_stages,
                       que é do PROJETO — some do quadro da equipe inteira. Fica a
-                      um clique do "Recolher", que é só seu (localStorage), e os
+                      um clique do "Recolher", que é preferência só sua, e os
                       dois soavam iguais. */}
                   <DropdownMenuItem
                     className="focus:bg-muted/60 focus:text-foreground"

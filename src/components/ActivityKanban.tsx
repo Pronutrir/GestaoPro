@@ -124,6 +124,7 @@ import {
   EMPTY_COLUMN_FILTER,
   columnFilterActive,
   DEFAULT_CARD_FIELDS,
+  DEFAULT_BOARD_SORT,
   type GroupByValue,
   type CardFields,
   type WorkflowStage,
@@ -134,6 +135,8 @@ import {
   type SubActivityStatusSummary,
   type ActivityKanbanProps,
 } from "./kanban/shared";
+import { useKanbanPrefs } from "@/hooks/useKanbanPrefs";
+import { migrarOrdenacaoDasColunas } from "@/lib/kanbanPrefs";
 import { KanbanCard, SortableKanbanCard } from "./kanban/KanbanCard";
 import {
   SortableColumn,
@@ -188,38 +191,45 @@ export const ActivityKanban = ({
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
-  const columnWidthsKey = `kanban-col-widths:${projectId}`;
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
-    if (typeof window === "undefined") return {};
-    try {
-      const raw = window.localStorage.getItem(`kanban-col-widths:${projectId}`);
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  });
-  // Colunas recolhidas (só front-end, persistido por projeto).
-  const collapsedStagesKey = `kanban-collapsed-stages:${projectId}`;
-  const [collapsedStages, setCollapsedStages] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      const raw = window.localStorage.getItem(`kanban-collapsed-stages:${projectId}`);
-      return raw ? new Set<string>(JSON.parse(raw)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
+
+  // Preferências de exibição (campos do card, raias, larguras, colunas
+  // recolhidas, ordenação por coluna). Ficavam em cinco chaves soltas de
+  // localStorage e não seguiam a pessoa: configurar o quadro no trabalho e
+  // abrir em casa devolvia tudo ao padrão. Agora o navegador é cache e o banco
+  // é a verdade — ver lib/kanbanPrefs.ts.
+  //
+  // FILTROS continuam locais de propósito (busca do momento, não gosto).
+  const { user, profile } = useAuth();
+  // `restaurarPrefs` existe no hook mas não é usado aqui: o "Restaurar" da tela
+  // fica sob "Campos do card" e restaura só eles — zerar larguras e raias num
+  // clique com esse rótulo surpreenderia.
+  const { prefs, setPrefs } = useKanbanPrefs(projectId, user?.id ?? null);
+  const columnWidths = prefs.columnWidths;
+  // Espelho para o handler de arrasto ler a largura atual sem entrar nas deps
+  // do useCallback (recriar o handler no meio do gesto perderia o movimento).
+  const columnWidthsRef = useRef<Record<string, number>>(columnWidths);
+  const collapsedStages = useMemo(() => new Set(prefs.collapsedStages), [prefs.collapsedStages]);
   const toggleCollapsedStage = useCallback((stageId: string) => {
-    setCollapsedStages((prev) => {
-      const next = new Set(prev);
+    setPrefs((p) => {
+      const next = new Set(p.collapsedStages);
       if (next.has(stageId)) next.delete(stageId);
       else next.add(stageId);
-      try {
-        window.localStorage.setItem(collapsedStagesKey, JSON.stringify([...next]));
-      } catch { /* quota */ }
-      return next;
+      return { collapsedStages: [...next] };
     });
-  }, [collapsedStagesKey]);
+  }, [setPrefs]);
+  const setColumnSort = useCallback((stageId: string, value: string) => {
+    setPrefs((p) => ({ columnSorts: { ...p.columnSorts, [stageId]: value } }));
+  }, [setPrefs]);
+  // A ordenação por coluna morava em `kanban-col-sort:{stageId}`, chave sem o
+  // projectId — só dá para achá-la depois que os stages chegam. Sem esta
+  // varredura, quem escolheu "por prazo" perderia a escolha nesta versão.
+  const ordenacoesMigradas = useRef(false);
+  useEffect(() => {
+    if (ordenacoesMigradas.current || stages.length === 0) return;
+    const achadas = migrarOrdenacaoDasColunas(stages.map((s) => s.id), prefs.columnSorts);
+    ordenacoesMigradas.current = true;
+    if (achadas) setPrefs((p) => ({ columnSorts: { ...achadas, ...p.columnSorts } }));
+  }, [stages, prefs.columnSorts, setPrefs]);
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Map<string, number>>(new Map());
   const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
   // Predecessoras ainda nao concluidas por atividade (dependencia bloqueante).
@@ -250,49 +260,16 @@ export const ActivityKanban = ({
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
 
-  // Chaves de preferência substituídas por versões novas: limpa a antiga
-  // para não acumular lixo indefinidamente no localStorage do usuário.
-  // - kanban-density (Fase 0): densidade S/M/G removida, o quadro tem um só
-  //   tamanho, o da imagem aprovada (lib/kanbanTokens).
-  // - kanban-card-fields v1 (Fase 1): campo virou versionado porque o merge
-  //   com o default antigo (participants/hours/subCount=true) sobrescrevia
-  //   o novo padrão para quem já tinha usado o quadro; ver cardFieldsKey.
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(`kanban-density:${projectId}`);
-      window.localStorage.removeItem(`kanban-card-fields:${projectId}`);
-    }
-  }, [projectId]);
-
-  // Campos visíveis do card (⚙ Card), persistido por projeto. Faz merge com os
-  // defaults para tolerar chaves novas adicionadas em versões futuras.
-  //
-  // Chave em v2 (Fase 1): quem já usava o quadro tinha participants/hours/
-  // subCount=true salvos no v1 — o merge "...DEFAULT_CARD_FIELDS, ...raw"
-  // faria o valor salvo vencer e a mudança de padrão nunca apareceria para
-  // ninguém que já tivesse aberto a tela antes. Bump de versão zera todo
-  // mundo para o novo padrão uma vez; o v1 fica órfão e inofensivo.
-  const cardFieldsKey = `kanban-card-fields:v2:${projectId}`;
-  const [cardFields, setCardFields] = useState<CardFields>(() => {
-    if (typeof window === "undefined") return DEFAULT_CARD_FIELDS;
-    try {
-      const raw = window.localStorage.getItem(cardFieldsKey);
-      return raw ? { ...DEFAULT_CARD_FIELDS, ...JSON.parse(raw) } : DEFAULT_CARD_FIELDS;
-    } catch {
-      return DEFAULT_CARD_FIELDS;
-    }
-  });
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try { window.localStorage.setItem(cardFieldsKey, JSON.stringify(cardFields)); } catch { /* quota */ }
-    }
-  }, [cardFields, cardFieldsKey]);
+  // Campos visíveis do card (⚙ Card). A limpeza das chaves antigas e o merge
+  // com os defaults moraram aqui até 12/08/2026; hoje são responsabilidade de
+  // lib/kanbanPrefs (limparChavesAntigas / sanearPrefs), junto com a lição de
+  // versionar a chave sempre que um DEFAULT_* persistido mudar de valor.
+  const cardFields = prefs.cardFields;
   const toggleCardField = useCallback((key: keyof CardFields) => {
-    setCardFields((prev) => ({ ...prev, [key]: !prev[key] }));
-  }, []);
+    setPrefs((p) => ({ cardFields: { ...p.cardFields, [key]: !p.cardFields[key] } }));
+  }, [setPrefs]);
 
   // Filtro "Apenas minhas tarefas" — persistido por projeto
-  const { user, profile } = useAuth();
   const myName = (profile?.full_name || "").trim().toLowerCase();
   const myId = user?.id || null;
   const onlyMineKey = `kanban-only-mine:${projectId}`;
@@ -306,20 +283,9 @@ export const ActivityKanban = ({
     }
   }, [onlyMine, onlyMineKey]);
 
-  // Agrupamento em raias (swimlanes) e ordenação padrão do quadro — ajustes de
-  // exibição persistidos por projeto, como os demais (localStorage; a migração
-  // para prefs no banco foi adiada por decisão do usuário).
-  const groupByKey = `kanban-group-by:${projectId}`;
-  const [groupBy, setGroupBy] = useState<GroupByValue>(() => {
-    if (typeof window === "undefined") return "none";
-    const raw = window.localStorage.getItem(groupByKey);
-    return raw && (GROUP_BY_VALUES as readonly string[]).includes(raw) ? (raw as GroupByValue) : "none";
-  });
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try { window.localStorage.setItem(groupByKey, groupBy); } catch { /* quota */ }
-    }
-  }, [groupBy, groupByKey]);
+  // Agrupamento em raias (swimlanes) — segue a pessoa entre computadores.
+  const groupBy = prefs.groupBy;
+  const setGroupBy = useCallback((v: GroupByValue) => setPrefs({ groupBy: v }), [setPrefs]);
   // Times de raia (nível B): grupos nomeados de pessoas, por projeto,
   // compartilhados via banco. Alimentam a "Raia por time" quando o usuário
   // escolhe agrupar por time — não alteram o comportamento padrão do Kanban.
@@ -551,8 +517,12 @@ export const ActivityKanban = ({
     setFilterStartRange(f.startRange ?? { from: "", to: "" });
     setFilterHoursRange(f.hoursRange ?? { min: "", max: "" });
     setOnlyMine(!!f.onlyMine);
-    setGroupBy((GROUP_BY_VALUES as readonly string[]).includes(c.groupBy ?? "") ? (c.groupBy as GroupByValue) : "none");
-    setCardFields({ ...DEFAULT_CARD_FIELDS, ...(c.cardFields ?? {}) });
+    // Raia e campos do card num setPrefs só: separados, o segundo leria o
+    // estado anterior ao primeiro e uma das duas mudanças se perderia.
+    setPrefs({
+      groupBy: (GROUP_BY_VALUES as readonly string[]).includes(c.groupBy ?? "") ? (c.groupBy as GroupByValue) : "none",
+      cardFields: { ...DEFAULT_CARD_FIELDS, ...(c.cardFields ?? {}) },
+    });
     setActiveViewId(v.id);
   };
 
@@ -900,20 +870,33 @@ export const ActivityKanban = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
 
-  // Initialize equal column widths when stages change
-  useEffect(() => {
-    const visibleStages = stages.filter((s) => s.display_order > 0);
-    if (visibleStages.length === 0) return;
-    // Only initialize if no widths set yet
-    setColumnWidths((prev) => {
-      const hasAll = visibleStages.every((s) => prev[s.id]);
-      if (hasAll) return prev;
-      const equalWidth = 100 / visibleStages.length;
-      const widths: Record<string, number> = {};
-      visibleStages.forEach((s) => (widths[s.id] = prev[s.id] || equalWidth));
-      return widths;
-    });
+  // Largura de quem ainda não tem: divide o espaço em partes iguais. É CÁLCULO,
+  // não preferência — por isso não vai para `setPrefs`. Gravar aqui criaria uma
+  // linha no banco em todo primeiro acesso, com larguras que ninguém escolheu,
+  // e o efeito se realimentaria (lê columnWidths, escreve columnWidths).
+  const larguraPadrao = useMemo(() => {
+    const visiveis = stages.filter((s) => s.display_order > 0);
+    if (visiveis.length === 0) return {};
+    const igual = 100 / visiveis.length;
+    const out: Record<string, number> = {};
+    for (const s of visiveis) out[s.id] = igual;
+    return out;
   }, [stages]);
+
+  // Largura durante o arrasto: estado efêmero, fora das preferências. Cada
+  // pixel do movimento entraria no debounce e viraria escrita no banco — o
+  // valor só vira preferência quando a mão solta. Enquanto arrasta, a coluna
+  // segue este valor; em repouso, `larguraArrastando` é null e vale a pref.
+  const [larguraArrastando, setLarguraArrastando] = useState<Record<string, number> | null>(null);
+  // O que a pessoa escolheu vence o padrão calculado, coluna a coluna.
+  const larguraEfetiva = useMemo(
+    () => ({ ...larguraPadrao, ...(larguraArrastando ?? columnWidths) }),
+    [larguraPadrao, larguraArrastando, columnWidths],
+  );
+  // O handler de arrasto lê daqui: precisa das larguras JÁ resolvidas (com o
+  // padrão preenchido), senão arrastar a primeira coluna gravaria só ela e as
+  // outras voltariam ao cálculo na próxima carga.
+  useEffect(() => { columnWidthsRef.current = larguraEfetiva; }, [larguraEfetiva]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent, stageId: string, currentWidthPct: number) => {
     e.preventDefault();
@@ -922,13 +905,17 @@ export const ActivityKanban = ({
     const containerWidth = containerRef.current.offsetWidth;
     const startWidth = (currentWidthPct / 100) * containerWidth;
     resizingRef.current = { stageId, startX: e.clientX, startWidth };
+    let ultimo: Record<string, number> | null = null;
 
     const handleMouseMove = (ev: MouseEvent) => {
       if (!resizingRef.current || !containerRef.current) return;
       const diff = ev.clientX - resizingRef.current.startX;
       const newWidthPx = Math.max(160, resizingRef.current.startWidth + diff);
       const newWidthPct = (newWidthPx / containerRef.current.offsetWidth) * 100;
-      setColumnWidths((prev) => ({ ...prev, [resizingRef.current!.stageId]: newWidthPct }));
+      setLarguraArrastando((prev) => {
+        ultimo = { ...(prev ?? columnWidthsRef.current), [resizingRef.current!.stageId]: newWidthPct };
+        return ultimo;
+      });
     };
 
     const handleMouseUp = () => {
@@ -937,18 +924,16 @@ export const ActivityKanban = ({
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
-      // Persiste a largura ao soltar (nao a cada pixel).
-      setColumnWidths((prev) => {
-        try { window.localStorage.setItem(columnWidthsKey, JSON.stringify(prev)); } catch { /* quota */ }
-        return prev;
-      });
+      // Persiste ao soltar (não a cada pixel): uma escrita por gesto.
+      if (ultimo) setPrefs({ columnWidths: ultimo });
+      setLarguraArrastando(null);
     };
 
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-  }, [columnWidthsKey]);
+  }, [setPrefs]);
 
   // KeyboardSensor além do ponteiro: sem ele o quadro é inoperável por teclado
   // (mover card só com mouse). O Backlog já usava este par — o Kanban ficou
@@ -2641,7 +2626,7 @@ export const ActivityKanban = ({
               onManageGroups={() => setManageGroupsOpen(true)}
               cardFields={cardFields}
               onToggleCardField={toggleCardField}
-              onRestoreCardFields={() => setCardFields(DEFAULT_CARD_FIELDS)}
+              onRestoreCardFields={() => setPrefs({ cardFields: DEFAULT_CARD_FIELDS })}
               alerta={hiddenStages.some((s) => (countByStage.get(s.id) ?? 0) > 0)}
             />
           );
@@ -2744,13 +2729,15 @@ export const ActivityKanban = ({
           const renderColumn = (stage: WorkflowStage, idx: number, laneMatch?: (a: Activity) => boolean, laneId?: string) => {
             const base = activitiesByStage[stage.id] || [];
             const stageActivities = laneMatch ? base.filter(laneMatch) : base;
-            const widthPct = columnWidths[stage.id] || (100 / visibleStages.length);
+            const widthPct = larguraEfetiva[stage.id] || (100 / visibleStages.length);
             return (
               <SortableColumn
                 key={laneId ? `${laneId}-${stage.id}` : stage.id}
                 laneId={laneId}
                 collapsed={collapsedStages.has(stage.id)}
                 onToggleCollapse={toggleCollapsedStage}
+                colSort={prefs.columnSorts[stage.id] ?? DEFAULT_BOARD_SORT}
+                onChangeColSort={setColumnSort}
                 columnFilterSlot={
                   <ColumnFilterPanel
                     stageId={stage.id}
