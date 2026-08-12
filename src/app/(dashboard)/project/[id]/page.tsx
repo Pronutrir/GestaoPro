@@ -1757,9 +1757,15 @@ export default function ProjectDetailsPage() {
             </TabsContent>
 
             <TabsContent value="backlog" className="mt-3 space-y-3">
-              {/* Barra única: ações à esquerda · busca/filtros/opções à direita */}
-              <div className="flex flex-wrap items-center gap-2">
-                {canCreate ? (
+              {/* A FAIXA DE AÇÕES SUMIU DAQUI.
+                  "Nova Atividade" e "Importar EAP" descem para a linha de
+                  filtros do Backlog, via prop `acoes`. Eram duas faixas — os
+                  botões nesta, busca e segmentos na outra — e a divisão era
+                  acidente de arquitetura: os segmentos dependem da prontidão,
+                  que é estado do componente. Quem olha a tela vê uma barra de
+                  trabalho, não dois donos de código. */}
+              {(() => {
+                const acoesBacklog = canCreate ? (
                   <>
                     {/* Abre a MESMA tela da edição, agora em modo de criação.
                         Antes abria um diálogo de 3 campos (título, onde
@@ -1767,7 +1773,7 @@ export default function ProjectDetailsPage() {
                         editar a mesma coisa não podiam ser telas diferentes.
                         A tela completa já existia e estava órfã: o estado que a
                         abre nunca era ligado em lugar nenhum do código. */}
-                    <Button size="sm" variant="default" onClick={() => setShowAddActivity(true)} className="gap-1.5 h-9">
+                    <Button size="sm" variant="default" onClick={() => setShowAddActivity(true)} className="gap-1.5 h-8">
                       <Plus className="w-4 h-4" /> Nova Atividade
                     </Button>
                     <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
@@ -1777,7 +1783,7 @@ export default function ProjectDetailsPage() {
                     size="sm"
                     variant="default"
                     disabled
-                    className="gap-1.5 h-9"
+                    className="gap-1.5 h-8"
                     title={
                       isProjectConcluded
                         ? "Projeto concluído — reabra para criar atividades."
@@ -1790,46 +1796,17 @@ export default function ProjectDetailsPage() {
                   >
                     <Plus className="w-4 h-4" /> Nova Atividade
                   </Button>
-                )}
-
-                <span className="flex-1" />
-
-                <div className="relative w-[200px]">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    value={listSearch}
-                    onChange={(e) => setListSearch(e.target.value)}
-                    placeholder="Buscar..."
-                    className="pl-8 h-9"
-                  />
-                </div>
-                {/* STATUS e PRIORIDADE saíram daqui para o painel "Filtros" do
-                    Backlog, junto da Prontidão. Eram quatro controles parecidos
-                    disputando a mesma faixa — dois deles com o nome de colunas
-                    da tabela, e "Fase" (que é agrupamento) no meio. Recortar a
-                    lista virou uma coisa só. */}
-                {listSearch && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setListSearch("")}
-                    className="gap-1 h-9"
-                  >
-                    <X className="w-3.5 h-3.5" /> Limpar
-                  </Button>
-                )}
-
-                {/* O MENU "..." SAIU INTEIRO.
-                    Tinha três itens e ficou sem nenhum: "arquivar todas as
-                    fases/atividades" foram removidas antes (prometiam
-                    restauração numa tela que não lista fases), e "Renumerar
-                    EAP" saiu agora — é migração de convenção, de uso único por
-                    projeto, e não pertence à barra de trabalho diário.
-                    O diálogo de renumeração continua no código: quando as EAPs
-                    antigas precisarem migrar, basta religar o gatilho. */}
-              </div>
-
+                );
+                /* O MENU "..." saiu inteiro: tinha três itens e ficou sem
+                   nenhum. "Arquivar todas as fases/atividades" foram removidas
+                   antes (prometiam restauração numa tela que não lista fases),
+                   e "Renumerar EAP" saiu depois — é migração de convenção, de
+                   uso único por projeto, não pertence à barra de trabalho
+                   diário. O diálogo continua no código: quando as EAPs antigas
+                   precisarem migrar, basta religar o gatilho. */
+                return (
               <BacklogSection
+                acoes={acoesBacklog}
                 projectId={id!}
                 activities={backlogFilteredActivities}
                 phases={phases}
@@ -1842,6 +1819,8 @@ export default function ProjectDetailsPage() {
                 onStatusFilterChange={setListStatusFilter}
                 priorityFilter={listPriorityFilter}
                 onPriorityFilterChange={setListPriorityFilter}
+                search={listSearch}
+                onSearchChange={setListSearch}
                 deleteBlockedReason={
                   isProjectConcluded ? "Projeto concluído — reabra o projeto para arquivar atividades."
                   : isChangeBlocked ? "Há uma solicitação de mudança aberta neste projeto."
@@ -1850,6 +1829,8 @@ export default function ProjectDetailsPage() {
                 }
                 hasActiveFilters={!!listSearch || listStatusFilter !== "all" || listPriorityFilter !== "all"}
               />
+                );
+              })()}
             </TabsContent>
 
             <TabsContent value="financials" className="mt-0">

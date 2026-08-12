@@ -8,7 +8,7 @@ import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp, Diamond,
-  Rows3, MoreHorizontal, Pencil, Package, IndentIncrease, SlidersHorizontal,
+  Rows3, MoreHorizontal, Pencil, Package, IndentIncrease, SlidersHorizontal, Search,
   User, Flag, Calendar as CalendarIcon, Link2, X,
 } from "lucide-react";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -116,6 +116,14 @@ interface BacklogSectionProps {
   onStatusFilterChange?: (v: string) => void;
   priorityFilter?: string;
   onPriorityFilterChange?: (v: string) => void;
+  /** Busca da página. Vem por prop porque recorta `activities` antes de chegar
+   *  aqui — o componente só empresta o lugar, ao lado dos segmentos. */
+  search?: string;
+  onSearchChange?: (v: string) => void;
+  /** "Nova Atividade" e "Importar EAP", renderizados no INÍCIO da linha de
+   *  filtros. Vêm da página porque dependem de permissão e de diálogos que
+   *  vivem lá — mas pertencem visualmente a esta linha, não a uma acima. */
+  acoes?: React.ReactNode;
 }
 
 export const BacklogSection = ({
@@ -124,6 +132,7 @@ export const BacklogSection = ({
   onDataChanged, isAdmin = false, deleteBlockedReason, hasActiveFilters,
   statusFilter = "all", onStatusFilterChange,
   priorityFilter = "all", onPriorityFilterChange,
+  search = "", onSearchChange, acoes,
 }: BacklogSectionProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -1608,12 +1617,12 @@ export const BacklogSection = ({
   })();
   const carencias = principaisCarencias(prontidaoResumo);
 
-  // Quantos recortes estão ativos — o número no botão "Filtros" evita ter de
-  // abrir o painel só para descobrir se a lista está inteira.
+  // Quantos recortes estão ativos DENTRO do painel — evita abrir só para
+  // descobrir se a lista está inteira. A prontidão não entra: ela tem os
+  // segmentos, que já mostram qual está ligado sem precisar de contador.
   const filtrosAtivos =
     (statusFilter !== "all" ? 1 : 0) +
-    (priorityFilter !== "all" ? 1 : 0) +
-    (prontidaoFilter !== "all" ? 1 : 0);
+    (priorityFilter !== "all" ? 1 : 0);
 
   return (
     <div className="space-y-2.5">
@@ -1636,27 +1645,189 @@ export const BacklogSection = ({
           seletor "Todas N / Prontas N / Incompletas N". Foi preciso inventar um
           "(N avaliáveis)" só para explicar por que dois desses totais
           discordavam — remendo sobre a duplicação.
-          A carência virou um LINK na linha de contexto (era a informação mais
-          acionável da tela e a única sem ação), e o progresso já está no topo
-          da página, ao lado de "Progresso: 0/16 tarefas".
-          Sobra o chip do filtro ativo, que não duplica nada: é o único jeito de
-          saber que a lista está recortada. */}
-      {prontidaoFilter !== "all" && prontidaoResumo.total > 0 && (
-        <div className="flex items-center gap-2.5 flex-wrap px-0.5 text-[12px] text-muted-foreground">
-          <button
-            type="button"
-            onClick={() => setProntidaoFilter("all")}
-            title="Remover este filtro"
-            className={cn(
-              "inline-flex items-center gap-1.5 h-[22px] px-2 rounded-full border text-[11px] font-medium transition-colors",
-              prontidaoFilter === "incomplete"
-                ? "border-destructive/50 bg-destructive/10 text-destructive hover:bg-destructive/15"
-                : "border-success/50 bg-success/10 text-success hover:bg-success/15",
-            )}
-          >
-            {prontidaoFilter === "incomplete" ? "Incompletas" : "Prontas"}
-            <X className="w-3 h-3 opacity-70" />
-          </button>
+          A carência virou um LINK na linha de contexto, e o chip de filtro
+          ativo deixou de ser necessário: os SEGMENTOS abaixo mostram qual
+          recorte está ligado, com o número de cada um. */}
+
+      {/* ===== SEGMENTOS + BARRA DE PRONTIDÃO =====
+          Os três recortes com SEUS NÚMEROS, visíveis sem clicar. Escondê-los
+          num painel obrigava a abrir para responder "quantas estão prontas?",
+          que é a pergunta que se faz ao abrir o Backlog.
+
+          A barra abaixo voltou. Eu a tinha removido alegando que duplicava o
+          "Progresso: 0/16" do topo da página — mas são medidas DIFERENTES:
+          aquela conta CONCLUÍDAS, esta conta PRONTAS PARA COMEÇAR. Tirar foi
+          erro meu. Agora ela não repete os segmentos: eles têm os números, ela
+          tem a proporção e as carências.
+
+          Some inteira quando tudo está pronto — faixa verde dizendo o óbvio é
+          ruído, e "Incompletas 0" não é opção, é lixo visual. */}
+      {/* LINHA 1: busca + segmentos + painel. Os três recortes ficam ao lado
+          do campo de busca, como na referência — é a primeira coisa que se lê
+          ao abrir o Backlog, e responde "quantas estão prontas?" sem clique.
+          A busca mora AQUI e não na barra da página porque os segmentos
+          dependem da prontidão, que é estado deste componente: separá-los
+          deixaria metade da linha num arquivo e metade no outro. */}
+      {(acoes || onSearchChange || prontidaoResumo.total > 0) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* UMA LINHA SÓ: ações, busca, segmentos e painel.
+              Estavam em duas — os botões numa faixa da página, o resto noutra
+              do componente — e a divisão era acidente de arquitetura, não
+              decisão de layout: quem olha a tela vê uma barra de trabalho, não
+              dois donos de código.
+              A busca vem por prop: recorta `activities` ANTES de chegar aqui, e
+              um segundo campo daria duas buscas sobre a mesma lista.
+              A linha não depende dos segmentos — com tudo pronto eles somem, e
+              busca e ações continuam. */}
+          {acoes}
+          {onSearchChange ? (
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Buscar tarefa..."
+                className="pl-8 h-8 text-[13px]"
+              />
+            </div>
+          ) : (
+            <span className="flex-1" />
+          )}
+
+          {/* SEGMENTOS — os números na cara, sem clicar. Cada um mostra QUANTOS
+              caem nele: é a diferença entre "16 sem responsável" (16 de
+              quanto?) e "Incompletas 16" ao lado de "Todas 16".
+              "Incompletas 0" não é renderizado: segmento vazio não é opção que
+              se escolhe, é ruído. */}
+          <div className={cn(
+            "inline-flex rounded-md border border-border overflow-hidden h-8 shrink-0",
+            // Tudo pronto: não há o que recortar, e três botões dizendo isso
+            // seriam ruído. A busca ao lado continua.
+            !(prontidaoResumo.total > 0 && prontidaoResumo.prontas < prontidaoResumo.total) && "hidden",
+          )}>
+            {([
+              { v: "all" as const, lab: "Todas", n: prontidaoResumo.total, cls: "" },
+              { v: "ready" as const, lab: "Prontas", n: prontidaoResumo.prontas, cls: "text-success" },
+              {
+                v: "incomplete" as const,
+                lab: "Incompletas",
+                n: prontidaoResumo.quaseProntas + prontidaoResumo.incompletas,
+                cls: "text-destructive",
+              },
+            ]).filter((s) => s.v === "all" || s.n > 0).map((s, i) => (
+              <button
+                key={s.v}
+                type="button"
+                onClick={() => setProntidaoFilter(s.v)}
+                className={cn(
+                  "px-3 text-[12.5px] transition-colors whitespace-nowrap",
+                  i > 0 && "border-l border-border",
+                  prontidaoFilter === s.v
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : cn("hover:bg-muted/60", s.cls || "text-muted-foreground"),
+                )}
+              >
+                {s.lab} <span className="tabular-nums">{s.n}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* O painel guarda o que NÃO cabe como segmento: Status e Prioridade
+              têm cinco e seis valores cada — abertos, viram uma barra inteira.
+              O número no botão diz quantos recortes estão ativos sem abrir. */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className={cn(
+                  "h-8 gap-1.5 text-[13px] px-2.5 shrink-0",
+                  filtrosAtivos > 0 && "border-primary/50 text-primary",
+                )}
+                title="Status e prioridade"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                {filtrosAtivos > 0 && (
+                  <span className="min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold inline-flex items-center justify-center tabular-nums">
+                    {filtrosAtivos}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[248px] p-3 space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status</label>
+                <Select value={statusFilter} onValueChange={(v) => onStatusFilterChange?.(v)}>
+                  <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="pending">Pendente</SelectItem>
+                    <SelectItem value="in_progress">Em andamento</SelectItem>
+                    <SelectItem value="completed">Concluída</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Prioridade</label>
+                <Select value={priorityFilter} onValueChange={(v) => onPriorityFilterChange?.(v)}>
+                  <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="urgente">Urgente</SelectItem>
+                    <SelectItem value="critica">Crítica</SelectItem>
+                    <SelectItem value="alta">Alta</SelectItem>
+                    <SelectItem value="media">Média</SelectItem>
+                    <SelectItem value="baixa">Baixa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {filtrosAtivos > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="w-full h-8 text-[13px] gap-1.5"
+                  onClick={() => {
+                    onStatusFilterChange?.("all");
+                    onPriorityFilterChange?.("all");
+                  }}
+                >
+                  <X className="w-3.5 h-3.5" /> Limpar filtros
+                </Button>
+              )}
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
+
+      {prontidaoResumo.total > 0 && prontidaoResumo.prontas < prontidaoResumo.total && (
+        <div className="flex items-center gap-3 flex-wrap px-0.5 text-[12px] text-muted-foreground">
+          <span className="shrink-0">
+            <span className="text-foreground font-semibold tabular-nums">{prontidaoResumo.prontas}</span>
+            {" "}pronta{prontidaoResumo.prontas === 1 ? "" : "s"} para executar
+          </span>
+          <span className="flex-1 min-w-[100px] h-[7px] rounded-full overflow-hidden flex border border-border/60">
+            {[
+              { n: prontidaoResumo.prontas, cls: "bg-success", lab: "prontas" },
+              { n: prontidaoResumo.quaseProntas, cls: "bg-warning", lab: "falta 1 campo" },
+              { n: prontidaoResumo.incompletas, cls: "bg-destructive", lab: "falta mais de 1" },
+            ].map((f) => f.n > 0 && (
+              <span
+                key={f.lab}
+                className={f.cls}
+                style={{ width: `${(f.n / prontidaoResumo.total) * 100}%` }}
+                title={`${f.n} ${f.lab}`}
+              />
+            ))}
+          </span>
+          {carencias.length > 0 && (
+            <span className="shrink-0">
+              {carencias
+                .map((c) => `${PRONTIDAO_LABELS_LONGOS[c.requisito].replace("sem ", "falta ")} em ${c.quantidade}`)
+                .join(" · ")}
+            </span>
+          )}
         </div>
       )}
 
@@ -1683,22 +1854,11 @@ export const BacklogSection = ({
                 ].filter(Boolean).join(" · ")}
               </span>
             )}
-            {/* A carência vira LINK que filtra, em vez de texto morto numa
-                linha própria. Era a informação mais acionável da tela e a
-                única sem ação. */}
-            {carencias.length > 0 && prontidaoFilter !== "incomplete" && (
-              <>
-                <span className="text-muted-foreground/40">·</span>
-                <button
-                  type="button"
-                  onClick={() => setProntidaoFilter("incomplete")}
-                  className="text-destructive hover:underline underline-offset-2 decoration-dotted"
-                  title="Ver só as que estão incompletas"
-                >
-                  {carencias[0].quantidade} {PRONTIDAO_LABELS_LONGOS[carencias[0].requisito]}
-                </button>
-              </>
-            )}
+            {/* O link de carência saiu daqui: a barra de prontidão acima já
+                traz "falta responsável em 16 · prioridade em 16", com as DUAS
+                maiores carências em vez de uma, e o segmento "Incompletas" ao
+                lado faz o filtro. Manter os dois era dizer a mesma coisa duas
+                vezes na mesma tela. */}
           </p>
 
           {/* Controles de visão */}
@@ -1838,97 +1998,10 @@ export const BacklogSection = ({
                 </Popover>
               </>
             )}
-            {/* PRONTIDÃO como filtro, junto dos outros — não numa faixa
-                própria. Ele recorta a lista igual a Status e Prioridade, e
-                separá-lo sugeria que fosse outra coisa. Some quando não há
-                nada a recortar (tudo pronto ou nada avaliável). */}
-            {/* UM BOTÃO PARA TODOS OS FILTROS.
-                Status e Prioridade estavam na barra de cima, Prontidão aqui, e
-                "Fase" (que é agrupamento, não filtro) no meio dos dois — quatro
-                controles parecidos disputando a mesma faixa, dois deles com o
-                nome de colunas da tabela. Agora recortar a lista é uma coisa
-                só, e o número no botão diz quantos recortes estão ativos sem
-                precisar abrir. */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className={cn(
-                    "h-7 gap-1.5 text-[13px] px-2.5",
-                    filtrosAtivos > 0 && "border-primary/50 text-primary",
-                  )}
-                >
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  Filtros
-                  {filtrosAtivos > 0 && (
-                    <span className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold inline-flex items-center justify-center tabular-nums">
-                      {filtrosAtivos}
-                    </span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-[248px] p-3 space-y-3">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status</label>
-                  <Select value={statusFilter} onValueChange={(v) => onStatusFilterChange?.(v)}>
-                    <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="pending">Pendente</SelectItem>
-                      <SelectItem value="in_progress">Em andamento</SelectItem>
-                      <SelectItem value="completed">Concluída</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Prioridade</label>
-                  <Select value={priorityFilter} onValueChange={(v) => onPriorityFilterChange?.(v)}>
-                    <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas</SelectItem>
-                      <SelectItem value="urgente">Urgente</SelectItem>
-                      <SelectItem value="critica">Crítica</SelectItem>
-                      <SelectItem value="alta">Alta</SelectItem>
-                      <SelectItem value="media">Média</SelectItem>
-                      <SelectItem value="baixa">Baixa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {prontidaoResumo.total > 0 && (
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Prontidão</label>
-                    <Select value={prontidaoFilter} onValueChange={(v) => setProntidaoFilter(v as typeof prontidaoFilter)}>
-                      <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas {prontidaoResumo.total}</SelectItem>
-                        <SelectItem value="ready">Prontas {prontidaoResumo.prontas}</SelectItem>
-                        <SelectItem value="incomplete">
-                          Incompletas {prontidaoResumo.quaseProntas + prontidaoResumo.incompletas}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {filtrosAtivos > 0 && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="w-full h-8 text-[13px] gap-1.5"
-                    onClick={() => {
-                      onStatusFilterChange?.("all");
-                      onPriorityFilterChange?.("all");
-                      setProntidaoFilter("all");
-                    }}
-                  >
-                    <X className="w-3.5 h-3.5" /> Limpar filtros
-                  </Button>
-                )}
-              </PopoverContent>
-            </Popover>
+            {/* O painel "Filtros" SUBIU para a linha da busca e dos segmentos:
+                filtrar é uma coisa só e mora num lugar só. Aqui ficam os
+                controles de VISÃO — agrupar, expandir, recolher —, que não
+                recortam a lista, apenas reorganizam o que sobrou dela. */}
 
             {/* Agrupar em raias — mesmo modelo do Kanban */}
             <Select value={groupBy} onValueChange={(v) => changeGroupBy(v as GroupBy)}>
