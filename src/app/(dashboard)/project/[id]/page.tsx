@@ -36,13 +36,10 @@ import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, GanttChart, BookOpen, FileText, Flag, History,
-  ChevronRight, MoreHorizontal, Kanban, Users, AlertTriangle, ListOrdered,
+  ChevronRight, Kanban, Users, AlertTriangle,
   Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
   NotebookPen, Search, X,
 } from "lucide-react";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
@@ -1806,69 +1803,30 @@ export default function ProjectDetailsPage() {
                     className="pl-8 h-9"
                   />
                 </div>
-                <Select value={listStatusFilter} onValueChange={setListStatusFilter}>
-                  <SelectTrigger className="w-[128px] h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Status: todos</SelectItem>
-                    <SelectItem value="pending">Pendente</SelectItem>
-                    <SelectItem value="in_progress">Em andamento</SelectItem>
-                    <SelectItem value="completed">Concluída</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={listPriorityFilter} onValueChange={setListPriorityFilter}>
-                  <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Prioridade: todas</SelectItem>
-                    <SelectItem value="urgente">Urgente</SelectItem>
-                    <SelectItem value="critica">Crítica</SelectItem>
-                    <SelectItem value="alta">Alta</SelectItem>
-                    <SelectItem value="media">Média</SelectItem>
-                    <SelectItem value="baixa">Baixa</SelectItem>
-                  </SelectContent>
-                </Select>
-                {(listSearch || listStatusFilter !== "all" || listPriorityFilter !== "all") && (
+                {/* STATUS e PRIORIDADE saíram daqui para o painel "Filtros" do
+                    Backlog, junto da Prontidão. Eram quatro controles parecidos
+                    disputando a mesma faixa — dois deles com o nome de colunas
+                    da tabela, e "Fase" (que é agrupamento) no meio. Recortar a
+                    lista virou uma coisa só. */}
+                {listSearch && (
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => { setListSearch(""); setListStatusFilter("all"); setListPriorityFilter("all"); }}
+                    onClick={() => setListSearch("")}
                     className="gap-1 h-9"
                   >
                     <X className="w-3.5 h-3.5" /> Limpar
                   </Button>
                 )}
 
-                {canCreate && (phases.length > 0 || activities.length > 0) && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="icon" variant="outline" className="h-9 w-9" title="Mais opções">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {/* Renumerar fica no menu, não na barra: é ação rara e de
-                          mão única. Acima das destrutivas porque não é uma
-                          delas — muda códigos, não apaga nada. */}
-                      {canCreate && activities.length > 0 && (
-                        <DropdownMenuItem onClick={() => setShowRenumerar(true)}>
-                          <ListOrdered className="w-4 h-4 mr-2" /> Renumerar EAP…
-                        </DropdownMenuItem>
-                      )}
-                      {/* "ARQUIVAR TODAS AS FASES" e "ARQUIVAR TODAS AS
-                          ATIVIDADES" foram REMOVIDAS.
-                          Não foi só poluição. As duas avisavam que o conteúdo
-                          "pode ser restaurado no Arquivo" — a tela se chama
-                          Lixeira, e ela lê apenas `activities`: fase arquivada
-                          não aparecia em lugar nenhum. O comando das fases
-                          também não filtrava as já arquivadas, então reescrevia
-                          `trashed_at` e apagava quando cada uma foi arquivada
-                          de verdade. Era irreversível pela interface enquanto
-                          prometia o contrário.
-                          Para limpar o projeto existe a seleção em lote do
-                          Backlog: mostra o que vai acontecer, atinge só o que
-                          foi escolhido, e a Lixeira restaura. */}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                {/* O MENU "..." SAIU INTEIRO.
+                    Tinha três itens e ficou sem nenhum: "arquivar todas as
+                    fases/atividades" foram removidas antes (prometiam
+                    restauração numa tela que não lista fases), e "Renumerar
+                    EAP" saiu agora — é migração de convenção, de uso único por
+                    projeto, e não pertence à barra de trabalho diário.
+                    O diálogo de renumeração continua no código: quando as EAPs
+                    antigas precisarem migrar, basta religar o gatilho. */}
               </div>
 
               <BacklogSection
@@ -1880,6 +1838,10 @@ export default function ProjectDetailsPage() {
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
                 isAdmin={canDelete}
+                statusFilter={listStatusFilter}
+                onStatusFilterChange={setListStatusFilter}
+                priorityFilter={listPriorityFilter}
+                onPriorityFilterChange={setListPriorityFilter}
                 deleteBlockedReason={
                   isProjectConcluded ? "Projeto concluído — reabra o projeto para arquivar atividades."
                   : isChangeBlocked ? "Há uma solicitação de mudança aberta neste projeto."

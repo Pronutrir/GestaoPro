@@ -7,8 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
-  ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Diamond,
-  Rows3, MoreHorizontal, Pencil, Package, IndentIncrease,
+  ChevronsUpDown, ChevronsDownUp, Diamond,
+  Rows3, MoreHorizontal, Pencil, Package, IndentIncrease, SlidersHorizontal,
   User, Flag, Calendar as CalendarIcon, Link2, X,
 } from "lucide-react";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -109,12 +109,21 @@ interface BacklogSectionProps {
    *  tooltip em vez de sumir — some sem explicação vira "não consigo excluir". */
   deleteBlockedReason?: string;
   hasActiveFilters?: boolean;
+  /** Filtros que viviam na barra da página e passaram para o painel "Filtros".
+   *  Ficam LÁ porque recortam `activities` antes de chegar aqui; o painel é só
+   *  onde se mexe neles, junto dos demais. */
+  statusFilter?: string;
+  onStatusFilterChange?: (v: string) => void;
+  priorityFilter?: string;
+  onPriorityFilterChange?: (v: string) => void;
 }
 
 export const BacklogSection = ({
   projectId, activities, phases,
   onEditActivity, onDeleteActivity, onToggleActivity,
   onDataChanged, isAdmin = false, deleteBlockedReason, hasActiveFilters,
+  statusFilter = "all", onStatusFilterChange,
+  priorityFilter = "all", onPriorityFilterChange,
 }: BacklogSectionProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -832,7 +841,36 @@ export const BacklogSection = ({
       {/* expand + (caixa de seleção, só no modo) — espelha as células da linha */}
       <span />
       {selectMode && <span />}
-      <span>Tarefa</span>
+      {/* SELEÇÃO EM LOTE AQUI, não escondida num menu "⋯".
+          Era o único item de um dropdown inteiro, com nome de comando
+          ("Selecionar em lote") em vez de um controle que se reconhece. A
+          caixa ao lado de "Tarefa" é o lugar onde toda tabela põe isso: liga a
+          seleção, e no modo ligado marca ou desmarca tudo de uma vez. */}
+      <span className="flex items-center gap-2">
+        <Checkbox
+          checked={selectMode && selectedIds.size > 0 && selectedIds.size === backlogActs.length}
+          onCheckedChange={(v) => {
+            if (!selectMode) { setSelectMode(true); return; }
+            setSelectedIds(v ? new Set(backlogActs.map((a) => a.id)) : new Set());
+          }}
+          className="h-3.5 w-3.5"
+          title={
+            !selectMode ? "Selecionar em lote"
+              : selectedIds.size === backlogActs.length ? "Desmarcar todas"
+                : "Marcar todas"
+          }
+        />
+        Tarefa
+        {selectMode && (
+          <button
+            type="button"
+            onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
+            className="normal-case font-normal text-[10.5px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+          >
+            sair
+          </button>
+        )}
+      </span>
       {activeCols.map((c) => (
         <span key={c.id}>{c.label}</span>
       ))}
@@ -1570,6 +1608,13 @@ export const BacklogSection = ({
   })();
   const carencias = principaisCarencias(prontidaoResumo);
 
+  // Quantos recortes estão ativos — o número no botão "Filtros" evita ter de
+  // abrir o painel só para descobrir se a lista está inteira.
+  const filtrosAtivos =
+    (statusFilter !== "all" ? 1 : 0) +
+    (priorityFilter !== "all" ? 1 : 0) +
+    (prontidaoFilter !== "all" ? 1 : 0);
+
   return (
     <div className="space-y-2.5">
       {/* ===== LINHA DE ESTADO — o que está filtrado e o que falta =====
@@ -1797,26 +1842,93 @@ export const BacklogSection = ({
                 própria. Ele recorta a lista igual a Status e Prioridade, e
                 separá-lo sugeria que fosse outra coisa. Some quando não há
                 nada a recortar (tudo pronto ou nada avaliável). */}
-            {prontidaoResumo.total > 0 && prontidaoResumo.prontas < prontidaoResumo.total && (
-              <Select value={prontidaoFilter} onValueChange={(v) => setProntidaoFilter(v as typeof prontidaoFilter)}>
-                <SelectTrigger
+            {/* UM BOTÃO PARA TODOS OS FILTROS.
+                Status e Prioridade estavam na barra de cima, Prontidão aqui, e
+                "Fase" (que é agrupamento, não filtro) no meio dos dois — quatro
+                controles parecidos disputando a mesma faixa, dois deles com o
+                nome de colunas da tabela. Agora recortar a lista é uma coisa
+                só, e o número no botão diz quantos recortes estão ativos sem
+                precisar abrir. */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
                   className={cn(
-                    "h-7 w-[132px] text-[13px] gap-1.5",
-                    prontidaoFilter === "incomplete" && "border-destructive/50 text-destructive",
-                    prontidaoFilter === "ready" && "border-success/50 text-success",
+                    "h-7 gap-1.5 text-[13px] px-2.5",
+                    filtrosAtivos > 0 && "border-primary/50 text-primary",
                   )}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas {prontidaoResumo.total}</SelectItem>
-                  <SelectItem value="ready">Prontas {prontidaoResumo.prontas}</SelectItem>
-                  <SelectItem value="incomplete">
-                    Incompletas {prontidaoResumo.quaseProntas + prontidaoResumo.incompletas}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  Filtros
+                  {filtrosAtivos > 0 && (
+                    <span className="ml-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold inline-flex items-center justify-center tabular-nums">
+                      {filtrosAtivos}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[248px] p-3 space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status</label>
+                  <Select value={statusFilter} onValueChange={(v) => onStatusFilterChange?.(v)}>
+                    <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="pending">Pendente</SelectItem>
+                      <SelectItem value="in_progress">Em andamento</SelectItem>
+                      <SelectItem value="completed">Concluída</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Prioridade</label>
+                  <Select value={priorityFilter} onValueChange={(v) => onPriorityFilterChange?.(v)}>
+                    <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      <SelectItem value="urgente">Urgente</SelectItem>
+                      <SelectItem value="critica">Crítica</SelectItem>
+                      <SelectItem value="alta">Alta</SelectItem>
+                      <SelectItem value="media">Média</SelectItem>
+                      <SelectItem value="baixa">Baixa</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {prontidaoResumo.total > 0 && (
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Prontidão</label>
+                    <Select value={prontidaoFilter} onValueChange={(v) => setProntidaoFilter(v as typeof prontidaoFilter)}>
+                      <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas {prontidaoResumo.total}</SelectItem>
+                        <SelectItem value="ready">Prontas {prontidaoResumo.prontas}</SelectItem>
+                        <SelectItem value="incomplete">
+                          Incompletas {prontidaoResumo.quaseProntas + prontidaoResumo.incompletas}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {filtrosAtivos > 0 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="w-full h-8 text-[13px] gap-1.5"
+                    onClick={() => {
+                      onStatusFilterChange?.("all");
+                      onPriorityFilterChange?.("all");
+                      setProntidaoFilter("all");
+                    }}
+                  >
+                    <X className="w-3.5 h-3.5" /> Limpar filtros
+                  </Button>
+                )}
+              </PopoverContent>
+            </Popover>
 
             {/* Agrupar em raias — mesmo modelo do Kanban */}
             <Select value={groupBy} onValueChange={(v) => changeGroupBy(v as GroupBy)}>
@@ -1860,20 +1972,10 @@ export const BacklogSection = ({
             >
               <ChevronsDownUp className="w-4 h-4" />
             </Button>
-            {/* Menu de ações secundárias */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" title="Mais ações">
-                  <MoreHorizontal className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setSelectMode((v) => { if (v) setSelectedIds(new Set()); return !v; })}>
-                  <MousePointerSquareDashed className="w-4 h-4 mr-2" />
-                  {selectMode ? "Sair da seleção" : "Selecionar em lote"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* O menu "⋯" saiu: tinha um item só — "Selecionar em lote" —, que
+                virou a caixa ao lado de "Tarefa" no cabeçalho da tabela. Um
+                dropdown para uma ação escondia justamente o que precisava ser
+                sugestivo. */}
           </div>
         </div>
       )}
