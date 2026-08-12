@@ -850,27 +850,38 @@ export const BacklogSection = ({
       {/* expand + (caixa de seleção, só no modo) — espelha as células da linha */}
       <span />
       {selectMode && <span />}
-      {/* MARCAR/DESMARCAR TODAS — um clique, sem etapa intermediária.
-          Antes o primeiro clique só LIGAVA o modo sem marcar nada, e um link
-          "sair" aparecia ao lado: dois passos e um deslocamento da coluna para
-          fazer o que a caixa promete. Agora marcar liga o modo E seleciona
-          tudo; desmarcar limpa e desliga. Clicar e desclicar, só isso. */}
+      {/* MARCAR TODAS / NENHUMA — e o modo liga sozinho ao primeiro clique.
+          Esta caixa passou por dois erros meus. Primeiro pedia dois cliques (um
+          para ligar o modo, outro para marcar) com um link "sair" que empurrava
+          a coluna. Corrigi fazendo-a marcar TUDO ao ligar — e aí só existia
+          "todas ou nada": não dava mais para escolher algumas, porque as caixas
+          das linhas só aparecem no modo e o modo já vinha com tudo marcado.
+
+          Agora tem três estados, como qualquer tabela: vazia (nada), traço
+          (algumas) e marcada (todas). Clicar com nada marcado seleciona tudo;
+          com algo marcado, limpa e sai — e no meio-termo o usuário mexe nas
+          caixas das linhas, que é o que faltava. */}
       <span className="flex items-center gap-2">
         <Checkbox
-          checked={selectMode && selectedIds.size > 0 && selectedIds.size === backlogActs.length}
-          onCheckedChange={(v) => {
-            if (v) {
-              setSelectMode(true);
-              setSelectedIds(new Set(backlogActs.map((a) => a.id)));
-            } else {
+          checked={
+            selectMode && selectedIds.size > 0
+              ? (selectedIds.size === backlogActs.length ? true : "indeterminate")
+              : false
+          }
+          onCheckedChange={() => {
+            // Algo marcado → limpa e sai. Nada marcado → marca tudo.
+            if (selectMode && selectedIds.size > 0) {
               setSelectedIds(new Set());
               setSelectMode(false);
+            } else {
+              setSelectMode(true);
+              setSelectedIds(new Set(backlogActs.map((a) => a.id)));
             }
           }}
           className="h-3.5 w-3.5"
           title={
-            selectMode && selectedIds.size === backlogActs.length
-              ? "Desmarcar todas"
+            selectMode && selectedIds.size > 0
+              ? `Limpar seleção (${selectedIds.size})`
               : `Selecionar todas as ${backlogActs.length}`
           }
         />
@@ -1010,9 +1021,24 @@ export const BacklogSection = ({
           // quanto mais fundo o item — era o que desalinhava as linhas do
           // cabeçalho. O recuo é aplicado só na coluna do título, abaixo.
           style={{ gridTemplateColumns: backlogGrid }}
-          onClick={() => { if (!isEditingTitle) onEditActivity(activity); }}
+          // No modo seleção a linha ALTERNA a marcação em vez de abrir a
+          // edição: quem está escolhendo várias tarefas quer clicar rápido, e
+          // mirar na caixinha de 14px a cada item é trabalho desnecessário.
+          onClick={() => {
+            if (isEditingTitle) return;
+            if (selectMode) { toggleSelect(activity.id); return; }
+            onEditActivity(activity);
+          }}
         >
-          {/* col: expand */}
+          {/* col: expand — ou a caixa de seleção, no hover.
+              ENTRAR NA SELEÇÃO PELA LINHA. Antes o modo só ligava pelo
+              cabeçalho, e ligá-lo marcava tudo: para escolher três tarefas era
+              preciso marcar as 718 e desmarcar 715. A caixa aparece ao passar o
+              mouse sobre a linha e liga o modo já com aquela tarefa marcada —
+              que é o gesto natural de "quero estas".
+              Ocupa o lugar do expandir só quando o item não tem filhos; com
+              filhos, o expandir continua e a seleção se faz no cabeçalho ou nas
+              outras linhas. */}
           {hasChildren ? (
             <button
               type="button"
@@ -1021,8 +1047,22 @@ export const BacklogSection = ({
             >
               {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
-          ) : (
+          ) : selectMode ? (
             <span className="w-5" />
+          ) : (
+            <span className="w-5 flex items-center justify-center">
+              <Checkbox
+                checked={false}
+                onCheckedChange={() => {
+                  setSelectMode(true);
+                  setSelectedIds(new Set([activity.id]));
+                }}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Selecionar ${activity.title}`}
+                title="Selecionar esta tarefa"
+                className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+              />
+            </span>
           )}
 
           {/* col: caixa de seleção em lote — só existe no modo seleção.
