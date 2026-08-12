@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { CharterFlowPanel, type CharterStatus } from "@/components/charter/CharterFlowPanel";
 import { OrigemDemanda } from "@/components/charter/OrigemDemanda";
 import {
-  FileText, Save, ClipboardList, CheckCircle2, Ban, FileDown,
+  FileText, Save, ClipboardList, CheckCircle2, Ban, FileDown, Sparkles,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -21,6 +21,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { BaselineBlock } from "@/components/BaselineBlock";
 import { cn } from "@/lib/utils";
+import {
+  sugerirCampos, sugerirAprovadores, entregasDaEap, orcamentoAutorizado,
+  completude as completudeEssencial,
+  ORIGEM_LABEL, ORIGEM_DETALHE,
+  type Sugestao, type FontePremissa, type FonteBaseline,
+} from "@/lib/charterAutofill";
 
 /* -------- AutoTextarea: cresce conforme conteúdo -------- */
 const AutoTextarea = ({
@@ -256,6 +262,9 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [risks, setRisks] = useState<Risk[]>([]);
+  /** Fontes do autopreenchimento — ver lib/charterAutofill. */
+  const [premissas, setPremissas] = useState<FontePremissa[]>([]);
+  const [baseline, setBaseline] = useState<FonteBaseline | null>(null);
   const [allProfiles, setAllProfiles] = useState<{ id: string; full_name: string; sector: string | null }[]>([]);
   const [memberRows, setMemberRows] = useState<MemberRow[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
@@ -300,6 +309,41 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
    *  em `preenchido`. Abre sozinha se já houver conteúdo lá dentro: esconder
    *  o que a pessoa escreveu seria pior que mostrar campo vazio. */
   const [detalhado, setDetalhado] = useState(false);
+
+  /**
+   * O que o sistema JÁ SABE e o TAP ainda não tem.
+   *
+   * Medido em 02/08: 13 de 20 campos com 0% de preenchimento em 52 projetos, e
+   * nenhum dos 25 com patrocinador. Não é desleixo — na hora de abrir ninguém
+   * sabe a resposta, e metade dela está no banco: o gestor no cadastro, o
+   * patrocinador na solicitação, o prazo na linha de base, as premissas na
+   * tabela própria.
+   *
+   * Indexado por campo para a oferta aparecer AO LADO dele, não numa lista
+   * separada que exigiria procurar onde aplicar.
+   */
+  const sugestoes = useMemo(() => {
+    const lista = sugerirCampos(
+      { ...data, objective: form.objective, scope: form.scope, justification: data.justification },
+      {
+        projeto: {
+          manager: (project as any).manager, owner: project.owner, sponsor: (project as any).sponsor,
+          restrictions: (project as any).restrictions, objective: form.objective,
+          due_date: project.due_date, baseline_end_date: (project as any).baseline_end_date,
+          budget_planned: project.budget_planned,
+        },
+        premissas,
+        baseline,
+      },
+    );
+    return Object.fromEntries(lista.map((s) => [s.campo, s])) as Record<string, Sugestao>;
+  }, [data, form, project, premissas, baseline]);
+
+  /** Aceita a oferta. Grava no charter e a sugestão some — o campo deixou de
+   *  estar vazio, que é a única condição para ela existir. */
+  const usarSugestao = (campo: string, valor: string) => {
+    setData((prev) => ({ ...prev, [campo]: valor }));
+  };
 
   /** Completude por seção — alimenta a barra do topo e o "3 de 4" de cada
    *  cabeçalho. Conta o que EXISTE, nunca bloqueia. */
@@ -404,8 +448,30 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       supabase.from("profiles").select("id, full_name, sector").not("full_name", "is", null).order("full_name"),
       supabase.from("user_roles").select("user_id").eq("role", "admin"),
       supabase.from("project_members").select("id, user_id, invitation_status, decline_reason, raci").eq("project_id", projectId),
+      // PREMISSAS: existem numa tabela própria e o TAP pedia texto livre — o
+      // mesmo dado vivia em dois lugares sem se falarem.
     ]);
+
+    /* FONTES DO AUTOPREENCHIMENTO, fora do Promise.all acima.
+       Vão separadas por dois motivos: `types.ts` está desatualizado e não
+       conhece estas tabelas (o `as any` quebraria a inferência do array), e
+       elas são OPCIONAIS — se a migration não rodou no ambiente, o TAP
+       continua funcionando e o autopreenchimento apenas não oferece o que não
+       conseguiu ler. `.catch` porque tabela ausente devolve erro de rede, não
+       resultado vazio. */
+    const sb = supabase as any;
+    const prem = await sb.from("assumptions")
+      .select("description").eq("project_id", projectId).eq("is_trashed", false)
+      .then((x: any) => x, () => ({ data: null }));
+    // A linha de base ativa é única por índice parcial — limit(1) basta.
+    const base = await sb.from("budget_baselines")
+      .select("baseline_total, version").eq("project_id", projectId).eq("is_active", true).limit(1)
+      .then((x: any) => ({ data: x?.data?.[0] ?? null }), () => ({ data: null }));
     if (r.data) setRisks(r.data);
+    // Tabela ausente no ambiente não pode derrubar o TAP: as duas são opcionais
+    // e o autopreenchimento simplesmente não oferece o que não conseguiu ler.
+    setPremissas(prem.data ? (prem.data as any[]).map((p) => ({ description: p.description })) : []);
+    setBaseline((base as any)?.data ?? null);
     const adminIds = new Set((adminRoles.data || []).map((x: any) => x.user_id));
     const profiles = (prof.data || []).filter((p: any) => p.full_name && !adminIds.has(p.id));
     setAllProfiles(profiles);
@@ -638,6 +704,34 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${completude.pct}%` }} />
         </div>
 
+        {/* PRONTO PARA ASSINAR — outra pergunta, outra conta.
+            A barra acima mede o documento inteiro (20 campos). Esta mede os 6
+            que fazem o TAP cumprir sua função de AUTORIZAR: objetivo, escopo,
+            justificativa, gestor, patrocinador e prazo. Um TAP com esses seis
+            está pronto para circular; os demais enriquecem, não habilitam.
+            Sem essa distinção, "8 de 20" desanimava quem já podia assinar. */}
+        {(() => {
+          const ess = completudeEssencial(
+            { ...data, objective: form.objective, scope: form.scope, justification: data.justification },
+            { manager: (project as any).manager, sponsor: (project as any).sponsor },
+          );
+          if (ess.faltando.length === 0) {
+            return (
+              <p className="mt-2 text-[11px] text-success leading-snug inline-flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" /> Pronto para circular: o essencial está preenchido.
+              </p>
+            );
+          }
+          return (
+            <p className="mt-2 text-[11px] text-muted-foreground leading-snug">
+              Para circular, falta: <span className="text-foreground">{ess.faltando.join(", ")}</span>.
+              {Object.keys(sugestoes).length > 0 && (
+                <span className="text-primary"> {Object.keys(sugestoes).length} campo(s) podem ser preenchidos com o que o sistema já sabe.</span>
+              )}
+            </p>
+          );
+        })()}
+
         {/* Informa o que falta — NUNCA bloqueia. Campo obrigatório travaria a
             abertura do projeto, que é o oposto do que se quer aqui. */}
         {completude.faltando.length > 0 && (
@@ -717,18 +811,46 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           </Field>
           <Field label="Patrocinador (Sponsor)">
             <TextField editing={editing} value={data.sponsor} onChange={(v) => setData({ ...data, sponsor: v })} placeholder="Nome do patrocinador" multiline={false} />
+            {editing && sugestoes.sponsor && (
+              <SugestaoInline s={sugestoes.sponsor} onUsar={() => usarSugestao("sponsor", sugestoes.sponsor.valor)} />
+            )}
           </Field>
           <Field label="Gerente do Projeto">
             <TextField editing={editing} value={data.manager} onChange={(v) => setData({ ...data, manager: v })} placeholder="Nome do gerente" multiline={false} />
+            {editing && sugestoes.manager && (
+              <SugestaoInline s={sugestoes.manager} onUsar={() => usarSugestao("manager", sugestoes.manager.valor)} />
+            )}
           </Field>
           <Field label="Nível de Autoridade">
             <TextField editing={editing} value={data.authority} onChange={(v) => setData({ ...data, authority: v })} placeholder="Ex.: aprova mudanças até R$ 10 mil" multiline={false} />
+            {editing && sugestoes.authority && (
+              <SugestaoInline s={sugestoes.authority} onUsar={() => usarSugestao("authority", sugestoes.authority.valor)} />
+            )}
           </Field>
           <Field label="Líder do Projeto">
             <p className="text-sm">{project.owner || <span className="italic text-muted-foreground">Não definido</span>}</p>
           </Field>
-          <Field label="Orçamento Planejado">
-            <p className="text-sm">{project.budget_planned ? `R$ ${Number(project.budget_planned).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}</p>
+          {/* ORÇAMENTO AUTORIZADO — a linha de base vence o campo solto.
+              `budget_planned` é um número digitado à mão; a linha de base foi
+              aprovada, versionada, e é a referência do valor agregado. Num
+              documento que AUTORIZA gasto, citar o número informal seria
+              autorizar o valor errado. */}
+          <Field label="Orçamento Autorizado">
+            {(() => {
+              const orc = orcamentoAutorizado(
+                { budget_planned: project.budget_planned },
+                baseline,
+              );
+              if (!orc) return <p className="text-sm text-muted-foreground italic">—</p>;
+              return (
+                <p className="text-sm">
+                  {orc.texto}
+                  {orc.nota && (
+                    <span className="ml-1.5 text-[11px] text-muted-foreground">({orc.nota})</span>
+                  )}
+                </p>
+              );
+            })()}
           </Field>
           <Field label="Data de Início">
             {editing ? (
@@ -777,6 +899,12 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
                   <td className="px-3 py-2 font-medium w-32 align-top text-muted-foreground">{row.label}</td>
                   <td className="px-3 py-2 align-top">
                     <TextField editing={editing} value={(data as any)[row.k] || ""} onChange={(v) => setData({ ...data, [row.k]: v } as CharterData)} placeholder={`Defina ${row.label.toLowerCase()}...`} rows={2} />
+                    {/* O prazo vem da linha de base; o específico, do objetivo
+                        do projeto. Duas das cinco letras já estão respondidas
+                        em outro lugar do sistema. */}
+                    {editing && sugestoes[row.k] && (
+                      <SugestaoInline s={sugestoes[row.k]} onUsar={() => usarSugestao(row.k, sugestoes[row.k].valor)} />
+                    )}
                   </td>
                 </tr>
               ))}
@@ -816,12 +944,22 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           <div className="pt-2">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Fases / Entregáveis cadastrados:</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {phases.map((p, i) => (
-                <div key={p.id} className="text-sm flex items-start gap-2 p-2 rounded border border-border bg-muted/30">
-                  <span className="text-primary font-mono font-semibold">1.{i + 1}</span>
-                  <span>{p.title}</span>
-                </div>
-              ))}
+              {/* O CÓDIGO REAL DA EAP, não a posição na lista.
+                  Antes numerava "1.{i+1}" pela ordem, ignorando o `wbs_code` —
+                  então o documento formal citava uma numeração que não batia
+                  com a do Backlog nem com a do Cronograma. Três telas, três
+                  números para a mesma entrega, e o TAP é o que vira anexo de
+                  contrato. Sem código cadastrado, mostra só o título: um número
+                  inventado é pior que nenhum. */}
+              {phases.map((p) => {
+                const code = ((p as any).wbs_code || "").trim();
+                return (
+                  <div key={p.id} className="text-sm flex items-start gap-2 p-2 rounded border border-border bg-muted/30">
+                    {code && <span className="text-primary font-mono font-semibold shrink-0">{code}</span>}
+                    <span>{p.title}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -840,6 +978,9 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
               editing={editing}
               rows={4}
             />
+            {editing && sugestoes.assumptions && (
+              <SugestaoInline s={sugestoes.assumptions} onUsar={() => usarSugestao("assumptions", sugestoes.assumptions.valor)} />
+            )}
           </div>
           <div>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Restrições</div>
@@ -851,6 +992,9 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
               editing={editing}
               rows={4}
             />
+            {editing && sugestoes.constraints && (
+              <SugestaoInline s={sugestoes.constraints} onUsar={() => usarSugestao("constraints", sugestoes.constraints.valor)} />
+            )}
           </div>
         </div>
       </SectionBlock>
@@ -1011,29 +1155,42 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             aval final do projeto, então já entra como aprovador em vez de ser
             cadastrado de novo à mão. */}
         {(() => {
-          const aprovador = memberRows.find((m) => m.raci === "A");
-          if (!aprovador) return null;
-          const jaConsta = (data.approvals || []).some(
-            (ap) => ap.name.trim().toLowerCase() === aprovador.full_name.trim().toLowerCase(),
+          // TODOS os RACI-A, não só o primeiro. `find` pegava um: num projeto
+          // com dois responsáveis, o segundo ficava invisível e era cadastrado
+          // à mão — ou esquecido, que é pior num documento que autoriza.
+          const faltantes = sugerirAprovadores(
+            data.approvals || [],
+            memberRows.map((m) => ({ user_name: m.full_name, raci: m.raci })),
           );
+          const temAlgumA = memberRows.some((m) => (m.raci || "").toUpperCase() === "A");
+          if (!temAlgumA) return null;
           return (
             <div className="flex items-center gap-2 flex-wrap rounded-md border border-primary/30 bg-primary/5 px-3 py-2 print:hidden">
-              <span className="text-xs text-muted-foreground">Aprovador definido na equipe:</span>
-              <span className="text-sm font-medium">{aprovador.full_name}</span>
-              {jaConsta ? (
-                <span className="text-[11px] text-success ml-auto">já está na lista</span>
-              ) : editing ? (
-                <Button
-                  type="button" size="sm" variant="outline" className="h-7 text-xs ml-auto"
-                  onClick={() => setData({
-                    ...data,
-                    approvals: [...(data.approvals || []), { role: "Aprovador", name: aprovador.full_name, date: "" }],
-                  })}
-                >
-                  Incluir nas aprovações
-                </Button>
+              <span className="text-xs text-muted-foreground">
+                {faltantes.length > 1 ? "Aprovadores definidos na equipe:" : "Aprovador definido na equipe:"}
+              </span>
+              {faltantes.length === 0 ? (
+                <span className="text-[11px] text-success">já estão na lista</span>
               ) : (
-                <span className="text-[11px] text-muted-foreground ml-auto">edite o TAP para incluir</span>
+                <>
+                  <span className="text-sm font-medium">{faltantes.map((a) => a.name).join(" · ")}</span>
+                  {editing ? (
+                    <Button
+                      type="button" size="sm" variant="outline" className="h-7 text-xs ml-auto"
+                      onClick={() => setData({
+                        ...data,
+                        approvals: [
+                          ...(data.approvals || []),
+                          ...faltantes.map((a) => ({ role: a.role, name: a.name, date: "" })),
+                        ],
+                      })}
+                    >
+                      Incluir {faltantes.length > 1 ? `os ${faltantes.length}` : ""} nas aprovações
+                    </Button>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground ml-auto">edite o TAP para incluir</span>
+                  )}
+                </>
               )}
             </div>
           );
@@ -1101,4 +1258,32 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
     <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
     {children}
   </div>
+);
+
+/**
+ * Oferta de autopreenchimento — o valor que o sistema já sabe.
+ *
+ * Aparece SÓ em campo vazio e SÓ enquanto se edita. Não grava sozinho: mostra
+ * o que seria escrito e de onde veio, e o usuário aceita. Preencher por conta
+ * própria transformaria o TAP num documento que o sistema assina no lugar de
+ * quem responde por ele.
+ *
+ * A procedência é metade do valor num documento formal: "Patrocinador: Raphael"
+ * sem dizer que veio da solicitação do Roadmap é dado sem origem.
+ */
+const SugestaoInline = ({ s, onUsar }: { s: Sugestao; onUsar: () => void }) => (
+  <button
+    type="button"
+    onClick={onUsar}
+    title={`${ORIGEM_DETALHE[s.origem]} Clique para usar: "${s.valor.slice(0, 120)}${s.valor.length > 120 ? "…" : ""}"`}
+    className="mt-1 inline-flex items-start gap-1.5 max-w-full text-left rounded border border-dashed border-primary/40 bg-primary/[0.04] px-2 py-1 text-[11.5px] text-muted-foreground hover:bg-primary/10 hover:border-primary/60 transition-colors"
+  >
+    <Sparkles className="w-3 h-3 shrink-0 mt-[3px] text-primary" />
+    <span className="min-w-0">
+      <span className="text-foreground line-clamp-2">{s.valor}</span>
+      <span className="text-primary/80 ml-1 whitespace-nowrap">
+        · {ORIGEM_LABEL[s.origem]}{s.nota ? ` (${s.nota})` : ""}
+      </span>
+    </span>
+  </button>
 );
