@@ -18,7 +18,7 @@ import { User, Calendar, Clock, DollarSign, Layers, Tag, X, Flag, Plus, Trash2, 
 import {
   eapCanMoveInto, eapCanGroup, eapDescendantIds, eapShouldDemote,
   eapToPersisted, eapLevel, resolveEapKind, EAP_LABELS, EAP_HINTS,
-  eapMilestoneBlockedReason, eapIsFaseLevel, EAP_FASE_LEVEL, isSyntheticPhaseRow,
+  eapMilestoneBlockedReason, eapIsFaseLevel, EAP_FASE_LEVEL, isSyntheticPhaseRow, eapCodeToPersist,
   type EapKind, type EapNodeLike,
 } from "@/lib/eapModel";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -673,51 +673,37 @@ export const EditActivityDialog = ({
       onOpenChange(false);
       return;
     }
-    // Create a draft activity when opening in create mode
-    if (createMode && !draftActivity && !creatingDraft && projectId) {
-      setCreatingDraft(true);
-      const draftId = crypto.randomUUID();
-      const insertPayload: any = {
-        id: draftId,
+    // RASCUNHO EM MEMÓRIA, não no banco.
+    //
+    // Antes, abrir "Nova Atividade" INSERIA uma linha chamada "Nova atividade"
+    // antes de o usuário digitar qualquer coisa. Fechar sem preencher deixava
+    // lixo no projeto — e abrir e fechar três vezes deixava três.
+    //
+    // Agora o rascunho existe só na tela; a gravação acontece uma vez, ao
+    // confirmar (ver o ramo `createMode` do salvamento). O id é gerado aqui
+    // para que abas e subitens tenham a que se referir enquanto se edita.
+    if (createMode && !draftActivity && projectId) {
+      setDraftActivity({
+        id: crypto.randomUUID(),
         project_id: projectId,
-        title: "Nova atividade",
+        title: "",
+        description: null,
         status: "pending",
-        priority: "medium",
-        workflow_stage_id: defaultStageId || null,
+        completed_at: null,
+        created_at: new Date().toISOString(),
+        assigned_to: null,
+        start_date: null,
+        end_date: null,
+        cost: 0,
+        hours: 0,
         phase_id: defaultPhaseId || null,
+        priority: "medium",
+        tags: [],
         parent_id: defaultParentId || null,
-      };
-      supabase.from("activities").insert(insertPayload).then(({ error }) => {
-        setCreatingDraft(false);
-        if (error) {
-          console.error("Erro ao iniciar rascunho de atividade:", error);
-          toast({ title: "Erro ao iniciar nova atividade", variant: "destructive" });
-          onOpenChange(false);
-          return;
-        }
-        setDraftActivity({
-          id: draftId,
-          project_id: projectId,
-          title: "Nova atividade",
-          description: null,
-          status: "pending",
-          completed_at: null,
-          created_at: new Date().toISOString(),
-          assigned_to: null,
-          start_date: null,
-          end_date: null,
-          cost: 0,
-          hours: 0,
-          phase_id: defaultPhaseId || null,
-          priority: "medium",
-          tags: [],
-          parent_id: defaultParentId || null,
-          workflow_stage_id: defaultStageId || null,
-        } as Activity & { project_id: string; workflow_stage_id: string | null });
-        onActivityCreated?.(draftId);
-        // Pre-fill title empty so user types fresh
-        setFormData((prev) => ({ ...prev, title: "" }));
-      });
+        workflow_stage_id: defaultStageId || null,
+        __rascunho: true,
+      } as Activity & { project_id: string; workflow_stage_id: string | null });
+      setFormData((prev) => ({ ...prev, title: "" }));
     }
 
     // Fetch all active profiles for participants dropdown
@@ -1272,7 +1258,10 @@ export const EditActivityDialog = ({
         is_milestone: formData.is_milestone,
         item_type: formData.item_type,
         progress_flag: formData.progress_flag ?? 0,
-        wbs_code: wbsToSave,
+        // Marco não tem código EAP: é ponto no cronograma, não trabalho na EAP.
+        // Marcar um item como Marco LIMPA o código que ele tinha — senão a
+        // numeração do trabalho ficaria com um vão no lugar dele.
+        wbs_code: eapCodeToPersist(formData, wbsToSave),
       };
 
       // Trocou de pai? O trigger eap_nesting_rule só aceita agrupador
@@ -1296,15 +1285,24 @@ export const EditActivityDialog = ({
         }
       }
 
-      const compatPayload: Record<string, any> = { ...updatePayload };
+      // Rascunho ainda não existe no banco: a primeira gravação é INSERT.
+      // O laço de compatibilidade abaixo (que remove colunas ausentes e degrada
+      // item_type) vale para os dois casos — foi construído para sobreviver a
+      // ambientes com schema diferente, e criar não é exceção.
+      const ehRascunho = !!(act as any).__rascunho;
+      const compatPayload: Record<string, any> = ehRascunho
+        ? { ...updatePayload, id: act.id, project_id: projectId }
+        : { ...updatePayload };
       const droppedColumns: string[] = [];
       let downgradedItemType = false;
       let error: any = null;
       for (let i = 0; i < 8; i += 1) {
-        const result = await supabase
-          .from("activities")
-          .update(compatPayload as any)
-          .eq("id", act.id);
+        const result = ehRascunho
+          ? await supabase.from("activities").insert(compatPayload as any)
+          : await supabase
+              .from("activities")
+              .update(compatPayload as any)
+              .eq("id", act.id);
         error = result.error;
         if (!error) break;
 
@@ -1747,12 +1745,19 @@ export const EditActivityDialog = ({
               // planilha: o dado chegava preenchido e o campo seguia escondido.
               const showHours = !formData.is_milestone;
               const showCost = !formData.is_milestone;
-              const showWbs = hasWbs || revealedFields.has("wbs");
+              // Código EAP some para Marco, pelo mesmo motivo que horas e custo:
+              // marco é ponto no cronograma, não trabalho na EAP. Mostrar um
+              // campo que a gravação vai zerar seria pior que não mostrar.
+              const showWbs =
+                !formData.is_milestone && (hasWbs || revealedFields.has("wbs"));
               // Chips do "+ Adicionar campo": só os que estão ocultos no momento.
               // Dependências não entra: passou a ser sempre visível (é informação de
               // sequenciamento, não campo opcional — quem não vê, não sabe que existe).
               const hiddenChips: { key: OptionalFieldKey; label: string; icon: React.ReactNode }[] = [
-                !showWbs && { key: "wbs" as const, label: "Código EAP", icon: <Hash className="w-3 h-3" /> },
+                // Não oferece "Código EAP" para Marco: o campo não se aplica, e
+                // um chip que revela algo sem efeito é uma promessa falsa.
+                !showWbs && !formData.is_milestone &&
+                  { key: "wbs" as const, label: "Código EAP", icon: <Hash className="w-3 h-3" /> },
               ].filter(Boolean) as { key: OptionalFieldKey; label: string; icon: React.ReactNode }[];
               return (
               <div className="space-y-2.5">

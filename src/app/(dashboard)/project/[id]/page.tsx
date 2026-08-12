@@ -21,7 +21,6 @@ import { ProjectCharter } from "@/components/ProjectCharter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { BacklogSection } from "@/components/BacklogSection";
-import { QuickCreateActivity } from "@/components/QuickCreateActivity";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { MeetingsManager } from "@/components/MeetingsManager";
 import { ProjectRegistrosTimeline } from "@/components/ProjectRegistrosTimeline";
@@ -37,13 +36,10 @@ import { DraggableTabBar } from "@/components/DraggableTabBar";
 import {
   ArrowLeft, Plus, Calendar, CheckCircle2, Circle, Pencil, Trash2,
   Layers, GanttChart, BookOpen, FileText, Flag, History,
-  ChevronRight, MoreHorizontal, Kanban, Users, AlertTriangle, ListOrdered,
+  ChevronRight, Kanban, Users, AlertTriangle,
   Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
   NotebookPen, Search, X,
 } from "lucide-react";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
@@ -192,7 +188,6 @@ export default function ProjectDetailsPage() {
   const [listStatusFilter, setListStatusFilter] = useState("all");
   const [listPriorityFilter, setListPriorityFilter] = useState("all");
   const [showAddActivity, setShowAddActivity] = useState(false);
-  const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [showRenumerar, setShowRenumerar] = useState(false);
   const [createTaskStageId, setCreateTaskStageId] = useState<string | null>(null);
   const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
@@ -1682,7 +1677,13 @@ export default function ProjectDetailsPage() {
             </TabsContent>
 
             <TabsContent value="tap" className="mt-0">
-              <ProjectCharter projectId={id!} project={project} phases={phases} members={members} onMembersChanged={fetchMembers} />
+              {/* onIrPara: os "próximos passos" do TAP aprovado levam às abas
+                  que continuam o trabalho — reuniões, financeiro, backlog. */}
+              <ProjectCharter
+                projectId={id!} project={project} phases={phases} members={members}
+                onMembersChanged={fetchMembers}
+                onIrPara={(aba) => { setActiveTab(aba); fetchProjectData(); }}
+              />
             </TabsContent>
 
             <TabsContent value="meetings" className="mt-0">
@@ -1762,11 +1763,23 @@ export default function ProjectDetailsPage() {
             </TabsContent>
 
             <TabsContent value="backlog" className="mt-3 space-y-3">
-              {/* Barra única: ações à esquerda · busca/filtros/opções à direita */}
-              <div className="flex flex-wrap items-center gap-2">
-                {canCreate ? (
+              {/* A FAIXA DE AÇÕES SUMIU DAQUI.
+                  "Nova Atividade" e "Importar EAP" descem para a linha de
+                  filtros do Backlog, via prop `acoes`. Eram duas faixas — os
+                  botões nesta, busca e segmentos na outra — e a divisão era
+                  acidente de arquitetura: os segmentos dependem da prontidão,
+                  que é estado do componente. Quem olha a tela vê uma barra de
+                  trabalho, não dois donos de código. */}
+              {(() => {
+                const acoesBacklog = canCreate ? (
                   <>
-                    <Button size="sm" variant="default" onClick={() => setShowQuickCreate(true)} className="gap-1.5 h-9">
+                    {/* Abre a MESMA tela da edição, agora em modo de criação.
+                        Antes abria um diálogo de 3 campos (título, onde
+                        encaixar, tipo) enquanto editar mostrava ~20 — criar e
+                        editar a mesma coisa não podiam ser telas diferentes.
+                        A tela completa já existia e estava órfã: o estado que a
+                        abre nunca era ligado em lugar nenhum do código. */}
+                    <Button size="sm" variant="default" onClick={() => setShowAddActivity(true)} className="gap-1.5 h-8">
                       <Plus className="w-4 h-4" /> Nova Atividade
                     </Button>
                     <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
@@ -1776,7 +1789,7 @@ export default function ProjectDetailsPage() {
                     size="sm"
                     variant="default"
                     disabled
-                    className="gap-1.5 h-9"
+                    className="gap-1.5 h-8"
                     title={
                       isProjectConcluded
                         ? "Projeto concluído — reabra para criar atividades."
@@ -1789,102 +1802,17 @@ export default function ProjectDetailsPage() {
                   >
                     <Plus className="w-4 h-4" /> Nova Atividade
                   </Button>
-                )}
-
-                <span className="flex-1" />
-
-                <div className="relative w-[200px]">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    value={listSearch}
-                    onChange={(e) => setListSearch(e.target.value)}
-                    placeholder="Buscar..."
-                    className="pl-8 h-9"
-                  />
-                </div>
-                <Select value={listStatusFilter} onValueChange={setListStatusFilter}>
-                  <SelectTrigger className="w-[128px] h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Status: todos</SelectItem>
-                    <SelectItem value="pending">Pendente</SelectItem>
-                    <SelectItem value="in_progress">Em andamento</SelectItem>
-                    <SelectItem value="completed">Concluída</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={listPriorityFilter} onValueChange={setListPriorityFilter}>
-                  <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Prioridade: todas</SelectItem>
-                    <SelectItem value="urgente">Urgente</SelectItem>
-                    <SelectItem value="critica">Crítica</SelectItem>
-                    <SelectItem value="alta">Alta</SelectItem>
-                    <SelectItem value="media">Média</SelectItem>
-                    <SelectItem value="baixa">Baixa</SelectItem>
-                  </SelectContent>
-                </Select>
-                {(listSearch || listStatusFilter !== "all" || listPriorityFilter !== "all") && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => { setListSearch(""); setListStatusFilter("all"); setListPriorityFilter("all"); }}
-                    className="gap-1 h-9"
-                  >
-                    <X className="w-3.5 h-3.5" /> Limpar
-                  </Button>
-                )}
-
-                {canCreate && (phases.length > 0 || activities.length > 0) && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="icon" variant="outline" className="h-9 w-9" title="Mais opções">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {/* Renumerar fica no menu, não na barra: é ação rara e de
-                          mão única. Acima das destrutivas porque não é uma
-                          delas — muda códigos, não apaga nada. */}
-                      {canCreate && activities.length > 0 && (
-                        <DropdownMenuItem onClick={() => setShowRenumerar(true)}>
-                          <ListOrdered className="w-4 h-4 mr-2" /> Renumerar EAP…
-                        </DropdownMenuItem>
-                      )}
-                      {phases.length > 0 && (
-                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          const ok = await appConfirm({
-                            title: "Arquivar fases",
-                            description: `Arquivar TODAS as ${phases.length} fases? Elas podem ser restauradas no Arquivo.`,
-                            confirmText: "Arquivar",
-                            destructive: true,
-                          });
-                          if (!ok) return;
-                          await (supabase.from("phases").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id));
-                          toast.success(`${phases.length} fases arquivadas!`); fetchProjectData();
-                        }}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as fases
-                        </DropdownMenuItem>
-                      )}
-                      {activities.length > 0 && (
-                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          const ok = await appConfirm({
-                            title: "Arquivar atividades",
-                            description: `Arquivar TODAS as ${activities.length} atividades? Elas podem ser restauradas no Arquivo.`,
-                            confirmText: "Arquivar",
-                            destructive: true,
-                          });
-                          if (!ok) return;
-                          await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id) as any).eq("is_trashed", false);
-                          toast.success(`${activities.length} atividades arquivadas!`); fetchProjectData();
-                        }}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as atividades
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </div>
-
+                );
+                /* O MENU "..." saiu inteiro: tinha três itens e ficou sem
+                   nenhum. "Arquivar todas as fases/atividades" foram removidas
+                   antes (prometiam restauração numa tela que não lista fases),
+                   e "Renumerar EAP" saiu depois — é migração de convenção, de
+                   uso único por projeto, não pertence à barra de trabalho
+                   diário. O diálogo continua no código: quando as EAPs antigas
+                   precisarem migrar, basta religar o gatilho. */
+                return (
               <BacklogSection
+                acoes={acoesBacklog}
                 projectId={id!}
                 activities={backlogFilteredActivities}
                 phases={phases}
@@ -1893,6 +1821,12 @@ export default function ProjectDetailsPage() {
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
                 isAdmin={canDelete}
+                statusFilter={listStatusFilter}
+                onStatusFilterChange={setListStatusFilter}
+                priorityFilter={listPriorityFilter}
+                onPriorityFilterChange={setListPriorityFilter}
+                search={listSearch}
+                onSearchChange={setListSearch}
                 deleteBlockedReason={
                   isProjectConcluded ? "Projeto concluído — reabra o projeto para arquivar atividades."
                   : isChangeBlocked ? "Há uma solicitação de mudança aberta neste projeto."
@@ -1901,6 +1835,8 @@ export default function ProjectDetailsPage() {
                 }
                 hasActiveFilters={!!listSearch || listStatusFilter !== "all" || listPriorityFilter !== "all"}
               />
+                );
+              })()}
             </TabsContent>
 
             <TabsContent value="financials" className="mt-0">
@@ -1967,20 +1903,7 @@ export default function ProjectDetailsPage() {
           onOpenChange={setShowRenumerar}
           onDataChanged={fetchProjectData}
         />
-        <QuickCreateActivity
-          open={showQuickCreate}
-          onOpenChange={setShowQuickCreate}
-          projectId={id!}
-          parentOptions={activities as any}
-          disabledReason={isProjectConcluded ? "Projeto concluído. Reabra para criar atividades." : null}
-          onCreated={fetchProjectData}
-          onOpenDetails={async (activityId) => {
-            await fetchProjectData();
-            const created = activities.find((a) => a.id === activityId)
-              || (await supabase.from("activities").select("*").eq("id", activityId).maybeSingle()).data;
-            if (created) openEditActivity(created as any);
-          }}
-        />
+
     </main>
   );
 }

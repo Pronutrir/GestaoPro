@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package, AlertTriangle, FolderTree, AlignLeft } from "lucide-react";
+import { Upload, Layers, Circle, Diamond, Package, AlertTriangle, FolderTree, AlignLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -10,7 +10,7 @@ import {
   splitColumns, pareceCabecalho, detectarColunas, lerLinha, statusPorDatas,
   type ColValues,
 } from "@/lib/wbsColumns";
-import { eapRoleForImport, eapToPersisted, eapIsFaseLevel, type EapKind } from "@/lib/eapModel";
+import { eapRoleForImport, eapToPersisted, eapIsFaseLevel, eapCodeToPersist, eapRootCode, type EapKind } from "@/lib/eapModel";
 
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
@@ -24,6 +24,9 @@ interface TreeNode {
   depth: number;         // 1 = topo
   role: EapRole;         // resolvido por posição + palavra-chave
   parentCode: string | null;
+  /** O código veio ESCRITO no texto, ou foi inventado pelo recuo? Decide se a
+   *  posição pode vencer a palavra "Marco" no título — ver eapRoleForImport. */
+  codigoExplicito?: boolean;
   /** Datas, horas, custo, responsável e descrição lidos das colunas da planilha. */
   vals?: ColValues;
 }
@@ -94,6 +97,7 @@ const aplicarPapeis = (nodes: TreeNode[]) => {
       depth: n.depth,
       hasChildren: temFilhos.has(n.code),
       title: n.title,
+      codigoExplicito: n.codigoExplicito !== false,
     });
   }
 };
@@ -251,9 +255,22 @@ const parseFlexible = (text: string): ParseResult => {
       // contador do próprio nível: precisamos de um contador por PAI.
       // Reusa o count do pai como índice; para a raiz, conta itens de topo.
       const siblingIndex = parent ? parent.count : (nodes.filter((n) => n.parentCode === null).length + 1);
-      const code = parentCode ? `${parentCode}.${siblingIndex}` : String(siblingIndex);
-      const level = stack.length + 1;
-      nodes.push({ code, title: r.title, depth: level, role: "atividade", parentCode });
+      // ITEM DE TOPO PENDE DA RAIZ, não É a raiz.
+      //
+      // Sem código explícito o parser inventa a numeração, e antes o primeiro
+      // item virava "1" — que é o nível do PROJETO. Digitar uma linha solta
+      // ("Marco M2 — Kick-off realizado") produzia um item rotulado Projeto na
+      // prévia: absurdo, porque o projeto é a raiz virtual e não é algo que se
+      // cria colando uma linha.
+      //
+      // `eapRootCode()` devolve "1" na convenção atual, então o topo nasce em
+      // 1.1, 1.2, 1.3 — Fases, que é o que uma lista sem numeração descreve.
+      const raiz = eapRootCode();
+      const code = parentCode
+        ? `${parentCode}.${siblingIndex}`
+        : raiz ? `${raiz}.${siblingIndex}` : String(siblingIndex);
+      const level = code.split(".").length;
+      nodes.push({ code, title: r.title, depth: level, role: "atividade", parentCode, codigoExplicito: false });
       // empilha este item como possível ancestral dos próximos mais indentados
       stack.push({ indent: r.indent, count: 0, code });
     }
@@ -272,74 +289,14 @@ const parseFlexible = (text: string): ParseResult => {
   return { nodes, descartadas };
 };
 
-/* ------------------------------------------------------------------ */
-/*  Modelos por tipo de projeto (para quem não tem EAP pronta).        */
-/* ------------------------------------------------------------------ */
-const TEMPLATES: { id: string; emoji: string; name: string; desc: string; text: string }[] = [
-  {
-    id: "sistema", emoji: "💻", name: "Implantação de sistema",
-    desc: "Descoberta · Desenvolvimento · Homologação · Go-live",
-    text: `1. Descoberta e Requisitos
-1.1 Levantamento de requisitos
-1.1.1 Entrevistar áreas
-1.1.2 Mapear processos atuais
-1.1.3 Marco: Requisitos aprovados
-2. Desenvolvimento
-2.1 Modelagem e arquitetura
-2.2 Construção
-2.2.1 Desenvolver módulo principal
-2.2.2 Integrações
-3. Homologação
-3.1 Testes com usuários
-3.2 Ajustes finais
-4. Go-live
-4.1 Plano de implantação
-4.2 Treinamento
-4.3 Marco: Sistema em produção`,
-  },
-  {
-    id: "campanha", emoji: "📣", name: "Campanha de marketing",
-    desc: "Briefing · Criação · Veiculação · Análise",
-    text: `1. Briefing e Planejamento
-1.1 Definir objetivo e público
-1.2 Definir orçamento
-1.3 Marco: Briefing aprovado
-2. Criação
-2.1 Conceito e mensagem
-2.2 Produção de peças
-3. Veiculação
-3.1 Configurar canais
-3.2 Publicar e monitorar
-4. Análise
-4.1 Coletar métricas
-4.2 Relatório de resultados`,
-  },
-  {
-    id: "processo", emoji: "🔧", name: "Melhoria de processo",
-    desc: "Diagnóstico · Redesenho · Piloto · Rollout",
-    text: `1. Diagnóstico
-1.1 Mapear processo atual (AS-IS)
-1.2 Identificar gargalos
-2. Redesenho
-2.1 Desenhar processo futuro (TO-BE)
-2.2 Validar com áreas
-2.3 Marco: Novo processo aprovado
-3. Piloto
-3.1 Executar piloto
-3.2 Avaliar resultados
-4. Rollout
-4.1 Treinar equipes
-4.2 Implantar em toda a operação`,
-  },
-];
-
 export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogProps) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"paste" | "template">("paste");
   const [text, setText] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  /** Selo clicado no rodapé: recorta a prévia por papel. Null = mostra tudo.
+   *  Só afeta o que se VÊ — a importação leva a árvore inteira. */
+  const [filtroPapel, setFiltroPapel] = useState<EapRole | null>(null);
 
   /**
    * Fases que JÁ EXISTEM no projeto, indexadas pelo código EAP.
@@ -422,19 +379,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
    */
   const linhasIgnoradas = parsed.descartadas;
 
-  const resetAndClose = () => { setText(""); setSelectedTemplate(null); setTab("paste"); setOpen(false); };
+  const resetAndClose = () => { setText(""); setFiltroPapel(null); setOpen(false); };
 
-  const pickTemplate = (id: string) => {
-    const t = TEMPLATES.find((x) => x.id === id);
-    if (!t) return;
-    setSelectedTemplate(id);
-    setText(t.text);
-    // Volta para "Colar texto" ao escolher um modelo: é lá que o texto fica
-    // visível e editável. Ficar na aba de modelos escondia o que havia sido
-    // carregado — a pessoa via só um "✓" e não percebia que ainda faltava
-    // confirmar em "Importar N itens", então parecia que nada acontecia.
-    setTab("paste");
-  };
 
   const handleImport = async () => {
     if (tree.length === 0) return;
@@ -658,7 +604,11 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           phase_id: phaseId,
           parent_id: parentId,
           display_order: phaseOrderCounter[phaseKey]++,
-          wbs_code: node.code,
+          // O código colado POSICIONA o marco (é o que diz de quem ele pende),
+          // mas não é gravado: marco é ponto no cronograma, não trabalho na
+          // EAP. Sem isso ele consumiria um número e as atividades seguintes
+          // ficariam com um vão na numeração.
+          wbs_code: eapCodeToPersist(persisted, node.code),
           item_type: persisted.item_type,
           is_milestone: persisted.is_milestone,
           // Nasce no Backlog — igual a criação manual (segue o fluxo).
@@ -767,11 +717,31 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     }
   };
 
-  const CountBadge = ({ role, n }: { role: EapRole; n: number }) => (
-    <span className={cn("inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full border", ROLE_META[role].cls)}>
-      {ROLE_META[role].icon} {n} {ROLE_META[role].label.toLowerCase()}{n === 1 ? "" : "s"}
-    </span>
-  );
+  /**
+   * Selo de contagem que FILTRA a prévia.
+   *
+   * Antes era texto: mostrava "4 entregas" e não havia como ver QUAIS. Numa EAP
+   * de 38 itens, saber que existem 2 marcos sem poder achá-los na lista é
+   * informação que não ajuda a conferir nada — e conferir é o que se faz nesta
+   * tela antes de importar.
+   */
+  const CountBadge = ({ role, n }: { role: EapRole; n: number }) => {
+    const ativo = filtroPapel === role;
+    return (
+      <button
+        type="button"
+        onClick={() => setFiltroPapel(ativo ? null : role)}
+        title={ativo ? "Mostrar todos" : `Ver só ${ROLE_META[role].label.toLowerCase()}s`}
+        className={cn(
+          "inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full border transition-all",
+          ROLE_META[role].cls,
+          ativo ? "ring-2 ring-offset-1 ring-current" : "hover:brightness-95 opacity-90 hover:opacity-100",
+        )}
+      >
+        {ROLE_META[role].icon} {n} {ROLE_META[role].label.toLowerCase()}{n === 1 ? "" : "s"}
+      </button>
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : resetAndClose())}>
@@ -784,8 +754,13 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         {/* Cabeçalho enxuto */}
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <DialogTitle className="text-base font-semibold">Importar EAP</DialogTitle>
+          {/* UMA FRASE. Antes eram três blocos mais um aviso de Marco com três
+              linhas, falando em "profundidade", "nível da Fase" e "a posição
+              vence" — vocabulário de quem escreveu o parser, não de quem cola
+              uma EAP. A regra saiu do texto e virou o de/para ao lado do campo,
+              onde se lê comparando com o exemplo em vez de decorando. */}
           <p className="text-[13px] text-muted-foreground mt-0.5">
-            Cole sua estrutura em qualquer formato ou comece de um modelo.{" "}
+            Cole sua estrutura em qualquer formato.{" "}
             <span className="text-foreground">
               O nível 1 é o próprio projeto e não é importado. <span className="font-mono">1.1</span> vira Fase,{" "}
               <span className="font-mono">1.1.1</span> Entrega, e daí em diante Atividade.
@@ -797,38 +772,31 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           </p>
         </DialogHeader>
 
-        {/* Abas segmentadas */}
-        <div className="flex items-center gap-1 px-6 pt-3 shrink-0">
-          {([["paste", "Colar texto", <ClipboardList key="i" className="w-4 h-4" />],
-             ["template", "Usar modelo", <FileText key="i" className="w-4 h-4" />]] as const).map(([id, label, icon]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={cn(
-                "flex items-center gap-2 text-[13px] px-3 py-1.5 rounded-md transition-colors",
-                tab === id ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:bg-muted/50",
-              )}
-            >
-              {icon} {label}
-            </button>
-          ))}
-        </div>
+        {/* SEM ABAS. Eram duas — "Colar texto" e "Usar modelo" — e a segunda
+            saiu junto com os modelos: três EAPs genéricas que ocupavam metade
+            do diálogo. Quem tem uma EAP cola a sua; quem não tem não adota a
+            estrutura de um projeto alheio. Sobrou uma coisa a fazer, e uma
+            coisa só não precisa de aba para ser escolhida. */}
 
         {/* Corpo: cresce e rola internamente; footer fica ancorado */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border-t mt-3 flex-1 min-h-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border-t flex-1 min-h-0">
           {/* Entrada */}
           <div className="p-6 md:border-r flex flex-col min-h-0">
-            {tab === "paste" ? (
-              // textarea nativa: o wrapper de UI força whiteSpace/overflowWrap
-              // inline e reajusta altura no onChange, o que atrapalhava a
-              // digitação e a colagem neste campo (que é monoespaçado, de
-              // muitas linhas e vive dentro de um flex com min-h-0).
-              // `h-full` explícito: com `flex-1 min-h-0` a altura colapsava a
-              // zero e o campo ficava sem área clicável.
-              <textarea
+            {/* textarea nativa: o wrapper de UI força whiteSpace/overflowWrap
+                inline e reajusta altura no onChange, o que atrapalhava a
+                digitação e a colagem neste campo (monoespaçado, de muitas
+                linhas, dentro de um flex com min-h-0).
+                `h-full` explícito: com `flex-1 min-h-0` a altura colapsava a
+                zero e o campo ficava sem área clicável. */}
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 shrink-0">
+              Cole aqui
+            </div>
+            <textarea
                 value={text}
-                onChange={(e) => { setText(e.target.value); setSelectedTemplate(null); }}
+                /* Limpa o recorte ao editar: o papel filtrado pode deixar de
+                   existir no texto novo, e a prévia ficaria vazia sem dizer
+                   por quê. */
+                onChange={(e) => { setText(e.target.value); setFiltroPapel(null); }}
                 spellCheck={false}
                 autoFocus
                 className="h-full w-full min-h-[240px] resize-none rounded-md border border-input bg-muted/50 px-3 py-2 font-mono text-[13px] leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -842,72 +810,60 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 // As setas ficam ALINHADAS numa coluna: antes cada uma começava
                 // no fim do próprio texto, deixando um degrau irregular no meio
                 // do bloco.
+                /* Só a estrutura, sem as setas explicativas. Elas dobravam o
+                   comprimento de cada linha e quebravam no campo estreito,
+                   virando um bloco confuso — e a regra que elas repetiam já
+                   está escrita logo acima, no cabeçalho. */
+                /* Espelha o de/para ao lado, LINHA A LINHA: a 1ª daqui é a 1ª
+                   de lá. É o que permite ler comparando em vez de decorar uma
+                   regra escrita em texto. */
                 placeholder={[
-                  "1. Implantação do Serviço      ← o projeto: não é importado",
-                  "1.1 Iniciação e Planejamento   ← Fase",
-                  "1.1.1 Formalização do Projeto  ← agrupa: vira Entrega",
-                  "1.1.1.1 Elaborar TAP           ← folha: vira Atividade",
-                  "1.1.1.2 Marco: TAP aprovado    ← vira Marco",
-                  "1.2 Requisitos e Design        ← Fase",
-                  "1.2.1 Especificação            ← Entrega",
-                  "",
-                  "ou com bullets e recuo:",
-                  "• Iniciação",
-                  "   - Formalização",
+                  "1. Implantação do Serviço",
+                  "1.1 Iniciação",
+                  "1.1.1 Formalização",
+                  "1.1.1.1 Elaborar TAP",
+                  "1.1.1.2 Marco: TAP aprovado",
                 ].join("\n")}
               />
-            ) : (
-              <div className="overflow-y-auto space-y-2 -mx-1 px-1">
-                {TEMPLATES.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => pickTemplate(t.id)}
-                    className={cn(
-                      "w-full flex items-center gap-3 text-left border rounded-lg p-3 transition-colors",
-                      selectedTemplate === t.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
-                    )}
-                  >
-                    <span className="w-9 h-9 rounded-md bg-muted flex items-center justify-center text-lg shrink-0">{t.emoji}</span>
-                    <span className="min-w-0">
-                      <span className="block text-[13px] font-medium">{t.name}</span>
-                      <span className="block text-xs text-muted-foreground truncate">{t.desc}</span>
-                    </span>
-                    {selectedTemplate === t.id && <span className="ml-auto text-primary text-sm">✓</span>}
-                  </button>
-                ))}
-                {/* Não é uma opção de importação: só fecha o diálogo. Estava
-                    com a mesma aparência dos modelos acima, então clicar nele
-                    parecia escolher um modelo — o modal fechava, nada era
-                    criado e nada explicava o porquê. Agora é texto com um link,
-                    não mais um cartão irmão dos modelos. */}
-                <p className="text-xs text-muted-foreground pt-1">
-                  Prefere montar item a item?{" "}
-                  <button
-                    type="button"
-                    onClick={resetAndClose}
-                    className="underline underline-offset-2 hover:text-foreground"
-                  >
-                    Feche e use “Nova Atividade”
-                  </button>
-                  .
-                </p>
-              </div>
-            )}
           </div>
 
           {/* Pré-visualização em árvore */}
           <div className="p-6 flex flex-col min-h-0">
             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 shrink-0">
-              Pré-visualização
+              {tree.length === 0 ? "O que vai acontecer" : "Pré-visualização"}
             </div>
             {tree.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg text-center text-[13px] text-muted-foreground px-6">
-                A árvore aparece aqui conforme você cola o texto ou escolhe um modelo.
+              /* A ÁREA VAZIA ENSINA. Antes dizia "a árvore aparece aqui
+                 conforme você cola" — descrevia o óbvio e não explicava a
+                 regra, que estava num parágrafo lá em cima.
+                 Agora cada linha aqui corresponde à mesma linha do exemplo no
+                 campo ao lado, então lê-se comparando em vez de decorando. E
+                 some assim que há o que mostrar, dando lugar à árvore real. */
+              <div className="flex-1 border border-dashed rounded-lg p-4 flex flex-col justify-center gap-2.5">
+                {[
+                  { code: "1.", papel: "o projeto", nota: "não é importado", cls: "text-muted-foreground" },
+                  { code: "1.1", papel: "Fase" },
+                  { code: "1.1.1", papel: "Entrega" },
+                  { code: "1.1.1.1", papel: "Atividade" },
+                ].map((l) => (
+                  <div key={l.code} className="flex items-baseline gap-2.5 text-[12.5px]">
+                    <span className="font-mono text-muted-foreground w-[58px] shrink-0 tabular-nums">{l.code}</span>
+                    <span className={l.cls || "font-medium text-foreground"}>{l.papel}</span>
+                    {l.nota && <span className="text-muted-foreground/70 text-[11.5px]">— {l.nota}</span>}
+                  </div>
+                ))}
+                <div className="flex items-baseline gap-2.5 text-[12.5px] pt-2 mt-1 border-t border-dashed">
+                  <Diamond className="w-3 h-3 shrink-0 self-center text-amber-600 dark:text-amber-400 fill-current" />
+                  <span className="text-muted-foreground">
+                    Escreva{" "}
+                    <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11.5px] text-foreground">Marco:</code>
+                    {" "}no título para virar um marco
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto space-y-1 -mx-1 px-1">
-                {tree.map((n) => {
+                {(filtroPapel ? tree.filter((n) => n.role === filtroPapel) : tree).map((n) => {
                   // Ancestral inventado pelo parser (o texto começou em "1.2",
                   // então o "1" foi criado para a árvore não ficar quebrada).
                   const inventado = n.title.startsWith("(sem título)");

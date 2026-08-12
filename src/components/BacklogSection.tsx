@@ -7,8 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
-  ChevronsUpDown, ChevronsDownUp, MousePointerSquareDashed, Diamond,
-  Rows3, MoreHorizontal, Pencil, Package, IndentIncrease,
+  ChevronsUpDown, ChevronsDownUp, Diamond,
+  Rows3, MoreHorizontal, Pencil, Package, IndentIncrease, SlidersHorizontal, Search,
   User, Flag, Calendar as CalendarIcon, Link2, X,
 } from "lucide-react";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -109,12 +109,30 @@ interface BacklogSectionProps {
    *  tooltip em vez de sumir — some sem explicação vira "não consigo excluir". */
   deleteBlockedReason?: string;
   hasActiveFilters?: boolean;
+  /** Filtros que viviam na barra da página e passaram para o painel "Filtros".
+   *  Ficam LÁ porque recortam `activities` antes de chegar aqui; o painel é só
+   *  onde se mexe neles, junto dos demais. */
+  statusFilter?: string;
+  onStatusFilterChange?: (v: string) => void;
+  priorityFilter?: string;
+  onPriorityFilterChange?: (v: string) => void;
+  /** Busca da página. Vem por prop porque recorta `activities` antes de chegar
+   *  aqui — o componente só empresta o lugar, ao lado dos segmentos. */
+  search?: string;
+  onSearchChange?: (v: string) => void;
+  /** "Nova Atividade" e "Importar EAP", renderizados no INÍCIO da linha de
+   *  filtros. Vêm da página porque dependem de permissão e de diálogos que
+   *  vivem lá — mas pertencem visualmente a esta linha, não a uma acima. */
+  acoes?: React.ReactNode;
 }
 
 export const BacklogSection = ({
   projectId, activities, phases,
   onEditActivity, onDeleteActivity, onToggleActivity,
   onDataChanged, isAdmin = false, deleteBlockedReason, hasActiveFilters,
+  statusFilter = "all", onStatusFilterChange,
+  priorityFilter = "all", onPriorityFilterChange,
+  search = "", onSearchChange, acoes,
 }: BacklogSectionProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -537,18 +555,31 @@ export const BacklogSection = ({
   };
 
   const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedIds(next);
+    // Desmarcar a ÚLTIMA sai do modo. Sem isto a coluna das caixas continuava
+    // reservada com zero itens marcados — o usuário via o marcador na lateral
+    // de cada linha sem ter selecionado nada e sem saber como voltar.
+    // Calculado fora do updater: chamar outro setState lá dentro é efeito
+    // colateral durante o render.
+    if (next.size === 0) setSelectMode(false);
   };
 
   const allBacklogIds = backlogActs.map((a) => a.id);
   const allSelected = allBacklogIds.length > 0 && selectedIds.size === allBacklogIds.length;
   const toggleSelectAll = () => {
-    if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(allBacklogIds));
+    if (allSelected) {
+      // DESLIGA O MODO junto. Limpar só a seleção deixava `selectMode` ligado,
+      // e a coluna da caixa continuava reservada no grid: o "marcador lateral"
+      // ficava fixo na lateral de cada linha depois de desmarcar tudo, sem
+      // nada selecionado e sem jeito de sair.
+      setSelectedIds(new Set());
+      setSelectMode(false);
+    } else {
+      setSelectMode(true);
+      setSelectedIds(new Set(allBacklogIds));
+    }
   };
 
   const handleMoveSelected = async () => {
@@ -832,7 +863,43 @@ export const BacklogSection = ({
       {/* expand + (caixa de seleção, só no modo) — espelha as células da linha */}
       <span />
       {selectMode && <span />}
-      <span>Tarefa</span>
+      {/* MARCAR TODAS / NENHUMA — e o modo liga sozinho ao primeiro clique.
+          Esta caixa passou por dois erros meus. Primeiro pedia dois cliques (um
+          para ligar o modo, outro para marcar) com um link "sair" que empurrava
+          a coluna. Corrigi fazendo-a marcar TUDO ao ligar — e aí só existia
+          "todas ou nada": não dava mais para escolher algumas, porque as caixas
+          das linhas só aparecem no modo e o modo já vinha com tudo marcado.
+
+          Agora tem três estados, como qualquer tabela: vazia (nada), traço
+          (algumas) e marcada (todas). Clicar com nada marcado seleciona tudo;
+          com algo marcado, limpa e sai — e no meio-termo o usuário mexe nas
+          caixas das linhas, que é o que faltava. */}
+      <span className="flex items-center gap-2">
+        <Checkbox
+          checked={
+            selectMode && selectedIds.size > 0
+              ? (selectedIds.size === backlogActs.length ? true : "indeterminate")
+              : false
+          }
+          onCheckedChange={() => {
+            // Algo marcado → limpa e sai. Nada marcado → marca tudo.
+            if (selectMode && selectedIds.size > 0) {
+              setSelectedIds(new Set());
+              setSelectMode(false);
+            } else {
+              setSelectMode(true);
+              setSelectedIds(new Set(backlogActs.map((a) => a.id)));
+            }
+          }}
+          className="h-3.5 w-3.5"
+          title={
+            selectMode && selectedIds.size > 0
+              ? `Limpar seleção (${selectedIds.size})`
+              : `Selecionar todas as ${backlogActs.length}`
+          }
+        />
+        Tarefa
+      </span>
       {activeCols.map((c) => (
         <span key={c.id}>{c.label}</span>
       ))}
@@ -967,9 +1034,24 @@ export const BacklogSection = ({
           // quanto mais fundo o item — era o que desalinhava as linhas do
           // cabeçalho. O recuo é aplicado só na coluna do título, abaixo.
           style={{ gridTemplateColumns: backlogGrid }}
-          onClick={() => { if (!isEditingTitle) onEditActivity(activity); }}
+          // No modo seleção a linha ALTERNA a marcação em vez de abrir a
+          // edição: quem está escolhendo várias tarefas quer clicar rápido, e
+          // mirar na caixinha de 14px a cada item é trabalho desnecessário.
+          onClick={() => {
+            if (isEditingTitle) return;
+            if (selectMode) { toggleSelect(activity.id); return; }
+            onEditActivity(activity);
+          }}
         >
-          {/* col: expand */}
+          {/* col: expand — ou a caixa de seleção, no hover.
+              ENTRAR NA SELEÇÃO PELA LINHA. Antes o modo só ligava pelo
+              cabeçalho, e ligá-lo marcava tudo: para escolher três tarefas era
+              preciso marcar as 718 e desmarcar 715. A caixa aparece ao passar o
+              mouse sobre a linha e liga o modo já com aquela tarefa marcada —
+              que é o gesto natural de "quero estas".
+              Ocupa o lugar do expandir só quando o item não tem filhos; com
+              filhos, o expandir continua e a seleção se faz no cabeçalho ou nas
+              outras linhas. */}
           {hasChildren ? (
             <button
               type="button"
@@ -978,8 +1060,22 @@ export const BacklogSection = ({
             >
               {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
-          ) : (
+          ) : selectMode ? (
             <span className="w-5" />
+          ) : (
+            <span className="w-5 flex items-center justify-center">
+              <Checkbox
+                checked={false}
+                onCheckedChange={() => {
+                  setSelectMode(true);
+                  setSelectedIds(new Set([activity.id]));
+                }}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Selecionar ${activity.title}`}
+                title="Selecionar esta tarefa"
+                className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+              />
+            </span>
           )}
 
           {/* col: caixa de seleção em lote — só existe no modo seleção.
@@ -1570,6 +1666,13 @@ export const BacklogSection = ({
   })();
   const carencias = principaisCarencias(prontidaoResumo);
 
+  // Quantos recortes estão ativos DENTRO do painel — evita abrir só para
+  // descobrir se a lista está inteira. A prontidão não entra: ela tem os
+  // segmentos, que já mostram qual está ligado sem precisar de contador.
+  const filtrosAtivos =
+    (statusFilter !== "all" ? 1 : 0) +
+    (priorityFilter !== "all" ? 1 : 0);
+
   return (
     <div className="space-y-2.5">
       {/* ===== LINHA DE ESTADO — o que está filtrado e o que falta =====
@@ -1585,26 +1688,188 @@ export const BacklogSection = ({
           A chip resolve o alerta do Groto sobre segmentado-como-filtro: sem um
           estado explícito de "filtro ativo", o usuário não percebe que está
           vendo dados recortados. Aqui ela diz o que é e o ✕ desfaz. */}
-      {(prontidaoFilter !== "all" || carencias.length > 0) && prontidaoResumo.total > 0 && (
-        <div className="flex items-center gap-2.5 flex-wrap px-0.5 text-[12px] text-muted-foreground">
-          {prontidaoFilter !== "all" && (
-            <button
-              type="button"
-              onClick={() => setProntidaoFilter("all")}
-              title="Remover este filtro"
-              className={cn(
-                "inline-flex items-center gap-1.5 h-[22px] px-2 rounded-full border text-[11px] font-medium transition-colors",
-                prontidaoFilter === "incomplete"
-                  ? "border-destructive/50 bg-destructive/10 text-destructive hover:bg-destructive/15"
-                  : "border-success/50 bg-success/10 text-success hover:bg-success/15",
-              )}
-            >
-              {prontidaoFilter === "incomplete" ? "Incompletas" : "Prontas"}
-              <X className="w-3 h-3 opacity-70" />
-            </button>
+      {/* A LINHA DE PRONTIDÃO SAIU DAQUI.
+          A prontidão aparecia TRÊS vezes na mesma tela: as carências num texto
+          próprio, o "N / N prontas" com barra à direita, e os números dentro do
+          seletor "Todas N / Prontas N / Incompletas N". Foi preciso inventar um
+          "(N avaliáveis)" só para explicar por que dois desses totais
+          discordavam — remendo sobre a duplicação.
+          A carência virou um LINK na linha de contexto, e o chip de filtro
+          ativo deixou de ser necessário: os SEGMENTOS abaixo mostram qual
+          recorte está ligado, com o número de cada um. */}
+
+      {/* ===== SEGMENTOS + BARRA DE PRONTIDÃO =====
+          Os três recortes com SEUS NÚMEROS, visíveis sem clicar. Escondê-los
+          num painel obrigava a abrir para responder "quantas estão prontas?",
+          que é a pergunta que se faz ao abrir o Backlog.
+
+          A barra abaixo voltou. Eu a tinha removido alegando que duplicava o
+          "Progresso: 0/16" do topo da página — mas são medidas DIFERENTES:
+          aquela conta CONCLUÍDAS, esta conta PRONTAS PARA COMEÇAR. Tirar foi
+          erro meu. Agora ela não repete os segmentos: eles têm os números, ela
+          tem a proporção e as carências.
+
+          Some inteira quando tudo está pronto — faixa verde dizendo o óbvio é
+          ruído, e "Incompletas 0" não é opção, é lixo visual. */}
+      {/* LINHA 1: busca + segmentos + painel. Os três recortes ficam ao lado
+          do campo de busca, como na referência — é a primeira coisa que se lê
+          ao abrir o Backlog, e responde "quantas estão prontas?" sem clique.
+          A busca mora AQUI e não na barra da página porque os segmentos
+          dependem da prontidão, que é estado deste componente: separá-los
+          deixaria metade da linha num arquivo e metade no outro. */}
+      {(acoes || onSearchChange || prontidaoResumo.total > 0) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* UMA LINHA SÓ: ações, busca, segmentos e painel.
+              Estavam em duas — os botões numa faixa da página, o resto noutra
+              do componente — e a divisão era acidente de arquitetura, não
+              decisão de layout: quem olha a tela vê uma barra de trabalho, não
+              dois donos de código.
+              A busca vem por prop: recorta `activities` ANTES de chegar aqui, e
+              um segundo campo daria duas buscas sobre a mesma lista.
+              A linha não depende dos segmentos — com tudo pronto eles somem, e
+              busca e ações continuam. */}
+          {acoes}
+          {onSearchChange ? (
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Buscar tarefa..."
+                className="pl-8 h-8 text-[13px]"
+              />
+            </div>
+          ) : (
+            <span className="flex-1" />
           )}
 
-          {/* As duas maiores carências: é o que orienta por onde começar. */}
+          {/* SEGMENTOS — os números na cara, sem clicar. Cada um mostra QUANTOS
+              caem nele: é a diferença entre "16 sem responsável" (16 de
+              quanto?) e "Incompletas 16" ao lado de "Todas 16".
+              "Incompletas 0" não é renderizado: segmento vazio não é opção que
+              se escolhe, é ruído. */}
+          <div className={cn(
+            "inline-flex rounded-md border border-border overflow-hidden h-8 shrink-0",
+            // Tudo pronto: não há o que recortar, e três botões dizendo isso
+            // seriam ruído. A busca ao lado continua.
+            !(prontidaoResumo.total > 0 && prontidaoResumo.prontas < prontidaoResumo.total) && "hidden",
+          )}>
+            {([
+              { v: "all" as const, lab: "Todas", n: prontidaoResumo.total, cls: "" },
+              { v: "ready" as const, lab: "Prontas", n: prontidaoResumo.prontas, cls: "text-success" },
+              {
+                v: "incomplete" as const,
+                lab: "Incompletas",
+                n: prontidaoResumo.quaseProntas + prontidaoResumo.incompletas,
+                cls: "text-destructive",
+              },
+            ]).filter((s) => s.v === "all" || s.n > 0).map((s, i) => (
+              <button
+                key={s.v}
+                type="button"
+                onClick={() => setProntidaoFilter(s.v)}
+                className={cn(
+                  "px-3 text-[12.5px] transition-colors whitespace-nowrap",
+                  i > 0 && "border-l border-border",
+                  prontidaoFilter === s.v
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : cn("hover:bg-muted/60", s.cls || "text-muted-foreground"),
+                )}
+              >
+                {s.lab} <span className="tabular-nums">{s.n}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* O painel guarda o que NÃO cabe como segmento: Status e Prioridade
+              têm cinco e seis valores cada — abertos, viram uma barra inteira.
+              O número no botão diz quantos recortes estão ativos sem abrir. */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className={cn(
+                  "h-8 gap-1.5 text-[13px] px-2.5 shrink-0",
+                  filtrosAtivos > 0 && "border-primary/50 text-primary",
+                )}
+                title="Status e prioridade"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                {filtrosAtivos > 0 && (
+                  <span className="min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold inline-flex items-center justify-center tabular-nums">
+                    {filtrosAtivos}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[248px] p-3 space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status</label>
+                <Select value={statusFilter} onValueChange={(v) => onStatusFilterChange?.(v)}>
+                  <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="pending">Pendente</SelectItem>
+                    <SelectItem value="in_progress">Em andamento</SelectItem>
+                    <SelectItem value="completed">Concluída</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Prioridade</label>
+                <Select value={priorityFilter} onValueChange={(v) => onPriorityFilterChange?.(v)}>
+                  <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="urgente">Urgente</SelectItem>
+                    <SelectItem value="critica">Crítica</SelectItem>
+                    <SelectItem value="alta">Alta</SelectItem>
+                    <SelectItem value="media">Média</SelectItem>
+                    <SelectItem value="baixa">Baixa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {filtrosAtivos > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="w-full h-8 text-[13px] gap-1.5"
+                  onClick={() => {
+                    onStatusFilterChange?.("all");
+                    onPriorityFilterChange?.("all");
+                  }}
+                >
+                  <X className="w-3.5 h-3.5" /> Limpar filtros
+                </Button>
+              )}
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
+
+      {prontidaoResumo.total > 0 && prontidaoResumo.prontas < prontidaoResumo.total && (
+        <div className="flex items-center gap-3 flex-wrap px-0.5 text-[12px] text-muted-foreground">
+          <span className="shrink-0">
+            <span className="text-foreground font-semibold tabular-nums">{prontidaoResumo.prontas}</span>
+            {" "}pronta{prontidaoResumo.prontas === 1 ? "" : "s"} para executar
+          </span>
+          <span className="flex-1 min-w-[100px] h-[7px] rounded-full overflow-hidden flex border border-border/60">
+            {[
+              { n: prontidaoResumo.prontas, cls: "bg-success", lab: "prontas" },
+              { n: prontidaoResumo.quaseProntas, cls: "bg-warning", lab: "falta 1 campo" },
+              { n: prontidaoResumo.incompletas, cls: "bg-destructive", lab: "falta mais de 1" },
+            ].map((f) => f.n > 0 && (
+              <span
+                key={f.lab}
+                className={f.cls}
+                style={{ width: `${(f.n / prontidaoResumo.total) * 100}%` }}
+                title={`${f.n} ${f.lab}`}
+              />
+            ))}
+          </span>
           {carencias.length > 0 && (
             <span className="shrink-0">
               {carencias
@@ -1612,28 +1877,6 @@ export const BacklogSection = ({
                 .join(" · ")}
             </span>
           )}
-
-          {/* Barra fina, à direita: proporção sem ocupar linha própria. */}
-          <span className="ml-auto flex items-center gap-2 shrink-0">
-            <span className="tabular-nums">
-              <span className="text-foreground font-semibold">{prontidaoResumo.prontas}</span>
-              {" / "}{prontidaoResumo.total} prontas
-            </span>
-            <span className="w-16 h-1.5 rounded-full overflow-hidden flex border border-border/60">
-              {[
-                { n: prontidaoResumo.prontas, cls: "bg-success", lab: "prontas" },
-                { n: prontidaoResumo.quaseProntas, cls: "bg-warning", lab: "falta 1 campo" },
-                { n: prontidaoResumo.incompletas, cls: "bg-destructive", lab: "falta mais de 1" },
-              ].map((f) => f.n > 0 && (
-                <span
-                  key={f.lab}
-                  className={f.cls}
-                  style={{ width: `${(f.n / prontidaoResumo.total) * 100}%` }}
-                  title={`${f.n} ${f.lab}`}
-                />
-              ))}
-            </span>
-          </span>
         </div>
       )}
 
@@ -1645,37 +1888,43 @@ export const BacklogSection = ({
             {selectMode && selectedIds.size > 0 ? (
               <span className="text-foreground font-medium">{selectedIds.size} de {typeCounts.total} selecionada(s)</span>
             ) : (
-              <>
-                <span><span className="text-foreground font-semibold">{typeCounts.total}</span> tarefas</span>
-                <span className="text-muted-foreground/40">·</span>
-                <span className="text-muted-foreground/90">
-                  {[
-                    typeCounts.fase && `${typeCounts.fase} fase${typeCounts.fase > 1 ? "s" : ""}`,
-                    typeCounts.atividade && `${typeCounts.atividade} atividade${typeCounts.atividade > 1 ? "s" : ""}`,
-                    typeCounts.marco && `${typeCounts.marco} marco${typeCounts.marco > 1 ? "s" : ""}`,
-                  ].filter(Boolean).join(" · ")}
-                </span>
-              </>
+              /* SEM O TOTAL. "16 tarefas · 15 atividades · 1 marco" lia como
+                 16 mais 15 mais 1, quando 15 + 1 É o 16 — a palavra "tarefas"
+                 fazia dois papéis, o todo e uma categoria irmã das outras. E
+                 marco não é tarefa: foi separado da EAP por não ser trabalho,
+                 e seguia somado no total do que há para fazer.
+                 Cada palavra passa a nomear uma coisa só; a soma se faz de
+                 cabeça. */
+              <span className="text-muted-foreground/90">
+                {[
+                  typeCounts.fase && `${typeCounts.fase} fase${typeCounts.fase > 1 ? "s" : ""}`,
+                  typeCounts.atividade && `${typeCounts.atividade} atividade${typeCounts.atividade > 1 ? "s" : ""}`,
+                  typeCounts.marco && `${typeCounts.marco} marco${typeCounts.marco > 1 ? "s" : ""}`,
+                ].filter(Boolean).join(" · ")}
+              </span>
             )}
+            {/* O link de carência saiu daqui: a barra de prontidão acima já
+                traz "falta responsável em 16 · prioridade em 16", com as DUAS
+                maiores carências em vez de uma, e o segmento "Incompletas" ao
+                lado faz o filtro. Manter os dois era dizer a mesma coisa duas
+                vezes na mesma tela. */}
           </p>
-          {/* Contagens diferentes precisam se explicar: "14 tarefas" acima e
-              "12 prontas" ao lado pareciam discordar. A prontidão não avalia
-              agrupadores (horas e datas vêm dos filhos) nem concluídas — o
-              tooltip diz isso onde a dúvida aparece. */}
-          {prontidaoResumo.total > 0 && prontidaoResumo.total !== typeCounts.total && (
-            <span
-              className="text-[11px] text-muted-foreground/70 cursor-help"
-              title={`${prontidaoResumo.total} entram na conta de prontidão. Fases e tarefas concluídas ficam de fora: as horas e datas de um agrupador vêm dos filhos, e cobrar prazo de algo já entregue é ruído.`}
-            >
-              ({prontidaoResumo.total} avaliáveis)
-            </span>
-          )}
 
           {/* Controles de visão */}
           <div className="flex items-center gap-1.5">
             {selectMode && selectedIds.size > 0 && (
               <>
-                <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} aria-label="Selecionar todas" className="ml-1" />
+                {/* Estender para TODAS sem voltar ao cabeçalho da tabela —
+                    útil quando se selecionou algumas e se decidiu que era o
+                    conjunto inteiro. Mostra o traço no meio-termo, como a do
+                    cabeçalho, para não sugerir que nada está marcado. */}
+                <Checkbox
+                  checked={allSelected ? true : "indeterminate"}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label={allSelected ? "Desmarcar todas" : "Selecionar todas"}
+                  title={allSelected ? "Desmarcar todas" : `Selecionar todas as ${allBacklogIds.length}`}
+                  className="ml-1"
+                />
                 <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => setMoveDialogOpen(true)}>
                   <ArrowRight className="w-3.5 h-3.5" /> Mudar status ({selectedIds.size})
                 </Button>
@@ -1806,32 +2055,51 @@ export const BacklogSection = ({
                     ))}
                   </PopoverContent>
                 </Popover>
+
+                {/* ARQUIVAR EM LOTE — estava faltando.
+                    Ao remover "Arquivar todas as fases/atividades" do menu, eu
+                    disse que a seleção em lote resolvia. Não resolvia: dava
+                    para selecionar e mudar status, responsável, prazo e
+                    prioridade, mas NÃO para arquivar. Tirei a saída ruim sem
+                    conferir se a boa existia. */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                  // `isAdmin` MANDA, não `deleteBlockedReason`. A página envia
+                  // esse texto SEMPRE — o último ramo é um padrão ("você não
+                  // tem permissão") que chega mesmo com permissão. Ele existe
+                  // para EXPLICAR o bloqueio, não para causá-lo: os outros
+                  // botões de arquivar do arquivo já testam `isAdmin` e só usam
+                  // o texto no tooltip. O meu testava o texto, então o botão
+                  // nascia desabilitado para todo mundo.
+                  disabled={!isAdmin}
+                  title={isAdmin ? "Arquivar as selecionadas" : (deleteBlockedReason || "Você não tem permissão para arquivar")}
+                  onClick={async () => {
+                    const n = selectedIds.size;
+                    const ok = await appConfirm({
+                      title: `Arquivar ${n} ${n === 1 ? "tarefa" : "tarefas"}?`,
+                      description: "Elas saem do Backlog e podem ser restauradas na Lixeira, aqui embaixo.",
+                      confirmText: "Arquivar",
+                      destructive: true,
+                    });
+                    if (!ok) return;
+                    await aplicarEmLote(
+                      { is_trashed: true, trashed_at: new Date().toISOString() },
+                      `${n} ${n === 1 ? "tarefa arquivada" : "tarefas arquivadas"}`,
+                    );
+                    setSelectedIds(new Set());
+                    setSelectMode(false);
+                  }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Arquivar
+                </Button>
               </>
             )}
-            {/* PRONTIDÃO como filtro, junto dos outros — não numa faixa
-                própria. Ele recorta a lista igual a Status e Prioridade, e
-                separá-lo sugeria que fosse outra coisa. Some quando não há
-                nada a recortar (tudo pronto ou nada avaliável). */}
-            {prontidaoResumo.total > 0 && prontidaoResumo.prontas < prontidaoResumo.total && (
-              <Select value={prontidaoFilter} onValueChange={(v) => setProntidaoFilter(v as typeof prontidaoFilter)}>
-                <SelectTrigger
-                  className={cn(
-                    "h-7 w-[132px] text-[13px] gap-1.5",
-                    prontidaoFilter === "incomplete" && "border-destructive/50 text-destructive",
-                    prontidaoFilter === "ready" && "border-success/50 text-success",
-                  )}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas {prontidaoResumo.total}</SelectItem>
-                  <SelectItem value="ready">Prontas {prontidaoResumo.prontas}</SelectItem>
-                  <SelectItem value="incomplete">
-                    Incompletas {prontidaoResumo.quaseProntas + prontidaoResumo.incompletas}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+            {/* O painel "Filtros" SUBIU para a linha da busca e dos segmentos:
+                filtrar é uma coisa só e mora num lugar só. Aqui ficam os
+                controles de VISÃO — agrupar, expandir, recolher —, que não
+                recortam a lista, apenas reorganizam o que sobrou dela. */}
 
             {/* Agrupar em raias — mesmo modelo do Kanban */}
             <Select value={groupBy} onValueChange={(v) => changeGroupBy(v as GroupBy)}>
@@ -1875,20 +2143,10 @@ export const BacklogSection = ({
             >
               <ChevronsDownUp className="w-4 h-4" />
             </Button>
-            {/* Menu de ações secundárias */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" title="Mais ações">
-                  <MoreHorizontal className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setSelectMode((v) => { if (v) setSelectedIds(new Set()); return !v; })}>
-                  <MousePointerSquareDashed className="w-4 h-4 mr-2" />
-                  {selectMode ? "Sair da seleção" : "Selecionar em lote"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* O menu "⋯" saiu: tinha um item só — "Selecionar em lote" —, que
+                virou a caixa ao lado de "Tarefa" no cabeçalho da tabela. Um
+                dropdown para uma ação escondia justamente o que precisava ser
+                sugestivo. */}
           </div>
         </div>
       )}
