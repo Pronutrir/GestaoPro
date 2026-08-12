@@ -10,7 +10,7 @@ import {
   splitColumns, pareceCabecalho, detectarColunas, lerLinha, statusPorDatas,
   type ColValues,
 } from "@/lib/wbsColumns";
-import { eapRoleForImport, eapToPersisted, eapIsFaseLevel, eapCodeToPersist, type EapKind } from "@/lib/eapModel";
+import { eapRoleForImport, eapToPersisted, eapIsFaseLevel, eapCodeToPersist, eapRootCode, type EapKind } from "@/lib/eapModel";
 
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
@@ -24,6 +24,9 @@ interface TreeNode {
   depth: number;         // 1 = topo
   role: EapRole;         // resolvido por posição + palavra-chave
   parentCode: string | null;
+  /** O código veio ESCRITO no texto, ou foi inventado pelo recuo? Decide se a
+   *  posição pode vencer a palavra "Marco" no título — ver eapRoleForImport. */
+  codigoExplicito?: boolean;
   /** Datas, horas, custo e responsável lidos das colunas da planilha. */
   vals?: ColValues;
 }
@@ -78,6 +81,7 @@ const aplicarPapeis = (nodes: TreeNode[]) => {
       depth: n.depth,
       hasChildren: temFilhos.has(n.code),
       title: n.title,
+      codigoExplicito: n.codigoExplicito !== false,
     });
   }
 };
@@ -229,9 +233,22 @@ const parseFlexible = (text: string): TreeNode[] => {
       // contador do próprio nível: precisamos de um contador por PAI.
       // Reusa o count do pai como índice; para a raiz, conta itens de topo.
       const siblingIndex = parent ? parent.count : (nodes.filter((n) => n.parentCode === null).length + 1);
-      const code = parentCode ? `${parentCode}.${siblingIndex}` : String(siblingIndex);
-      const level = stack.length + 1;
-      nodes.push({ code, title: r.title, depth: level, role: "atividade", parentCode });
+      // ITEM DE TOPO PENDE DA RAIZ, não É a raiz.
+      //
+      // Sem código explícito o parser inventa a numeração, e antes o primeiro
+      // item virava "1" — que é o nível do PROJETO. Digitar uma linha solta
+      // ("Marco M2 — Kick-off realizado") produzia um item rotulado Projeto na
+      // prévia: absurdo, porque o projeto é a raiz virtual e não é algo que se
+      // cria colando uma linha.
+      //
+      // `eapRootCode()` devolve "1" na convenção atual, então o topo nasce em
+      // 1.1, 1.2, 1.3 — Fases, que é o que uma lista sem numeração descreve.
+      const raiz = eapRootCode();
+      const code = parentCode
+        ? `${parentCode}.${siblingIndex}`
+        : raiz ? `${raiz}.${siblingIndex}` : String(siblingIndex);
+      const level = code.split(".").length;
+      nodes.push({ code, title: r.title, depth: level, role: "atividade", parentCode, codigoExplicito: false });
       // empilha este item como possível ancestral dos próximos mais indentados
       stack.push({ indent: r.indent, count: 0, code });
     }

@@ -366,7 +366,20 @@ export function eapRoleForImport(opts: {
   depth: number;
   hasChildren: boolean;
   title: string;
+  /** O código veio ESCRITO no texto colado? Falso quando o parser o inventou
+   *  a partir do recuo (lista sem numeração). */
+  codigoExplicito?: boolean;
 }): EapKind {
+  // Marco vence quando o código foi INVENTADO pelo parser.
+  //
+  // "A posição vence a palavra-chave" existe para EAP numerada, onde escrever
+  // "1.2" é decisão de quem planeja — e EAPs reais nomeiam fases como
+  // "Milestone 1 - Lançamento". Numa lista sem números o código é palpite do
+  // parser: deixá-lo vencer a palavra que a pessoa DIGITOU inverte quem manda.
+  // Digitar "Marco M2 — Kick-off" e ver "Fase" na prévia não tem explicação.
+  const inventado = opts.codigoExplicito === false;
+  if (inventado && !opts.hasChildren && eapTitleDeclaresMilestone(opts.title)) return "marco";
+
   // eapIsFaseLevel em vez de `depth === 1`: era a segunda cópia da regra de
   // nível, e uma cópia que discorda das outras faz a mesma EAP ter papéis
   // diferentes na importação e no Backlog.
