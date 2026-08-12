@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X, Send, Clock, CheckCircle2, XCircle, Paperclip, Search, ChevronsUpDown, Check, MoreHorizontal } from "lucide-react";
+import { FileText, Plus, Trash2, ExternalLink, Upload, Pencil, Save, X, Send, Clock, CheckCircle2, XCircle, Paperclip, Search, ChevronsUpDown, Check, MoreHorizontal, Link as LinkIcon } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -24,7 +24,7 @@ import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useAuth } from "@/contexts/AuthContext";
 import { DocumentFlowPanel } from "@/components/documentos/DocumentFlowPanel";
 import { FileUploadField, type UploadResult } from "@/components/documentos/FileUploadField";
-import { resolveFileUrl } from "@/lib/documentCenter";
+import { resolveFileUrl, ehLink, dominioDe } from "@/lib/documentCenter";
 import { StartFlowDialog, type DraftParticipant } from "@/components/documentos/StartFlowDialog";
 import {
   FLOW_KINDS, ROLE_META, flowProgress, isMyTurn, hashFile, captureOrigin,
@@ -760,8 +760,16 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                 myTurn && "border-primary/50 ring-1 ring-primary/20")}>
             <div className="flex items-center justify-between p-3 group hover:shadow-sm transition-shadow">
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <FileText className="w-5 h-5 text-primary" />
+                {/* Ícone diz o que é ANTES do selo: arquivo mora no projeto,
+                    link mora fora — e a diferença muda o que se pode fazer com
+                    ele (link não assina). */}
+                <div className={cn(
+                  "w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0",
+                  ehLink(doc) ? "bg-success/10" : "bg-primary/10",
+                )}>
+                  {ehLink(doc)
+                    ? <LinkIcon className="w-5 h-5 text-success" />
+                    : <FileText className="w-5 h-5 text-primary" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   {/* Sem selo de versão: ele existia para dar visibilidade ao
@@ -770,7 +778,11 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                       na linha de metadados abaixo. */}
                   <p className="font-medium text-sm text-foreground truncate">{doc.file_name}</p>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {doc.file_type && <Badge variant="outline" className="text-xs">{doc.file_type}</Badge>}
+                    {ehLink(doc) ? (
+                      <Badge variant="outline" className="text-xs border-success/40 text-success">Link</Badge>
+                    ) : (
+                      doc.file_type && <Badge variant="outline" className="text-xs">{doc.file_type}</Badge>
+                    )}
                     {doc.phase_id && (
                       <Badge className="bg-primary/20 text-primary text-xs">
                         {phases.find((p) => p.id === doc.phase_id)?.title}
@@ -801,8 +813,14 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                         <span>{doc.uploaded_by}</span>
                       </span>
                     )}
+                    {/* Link não tem versão — o conteúdo é de outra pessoa e muda
+                        sem passar por aqui. No lugar dela, o DOMÍNIO: saber para
+                        onde aponta antes de clicar vale mais que um "v1" que
+                        nunca vai virar v2. */}
                     <span className="text-xs text-muted-foreground">
-                      v{doc.version} · {new Date(doc.created_at).toLocaleDateString("pt-BR")}
+                      {ehLink(doc)
+                        ? (dominioDe(doc.file_url) || "link externo")
+                        : `v${doc.version}`} · {new Date(doc.created_at).toLocaleDateString("pt-BR")}
                     </span>
                     {/* Selo do fluxo: o que está sendo pedido e como vai */}
                     {flow && (

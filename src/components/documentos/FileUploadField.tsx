@@ -6,16 +6,26 @@
 // isso, o card do Kanban já subia arquivo normalmente. Mesma tabela, dois modos
 // de entrada incompatíveis.
 //
-// O arraste continua aceitando link colado, porque documento externo (norma,
-// legislação, planilha compartilhada) é caso real — só deixa de ser o único
-// caminho possível.
+// O LINK VOLTOU A SER ESCOLHA. Ele existia só como fallback automático quando
+// o bucket não estava criado no ambiente — nunca por vontade de quem cadastra.
+// Para registrar uma norma da Anvisa ou uma planilha compartilhada era preciso
+// baixar e subir de novo, criando uma cópia que envelhece sozinha enquanto a
+// original continua mudando.
+//
+// Documento externo é caso real (norma, legislação, planilha viva). Só não pode
+// ser ASSINADO: o fluxo formal calcula o hash do conteúdo para provar que o que
+// foi assinado é o que está lá, e um endereço pode apontar para outra coisa
+// amanhã. A tela diz isso onde a escolha é feita.
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, X, FileText, Loader2 } from "lucide-react";
+import { Upload, X, FileText, Loader2, Link as LinkIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { MAX_UPLOAD_BYTES, formatSize, safeFileName, fileExtension } from "@/lib/documentCenter";
+import {
+  MAX_UPLOAD_BYTES, formatSize, safeFileName, fileExtension,
+  urlValida, nomeSugeridoDaUrl,
+} from "@/lib/documentCenter";
 import { cn } from "@/lib/utils";
 
 export interface UploadResult {
@@ -100,38 +110,95 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
     );
   }
 
+  /* SELETOR ARQUIVO / LINK.
+     O modo link já existia, mas só como FALLBACK automático quando o bucket
+     não estava criado — nunca por escolha. Resultado: para registrar uma norma
+     da Anvisa ou uma planilha compartilhada era preciso baixar e subir de
+     novo, criando uma cópia que envelhece sozinha enquanto a original muda.
+     O banco sempre aceitou link (`file_url` é texto e `storage_path` nulo já
+     identifica externo, que é como a edição distingue os dois hoje). Faltava
+     a porta de entrada. */
+  const Seletor = () => (
+    <div className="inline-flex rounded-md border border-input overflow-hidden h-8 mb-2">
+      {([
+        { modo: false, icone: <Upload className="w-3.5 h-3.5" />, label: "Arquivo" },
+        { modo: true, icone: <LinkIcon className="w-3.5 h-3.5" />, label: "Link" },
+      ]).map((op, i) => (
+        <button
+          key={op.label}
+          type="button"
+          onClick={() => setLinkMode(op.modo)}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3 text-[12.5px] transition-colors",
+            i > 0 && "border-l border-input",
+            linkMode === op.modo
+              ? "bg-primary text-primary-foreground font-medium"
+              : "text-muted-foreground hover:bg-muted/60",
+          )}
+        >
+          {op.icone} {op.label}
+        </button>
+      ))}
+    </div>
+  );
+
   if (linkMode) {
+    const url = linkUrl.trim();
+    const valida = urlValida(url);
+    const sugerido = valida ? nomeSugeridoDaUrl(url) : "";
+    const nomeFinal = linkName.trim() || sugerido;
     return (
-      <div className="space-y-2">
-        <Input placeholder="Nome do documento" value={linkName}
-          onChange={(e) => setLinkName(e.target.value)} />
-        <div className="flex gap-2">
-          <Input placeholder="https://…" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
-          <Button type="button" variant="secondary" className="shrink-0"
-            disabled={!linkUrl.trim()}
-            onClick={() => {
-              const name = linkName.trim() || linkUrl.split("/").pop() || "Documento";
-              onChange({
-                fileName: name, fileUrl: linkUrl.trim(), storagePath: null,
-                fileType: "link", fileSize: null,
-              });
-            }}>
-            Usar link
-          </Button>
+      <div>
+        <Seletor />
+        <div className="space-y-2">
+          <Input
+            placeholder="https://…"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            className={cn("font-mono text-[13px]", url && !valida && "border-destructive")}
+          />
+          {url && !valida && (
+            <p className="text-[11px] text-destructive">
+              Endereço inválido. Precisa começar com <span className="font-mono">http://</span> ou{" "}
+              <span className="font-mono">https://</span>.
+            </p>
+          )}
+          <div className="flex gap-2">
+            {/* O nome é SUGERIDO do endereço: uma URL externa não informa nome,
+                e digitá-lo à mão era o atrito que sobrava. Continua editável —
+                a sugestão vem do caminho, que nem sempre é um bom título. */}
+            <Input
+              placeholder={sugerido ? `${sugerido} (sugerido)` : "Nome do documento"}
+              value={linkName}
+              onChange={(e) => setLinkName(e.target.value)}
+            />
+            <Button
+              type="button" variant="secondary" className="shrink-0"
+              disabled={!valida}
+              onClick={() => onChange({
+                fileName: nomeFinal || "Documento",
+                fileUrl: url,
+                storagePath: null,
+                fileType: "link",
+                fileSize: null,
+              })}
+            >
+              Usar link
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            O arquivo fica <strong>fora do sistema</strong>: pode receber ciência e
+            aprovação, mas <strong>não assinatura</strong> — o que está no endereço
+            pode ser trocado depois de assinado.
+          </p>
         </div>
-        {/* Só se chega aqui por FALLBACK (bucket ausente), nunca por escolha.
-            Voltar levaria a um upload que falha de novo — em vez do botão,
-            explica o que está acontecendo e o que o link não permite. */}
-        <p className="text-[11px] text-muted-foreground">
-          O envio de arquivo ainda não está habilitado neste ambiente. Documento
-          por link pode receber ciência e aprovação, mas <strong>não assinatura</strong>:
-          um arquivo fora do sistema pode ser trocado depois de assinado.
-        </p>
       </div>
     );
   }
 
   return (
+    <div>
+    <Seletor />
     <div
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
@@ -155,12 +222,6 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
         </span>
       ) : (
         <>
-          {/* Sem atalho para "usar um link externo": ele desfazia a melhoria
-              num clique e levava a um documento que NÃO pode ser assinado
-              (link pode ser trocado pelo dono, e o hash falha em silêncio).
-              O modo link continua existindo como FALLBACK automático, quando o
-              bucket ainda não foi criado no ambiente — ali não é escolha, é a
-              única forma de cadastrar. */}
           <Upload className="w-5 h-5 mx-auto mb-2 text-muted-foreground" />
           <p className="text-[13px] text-foreground mb-1">
             Arraste o arquivo aqui ou{" "}
@@ -174,6 +235,7 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
           </p>
         </>
       )}
+    </div>
     </div>
   );
 }

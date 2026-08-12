@@ -55,6 +55,62 @@ export async function resolveFileUrl(
   return data?.signedUrl ?? doc.file_url;
 }
 
+/**
+ * É link externo? `storage_path` nulo já era o critério usado na edição para
+ * decidir se a URL pode ser trocada à mão — aqui vira função para as duas
+ * telas perguntarem a mesma coisa do mesmo jeito.
+ */
+export function ehLink(doc: { storage_path?: string | null; file_type?: string | null }): boolean {
+  return !doc.storage_path;
+}
+
+/** Domínio de uma URL, para a lista dizer PARA ONDE o link aponta. */
+export function dominioDe(url: string): string {
+  try {
+    return new URL(url.trim()).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Nome sugerido a partir do endereço.
+ *
+ * Uma URL externa não informa nome — está escrito no comentário da tela de
+ * edição, e digitá-lo à mão era o atrito que sobrava. O último trecho do
+ * caminho costuma ser o título ("rdc-15-2012" → "Rdc 15 2012"); sem caminho
+ * útil, o domínio serve.
+ */
+export function nomeSugeridoDaUrl(url: string): string {
+  const limpo = url.trim();
+  if (!limpo) return "";
+  let u: URL;
+  try {
+    u = new URL(limpo);
+  } catch {
+    return "";
+  }
+  const ultimo = u.pathname.split("/").filter(Boolean).pop() || "";
+  // Tira a extensão e troca separadores por espaço: o caminho é feito para
+  // máquina, o nome é para gente.
+  const base = decodeURIComponent(ultimo)
+    .replace(/\.[a-z0-9]{2,5}$/i, "")
+    .replace(/[-_+]+/g, " ")
+    .trim();
+  if (!base) return u.hostname.replace(/^www\./, "");
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
+/** URL utilizável? Só http(s) — evita `javascript:` e caminho relativo. */
+export function urlValida(url: string): boolean {
+  try {
+    const u = new URL(url.trim());
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 /** Nome de arquivo seguro para o storage: sem acento, espaço nem barra. */
 export function safeFileName(name: string): string {
   // ̀-ͯ é o bloco de marcas de acento que o NFD separa da letra.
