@@ -48,7 +48,6 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
   const [dragging, setDragging] = useState(false);
   const [linkMode, setLinkMode] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
-  const [linkName, setLinkName] = useState("");
   const { toast } = useToast();
 
   const upload = async (file: File) => {
@@ -146,7 +145,6 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
     const url = linkUrl.trim();
     const valida = urlValida(url);
     const sugerido = valida ? nomeSugeridoDaUrl(url) : "";
-    const nomeFinal = linkName.trim() || sugerido;
     return (
       <div>
         <Seletor />
@@ -163,29 +161,24 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
               <span className="font-mono">https://</span>.
             </p>
           )}
-          <div className="flex gap-2">
-            {/* O nome é SUGERIDO do endereço: uma URL externa não informa nome,
-                e digitá-lo à mão era o atrito que sobrava. Continua editável —
-                a sugestão vem do caminho, que nem sempre é um bom título. */}
-            <Input
-              placeholder={sugerido ? `${sugerido} (sugerido)` : "Nome do documento"}
-              value={linkName}
-              onChange={(e) => setLinkName(e.target.value)}
-            />
-            <Button
-              type="button" variant="secondary" className="shrink-0"
-              disabled={!valida}
-              onClick={() => onChange({
-                fileName: nomeFinal || "Documento",
-                fileUrl: url,
-                storagePath: null,
-                fileType: "link",
-                fileSize: null,
-              })}
-            >
-              Usar link
-            </Button>
-          </div>
+          {/* SEM CAMPO DE NOME AQUI. O formulário já tem "Nome do documento"
+              logo abaixo, e eu havia acrescentado um segundo — dois campos
+              pedindo a mesma coisa, com o de baixo sendo o que de fato grava.
+              O nome sugerido da URL vai direto para aquele, do mesmo jeito que
+              o upload de arquivo já preenche com o nome do arquivo. */}
+          <Button
+            type="button" variant="secondary" className="w-full"
+            disabled={!valida}
+            onClick={() => onChange({
+              fileName: sugerido || "Documento",
+              fileUrl: url,
+              storagePath: null,
+              fileType: "link",
+              fileSize: null,
+            })}
+          >
+            Usar link
+          </Button>
           <p className="text-[11px] text-muted-foreground">
             O arquivo fica <strong>fora do sistema</strong>: pode receber ciência e
             aprovação, mas <strong>não assinatura</strong> — o que está no endereço
