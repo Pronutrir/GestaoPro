@@ -12,7 +12,7 @@
  */
 
 export type ColRole =
-  | "codigo" | "titulo"
+  | "codigo" | "titulo" | "descricao"
   | "inicio" | "fim"
   | "inicio_real" | "fim_real"
   | "horas" | "custo" | "responsavel"
@@ -21,6 +21,7 @@ export type ColRole =
 export const COL_LABEL: Record<ColRole, string> = {
   codigo: "Código EAP",
   titulo: "Título",
+  descricao: "Descrição",
   inicio: "Início previsto",
   fim: "Fim previsto",
   inicio_real: "Início real",
@@ -34,14 +35,79 @@ export const COL_LABEL: Record<ColRole, string> = {
 /** Uma linha já quebrada em células. */
 export type Row = string[];
 
+/**
+ * Varredura ciente de ASPAS, célula a célula.
+ *
+ * Excel, LibreOffice e Google Sheets envolvem em `"` toda célula que contenha
+ * quebra de linha, TAB ou aspa — e uma DESCRIÇÃO é justamente onde a quebra de
+ * linha aparece. Quebrar o texto por "\n" antes de olhar as aspas partia esse
+ * registro em duas linhas físicas, com três efeitos, todos silenciosos:
+ *
+ *   1. a descrição era truncada na primeira linha, com a aspa de abertura
+ *      grudada no valor;
+ *   2. a cauda virava uma linha fantasma, deslocada de coluna (as horas do
+ *      registro caíam na coluna do título) e descartada por não ter código;
+ *   3. pior: as linhas extras diluíam a votação de TAB de `splitColumns` e a
+ *      colagem INTEIRA caía no modo texto. Medido — uma descrição de 6 linhas
+ *      numa EAP de 3 itens: 9 linhas físicas, 5 com TAB, exigido 6. Aí datas e
+ *      horas voltam a entrar no título, que é o defeito que este arquivo existe
+ *      para consertar.
+ *
+ * Por isso a junção acontece ANTES da votação — não é refinamento, é a condição
+ * para o modo planilha sobreviver a uma descrição multilinha.
+ *
+ * Devolve null quando o texto termina dentro de aspas: aí a aspa era literal
+ * (alguém escreveu `"prioridade"` no começo da célula), não delimitador, e
+ * insistir na leitura engoliria o resto da colagem numa única célula.
+ */
+function varrerGrade(text: string): Row[] | null {
+  const src = text.replace(/\r\n?/g, "\n");
+  const rows: Row[] = [];
+  let row: string[] = [];
+  let cell = "";
+  let citada = false;   // a célula atual abriu com aspas
+  let inicioCel = true; // ainda não veio conteúdo nesta célula
+
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (citada) {
+      // "" dentro de aspas é uma aspa literal — é como a planilha escapa.
+      if (c === '"') {
+        if (src[i + 1] === '"') { cell += '"'; i++; continue; }
+        citada = false;
+        continue;
+      }
+      cell += c;
+      continue;
+    }
+    // Aspa só delimita no INÍCIO da célula: em `Fazer o "de-para"` ela é texto.
+    if (c === '"' && inicioCel) { citada = true; inicioCel = false; continue; }
+    if (c === "\t") { row.push(cell); cell = ""; inicioCel = true; continue; }
+    if (c === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; inicioCel = true; continue; }
+    cell += c;
+    inicioCel = false;
+  }
+  if (citada) return null;
+  row.push(cell);
+  rows.push(row);
+  return rows;
+}
+
 /** Quebra o texto em linhas × células. Só vale quando há TAB de verdade. */
 export function splitColumns(text: string): Row[] | null {
-  const lines = text.split("\n").filter((l) => l.trim().length > 0);
+  // Sem aspas equilibradas, volta ao corte ingênuo — nunca pior que antes.
+  const grade = varrerGrade(text) ?? text.replace(/\r\n?/g, "\n").split("\n").map((l) => l.split("\t"));
+  // O trim preserva as quebras de linha INTERNAS da célula: é o que mantém a
+  // descrição multilinha inteira até a gravação.
+  const rows = grade
+    .map((r) => r.map((c) => c.trim()))
+    .filter((r) => r.some((c) => c.length > 0));
   // Exige TAB na maioria das linhas: uma única linha com TAB solto costuma ser
-  // acidente de digitação, não planilha.
-  const comTab = lines.filter((l) => l.includes("\t")).length;
-  if (comTab < Math.max(2, Math.ceil(lines.length * 0.6))) return null;
-  return lines.map((l) => l.split("\t").map((c) => c.trim()));
+  // acidente de digitação, não planilha. A conta é sobre linhas LÓGICAS (já
+  // reunidas), senão uma descrição multilinha derruba a votação.
+  const comTab = rows.filter((r) => r.length > 1).length;
+  if (comTab < Math.max(2, Math.ceil(rows.length * 0.6))) return null;
+  return rows;
 }
 
 /* ------------------------------------------------------------------ */
@@ -179,8 +245,25 @@ function porCabecalho(h: string): ColRole | null {
   if (/(hora|esfor[çc]o|dura[çc]|effort|work)/.test(s)) return "horas";
   if (/(custo|valor|cost|or[çc]amento)/.test(s)) return "custo";
   if (/(respons|assign|owner|executor|quem)/.test(s)) return "responsavel";
+  // DESCRIÇÃO antes de código E de título, e não é detalhe de ordem:
+  //
+  //  · antes de TÍTULO porque `descri` estava no regex do título — uma coluna
+  //    "Descrição" ao lado de "Tarefa" produzia DUAS colunas com papel titulo e
+  //    a última ganhava, então a descrição SUBSTITUÍA o nome da tarefa (medido:
+  //    "Levantamento" virava "Entrevistar as áreas e mapear o AS-IS");
+  //  · antes de CÓDIGO porque o regex de código casa `item`, e "Descrição do
+  //    item" resolvia para codigo. Passava despercebido enquanto o texto não
+  //    parecesse código — mas uma descrição começando em "1.2 …" casa com
+  //    `separarCodigoTitulo` e reescreveria o código, jogando o item para o
+  //    lugar errado na árvore.
+  //
+  // "Detalhamento" entra como sinônimo (é como o dicionário da EAP costuma
+  // chamar a coluna). "Observações" fica fora de propósito: é campo diferente
+  // de descrição em boa parte das planilhas, e capturá-lo faria a segunda
+  // coluna de texto disputar o mesmo papel.
+  if (/(descri|detalh)/.test(s)) return "descricao";
   if (/(eap|wbs|c[óo]digo|item|n[ºo°]|edt)/.test(s)) return "codigo";
-  if (/(tarefa|atividade|nome|t[íi]tulo|descri)/.test(s)) return "titulo";
+  if (/(tarefa|atividade|nome|t[íi]tulo)/.test(s)) return "titulo";
   return null;
 }
 
@@ -219,7 +302,17 @@ export function detectarColunas(rows: Row[], temCabecalho: boolean): ColRole[] {
   if (temCabecalho) {
     rows[0].forEach((h, i) => {
       const r = porCabecalho(h);
-      if (r) roles[i] = r;
+      if (!r) return;
+      // PRIMEIRA VENCE entre colunas de texto. Sobrescrever um papel de texto
+      // significa perder o conteúdo da primeira coluna em silêncio, que é como
+      // "Tarefa" + "Descrição" apagava o nome da tarefa.
+      //
+      // Datas ficam DE FORA desta regra de propósito: devolver uma segunda
+      // coluna de data para a detecção por conteúdo a faria assumir o próximo
+      // papel da ordem (início real), e um "Fim" duplicado passaria a marcar o
+      // item como em andamento — pior que a sobrescrita.
+      if ((r === "titulo" || r === "descricao") && roles.includes(r)) return;
+      roles[i] = r;
     });
   }
 
@@ -268,6 +361,21 @@ export function detectarColunas(rows: Row[], temCabecalho: boolean): ColRole[] {
     if (k < ordem.length) { roles[i] = ordem[k]; jaUsados.add(ordem[k]); k++; }
   }
 
+  // Sem coluna de título, a DESCRIÇÃO é o nome do item.
+  //
+  // Planilha de EAP em pt-BR muitas vezes chama a coluna do nome de "Descrição"
+  // e não tem nenhuma "Tarefa". Isso funcionava por acidente, porque `descri`
+  // estava no regex do título. Sem esta promoção, essas colagens ficariam sem
+  // título nenhum e TODAS as linhas seriam descartadas pelo filtro da
+  // importação: "Nada para importar ainda", sem uma palavra de explicação.
+  //
+  // Vem antes do palpite por conteúdo abaixo porque o cabeçalho manda: uma
+  // coluna que o cabeçalho identificou vale mais que a de texto mais longo.
+  if (!roles.includes("titulo")) {
+    const iDesc = roles.indexOf("descricao");
+    if (iDesc >= 0) roles[iDesc] = "titulo";
+  }
+
   // Título: a primeira coluna textual que sobrou (ou a maior, se nenhuma).
   if (!roles.includes("titulo")) {
     let melhor = -1, maior = -1;
@@ -287,6 +395,8 @@ export function detectarColunas(rows: Row[], temCabecalho: boolean): ColRole[] {
 export interface ColValues {
   codigo?: string;
   titulo?: string;
+  /** Texto livre da coluna de descrição. Único campo que MANTÉM quebras de linha. */
+  descricao?: string;
   start_date?: string;
   end_date?: string;
   actual_start_date?: string;
@@ -295,6 +405,15 @@ export interface ColValues {
   cost?: number;
   responsavel?: string;
 }
+
+/**
+ * Colapsa quebras de linha e espaços repetidos numa linha só.
+ *
+ * A célula da planilha pode ser multilinha, e só a DESCRIÇÃO quer essa quebra:
+ * um título com "\n" desalinharia a prévia em árvore e entraria quebrado no
+ * campo de título das telas.
+ */
+const umaLinha = (s: string) => s.replace(/\s+/g, " ").trim();
 
 export function lerLinha(row: Row, roles: ColRole[], anoPadrao?: number): ColValues {
   const out: ColValues = {};
@@ -313,19 +432,24 @@ export function lerLinha(row: Row, roles: ColRole[], anoPadrao?: number): ColVal
       // A célula também pode trazer código E título juntos, quando a linha veio
       // sem TAB no meio de uma colagem que tem TAB nas outras.
       case "codigo": {
-        if (CODIGO_RE.test(v)) { out.codigo = normalizarCodigo(v); break; }
-        const par = separarCodigoTitulo(v);
+        const uma = umaLinha(v);
+        if (CODIGO_RE.test(uma)) { out.codigo = normalizarCodigo(uma); break; }
+        const par = separarCodigoTitulo(uma);
         if (par) { out.codigo = par.codigo; tituloDoCodigo = par.titulo; }
         break;
       }
-      case "titulo": out.titulo = v; break;
+      case "titulo": out.titulo = umaLinha(v); break;
+      // A quebra de linha é PRESERVADA aqui, e só aqui: a descrição é editada
+      // num Textarea e exibida com `whitespace-pre-wrap`, então o parágrafo
+      // sobrevive intacto da planilha até a tela.
+      case "descricao": out.descricao = v; break;
       case "inicio": { const d = parseDateBR(v, anoPadrao); if (d) out.start_date = d; break; }
       case "fim": { const d = parseDateBR(v, anoPadrao); if (d) out.end_date = d; break; }
       case "inicio_real": { const d = parseDateBR(v, anoPadrao); if (d) out.actual_start_date = d; break; }
       case "fim_real": { const d = parseDateBR(v, anoPadrao); if (d) out.actual_end_date = d; break; }
       case "horas": { const h = parseHoras(v); if (h !== null) out.hours = h; break; }
       case "custo": { const c = parseCusto(v); if (c !== null) out.cost = c; break; }
-      case "responsavel": out.responsavel = v; break;
+      case "responsavel": out.responsavel = umaLinha(v); break;
     }
   });
   if (!out.titulo && tituloDoCodigo) out.titulo = tituloDoCodigo;

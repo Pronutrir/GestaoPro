@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package, AlertTriangle, FolderTree } from "lucide-react";
+import { Upload, Layers, Circle, Diamond, ClipboardList, FileText, Package, AlertTriangle, FolderTree, AlignLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -24,8 +24,24 @@ interface TreeNode {
   depth: number;         // 1 = topo
   role: EapRole;         // resolvido por posição + palavra-chave
   parentCode: string | null;
-  /** Datas, horas, custo e responsável lidos das colunas da planilha. */
+  /** Datas, horas, custo, responsável e descrição lidos das colunas da planilha. */
   vals?: ColValues;
+}
+
+/**
+ * Resultado do parser.
+ *
+ * `descartadas` são as linhas que o parser LEU e não conseguiu virar item. Antes
+ * o rodapé estimava esse número subtraindo os itens das linhas coladas, e a
+ * conta errava sempre que a colagem não fosse 1 linha = 1 item: a linha de
+ * CABEÇALHO entrava na conta e nunca vira item, então toda planilha com
+ * cabeçalho acusava "1 linha não reconhecida" sem ter nada de errado — e uma
+ * descrição multilinha somava um falso alarme por linha de texto. Um aviso que
+ * mente é pior que aviso nenhum: ele existe para denunciar descarte silencioso.
+ */
+interface ParseResult {
+  nodes: TreeNode[];
+  descartadas: number;
 }
 
 interface ImportWBSDialogProps {
@@ -87,7 +103,7 @@ const aplicarPapeis = (nodes: TreeNode[]) => {
 /*  e indentação por espaços/tabs. Sempre produz uma hierarquia com     */
 /*  códigos normalizados (1, 1.1, 1.1.2...).                            */
 /* ------------------------------------------------------------------ */
-const parseFlexible = (text: string): TreeNode[] => {
+const parseFlexible = (text: string): ParseResult => {
   // MODO PLANILHA: quando vem com TAB, as colunas são lidas antes de tudo.
   // Sem isto o TAB virava espaço e datas/horas entravam no TÍTULO — a
   // informação não era só perdida, sujava o nome da tarefa.
@@ -123,11 +139,13 @@ const parseFlexible = (text: string): TreeNode[] => {
     }
     aplicarPapeis(nodes);
     nodes.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
-    return nodes;
+    // No modo planilha nada é inventado, então a diferença é exata: são as
+    // linhas sem código reconhecível ou sem título.
+    return { nodes, descartadas: corpo.length - nodes.length };
   }
 
   const rawLines = text.split("\n").map((l) => l.replace(/\t/g, "  ")).filter((l) => l.trim().length > 0);
-  if (rawLines.length === 0) return [];
+  if (rawLines.length === 0) return { nodes: [], descartadas: 0 };
 
   // Aceita "1.1 Título", "1.1. Título", "1.1) Título" e "1.1 - Título".
   // O separador opcional depois do código evita que uma EAP colada do Word,
@@ -160,6 +178,7 @@ const parseFlexible = (text: string): TreeNode[] => {
     withCode.length >= Math.ceil(raws.length * 0.3);
 
   const nodes: TreeNode[] = [];
+  let descartadas = 0;
 
   if (useNumbered) {
     // Modo código: a profundidade vem do número de segmentos do código.
@@ -169,7 +188,10 @@ const parseFlexible = (text: string): TreeNode[] => {
     for (const r of raws) {
       if (!r.explicitCode) {
         const prev = nodes[nodes.length - 1];
+        // Anexada ao item anterior é APROVEITAMENTO, não descarte — só conta
+        // como perdida a linha que não tem nem código nem item anterior.
         if (prev) prev.title = `${prev.title} ${r.title}`.trim();
+        else descartadas++;
         continue;
       }
       // Zeros à direita são decorativos: "1.0" é nível 1, não 2. Formato comum
@@ -247,7 +269,7 @@ const parseFlexible = (text: string): TreeNode[] => {
   // "1. Fase / 1.1 Entrega / 1.1.1 Atividade": o nível é que decide.
   aplicarPapeis(nodes);
 
-  return nodes;
+  return { nodes, descartadas };
 };
 
 /* ------------------------------------------------------------------ */
@@ -366,7 +388,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     return fasesExistentes.get(partes.join(".")) ?? null;
   };
 
-  const tree = useMemo(() => parseFlexible(text), [text]);
+  const parsed = useMemo(() => parseFlexible(text), [text]);
+  const tree = parsed.nodes;
   const counts = useMemo(() => {
     const c = { fase: 0, entrega: 0, atividade: 0, marco: 0 };
     tree.forEach((n) => { c[n.role]++; });
@@ -389,20 +412,15 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
    * O parser descarta em silêncio o que não consegue posicionar na árvore, e
    * isso já escondeu um bug: um código com ponto final ("1.") era rejeitado e
    * a fase sumia da prévia — visível no campo, ausente do resultado, sem
-   * nenhum aviso. Comparar o que foi colado com o que foi reconhecido é a rede
-   * de segurança: se sobrar linha, a prévia diz quantas.
+   * nenhum aviso. Este contador é a rede de segurança.
    *
-   * Desconta os ancestrais INVENTADOS pelo parser (o "1" criado quando o texto
-   * começa em "1.2"), que existem na árvore sem ter linha correspondente.
+   * Agora vem do próprio parser (ver `ParseResult.descartadas`), que sabe o que
+   * jogou fora. A estimativa anterior — linhas coladas menos itens — acusava
+   * falso em toda colagem cujo mapeamento não fosse 1 linha = 1 item: o
+   * cabeçalho da planilha, o título quebrado em duas linhas e cada linha de uma
+   * descrição multilinha entravam como "não reconhecidas".
    */
-  const linhasIgnoradas = useMemo(() => {
-    const coladas = text.split("\n").filter((l) => l.trim().length > 0).length;
-    if (coladas === 0) return 0;
-    const inventados = tree.filter((n) => n.title.startsWith("(sem título)")).length;
-    // Título quebrado em duas linhas é anexado ao anterior, então a diferença
-    // pode ser legítima. Só avisa quando sobra — nunca acusa a mais.
-    return Math.max(0, coladas - (tree.length - inventados));
-  }, [text, tree]);
+  const linhasIgnoradas = parsed.descartadas;
 
   const resetAndClose = () => { setText(""); setSelectedTemplate(null); setTab("paste"); setOpen(false); };
 
@@ -477,6 +495,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       let phasesHasWbs = true;
       // Idem para as datas: a migration que as cria pode não ter rodado ainda.
       let phasesHasDates = true;
+      // E para a descrição da fase, pelo mesmo motivo.
+      let phasesHasDescription = true;
       // Colunas que o banco não tinha e foram descartadas para a importação
       // seguir. Avisadas no fim: silenciar faria o item nascer sem o campo sem
       // ninguém saber (ex.: sem código EAP, que define o papel Fase/Atividade).
@@ -545,6 +565,10 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           display_order: phaseOrder++,
         };
         if (phasesHasWbs) base.wbs_code = phase.code;
+        // A fase também tem descrição (e o painel dela já edita esse campo):
+        // deixar a coluna da planilha de fora obrigaria a redigitar à mão
+        // justamente o texto que explica a fase.
+        if (phasesHasDescription && phase.vals?.descricao) base.description = phase.vals.descricao;
         // Datas da linha da fase, quando a planilha as traz. É dado diferente
         // da soma dos filhos: esta é a data PLANEJADA para a fase, e a
         // divergência entre as duas é justamente o que interessa ver.
@@ -556,12 +580,16 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           if (v.actual_end_date) base.actual_end_date = v.actual_end_date;
         }
 
-        let res = await supabase.from("phases").insert(base as any).select("id").single();
+        // Cada degrade abaixo remove um campo de `base` e tenta de novo — a
+        // inserção é a mesma, então fica num lugar só.
+        const inserirFase = () => supabase.from("phases").insert(base as any).select("id").single();
+
+        let res = await inserirFase();
         if (res.error && /wbs_code/i.test(res.error.message)) {
           phasesHasWbs = false;
           delete base.wbs_code;
           base.title = `${phase.code} ${phase.title}`;
-          res = await supabase.from("phases").insert(base as any).select("id").single();
+          res = await inserirFase();
         }
         // Datas ausentes em phases: descarta as quatro de uma vez (vêm da mesma
         // migration) e segue — a fase sem data ainda é melhor que nenhuma fase.
@@ -569,7 +597,14 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           phasesHasDates = false;
           for (const c of ["start_date", "end_date", "actual_start_date", "actual_end_date"]) delete base[c];
           droppedCols.add("datas da fase");
-          res = await supabase.from("phases").insert(base as any).select("id").single();
+          res = await inserirFase();
+        }
+        // Descrição ausente em phases: desiste do campo, não da fase.
+        if (res.error && /description/i.test(res.error.message)) {
+          phasesHasDescription = false;
+          delete base.description;
+          droppedCols.add("descrição da fase");
+          res = await inserirFase();
         }
         if (res.error) throw res.error;
         phaseIdMap[phase.code] = res.data.id;
@@ -642,6 +677,11 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           if (v.actual_end_date) basePayload.actual_end_date = v.actual_end_date;
           if (v.hours != null) basePayload.hours = v.hours;
           if (v.cost != null) basePayload.cost = v.cost;
+          // Descrição da planilha vai para o mesmo campo que o editor de
+          // atividade usa, com as quebras de linha preservadas (a tela exibe
+          // com `whitespace-pre-wrap`). Se o banco não tiver a coluna, o
+          // degrade genérico abaixo a descarta e avisa no fim.
+          if (v.descricao) basePayload.description = v.descricao;
 
           const st = statusPorDatas(v);
           basePayload.status = st;
@@ -752,7 +792,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
               {" "}Para um <strong className="font-medium">Marco</strong>, comece o título com{" "}
               <code className="px-1 py-0.5 rounded bg-muted text-[12px] font-mono">Marco:</code>.
             </span>{" "}
-            Colando de planilha, as colunas de data, horas e responsável são reconhecidas.
+            Colando de planilha, as colunas de data, horas, custo, responsável e{" "}
+            <strong className="font-medium">descrição</strong> são reconhecidas pelo cabeçalho.
           </p>
         </DialogHeader>
 
@@ -909,6 +950,18 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                           </span>
                         )}
                         {n.vals.hours != null && <span className="font-mono">{n.vals.hours}h</span>}
+                        {/* A descrição não cabe na linha da prévia, mas some sem
+                            deixar rastro se nada a mencionar: o ícone confirma
+                            que a coluna foi lida, e o título mostra o texto que
+                            será gravado — inclusive as quebras de linha. */}
+                        {n.vals.descricao && (
+                          <span
+                            className="inline-flex items-center"
+                            title={`Descrição:\n${n.vals.descricao}`}
+                          >
+                            <AlignLeft className="w-3 h-3" />
+                          </span>
+                        )}
                         {n.vals.actual_end_date && (
                           <span className="px-1 rounded border border-success/40 text-success">concluída</span>
                         )}
@@ -940,7 +993,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
               {linhasIgnoradas > 0 && (
                 <span
                   className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-warning/40 bg-warning/5 text-warning text-[11px] font-medium"
-                  title="Essas linhas não têm código EAP reconhecível (ex.: numeração fora do padrão 1, 1.2, 1.2.3) e não serão importadas. Confira o texto colado."
+                  title="Essas linhas não têm código EAP reconhecível (ex.: numeração fora do padrão 1, 1.2, 1.2.3) ou estão sem título, e não serão importadas. Confira o texto colado."
                 >
                   <AlertTriangle className="w-3 h-3 shrink-0" />
                   {linhasIgnoradas} linha(s) não reconhecida(s)
