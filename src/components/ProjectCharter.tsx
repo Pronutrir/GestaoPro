@@ -98,6 +98,10 @@ interface ProjectCharterProps {
   phases: Phase[];
   members: { full_name: string; sector: string | null }[];
   onMembersChanged?: () => void;
+  /** Leva a outra aba do projeto. Alimenta os "próximos passos" que aparecem
+   *  quando o TAP é aprovado — o documento destrava o trabalho em vez de
+   *  terminar em si mesmo. */
+  onIrPara?: (aba: string) => void;
 }
 
 interface CharterData {
@@ -192,7 +196,9 @@ const SectionBlock = ({ n, title, children, status, editing }: {
   const setAberta = (fn: (v: boolean) => boolean) => setManual(fn(aberta));
 
   return (
-    <div className="border-b border-border last:border-b-0 print:break-inside-avoid">
+    // scroll-mt: o cabeçalho da página é fixo, e sem a margem o índice levava
+    // a seção para debaixo dele.
+    <div id={`tap-secao-${n}`} className="border-b border-border last:border-b-0 print:break-inside-avoid scroll-mt-24">
       <button
         type="button"
         onClick={() => setAberta((v) => !v)}
@@ -254,8 +260,53 @@ const SECAO_NOMES: Record<number, string> = {
   7: "Benefícios",
 };
 
+/**
+ * Índice das seções, com o estado de cada uma.
+ *
+ * O TAP tem 8 seções e rola. Para saber o que falta era preciso descer a
+ * página inteira abrindo cada bloco fechado — o "Detalhar o TAP" escondia sem
+ * responder onde estava o buraco.
+ *
+ * Aqui o estado de todas cabe num olhar: cheia, parcial, vazia. Clicar leva à
+ * seção. Some na impressão, como o resto do andaime: o PDF é o documento.
+ */
+const IndiceSecoes = ({ porSecao }: { porSecao: Record<number, { preenchidos: number; total: number }> }) => {
+  const irPara = (n: number) => {
+    document.getElementById(`tap-secao-${n}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  return (
+    <nav className="print:hidden flex flex-wrap gap-1.5" aria-label="Seções do TAP">
+      {Object.entries(SECAO_NOMES).map(([k, nome]) => {
+        const n = Number(k);
+        const st = porSecao[n];
+        const vazia = !st || st.preenchidos === 0;
+        const cheia = st && st.preenchidos === st.total;
+        return (
+          <button
+            key={n}
+            type="button"
+            onClick={() => irPara(n)}
+            title={st ? `${st.preenchidos} de ${st.total} campos` : undefined}
+            className={cn(
+              "inline-flex items-center gap-1.5 h-6 px-2 rounded-full border text-[11.5px] transition-colors",
+              cheia && "border-success/40 bg-success/5 text-success hover:bg-success/10",
+              !cheia && !vazia && "border-warning/40 bg-warning/5 text-warning hover:bg-warning/10",
+              vazia && "border-border text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {/* Ponto cheio, meio ou vazio: a forma diz o estado antes da cor,
+                para quem não distingue verde de âmbar. */}
+            <span className="text-[9px] leading-none">{cheia ? "●" : vazia ? "○" : "◐"}</span>
+            {nome}
+          </button>
+        );
+      })}
+    </nav>
+  );
+};
+
 /* ============================================================ */
-export const ProjectCharter = ({ projectId, project, phases, members, onMembersChanged }: ProjectCharterProps) => {
+export const ProjectCharter = ({ projectId, project, phases, members, onMembersChanged, onIrPara }: ProjectCharterProps) => {
   const { toast } = useToast();
   const { user, canManage } = useAuth();
 
@@ -343,6 +394,48 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
    *  estar vazio, que é a única condição para ela existir. */
   const usarSugestao = (campo: string, valor: string) => {
     setData((prev) => ({ ...prev, [campo]: valor }));
+  };
+
+  /**
+   * Cria a reunião de kickoff já com quem assinou o TAP.
+   *
+   * Os participantes saem das aprovações: são exatamente as pessoas que
+   * autorizaram o projeto, e recadastrá-las à mão seria digitar de novo o que
+   * o TAP acabou de registrar. A pauta nasce do próprio documento — objetivo,
+   * escopo e prazo são o que se apresenta num kickoff.
+   */
+  const irParaKickoff = async () => {
+    const participantes = (data.approvals || [])
+      .map((a) => (a.name || "").trim())
+      .filter(Boolean);
+    const pauta = [
+      "1. Apresentação do TAP aprovado",
+      form.objective ? `2. Objetivo: ${form.objective}` : "2. Objetivo do projeto",
+      form.scope ? "3. Escopo acordado" : "3. Escopo",
+      "4. Equipe e responsabilidades",
+      "5. Próximos passos e cronograma",
+    ].join("\n");
+
+    const { error } = await (supabase.from("meetings") as any).insert({
+      project_id: projectId,
+      title: `Kickoff — ${project.title}`,
+      meeting_type: "kickoff",
+      meeting_date: new Date().toISOString().slice(0, 10),
+      agenda: pauta,
+      participants: participantes,
+    });
+
+    if (error) {
+      toast({ title: "Não foi possível criar o kickoff", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({
+      title: "Kickoff criado",
+      description: participantes.length
+        ? `${participantes.length} participante(s) do TAP já incluídos. Ajuste a data em Reuniões.`
+        : "Ajuste data e participantes em Reuniões.",
+    });
+    onIrPara?.("meetings");
   };
 
   /** Completude por seção — alimenta a barra do topo e o "3 de 4" de cada
@@ -678,6 +771,52 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
         />
       </div>
 
+      {/* DEPOIS DE APROVADO, O TAP OFERECE O PRÓXIMO PASSO.
+          Era um beco: preenche, circula, assina — e nada acontece. O documento
+          que AUTORIZA o projeto não destravava nada, e quem aprovava saía da
+          tela sem saber o que fazer em seguida.
+          As três ações usam módulos que já existem; o TAP só deixa de ser
+          documento e passa a ser o marco que libera o trabalho. */}
+      {charterStatus === "aprovado" && canManage && (
+        <Card className="p-3 print:hidden border-success/40 bg-success/[0.03]">
+          <div className="flex items-center gap-2 mb-2.5">
+            <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+            <span className="text-sm font-semibold">Aprovado — próximos passos</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {/* Kickoff com os aprovadores já como participantes: são as pessoas
+                que assinaram, e recadastrá-las à mão seria digitar de novo o
+                que o TAP acabou de registrar. */}
+            <Button
+              size="sm" variant="outline" className="h-8 text-xs gap-1.5"
+              onClick={irParaKickoff}
+            >
+              <ClipboardList className="w-3.5 h-3.5" /> Agendar kickoff
+            </Button>
+            {/* A linha de base congela o que o TAP autorizou. Sem isso o valor
+                agregado compara o real contra um alvo que ainda muda. */}
+            <Button
+              size="sm" variant="outline" className="h-8 text-xs gap-1.5"
+              onClick={() => onIrPara?.("financials")}
+            >
+              <Save className="w-3.5 h-3.5" /> Congelar linha de base
+            </Button>
+            <Button
+              size="sm" variant="outline" className="h-8 text-xs gap-1.5"
+              onClick={() => onIrPara?.("backlog")}
+            >
+              <FileText className="w-3.5 h-3.5" /> Detalhar a EAP
+            </Button>
+            <Button
+              size="sm" variant="outline" className="h-8 text-xs gap-1.5 ml-auto"
+              onClick={() => window.print()}
+            >
+              <FileDown className="w-3.5 h-3.5" /> Exportar PDF
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Cabeçalho geral */}
       <Card className="overflow-hidden border-border print:break-inside-avoid">
         <div className="bg-primary/10 text-foreground p-5 flex items-center gap-4">
@@ -732,14 +871,16 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           );
         })()}
 
-        {/* Informa o que falta — NUNCA bloqueia. Campo obrigatório travaria a
-            abertura do projeto, que é o oposto do que se quer aqui. */}
-        {completude.faltando.length > 0 && (
-          <p className="mt-2 text-[11px] text-muted-foreground leading-snug">
-            Em branco: {completude.faltando.map((s) => SECAO_NOMES[s.n]).filter(Boolean).join(" · ")}
-            {" — "}o TAP pode ser aprovado assim mesmo.
-          </p>
-        )}
+        {/* ÍNDICE no lugar do "Em branco: Identificação · Problema · …".
+            Aquela linha dizia o que faltava e não levava a lugar nenhum — a
+            pessoa lia, descia a página e reabria as seções procurando. O
+            índice diz a mesma coisa E leva, com o estado de TODAS (inclusive
+            as cheias, que o texto omitia). Informa, nunca bloqueia: campo
+            obrigatório travaria a abertura do projeto, o oposto do que se
+            quer aqui. */}
+        <div className="mt-2.5">
+          <IndiceSecoes porSecao={completude.porSecao} />
+        </div>
       </Card>
 
       {/* Todas as seções num CARD só — lista contínua em vez de oito cartões

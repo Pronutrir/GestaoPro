@@ -1677,7 +1677,13 @@ export default function ProjectDetailsPage() {
             </TabsContent>
 
             <TabsContent value="tap" className="mt-0">
-              <ProjectCharter projectId={id!} project={project} phases={phases} members={members} onMembersChanged={fetchMembers} />
+              {/* onIrPara: os "próximos passos" do TAP aprovado levam às abas
+                  que continuam o trabalho — reuniões, financeiro, backlog. */}
+              <ProjectCharter
+                projectId={id!} project={project} phases={phases} members={members}
+                onMembersChanged={fetchMembers}
+                onIrPara={(aba) => { setActiveTab(aba); fetchProjectData(); }}
+              />
             </TabsContent>
 
             <TabsContent value="meetings" className="mt-0">
