@@ -673,51 +673,37 @@ export const EditActivityDialog = ({
       onOpenChange(false);
       return;
     }
-    // Create a draft activity when opening in create mode
-    if (createMode && !draftActivity && !creatingDraft && projectId) {
-      setCreatingDraft(true);
-      const draftId = crypto.randomUUID();
-      const insertPayload: any = {
-        id: draftId,
+    // RASCUNHO EM MEMÓRIA, não no banco.
+    //
+    // Antes, abrir "Nova Atividade" INSERIA uma linha chamada "Nova atividade"
+    // antes de o usuário digitar qualquer coisa. Fechar sem preencher deixava
+    // lixo no projeto — e abrir e fechar três vezes deixava três.
+    //
+    // Agora o rascunho existe só na tela; a gravação acontece uma vez, ao
+    // confirmar (ver o ramo `createMode` do salvamento). O id é gerado aqui
+    // para que abas e subitens tenham a que se referir enquanto se edita.
+    if (createMode && !draftActivity && projectId) {
+      setDraftActivity({
+        id: crypto.randomUUID(),
         project_id: projectId,
-        title: "Nova atividade",
+        title: "",
+        description: null,
         status: "pending",
-        priority: "medium",
-        workflow_stage_id: defaultStageId || null,
+        completed_at: null,
+        created_at: new Date().toISOString(),
+        assigned_to: null,
+        start_date: null,
+        end_date: null,
+        cost: 0,
+        hours: 0,
         phase_id: defaultPhaseId || null,
+        priority: "medium",
+        tags: [],
         parent_id: defaultParentId || null,
-      };
-      supabase.from("activities").insert(insertPayload).then(({ error }) => {
-        setCreatingDraft(false);
-        if (error) {
-          console.error("Erro ao iniciar rascunho de atividade:", error);
-          toast({ title: "Erro ao iniciar nova atividade", variant: "destructive" });
-          onOpenChange(false);
-          return;
-        }
-        setDraftActivity({
-          id: draftId,
-          project_id: projectId,
-          title: "Nova atividade",
-          description: null,
-          status: "pending",
-          completed_at: null,
-          created_at: new Date().toISOString(),
-          assigned_to: null,
-          start_date: null,
-          end_date: null,
-          cost: 0,
-          hours: 0,
-          phase_id: defaultPhaseId || null,
-          priority: "medium",
-          tags: [],
-          parent_id: defaultParentId || null,
-          workflow_stage_id: defaultStageId || null,
-        } as Activity & { project_id: string; workflow_stage_id: string | null });
-        onActivityCreated?.(draftId);
-        // Pre-fill title empty so user types fresh
-        setFormData((prev) => ({ ...prev, title: "" }));
-      });
+        workflow_stage_id: defaultStageId || null,
+        __rascunho: true,
+      } as Activity & { project_id: string; workflow_stage_id: string | null });
+      setFormData((prev) => ({ ...prev, title: "" }));
     }
 
     // Fetch all active profiles for participants dropdown
@@ -1299,15 +1285,24 @@ export const EditActivityDialog = ({
         }
       }
 
-      const compatPayload: Record<string, any> = { ...updatePayload };
+      // Rascunho ainda não existe no banco: a primeira gravação é INSERT.
+      // O laço de compatibilidade abaixo (que remove colunas ausentes e degrada
+      // item_type) vale para os dois casos — foi construído para sobreviver a
+      // ambientes com schema diferente, e criar não é exceção.
+      const ehRascunho = !!(act as any).__rascunho;
+      const compatPayload: Record<string, any> = ehRascunho
+        ? { ...updatePayload, id: act.id, project_id: projectId }
+        : { ...updatePayload };
       const droppedColumns: string[] = [];
       let downgradedItemType = false;
       let error: any = null;
       for (let i = 0; i < 8; i += 1) {
-        const result = await supabase
-          .from("activities")
-          .update(compatPayload as any)
-          .eq("id", act.id);
+        const result = ehRascunho
+          ? await supabase.from("activities").insert(compatPayload as any)
+          : await supabase
+              .from("activities")
+              .update(compatPayload as any)
+              .eq("id", act.id);
         error = result.error;
         if (!error) break;
 

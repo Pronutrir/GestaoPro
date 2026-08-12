@@ -1585,55 +1585,33 @@ export const BacklogSection = ({
           A chip resolve o alerta do Groto sobre segmentado-como-filtro: sem um
           estado explícito de "filtro ativo", o usuário não percebe que está
           vendo dados recortados. Aqui ela diz o que é e o ✕ desfaz. */}
-      {(prontidaoFilter !== "all" || carencias.length > 0) && prontidaoResumo.total > 0 && (
+      {/* A LINHA DE PRONTIDÃO SAIU DAQUI.
+          A prontidão aparecia TRÊS vezes na mesma tela: as carências num texto
+          próprio, o "N / N prontas" com barra à direita, e os números dentro do
+          seletor "Todas N / Prontas N / Incompletas N". Foi preciso inventar um
+          "(N avaliáveis)" só para explicar por que dois desses totais
+          discordavam — remendo sobre a duplicação.
+          A carência virou um LINK na linha de contexto (era a informação mais
+          acionável da tela e a única sem ação), e o progresso já está no topo
+          da página, ao lado de "Progresso: 0/16 tarefas".
+          Sobra o chip do filtro ativo, que não duplica nada: é o único jeito de
+          saber que a lista está recortada. */}
+      {prontidaoFilter !== "all" && prontidaoResumo.total > 0 && (
         <div className="flex items-center gap-2.5 flex-wrap px-0.5 text-[12px] text-muted-foreground">
-          {prontidaoFilter !== "all" && (
-            <button
-              type="button"
-              onClick={() => setProntidaoFilter("all")}
-              title="Remover este filtro"
-              className={cn(
-                "inline-flex items-center gap-1.5 h-[22px] px-2 rounded-full border text-[11px] font-medium transition-colors",
-                prontidaoFilter === "incomplete"
-                  ? "border-destructive/50 bg-destructive/10 text-destructive hover:bg-destructive/15"
-                  : "border-success/50 bg-success/10 text-success hover:bg-success/15",
-              )}
-            >
-              {prontidaoFilter === "incomplete" ? "Incompletas" : "Prontas"}
-              <X className="w-3 h-3 opacity-70" />
-            </button>
-          )}
-
-          {/* As duas maiores carências: é o que orienta por onde começar. */}
-          {carencias.length > 0 && (
-            <span className="shrink-0">
-              {carencias
-                .map((c) => `${PRONTIDAO_LABELS_LONGOS[c.requisito].replace("sem ", "falta ")} em ${c.quantidade}`)
-                .join(" · ")}
-            </span>
-          )}
-
-          {/* Barra fina, à direita: proporção sem ocupar linha própria. */}
-          <span className="ml-auto flex items-center gap-2 shrink-0">
-            <span className="tabular-nums">
-              <span className="text-foreground font-semibold">{prontidaoResumo.prontas}</span>
-              {" / "}{prontidaoResumo.total} prontas
-            </span>
-            <span className="w-16 h-1.5 rounded-full overflow-hidden flex border border-border/60">
-              {[
-                { n: prontidaoResumo.prontas, cls: "bg-success", lab: "prontas" },
-                { n: prontidaoResumo.quaseProntas, cls: "bg-warning", lab: "falta 1 campo" },
-                { n: prontidaoResumo.incompletas, cls: "bg-destructive", lab: "falta mais de 1" },
-              ].map((f) => f.n > 0 && (
-                <span
-                  key={f.lab}
-                  className={f.cls}
-                  style={{ width: `${(f.n / prontidaoResumo.total) * 100}%` }}
-                  title={`${f.n} ${f.lab}`}
-                />
-              ))}
-            </span>
-          </span>
+          <button
+            type="button"
+            onClick={() => setProntidaoFilter("all")}
+            title="Remover este filtro"
+            className={cn(
+              "inline-flex items-center gap-1.5 h-[22px] px-2 rounded-full border text-[11px] font-medium transition-colors",
+              prontidaoFilter === "incomplete"
+                ? "border-destructive/50 bg-destructive/10 text-destructive hover:bg-destructive/15"
+                : "border-success/50 bg-success/10 text-success hover:bg-success/15",
+            )}
+          >
+            {prontidaoFilter === "incomplete" ? "Incompletas" : "Prontas"}
+            <X className="w-3 h-3 opacity-70" />
+          </button>
         </div>
       )}
 
@@ -1645,31 +1623,38 @@ export const BacklogSection = ({
             {selectMode && selectedIds.size > 0 ? (
               <span className="text-foreground font-medium">{selectedIds.size} de {typeCounts.total} selecionada(s)</span>
             ) : (
+              /* SEM O TOTAL. "16 tarefas · 15 atividades · 1 marco" lia como
+                 16 mais 15 mais 1, quando 15 + 1 É o 16 — a palavra "tarefas"
+                 fazia dois papéis, o todo e uma categoria irmã das outras. E
+                 marco não é tarefa: foi separado da EAP por não ser trabalho,
+                 e seguia somado no total do que há para fazer.
+                 Cada palavra passa a nomear uma coisa só; a soma se faz de
+                 cabeça. */
+              <span className="text-muted-foreground/90">
+                {[
+                  typeCounts.fase && `${typeCounts.fase} fase${typeCounts.fase > 1 ? "s" : ""}`,
+                  typeCounts.atividade && `${typeCounts.atividade} atividade${typeCounts.atividade > 1 ? "s" : ""}`,
+                  typeCounts.marco && `${typeCounts.marco} marco${typeCounts.marco > 1 ? "s" : ""}`,
+                ].filter(Boolean).join(" · ")}
+              </span>
+            )}
+            {/* A carência vira LINK que filtra, em vez de texto morto numa
+                linha própria. Era a informação mais acionável da tela e a
+                única sem ação. */}
+            {carencias.length > 0 && prontidaoFilter !== "incomplete" && (
               <>
-                <span><span className="text-foreground font-semibold">{typeCounts.total}</span> tarefas</span>
                 <span className="text-muted-foreground/40">·</span>
-                <span className="text-muted-foreground/90">
-                  {[
-                    typeCounts.fase && `${typeCounts.fase} fase${typeCounts.fase > 1 ? "s" : ""}`,
-                    typeCounts.atividade && `${typeCounts.atividade} atividade${typeCounts.atividade > 1 ? "s" : ""}`,
-                    typeCounts.marco && `${typeCounts.marco} marco${typeCounts.marco > 1 ? "s" : ""}`,
-                  ].filter(Boolean).join(" · ")}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setProntidaoFilter("incomplete")}
+                  className="text-destructive hover:underline underline-offset-2 decoration-dotted"
+                  title="Ver só as que estão incompletas"
+                >
+                  {carencias[0].quantidade} {PRONTIDAO_LABELS_LONGOS[carencias[0].requisito]}
+                </button>
               </>
             )}
           </p>
-          {/* Contagens diferentes precisam se explicar: "14 tarefas" acima e
-              "12 prontas" ao lado pareciam discordar. A prontidão não avalia
-              agrupadores (horas e datas vêm dos filhos) nem concluídas — o
-              tooltip diz isso onde a dúvida aparece. */}
-          {prontidaoResumo.total > 0 && prontidaoResumo.total !== typeCounts.total && (
-            <span
-              className="text-[11px] text-muted-foreground/70 cursor-help"
-              title={`${prontidaoResumo.total} entram na conta de prontidão. Fases e tarefas concluídas ficam de fora: as horas e datas de um agrupador vêm dos filhos, e cobrar prazo de algo já entregue é ruído.`}
-            >
-              ({prontidaoResumo.total} avaliáveis)
-            </span>
-          )}
 
           {/* Controles de visão */}
           <div className="flex items-center gap-1.5">

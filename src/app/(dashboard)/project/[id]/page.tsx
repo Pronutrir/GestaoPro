@@ -21,7 +21,6 @@ import { ProjectCharter } from "@/components/ProjectCharter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ActivityKanban } from "@/components/ActivityKanban";
 import { BacklogSection } from "@/components/BacklogSection";
-import { QuickCreateActivity } from "@/components/QuickCreateActivity";
 import { ProjectCalendarView } from "@/components/project-views/ProjectCalendarView";
 import { MeetingsManager } from "@/components/MeetingsManager";
 import { ProjectRegistrosTimeline } from "@/components/ProjectRegistrosTimeline";
@@ -192,7 +191,6 @@ export default function ProjectDetailsPage() {
   const [listStatusFilter, setListStatusFilter] = useState("all");
   const [listPriorityFilter, setListPriorityFilter] = useState("all");
   const [showAddActivity, setShowAddActivity] = useState(false);
-  const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [showRenumerar, setShowRenumerar] = useState(false);
   const [createTaskStageId, setCreateTaskStageId] = useState<string | null>(null);
   const [createTaskPhaseId, setCreateTaskPhaseId] = useState<string | null>(null);
@@ -1766,7 +1764,13 @@ export default function ProjectDetailsPage() {
               <div className="flex flex-wrap items-center gap-2">
                 {canCreate ? (
                   <>
-                    <Button size="sm" variant="default" onClick={() => setShowQuickCreate(true)} className="gap-1.5 h-9">
+                    {/* Abre a MESMA tela da edição, agora em modo de criação.
+                        Antes abria um diálogo de 3 campos (título, onde
+                        encaixar, tipo) enquanto editar mostrava ~20 — criar e
+                        editar a mesma coisa não podiam ser telas diferentes.
+                        A tela completa já existia e estava órfã: o estado que a
+                        abre nunca era ligado em lugar nenhum do código. */}
+                    <Button size="sm" variant="default" onClick={() => setShowAddActivity(true)} className="gap-1.5 h-9">
                       <Plus className="w-4 h-4" /> Nova Atividade
                     </Button>
                     <ImportWBSDialog projectId={id!} onDataChanged={fetchProjectData} />
@@ -1849,36 +1853,19 @@ export default function ProjectDetailsPage() {
                           <ListOrdered className="w-4 h-4 mr-2" /> Renumerar EAP…
                         </DropdownMenuItem>
                       )}
-                      {phases.length > 0 && (
-                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          const ok = await appConfirm({
-                            title: "Arquivar fases",
-                            description: `Arquivar TODAS as ${phases.length} fases? Elas podem ser restauradas no Arquivo.`,
-                            confirmText: "Arquivar",
-                            destructive: true,
-                          });
-                          if (!ok) return;
-                          await (supabase.from("phases").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id));
-                          toast.success(`${phases.length} fases arquivadas!`); fetchProjectData();
-                        }}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as fases
-                        </DropdownMenuItem>
-                      )}
-                      {activities.length > 0 && (
-                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                          const ok = await appConfirm({
-                            title: "Arquivar atividades",
-                            description: `Arquivar TODAS as ${activities.length} atividades? Elas podem ser restauradas no Arquivo.`,
-                            confirmText: "Arquivar",
-                            destructive: true,
-                          });
-                          if (!ok) return;
-                          await (supabase.from("activities").update({ is_trashed: true, trashed_at: new Date().toISOString() } as any).eq("project_id", id) as any).eq("is_trashed", false);
-                          toast.success(`${activities.length} atividades arquivadas!`); fetchProjectData();
-                        }}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Arquivar todas as atividades
-                        </DropdownMenuItem>
-                      )}
+                      {/* "ARQUIVAR TODAS AS FASES" e "ARQUIVAR TODAS AS
+                          ATIVIDADES" foram REMOVIDAS.
+                          Não foi só poluição. As duas avisavam que o conteúdo
+                          "pode ser restaurado no Arquivo" — a tela se chama
+                          Lixeira, e ela lê apenas `activities`: fase arquivada
+                          não aparecia em lugar nenhum. O comando das fases
+                          também não filtrava as já arquivadas, então reescrevia
+                          `trashed_at` e apagava quando cada uma foi arquivada
+                          de verdade. Era irreversível pela interface enquanto
+                          prometia o contrário.
+                          Para limpar o projeto existe a seleção em lote do
+                          Backlog: mostra o que vai acontecer, atinge só o que
+                          foi escolhido, e a Lixeira restaura. */}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
@@ -1967,20 +1954,7 @@ export default function ProjectDetailsPage() {
           onOpenChange={setShowRenumerar}
           onDataChanged={fetchProjectData}
         />
-        <QuickCreateActivity
-          open={showQuickCreate}
-          onOpenChange={setShowQuickCreate}
-          projectId={id!}
-          parentOptions={activities as any}
-          disabledReason={isProjectConcluded ? "Projeto concluído. Reabra para criar atividades." : null}
-          onCreated={fetchProjectData}
-          onOpenDetails={async (activityId) => {
-            await fetchProjectData();
-            const created = activities.find((a) => a.id === activityId)
-              || (await supabase.from("activities").select("*").eq("id", activityId).maybeSingle()).data;
-            if (created) openEditActivity(created as any);
-          }}
-        />
+
     </main>
   );
 }

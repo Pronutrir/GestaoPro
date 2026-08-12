@@ -827,14 +827,18 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 // As setas ficam ALINHADAS numa coluna: antes cada uma começava
                 // no fim do próprio texto, deixando um degrau irregular no meio
                 // do bloco.
+                /* Só a estrutura, sem as setas explicativas. Elas dobravam o
+                   comprimento de cada linha e quebravam no campo estreito,
+                   virando um bloco confuso — e a regra que elas repetiam já
+                   está escrita logo acima, no cabeçalho. */
                 placeholder={[
-                  "1. Implantação do Serviço      ← o projeto: não é importado",
-                  "1.1 Iniciação e Planejamento   ← Fase",
-                  "1.1.1 Formalização do Projeto  ← agrupa: vira Entrega",
-                  "1.1.1.1 Elaborar TAP           ← folha: vira Atividade",
-                  "1.1.1.2 Marco: TAP aprovado    ← vira Marco",
-                  "1.2 Requisitos e Design        ← Fase",
-                  "1.2.1 Especificação            ← Entrega",
+                  "1. Implantação do Serviço",
+                  "1.1 Iniciação e Planejamento",
+                  "1.1.1 Formalização do Projeto",
+                  "1.1.1.1 Elaborar TAP",
+                  "1.1.1.2 Marco: TAP aprovado",
+                  "1.2 Requisitos e Design",
+                  "1.2.1 Especificação",
                   "",
                   "ou com bullets e recuo:",
                   "• Iniciação",
