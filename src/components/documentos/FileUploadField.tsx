@@ -91,7 +91,11 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
     });
   };
 
-  if (value) {
+  // No modo link o campo NÃO dá lugar ao resumo: o valor é confirmado a cada
+  // tecla, e trocar a tela no meio da digitação tiraria o campo debaixo do
+  // cursor. Para arquivo o resumo continua — ali o valor vem de uma escolha
+  // única, não de algo que se continua editando.
+  if (value && !linkMode) {
     return (
       <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
         <FileText className="w-4 h-4 text-primary shrink-0" />
@@ -144,46 +148,57 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
   if (linkMode) {
     const url = linkUrl.trim();
     const valida = urlValida(url);
-    const sugerido = valida ? nomeSugeridoDaUrl(url) : "";
     return (
       <div>
         <Seletor />
         <div className="space-y-2">
+          {/* Confirma sozinho assim que o endereço fica válido. Digitar já é a
+              intenção: exigir um segundo clique para dizer "sim, era isso" é o
+              tipo de etapa que existe para o programa, não para quem usa. */}
           <Input
             placeholder="https://…"
             value={linkUrl}
-            onChange={(e) => setLinkUrl(e.target.value)}
+            autoFocus
+            onChange={(e) => {
+              const v = e.target.value;
+              setLinkUrl(v);
+              const limpo = v.trim();
+              if (urlValida(limpo)) {
+                onChange({
+                  fileName: nomeSugeridoDaUrl(limpo) || "Documento",
+                  fileUrl: limpo,
+                  storagePath: null,
+                  fileType: "link",
+                  fileSize: null,
+                });
+              } else if (value) {
+                // Apagar ou estragar o endereço desfaz a confirmação: senão o
+                // formulário guardaria um link que não está mais no campo.
+                onChange(null);
+              }
+            }}
             className={cn("font-mono text-[13px]", url && !valida && "border-destructive")}
           />
-          {url && !valida && (
+          {/* SEM BOTÃO "USAR LINK" e sem campo de nome.
+              Colar o endereço JÁ É a ação — o modo arquivo não pede confirmação
+              depois de escolher o arquivo, e o link não tinha por que pedir. O
+              campo de nome era duplicata do que existe logo abaixo; o nome
+              sugerido vai direto para lá, como o upload já fazia.
+              O aviso sobre assinatura saiu daqui: explicava uma regra de um
+              fluxo que ainda não começou, antes de a pessoa ter feito nada.
+              Ele aparece quando importa — ao tentar circular para assinatura
+              (DocumentManager:177), com a instrução do que fazer. */}
+          {url && !valida ? (
             <p className="text-[11px] text-destructive">
-              Endereço inválido. Precisa começar com <span className="font-mono">http://</span> ou{" "}
+              Precisa começar com <span className="font-mono">http://</span> ou{" "}
               <span className="font-mono">https://</span>.
             </p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              O documento fica fora do sistema — o endereço aponta para onde ele
+              está hoje.
+            </p>
           )}
-          {/* SEM CAMPO DE NOME AQUI. O formulário já tem "Nome do documento"
-              logo abaixo, e eu havia acrescentado um segundo — dois campos
-              pedindo a mesma coisa, com o de baixo sendo o que de fato grava.
-              O nome sugerido da URL vai direto para aquele, do mesmo jeito que
-              o upload de arquivo já preenche com o nome do arquivo. */}
-          <Button
-            type="button" variant="secondary" className="w-full"
-            disabled={!valida}
-            onClick={() => onChange({
-              fileName: sugerido || "Documento",
-              fileUrl: url,
-              storagePath: null,
-              fileType: "link",
-              fileSize: null,
-            })}
-          >
-            Usar link
-          </Button>
-          <p className="text-[11px] text-muted-foreground">
-            O arquivo fica <strong>fora do sistema</strong>: pode receber ciência e
-            aprovação, mas <strong>não assinatura</strong> — o que está no endereço
-            pode ser trocado depois de assinado.
-          </p>
         </div>
       </div>
     );
