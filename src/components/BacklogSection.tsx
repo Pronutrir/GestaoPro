@@ -555,18 +555,31 @@ export const BacklogSection = ({
   };
 
   const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedIds(next);
+    // Desmarcar a ÚLTIMA sai do modo. Sem isto a coluna das caixas continuava
+    // reservada com zero itens marcados — o usuário via o marcador na lateral
+    // de cada linha sem ter selecionado nada e sem saber como voltar.
+    // Calculado fora do updater: chamar outro setState lá dentro é efeito
+    // colateral durante o render.
+    if (next.size === 0) setSelectMode(false);
   };
 
   const allBacklogIds = backlogActs.map((a) => a.id);
   const allSelected = allBacklogIds.length > 0 && selectedIds.size === allBacklogIds.length;
   const toggleSelectAll = () => {
-    if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(allBacklogIds));
+    if (allSelected) {
+      // DESLIGA O MODO junto. Limpar só a seleção deixava `selectMode` ligado,
+      // e a coluna da caixa continuava reservada no grid: o "marcador lateral"
+      // ficava fixo na lateral de cada linha depois de desmarcar tudo, sem
+      // nada selecionado e sem jeito de sair.
+      setSelectedIds(new Set());
+      setSelectMode(false);
+    } else {
+      setSelectMode(true);
+      setSelectedIds(new Set(allBacklogIds));
+    }
   };
 
   const handleMoveSelected = async () => {
@@ -1901,7 +1914,17 @@ export const BacklogSection = ({
           <div className="flex items-center gap-1.5">
             {selectMode && selectedIds.size > 0 && (
               <>
-                <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} aria-label="Selecionar todas" className="ml-1" />
+                {/* Estender para TODAS sem voltar ao cabeçalho da tabela —
+                    útil quando se selecionou algumas e se decidiu que era o
+                    conjunto inteiro. Mostra o traço no meio-termo, como a do
+                    cabeçalho, para não sugerir que nada está marcado. */}
+                <Checkbox
+                  checked={allSelected ? true : "indeterminate"}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label={allSelected ? "Desmarcar todas" : "Selecionar todas"}
+                  title={allSelected ? "Desmarcar todas" : `Selecionar todas as ${allBacklogIds.length}`}
+                  className="ml-1"
+                />
                 <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => setMoveDialogOpen(true)}>
                   <ArrowRight className="w-3.5 h-3.5" /> Mudar status ({selectedIds.size})
                 </Button>
@@ -2043,8 +2066,15 @@ export const BacklogSection = ({
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
-                  disabled={!!deleteBlockedReason}
-                  title={deleteBlockedReason || "Arquivar as selecionadas"}
+                  // `isAdmin` MANDA, não `deleteBlockedReason`. A página envia
+                  // esse texto SEMPRE — o último ramo é um padrão ("você não
+                  // tem permissão") que chega mesmo com permissão. Ele existe
+                  // para EXPLICAR o bloqueio, não para causá-lo: os outros
+                  // botões de arquivar do arquivo já testam `isAdmin` e só usam
+                  // o texto no tooltip. O meu testava o texto, então o botão
+                  // nascia desabilitado para todo mundo.
+                  disabled={!isAdmin}
+                  title={isAdmin ? "Arquivar as selecionadas" : (deleteBlockedReason || "Você não tem permissão para arquivar")}
                   onClick={async () => {
                     const n = selectedIds.size;
                     const ok = await appConfirm({
