@@ -1019,16 +1019,23 @@ export const MeetingsManager = ({ projectId, phases, onCreateActivity, onCreateB
               )}
             </div>
           )}
-          <Input
-            placeholder="Título da reunião *"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-          />
-          {form.title.trim() && (
-            <div className="flex justify-end -mt-2">
-              <AIAssistButton value={form.title} onChange={(v) => setForm({ ...form, title: v })} context="meeting_title" />
-            </div>
-          )}
+          {/* IA dentro do campo — mesmo padrão do TAP (ProjectCharter:152) e
+              da Central de Documentos. Numa linha própria, o botão aparecia e
+              sumia conforme o título tinha texto: o formulário crescia e
+              encolhia enquanto se digitava. */}
+          <div className="relative">
+            <Input
+              placeholder="Título da reunião *"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className={form.title.trim() ? "pr-10" : ""}
+            />
+            {form.title.trim() && (
+              <div className="absolute top-1/2 -translate-y-1/2 right-1">
+                <AIAssistButton value={form.title} onChange={(v) => setForm({ ...form, title: v })} context="meeting_title" size="icon" />
+              </div>
+            )}
+          </div>
           {/* Também era texto livre — mesmo problema do responsável da ação. */}
           <div className="grid gap-1.5">
             <Label className="text-[12px] text-muted-foreground">Proponente / Responsável</Label>

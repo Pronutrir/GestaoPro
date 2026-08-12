@@ -619,12 +619,30 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
               Arquivo enviado ao projeto. Para trocar o arquivo, exclua e envie de novo.
             </p>
           )}
-          <Input placeholder="Descrição (opcional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          {form.description.trim() && (
-            <div className="flex justify-end -mt-2">
-              <AIAssistButton value={form.description} onChange={(v) => setForm({ ...form, description: v })} context="document_description" />
-            </div>
-          )}
+          {/* IA DENTRO do campo, não numa linha abaixo.
+              O botão ocupava uma faixa própria que aparecia e sumia conforme a
+              descrição tinha texto — o formulário crescia e encolhia enquanto
+              se digitava, e a linha extra empurrava fase e atividade para
+              baixo. É o mesmo padrão que o TAP já usa (ProjectCharter:152):
+              `pr-10` abre espaço no campo e o botão se sobrepõe à direita. */}
+          <div className="relative">
+            <Input
+              placeholder="Descrição (opcional)"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              className={form.description.trim() ? "pr-10" : ""}
+            />
+            {form.description.trim() && (
+              <div className="absolute top-1/2 -translate-y-1/2 right-1">
+                <AIAssistButton
+                  value={form.description}
+                  onChange={(v) => setForm({ ...form, description: v })}
+                  context="document_description"
+                  size="icon"
+                />
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             {phases.length > 0 && (
               <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.phase_id} onChange={(e) => setForm({ ...form, phase_id: e.target.value })}>
