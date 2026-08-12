@@ -14,6 +14,67 @@ export function fileExtension(name: string): string {
   return m ? m[1].toLowerCase() : "";
 }
 
+/**
+ * Nome do formato para quem não é técnico.
+ *
+ * O selo mostrava a extensão crua: um arquivo chamado "teste pdf" mas salvo
+ * como .md exibia "MD", e ninguém sabia o que era. A extensão comunica quando
+ * é conhecida (PDF, PNG) e vira sigla quando não é — "MD", "ODT", "CSV" não
+ * dizem nada a quem só quer abrir o documento.
+ *
+ * Só traduz o que precisa: PDF e PNG ficam como estão, porque já são o nome
+ * pelo qual as pessoas os chamam.
+ */
+const FORMATO_LEGIVEL: Record<string, string> = {
+  md: "Markdown",
+  markdown: "Markdown",
+  doc: "Word",
+  docx: "Word",
+  odt: "Texto",
+  rtf: "Texto",
+  txt: "Texto",
+  xls: "Excel",
+  xlsx: "Excel",
+  ods: "Planilha",
+  csv: "Planilha",
+  ppt: "PowerPoint",
+  pptx: "PowerPoint",
+  odp: "Slides",
+  jpg: "Imagem",
+  jpeg: "Imagem",
+  gif: "Imagem",
+  webp: "Imagem",
+  svg: "Imagem",
+  zip: "Compactado",
+  rar: "Compactado",
+  "7z": "Compactado",
+};
+
+/**
+ * Nome do arquivo como foi enviado, a partir do caminho no storage.
+ *
+ * O caminho é `projeto/timestamp-nome.ext` (ver FileUploadField) — o carimbo
+ * evita colisão entre dois envios do mesmo arquivo, mas não interessa a
+ * ninguém que só quer saber qual arquivo é aquele.
+ */
+export function nomeDoArquivo(storagePath?: string | null): string {
+  const ultimo = (storagePath || "").split("/").pop() || "";
+  return ultimo.replace(/^\d{10,}-/, "");
+}
+
+/**
+ * Rótulo do selo. Recebe o que está gravado em `file_type` — que hoje é a
+ * extensão em maiúsculas, mas já foi MIME em registros antigos.
+ */
+export function rotuloFormato(fileType?: string | null): string {
+  const t = (fileType || "").trim();
+  if (!t) return "";
+  // MIME antigo ("application/pdf"): fica o que vem depois da barra.
+  const bruto = t.includes("/") ? t.split("/").pop()! : t;
+  const chave = bruto.toLowerCase();
+  return FORMATO_LEGIVEL[chave] || bruto.toUpperCase();
+}
+
 /** Tamanho legível — "2,4 MB" em vez de 2516582. */
 export function formatSize(bytes: number | null | undefined): string {
   if (!bytes || bytes <= 0) return "";

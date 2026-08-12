@@ -24,7 +24,7 @@ import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { useAuth } from "@/contexts/AuthContext";
 import { DocumentFlowPanel } from "@/components/documentos/DocumentFlowPanel";
 import { FileUploadField, type UploadResult } from "@/components/documentos/FileUploadField";
-import { resolveFileUrl, ehLink, dominioDe } from "@/lib/documentCenter";
+import { resolveFileUrl, ehLink, dominioDe, rotuloFormato, nomeDoArquivo } from "@/lib/documentCenter";
 import { StartFlowDialog, type DraftParticipant } from "@/components/documentos/StartFlowDialog";
 import {
   FLOW_KINDS, ROLE_META, flowProgress, isMyTurn, hashFile, captureOrigin,
@@ -799,7 +799,18 @@ export const DocumentManager = ({ projectId, phases, activities, canManageProjec
                     {ehLink(doc) ? (
                       <Badge variant="outline" className="text-xs border-success/40 text-success">Link</Badge>
                     ) : (
-                      doc.file_type && <Badge variant="outline" className="text-xs">{doc.file_type}</Badge>
+                      // O selo mostra o FORMATO por nome, e o tooltip traz o
+                      // nome real do arquivo: "teste pdf" salvo como .md exibia
+                      // "MD" e não havia como descobrir por quê.
+                      doc.file_type && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs"
+                          title={nomeDoArquivo(doc.storage_path) || undefined}
+                        >
+                          {rotuloFormato(doc.file_type)}
+                        </Badge>
+                      )
                     )}
                     {doc.phase_id && (
                       <Badge className="bg-primary/20 text-primary text-xs">
