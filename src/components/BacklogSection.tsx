@@ -579,13 +579,45 @@ export const BacklogSection = ({
     return out;
   };
 
+  /**
+   * Todos os ANCESTRAIS de um item, do pai para cima.
+   *
+   * Necessário para o pai não continuar marcado depois que um filho sai: a
+   * marca dele quer dizer "isto e tudo que está dentro", e isso deixa de ser
+   * verdade no instante em que um descendente é desmarcado.
+   */
+  const ancestraisDe = (id: string): string[] => {
+    const out: string[] = [];
+    let atual = backlogActs.find((a) => a.id === id)?.parent_id ?? null;
+    while (atual) {
+      out.push(atual);
+      atual = backlogActs.find((a) => a.id === atual)?.parent_id ?? null;
+    }
+    return out;
+  };
+
   const toggleSelect = (id: string) => {
     const next = new Set(selectedIds);
     const familia = [id, ...descendentesDe(id)];
     // O clique no PAI manda: marcando, entra a família toda; desmarcando, sai
     // toda. Alternar item a item deixaria o pai marcado com filhos fora.
-    if (next.has(id)) familia.forEach((x) => next.delete(x));
-    else familia.forEach((x) => next.add(x));
+    if (next.has(id)) {
+      familia.forEach((x) => next.delete(x));
+      // E OS ANCESTRAIS SAEM JUNTO. Sem isto, desmarcar dois filhos de uma
+      // fase que estava inteira selecionada deixava a fase marcada em sólido:
+      // a caixa dizia "tudo aqui dentro" enquanto dois itens estavam fora, e
+      // arquivar levaria a fase como se estivesse completa.
+      ancestraisDe(id).forEach((x) => next.delete(x));
+    } else {
+      familia.forEach((x) => next.add(x));
+      // Marcar o ÚLTIMO filho que faltava completa o pai — e o avô, se for o
+      // caso. `estadoDaCaixa` já mostraria o sólido pelo cálculo, mas o id do
+      // pai precisa entrar no conjunto para as ações em lote o alcançarem.
+      for (const anc of ancestraisDe(id)) {
+        const filhos = descendentesDe(anc);
+        if (filhos.length > 0 && filhos.every((f) => next.has(f))) next.add(anc);
+      }
+    }
     setSelectedIds(next);
     // Desmarcar a ÚLTIMA sai do modo. Sem isto a coluna das caixas continuava
     // reservada com zero itens marcados — o usuário via o marcador na lateral
@@ -602,9 +634,15 @@ export const BacklogSection = ({
    * e o contador do rodapé diria um número que a tela não confirma.
    */
   const estadoDaCaixa = (id: string): boolean | "indeterminate" => {
-    if (selectedIds.has(id)) return true;
     const filhos = descendentesDe(id);
-    if (filhos.length === 0) return false;
+    // FOLHA: só o próprio id decide.
+    if (filhos.length === 0) return selectedIds.has(id);
+    // AGRUPADOR: quem manda são os FILHOS, não o id dele.
+    //
+    // Antes começava com `if (selectedIds.has(id)) return true`, e o id do pai
+    // ficava no conjunto depois de desmarcar um filho: a fase aparecia sólida
+    // com dois itens em branco embaixo. O `toggleSelect` agora tira o pai nesse
+    // caso, e este cálculo deixa de depender disso para acertar.
     const marcados = filhos.filter((f) => selectedIds.has(f)).length;
     if (marcados === 0) return false;
     return marcados === filhos.length ? true : "indeterminate";
