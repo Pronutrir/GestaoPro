@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ import {
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { resolveEapKind, type EapKind } from "@/lib/eapModel";
+import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
 import {
   avaliarProntidao, resumirProntidao, principaisCarencias,
   PRONTIDAO_LABELS, PRONTIDAO_LABELS_LONGOS,
@@ -139,6 +140,15 @@ export const BacklogSection = ({
   const [backlogStageId, setBacklogStageId] = useState<string | null>(null);
   // Todos os stages, incluindo o "Backlog" (display_order=0), para mostrar badge de status
   const [allStages, setAllStages] = useState<WorkflowStage[]>([]);
+  /**
+   * "Só a fila" (padrão) × "tudo".
+   *
+   * A aba servia de lista geral do projeto — é onde se via tudo de uma vez, com
+   * responsável e prazo. Filtrar sem oferecer a volta tiraria esse uso de quem
+   * o tinha; o interruptor mantém os dois, começando no que a aba se propõe a
+   * ser.
+   */
+  const [mostrarTudo, setMostrarTudo] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [targetStageId, setTargetStageId] = useState<string>("");
@@ -327,8 +337,11 @@ export const BacklogSection = ({
     const fetchStages = async () => {
       const { data } = await supabase
         .from("workflow_stages")
-        // is_final: decide se mover para esta coluna conclui a tarefa.
-        .select("id, display_order, title, color, is_final")
+        // `*` em vez da lista de campos: a coluna `categoria` não está nos
+        // tipos gerados até a migration rodar, e nomeá-la aqui quebraria o
+        // typecheck. Ela decide se o item está NA FILA — é o que separa o
+        // backlog do trabalho em curso.
+        .select("*")
         .eq("project_id", projectId)
         .order("display_order");
       if (data) {
@@ -395,8 +408,84 @@ export const BacklogSection = ({
   // "Receber demanda da Diretoria (3)" com três subatividades excluídas
   // aparecendo aqui, enquanto a aba Subatividades do diálogo, que filtra
   // corretamente, mostrava vazio. As duas telas liam a mesma coisa e discordavam.
+  /**
+   * O item ainda está NA FILA?
+   *
+   * Categoria `backlog` ou `a_iniciar` = não começou. Qualquer outra (andamento,
+   * espera, revisão, concluída, cancelada) significa que o trabalho saiu da fila
+   * e vive no quadro.
+   *
+   * Item SEM coluna conta como fila: foi criado e ainda não foi posicionado.
+   */
+  const naFila = (a: Activity): boolean => {
+    if (!a.workflow_stage_id) return true;
+    const col = allStages.find((s) => s.id === a.workflow_stage_id);
+    if (!col) return true; // coluna desconhecida: não esconde o item
+    const cat = parseWorkflowCategory((col as { categoria?: string }).categoria)
+      ?? categoryFromLegacyFlags(col as never);
+    return cat === "backlog" || cat === "a_iniciar";
+  };
+
+  /**
+   * A aba mostra SÓ A FILA — o que ainda não começou.
+   *
+   * Antes exibia `activities.filter(a => !a.is_trashed)`: tudo que não estava
+   * na lixeira, inclusive concluídas e em andamento. Uma tarefa arrastada no
+   * Kanban continuava aqui como se ainda esperasse, e a fila deixava de
+   * responder "o que vem primeiro?" — priorizar 200 itens dos quais 150 já
+   * saíram é trabalho jogado fora. Pior: os números do topo ("prontas para
+   * executar", "falta responsável em 16") mediam o projeto inteiro.
+   *
+   * Jira, Azure DevOps e Linear separam pelo ESTADO do item, e sair do estado
+   * tira da fila automaticamente. O Trello e o contraexemplo — tudo convive, e
+   * a lista cresce sem fim.
+   *
+   * AGRUPADOR fica enquanto tiver descendente na fila: a estrutura existe para
+   * segurar o conteúdo, não sozinha.
+   */
+  const soAFila = (lista: Activity[]): Activity[] => {
+    // SÓ AS FOLHAS decidem. Agrupador não tem coluna própria (é rollup), então
+    // `naFila` o aprovaria por si mesmo — e uma fase com todos os filhos
+    // concluídos continuaria na lista, vazia. Ele entra depois, pelo caminho de
+    // volta, quando algum descendente estiver na fila.
+    const temFilho = new Set(lista.filter((a) => a.parent_id).map((a) => a.parent_id as string));
+    const folhasNaFila = new Set(
+      lista.filter((a) => !temFilho.has(a.id) && naFila(a)).map((a) => a.id),
+    );
+    const porId = new Map(lista.map((a) => [a.id, a]));
+    // Sobe de cada item da fila até a raiz, mantendo os ancestrais no caminho.
+    const manter = new Set(folhasNaFila);
+    for (const id of folhasNaFila) {
+      let atual = porId.get(id);
+      const visto = new Set<string>([id]);
+      while (atual?.parent_id && !visto.has(atual.parent_id)) {
+        visto.add(atual.parent_id);
+        manter.add(atual.parent_id);
+        atual = porId.get(atual.parent_id);
+      }
+    }
+    return lista.filter((a) => manter.has(a.id));
+  };
+
+  /**
+   * Quantas FOLHAS saíram da fila — o número do aviso.
+   *
+   * Só folhas: agrupador não "sai", ele acompanha os filhos. Contá-lo inflaria
+   * o aviso com estrutura, não com trabalho.
+   */
+  const foraDaFila = useMemo(() => {
+    const temFilho = new Set(
+      activities.filter((a) => !a.is_trashed && a.parent_id).map((a) => a.parent_id as string),
+    );
+    return activities.filter((a) => !a.is_trashed && !temFilho.has(a.id) && !naFila(a)).length;
+    // `naFila` depende de allStages; sem ele na lista o número congelaria no
+    // primeiro render, antes de as colunas chegarem.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activities, allStages]);
+
   const backlogActs = (() => {
-    const vivas = activities.filter((a) => !a.is_trashed);
+    const semLixeira = activities.filter((a) => !a.is_trashed);
+    const vivas = mostrarTudo ? semLixeira : soAFila(semLixeira);
     if (prontidaoFilter === "all") return vivas;
 
     // Quem tem filhos não é avaliado (horas e datas são rollup), mas precisa
@@ -2178,13 +2267,38 @@ export const BacklogSection = ({
                  e seguia somado no total do que há para fazer.
                  Cada palavra passa a nomear uma coisa só; a soma se faz de
                  cabeça. */
-              <span className="text-muted-foreground/90">
-                {[
-                  typeCounts.fase && `${typeCounts.fase} fase${typeCounts.fase > 1 ? "s" : ""}`,
-                  typeCounts.atividade && `${typeCounts.atividade} atividade${typeCounts.atividade > 1 ? "s" : ""}`,
-                  typeCounts.marco && `${typeCounts.marco} marco${typeCounts.marco > 1 ? "s" : ""}`,
-                ].filter(Boolean).join(" · ")}
-              </span>
+              <>
+                <span className="text-muted-foreground/90">
+                  {[
+                    typeCounts.fase && `${typeCounts.fase} fase${typeCounts.fase > 1 ? "s" : ""}`,
+                    typeCounts.atividade && `${typeCounts.atividade} atividade${typeCounts.atividade > 1 ? "s" : ""}`,
+                    typeCounts.marco && `${typeCounts.marco} marco${typeCounts.marco > 1 ? "s" : ""}`,
+                  ].filter(Boolean).join(" · ")}
+                </span>
+                {/* QUANTOS SAÍRAM DA FILA. Some, mas não sem explicação: quem
+                    procura uma tarefa que "estava aqui ontem" precisa saber que
+                    ela avançou, e não que sumiu. Clicar mostra tudo. */}
+                {!mostrarTudo && foraDaFila > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setMostrarTudo(true)}
+                    className="text-muted-foreground/80 hover:text-foreground underline decoration-dotted underline-offset-2 transition-colors"
+                    title="A fila mostra só o que ainda não começou. Clique para ver o projeto inteiro."
+                  >
+                    · {foraDaFila} já em andamento
+                  </button>
+                )}
+                {mostrarTudo && (
+                  <button
+                    type="button"
+                    onClick={() => setMostrarTudo(false)}
+                    className="text-muted-foreground/80 hover:text-foreground underline decoration-dotted underline-offset-2 transition-colors"
+                    title="Voltar a mostrar só o que ainda não começou"
+                  >
+                    · mostrando tudo, voltar à fila
+                  </button>
+                )}
+              </>
             )}
             {/* O link de carência saiu daqui: a barra de prontidão acima já
                 traz "falta responsável em 16 · prioridade em 16", com as DUAS
