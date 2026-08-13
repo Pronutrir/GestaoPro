@@ -804,7 +804,13 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           <Upload className="w-4 h-4" /> Importar EAP
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl w-[94vw] h-[82vh] overflow-hidden p-0 gap-0 flex flex-col">
+      {/* 6xl/90vh, não 4xl/82vh: são DUAS colunas de texto lado a lado, e uma
+          EAP tem código longo ("1.1.2.4") junto de título comprido. No tamanho
+          anterior sobravam ~170px por painel — cerca de 8 linhas, para uma EAP
+          de 20 itens. Importadores são largos por natureza (Jira CSV, Asana):
+          comparar "o que colei" com "o que vai entrar" exige os dois legíveis
+          ao mesmo tempo. */}
+      <DialogContent className="max-w-6xl w-[96vw] h-[90vh] overflow-hidden p-0 gap-0 flex flex-col">
         {/* Cabeçalho enxuto */}
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <DialogTitle className="text-base font-semibold">Importar EAP</DialogTitle>
@@ -847,7 +853,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 onChange={(e) => { setText(e.target.value); setFiltroPapel(null); }}
                 spellCheck={false}
                 autoFocus
-                className="h-full w-full min-h-[240px] resize-none rounded-md border border-input bg-muted/50 px-3 py-2 font-mono text-[13px] leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="h-full w-full min-h-[240px] resize-none rolagem-visivel rounded-md border border-input bg-muted/50 px-3 py-2 font-mono text-[13px] leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 // O exemplo mostra os TRÊS papéis que a importação produz, cada
                 // um numa situação em que ele de fato aparece: 1 é Fase (nível
                 // 1); 1.1 é Entrega porque tem subitens; 1.1.1 e 1.2 são
@@ -910,7 +916,10 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 </div>
               </div>
             ) : (
-              <div className="flex-1 min-h-0 overflow-y-auto space-y-1 -mx-1 px-1">
+              /* `rolagem-visivel`: a área já rolava, mas com a barra fina do
+                 sistema — nada dizia que havia mais itens abaixo, e a lista
+                 parecia acabar onde a área terminava. */
+              <div className="flex-1 min-h-0 overflow-y-auto rolagem-visivel space-y-1 -mx-1 px-1">
                 {(filtroPapel ? tree.filter((n) => n.role === filtroPapel) : tree).map((n) => {
                   // Ancestral inventado pelo parser (o texto começou em "1.2",
                   // então o "1" foi criado para a árvore não ficar quebrada).
@@ -976,38 +985,65 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
             observação solta, "código fora do padrão" é numeração que o parser
             não lê. Um aviso genérico obrigava a adivinhar qual era o caso. */}
         {detalheAberto && parsed.descartadas.length > 0 && (
-          <div className="px-6 pb-3 shrink-0 max-h-[180px] overflow-y-auto">
-            <div className="rounded-md border border-border divide-y divide-border/60">
-              {parsed.descartadas.map((d) => {
-                const anexada = d.motivo === "anexada";
-                return (
-                  <button
-                    key={`${d.numero}-${d.motivo}`}
-                    type="button"
-                    onClick={() => irParaLinha(d.numero)}
-                    className="w-full flex items-baseline gap-2.5 px-2.5 py-1.5 text-left hover:bg-muted/60 transition-colors"
-                    title="Ir para esta linha no texto colado"
-                  >
-                    <span className="text-[10.5px] text-muted-foreground/70 tabular-nums w-6 text-right shrink-0">
-                      {d.numero}
-                    </span>
-                    <span className="flex-1 min-w-0 truncate font-mono text-[12px]">{d.texto}</span>
-                    <span
-                      className={cn(
-                        "text-[10.5px] shrink-0 whitespace-nowrap",
-                        anexada ? "text-muted-foreground" : "text-warning",
-                      )}
-                      title={anexada ? `O texto entrou em "${d.anexadaEm}"` : undefined}
-                    >
-                      {MOTIVO_LABEL[d.motivo]}
-                    </span>
-                  </button>
-                );
-              })}
+          // ALTURA PRÓPRIA, não `shrink-0` solto. Antes ela crescia conforme o
+          // conteúdo e EMPURRAVA o corpo: a última linha do campo colado sumia
+          // atrás dela ("1.1.2.4 Classificar stakeholders" cortado ao meio).
+          // Com `h-[136px] shrink-0`, o corpo (que é `flex-1 min-h-0`) encolhe
+          // para caber — o painel tem lugar em vez de invadir.
+          <div className="h-[136px] shrink-0 border-t bg-muted/20 flex flex-col">
+            {/* Cabeçalho com o resumo e o fechar: sem ele, sair da lista exigia
+                achar o selo lá no rodapé, que a própria lista empurrou. */}
+            <div className="flex items-center justify-between gap-3 px-6 py-1.5 shrink-0">
+              <span className="text-[11px] text-muted-foreground">
+                {linhasPerdidas.length > 0 && (
+                  <span className="text-warning font-medium">
+                    {linhasPerdidas.length} fora da importação
+                  </span>
+                )}
+                {linhasPerdidas.length > 0 && linhasAnexadas.length > 0 && " · "}
+                {linhasAnexadas.length > 0 && (
+                  <span>{linhasAnexadas.length} juntada{linhasAnexadas.length > 1 ? "s" : ""} ao item anterior</span>
+                )}
+                <span className="text-muted-foreground/70"> — clique para ir até a linha</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setDetalheAberto(false)}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              >
+                Fechar
+              </button>
             </div>
-            <p className="mt-1.5 px-1 text-[10.5px] text-muted-foreground">
-              Clique numa linha para ir até ela no texto colado.
-            </p>
+            <div className="flex-1 min-h-0 overflow-y-auto rolagem-visivel px-6 pb-2.5">
+              <div className="rounded-md border border-border bg-background divide-y divide-border/60">
+                {parsed.descartadas.map((d) => {
+                  const anexada = d.motivo === "anexada";
+                  return (
+                    <button
+                      key={`${d.numero}-${d.motivo}`}
+                      type="button"
+                      onClick={() => irParaLinha(d.numero)}
+                      className="w-full flex items-baseline gap-2.5 px-2.5 py-1.5 text-left hover:bg-muted/60 transition-colors"
+                      title="Ir para esta linha no texto colado"
+                    >
+                      <span className="text-[10.5px] text-muted-foreground/70 tabular-nums w-6 text-right shrink-0">
+                        {d.numero}
+                      </span>
+                      <span className="flex-1 min-w-0 truncate font-mono text-[12px]">{d.texto}</span>
+                      <span
+                        className={cn(
+                          "text-[10.5px] shrink-0 whitespace-nowrap",
+                          anexada ? "text-muted-foreground" : "text-warning",
+                        )}
+                        title={anexada ? `O texto entrou em "${d.anexadaEm}"` : undefined}
+                      >
+                        {MOTIVO_LABEL[d.motivo]}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
 

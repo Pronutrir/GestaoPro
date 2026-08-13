@@ -281,3 +281,37 @@
 .theme-project-neutral .text-blue-600 {
   color: hsl(215 16% 47%);
 }
+
+/* Barra de rolagem VISÍVEL — `.rolagem-visivel`
+ *
+ * A barra fina do sistema (4px, quase sem contraste) esconde que a área rola:
+ * na prévia da importação de EAP a lista parecia acabar onde a área terminava,
+ * e não havia sinal de que existia mais conteúdo abaixo.
+ *
+ * 9px com contraste resolve, e o `scrollbar-gutter: stable` reserva o espaço
+ * para o conteúdo não pular quando a barra aparece e some.
+ *
+ * Firefox usa as propriedades padrão; Chrome/Edge/Safari, o pseudo-elemento.
+ */
+.rolagem-visivel {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.45) transparent;
+  scrollbar-gutter: stable;
+}
+.rolagem-visivel::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.rolagem-visivel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.rolagem-visivel::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.4);
+  border-radius: 5px;
+  /* A borda transparente afina o polegar sem encostar na borda da área. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.rolagem-visivel::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.65);
+}
