@@ -30,6 +30,7 @@ import {
   LayoutGrid,
   Layers,
   Search,
+  Settings2,
   Filter,
 } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
@@ -1337,7 +1338,7 @@ export function StageMenuItems({
  * toggle. "Nova coluna" passa a ser a última linha da lista.
  */
 export function StageListButton({
-  projectId, onChanged, stages = [], countByStage, canManage = false, onToggleVisible, acoes,
+  projectId, onChanged, stages = [], countByStage, canManage = false, onToggleVisible, acoes, onGerenciar,
 }: {
   projectId: string;
   onChanged?: () => void;
@@ -1348,6 +1349,11 @@ export function StageListButton({
   onToggleVisible?: (id: string, isVisible: boolean) => void;
   /** As mesmas ações do menu do cabeçalho. Sem elas, a lista só mostra. */
   acoes?: StageActions;
+  /**
+   * Abre a tabela "Gerenciar colunas" (a mesma do botão na régua). Quando
+   * ausente, cai na tela antiga — mantida só para quem ainda não passa a prop.
+   */
+  onGerenciar?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
@@ -1500,13 +1506,22 @@ export function StageListButton({
             {canManage && (
               <>
                 <div className="h-px bg-border my-1" />
+                {/* "Nova coluna" abria a tela antiga de configuração — o rótulo
+                    prometia criar e entregava administrar. Agora diz o que faz
+                    e leva à tabela, onde criar é uma linha a mais. */}
                 <button
                   type="button"
-                  onClick={() => { setListOpen(false); setOpen(true); }}
+                  onClick={() => {
+                    setListOpen(false);
+                    if (onGerenciar) onGerenciar();
+                    else setOpen(true);
+                  }}
                   className="flex items-center gap-1.5 text-[12px] rounded px-1.5 py-1 text-left hover:bg-muted transition-colors"
                 >
-                  <Plus className="w-3.5 h-3.5 shrink-0" />
-                  Nova coluna
+                  {onGerenciar
+                    ? <Settings2 className="w-3.5 h-3.5 shrink-0" />
+                    : <Plus className="w-3.5 h-3.5 shrink-0" />}
+                  {onGerenciar ? "Gerenciar colunas…" : "Nova coluna"}
                 </button>
               </>
             )}

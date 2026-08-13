@@ -52,6 +52,7 @@ import {
   Link2,
   User,
   Layers,
+  List,
   Search,
   Filter,
 } from "lucide-react";
@@ -137,6 +138,7 @@ import {
 } from "./kanban/shared";
 import { useKanbanPrefs } from "@/hooks/useKanbanPrefs";
 import { migrarOrdenacaoDasColunas } from "@/lib/kanbanPrefs";
+import { GerenciarColunas, type PlanoDeSalvamento } from "./kanban/GerenciarColunas";
 import { KanbanCard, SortableKanbanCard } from "./kanban/KanbanCard";
 import {
   SortableColumn,
@@ -292,6 +294,7 @@ export const ActivityKanban = ({
   type LaneTeam = { id: string; name: string; members: string[] };
   const [laneGroups, setLaneGroups] = useState<LaneTeam[]>([]);
   const [manageGroupsOpen, setManageGroupsOpen] = useState(false);
+  const [gerenciarColunasOpen, setGerenciarColunasOpen] = useState(false);
   const [teamsUnavailable, setTeamsUnavailable] = useState(false); // migration ainda não aplicada
 
   const fetchTeams = useCallback(async () => {
@@ -2158,6 +2161,91 @@ export const ActivityKanban = ({
     fetchStages();
   }, [fetchStages]);
 
+  // Aplica de uma vez o que a tela "Gerenciar colunas" montou. Ela edita uma
+  // CÓPIA e só chega aqui no Salvar, então este é o único ponto que escreve.
+  //
+  // Ordem: excluir → alterar → criar → reordenar. Excluir antes evita gastar
+  // ordem com linha que vai sumir; reordenar por último trabalha sobre a lista
+  // final, já com as novas dentro.
+  const handleSalvarColunas = useCallback(async (plano: PlanoDeSalvamento) => {
+    const falhas: string[] = [];
+
+    for (const id of plano.excluidas) {
+      const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
+      if (error) falhas.push(`excluir: ${error.message}`);
+    }
+
+    for (const l of plano.alteradas) {
+      const titulo = getStageDisplayTitle(l.title.trim());
+      const { error } = await supabase
+        .from("workflow_stages")
+        .update({
+          title: titulo,
+          color: l.color,
+          progress_percent: l.progress_percent,
+          wip_limit: l.wip_limit,
+          is_visible: l.is_visible,
+        } as never)
+        .eq("id", l.id);
+      if (error) falhas.push(`"${titulo}": ${error.message}`);
+    }
+
+    // As novas entram no fim; a reordenação logo abaixo põe cada uma no lugar.
+    let ordemLivre = stages.reduce((m, s) => Math.max(m, s.display_order), 0) + 1;
+    const idPorChave = new Map<string, string>();
+    for (const l of plano.criadas) {
+      const titulo = getStageDisplayTitle(l.title.trim());
+      if (!titulo) continue;
+      // Mesma precaução de handleAddStage: "concluida" é única por projeto
+      // (índice no banco), e `categoria` pode não existir se a migration não
+      // rodou — daí o insert de compatibilidade.
+      let categoria = suggestCategoryFromTitle(titulo);
+      if (categoria === "concluida" && stages.some((s) => s.categoria === "concluida")) {
+        categoria = "andamento";
+      }
+      const base = {
+        project_id: projectId,
+        title: titulo,
+        color: l.color,
+        display_order: ordemLivre++,
+        progress_percent: l.progress_percent,
+        wip_limit: l.wip_limit,
+        is_visible: l.is_visible,
+        categoria,
+        is_final: categoria === "concluida",
+      };
+      let criado = await supabase.from("workflow_stages").insert(base as never).select("id").single();
+      if (criado.error && /categoria/i.test(criado.error.message || "")) {
+        const { categoria: _fora, ...semCategoria } = base;
+        criado = await supabase.from("workflow_stages").insert(semCategoria as never).select("id").single();
+      }
+      if (criado.error) falhas.push(`criar "${titulo}": ${criado.error.message}`);
+      else if (criado.data?.id) idPorChave.set(l.id, criado.data.id);
+    }
+
+    if (plano.ordem) {
+      // Troca as chaves temporárias ("novo:0") pelos ids que o banco devolveu.
+      const ids = plano.ordem.map((id) => idPorChave.get(id) ?? id).filter((id) => !id.startsWith("novo:"));
+      const resultados = await Promise.all(
+        ids.map((id, i) =>
+          supabase.from("workflow_stages").update({ display_order: i }).eq("id", id),
+        ),
+      );
+      const erro = resultados.find((r) => r.error);
+      if (erro?.error) falhas.push(`ordem: ${erro.error.message}`);
+    }
+
+    await fetchStages();
+
+    if (falhas.length > 0) {
+      toast({
+        title: falhas.length === 1 ? "Uma mudança não foi salva" : `${falhas.length} mudanças não foram salvas`,
+        description: falhas[0],
+        variant: "destructive",
+      });
+    }
+  }, [projectId, stages, fetchStages, toast]);
+
   // As 8 ações de administrar coluna, num objeto só. Memoizado porque vai como
   // prop: literal inline recriaria a identidade a cada render do quadro.
   const acoesDeColuna = useMemo(() => ({
@@ -2649,6 +2737,28 @@ export const ActivityKanban = ({
             />
           );
         })()}
+        {/* COLUNAS — vizinho de Visões porque é da mesma família: o que o
+            quadro mostra. Antes só existia no FIM da fila de colunas, onde só
+            aparecia depois de rolar o quadro inteiro até a direita. O ponto
+            âmbar é o mesmo aviso de tarefa presa em coluna oculta. */}
+        {(isAdmin || canCreate) && (
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-7 gap-1.5 text-xs",
+              hiddenStages.some((s) => (countByStage.get(s.id) ?? 0) > 0) && "border-warning text-warning",
+            )}
+            onClick={() => setGerenciarColunasOpen(true)}
+            title="Nome, cor, progresso, limite de WIP, visibilidade e ordem das colunas"
+          >
+            <List className="w-3.5 h-3.5 shrink-0" />
+            Colunas
+            {hiddenStages.some((s) => (countByStage.get(s.id) ?? 0) > 0) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" title="Há tarefa em coluna oculta" />
+            )}
+          </Button>
+        )}
         {/* "Por time" depende de existir um time cadastrado, mas o cadastro
             estava escondido dois níveis abaixo, no fim do menu de outra função —
             quem não sabia que existia, não achava. Com a raia por time ativa, o
@@ -2865,10 +2975,12 @@ export const ActivityKanban = ({
             return (
               <>
                 {visibleStages.map((stage, idx) => renderColumn(stage, idx))}
-                {/* "Colunas" fica no fim da fila — Linear e Notion mantêm o
-                    acesso a criar/administrar coluna exatamente aqui, onde a
-                    posição já ensina a ação. Recebe TODAS as colunas: oculta
-                    e visível na mesma lista, como no Notion. */}
+                {/* O acesso do FIM DA FILA continua — Linear e Notion mantêm
+                    criar/administrar coluna exatamente aqui, onde a posição já
+                    ensina a ação. Mudou o destino: "Gerenciar colunas…" abre a
+                    MESMA tabela do botão da régua, em vez da tela antiga.
+                    Havia três portas para o mesmo assunto; agora são duas
+                    entradas para um só lugar. */}
                 {(isAdmin || canCreate) && (
                   <StageListButton
                     projectId={projectId}
@@ -2880,6 +2992,7 @@ export const ActivityKanban = ({
                     // As mesmas ações do menu ⋯ do cabeçalho. Sem elas, a
                     // coluna oculta não teria como ser editada em lugar nenhum.
                     acoes={acoesDeColuna}
+                    onGerenciar={() => setGerenciarColunasOpen(true)}
                   />
                 )}
               </>
@@ -3092,6 +3205,18 @@ export const ActivityKanban = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Gerenciar colunas — a tabela com todas de uma vez (nome, cor,
+          progresso, WIP, visibilidade e ordem). Recebe TODAS as colunas:
+          a oculta precisa aparecer aqui, senão volta a não ter onde ser
+          editada. */}
+      <GerenciarColunas
+        open={gerenciarColunasOpen}
+        onOpenChange={setGerenciarColunasOpen}
+        stages={stages}
+        countByStage={countByStage}
+        onSalvar={handleSalvarColunas}
+      />
 
       {/* Gerenciar grupos de raia (estilo Jira: uma raia agrega vários responsáveis) */}
       <Dialog open={manageGroupsOpen} onOpenChange={setManageGroupsOpen}>
