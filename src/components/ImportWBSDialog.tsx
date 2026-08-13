@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Layers, Circle, Diamond, Package, AlertTriangle, FolderTree } from "lucide-react";
+import { Upload, Layers, Circle, Diamond, Package, AlertTriangle, FolderTree, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -86,12 +86,45 @@ const aplicarPapeis = (nodes: TreeNode[]) => {
   }
 };
 
+/**
+ * Uma linha colada que NÃO virou item — com o porquê.
+ *
+ * Antes o parser descartava com um `continue` mudo, e a prévia reconstruía a
+ * contagem por SUBTRAÇÃO (coladas − reconhecidas). Por isso o aviso dizia "1
+ * linha" e nunca "a linha 7": não existia lista nenhuma para mostrar.
+ *
+ * `anexada` não é perda — é o título que quebrou em duas ao colar e foi juntado
+ * ao item anterior. Aparecia no mesmo contador e assustava à toa: o texto FOI
+ * importado.
+ */
+type LinhaDescartada = {
+  /** Número da linha no texto colado, contando a partir de 1. */
+  numero: number;
+  texto: string;
+  motivo: "sem-codigo" | "codigo-invalido" | "sem-titulo" | "anexada";
+  /** Só para `anexada`: em qual item o texto entrou. */
+  anexadaEm?: string;
+};
+
+const MOTIVO_LABEL: Record<LinhaDescartada["motivo"], string> = {
+  "sem-codigo": "sem código EAP",
+  "codigo-invalido": "código fora do padrão",
+  "sem-titulo": "sem título",
+  "anexada": "juntada à linha anterior",
+};
+
+type ResultadoParse = { nodes: TreeNode[]; descartadas: LinhaDescartada[] };
+
 /* ------------------------------------------------------------------ */
 /*  Parser FLEXÍVEL: aceita código numérico (1.2.3), bullets (• - – *)  */
 /*  e indentação por espaços/tabs. Sempre produz uma hierarquia com     */
 /*  códigos normalizados (1, 1.1, 1.1.2...).                            */
+/*                                                                      */
+/*  Devolve TAMBÉM o que descartou: a prévia precisa dizer QUAL linha    */
+/*  ficou de fora, e o motivo é diferente em cada caso.                 */
 /* ------------------------------------------------------------------ */
-const parseFlexible = (text: string): TreeNode[] => {
+const parseFlexible = (text: string): ResultadoParse => {
+  const descartadas: LinhaDescartada[] = [];
   // MODO PLANILHA: quando vem com TAB, as colunas são lidas antes de tudo.
   // Sem isto o TAB virava espaço e datas/horas entravam no TÍTULO — a
   // informação não era só perdida, sujava o nome da tarefa.
@@ -100,18 +133,32 @@ const parseFlexible = (text: string): TreeNode[] => {
     const temCab = pareceCabecalho(grid[0]);
     const roles = detectarColunas(grid, temCab);
     const corpo = temCab ? grid.slice(1) : grid;
+    // O ÍNDICE ORIGINAL viaja junto: sem ele o aviso não teria número de linha
+    // para citar, e clicar não teria para onde levar. O +1 do cabeçalho e o +1
+    // da contagem humana (linha 1, não linha 0) entram aqui.
+    const deslocamento = (temCab ? 1 : 0) + 1;
     const linhas = corpo
-      .map((row) => ({ vals: lerLinha(row, roles), row }))
-      .filter((x) => (x.vals.titulo || "").trim().length > 0);
+      .map((row, i) => ({ vals: lerLinha(row, roles), row, numero: i + deslocamento }))
+      .filter((x) => {
+        if ((x.vals.titulo || "").trim().length > 0) return true;
+        descartadas.push({ numero: x.numero, texto: x.row.join(" ").trim(), motivo: "sem-titulo" });
+        return false;
+      });
 
     const nodes: TreeNode[] = [];
-    for (const { vals } of linhas) {
+    for (const { vals, numero, row } of linhas) {
       // Sem código não há como posicionar na árvore. Este descarte já custou
       // caro: um código com ponto final ("1.") era rejeitado pelo CODIGO_RE e
       // a fase sumia da prévia SEM AVISO — a linha estava visível no campo e
-      // ausente do resultado. O regex foi corrigido, e a prévia agora compara
-      // linhas coladas × itens reconhecidos para avisar quando sobra alguma.
-      if (!vals.codigo) continue;
+      // ausente do resultado. Agora ele é REGISTRADO em vez de silencioso.
+      if (!vals.codigo) {
+        descartadas.push({
+          numero,
+          texto: (vals.titulo || row.join(" ")).trim(),
+          motivo: "sem-codigo",
+        });
+        continue;
+      }
       const parts = vals.codigo.split(".");
       while (parts.length > 1 && parts[parts.length - 1] === "0") parts.pop();
       const code = parts.join(".");
@@ -127,28 +174,38 @@ const parseFlexible = (text: string): TreeNode[] => {
     }
     aplicarPapeis(nodes);
     nodes.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
-    return nodes;
+    return { nodes, descartadas };
   }
 
-  const rawLines = text.split("\n").map((l) => l.replace(/\t/g, "  ")).filter((l) => l.trim().length > 0);
-  if (rawLines.length === 0) return [];
+  // O NÚMERO DA LINHA vem do texto ORIGINAL, antes de descartar as vazias —
+  // é o número que a pessoa vê no campo e para onde o clique vai rolar. Contar
+  // depois do filtro daria um número que não existe na tela.
+  const rawLines = text.split("\n")
+    .map((l, i) => ({ linha: l.replace(/\t/g, "  "), numero: i + 1 }))
+    .filter((x) => x.linha.trim().length > 0);
+  if (rawLines.length === 0) return { nodes: [], descartadas };
 
   // Aceita "1.1 Título", "1.1. Título", "1.1) Título" e "1.1 - Título".
   // O separador opcional depois do código evita que uma EAP colada do Word,
   // que costuma usar ")" ou "-", deixe de ser reconhecida como numerada.
   const numRe = /^\s*(\d+(?:\.\d+)*)\s*[.)]?\s*[-–—]?\s+(.+)$/;
 
-  type Raw = { indent: number; title: string; explicitCode: string | null };
-  const raws: Raw[] = rawLines.map((line) => {
-    const indent = line.length - line.trimStart().length;
-    let body = line.trim();
+  type Raw = { indent: number; title: string; explicitCode: string | null; numero: number; original: string };
+  const raws: Raw[] = rawLines.map(({ linha, numero }) => {
+    const indent = linha.length - linha.trimStart().length;
+    let body = linha.trim();
     let explicitCode: string | null = null;
     const m = body.match(numRe);
     if (m) { explicitCode = m[1]; body = m[2].trim(); }
     // remove marcadores de bullet no início
     body = body.replace(/^[•\-–—*•]+\s*/, "").trim();
-    return { indent, title: body, explicitCode };
-  }).filter((r) => r.title.length > 0);
+    return { indent, title: body, explicitCode, numero, original: linha.trim() };
+  }).filter((r) => {
+    if (r.title.length > 0) return true;
+    // Sobrou só o código, ou só um bullet: não há o que nomear.
+    descartadas.push({ numero: r.numero, texto: r.original, motivo: "sem-titulo" });
+    return false;
+  });
 
   // Decide o modo pelo que REALMENTE foi extraído, não por um segundo teste
   // sobre o texto cru. E o critério é "existe hierarquia numérica de verdade"
@@ -173,7 +230,19 @@ const parseFlexible = (text: string): TreeNode[] => {
     for (const r of raws) {
       if (!r.explicitCode) {
         const prev = nodes[nodes.length - 1];
-        if (prev) prev.title = `${prev.title} ${r.title}`.trim();
+        if (prev) {
+          prev.title = `${prev.title} ${r.title}`.trim();
+          // ANEXADA não é perda: o texto entrou no item de cima. Registrada
+          // como informação, não como alerta — antes ela inflava o contador de
+          // "não reconhecidas" e assustava sem ter havido perda nenhuma.
+          descartadas.push({
+            numero: r.numero, texto: r.title, motivo: "anexada",
+            anexadaEm: `${prev.code} ${prev.title}`.trim(),
+          });
+        } else {
+          // Sem item anterior não há onde anexar — aí é perda de verdade.
+          descartadas.push({ numero: r.numero, texto: r.title, motivo: "sem-codigo" });
+        }
         continue;
       }
       // Zeros à direita são decorativos: "1.0" é nível 1, não 2. Formato comum
@@ -264,13 +333,15 @@ const parseFlexible = (text: string): TreeNode[] => {
   // "1. Fase / 1.1 Entrega / 1.1.1 Atividade": o nível é que decide.
   aplicarPapeis(nodes);
 
-  return nodes;
+  return { nodes, descartadas };
 };
 
 export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogProps) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  /** Para o clique numa linha descartada rolar o campo até ela. */
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [importing, setImporting] = useState(false);
   /** Selo clicado no rodapé: recorta a prévia por papel. Null = mostra tudo.
    *  Só afeta o que se VÊ — a importação leva a árvore inteira. */
@@ -323,7 +394,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     return fasesExistentes.get(partes.join(".")) ?? null;
   };
 
-  const tree = useMemo(() => parseFlexible(text), [text]);
+  const parsed = useMemo(() => parseFlexible(text), [text]);
+  const tree = parsed.nodes;
   const counts = useMemo(() => {
     const c = { fase: 0, entrega: 0, atividade: 0, marco: 0 };
     tree.forEach((n) => { c[n.role]++; });
@@ -341,25 +413,47 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
   );
 
   /**
-   * Linhas coladas que NÃO viraram item.
+   * Linhas coladas que NÃO viraram item, com número e motivo.
    *
-   * O parser descarta em silêncio o que não consegue posicionar na árvore, e
-   * isso já escondeu um bug: um código com ponto final ("1.") era rejeitado e
-   * a fase sumia da prévia — visível no campo, ausente do resultado, sem
-   * nenhum aviso. Comparar o que foi colado com o que foi reconhecido é a rede
-   * de segurança: se sobrar linha, a prévia diz quantas.
+   * Antes isto era uma SUBTRAÇÃO (coladas − reconhecidas) e por isso o aviso
+   * dizia "1 linha" sem poder dizer QUAL: não havia lista, só um número. Agora
+   * o parser registra cada descarte e a prévia mostra a linha, o texto e o
+   * porquê — cada motivo pede uma correção diferente.
    *
-   * Desconta os ancestrais INVENTADOS pelo parser (o "1" criado quando o texto
-   * começa em "1.2"), que existem na árvore sem ter linha correspondente.
+   * `anexada` fica FORA do alerta: o texto entrou no item anterior (título que
+   * quebrou em duas ao colar), então não houve perda. Ela entrava no contador
+   * antigo e assustava à toa.
    */
-  const linhasIgnoradas = useMemo(() => {
-    const coladas = text.split("\n").filter((l) => l.trim().length > 0).length;
-    if (coladas === 0) return 0;
-    const inventados = tree.filter((n) => n.title.startsWith("(sem título)")).length;
-    // Título quebrado em duas linhas é anexado ao anterior, então a diferença
-    // pode ser legítima. Só avisa quando sobra — nunca acusa a mais.
-    return Math.max(0, coladas - (tree.length - inventados));
-  }, [text, tree]);
+  const linhasPerdidas = useMemo(
+    () => parsed.descartadas.filter((d) => d.motivo !== "anexada"),
+    [parsed.descartadas],
+  );
+  const linhasAnexadas = useMemo(
+    () => parsed.descartadas.filter((d) => d.motivo === "anexada"),
+    [parsed.descartadas],
+  );
+  const [detalheAberto, setDetalheAberto] = useState(false);
+
+  /**
+   * Rola o campo de texto até a linha e a seleciona.
+   *
+   * Corrigir acontece onde o texto está — mandar a pessoa procurar a linha 7 à
+   * mão, num campo com 80 linhas, seria devolver o mesmo trabalho que o aviso
+   * deveria poupar.
+   */
+  const irParaLinha = (numero: number) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const linhas = ta.value.split("\n");
+    const inicio = linhas.slice(0, numero - 1).reduce((n, l) => n + l.length + 1, 0);
+    const fim = inicio + (linhas[numero - 1]?.length ?? 0);
+    ta.focus();
+    ta.setSelectionRange(inicio, fim);
+    // Aproxima a linha do meio do campo: `scrollTop` direto colocaria ela na
+    // primeira posição visível, sem contexto em volta.
+    const alturaLinha = ta.scrollHeight / Math.max(1, linhas.length);
+    ta.scrollTop = Math.max(0, (numero - 1) * alturaLinha - ta.clientHeight / 2);
+  };
 
   const resetAndClose = () => { setText(""); setFiltroPapel(null); setOpen(false); };
 
@@ -745,6 +839,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
               Cole aqui
             </div>
             <textarea
+                ref={textareaRef}
                 value={text}
                 /* Limpa o recorte ao editar: o papel filtrado pode deixar de
                    existir no texto novo, e a prévia ficaria vazia sem dizer
@@ -876,6 +971,46 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           </div>
         </div>
 
+        {/* A LISTA do que ficou de fora — linha, texto e motivo.
+            Cada motivo pede uma correção diferente: "sem código EAP" é uma
+            observação solta, "código fora do padrão" é numeração que o parser
+            não lê. Um aviso genérico obrigava a adivinhar qual era o caso. */}
+        {detalheAberto && parsed.descartadas.length > 0 && (
+          <div className="px-6 pb-3 shrink-0 max-h-[180px] overflow-y-auto">
+            <div className="rounded-md border border-border divide-y divide-border/60">
+              {parsed.descartadas.map((d) => {
+                const anexada = d.motivo === "anexada";
+                return (
+                  <button
+                    key={`${d.numero}-${d.motivo}`}
+                    type="button"
+                    onClick={() => irParaLinha(d.numero)}
+                    className="w-full flex items-baseline gap-2.5 px-2.5 py-1.5 text-left hover:bg-muted/60 transition-colors"
+                    title="Ir para esta linha no texto colado"
+                  >
+                    <span className="text-[10.5px] text-muted-foreground/70 tabular-nums w-6 text-right shrink-0">
+                      {d.numero}
+                    </span>
+                    <span className="flex-1 min-w-0 truncate font-mono text-[12px]">{d.texto}</span>
+                    <span
+                      className={cn(
+                        "text-[10.5px] shrink-0 whitespace-nowrap",
+                        anexada ? "text-muted-foreground" : "text-warning",
+                      )}
+                      title={anexada ? `O texto entrou em "${d.anexadaEm}"` : undefined}
+                    >
+                      {MOTIVO_LABEL[d.motivo]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 px-1 text-[10.5px] text-muted-foreground">
+              Clique numa linha para ir até ela no texto colado.
+            </p>
+          </div>
+        )}
+
         {/* Rodapé: contadores + ações (sempre visível) */}
         <div className="flex flex-wrap items-center gap-3 px-6 py-3.5 border-t bg-muted/30 shrink-0">
           {tree.length > 0 ? (
@@ -884,17 +1019,37 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
               {counts.entrega > 0 && <CountBadge role="entrega" n={counts.entrega} />}
               <CountBadge role="atividade" n={counts.atividade} />
               {counts.marco > 0 && <CountBadge role="marco" n={counts.marco} />}
-              {/* REDE DE SEGURANÇA: linha colada que não virou item some sem
-                  deixar rastro. Foi assim que o código com ponto final ("1.")
-                  fez a fase desaparecer da prévia sem nenhum aviso. */}
-              {linhasIgnoradas > 0 && (
-                <span
-                  className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-warning/40 bg-warning/5 text-warning text-[11px] font-medium"
-                  title="Essas linhas não têm código EAP reconhecível (ex.: numeração fora do padrão 1, 1.2, 1.2.3) e não serão importadas. Confira o texto colado."
+              {/* O AVISO ABRE. Antes era um número calculado por subtração
+                  (coladas − reconhecidas), então dizia "1 linha" sem poder
+                  dizer QUAL — não existia lista para mostrar. Agora o parser
+                  registra cada descarte e o selo revela a lista. */}
+              {linhasPerdidas.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setDetalheAberto((v) => !v)}
+                  className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-warning/40 bg-warning/5 text-warning text-[11px] font-medium hover:bg-warning/10 transition-colors"
+                  title="Ver quais linhas ficaram de fora"
+                  aria-expanded={detalheAberto}
                 >
                   <AlertTriangle className="w-3 h-3 shrink-0" />
-                  {linhasIgnoradas} linha(s) não reconhecida(s)
-                </span>
+                  {linhasPerdidas.length} {linhasPerdidas.length === 1 ? "linha não reconhecida" : "linhas não reconhecidas"}
+                  <ChevronDown className={cn("w-3 h-3 shrink-0 opacity-60 transition-transform", detalheAberto && "rotate-180")} />
+                </button>
+              )}
+              {/* Anexadas NÃO são perda: o texto entrou no item anterior. Ficam
+                  em tom neutro, longe do âmbar — antes entravam no mesmo
+                  contador e assustavam sem ter havido perda nenhuma. */}
+              {linhasAnexadas.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setDetalheAberto((v) => !v)}
+                  className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-border bg-muted/40 text-muted-foreground text-[11px] hover:text-foreground transition-colors"
+                  title="Títulos que quebraram em duas linhas e foram juntados ao item anterior"
+                  aria-expanded={detalheAberto}
+                >
+                  {linhasAnexadas.length} {linhasAnexadas.length === 1 ? "linha juntada" : "linhas juntadas"}
+                  <ChevronDown className={cn("w-3 h-3 shrink-0 opacity-60 transition-transform", detalheAberto && "rotate-180")} />
+                </button>
               )}
             </div>
           ) : (
