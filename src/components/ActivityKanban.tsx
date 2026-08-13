@@ -2884,6 +2884,7 @@ export const ActivityKanban = ({
                 onToggleCollapse={toggleCollapsedStage}
                 colSort={prefs.columnSorts[stage.id] ?? DEFAULT_BOARD_SORT}
                 onChangeColSort={setColumnSort}
+                onAbrirGerenciarColunas={() => setGerenciarColunasOpen(true)}
                 columnFilterSlot={
                   <ColumnFilterPanel
                     stageId={stage.id}

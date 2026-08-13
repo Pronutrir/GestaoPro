@@ -35,6 +35,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { STAGE_PRESET_COLORS, ehColunaDeEntrada, type WorkflowStage } from "./shared";
+import { percentualAutomaticoDaColuna } from "@/lib/activityProgress";
 
 /** O que a tabela edita. `id` novo começa com "novo:" e ainda não existe no banco. */
 export type LinhaColuna = {
@@ -65,16 +66,19 @@ const paraLinha = (s: WorkflowStage): LinhaColuna => ({
   is_final: s.is_final === true,
 });
 
-/** "auto" e "—" são a forma de dizer "sem valor" sem deixar o campo vazio. */
-const textoProgresso = (v: number | null) => (v == null ? "auto" : `${v}%`);
+/** "—" diz "sem limite" sem deixar o campo vazio. */
 const textoWip = (v: number | null) => (v == null ? "—" : String(v));
 
-/** Aceita "auto", "", "—", "50", "50%". Devolve `undefined` se não der para ler. */
-function lerProgresso(txt: string): number | null | undefined {
-  const t = txt.trim().toLowerCase().replace("%", "").replace(",", ".");
-  if (t === "" || t === "auto" || t === "—" || t === "-") return null;
+/**
+ * Lê o percentual digitado. Só número agora — "auto" virou caixa de seleção,
+ * então o campo não precisa mais adivinhar se o texto é palavra ou valor.
+ * Devolve `null` quando não dá para ler (o chamador restaura o anterior).
+ */
+function lerProgresso(txt: string): number | null {
+  const t = txt.trim().replace("%", "").replace(",", ".");
+  if (t === "") return null;
   const n = Number(t);
-  if (!Number.isFinite(n)) return undefined;
+  if (!Number.isFinite(n)) return null;
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
@@ -87,7 +91,7 @@ function lerWip(txt: string): number | null | undefined {
 }
 
 function LinhaArrastavel({
-  linha, ehEntrada, contagem, onMudar, onExcluir,
+  linha, ehEntrada, contagem, percentualAuto, onMudar, onExcluir,
 }: {
   linha: LinhaColuna;
   /**
@@ -96,16 +100,20 @@ function LinhaArrastavel({
    */
   ehEntrada: boolean;
   contagem: number;
+  /** Quanto o "auto" vale para esta coluna hoje; null = não avança progresso. */
+  percentualAuto: number | null;
   onMudar: (id: string, p: Partial<LinhaColuna>) => void;
   onExcluir: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: linha.id });
-  const [progressoTexto, setProgressoTexto] = useState(textoProgresso(linha.progress_percent));
+  // `progress_percent = null` É o modo automático — não existe terceiro estado.
+  const ehAuto = linha.progress_percent == null;
+  const [progressoTexto, setProgressoTexto] = useState(String(linha.progress_percent ?? ""));
   const [wipTexto, setWipTexto] = useState(textoWip(linha.wip_limit));
 
   // O valor pode mudar por fora (desfazer um arrasto, por exemplo).
-  useEffect(() => { setProgressoTexto(textoProgresso(linha.progress_percent)); }, [linha.progress_percent]);
+  useEffect(() => { setProgressoTexto(String(linha.progress_percent ?? "")); }, [linha.progress_percent]);
   useEffect(() => { setWipTexto(textoWip(linha.wip_limit)); }, [linha.wip_limit]);
 
   const oculta = !linha.is_visible;
@@ -184,23 +192,63 @@ function LinhaArrastavel({
         </DropdownMenu>
       </td>
 
-      {/* Progresso e WIP guardam TEXTO enquanto se digita: converter a cada
-          tecla apagaria o que a pessoa está escrevendo ("5" viraria 5 antes
-          do "0" de "50"). A leitura acontece ao sair do campo. */}
-      <td className="py-1.5 pr-2 w-24">
-        <Input
-          value={progressoTexto}
-          onChange={(e) => setProgressoTexto(e.target.value)}
-          onBlur={() => {
-            const v = lerProgresso(progressoTexto);
-            if (v === undefined) setProgressoTexto(textoProgresso(linha.progress_percent));
-            else { onMudar(linha.id, { progress_percent: v }); setProgressoTexto(textoProgresso(v)); }
-          }}
-          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-          className="h-8 text-[13px] text-center tabular-nums"
-          aria-label={`Progresso de "${linha.title}"`}
-          title="Percentual fixo desta coluna. 'auto' = calculado pela posição."
-        />
+      {/* PROGRESSO — dois estados, dois controles.
+          Antes "auto" e um número dividiam o mesmo campo de texto: nada dizia
+          que eram coisas diferentes, digitar a palavra "auto" era a única forma
+          de voltar ao automático, e o valor que o auto vale ficava escondido.
+          Agora a caixa escolhe o MODO e o campo carrega o NÚMERO — como Jira faz
+          em estimativa (Automático/Manual) e o Figma em auto layout. */}
+      <td className="py-1.5 pr-2 w-[132px]">
+        <div className="flex items-center gap-1.5">
+          <label
+            className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none shrink-0"
+            title="Calculado pela posição da coluna no fluxo — muda sozinho ao inserir ou reordenar colunas"
+          >
+            <Checkbox
+              checked={ehAuto}
+              onCheckedChange={(v) => {
+                if (v === true) {
+                  onMudar(linha.id, { progress_percent: null });
+                } else {
+                  // Ao destravar, começa do valor que o auto já mostrava: a
+                  // pessoa quase sempre quer ajustar aquilo, não digitar do zero.
+                  const base = percentualAuto ?? 50;
+                  onMudar(linha.id, { progress_percent: base });
+                  setProgressoTexto(String(base));
+                }
+              }}
+              aria-label={`Progresso automático de "${linha.title}"`}
+            />
+            auto
+          </label>
+          {ehAuto ? (
+            // O número que o auto vale HOJE. Antes a tela dizia só "auto" e
+            // escondia isto — quem quisesse saber calculava de cabeça.
+            <span
+              className="text-[12px] text-muted-foreground/70 tabular-nums w-11 text-right"
+              title={percentualAuto == null
+                ? "Esta coluna não avança o progresso"
+                : `Vale ${percentualAuto}% pela posição atual`}
+            >
+              {percentualAuto == null ? "—" : `${percentualAuto}%`}
+            </span>
+          ) : (
+            <Input
+              value={progressoTexto}
+              onChange={(e) => setProgressoTexto(e.target.value)}
+              onBlur={() => {
+                const v = lerProgresso(progressoTexto);
+                if (v == null) setProgressoTexto(String(linha.progress_percent ?? 0));
+                else { onMudar(linha.id, { progress_percent: v }); setProgressoTexto(String(v)); }
+              }}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              className="h-8 w-14 text-[13px] text-center tabular-nums px-1"
+              inputMode="numeric"
+              aria-label={`Progresso de "${linha.title}" em porcento`}
+              title="Percentual fixo desta coluna (0 a 100)"
+            />
+          )}
+        </div>
       </td>
 
       <td className="py-1.5 pr-2 w-20">
@@ -214,8 +262,10 @@ function LinhaArrastavel({
           }}
           onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
           className="h-8 text-[13px] text-center tabular-nums"
-          aria-label={`Limite WIP de "${linha.title}"`}
-          title="Limite de cards em andamento. '—' = sem limite."
+          aria-label={`Limite de tarefas em "${linha.title}"`}
+          title={"Máximo de tarefas ao mesmo tempo nesta coluna (limite de WIP).\n"
+            + "Serve para terminar antes de começar mais — e deixa o gargalo à vista.\n"
+            + "'—' = sem limite."}
         />
       </td>
 
@@ -295,6 +345,35 @@ export function GerenciarColunas({
 
   /** A coluna onde as atividades nascem — nunca se move nem se exclui. */
   const idDaEntrada = useMemo(() => stages.find(ehColunaDeEntrada)?.id ?? null, [stages]);
+
+  /**
+   * Quanto o "auto" vale para cada coluna, calculado sobre a ORDEM EM EDIÇÃO —
+   * não sobre a salva. É o ponto do recurso: reordenar ou excluir muda o valor
+   * do automático, e a tela mostra isso ANTES de salvar, em vez de a pessoa
+   * descobrir depois. As linhas novas herdam os metadados de `stages` quando
+   * existem; as recém-criadas entram como "andamento", que é o padrão.
+   */
+  const autoPorColuna = useMemo(() => {
+    const meta = new Map(stages.map((s) => [s.id, s]));
+    const comoStages = linhas.map((l, i) => {
+      const original = meta.get(l.id);
+      return {
+        id: l.id,
+        title: l.title,
+        // A entrada mantém 0; as demais seguem a posição atual da lista.
+        display_order: l.id === idDaEntrada ? 0 : i,
+        is_final: l.is_final,
+        is_blocked: original?.is_blocked ?? false,
+        is_visible: l.is_visible,
+        progress_percent: l.progress_percent,
+        contributes_to_progress: original?.contributes_to_progress,
+        categoria: original?.categoria,
+      };
+    });
+    const out = new Map<string, number | null>();
+    for (const l of linhas) out.set(l.id, percentualAutomaticoDaColuna(l.id, comoStages));
+    return out;
+  }, [linhas, stages, idDaEntrada]);
 
   const originais = useMemo(() => new Map(stages.map((s) => [s.id, paraLinha(s)])), [stages]);
   const ordemOriginal = useMemo(() => stages.map((s) => s.id).join(","), [stages]);
@@ -405,7 +484,12 @@ export function GerenciarColunas({
                   <th className="text-left py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Nome</th>
                   <th className="text-left py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Cor</th>
                   <th className="text-center py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Progresso</th>
-                  <th className="text-center py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">WIP</th>
+                  {/* "Limite" em vez de "WIP": a sigla só é óbvia para quem já
+                      conhece Kanban de processo. Jira escreve "Column
+                      constraint" e Azure DevOps "Work in progress limits" —
+                      nenhum dos dois mostra a sigla sozinha. O significado
+                      completo fica no tooltip da célula. */}
+                  <th className="text-center py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" title="Limite de tarefas simultâneas na coluna (WIP)">Limite</th>
                   <th className="text-center py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Visível</th>
                   <th className="w-8" />
                 </tr>
@@ -421,6 +505,7 @@ export function GerenciarColunas({
                       // proteção passaria para a linha errada.
                       ehEntrada={l.id === idDaEntrada}
                       contagem={contagem.get(l.id) ?? 0}
+                      percentualAuto={autoPorColuna.get(l.id) ?? null}
                       onMudar={mudar}
                       onExcluir={excluir}
                     />

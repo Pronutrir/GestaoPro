@@ -114,6 +114,46 @@ function subFeita(s: SubActivityLike, stages: ProgressStageLike[] | null | undef
   return parseWorkflowCategory(col.categoria) === "concluida" || col.is_final === true;
 }
 
+/**
+ * Quanto uma coluna vale QUANDO NÃO TEM PERCENTUAL PRÓPRIO — o "auto".
+ *
+ * O número sai da POSIÇÃO no fluxo: a j-ésima de K colunas de trabalho vale
+ * j/(K+1). Divide por K+1, não por K, para nunca dar 100% antes da coluna
+ * final. Logo o valor MUDA sozinho ao inserir, remover ou reordenar colunas —
+ * é essa a diferença entre "auto" e um número fixo.
+ *
+ * Existe para a tela de gerenciar colunas poder MOSTRAR quanto o auto vale.
+ * Antes o campo dizia só "auto" e escondia o número; quem quisesse saber tinha
+ * de calcular de cabeça. Mesmas regras de `computeActivityProgress` — se
+ * divergirem, a tela mente sobre o próprio sistema.
+ *
+ * Devolve `null` quando a coluna não entra na conta (backlog, bloqueio,
+ * exceção, ou marcada para não contribuir): nesses casos não há "auto" a
+ * exibir, o valor é 0 por definição.
+ */
+export function percentualAutomaticoDaColuna(
+  stageId: string,
+  stages: ProgressStageLike[] | null | undefined,
+): number | null {
+  if (!stages || stages.length === 0) return null;
+  const current = stages.find((s) => s.id === stageId);
+  if (!current) return null;
+
+  const category = parseWorkflowCategory(current.categoria) ?? categoryFromLegacyFlags(current);
+  if (category === "concluida" || current.is_final) return 100;
+  if (category === "backlog" || isBacklogStage(current)) return null;
+  if (current.is_blocked || current.is_exception) return null;
+  if (current.contributes_to_progress === false) return null;
+
+  // Mesmo denominador de computeActivityProgress: só colunas de "andamento".
+  const flow = stages
+    .filter((s) => (parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s)) === "andamento")
+    .sort((a, b) => a.display_order - b.display_order);
+  const j = flow.findIndex((s) => s.id === current.id) + 1;
+  if (j <= 0) return null;
+  return clampPercent((j / (flow.length + 1)) * 100);
+}
+
 export function computeActivityProgress(
   currentStageId: string | null | undefined,
   stages: ProgressStageLike[] | null | undefined,

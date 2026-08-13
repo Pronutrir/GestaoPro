@@ -376,6 +376,7 @@ export function SortableColumn({
   columnFilterSlot,
   colSort: colSortProp,
   onChangeColSort,
+  onAbrirGerenciarColunas,
 }: {
   stage: WorkflowStage;
   stageActivities: Activity[];
@@ -431,6 +432,8 @@ export function SortableColumn({
   /** Ordenação desta coluna, vinda das preferências do usuário (banco). */
   colSort?: string;
   onChangeColSort?: (stageId: string, value: string) => void;
+  /** Abre a tabela "Gerenciar colunas" a partir do menu ⋯ do cabeçalho. */
+  onAbrirGerenciarColunas?: () => void;
 }) {
   // Ordenação por coluna, independente das demais. PERSISTE: antes voltava ao
   // padrão a cada recarregamento — quem escolhia "por prazo" reencontrava a
@@ -1003,6 +1006,7 @@ export function SortableColumn({
                   <StageMenuItems
                     stage={stage}
                     quantidade={stageActivities.length}
+                    onAbrirGerenciar={onAbrirGerenciarColunas}
                     onPedirRenomear={() => {
                       // No cabeçalho o título vira campo no lugar — a coluna
                       // está à vista, não precisa de diálogo.
@@ -1194,12 +1198,17 @@ export type StageMenuData = {
  * Só os itens; quem chama põe o DropdownMenu em volta e decide o gatilho.
  */
 export function StageMenuItems({
-  stage, acoes, quantidade = 0, onPedirRenomear, fecharAoRenomear = false,
+  stage, acoes, quantidade = 0, onPedirRenomear, fecharAoRenomear = false, onAbrirGerenciar,
 }: {
   stage: StageMenuData;
   acoes: StageActions;
   /** Cards na coluna — usado no aviso de ocultar. */
   quantidade?: number;
+  /**
+   * Abre a tabela "Gerenciar colunas". Quando passado, progresso e limite de
+   * trabalho deixam de usar `window.prompt` e viram um item só que leva até lá.
+   */
+  onAbrirGerenciar?: () => void;
   /** Renomear: o cabeçalho edita no lugar, a lista abre um campo próprio. */
   onPedirRenomear: () => void;
   /**
@@ -1253,24 +1262,44 @@ export function StageMenuItems({
         <Check className="w-3.5 h-3.5 mr-2 text-success" />
         {stage.is_final ? "Remover marca de Final" : "Marcar como Final"}
       </DropdownMenuItem>
-      <DropdownMenuItem
-        className="focus:bg-muted/60 focus:text-foreground"
-        onSelect={(e) => { e.preventDefault(); acoes.onSetProgress(stage.id, stage.progress_percent ?? null); }}
-        title="Define um percentual fixo para esta coluna. Em branco = automático por posição."
-      >
-        <LayoutGrid className="w-3.5 h-3.5 mr-2" />
-        {stage.progress_percent == null
-          ? "Definir progresso (%)"
-          : `Editar progresso (${stage.progress_percent}%)`}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        className="focus:bg-muted/60 focus:text-foreground"
-        onSelect={(e) => { e.preventDefault(); acoes.onSetWipLimit(stage.id, stage.wip_limit ?? null); }}
-        title="Limite de cards em andamento (WIP). Em branco = sem limite."
-      >
-        <Layers className="w-3.5 h-3.5 mr-2" />
-        {stage.wip_limit == null ? "Definir limite (WIP)" : `Editar limite WIP (${stage.wip_limit})`}
-      </DropdownMenuItem>
+      {/* Progresso e limite de trabalho abriam um `window.prompt` cada — a
+          caixa cinza do navegador, pedindo "0-100, em branco para automático".
+          O texto carregava a mesma ambiguidade que a tabela já resolveu: nada
+          dizia que "automático" e um número são modos diferentes, e apagar o
+          campo era a única forma de voltar ao automático.
+          Quando a tela de gerenciar está disponível, os dois viram um item só
+          que leva até ela; sem ela, o prompt continua como estava. */}
+      {onAbrirGerenciar ? (
+        <DropdownMenuItem
+          className="focus:bg-muted/60 focus:text-foreground"
+          onSelect={(e) => { e.preventDefault(); onAbrirGerenciar(); }}
+          title="Progresso, limite de trabalho, ordem e visibilidade de todas as colunas"
+        >
+          <Settings2 className="w-3.5 h-3.5 mr-2" />
+          Progresso e limite…
+        </DropdownMenuItem>
+      ) : (
+        <>
+          <DropdownMenuItem
+            className="focus:bg-muted/60 focus:text-foreground"
+            onSelect={(e) => { e.preventDefault(); acoes.onSetProgress(stage.id, stage.progress_percent ?? null); }}
+            title="Define um percentual fixo para esta coluna. Em branco = automático por posição."
+          >
+            <LayoutGrid className="w-3.5 h-3.5 mr-2" />
+            {stage.progress_percent == null
+              ? "Definir progresso (%)"
+              : `Editar progresso (${stage.progress_percent}%)`}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="focus:bg-muted/60 focus:text-foreground"
+            onSelect={(e) => { e.preventDefault(); acoes.onSetWipLimit(stage.id, stage.wip_limit ?? null); }}
+            title="Limite de cards em andamento (WIP). Em branco = sem limite."
+          >
+            <Layers className="w-3.5 h-3.5 mr-2" />
+            {stage.wip_limit == null ? "Definir limite (WIP)" : `Editar limite WIP (${stage.wip_limit})`}
+          </DropdownMenuItem>
+        </>
+      )}
       {/* Só faz sentido oferecer o modo rígido quando existe limite. */}
       {stage.wip_limit != null && stage.wip_limit > 0 && acoes.onToggleWipStrict && (
         <DropdownMenuItem
@@ -1487,6 +1516,7 @@ export function StageListButton({
                           stage={s}
                           quantidade={n}
                           fecharAoRenomear
+                          onAbrirGerenciar={onGerenciar && (() => { setListOpen(false); onGerenciar(); })}
                           onPedirRenomear={() => { setNovoNome(s.title); setRenomeando(s.id); }}
                           acoes={acoes}
                         />
