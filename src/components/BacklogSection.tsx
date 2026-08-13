@@ -554,15 +554,112 @@ export const BacklogSection = ({
     });
   };
 
+  /**
+   * Marcar um agrupador marca o que está DENTRO dele — e desmarcar, idem.
+   *
+   * Sem a cascata, escolher "Fase 1" pegava só a linha do título: arquivar
+   * deixaria as atividades órfãs, visíveis e sem raiz. É o comportamento de
+   * árvore do Explorer, do Finder e da EAP do MS Project.
+   *
+   * Anda pelos DESCENDENTES, não só pelos filhos diretos — Fase → Entrega →
+   * Atividade tem três níveis, e parar no primeiro deixaria os netos de fora.
+   * Alcança ramo RECOLHIDO de propósito: o resultado não pode depender de a
+   * fase estar aberta na hora do clique.
+   */
+  const descendentesDe = (id: string): string[] => {
+    const out: string[] = [];
+    const fila = [id];
+    while (fila.length) {
+      const atual = fila.pop()!;
+      for (const f of childrenByParent.get(atual) || []) {
+        out.push(f.id);
+        fila.push(f.id);
+      }
+    }
+    return out;
+  };
+
   const toggleSelect = (id: string) => {
     const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id); else next.add(id);
+    const familia = [id, ...descendentesDe(id)];
+    // O clique no PAI manda: marcando, entra a família toda; desmarcando, sai
+    // toda. Alternar item a item deixaria o pai marcado com filhos fora.
+    if (next.has(id)) familia.forEach((x) => next.delete(x));
+    else familia.forEach((x) => next.add(x));
     setSelectedIds(next);
     // Desmarcar a ÚLTIMA sai do modo. Sem isto a coluna das caixas continuava
     // reservada com zero itens marcados — o usuário via o marcador na lateral
     // de cada linha sem ter selecionado nada e sem saber como voltar.
     // Calculado fora do updater: chamar outro setState lá dentro é efeito
     // colateral durante o render.
+    if (next.size === 0) setSelectMode(false);
+  };
+
+  /**
+   * Estado da caixa de um agrupador: marcado, vazio, ou o traço do meio-termo.
+   *
+   * Sem o traço, um pai com metade dos filhos marcados apareceria desmarcado —
+   * e o contador do rodapé diria um número que a tela não confirma.
+   */
+  const estadoDaCaixa = (id: string): boolean | "indeterminate" => {
+    if (selectedIds.has(id)) return true;
+    const filhos = descendentesDe(id);
+    if (filhos.length === 0) return false;
+    const marcados = filhos.filter((f) => selectedIds.has(f)).length;
+    if (marcados === 0) return false;
+    return marcados === filhos.length ? true : "indeterminate";
+  };
+
+  /**
+   * As FOLHAS da seleção — o que de fato executa trabalho.
+   *
+   * Agrupador (Fase, Entrega, ou qualquer item com subitens) tem horas, datas,
+   * responsável e status DERIVADOS dos filhos. Gravar neles produziria um valor
+   * que discorda do próprio conteúdo — e "mudar status" chegaria a empurrar uma
+   * Fase para uma coluna do Kanban, onde ela não vive.
+   *
+   * A regra que separa as ações:
+   *   ESTRUTURAL (arquivar, excluir, mover) → a seleção inteira, agrupador junto
+   *   EXECUÇÃO (status, responsável, prazo, prioridade, dependência) → só folhas
+   */
+  const idsFolhaSelecionados = (): string[] =>
+    Array.from(selectedIds).filter((id) => (childrenByParent.get(id) || []).length === 0);
+
+  /** Quantos agrupadores há na seleção — para a barra dizer o que vai acontecer. */
+  const totalAgrupadoresSelecionados = Array.from(selectedIds)
+    .filter((id) => (childrenByParent.get(id) || []).length > 0).length;
+
+  /**
+   * A FASE REAL (tabela `phases`) é um caso à parte: ela não é uma `activity`,
+   * e as ações em lote gravam em `activities`. Guardar o id dela na seleção
+   * exigiria que cada ação soubesse ignorá-lo — mais código, para um caso que
+   * a maioria dos projetos não usa.
+   *
+   * Então a caixa dela opera sobre o CONTEÚDO: marcar seleciona as tarefas de
+   * dentro (com seus descendentes), desmarcar tira todas. O efeito é o que se
+   * espera ao marcar uma fase; só a linha do título fica fora das operações.
+   */
+  const idsDaFaseReal = (acts: Activity[]): string[] =>
+    acts.flatMap((a) => [a.id, ...descendentesDe(a.id)]);
+
+  const estadoDaFaseReal = (acts: Activity[]): boolean | "indeterminate" => {
+    const ids = idsDaFaseReal(acts);
+    if (ids.length === 0) return false;
+    const marcados = ids.filter((x) => selectedIds.has(x)).length;
+    if (marcados === 0) return false;
+    return marcados === ids.length ? true : "indeterminate";
+  };
+
+  const toggleSelecaoDaFaseReal = (acts: Activity[], forcarMarcar = false) => {
+    const ids = idsDaFaseReal(acts);
+    if (ids.length === 0) return;
+    const next = new Set(selectedIds);
+    // Meio-termo conta como "marcar": clicar num traço completa a seleção, em
+    // vez de zerar o que já estava escolhido.
+    const jaTodas = !forcarMarcar && ids.every((x) => next.has(x));
+    if (jaTodas) ids.forEach((x) => next.delete(x));
+    else ids.forEach((x) => next.add(x));
+    setSelectedIds(next);
     if (next.size === 0) setSelectMode(false);
   };
 
@@ -588,7 +685,18 @@ export const BacklogSection = ({
       return;
     }
     setIsMoving(true);
-    const ids = Array.from(selectedIds);
+    // SÓ AS FOLHAS: agrupador não vive numa coluna do Kanban, e marcar um como
+    // "concluído" criaria um status que discorda dos filhos.
+    const ids = idsFolhaSelecionados();
+    if (ids.length === 0) {
+      setIsMoving(false);
+      toast({
+        title: "Nenhuma tarefa para mover",
+        description: "A seleção só tem fases e entregas — elas não vivem numa coluna do quadro.",
+        variant: "destructive",
+      });
+      return;
+    }
     const updateData: Database['public']['Tables']['activities']['Update'] = { workflow_stage_id: targetStageId };
     if (assignee && assignee !== "__none__") updateData.assigned_to = assignee;
 
@@ -645,9 +753,26 @@ export const BacklogSection = ({
   const aplicarEmLote = async (
     patch: Record<string, unknown>,
     descricao: string,
+    /**
+     * `estrutural` decide quem recebe o patch.
+     *
+     * ARQUIVAR é estrutural: leva a fase E o conteúdo. Antes arquivava só o que
+     * estava marcado — o pai sumia e os filhos ficavam órfãos, visíveis e sem
+     * raiz. Já responsável, prazo e prioridade são de EXECUÇÃO: agrupador não
+     * tem valor próprio para eles (é rollup dos filhos), então só as folhas.
+     */
+    estrutural = false,
   ) => {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
+    const ids = estrutural ? Array.from(selectedIds) : idsFolhaSelecionados();
+    if (ids.length === 0) {
+      setBulkField(null);
+      toast({
+        title: "Nenhuma tarefa recebeu a mudança",
+        description: "A seleção só tem fases e entregas — o valor delas vem das tarefas de dentro.",
+        variant: "destructive",
+      });
+      return;
+    }
     setBulkField(null);
 
     const { error } = await mutateInChunks(ids, (batch) =>
@@ -684,8 +809,12 @@ export const BacklogSection = ({
    * cobre a esmagadora maioria das dependências de projeto.
    */
   const ligarEmSequencia = async () => {
+    // SÓ AS FOLHAS. Encadear fases criaria dependência entre coisas que já se
+    // relacionam por hierarquia — e a data da fase é rollup dos filhos, então a
+    // dependência não teria o que mover.
+    const folhas = new Set(idsFolhaSelecionados());
     const ordenadas = backlogActs
-      .filter((a) => selectedIds.has(a.id))
+      .filter((a) => folhas.has(a.id))
       .sort((a, b) => {
         // Mesma regra da árvore: código EAP quando existe, senão display_order.
         const wa = (a.wbs_code || "").trim(), wb = (b.wbs_code || "").trim();
@@ -1049,32 +1178,53 @@ export const BacklogSection = ({
               preciso marcar as 718 e desmarcar 715. A caixa aparece ao passar o
               mouse sobre a linha e liga o modo já com aquela tarefa marcada —
               que é o gesto natural de "quero estas".
-              Ocupa o lugar do expandir só quando o item não tem filhos; com
-              filhos, o expandir continua e a seleção se faz no cabeçalho ou nas
-              outras linhas. */}
-          {hasChildren ? (
-            <button
-              type="button"
-              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-              onClick={(e) => { e.stopPropagation(); toggleParent(activity.id); }}
-            >
-              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-          ) : selectMode ? (
-            <span className="w-5" />
+
+              QUEM TEM FILHOS TAMBÉM ENTRA (13/08/2026). Antes a condição era
+              `hasChildren ? seta : caixa` — a seta vencia, e agrupador ficava
+              sem forma de iniciar a seleção. Pior: a condição era ter filhos,
+              não o papel na EAP, então uma Atividade com subitens perdia a
+              caixa e uma Fase vazia a mantinha. Agora a seta cede o lugar à
+              caixa enquanto o mouse está sobre a linha: as duas ocupam a mesma
+              célula sem disputa, e o expandir volta assim que o mouse sai. */}
+          {selectMode ? (
+            hasChildren ? (
+              <button
+                type="button"
+                className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
+                onClick={(e) => { e.stopPropagation(); toggleParent(activity.id); }}
+              >
+                {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            ) : (
+              <span className="w-5" />
+            )
           ) : (
-            <span className="w-5 flex items-center justify-center">
-              <Checkbox
-                checked={false}
-                onCheckedChange={() => {
-                  setSelectMode(true);
-                  setSelectedIds(new Set([activity.id]));
-                }}
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Selecionar ${activity.title}`}
-                title="Selecionar esta tarefa"
-                className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-              />
+            <span className="w-5 h-5 relative shrink-0">
+              {hasChildren && (
+                <button
+                  type="button"
+                  className="absolute inset-0 flex items-center justify-center rounded hover:bg-muted text-muted-foreground group-hover:opacity-0 transition-opacity"
+                  onClick={(e) => { e.stopPropagation(); toggleParent(activity.id); }}
+                  title={isCollapsed ? "Expandir" : "Recolher"}
+                >
+                  {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+              )}
+              <span className="absolute inset-0 flex items-center justify-center">
+                <Checkbox
+                  checked={false}
+                  onCheckedChange={() => {
+                    setSelectMode(true);
+                    // Já entra com a família: quem clica na caixa de um
+                    // agrupador quer o conjunto, não a linha do título.
+                    setSelectedIds(new Set([activity.id, ...descendentesDe(activity.id)]));
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Selecionar ${activity.title}`}
+                  title={hasChildren ? "Selecionar este item e o que está dentro" : "Selecionar esta tarefa"}
+                  className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                />
+              </span>
             </span>
           )}
 
@@ -1086,10 +1236,14 @@ export const BacklogSection = ({
               ver backlogGrid, que também é condicional. */}
           {selectMode && (
             <Checkbox
-              checked={isSelected}
+              // `estadoDaCaixa` traz o traço do meio-termo: pai com ALGUNS
+              // filhos marcados. Sem ele o pai pareceria desmarcado, e o
+              // contador do rodapé diria um número que a tela não confirma.
+              checked={estadoDaCaixa(activity.id)}
               onCheckedChange={() => toggleSelect(activity.id)}
               onClick={(e) => e.stopPropagation()}
               aria-label={`Selecionar ${activity.title}`}
+              title={hasChildren ? "Seleciona este item e o que está dentro" : undefined}
             />
           )}
 
@@ -1345,20 +1499,63 @@ export const BacklogSection = ({
             como abrir a fase — ela nem tinha tela própria. */}
         <div
           className={cn(
-            "flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50",
+            "group flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50",
             phaseId && "cursor-pointer hover:bg-muted/70 transition-colors",
           )}
-          onClick={() => { if (phaseId) openPhase(phaseId, phaseTitle); }}
+          onClick={() => {
+            if (selectMode && phaseId) { toggleSelecaoDaFaseReal(acts); return; }
+            if (phaseId) openPhase(phaseId, phaseTitle);
+          }}
         >
+          {/* A FASE REAL seleciona o CONTEÚDO, não a si mesma.
+              Ela vive na tabela `phases`, e as ações em lote gravam em
+              `activities` — o id dela não caberia em `selectedIds`. Marcar
+              pega as atividades de dentro, que é o efeito que se espera; a
+              linha da fase em si não entra em nenhuma operação.
+              Fora do modo, a caixa aparece no hover sobre o chevron. */}
           {phaseId ? (
-            <button
-              type="button"
-              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-              title={isCollapsed ? "Expandir" : "Recolher"}
-              onClick={(e) => { e.stopPropagation(); togglePhase(phaseId); }}
-            >
-              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
+            selectMode ? (
+              <>
+                <Checkbox
+                  checked={estadoDaFaseReal(acts)}
+                  onCheckedChange={() => toggleSelecaoDaFaseReal(acts)}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Selecionar as tarefas de ${phaseTitle}`}
+                  title="Seleciona as tarefas desta fase"
+                />
+                <button
+                  type="button"
+                  className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
+                  title={isCollapsed ? "Expandir" : "Recolher"}
+                  onClick={(e) => { e.stopPropagation(); togglePhase(phaseId); }}
+                >
+                  {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+              </>
+            ) : (
+              <span className="w-5 h-5 relative shrink-0">
+                <button
+                  type="button"
+                  className="absolute inset-0 flex items-center justify-center rounded hover:bg-muted text-muted-foreground group-hover:opacity-0 transition-opacity"
+                  title={isCollapsed ? "Expandir" : "Recolher"}
+                  onClick={(e) => { e.stopPropagation(); togglePhase(phaseId); }}
+                >
+                  {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+                {acts.length > 0 && (
+                  <span className="absolute inset-0 flex items-center justify-center">
+                    <Checkbox
+                      checked={false}
+                      onCheckedChange={() => { setSelectMode(true); toggleSelecaoDaFaseReal(acts, true); }}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Selecionar as tarefas de ${phaseTitle}`}
+                      title="Selecionar as tarefas desta fase"
+                      className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                    />
+                  </span>
+                )}
+              </span>
+            )
           ) : (
             <span className="w-5 shrink-0" />
           )}
@@ -1483,16 +1680,60 @@ export const BacklogSection = ({
       <div key={phaseAct.id}>
         {/* Mesmo gesto da fase real: clique abre, chevron colapsa. */}
         <div
-          className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
-          onClick={() => onEditActivity(phaseAct)}
+          className="group flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+          onClick={() => {
+            if (selectMode) { toggleSelect(phaseAct.id); return; }
+            onEditActivity(phaseAct);
+          }}
         >
-          <button
-            type="button"
-            className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-            onClick={(e) => { e.stopPropagation(); toggleParent(phaseAct.id); }}
-          >
-            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
+          {/* A CAIXA QUE FALTAVA. Esta linha desenha as Fases e Entregas de
+              topo e nunca emitiu checkbox nenhum — nem no modo seleção. Ela é
+              uma `activity` de verdade, com id real: todas as ações em lote já
+              funcionariam sobre ela, só não havia como marcá-la.
+              Fora do modo, a caixa aparece no hover e toma o lugar do chevron;
+              dentro do modo, ela é fixa e o chevron volta ao lado. */}
+          {selectMode ? (
+            <>
+              <Checkbox
+                checked={estadoDaCaixa(phaseAct.id)}
+                onCheckedChange={() => toggleSelect(phaseAct.id)}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Selecionar ${phaseAct.title}`}
+                title="Seleciona esta fase e o que está dentro"
+              />
+              <button
+                type="button"
+                className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
+                onClick={(e) => { e.stopPropagation(); toggleParent(phaseAct.id); }}
+              >
+                {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </>
+          ) : (
+            <span className="w-5 h-5 relative shrink-0">
+              <button
+                type="button"
+                className="absolute inset-0 flex items-center justify-center rounded hover:bg-muted text-muted-foreground group-hover:opacity-0 transition-opacity"
+                onClick={(e) => { e.stopPropagation(); toggleParent(phaseAct.id); }}
+                title={isCollapsed ? "Expandir" : "Recolher"}
+              >
+                {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              <span className="absolute inset-0 flex items-center justify-center">
+                <Checkbox
+                  checked={false}
+                  onCheckedChange={() => {
+                    setSelectMode(true);
+                    setSelectedIds(new Set([phaseAct.id, ...descendentesDe(phaseAct.id)]));
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Selecionar ${phaseAct.title}`}
+                  title="Selecionar esta fase e o que está dentro"
+                  className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                />
+              </span>
+            </span>
+          )}
           {/* Fase = camadas empilhadas; Entrega = pacote, em tom mais discreto.
               A entrega está DENTRO da fase, e o peso visual precisa dizer isso. */}
           <span className={cn(
@@ -1885,8 +2126,15 @@ export const BacklogSection = ({
         <div className="flex items-center justify-between gap-3 flex-wrap px-0.5">
           {/* Legenda de contexto — total + quebra por tipo */}
           <p className="text-[13px] text-muted-foreground flex items-center gap-2 flex-wrap">
+            {/* No modo seleção, separa fases de tarefas: as ações tratam os
+                dois de forma diferente (fase entra em arquivar, fica fora de
+                status e prazo), e um número único escondia isso. */}
             {selectMode && selectedIds.size > 0 ? (
-              <span className="text-foreground font-medium">{selectedIds.size} de {typeCounts.total} selecionada(s)</span>
+              <span className="text-foreground font-medium">
+                {totalAgrupadoresSelecionados > 0
+                  ? `${totalAgrupadoresSelecionados} ${totalAgrupadoresSelecionados === 1 ? "fase" : "fases"} e ${selectedIds.size - totalAgrupadoresSelecionados} ${selectedIds.size - totalAgrupadoresSelecionados === 1 ? "tarefa" : "tarefas"}`
+                  : `${selectedIds.size} de ${typeCounts.total} selecionada(s)`}
+              </span>
             ) : (
               /* SEM O TOTAL. "16 tarefas · 15 atividades · 1 marco" lia como
                  16 mais 15 mais 1, quando 15 + 1 É o 16 — a palavra "tarefas"
@@ -2077,16 +2325,24 @@ export const BacklogSection = ({
                   title={isAdmin ? "Arquivar as selecionadas" : (deleteBlockedReason || "Você não tem permissão para arquivar")}
                   onClick={async () => {
                     const n = selectedIds.size;
+                    const g = totalAgrupadoresSelecionados;
                     const ok = await appConfirm({
-                      title: `Arquivar ${n} ${n === 1 ? "tarefa" : "tarefas"}?`,
-                      description: "Elas saem do Backlog e podem ser restauradas na Lixeira, aqui embaixo.",
+                      title: `Arquivar ${n} ${n === 1 ? "item" : "itens"}?`,
+                      // Diz que a fase leva o conteúdo junto: arquivar um
+                      // agrupador sozinho deixaria os filhos órfãos, e a
+                      // seleção em cascata já os incluiu — a confirmação
+                      // precisa mostrar isso antes, não depois.
+                      description: g > 0
+                        ? `Inclui ${g} ${g === 1 ? "fase/entrega" : "fases/entregas"} e o que está dentro. Tudo sai do Backlog e pode ser restaurado na Lixeira, aqui embaixo.`
+                        : "Elas saem do Backlog e podem ser restauradas na Lixeira, aqui embaixo.",
                       confirmText: "Arquivar",
                       destructive: true,
                     });
                     if (!ok) return;
                     await aplicarEmLote(
                       { is_trashed: true, trashed_at: new Date().toISOString() },
-                      `${n} ${n === 1 ? "tarefa arquivada" : "tarefas arquivadas"}`,
+                      `${n} ${n === 1 ? "item arquivado" : "itens arquivados"}`,
+                      true, // estrutural: a fase vai junto com o conteúdo
                     );
                     setSelectedIds(new Set());
                     setSelectMode(false);
