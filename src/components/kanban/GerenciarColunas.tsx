@@ -34,7 +34,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
-import { STAGE_PRESET_COLORS, type WorkflowStage } from "./shared";
+import { STAGE_PRESET_COLORS, ehColunaDeEntrada, type WorkflowStage } from "./shared";
 
 /** O que a tabela edita. `id` novo começa com "novo:" e ainda não existe no banco. */
 export type LinhaColuna = {
@@ -87,10 +87,14 @@ function lerWip(txt: string): number | null | undefined {
 }
 
 function LinhaArrastavel({
-  linha, podeExcluir, contagem, onMudar, onExcluir,
+  linha, ehEntrada, contagem, onMudar, onExcluir,
 }: {
   linha: LinhaColuna;
-  podeExcluir: boolean;
+  /**
+   * A coluna de entrada (`display_order = 0`) — onde as atividades nascem.
+   * Não se move nem se exclui; o resto se edita normalmente.
+   */
+  ehEntrada: boolean;
   contagem: number;
   onMudar: (id: string, p: Partial<LinhaColuna>) => void;
   onExcluir: (id: string) => void;
@@ -118,15 +122,28 @@ function LinhaArrastavel({
       )}
     >
       <td className="py-1.5 pl-1 pr-0 w-7">
-        <button
-          type="button"
-          className="cursor-grab active:cursor-grabbing text-muted-foreground/70 hover:text-foreground p-1 rounded"
-          title="Arrastar para reordenar"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="w-3.5 h-3.5" />
-        </button>
+        {/* A coluna de entrada não se move: ela é definida por
+            `display_order = 0` e é onde as atividades nascem (criação rápida,
+            importação de EAP, reabertura). Trocá-la de lugar mudaria isso em
+            silêncio, então o puxador some em vez de enganar. */}
+        {ehEntrada ? (
+          <span
+            className="block p-1 text-muted-foreground/25"
+            title="A coluna de entrada é sempre a primeira — é onde as atividades nascem"
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="cursor-grab active:cursor-grabbing text-muted-foreground/70 hover:text-foreground p-1 rounded"
+            title="Arrastar para reordenar"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </button>
+        )}
       </td>
 
       <td className="py-1.5 pr-2">
@@ -225,15 +242,17 @@ function LinhaArrastavel({
       <td className="py-1.5 pr-1 w-8">
         <button
           type="button"
-          disabled={!podeExcluir}
+          disabled={ehEntrada}
           onClick={() => onExcluir(linha.id)}
           className={cn(
             "p-1 rounded transition-colors",
-            podeExcluir
-              ? "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-              : "text-muted-foreground/30 cursor-not-allowed",
+            ehEntrada
+              ? "text-muted-foreground/30 cursor-not-allowed"
+              : "text-muted-foreground hover:text-destructive hover:bg-destructive/10",
           )}
-          title={podeExcluir ? `Excluir "${linha.title}"` : "A primeira coluna do quadro não pode ser excluída"}
+          title={ehEntrada
+            ? "A coluna de entrada não pode ser excluída — é onde as atividades nascem"
+            : `Excluir "${linha.title}"`}
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -273,6 +292,9 @@ export function GerenciarColunas({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+
+  /** A coluna onde as atividades nascem — nunca se move nem se exclui. */
+  const idDaEntrada = useMemo(() => stages.find(ehColunaDeEntrada)?.id ?? null, [stages]);
 
   const originais = useMemo(() => new Map(stages.map((s) => [s.id, paraLinha(s)])), [stages]);
   const ordemOriginal = useMemo(() => stages.map((s) => s.id).join(","), [stages]);
@@ -316,6 +338,10 @@ export function GerenciarColunas({
   const aoArrastar = (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
+    // Nem a entrada se move, nem outra ocupa o lugar dela: o puxador dela já
+    // está desligado, mas soltar uma linha SOBRE a primeira posição também a
+    // deslocaria — e `display_order = 0` é o que define onde a atividade nasce.
+    if (active.id === idDaEntrada || over.id === idDaEntrada) return;
     setLinhas((ls) => {
       const de = ls.findIndex((l) => l.id === active.id);
       const para = ls.findIndex((l) => l.id === over.id);
@@ -386,13 +412,14 @@ export function GerenciarColunas({
               </thead>
               <SortableContext items={linhas.map((l) => l.id)} strategy={verticalListSortingStrategy}>
                 <tbody>
-                  {linhas.map((l, i) => (
+                  {linhas.map((l) => (
                     <LinhaArrastavel
                       key={l.id}
                       linha={l}
-                      // A primeira coluna é o ponto de entrada do fluxo: sem ela
-                      // as atividades novas não teriam onde nascer.
-                      podeExcluir={i > 0}
+                      // Pelo ID da coluna de entrada, não pela posição na lista:
+                      // se a ordem mudar durante a edição, a posição mente e a
+                      // proteção passaria para a linha errada.
+                      ehEntrada={l.id === idDaEntrada}
                       contagem={contagem.get(l.id) ?? 0}
                       onMudar={mudar}
                       onExcluir={excluir}

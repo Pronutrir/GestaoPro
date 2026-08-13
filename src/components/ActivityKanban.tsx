@@ -126,6 +126,9 @@ import {
   columnFilterActive,
   DEFAULT_CARD_FIELDS,
   DEFAULT_BOARD_SORT,
+  colunasDoQuadro,
+  colunasOcultas,
+  ehColunaDeEntrada,
   type GroupByValue,
   type CardFields,
   type WorkflowStage,
@@ -878,7 +881,7 @@ export const ActivityKanban = ({
   // linha no banco em todo primeiro acesso, com larguras que ninguém escolheu,
   // e o efeito se realimentaria (lê columnWidths, escreve columnWidths).
   const larguraPadrao = useMemo(() => {
-    const visiveis = stages.filter((s) => s.display_order > 0);
+    const visiveis = colunasDoQuadro(stages);
     if (visiveis.length === 0) return {};
     const igual = 100 / visiveis.length;
     const out: Record<string, number> = {};
@@ -1526,14 +1529,18 @@ export const ActivityKanban = ({
       const overColId = (over.id as string).replace("col-", "");
       if (activeColId === overColId) return;
 
-      const visibleStages = stages.filter((s) => s.display_order > 0);
-      const oldIndex = visibleStages.findIndex((s) => s.id === activeColId);
-      const newIndex = visibleStages.findIndex((s) => s.id === overColId);
+      // A coluna de entrada APARECE no quadro mas não entra no arrasto: ela é
+      // definida por `display_order = 0` e trocá-la de lugar mudaria onde as
+      // atividades nascem. Arrastar outra para cima dela também não a desloca —
+      // as demais são renumeradas a partir de 1.
+      const reordenaveis = stages.filter((s) => !ehColunaDeEntrada(s));
+      const oldIndex = reordenaveis.findIndex((s) => s.id === activeColId);
+      const newIndex = reordenaveis.findIndex((s) => s.id === overColId);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      const reordered = arrayMove(visibleStages, oldIndex, newIndex);
+      const reordered = arrayMove(reordenaveis, oldIndex, newIndex);
       // Update local state immediately
-      const backlogStages = stages.filter((s) => s.display_order === 0);
+      const backlogStages = stages.filter(ehColunaDeEntrada);
       const updatedStages = [
         ...backlogStages,
         ...reordered.map((s, i) => ({ ...s, display_order: i + 1 })),
@@ -1858,7 +1865,9 @@ export const ActivityKanban = ({
   };
 
 
-  const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
+  // A coluna de entrada (Backlog) entra aqui desde 12/08/2026 — ver
+  // `colunasDoQuadro` em kanban/shared para o porquê e as referências.
+  const visibleStages = useMemo(() => colunasDoQuadro(stages), [stages]);
 
   /**
    * Colunas ocultas e quantas tarefas há em cada uma.
@@ -1868,10 +1877,7 @@ export const ActivityKanban = ({
    * aquele status e some junto, sem aparecer em lugar nenhum. O marcador ao
    * fim do quadro existe para isso não ser silencioso.
    */
-  const hiddenStages = useMemo(
-    () => stages.filter((s) => s.display_order > 0 && s.is_visible === false),
-    [stages],
-  );
+  const hiddenStages = useMemo(() => colunasOcultas(stages), [stages]);
   const countByStage = useMemo(() => {
     const m = new Map<string, number>();
     activities.forEach((a) => {
@@ -1912,7 +1918,10 @@ export const ActivityKanban = ({
       }
       if (e.key === "n" || e.key === "N") {
         if (!canCreate) return;
-        const first = stages.find((s) => s.display_order > 0 && s.is_visible !== false);
+        // De propósito pula a coluna de entrada: o atalho é para começar a
+        // trabalhar numa tarefa, não para engrossar a fila. Quem quer somar ao
+        // Backlog usa o "+" da própria coluna, que agora está à vista.
+        const first = stages.find((s) => !ehColunaDeEntrada(s) && s.is_visible !== false);
         if (first && onOpenCreateTask) {
           e.preventDefault();
           onOpenCreateTask(first.id);
@@ -2226,10 +2235,17 @@ export const ActivityKanban = ({
     if (plano.ordem) {
       // Troca as chaves temporárias ("novo:0") pelos ids que o banco devolveu.
       const ids = plano.ordem.map((id) => idPorChave.get(id) ?? id).filter((id) => !id.startsWith("novo:"));
+      // A partir de 1, NUNCA de 0: `display_order = 0` é o que marca a coluna
+      // de entrada. Numerando de 0, a primeira coluna reordenada assumiria esse
+      // papel e passaria a receber tudo que nasce no projeto — e a entrada
+      // original viraria uma coluna comum. A entrada é excluída da renumeração.
+      const idEntrada = stages.find(ehColunaDeEntrada)?.id;
       const resultados = await Promise.all(
-        ids.map((id, i) =>
-          supabase.from("workflow_stages").update({ display_order: i }).eq("id", id),
-        ),
+        ids
+          .filter((id) => id !== idEntrada)
+          .map((id, i) =>
+            supabase.from("workflow_stages").update({ display_order: i + 1 }).eq("id", id),
+          ),
       );
       const erro = resultados.find((r) => r.error);
       if (erro?.error) falhas.push(`ordem: ${erro.error.message}`);
@@ -2552,11 +2568,13 @@ export const ActivityKanban = ({
                   </AccordionSection>
                 )}
 
-                {/* Coluna / Status do fluxo */}
-                {stages.filter((s) => s.display_order > 0).length > 0 && (
+                {/* Coluna / Status do fluxo. Inclui a coluna de entrada: ela
+                    aparece no quadro, então filtrar por ela precisa funcionar —
+                    antes o filtro a omitia e não havia como isolar a fila. */}
+                {stages.length > 0 && (
                   <AccordionSection id="stage" label="Coluna / Status" summary={summaryStage} active={filterStages.size > 0}>
                     <FilterOptionList
-                      options={stages.filter((s) => s.display_order > 0).map((s) => ({ value: s.id, label: s.title }))}
+                      options={stages.map((s) => ({ value: s.id, label: s.title }))}
                       selected={(v) => filterStages.has(v)}
                       onToggle={(v) => toggleInSet(setFilterStages, v)}
                       searchPlaceholder="Buscar coluna..."
