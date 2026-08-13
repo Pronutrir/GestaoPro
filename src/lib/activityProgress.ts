@@ -3,10 +3,16 @@
  *
  * DUAS FONTES, nesta ordem:
  *
- *  1. SUBATIVIDADES, quando existem — % de subatividades concluídas. A coluna
- *     diz onde o cartão está; as subatividades dizem quanto do trabalho
- *     acabou. Quando discordam, o trabalho é a verdade: arrastar um cartão
- *     para "Concluída" não conclui o que está dentro dele.
+ *  1. SUBATIVIDADES, quando existem — MÉDIA DO AVANÇO de cada uma, não
+ *     contagem das concluídas. A coluna diz onde o cartão está; as
+ *     subatividades dizem quanto do trabalho andou. Quando discordam, o
+ *     trabalho é a verdade: arrastar um cartão para "Concluída" não conclui o
+ *     que está dentro dele.
+ *
+ *     Cada filho vale o que a coluna DELE vale (regra 2, recursivamente) — o
+ *     mesmo j/(K+1), o mesmo % fixo por coluna. Contar 0-ou-1 fazia um pai com
+ *     três filhos em andamento exibir 0%, e deixava o pai mais burro que o
+ *     filho: sozinho o filho mostrava 50%, dentro do pai valia nada.
  *
  *  2. POSIÇÃO DA COLUNA, para quem não tem subatividade — as regras abaixo,
  *     inalteradas.
@@ -116,6 +122,36 @@ function subFeita(s: SubActivityLike, stages: ProgressStageLike[] | null | undef
 }
 
 /**
+ * QUANTO uma subatividade avançou — não "acabou, sim ou não".
+ *
+ * Antes o pai contava cabeças (`feitas / total`) e cada filho valia 0 ou 1. Um
+ * cartão com três filhos em pleno andamento mostrava 0%: o quadro dizia que
+ * nada tinha começado. E era pior que isso — o filho sozinho mostrava 50% pela
+ * coluna dele, então o PAI era mais burro que o FILHO, e o Fixo configurado na
+ * tela de colunas não chegava ao cartão-pai.
+ *
+ * Agora cada filho vale o que a COLUNA dele diz — a mesma conta j/(K+1), o
+ * mesmo Fixo, a mesma função que já calcula o cartão sem filhos. Uma fonte só.
+ *
+ * `null` = fora da média (cancelada), não zero: zerar puniria o pai por algo
+ * que saiu do escopo. Pausada devolve o percentual congelado, ou 0 quando não
+ * há valor congelado — parada não avança, mas também não some da conta.
+ */
+function subAvanco(
+  s: SubActivityLike,
+  stages: ProgressStageLike[] | null | undefined,
+): number | null {
+  // `status` fecha a questão: concluída é 100, independente da coluna.
+  if ((s.status || "").toLowerCase() === "completed") return 100;
+  // Sem coluna não há o que ler — não iniciada.
+  if (!s.workflow_stage_id || !stages || stages.length === 0) return 0;
+  // Sem netos aqui: `SubActivityLike` não os carrega, e buscá-los abriria uma
+  // recursão que nenhuma das telas alimenta hoje. Um nível é o que existe.
+  const p = computeActivityProgress(s.workflow_stage_id, stages);
+  return p.percent;
+}
+
+/**
  * Quanto uma coluna vale QUANDO NÃO TEM PERCENTUAL PRÓPRIO — o "auto".
  *
  * O número sai da POSIÇÃO no fluxo: a j-ésima de K colunas de trabalho vale
@@ -161,7 +197,7 @@ export function computeActivityProgress(
   lastProgressStageId?: string | null,
   /**
    * Subatividades da atividade. QUANDO EXISTEM, elas mandam: a coluna diz onde
-   * o cartão está, as subatividades dizem quanto do trabalho acabou — e mover
+   * o cartão está, as subatividades dizem quanto do trabalho andou — e mover
    * um cartão não conclui nada.
    *
    * Medido em 03/08/2026: 703 das 1.317 atividades sao subatividades e o
@@ -171,13 +207,24 @@ export function computeActivityProgress(
   subActivities?: SubActivityLike[] | null,
 ): ActivityProgress {
   // ── Subatividades mandam quando existem ────────────────────────────────
-  if (subActivities && subActivities.length > 0) {
+  // MÉDIA DO AVANÇO, não contagem de concluídas. Cada filho entra com quanto
+  // andou (ver `subAvanco`), então "Em Revisão" vale 75 em vez de 0.
+  //
+  // Média simples, não ponderada por horas: só 48% das atividades têm horas
+  // preenchidas, e ponderar por um campo ausente em metade da base produziria
+  // números piores. Trocar é uma linha, se isso mudar.
+  //
+  // `avancos` vazio = TODOS os filhos cancelados: não há trabalho a medir
+  // neles. Cair para 0% seria mentir por omissão, então o bloco inteiro é
+  // pulado e o pai volta a responder pela própria coluna, logo abaixo.
+  const avancos = (subActivities ?? [])
+    .map((s) => subAvanco(s, stages))
+    .filter((v): v is number => v !== null);
+
+  if (subActivities && subActivities.length > 0 && avancos.length > 0) {
     const total = subActivities.length;
     const feitas = subActivities.filter((s) => subFeita(s, stages)).length;
-    // Contagem simples, não ponderada por horas: só 48% das atividades têm
-    // horas preenchidas, e ponderar por um campo ausente em metade da base
-    // produziria números piores. Trocar é uma linha, se isso mudar.
-    const percent = clampPercent((feitas / total) * 100);
+    const percent = clampPercent(avancos.reduce((a, b) => a + b, 0) / avancos.length);
 
     const col = currentStageId && stages ? stages.find((s) => s.id === currentStageId) : null;
     const colunaConcluida = !!col && (parseWorkflowCategory(col.categoria) === "concluida" || col.is_final === true);
