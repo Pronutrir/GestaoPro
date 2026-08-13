@@ -255,8 +255,27 @@ export const colunasDoQuadro = <T extends {
   });
 
 /** Colunas escondidas por decisão do projeto (`is_visible = false`). */
-export const colunasOcultas = <T extends { is_visible?: boolean }>(stages: T[]): T[] =>
-  stages.filter((s) => s.is_visible === false);
+/**
+ * Colunas ESCONDIDAS POR ENGANO — as que alguém desligou em "No quadro" e que
+ * ainda guardam tarefas. É o que o aviso âmbar da régua denuncia.
+ *
+ * A coluna de BACKLOG não entra, mesmo cheia. Ela sai do quadro por DECISÃO DE
+ * PRODUTO (Kanban é fluxo, Backlog é fila — ver `colunasDoQuadro`), e as tarefas
+ * dela estão à vista na aba própria. Tratá-la como escondida acendia o alerta
+ * permanentemente, num projeto sem nada de errado: foi o que aconteceu quando
+ * tirei o Backlog do quadro sem voltar aqui.
+ *
+ * O aviso serve para o caso em que a pessoa oculta uma coluna e esquece
+ * trabalho dentro — aí ninguém vê aquele status em lugar nenhum.
+ */
+export const colunasOcultas = <T extends {
+  is_visible?: boolean; display_order?: number; categoria?: WorkflowCategory; is_final?: boolean; is_blocked?: boolean;
+}>(stages: T[]): T[] =>
+  stages.filter((s) => {
+    if (s.is_visible !== false) return false;
+    const cat = parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s as never);
+    return cat !== "backlog";
+  });
 
 export interface WorkflowStage {
   id: string;
