@@ -28,6 +28,7 @@
 
 import {
   categoryFromLegacyFlags,
+  ehTrabalhoEmCurso,
   parseWorkflowCategory,
   WORKFLOW_CATEGORY_META,
 } from "./workflowCategory";
@@ -147,7 +148,7 @@ export function percentualAutomaticoDaColuna(
 
   // Mesmo denominador de computeActivityProgress: só colunas de "andamento".
   const flow = stages
-    .filter((s) => (parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s)) === "andamento")
+    .filter((s) => ehTrabalhoEmCurso(parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s)))
     .sort((a, b) => a.display_order - b.display_order);
   const j = flow.findIndex((s) => s.id === current.id) + 1;
   if (j <= 0) return null;
@@ -213,12 +214,21 @@ export function computeActivityProgress(
   // trabalho (ver cabeçalho) — o peso fixo do META vira só fallback.
   const category = parseWorkflowCategory(current.categoria);
   if (category) {
+    // ESPERA congela: o percentual para onde estava, e a atividade se anuncia
+    // como parada. Vem ANTES do teste de peso nulo porque "espera" e
+    // "cancelada" compartilham `progressWeight: null` por motivos opostos —
+    // uma está pausada e volta, a outra saiu dos indicadores para sempre.
+    // Sem esta guarda, uma coluna de espera exibiria "Cancelada".
+    if (category === "espera") {
+      const congelado = current.progress_percent != null ? clampPercent(current.progress_percent) : null;
+      return { percent: congelado, paused: true, label: "Em espera" };
+    }
     const weight = WORKFLOW_CATEGORY_META[category].progressWeight;
     if (weight === null) {
       // Cancelada: fora dos indicadores, sem percentual.
       return { percent: null, paused: false, label: "Cancelada" };
     }
-    if (category === "andamento") {
+    if (ehTrabalhoEmCurso(category)) {
       // 1) % explícito da coluna (menu "Definir % da coluna") vence a posição.
       if (current.progress_percent != null) {
         const explicit = clampPercent(current.progress_percent);
@@ -229,7 +239,7 @@ export function computeActivityProgress(
       //    Colunas sem categoria explícita entram pela leitura legada, para o
       //    fluxo ficar completo em quadros mistos (pré/pós-backfill).
       const flow = stages
-        .filter((s) => (parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s)) === "andamento")
+        .filter((s) => ehTrabalhoEmCurso(parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s)))
         .sort((a, b) => a.display_order - b.display_order);
       const j = flow.findIndex((s) => s.id === current.id) + 1;
       if (j > 0) {

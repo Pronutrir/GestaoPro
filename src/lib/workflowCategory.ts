@@ -24,11 +24,14 @@ export type WorkflowCategory =
   | "backlog"
   | "a_iniciar"
   | "andamento"
+  | "espera"
+  | "revisao"
   | "concluida"
   | "cancelada";
 
+/** Na ordem do fluxo — é a ordem em que aparecem no seletor. */
 export const WORKFLOW_CATEGORIES: WorkflowCategory[] = [
-  "backlog", "a_iniciar", "andamento", "concluida", "cancelada",
+  "backlog", "a_iniciar", "andamento", "espera", "revisao", "concluida", "cancelada",
 ];
 
 export interface WorkflowCategoryMeta {
@@ -64,9 +67,36 @@ export const WORKFLOW_CATEGORY_META: Record<WorkflowCategory, WorkflowCategoryMe
   },
   andamento: {
     label: "Em andamento",
-    hint: "Trabalho em curso. Conta no limite de WIP.",
+    hint: "Alguém está trabalhando nisso agora. Conta no limite de tarefas.",
     progressWeight: 25,
     dotClass: "bg-primary",
+  },
+  /**
+   * Parado por terceiro — cliente, fornecedor, aprovação externa.
+   *
+   * NÃO é trabalho em curso: fica fora do limite de tarefas simultâneas e não
+   * avança o percentual. Antes disto, espera virava "andamento" e inflava o WIP
+   * com item que ninguém está tocando, além de estragar o tempo médio de etapa.
+   * Nenhuma ferramenta de mercado conta espera como trabalho.
+   */
+  espera: {
+    label: "Em espera",
+    hint: "Parado por algo de fora — cliente, fornecedor, aprovação. Não conta no limite.",
+    progressWeight: null,
+    dotClass: "bg-warning",
+  },
+  /**
+   * Trabalho feito, sendo conferido — QA, validação, aprovação interna.
+   *
+   * Conta como andamento (é trabalho, e ocupa o limite), mas se distingue nos
+   * indicadores: sem a separação não dá para medir quanto tempo se gasta
+   * conferindo. Azure DevOps chama isso de "Resolved".
+   */
+  revisao: {
+    label: "Em revisão",
+    hint: "Trabalho feito, sendo conferido — QA, validação, aprovação.",
+    progressWeight: 25,
+    dotClass: "bg-violet-500",
   },
   concluida: {
     label: "Concluída",
@@ -81,6 +111,19 @@ export const WORKFLOW_CATEGORY_META: Record<WorkflowCategory, WorkflowCategoryMe
     dotClass: "bg-muted-foreground/35",
   },
 };
+
+/**
+ * Categorias que representam TRABALHO EM CURSO — as que formam o fluxo e
+ * dividem o percentual entre si.
+ *
+ * "Em revisão" entra: conferir é trabalho, ocupa pessoa e ocupa o limite.
+ * "Em espera" NÃO entra: o item está parado esperando alguém de fora, e contá-
+ * lo como andamento inflaria o WIP e o tempo médio de etapa com item que
+ * ninguém está tocando.
+ */
+export function ehTrabalhoEmCurso(c: WorkflowCategory): boolean {
+  return c === "andamento" || c === "revisao";
+}
 
 /** Categorias que encerram a atividade — nenhuma delas conta como atraso. */
 export function isClosingCategory(c: WorkflowCategory): boolean {

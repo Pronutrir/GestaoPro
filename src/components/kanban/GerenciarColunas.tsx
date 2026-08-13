@@ -1,17 +1,26 @@
 "use client";
-// GERENCIAR COLUNAS — a tabela com todas as colunas do quadro de uma vez.
+// GERENCIAR COLUNAS — todas as colunas do quadro numa lista.
 //
-// O painel "Colunas" (StageListButton) resolve o caso de UMA coluna: abre a
-// lista, clica no ⋯ daquela, mexe. O que ele não resolve é COMPARAR: para
-// descobrir quais colunas têm limite de WIP era preciso abrir sete menus, um
-// de cada vez, guardando o resultado de cabeça.
+// O menu ⋯ da coluna resolve UMA por vez. O que ele não resolve é COMPARAR:
+// para saber quais colunas têm limite era preciso abrir sete menus, guardando
+// o resultado de cabeça.
 //
-// Aqui cada coluna é uma LINHA e cada propriedade é uma COLUNA da tabela:
-// nome, cor, progresso, WIP e visibilidade lado a lado, com reordenação por
-// arrasto. Um olhar responde "quem tem WIP?" e "quem está oculta?".
+// LISTA, NÃO TABELA. A primeira versão era uma grade de 7 colunas com 5
+// controles por linha, todos com borda e peso iguais — densidade sem
+// hierarquia, e o campo Nome espremido a ~20px. Agora cada coluna é uma linha
+// com o nome em destaque, e os controles cabem sem disputar.
+//
+// TUDO À VISTA, COM O EFEITO AO LADO. Nenhuma ação escondida no hover: a pessoa
+// veria a linha sem saber o que dá para mudar, e teria de descobrir passando o
+// mouse. Cada controle mostra a consequência antes do clique — "vale 25%",
+// "não avança", "2 presas". Padrão de Linear (status do time) e Asana (regras);
+// o hover-para-revelar é do Jira, e é a queixa recorrente daquela tela.
+//
+// O LIMITE saiu daqui: era uma coluna inteira exibindo "—" para um valor que
+// quase nenhum projeto usa. Vive no menu ⋯ da coluna, no quadro.
 //
 // SALVAR EXPLÍCITO, ao contrário do resto do quadro (que aplica na hora): numa
-// tabela editável a pessoa mexe em várias linhas antes de decidir, e gravar a
+// lista editável a pessoa mexe em várias linhas antes de decidir, e gravar a
 // cada tecla faria o quadro dançar atrás do diálogo. Cancelar descarta tudo.
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -21,9 +30,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { GripVertical, Plus, Trash2, AlertTriangle } from "lucide-react";
+import { GripVertical, Plus, Trash2, AlertTriangle, ChevronDown, Check, LogIn } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors, type DragEndEvent,
@@ -36,6 +45,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { STAGE_PRESET_COLORS, ehColunaDeEntrada, type WorkflowStage } from "./shared";
 import { percentualAutomaticoDaColuna } from "@/lib/activityProgress";
+import {
+  WORKFLOW_CATEGORIES, WORKFLOW_CATEGORY_META, parseWorkflowCategory,
+  categoryFromLegacyFlags, suggestCategoryFromTitle, type WorkflowCategory,
+} from "@/lib/workflowCategory";
 
 /** O que a tabela edita. `id` novo começa com "novo:" e ainda não existe no banco. */
 export type LinhaColuna = {
@@ -46,6 +59,15 @@ export type LinhaColuna = {
   wip_limit: number | null;
   is_visible: boolean;
   is_final: boolean;
+  /**
+   * O que a coluna SIGNIFICA, independente do nome que o time deu.
+   *
+   * Existia só no banco: era adivinhada pelo título na criação
+   * (`suggestCategoryFromTitle`) e depois não havia como corrigir em tela
+   * nenhuma — criar "Aguardando cliente" virava "Em andamento" para sempre,
+   * contando como trabalho em curso no progresso e no limite.
+   */
+  categoria: WorkflowCategory;
 };
 
 export type PlanoDeSalvamento = {
@@ -54,6 +76,8 @@ export type PlanoDeSalvamento = {
   excluidas: string[];
   /** ids na ordem final — só quando a ordem mudou. */
   ordem: string[] | null;
+  /** Nova coluna de entrada — só quando mudou. Pode ser uma chave "novo:". */
+  entrada: string | null;
 };
 
 const paraLinha = (s: WorkflowStage): LinhaColuna => ({
@@ -64,10 +88,10 @@ const paraLinha = (s: WorkflowStage): LinhaColuna => ({
   wip_limit: s.wip_limit ?? null,
   is_visible: s.is_visible !== false,
   is_final: s.is_final === true,
+  // Quadro anterior à migration da categoria: deriva das flags legadas, mesma
+  // leitura que activityProgress usa, em vez de assumir "andamento".
+  categoria: parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s),
 });
-
-/** "—" diz "sem limite" sem deixar o campo vazio. */
-const textoWip = (v: number | null) => (v == null ? "—" : String(v));
 
 /**
  * Lê o percentual digitado. Só número agora — "auto" virou caixa de seleção,
@@ -82,16 +106,8 @@ function lerProgresso(txt: string): number | null {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-function lerWip(txt: string): number | null | undefined {
-  const t = txt.trim().replace("—", "").replace("-", "");
-  if (t === "") return null;
-  const n = Number(t);
-  if (!Number.isFinite(n) || n < 0) return undefined;
-  return Math.round(n);
-}
-
 function LinhaArrastavel({
-  linha, ehEntrada, contagem, percentualAuto, onMudar, onExcluir,
+  linha, ehEntrada, contagem, percentualAuto, concluidaOcupadaPor, nomeDaConcluida, onMudar, onMudarNome, onMarcarEntrada, onExcluir,
 }: {
   linha: LinhaColuna;
   /**
@@ -102,7 +118,13 @@ function LinhaArrastavel({
   contagem: number;
   /** Quanto o "auto" vale para esta coluna hoje; null = não avança progresso. */
   percentualAuto: number | null;
+  /** Id da coluna que já é "Concluída" — só uma por projeto (índice no banco). */
+  concluidaOcupadaPor: string | null;
+  nomeDaConcluida: string;
   onMudar: (id: string, p: Partial<LinhaColuna>) => void;
+  /** Separado de `onMudar`: só o nome dispara a sugestão de categoria. */
+  onMudarNome: (id: string, title: string) => void;
+  onMarcarEntrada: (id: string) => void;
   onExcluir: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -110,66 +132,52 @@ function LinhaArrastavel({
   // `progress_percent = null` É o modo automático — não existe terceiro estado.
   const ehAuto = linha.progress_percent == null;
   const [progressoTexto, setProgressoTexto] = useState(String(linha.progress_percent ?? ""));
-  const [wipTexto, setWipTexto] = useState(textoWip(linha.wip_limit));
 
   // O valor pode mudar por fora (desfazer um arrasto, por exemplo).
   useEffect(() => { setProgressoTexto(String(linha.progress_percent ?? "")); }, [linha.progress_percent]);
-  useEffect(() => { setWipTexto(textoWip(linha.wip_limit)); }, [linha.wip_limit]);
 
   const oculta = !linha.is_visible;
   const presas = oculta && contagem > 0;
 
   return (
-    <tr
+    <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "border-b border-border/60 last:border-0",
-        isDragging && "opacity-60 bg-muted/40",
-        oculta && "text-muted-foreground",
+        "relative grid items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors",
+        // A grade acompanha a legenda do cabeçalho. Em tela estreita as duas
+        // colunas do meio descem para uma segunda linha, sem quebrar o resto.
+        "grid-cols-[22px_minmax(0,1fr)_132px_136px_64px_78px_30px]",
+        "max-[860px]:grid-cols-[22px_minmax(0,1fr)_64px_78px_30px]",
+        isDragging ? "opacity-60 bg-muted/50" : "hover:bg-muted/40",
+        ehEntrada && "bg-primary/[0.06]",
       )}
     >
-      <td className="py-1.5 pl-1 pr-0 w-7">
-        {/* A coluna de entrada não se move: ela é definida por
-            `display_order = 0` e é onde as atividades nascem (criação rápida,
-            importação de EAP, reabertura). Trocá-la de lugar mudaria isso em
-            silêncio, então o puxador some em vez de enganar. */}
-        {ehEntrada ? (
-          <span
-            className="block p-1 text-muted-foreground/25"
-            title="A coluna de entrada é sempre a primeira — é onde as atividades nascem"
-          >
-            <GripVertical className="w-3.5 h-3.5" />
-          </span>
-        ) : (
-          <button
-            type="button"
-            className="cursor-grab active:cursor-grabbing text-muted-foreground/70 hover:text-foreground p-1 rounded"
-            title="Arrastar para reordenar"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </td>
+      {/* A faixa lateral marca a entrada sem depender de o olho achar o
+          marcador redondo lá na direita. */}
+      {ehEntrada && (
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-primary" aria-hidden />
+      )}
 
-      <td className="py-1.5 pr-2">
-        <Input
-          value={linha.title}
-          onChange={(e) => onMudar(linha.id, { title: e.target.value })}
-          className={cn("h-8 text-[13px]", oculta && "text-muted-foreground")}
-          aria-label="Nome da coluna"
-          placeholder="Nome da coluna"
-        />
-      </td>
+      <button
+        type="button"
+        className="justify-self-center cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-foreground p-0.5 rounded"
+        title="Arrastar para reordenar"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="w-3.5 h-3.5" />
+      </button>
 
-      <td className="py-1.5 pr-2 w-11">
+      {/* NOME — o que se lê primeiro, então é o maior elemento da linha. A
+          borda só aparece no hover/foco: campo com caixa permanente competia
+          com os controles ao lado, todos do mesmo peso. */}
+      <div className="flex items-center gap-2 min-w-0">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="w-5 h-5 rounded-full ring-1 ring-border hover:ring-foreground/50 focus:outline-none focus:ring-2 focus:ring-foreground/40"
+              className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-border/70 hover:ring-2 hover:ring-primary transition-all"
               style={{ backgroundColor: linha.color }}
               title="Alterar cor"
               aria-label={`Cor de "${linha.title}"`}
@@ -190,50 +198,115 @@ function LinhaArrastavel({
             </div>
           </DropdownMenuContent>
         </DropdownMenu>
-      </td>
+        <input
+          value={linha.title}
+          onChange={(e) => onMudarNome(linha.id, e.target.value)}
+          className={cn(
+            "min-w-0 w-full -ml-1.5 px-1.5 py-1 rounded-md bg-transparent",
+            "text-[14.5px] font-semibold tracking-[-.008em] text-foreground",
+            "border border-transparent hover:border-border hover:bg-background",
+            "focus:outline-none focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/15",
+            oculta && "opacity-55",
+          )}
+          aria-label="Nome da coluna"
+          placeholder="Nome da coluna"
+        />
+      </div>
 
-      {/* PROGRESSO — dois estados, dois controles.
-          Antes "auto" e um número dividiam o mesmo campo de texto: nada dizia
-          que eram coisas diferentes, digitar a palavra "auto" era a única forma
-          de voltar ao automático, e o valor que o auto vale ficava escondido.
-          Agora a caixa escolhe o MODO e o campo carrega o NÚMERO — como Jira faz
-          em estimativa (Automático/Manual) e o Figma em auto layout. */}
-      <td className="py-1.5 pr-2 w-[132px]">
-        <div className="flex items-center gap-1.5">
-          <label
-            className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none shrink-0"
-            title="Calculado pela posição da coluna no fluxo — muda sozinho ao inserir ou reordenar colunas"
-          >
-            <Checkbox
-              checked={ehAuto}
-              onCheckedChange={(v) => {
-                if (v === true) {
-                  onMudar(linha.id, { progress_percent: null });
-                } else {
-                  // Ao destravar, começa do valor que o auto já mostrava: a
-                  // pessoa quase sempre quer ajustar aquilo, não digitar do zero.
-                  const base = percentualAuto ?? 50;
-                  onMudar(linha.id, { progress_percent: base });
-                  setProgressoTexto(String(base));
-                }
-              }}
-              aria-label={`Progresso automático de "${linha.title}"`}
-            />
-            auto
-          </label>
-          {ehAuto ? (
-            // O número que o auto vale HOJE. Antes a tela dizia só "auto" e
-            // escondia isto — quem quisesse saber calculava de cabeça.
-            <span
-              className="text-[12px] text-muted-foreground/70 tabular-nums w-11 text-right"
-              title={percentualAuto == null
-                ? "Esta coluna não avança o progresso"
-                : `Vale ${percentualAuto}% pela posição atual`}
+      {/* SIGNIFICA — a categoria por extenso, não um ícone. É ela que decide
+          progresso, limite e indicadores; escondê-la atrás de um símbolo foi o
+          que deixou "Aguardando cliente" contando como trabalho em curso. */}
+      <div className="max-[860px]:col-start-2 max-[860px]:col-span-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center gap-1.5 px-2 py-1.5 rounded-md border border-border bg-background text-[11.5px] text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
+              title={WORKFLOW_CATEGORY_META[linha.categoria].hint}
+              aria-label={`Categoria de "${linha.title}"`}
             >
-              {percentualAuto == null ? "—" : `${percentualAuto}%`}
-            </span>
-          ) : (
-            <Input
+              <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", WORKFLOW_CATEGORY_META[linha.categoria].dotClass)} />
+              <span className="flex-1 truncate text-left">{WORKFLOW_CATEGORY_META[linha.categoria].label}</span>
+              <ChevronDown className="w-3 h-3 shrink-0 opacity-40" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-64">
+            {WORKFLOW_CATEGORIES.map((c) => {
+              const meta = WORKFLOW_CATEGORY_META[c];
+              // "Concluída" é única por projeto (índice no banco): oferecer a
+              // segunda faria o salvamento falhar depois de a pessoa escolher.
+              const ocupada = c === "concluida" && concluidaOcupadaPor != null && concluidaOcupadaPor !== linha.id;
+              return (
+                <DropdownMenuItem
+                  key={c}
+                  disabled={ocupada}
+                  className="focus:bg-muted/60 focus:text-foreground items-start gap-2"
+                  onSelect={(e) => { e.preventDefault(); onMudar(linha.id, { categoria: c }); }}
+                >
+                  <span className={cn("w-1.5 h-1.5 rounded-full shrink-0 mt-1.5", meta.dotClass)} />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1 text-[12.5px] leading-tight">
+                      {meta.label}
+                      {c === linha.categoria && <Check className="w-3 h-3 text-primary" />}
+                    </span>
+                    <span className="block text-[10.5px] text-muted-foreground leading-snug mt-0.5">
+                      {ocupada ? `Já em uso por "${nomeDaConcluida}"` : meta.hint}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* PROGRESSO — o modo à esquerda, o EFEITO à direita. Ver o resultado sem
+          clicar é o ponto: "vale 25%" muda ao reordenar ou trocar a categoria,
+          e é isso que distingue Auto de um número fixo. */}
+      <div className="flex items-center gap-2 max-[860px]:col-start-3 max-[860px]:col-span-2">
+        <div className="inline-flex shrink-0 rounded-md border border-border overflow-hidden text-[10.5px]" role="group">
+          <button
+            type="button"
+            onClick={() => { if (!ehAuto) onMudar(linha.id, { progress_percent: null }); }}
+            aria-pressed={ehAuto}
+            className={cn(
+              "px-2 py-1 transition-colors",
+              ehAuto ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:bg-muted",
+            )}
+            title="Calculado pela posição no fluxo — muda ao reordenar"
+          >
+            Auto
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (ehAuto) {
+                // Parte do valor que o Auto já vale: quem troca para Fixo quase
+                // sempre quer ajustar aquilo, não digitar do zero.
+                const base = percentualAuto ?? 50;
+                onMudar(linha.id, { progress_percent: base });
+                setProgressoTexto(String(base));
+              }
+            }}
+            aria-pressed={!ehAuto}
+            className={cn(
+              "px-2 py-1 transition-colors",
+              !ehAuto ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:bg-muted",
+            )}
+            title="Percentual que você define. Não muda com reordenação."
+          >
+            Fixo
+          </button>
+        </div>
+        {ehAuto ? (
+          <span className="text-[11.5px] text-muted-foreground tabular-nums whitespace-nowrap">
+            {percentualAuto == null
+              ? <span title="Esta coluna não avança o progresso">não avança</span>
+              : <>vale <b className="font-semibold text-foreground/70">{percentualAuto}%</b></>}
+          </span>
+        ) : (
+          <div className="flex items-center gap-1">
+            <input
               value={progressoTexto}
               onChange={(e) => setProgressoTexto(e.target.value)}
               onBlur={() => {
@@ -242,72 +315,85 @@ function LinhaArrastavel({
                 else { onMudar(linha.id, { progress_percent: v }); setProgressoTexto(String(v)); }
               }}
               onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-              className="h-8 w-14 text-[13px] text-center tabular-nums px-1"
+              className="w-11 px-1 py-1 text-[12px] text-center tabular-nums rounded-md border border-border bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               inputMode="numeric"
               aria-label={`Progresso de "${linha.title}" em porcento`}
-              title="Percentual fixo desta coluna (0 a 100)"
             />
-          )}
-        </div>
-      </td>
+            <span className="text-[11.5px] text-muted-foreground">%</span>
+          </div>
+        )}
+      </div>
 
-      <td className="py-1.5 pr-2 w-20">
-        <Input
-          value={wipTexto}
-          onChange={(e) => setWipTexto(e.target.value)}
-          onBlur={() => {
-            const v = lerWip(wipTexto);
-            if (v === undefined) setWipTexto(textoWip(linha.wip_limit));
-            else { onMudar(linha.id, { wip_limit: v }); setWipTexto(textoWip(v)); }
-          }}
-          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-          className="h-8 text-[13px] text-center tabular-nums"
-          aria-label={`Limite de tarefas em "${linha.title}"`}
-          title={"Máximo de tarefas ao mesmo tempo nesta coluna (limite de WIP).\n"
-            + "Serve para terminar antes de começar mais — e deixa o gargalo à vista.\n"
-            + "'—' = sem limite."}
-        />
-      </td>
+      {/* ENTRADA — marcador redondo em TODAS as linhas, para se ver que é
+          escolha exclusiva. Antes era um ícone de seta só na marcada: nada
+          indicava que as outras podiam assumir o papel. */}
+      <button
+        type="button"
+        onClick={() => { if (!ehEntrada) onMarcarEntrada(linha.id); }}
+        className={cn(
+          "justify-self-center w-4 h-4 rounded-full border-[1.5px] bg-background transition-all",
+          ehEntrada
+            ? "border-primary border-[5px] cursor-default"
+            : "border-muted-foreground/40 hover:border-primary cursor-pointer",
+        )}
+        title={ehEntrada
+          ? `As tarefas novas nascem em "${linha.title}" — criação rápida, importação de EAP e reabertura`
+          : `Fazer as tarefas novas nascerem em "${linha.title}"`}
+        aria-label={`Coluna de entrada: "${linha.title}"`}
+        aria-pressed={ehEntrada}
+      />
 
-      <td className="py-1.5 pr-2 w-16 text-center">
-        <div className="flex items-center justify-center gap-1">
-          <Checkbox
-            checked={linha.is_visible}
-            onCheckedChange={(v) => onMudar(linha.id, { is_visible: v === true })}
-            aria-label={`"${linha.title}" visível no quadro`}
-          />
-          {/* Coluna oculta VAZIA é arrumação; com tarefa dentro é problema —
-              tem gente com status que ninguém enxerga. Só esse caso avisa. */}
-          {presas && (
-            <span
-              className="text-warning text-[11px] font-medium tabular-nums"
-              title={`${contagem} ${contagem === 1 ? "tarefa fica" : "tarefas ficam"} sem aparecer no quadro`}
-            >
-              {contagem}
-            </span>
-          )}
-        </div>
-      </td>
-
-      <td className="py-1.5 pr-1 w-8">
+      {/* NO QUADRO — interruptor em vez de caixa: liga/desliga comunica
+          "aparece ou não" melhor que marcado/desmarcado. O aviso de tarefa
+          presa nasce embaixo, na hora em que se desliga. */}
+      <div className="justify-self-center flex flex-col items-center gap-1">
         <button
           type="button"
-          disabled={ehEntrada}
-          onClick={() => onExcluir(linha.id)}
+          role="switch"
+          aria-checked={linha.is_visible}
+          onClick={() => onMudar(linha.id, { is_visible: !linha.is_visible })}
           className={cn(
-            "p-1 rounded transition-colors",
-            ehEntrada
-              ? "text-muted-foreground/30 cursor-not-allowed"
-              : "text-muted-foreground hover:text-destructive hover:bg-destructive/10",
+            "relative w-8 h-[18px] rounded-full transition-colors",
+            linha.is_visible ? "bg-primary" : "bg-muted-foreground/40",
           )}
-          title={ehEntrada
-            ? "A coluna de entrada não pode ser excluída — é onde as atividades nascem"
-            : `Excluir "${linha.title}"`}
+          title={linha.is_visible ? "Aparece no quadro" : "Some do quadro, para todos do projeto"}
+          aria-label={`"${linha.title}" aparece no quadro`}
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          <span
+            className={cn(
+              "absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all",
+              linha.is_visible ? "left-[18px]" : "left-0.5",
+            )}
+          />
         </button>
-      </td>
-    </tr>
+        {presas && (
+          <span
+            className="flex items-center gap-0.5 text-[10px] text-warning bg-warning/10 px-1.5 py-px rounded whitespace-nowrap"
+            title={`${contagem} ${contagem === 1 ? "tarefa fica" : "tarefas ficam"} sem aparecer no quadro`}
+          >
+            <AlertTriangle className="w-2.5 h-2.5" />
+            {contagem} {contagem === 1 ? "presa" : "presas"}
+          </span>
+        )}
+      </div>
+
+      <button
+        type="button"
+        disabled={ehEntrada}
+        onClick={() => onExcluir(linha.id)}
+        className={cn(
+          "justify-self-center p-1 rounded transition-colors",
+          ehEntrada
+            ? "text-muted-foreground/25 cursor-not-allowed"
+            : "text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10",
+        )}
+        title={ehEntrada
+          ? "A coluna de entrada não pode ser excluída — é onde as atividades nascem"
+          : `Excluir "${linha.title}"`}
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
   );
 }
 
@@ -343,8 +429,26 @@ export function GerenciarColunas({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  /** A coluna onde as atividades nascem — nunca se move nem se exclui. */
-  const idDaEntrada = useMemo(() => stages.find(ehColunaDeEntrada)?.id ?? null, [stages]);
+  /**
+   * A coluna onde as atividades nascem. Editável aqui (uma por vez), e a
+   * escolha só vai para o banco no Salvar, como todo o resto da tabela.
+   */
+  const [idDaEntrada, setIdDaEntrada] = useState<string | null>(null);
+  const entradaOriginal = useMemo(() => stages.find(ehColunaDeEntrada)?.id ?? null, [stages]);
+  useEffect(() => { if (open) setIdDaEntrada(entradaOriginal); }, [open, entradaOriginal]);
+
+  /** Marcar uma desmarca a anterior — o banco tem índice de uma por projeto. */
+  const marcarEntrada = (id: string) => setIdDaEntrada(id);
+
+  /**
+   * A coluna marcada como "Concluída". O banco tem índice único por projeto, e
+   * oferecer a categoria a uma segunda coluna faria o salvamento falhar DEPOIS
+   * de a pessoa escolher — o menu desabilita e diz quem já ocupa.
+   */
+  const linhaConcluida = useMemo(
+    () => linhas.find((l) => l.categoria === "concluida") ?? null,
+    [linhas],
+  );
 
   /**
    * Quanto o "auto" vale para cada coluna, calculado sobre a ORDEM EM EDIÇÃO —
@@ -367,7 +471,10 @@ export function GerenciarColunas({
         is_visible: l.is_visible,
         progress_percent: l.progress_percent,
         contributes_to_progress: original?.contributes_to_progress,
-        categoria: original?.categoria,
+        // A categoria EM EDIÇÃO, não a salva: trocar "Em andamento" por
+        // "A iniciar" tira a coluna do denominador, e o valor das vizinhas muda
+        // junto. Usar a original faria o tooltip mentir até salvar.
+        categoria: l.categoria,
       };
     });
     const out = new Map<string, number | null>();
@@ -383,21 +490,32 @@ export function GerenciarColunas({
     if (excluidas.length > 0) return true;
     if (linhas.some((l) => l.id.startsWith("novo:"))) return true;
     if (ordemAtual !== ordemOriginal) return true;
+    if (idDaEntrada !== entradaOriginal) return true;
     return linhas.some((l) => {
       const o = originais.get(l.id);
       if (!o) return true;
       return o.title !== l.title || o.color !== l.color
         || o.progress_percent !== l.progress_percent
         || o.wip_limit !== l.wip_limit
-        || o.is_visible !== l.is_visible;
+        || o.is_visible !== l.is_visible
+        || o.categoria !== l.categoria;
     });
-  }, [linhas, excluidas, originais, ordemAtual, ordemOriginal]);
+  }, [linhas, excluidas, originais, ordemAtual, ordemOriginal, idDaEntrada, entradaOriginal]);
 
   const semNome = linhas.some((l) => !l.title.trim());
   const ocultasComTarefa = linhas.filter((l) => !l.is_visible && (contagem.get(l.id) ?? 0) > 0);
 
-  const mudar = (id: string, p: Partial<LinhaColuna>) =>
+  /**
+   * Linhas cuja categoria a pessoa escolheu à mão. A sugestão automática pelo
+   * nome para de agir nelas — senão continuar digitando o título apagaria a
+   * escolha logo depois de ela ser feita.
+   */
+  const [categoriasTocadas, setCategoriasTocadas] = useState<Set<string>>(new Set());
+
+  const mudar = (id: string, p: Partial<LinhaColuna>) => {
+    if (p.categoria !== undefined) setCategoriasTocadas((s) => new Set(s).add(id));
     setLinhas((ls) => ls.map((l) => (l.id === id ? { ...l, ...p } : l)));
+  };
 
   const excluir = (id: string) => {
     setLinhas((ls) => ls.filter((l) => l.id !== id));
@@ -411,7 +529,24 @@ export function GerenciarColunas({
     setLinhas((ls) => [...ls, {
       id, title: "", color: STAGE_PRESET_COLORS[0],
       progress_percent: null, wip_limit: null, is_visible: true, is_final: false,
+      categoria: "andamento",
     }]);
+  };
+
+  /**
+   * Sugere a categoria enquanto a pessoa digita o nome de uma coluna NOVA —
+   * mas só isso: sugere. Antes o palpite era gravado e virava definitivo, sem
+   * como corrigir. Agora ele preenche o campo e a pessoa vê, confere e troca
+   * se quiser. Só age em linha nova e enquanto a categoria não foi tocada à
+   * mão; renomear coluna existente nunca mexe na categoria (foi o defeito que
+   * derrubava o progresso ao renomear "Concluída").
+   */
+  const mudarNome = (id: string, title: string) => {
+    setLinhas((ls) => ls.map((l) => {
+      if (l.id !== id) return l;
+      const nova = l.id.startsWith("novo:") && !categoriasTocadas.has(l.id);
+      return nova ? { ...l, title, categoria: suggestCategoryFromTitle(title) } : { ...l, title };
+    }));
   };
 
   const aoArrastar = (e: DragEndEvent) => {
@@ -439,13 +574,15 @@ export function GerenciarColunas({
         return o.title !== l.title || o.color !== l.color
           || o.progress_percent !== l.progress_percent
           || o.wip_limit !== l.wip_limit
-          || o.is_visible !== l.is_visible;
+          || o.is_visible !== l.is_visible
+          || o.categoria !== l.categoria;
       });
       await onSalvar({
         criadas,
         alteradas,
         excluidas,
         ordem: ordemAtual !== ordemOriginal ? linhas.map((l) => l.id) : null,
+        entrada: idDaEntrada !== entradaOriginal ? idDaEntrada : null,
       });
       onOpenChange(false);
     } finally {
@@ -457,7 +594,10 @@ export function GerenciarColunas({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!salvando) onOpenChange(v); }}>
-      <DialogContent className="max-w-2xl">
+      {/* 4xl, não 2xl: com as colunas de controle somando ~440px, o diálogo
+          estreito deixava ~70px para o Nome — que trunca em "Em Anda…". O
+          Nome é o campo que se lê e se edita mais, então ele fica com a folga. */}
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <div className="flex items-baseline justify-between gap-3">
             <DialogTitle className="text-base">Gerenciar colunas</DialogTitle>
@@ -472,49 +612,60 @@ export function GerenciarColunas({
           </DialogDescription>
         </DialogHeader>
 
-        {/* O DndContext fica FORA da <table>: ele renderiza um <div>, e um div
-            entre <table> e <tbody> é HTML inválido — o React reclama em
-            desenvolvimento e o navegador reposiciona o nó, quebrando o layout. */}
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={aoArrastar}>
-          <div className="overflow-x-auto -mx-1 px-1">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="w-7" />
-                  <th className="text-left py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Nome</th>
-                  <th className="text-left py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Cor</th>
-                  <th className="text-center py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Progresso</th>
-                  {/* "Limite" em vez de "WIP": a sigla só é óbvia para quem já
-                      conhece Kanban de processo. Jira escreve "Column
-                      constraint" e Azure DevOps "Work in progress limits" —
-                      nenhum dos dois mostra a sigla sozinha. O significado
-                      completo fica no tooltip da célula. */}
-                  <th className="text-center py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" title="Limite de tarefas simultâneas na coluna (WIP)">Limite</th>
-                  <th className="text-center py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Visível</th>
-                  <th className="w-8" />
-                </tr>
-              </thead>
-              <SortableContext items={linhas.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-                <tbody>
-                  {linhas.map((l) => (
-                    <LinhaArrastavel
-                      key={l.id}
-                      linha={l}
-                      // Pelo ID da coluna de entrada, não pela posição na lista:
-                      // se a ordem mudar durante a edição, a posição mente e a
-                      // proteção passaria para a linha errada.
-                      ehEntrada={l.id === idDaEntrada}
-                      contagem={contagem.get(l.id) ?? 0}
-                      percentualAuto={autoPorColuna.get(l.id) ?? null}
-                      onMudar={mudar}
-                      onExcluir={excluir}
-                    />
-                  ))}
-                </tbody>
-              </SortableContext>
-            </table>
+        {/* A LISTA, não uma tabela. Era uma grade de 7 colunas com 5 controles
+            por linha, todos com borda e peso iguais: densidade sem hierarquia,
+            e o campo Nome espremido a ~20px. Agora cada coluna é uma linha, o
+            nome é o elemento maior, e cada controle carrega o efeito ao lado.
+            Padrão de Linear (status do time) e Asana (regras); o Jira mantém
+            tabela e é a queixa recorrente daquela tela. */}
+        <div>
+          {/* A legenda alinha com a grade das linhas. Some junto com as duas
+              colunas do meio quando a tela estreita. */}
+          <div className={cn(
+            "grid gap-2.5 px-2.5 pb-1.5 border-b border-border",
+            "grid-cols-[22px_minmax(0,1fr)_132px_136px_64px_78px_30px]",
+            "max-[860px]:grid-cols-[22px_minmax(0,1fr)_64px_78px_30px]",
+          )}>
+            <span />
+            <span className="text-[9.5px] font-semibold uppercase tracking-[.07em] text-muted-foreground">Nome</span>
+            <span
+              className="text-[9.5px] font-semibold uppercase tracking-[.07em] text-muted-foreground max-[860px]:hidden"
+              title="O que a coluna significa para o sistema — decide progresso, limite e indicadores. O nome é livre; a categoria, não."
+            >Significa</span>
+            <span className="text-[9.5px] font-semibold uppercase tracking-[.07em] text-muted-foreground max-[860px]:hidden">Progresso</span>
+            <span
+              className="text-[9.5px] font-semibold uppercase tracking-[.07em] text-muted-foreground text-center"
+              title="Onde a tarefa nasce: criação rápida, importação de EAP e reabertura. Uma por projeto."
+            >Entrada</span>
+            <span className="text-[9.5px] font-semibold uppercase tracking-[.07em] text-muted-foreground text-center">No quadro</span>
+            <span />
           </div>
-        </DndContext>
+
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={aoArrastar}>
+            <SortableContext items={linhas.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+              <div className="flex flex-col py-1 divide-y divide-border/50">
+                {linhas.map((l) => (
+                  <LinhaArrastavel
+                    key={l.id}
+                    linha={l}
+                    // Pelo ID da coluna de entrada, não pela posição na lista:
+                    // se a ordem mudar durante a edição, a posição mente e a
+                    // proteção passaria para a linha errada.
+                    ehEntrada={l.id === idDaEntrada}
+                    contagem={contagem.get(l.id) ?? 0}
+                    percentualAuto={autoPorColuna.get(l.id) ?? null}
+                    concluidaOcupadaPor={linhaConcluida?.id ?? null}
+                    nomeDaConcluida={linhaConcluida?.title ?? ""}
+                    onMudar={mudar}
+                    onMudarNome={mudarNome}
+                    onMarcarEntrada={marcarEntrada}
+                    onExcluir={excluir}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        </div>
 
         {ocultasComTarefa.length > 0 && (
           <div className="flex items-start gap-2 text-[11px] text-warning leading-snug">

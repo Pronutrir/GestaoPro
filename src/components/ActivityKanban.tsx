@@ -2194,6 +2194,11 @@ export const ActivityKanban = ({
           progress_percent: l.progress_percent,
           wip_limit: l.wip_limit,
           is_visible: l.is_visible,
+          categoria: l.categoria,
+          // `is_final` é a leitura legada de "concluída" — o quadro pré-migration
+          // ainda depende dela. Mantidas em acordo para os dois caminhos darem a
+          // mesma resposta; divergir faria o progresso mudar conforme quem lê.
+          is_final: l.categoria === "concluida",
         } as never)
         .eq("id", l.id);
       if (error) falhas.push(`"${titulo}": ${error.message}`);
@@ -2205,10 +2210,12 @@ export const ActivityKanban = ({
     for (const l of plano.criadas) {
       const titulo = getStageDisplayTitle(l.title.trim());
       if (!titulo) continue;
-      // Mesma precaução de handleAddStage: "concluida" é única por projeto
-      // (índice no banco), e `categoria` pode não existir se a migration não
-      // rodou — daí o insert de compatibilidade.
-      let categoria = suggestCategoryFromTitle(titulo);
+      // A categoria vem ESCOLHIDA da tabela — o palpite pelo título só
+      // pré-preenche o campo lá, e a pessoa vê e confirma. Antes ele era
+      // gravado direto e virava definitivo.
+      // Continua valendo a precaução do índice único: se outra coluna já é a
+      // "concluída" do projeto, o insert falharia depois de a pessoa salvar.
+      let categoria = l.categoria;
       if (categoria === "concluida" && stages.some((s) => s.categoria === "concluida")) {
         categoria = "andamento";
       }
@@ -2249,6 +2256,39 @@ export const ActivityKanban = ({
       );
       const erro = resultados.find((r) => r.error);
       if (erro?.error) falhas.push(`ordem: ${erro.error.message}`);
+    }
+
+    if (plano.entrada) {
+      // Desmarca a anterior ANTES de marcar a nova: o banco tem índice único
+      // parcial de uma entrada por projeto, e marcar primeiro colidiria.
+      const novaEntrada = idPorChave.get(plano.entrada) ?? plano.entrada;
+      const anterior = stages.find(ehColunaDeEntrada);
+      if (anterior && anterior.id !== novaEntrada) {
+        const r = await supabase
+          .from("workflow_stages")
+          .update({ is_entry_point: false } as never)
+          .eq("id", anterior.id);
+        if (r.error && !/is_entry_point/i.test(r.error.message || "")) {
+          falhas.push(`entrada: ${r.error.message}`);
+        }
+      }
+      const r = await supabase
+        .from("workflow_stages")
+        .update({ is_entry_point: true } as never)
+        .eq("id", novaEntrada);
+      if (r.error) {
+        // Coluna ausente = migration não rodou: o quadro segue no comportamento
+        // antigo (a primeira é a entrada) em vez de acusar erro à toa.
+        if (/is_entry_point|column|schema cache/i.test(r.error.message || "")) {
+          toast({
+            title: "Coluna de entrada não pôde ser alterada",
+            description: "Aplique a migration apply-coluna-de-entrada.sh na VM para habilitar.",
+            variant: "destructive",
+          });
+        } else {
+          falhas.push(`entrada: ${r.error.message}`);
+        }
+      }
     }
 
     await fetchStages();
