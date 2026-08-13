@@ -30,6 +30,14 @@ interface TreeNode {
   codigoExplicito?: boolean;
   /** Datas, horas, custo e responsável lidos das colunas da planilha. */
   vals?: ColValues;
+  /**
+   * Número da linha no texto colado — só para item SEM código (marco solto).
+   *
+   * A árvore é ordenada por `code`, e quem não tem código não teria lugar: iria
+   * parar no começo ou no fim, longe de onde foi escrito. Este número devolve a
+   * posição original na hora de ordenar.
+   */
+  ordemNoTexto?: number;
 }
 
 interface ImportWBSDialogProps {
@@ -102,8 +110,8 @@ type LinhaDescartada = {
   /** Número da linha no texto colado, contando a partir de 1. */
   numero: number;
   texto: string;
-  motivo: "sem-codigo" | "codigo-invalido" | "sem-titulo" | "anexada";
-  /** Só para `anexada`: em qual item o texto entrou. */
+  motivo: "sem-codigo" | "codigo-invalido" | "sem-titulo" | "anexada" | "numerada";
+  /** Para `anexada`: em qual item o texto entrou. Para `numerada`: o código dado. */
   anexadaEm?: string;
 };
 
@@ -112,7 +120,18 @@ const MOTIVO_LABEL: Record<LinhaDescartada["motivo"], string> = {
   "codigo-invalido": "código fora do padrão",
   "sem-titulo": "sem título",
   "anexada": "juntada à linha anterior",
+  // `numerada` NÃO é perda: a linha ENTROU na EAP, sem código, no lugar em que
+  // foi colada. Fica na lista para a decisão ser visível e conferível.
+  "numerada": "entrou sem código, na posição do texto",
 };
+
+/**
+ * Motivos que NÃO representam perda — a linha foi aproveitada de algum jeito.
+ *
+ * Fora do componente porque é constante: dentro, o Set seria recriado a cada
+ * render e as memoizações que dependem dele nunca segurariam nada.
+ */
+const MOTIVOS_SEM_PERDA = new Set<LinhaDescartada["motivo"]>(["anexada", "numerada"]);
 
 type ResultadoParse = { nodes: TreeNode[]; descartadas: LinhaDescartada[] };
 
@@ -276,11 +295,37 @@ const parseFlexible = (text: string): ResultadoParse => {
             numero: r.numero, texto: r.title, motivo: "anexada",
             anexadaEm: `${prev.code} ${prev.title}`.trim(),
           });
+        } else if (prev) {
+          // LINHA COMPLETA SEM NUMERAÇÃO: entra ONDE FOI COLADA, sem código.
+          //
+          // Marco se escreve assim — "Marco M1 — TAP aprovado" solto entre as
+          // atividades, sem numeração própria. É o formato de EAP real, não um
+          // descuido: o marco não é uma etapa do trabalho, é um ponto de
+          // controle, e por isso não recebe posição na numeração.
+          //
+          // `wbs_code` não é obrigatório no banco, então ele pode existir sem
+          // código. O que importa é o PAI — ele pende de onde estava no texto,
+          // que é o mesmo pai do item logo acima.
+          //
+          // `codigoExplicito: false` faz a palavra "Marco" no título vencer a
+          // posição em eapRoleForImport — é assim que ele vira Marco de fato.
+          nodes.push({
+            code: "",              // sem código: o marco não entra na numeração
+            title: r.title,
+            depth: prev.depth,     // mesmo nível do irmão de cima
+            role: "atividade",     // aplicarPapeis decide; o título declara marco
+            parentCode: prev.parentCode,
+            codigoExplicito: false,
+            ordemNoTexto: r.numero, // preserva o lugar na ordenação por código
+          });
+          // Registrada como INFORMAÇÃO: entrou na EAP, só não tem código.
+          descartadas.push({
+            numero: r.numero, texto: r.title, motivo: "numerada",
+            anexadaEm: prev.parentCode || "raiz",
+          });
         } else {
-          // Linha completa sem numeração (ou sem item anterior onde anexar):
-          // fica de fora e é REGISTRADA, com o número da linha para achar e
-          // corrigir. Não vira item porque não há como saber onde ela entra na
-          // hierarquia — inventar uma posição seria pior que avisar.
+          // Sem item anterior não há posição de onde deduzir — aí fica de fora
+          // mesmo, registrada com o número da linha para achar e corrigir.
           descartadas.push({ numero: r.numero, texto: r.title, motivo: "sem-codigo" });
         }
         continue;
@@ -317,7 +362,19 @@ const parseFlexible = (text: string): ResultadoParse => {
     }
     nodes.push(...missing);
     // Reordena por código para a árvore sair na ordem natural da EAP.
-    nodes.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+    //
+    // ITEM SEM CÓDIGO (marco solto) usa a chave do IRMÃO DE CIMA com um sufixo:
+    // ordenar "" pelo `localeCompare` o jogaria para o começo da lista, longe
+    // de onde foi escrito. Com a chave do vizinho + "~" (que vem depois de
+    // qualquer dígito), ele fica exatamente na linha em que foi colado.
+    const chaveDeOrdem = new Map<TreeNode, string>();
+    let ultimaChave = "";
+    for (const n of nodes) {
+      if (n.code) { ultimaChave = n.code; chaveDeOrdem.set(n, n.code); }
+      else chaveDeOrdem.set(n, `${ultimaChave}~${n.ordemNoTexto ?? 0}`);
+    }
+    nodes.sort((a, b) =>
+      (chaveDeOrdem.get(a) ?? "").localeCompare(chaveDeOrdem.get(b) ?? "", undefined, { numeric: true }));
   } else {
     // Modo indentação/bullets: a profundidade vem do recuo. Gera códigos.
     // Pilha de ancestrais: cada nível guarda { indent, count, code }.
@@ -461,16 +518,20 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
    * o parser registra cada descarte e a prévia mostra a linha, o texto e o
    * porquê — cada motivo pede uma correção diferente.
    *
-   * `anexada` fica FORA do alerta: o texto entrou no item anterior (título que
-   * quebrou em duas ao colar), então não houve perda. Ela entrava no contador
-   * antigo e assustava à toa.
+   * DOIS motivos ficam FORA do alerta porque não houve perda:
+   *   `anexada`  — o texto entrou no item anterior (título quebrado ao colar)
+   *   `numerada` — a linha virou item, com código deduzido da posição
+   *
+   * Os dois entravam no contador antigo e assustavam à toa. Continuam na lista,
+   * em tom neutro: são informação de "o que o parser decidiu por você", não
+   * aviso de perda.
    */
   const linhasPerdidas = useMemo(
-    () => parsed.descartadas.filter((d) => d.motivo !== "anexada"),
+    () => parsed.descartadas.filter((d) => !MOTIVOS_SEM_PERDA.has(d.motivo)),
     [parsed.descartadas],
   );
   const linhasAnexadas = useMemo(
-    () => parsed.descartadas.filter((d) => d.motivo === "anexada"),
+    () => parsed.descartadas.filter((d) => MOTIVOS_SEM_PERDA.has(d.motivo)),
     [parsed.descartadas],
   );
   const [detalheAberto, setDetalheAberto] = useState(false);
@@ -1049,11 +1110,18 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                   const inventado = n.title.startsWith("(sem título)");
                   const jaExiste = inventado ? faseExistente(n.code) : null;
                   return (
-                  <div key={n.code} className="flex items-center gap-2.5 py-1" style={{ paddingLeft: (n.depth - 1) * 20 }}>
+                  // `key` cai na linha do texto quando não há código: marco
+                  // solto tem code vazio, e keys vazias colidem entre si.
+                  <div key={n.code || `linha:${n.ordemNoTexto}`} className="flex items-center gap-2.5 py-1" style={{ paddingLeft: (n.depth - 1) * 20 }}>
                     <span className={cn("inline-flex items-center text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0", ROLE_META[n.role].cls)}>
                       {ROLE_META[n.role].short}
                     </span>
-                    <span className="text-[11px] font-mono text-muted-foreground shrink-0">{n.code}</span>
+                    {/* Sem código, mostra um traço em vez de espaço vazio: o
+                        marco não entra na numeração da EAP de propósito, e um
+                        branco ali pareceria informação faltando. */}
+                    <span className="text-[11px] font-mono text-muted-foreground shrink-0" title={n.code ? undefined : "Marco não entra na numeração da EAP"}>
+                      {n.code || "—"}
+                    </span>
                     {/* A fase JÁ EXISTE: mostra o título real e avisa que será
                         reaproveitada. Antes dizia "(sem título) 1" e prometia
                         uma fase nova que a importação não cria — ela reaproveita
