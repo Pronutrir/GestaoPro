@@ -1112,42 +1112,57 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                   return (
                   // `key` cai na linha do texto quando não há código: marco
                   // solto tem code vazio, e keys vazias colidem entre si.
-                  <div key={n.code || `linha:${n.ordemNoTexto}`} className="flex items-center gap-2.5 py-1" style={{ paddingLeft: (n.depth - 1) * 20 }}>
-                    <span className={cn("inline-flex items-center text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0", ROLE_META[n.role].cls)}>
+                  // `items-start`, não `items-center`: com o título quebrando em
+                  // duas linhas, centralizar faria o selo e o código flutuarem no
+                  // meio do bloco — a coluna deles deixaria de se ler de cima a
+                  // baixo. Pelo topo, cada linha começa alinhada com a anterior.
+                  <div key={n.code || `linha:${n.ordemNoTexto}`} className="flex items-start gap-2.5 py-1" style={{ paddingLeft: (n.depth - 1) * 20 }}>
+                    <span className={cn("inline-flex items-center text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 mt-px", ROLE_META[n.role].cls)}>
                       {ROLE_META[n.role].short}
                     </span>
                     {/* Sem código, mostra um traço em vez de espaço vazio: o
                         marco não entra na numeração da EAP de propósito, e um
                         branco ali pareceria informação faltando. */}
-                    <span className="text-[11px] font-mono text-muted-foreground shrink-0" title={n.code ? undefined : "Marco não entra na numeração da EAP"}>
+                    <span className="text-[11px] font-mono text-muted-foreground shrink-0 mt-0.5" title={n.code ? undefined : "Marco não entra na numeração da EAP"}>
                       {n.code || "—"}
                     </span>
                     {/* A fase JÁ EXISTE: mostra o título real e avisa que será
                         reaproveitada. Antes dizia "(sem título) 1" e prometia
                         uma fase nova que a importação não cria — ela reaproveita
                         a existente. */}
+                    {/* TÍTULO QUEBRA, não corta. `truncate` cortava numa linha
+                        só E sem `title`: o texto perdido não voltava nem no
+                        hover. Some mais do que parece — cada nível recua 20px,
+                        então "1.1.1.1" começa 60px à direita e ainda divide a
+                        linha com o selo e o código.
+                        Esta é a tela de CONFERIR antes de gravar; o que não se
+                        lê não se verifica. Jira e Asana quebram o texto na
+                        prévia pelo mesmo motivo.
+                        `line-clamp-3` é o teto: título colado por engano (200+
+                        caracteres) não pode ocupar meia tela — aí o tooltip
+                        mostra o resto. */}
                     {jaExiste ? (
                       <>
-                        <span className="text-[13px] truncate">{jaExiste}</span>
+                        <span className="text-[13px] break-words line-clamp-3 min-w-0 flex-1" title={jaExiste}>{jaExiste}</span>
                         <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded border border-success/40 bg-success/5 text-success">
                           já existe · será reaproveitada
                         </span>
                       </>
                     ) : inventado ? (
                       <>
-                        <span className="text-[13px] truncate text-muted-foreground italic">sem título</span>
+                        <span className="text-[13px] text-muted-foreground italic min-w-0">sem título</span>
                         <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded border border-warning/40 bg-warning/5 text-warning"
                               title={`O código ${n.code} não estava no texto colado, mas "${tree.find((x) => x.parentCode === n.code)?.code ?? ""}" precisa dele. Será criada sem título.`}>
                           criada automaticamente
                         </span>
                       </>
                     ) : (
-                      <span className="text-[13px] truncate">{n.title}</span>
+                      <span className="text-[13px] break-words line-clamp-3 min-w-0 flex-1" title={n.title}>{n.title}</span>
                     )}
                     {/* O que veio das colunas: conferir aqui evita descobrir
                         que a data entrou errada só depois de importar. */}
                     {n.vals && (
-                      <span className="ml-auto flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
+                      <span className="ml-auto flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground mt-0.5">
                         {(n.vals.start_date || n.vals.end_date) && (
                           <span className="font-mono">
                             {fmtDia(n.vals.start_date)}→{fmtDia(n.vals.end_date)}
