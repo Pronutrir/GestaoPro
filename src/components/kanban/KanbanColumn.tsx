@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { DateField } from "@/components/ui/date-field";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -994,145 +994,32 @@ export function SortableColumn({
                   onClick={(e) => e.stopPropagation()}
                   onPointerDown={(e) => e.stopPropagation()}
                 >
-                  <DropdownMenuLabel className="text-xs">Gerenciar coluna</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="focus:bg-muted/60 focus:text-foreground"
-                    onSelect={(e) => {
-                      e.preventDefault();
+                  {/* Os itens vêm de StageMenuItems: o MESMO menu que a lista
+                      "Colunas" usa. Antes ele vivia só aqui, e por isso a
+                      coluna oculta ficava sem nenhuma forma de ser editada.
+                      "Marcar como Bloqueio" saiu em rodada anterior: bloqueio é
+                      do ITEM, não da coluna. */}
+                  <StageMenuItems
+                    stage={stage}
+                    quantidade={stageActivities.length}
+                    onPedirRenomear={() => {
+                      // No cabeçalho o título vira campo no lugar — a coluna
+                      // está à vista, não precisa de diálogo.
                       setRenameValue(stage.title);
                       setRenaming(true);
                     }}
-                  >
-                    <Pencil className="w-3.5 h-3.5 mr-2" /> Renomear
-                  </DropdownMenuItem>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="focus:bg-muted/60 focus:text-foreground data-[state=open]:bg-muted/60 data-[state=open]:text-foreground">
-                      <div className="w-3.5 h-3.5 mr-2 rounded-full" style={{ backgroundColor: stage.color }} />
-                      Alterar cor
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent sideOffset={6} className="p-2">
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {STAGE_PRESET_COLORS.map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            className="w-6 h-6 rounded-full ring-1 ring-border hover:ring-foreground/50 focus:outline-none focus:ring-2 focus:ring-foreground/40"
-                            style={{ backgroundColor: c }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onChangeStageColor(stage.id, c);
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuItem
-                    className="focus:bg-muted/60 focus:text-foreground"
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      onToggleStageFinal(stage.id, stage.is_final);
+                    acoes={{
+                      onRename: onRenameStage,
+                      onDelete: onDeleteStage,
+                      onChangeColor: onChangeStageColor,
+                      onSetProgress: onSetStageProgress,
+                      onSetWipLimit: onSetStageWipLimit,
+                      onToggleWipStrict: onToggleStageWipStrict,
+                      onToggleContributes: onToggleStageContributes,
+                      onToggleFinal: onToggleStageFinal,
+                      onToggleVisible: onToggleStageVisible,
                     }}
-                    title="Final: atividades nesta coluna passam a representar 100% do fluxo."
-                  >
-                    <Check className="w-3.5 h-3.5 mr-2 text-success" />
-                    {stage.is_final ? "Remover marca de Final" : "Marcar como Final"}
-                  </DropdownMenuItem>
-                  {/* "Marcar como Bloqueio" saiu daqui: bloqueio é do ITEM, não
-                      da coluna. Uma coluna de bloqueio tira o card do fluxo,
-                      escapa do limite de WIP e distorce o tempo por etapa —
-                      agora se bloqueia pelo próprio card, que fica no lugar. */}
-                  <DropdownMenuItem
-                    className="focus:bg-muted/60 focus:text-foreground"
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      onSetStageProgress(stage.id, stage.progress_percent ?? null);
-                    }}
-                    title="Define um percentual fixo para esta coluna. Em branco = automático por posição."
-                  >
-                    <LayoutGrid className="w-3.5 h-3.5 mr-2" />
-                    {stage.progress_percent == null
-                      ? "Definir progresso (%)"
-                      : `Editar progresso (${stage.progress_percent}%)`}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="focus:bg-muted/60 focus:text-foreground"
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      onSetStageWipLimit(stage.id, stage.wip_limit ?? null);
-                    }}
-                    title="Limite de cards em andamento (WIP). Em branco = sem limite."
-                  >
-                    <Layers className="w-3.5 h-3.5 mr-2" />
-                    {stage.wip_limit == null
-                      ? "Definir limite (WIP)"
-                      : `Editar limite WIP (${stage.wip_limit})`}
-                  </DropdownMenuItem>
-                  {/* Só faz sentido oferecer o modo rígido quando existe limite. */}
-                  {stage.wip_limit != null && stage.wip_limit > 0 && onToggleStageWipStrict && (
-                    <DropdownMenuItem
-                      className="focus:bg-muted/60 focus:text-foreground"
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        onToggleStageWipStrict(stage.id, !!stage.wip_strict);
-                      }}
-                      title="Rígido: o quadro IMPEDE trazer mais cards ao atingir o limite. Flexível: apenas avisa."
-                    >
-                      {stage.wip_strict
-                        ? <Check className="w-3.5 h-3.5 mr-2 text-success" />
-                        : <span className="w-3.5 h-3.5 mr-2" />}
-                      {stage.wip_strict ? "Limite rígido (impede)" : "Tornar limite rígido"}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem
-                    className="focus:bg-muted/60 focus:text-foreground"
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      onToggleStageContributes(stage.id, stage.contributes_to_progress);
-                    }}
-                    title="Quando desativado, esta coluna não avança o progresso do fluxo."
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 mr-2" />
-                    {stage.contributes_to_progress === false
-                      ? "Incluir no progresso"
-                      : "Remover do progresso"}
-                  </DropdownMenuItem>
-                  {/* "para todos" no rótulo: ocultar grava em workflow_stages,
-                      que é do PROJETO — some do quadro da equipe inteira. Fica a
-                      um clique do "Recolher", que é preferência só sua, e os
-                      dois soavam iguais. */}
-                  <DropdownMenuItem
-                    className="focus:bg-muted/60 focus:text-foreground"
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      // Com cartões dentro, confirma: some do quadro de todo
-                      // mundo sem deixar rastro, e as tarefas continuam lá.
-                      if (stage.is_visible && stageActivities.length > 0) {
-                        const n = stageActivities.length;
-                        const ok = window.confirm(
-                          `"${stage.title}" tem ${n} ${n === 1 ? "tarefa" : "tarefas"} e vai sumir do quadro de TODOS do projeto.\n\n` +
-                          `As tarefas continuam existindo e mantêm o status — só deixam de aparecer aqui.\n\n` +
-                          `Para limpar apenas a sua visão, use "Recolher coluna".`
-                        );
-                        if (!ok) return;
-                      }
-                      onToggleStageVisible(stage.id, stage.is_visible);
-                    }}
-                  >
-                    {stage.is_visible ? <EyeOff className="w-3.5 h-3.5 mr-2" /> : <Eye className="w-3.5 h-3.5 mr-2" />}
-                    {stage.is_visible ? "Ocultar para todos" : "Mostrar para todos"}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      onDeleteStage(stage.id);
-                    }}
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir coluna
-                  </DropdownMenuItem>
+                  />
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -1268,6 +1155,176 @@ export function DroppableColumn({
   );
 }
 
+/** As ações de administrar uma coluna, sem depender de onde elas aparecem. */
+export type StageActions = {
+  onRename: (id: string, title: string) => void | Promise<void>;
+  onDelete: (id: string) => void | Promise<void>;
+  onChangeColor: (id: string, color: string) => void | Promise<void>;
+  onSetProgress: (id: string, current: number | null | undefined) => void | Promise<void>;
+  onSetWipLimit: (id: string, current: number | null | undefined) => void | Promise<void>;
+  onToggleWipStrict?: (id: string, current: boolean) => void | Promise<void>;
+  onToggleContributes: (id: string, current: boolean | undefined) => void | Promise<void>;
+  onToggleFinal: (id: string, current: boolean) => void | Promise<void>;
+  onToggleVisible: (id: string, current: boolean) => void | Promise<void>;
+};
+
+/** O que o menu precisa saber da coluna. Subconjunto de WorkflowStage. */
+export type StageMenuData = {
+  id: string;
+  title: string;
+  color: string;
+  is_final: boolean;
+  is_visible: boolean;
+  progress_percent?: number | null;
+  wip_limit?: number | null;
+  wip_strict?: boolean;
+  contributes_to_progress?: boolean;
+};
+
+/**
+ * O MIOLO do menu ⋯ da coluna — as 8 ações, num lugar só.
+ *
+ * Extraído do cabeçalho em 12/08/2026 porque ele era o ÚNICO caminho para
+ * administrar uma coluna: some a coluna do quadro (ocultar) e as ações somem
+ * junto. Quem ocultasse "Em Teste" não tinha como renomeá-la, mudar a cor ou
+ * excluí-la sem antes reexibir. Agora o mesmo menu serve o cabeçalho e a lista
+ * "Colunas", e a coluna oculta deixa de ser inalcançável.
+ *
+ * Só os itens; quem chama põe o DropdownMenu em volta e decide o gatilho.
+ */
+export function StageMenuItems({
+  stage, acoes, quantidade = 0, onPedirRenomear, fecharAoRenomear = false,
+}: {
+  stage: StageMenuData;
+  acoes: StageActions;
+  /** Cards na coluna — usado no aviso de ocultar. */
+  quantidade?: number;
+  /** Renomear: o cabeçalho edita no lugar, a lista abre um campo próprio. */
+  onPedirRenomear: () => void;
+  /**
+   * Deixa o menu FECHAR ao escolher Renomear.
+   *
+   * No cabeçalho o campo fica atrás do menu aberto, e o `preventDefault` é
+   * proposital — o título continua à vista enquanto o menu se fecha sozinho.
+   * Na lista o campo nasce DENTRO da mesma linha do gatilho: com o menu aberto
+   * por cima, ele fica coberto e o foco preso no menu, então digitar não
+   * chegava ao campo. (Visto em teste no navegador, não deduzido.)
+   */
+  fecharAoRenomear?: boolean;
+}) {
+  return (
+    <>
+      <DropdownMenuLabel className="text-xs">Gerenciar coluna</DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        className="focus:bg-muted/60 focus:text-foreground"
+        onSelect={(e) => {
+          if (!fecharAoRenomear) e.preventDefault();
+          onPedirRenomear();
+        }}
+      >
+        <Pencil className="w-3.5 h-3.5 mr-2" /> Renomear
+      </DropdownMenuItem>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger className="focus:bg-muted/60 focus:text-foreground data-[state=open]:bg-muted/60 data-[state=open]:text-foreground">
+          <div className="w-3.5 h-3.5 mr-2 rounded-full" style={{ backgroundColor: stage.color }} />
+          Alterar cor
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent sideOffset={6} className="p-2">
+          <div className="grid grid-cols-4 gap-1.5">
+            {STAGE_PRESET_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className="w-6 h-6 rounded-full ring-1 ring-border hover:ring-foreground/50 focus:outline-none focus:ring-2 focus:ring-foreground/40"
+                style={{ backgroundColor: c }}
+                onClick={(e) => { e.stopPropagation(); acoes.onChangeColor(stage.id, c); }}
+              />
+            ))}
+          </div>
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      <DropdownMenuItem
+        className="focus:bg-muted/60 focus:text-foreground"
+        onSelect={(e) => { e.preventDefault(); acoes.onToggleFinal(stage.id, stage.is_final); }}
+        title="Final: atividades nesta coluna passam a representar 100% do fluxo."
+      >
+        <Check className="w-3.5 h-3.5 mr-2 text-success" />
+        {stage.is_final ? "Remover marca de Final" : "Marcar como Final"}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        className="focus:bg-muted/60 focus:text-foreground"
+        onSelect={(e) => { e.preventDefault(); acoes.onSetProgress(stage.id, stage.progress_percent ?? null); }}
+        title="Define um percentual fixo para esta coluna. Em branco = automático por posição."
+      >
+        <LayoutGrid className="w-3.5 h-3.5 mr-2" />
+        {stage.progress_percent == null
+          ? "Definir progresso (%)"
+          : `Editar progresso (${stage.progress_percent}%)`}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        className="focus:bg-muted/60 focus:text-foreground"
+        onSelect={(e) => { e.preventDefault(); acoes.onSetWipLimit(stage.id, stage.wip_limit ?? null); }}
+        title="Limite de cards em andamento (WIP). Em branco = sem limite."
+      >
+        <Layers className="w-3.5 h-3.5 mr-2" />
+        {stage.wip_limit == null ? "Definir limite (WIP)" : `Editar limite WIP (${stage.wip_limit})`}
+      </DropdownMenuItem>
+      {/* Só faz sentido oferecer o modo rígido quando existe limite. */}
+      {stage.wip_limit != null && stage.wip_limit > 0 && acoes.onToggleWipStrict && (
+        <DropdownMenuItem
+          className="focus:bg-muted/60 focus:text-foreground"
+          onSelect={(e) => { e.preventDefault(); acoes.onToggleWipStrict!(stage.id, !!stage.wip_strict); }}
+          title="Rígido: o quadro IMPEDE trazer mais cards ao atingir o limite. Flexível: apenas avisa."
+        >
+          {stage.wip_strict
+            ? <Check className="w-3.5 h-3.5 mr-2 text-success" />
+            : <span className="w-3.5 h-3.5 mr-2" />}
+          {stage.wip_strict ? "Limite rígido (impede)" : "Tornar limite rígido"}
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuItem
+        className="focus:bg-muted/60 focus:text-foreground"
+        onSelect={(e) => { e.preventDefault(); acoes.onToggleContributes(stage.id, stage.contributes_to_progress); }}
+        title="Quando desativado, esta coluna não avança o progresso do fluxo."
+      >
+        <CheckCircle2 className="w-3.5 h-3.5 mr-2" />
+        {stage.contributes_to_progress === false ? "Incluir no progresso" : "Remover do progresso"}
+      </DropdownMenuItem>
+      {/* "para todos" no rótulo: ocultar grava em workflow_stages, que é do
+          PROJETO — some do quadro da equipe inteira. Fica a um clique do
+          "Recolher", que é preferência só sua, e os dois soavam iguais. */}
+      <DropdownMenuItem
+        className="focus:bg-muted/60 focus:text-foreground"
+        onSelect={(e) => {
+          e.preventDefault();
+          // Com cartões dentro, confirma: some do quadro de todo mundo sem
+          // deixar rastro, e as tarefas continuam lá.
+          if (stage.is_visible && quantidade > 0) {
+            const ok = window.confirm(
+              `"${stage.title}" tem ${quantidade} ${quantidade === 1 ? "tarefa" : "tarefas"} e vai sumir do quadro de TODOS do projeto.\n\n` +
+              `As tarefas continuam existindo e mantêm o status — só deixam de aparecer aqui.\n\n` +
+              `Para limpar apenas a sua visão, use "Recolher coluna".`
+            );
+            if (!ok) return;
+          }
+          acoes.onToggleVisible(stage.id, stage.is_visible);
+        }}
+      >
+        {stage.is_visible ? <EyeOff className="w-3.5 h-3.5 mr-2" /> : <Eye className="w-3.5 h-3.5 mr-2" />}
+        {stage.is_visible ? "Ocultar para todos" : "Mostrar para todos"}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+        onSelect={(e) => { e.preventDefault(); acoes.onDelete(stage.id); }}
+      >
+        <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir coluna
+      </DropdownMenuItem>
+    </>
+  );
+}
+
 /**
  * "Colunas" — a lista completa do quadro, no fim da fila de colunas.
  *
@@ -1280,24 +1337,36 @@ export function DroppableColumn({
  * toggle. "Nova coluna" passa a ser a última linha da lista.
  */
 export function StageListButton({
-  projectId, onChanged, stages = [], countByStage, canManage = false, onToggleVisible,
+  projectId, onChanged, stages = [], countByStage, canManage = false, onToggleVisible, acoes,
 }: {
   projectId: string;
   onChanged?: () => void;
   /** TODAS as colunas do projeto, visíveis e ocultas, em display_order. */
-  stages?: { id: string; title: string; color: string; is_visible?: boolean }[];
+  stages?: WorkflowStage[];
   countByStage?: Map<string, number>;
   canManage?: boolean;
   onToggleVisible?: (id: string, isVisible: boolean) => void;
+  /** As mesmas ações do menu do cabeçalho. Sem elas, a lista só mostra. */
+  acoes?: StageActions;
 }) {
   const [open, setOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  // Renomear a partir da lista: a coluna oculta não tem cabeçalho onde editar
+  // no lugar, então o campo aparece NA PRÓPRIA LINHA. Guarda o id em edição.
+  const [renomeando, setRenomeando] = useState<string | null>(null);
+  const [novoNome, setNovoNome] = useState("");
 
   const contagem = countByStage ?? new Map<string, number>();
   const ocultas = stages.filter((s) => s.is_visible === false);
   // Coluna oculta VAZIA é só arrumação; com tarefa dentro é problema — tem
   // gente com status que ninguém enxerga no quadro. Só esse caso ganha cor.
   const presas = ocultas.filter((s) => (contagem.get(s.id) ?? 0) > 0).length;
+
+  const confirmarRenome = (s: WorkflowStage) => {
+    const limpo = novoNome.trim();
+    if (limpo && limpo !== s.title) acoes?.onRename(s.id, limpo);
+    setRenomeando(null);
+  };
 
   return (
     <div className="shrink-0 self-start pt-3 pl-2 flex flex-col items-start gap-1">
@@ -1336,10 +1405,31 @@ export function StageListButton({
                   )}
                 >
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.color }} />
-                  <span className="truncate flex-1">{s.title}</span>
+                  {/* Renomear acontece AQUI, na linha: a coluna oculta não tem
+                      cabeçalho onde o título vire campo, e mandar para outra
+                      tela só para trocar um nome seria desvio. */}
+                  {renomeando === s.id ? (
+                    <input
+                      // `autoFocus` sozinho não basta: ao fechar, o Radix
+                      // devolve o foco ao gatilho do menu e o tira do campo.
+                      // O foco no rAF acontece DEPOIS dessa devolução.
+                      ref={(el) => { if (el) requestAnimationFrame(() => el.focus()); }}
+                      value={novoNome}
+                      onChange={(e) => setNovoNome(e.target.value)}
+                      onBlur={() => confirmarRenome(s)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") confirmarRenome(s);
+                        else if (e.key === "Escape") setRenomeando(null);
+                      }}
+                      className="flex-1 min-w-0 bg-transparent border-b border-border outline-none text-[12px] text-foreground"
+                      aria-label={`Novo nome para "${s.title}"`}
+                    />
+                  ) : (
+                    <span className="truncate flex-1">{s.title}</span>
+                  )}
                   {/* A contagem só aparece na oculta: numa coluna visível ela
                       já está no cabeçalho, aqui seria repetição. */}
-                  {oculta && n > 0 && (
+                  {oculta && n > 0 && renomeando !== s.id && (
                     <span className="shrink-0 tabular-nums text-warning font-medium text-[11px]">{n}</span>
                   )}
                   <button
@@ -1361,6 +1451,42 @@ export function StageListButton({
                   >
                     {oculta ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 opacity-60" />}
                   </button>
+                  {/* O ⋯ que faltava: as MESMAS ações do cabeçalho, agora
+                      alcançáveis também na coluna oculta — que não tem
+                      cabeçalho nenhum e por isso ficava sem edição. */}
+                  {canManage && acoes && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                          title={`Ações de "${s.title}"`}
+                        >
+                          <MoreHorizontal className="w-3.5 h-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        side="right"
+                        sideOffset={4}
+                        className="w-56"
+                        // Ao fechar, o Radix devolve o foco ao gatilho ⋯. Como o
+                        // campo de renomear nasce na MESMA linha, essa devolução
+                        // tirava o foco dele, o blur disparava e o renome se
+                        // cancelava ~150ms depois de aparecer. Medido no
+                        // navegador: t=50ms campo com foco, t=150ms campo some.
+                        onCloseAutoFocus={(e) => e.preventDefault()}
+                      >
+                        <StageMenuItems
+                          stage={s}
+                          quantidade={n}
+                          fecharAoRenomear
+                          onPedirRenomear={() => { setNovoNome(s.title); setRenomeando(s.id); }}
+                          acoes={acoes}
+                        />
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
               );
             })}

@@ -2158,6 +2158,24 @@ export const ActivityKanban = ({
     fetchStages();
   }, [fetchStages]);
 
+  // As 8 ações de administrar coluna, num objeto só. Memoizado porque vai como
+  // prop: literal inline recriaria a identidade a cada render do quadro.
+  const acoesDeColuna = useMemo(() => ({
+    onRename: handleRenameStage,
+    onDelete: handleDeleteStage,
+    onChangeColor: handleChangeStageColor,
+    onSetProgress: handleSetStageProgress,
+    onSetWipLimit: handleSetStageWipLimit,
+    onToggleWipStrict: handleToggleStageWipStrict,
+    onToggleContributes: handleToggleStageContributes,
+    onToggleFinal: handleToggleStageFinal,
+    onToggleVisible: handleToggleStageVisible,
+  }), [
+    handleRenameStage, handleDeleteStage, handleChangeStageColor,
+    handleSetStageProgress, handleSetStageWipLimit, handleToggleStageWipStrict,
+    handleToggleStageContributes, handleToggleStageFinal, handleToggleStageVisible,
+  ]);
+
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
   const activeColumn = dragType === "column" && activeId ? visibleStages.find((s) => `col-${s.id}` === activeId) : null;
 
@@ -2859,6 +2877,9 @@ export const ActivityKanban = ({
                     countByStage={countByStage}
                     canManage={isAdmin || canCreate}
                     onToggleVisible={handleToggleStageVisible}
+                    // As mesmas ações do menu ⋯ do cabeçalho. Sem elas, a
+                    // coluna oculta não teria como ser editada em lugar nenhum.
+                    acoes={acoesDeColuna}
                   />
                 )}
               </>
