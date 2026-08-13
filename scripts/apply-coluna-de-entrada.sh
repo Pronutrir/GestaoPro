@@ -24,6 +24,12 @@ $PSQL -v ON_ERROR_STOP=1 -f /tmp/coluna_de_entrada.sql
 $PSQL -c "INSERT INTO public.schema_migrations(version, inserted_at) VALUES ('${VERSION}', NOW()) ON CONFLICT DO NOTHING;"
 
 echo "── DEPOIS (cada projeto deve ter exatamente 1 entrada) ──"
+# O passo 2b desliga o Backlog do quadro em TODO projeto existente. Quem já
+# tinha ligado o interruptor "No quadro" de propósito perde a escolha — é uma
+# vez só, e religar é um clique na tela de colunas. Este contador diz quantos
+# foram afetados, para não ser silencioso.
+$PSQL -c "SELECT count(*) AS backlogs_fora_do_quadro FROM public.workflow_stages
+          WHERE categoria = 'backlog' AND is_visible = false;"
 $PSQL -c "SELECT count(*) AS projetos_com_entrada FROM (
             SELECT project_id FROM public.workflow_stages
             WHERE is_entry_point GROUP BY project_id

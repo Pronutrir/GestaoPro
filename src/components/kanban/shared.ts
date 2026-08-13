@@ -234,25 +234,22 @@ export const ehColunaDeEntrada = (s: { display_order: number; is_entry_point?: b
  * outro, e o agente de IA tinha uma terceira cópia (`isVisibleKanbanStage`, em
  * api/ai/agent/route.ts).
  *
- * BACKLOG NÃO ENTRA. Kanban e Backlog respondem perguntas diferentes: o quadro
- * diz "onde está cada coisa", a fila diz "o que vem primeiro". Misturar os dois
- * enche o quadro com uma lista que só cresce — é o que acontece no Trello, e a
- * queixa recorrente de lá. Jira e Azure DevOps separam as duas telas, e é o
- * corte adotado aqui: a coluna de categoria `backlog` vive na aba Backlog, com
- * GUT e prontidão.
+ * QUEM MANDA É `is_visible` — o interruptor "No quadro", inclusive para o
+ * Backlog.
  *
- * A coluna de ENTRADA, essa aparece — ela é outra coisa. O defeito real era a
- * tarefa criada rápido nascer numa coluna invisível, sem aviso nenhum; com a
- * entrada à vista e marcável, isso deixa de acontecer sem trazer a fila junto.
+ * Antes a categoria `backlog` era excluída aqui, incondicionalmente, e o
+ * interruptor não tinha efeito nenhum sobre ela: a pessoa ligava e a coluna
+ * continuava fora. Um controle que aceita o clique e ignora é pior do que não
+ * existir — mente sobre o próprio estado.
+ *
+ * A separação Kanban × Backlog continua valendo, mas onde ela pertence: no
+ * PADRÃO. O Backlog nasce com `is_visible = false` (o quadro diz "onde está
+ * cada coisa", a fila diz "o que vem primeiro"; misturar enche o quadro com uma
+ * lista que só cresce — o problema do Trello, que Jira e Azure evitam separando
+ * as telas). Quem quiser a fila no quadro liga o interruptor e assume a escolha.
  */
-export const colunasDoQuadro = <T extends {
-  display_order: number; is_visible?: boolean; categoria?: WorkflowCategory; is_final?: boolean; is_blocked?: boolean;
-}>(stages: T[]): T[] =>
-  stages.filter((s) => {
-    if (s.is_visible === false) return false;
-    const cat = parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s);
-    return cat !== "backlog";
-  });
+export const colunasDoQuadro = <T extends { is_visible?: boolean }>(stages: T[]): T[] =>
+  stages.filter((s) => s.is_visible !== false);
 
 /** Colunas escondidas por decisão do projeto (`is_visible = false`). */
 /**

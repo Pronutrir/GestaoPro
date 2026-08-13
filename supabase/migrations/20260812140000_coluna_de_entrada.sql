@@ -55,6 +55,20 @@ AND NOT EXISTS (
   WHERE e.project_id = ws.project_id AND e.is_entry_point
 );
 
+-- 2b) O Backlog dos projetos EXISTENTES sai do quadro ------------------------
+-- Kanban é fluxo ("onde está cada coisa"), Backlog é fila ("o que vem
+-- primeiro"): misturar enche o quadro com uma lista que só cresce. Jira e Azure
+-- DevOps separam as duas telas pelo mesmo motivo.
+--
+-- Isto é o PADRÃO, não uma trava: `is_visible` continua mandando, e quem quiser
+-- a fila no quadro liga o interruptor "No quadro" na tela de colunas. Sem este
+-- passo, o Backlog apareceria no quadro de todo projeto antigo sem ninguém ter
+-- pedido — o filtro por categoria que fazia esse trabalho saiu do código,
+-- justamente porque ignorava o interruptor.
+UPDATE public.workflow_stages
+SET is_visible = false
+WHERE categoria = 'backlog' AND is_visible IS DISTINCT FROM false;
+
 -- 3) Uma entrada por projeto, no máximo --------------------------------------
 -- Índice parcial: só as marcadas entram, então ele impede a segunda sem
 -- atrapalhar as demais linhas.
