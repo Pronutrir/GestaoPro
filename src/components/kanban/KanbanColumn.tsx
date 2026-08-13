@@ -650,10 +650,13 @@ export function SortableColumn({
       activity.workflow_stage_id,
       allStages,
       activity.last_progress_stage_id,
-      (childrenByParent.get(activity.id) || []).map((c: any) => ({
+      (childrenByParent.get(activity.id) || []).map((c) => ({
         status: c.status,
         workflow_stage_id: c.workflow_stage_id,
+        // Marco entra na média como 0 ou 100: não tem meio-caminho.
+        is_milestone: c.is_milestone,
       })),
+      activity.is_milestone,
     );
     const expanded = expandedIds.has(activity.id);
     const isMirrorParent = !stageActivityIds.has(activity.id) && inlineChildren.length > 0;

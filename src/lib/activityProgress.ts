@@ -73,6 +73,11 @@ export interface SubActivityLike {
   status?: string | null;
   /** Coluna da subatividade — usada quando `status` não é conclusivo. */
   workflow_stage_id?: string | null;
+  /**
+   * Marco não tem meio-caminho: é um ponto no tempo, sem duração, sem horas e
+   * sem custo (ver o cabeçalho de `eapModel.ts`). Ou aconteceu, ou não.
+   */
+  is_milestone?: boolean | null;
 }
 
 const PERCENT_LABELS: Record<number, string> = {
@@ -136,6 +141,9 @@ function subFeita(s: SubActivityLike, stages: ProgressStageLike[] | null | undef
  * `null` = fora da média (cancelada), não zero: zerar puniria o pai por algo
  * que saiu do escopo. Pausada devolve o percentual congelado, ou 0 quando não
  * há valor congelado — parada não avança, mas também não some da conta.
+ *
+ * MARCO é 0 ou 100, nunca o meio. Ele não tem duração: é um ponto no tempo, e
+ * arrastá-lo para "Em Revisão" não significa que meio marco aconteceu.
  */
 function subAvanco(
   s: SubActivityLike,
@@ -145,6 +153,10 @@ function subAvanco(
   if ((s.status || "").toLowerCase() === "completed") return 100;
   // Sem coluna não há o que ler — não iniciada.
   if (!s.workflow_stage_id || !stages || stages.length === 0) return 0;
+  // Marco: só a coluna FINAL o realiza. Qualquer posição intermediária é 0 —
+  // ele não avança, acontece. `subFeita` já faz esse teste (status ou coluna
+  // concluída), que é exatamente a pergunta binária que o marco aceita.
+  if (s.is_milestone) return subFeita(s, stages) ? 100 : 0;
   // Sem netos aqui: `SubActivityLike` não os carrega, e buscá-los abriria uma
   // recursão que nenhuma das telas alimenta hoje. Um nível é o que existe.
   const p = computeActivityProgress(s.workflow_stage_id, stages);
@@ -205,7 +217,29 @@ export function computeActivityProgress(
    * 100% tendo filho aberto (uma com 5 de 11 feitas).
    */
   subActivities?: SubActivityLike[] | null,
+  /**
+   * A PRÓPRIA atividade é um marco. Marco não tem percentual de avanço: é um
+   * ponto no tempo, sem duração, sem horas e sem custo — ou aconteceu, ou não.
+   * Sem esta marca ele herdava a régua das atividades e exibia 33%, 67%, como
+   * se um marco pudesse estar pela metade.
+   */
+  isMilestone?: boolean | null,
 ): ActivityProgress {
+  // ── MARCO: binário, decidido antes de tudo ─────────────────────────────
+  // Antes das subatividades de propósito: marco não agrupa (o trigger do banco
+  // recusa), então filho aqui é dado inconsistente e não deve mandar no número.
+  // Bloqueio ainda vence, porque "travado" descreve o cartão, não o avanço.
+  if (isMilestone) {
+    const col = currentStageId && stages ? stages.find((s) => s.id === currentStageId) : null;
+    if (col?.is_blocked) return { percent: null, paused: true, label: "Pausada" };
+    const feito = subFeita({ workflow_stage_id: currentStageId }, stages);
+    return {
+      percent: feito ? 100 : 0,
+      paused: false,
+      label: feito ? "Atingido" : "Não atingido",
+    };
+  }
+
   // ── Subatividades mandam quando existem ────────────────────────────────
   // MÉDIA DO AVANÇO, não contagem de concluídas. Cada filho entra com quanto
   // andou (ver `subAvanco`), então "Em Revisão" vale 75 em vez de 0.

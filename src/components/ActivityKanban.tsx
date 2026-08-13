@@ -98,6 +98,7 @@ import { KANBAN_TOKENS } from "@/lib/kanbanTokens";
 import {
   computeActivityProgress,
   type ActivityProgress,
+  type SubActivityLike,
 } from "@/lib/activityProgress";
 import { useAuth } from "@/contexts/AuthContext";
 import { normalizeGut, GUT_META, type GutLevel } from "@/lib/gutPriority";
@@ -593,11 +594,13 @@ export const ActivityKanban = ({
   /** Filhos por pai — a barra de progresso passa a medir trabalho feito
    *  (subatividades concluídas) em vez de posição no quadro. */
   const filhosPorPai = useMemo(() => {
-    const m = new Map<string, { status?: string | null; workflow_stage_id?: string | null }[]>();
+    const m = new Map<string, SubActivityLike[]>();
     activities.forEach((a) => {
       if (!a.parent_id) return;
       const arr = m.get(a.parent_id) || [];
-      arr.push({ status: a.status, workflow_stage_id: a.workflow_stage_id });
+      // `is_milestone` vai junto: marco entra na média como 0 ou 100, nunca
+      // pelo meio — arrastá-lo para "Em Revisão" não realiza meio marco.
+      arr.push({ status: a.status, workflow_stage_id: a.workflow_stage_id, is_milestone: a.is_milestone });
       m.set(a.parent_id, arr);
     });
     return m;
@@ -2899,7 +2902,7 @@ export const ActivityKanban = ({
                       }}
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
-                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id, filhosPorPai.get(activity.id))}
+                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id, filhosPorPai.get(activity.id), activity.is_milestone)}
                       cardFields={cardFields}
                       hoursStat={hoursStatsByActivity.get(activity.id)}
                       profilesMap={profilesMap}
@@ -3087,7 +3090,7 @@ export const ActivityKanban = ({
               onDelete={() => {}}
               onToggle={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
-              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id, filhosPorPai.get(activeActivity.id))}
+              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id, filhosPorPai.get(activeActivity.id), activeActivity.is_milestone)}
               cardFields={cardFields}
               profilesMap={profilesMap}
               profileAvatarMap={profileAvatarMap}
