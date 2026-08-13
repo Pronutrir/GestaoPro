@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Upload, Layers, Circle, Diamond, Package, AlertTriangle, FolderTree, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { cn } from "@/lib/utils";
 import {
   splitColumns, pareceCabecalho, detectarColunas, lerLinha, statusPorDatas,
@@ -377,6 +378,7 @@ const parseFlexible = (text: string): ResultadoParse => {
 
 export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   /** Para o clique numa linha descartada rolar o campo até ela. */
@@ -519,6 +521,41 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
   const handleImport = async () => {
     if (tree.length === 0) return;
+
+    // PERDA SILENCIOSA, NÃO. O aviso dizia "1 linha não reconhecida", mas nada
+    // impedia clicar em Importar e a linha sumir sem que ninguém percebesse —
+    // era o caso do "Marco M1 — TAP aprovado", que ficava de fora da EAP e só
+    // se descobria depois, conferindo o Backlog contra o texto original.
+    //
+    // Só as PERDAS confirmam: linha juntada ao item anterior não entra aqui,
+    // porque o texto dela foi importado.
+    if (linhasPerdidas.length > 0) {
+      const n = linhasPerdidas.length;
+      // O diálogo de confirmação renderiza a descrição num parágrafo só (sem
+      // preservar quebras), então a amostra vai em linha corrida.
+      const amostra = linhasPerdidas
+        .slice(0, 3)
+        .map((d) => `linha ${d.numero} ("${d.texto}")`)
+        .join(", ");
+      const resto = n > 3 ? ` e mais ${n - 3}` : "";
+      const ok = await appConfirm({
+        title: n === 1 ? "Uma linha vai ficar de fora" : `${n} linhas vão ficar de fora`,
+        description:
+          `${amostra}${resto}. ` +
+          (n === 1 ? "Ela não tem" : "Elas não têm") +
+          " código EAP, então não há como saber onde entra" + (n === 1 ? "" : "m") +
+          " na estrutura. Para incluir, volte e dê um código a cada uma (ex.: 1.2.3).",
+        confirmText: "Importar assim mesmo",
+        cancelText: "Voltar e corrigir",
+      });
+      if (!ok) {
+        // Abre a lista: quem escolheu corrigir precisa VER quais são, sem ter
+        // de procurar o selo depois de fechar o aviso.
+        setDetalheAberto(true);
+        return;
+      }
+    }
+
     setImporting(true);
     try {
       // A LINHA DO PROJETO NÃO É IMPORTADA. O nível 1 é o projeto, que já
