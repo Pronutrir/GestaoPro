@@ -701,21 +701,9 @@ export const BacklogSection = ({
     if (next.size === 0) setSelectMode(false);
   };
 
-  const allBacklogIds = backlogActs.map((a) => a.id);
-  const allSelected = allBacklogIds.length > 0 && selectedIds.size === allBacklogIds.length;
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      // DESLIGA O MODO junto. Limpar só a seleção deixava `selectMode` ligado,
-      // e a coluna da caixa continuava reservada no grid: o "marcador lateral"
-      // ficava fixo na lateral de cada linha depois de desmarcar tudo, sem
-      // nada selecionado e sem jeito de sair.
-      setSelectedIds(new Set());
-      setSelectMode(false);
-    } else {
-      setSelectMode(true);
-      setSelectedIds(new Set(allBacklogIds));
-    }
-  };
+  // `toggleSelectAll` e `allSelected` saíram junto com a caixa duplicada da
+  // barra de ações: só existiam para ela. A caixa do cabeçalho faz o mesmo
+  // trabalho, no lugar onde ele se lê.
 
   const handleMoveSelected = async () => {
     if (!targetStageId) {
@@ -1027,9 +1015,6 @@ export const BacklogSection = ({
       className="grid items-center gap-2 px-3 py-1.5 bg-muted/40 border-b border-border text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground"
       style={{ gridTemplateColumns: backlogGrid }}
     >
-      {/* expand + (caixa de seleção, só no modo) — espelha as células da linha */}
-      <span />
-      {selectMode && <span />}
       {/* MARCAR TODAS / NENHUMA — e o modo liga sozinho ao primeiro clique.
           Esta caixa passou por dois erros meus. Primeiro pedia dois cliques (um
           para ligar o modo, outro para marcar) com um link "sair" que empurrava
@@ -1040,33 +1025,45 @@ export const BacklogSection = ({
           Agora tem três estados, como qualquer tabela: vazia (nada), traço
           (algumas) e marcada (todas). Clicar com nada marcado seleciona tudo;
           com algo marcado, limpa e sai — e no meio-termo o usuário mexe nas
-          caixas das linhas, que é o que faltava. */}
-      <span className="flex items-center gap-2">
-        <Checkbox
-          checked={
-            selectMode && selectedIds.size > 0
-              ? (selectedIds.size === backlogActs.length ? true : "indeterminate")
-              : false
-          }
-          onCheckedChange={() => {
-            // Algo marcado → limpa e sai. Nada marcado → marca tudo.
-            if (selectMode && selectedIds.size > 0) {
-              setSelectedIds(new Set());
-              setSelectMode(false);
-            } else {
+          caixas das linhas, que é o que faltava.
+
+          FICA NA COLUNA DAS CAIXAS (13/08/2026), não colada ao rótulo "Tarefa".
+          Antes ela vivia dentro da célula do título, deslocada uns 30px para a
+          direita da coluna que comanda — e por isso não se lia como "todas
+          desta coluna". Aqui ela alinha com as caixas das linhas, que é o que a
+          torna compreensível sem legenda. */}
+      {selectMode ? (
+        // A caixa vem PRIMEIRO, antes da célula do expandir: é assim que a
+        // linha da fase desenha (caixa, depois chevron), e o cabeçalho precisa
+        // casar com ela — senão fica 34px à direita das caixas que comanda.
+        <>
+          <span className="flex items-center justify-center">
+            <Checkbox
+              checked={selectedIds.size === backlogActs.length ? true : "indeterminate"}
+              onCheckedChange={() => { setSelectedIds(new Set()); setSelectMode(false); }}
+              className="h-3.5 w-3.5"
+              title={`Limpar seleção (${selectedIds.size})`}
+            />
+          </span>
+          <span />
+        </>
+      ) : (
+        // Fora do modo, a caixa toma o lugar do expandir — mesma célula que a
+        // caixa de hover das linhas ocupa, então a coluna não muda de largura
+        // ao entrar no modo.
+        <span className="flex items-center justify-center">
+          <Checkbox
+            checked={false}
+            onCheckedChange={() => {
               setSelectMode(true);
               setSelectedIds(new Set(backlogActs.map((a) => a.id)));
-            }
-          }}
-          className="h-3.5 w-3.5"
-          title={
-            selectMode && selectedIds.size > 0
-              ? `Limpar seleção (${selectedIds.size})`
-              : `Selecionar todas as ${backlogActs.length}`
-          }
-        />
-        Tarefa
-      </span>
+            }}
+            className="h-3.5 w-3.5"
+            title={`Selecionar todas as ${backlogActs.length}`}
+          />
+        </span>
+      )}
+      <span>Tarefa</span>
       {activeCols.map((c) => (
         <span key={c.id}>{c.label}</span>
       ))}
@@ -2200,17 +2197,12 @@ export const BacklogSection = ({
           <div className="flex items-center gap-1.5">
             {selectMode && selectedIds.size > 0 && (
               <>
-                {/* Estender para TODAS sem voltar ao cabeçalho da tabela —
-                    útil quando se selecionou algumas e se decidiu que era o
-                    conjunto inteiro. Mostra o traço no meio-termo, como a do
-                    cabeçalho, para não sugerir que nada está marcado. */}
-                <Checkbox
-                  checked={allSelected ? true : "indeterminate"}
-                  onCheckedChange={toggleSelectAll}
-                  aria-label={allSelected ? "Desmarcar todas" : "Selecionar todas"}
-                  title={allSelected ? "Desmarcar todas" : `Selecionar todas as ${allBacklogIds.length}`}
-                  className="ml-1"
-                />
+                {/* A caixa de "selecionar todas" SAIU daqui (13/08/2026): era a
+                    segunda na tela fazendo a mesma coisa que a do cabeçalho da
+                    tabela, a poucos pixels dela. Duas caixas idênticas lado a
+                    lado não se distinguem — o usuário perguntou qual era qual.
+                    Ficou a do cabeçalho, que está na coluna das caixas das
+                    linhas e por isso se lê como "todas desta coluna". */}
                 <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => setMoveDialogOpen(true)}>
                   <ArrowRight className="w-3.5 h-3.5" /> Mudar status ({selectedIds.size})
                 </Button>
