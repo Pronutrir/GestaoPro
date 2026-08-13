@@ -115,6 +115,38 @@ const MOTIVO_LABEL: Record<LinhaDescartada["motivo"], string> = {
 
 type ResultadoParse = { nodes: TreeNode[]; descartadas: LinhaDescartada[] };
 
+/**
+ * A linha sem código é CONTINUAÇÃO da anterior, ou um item por conta própria?
+ *
+ * O parser anexava qualquer linha sem código ao título de cima, sem perguntar.
+ * O resultado apareceu na tela: "Marco M1 — TAP aprovado", numa linha própria,
+ * virou parte de "1.1.1.11 Aprovar TAP" — e a palavra "Marco" no título assim
+ * formado ainda fez o item ser classificado como Marco. Dois erros de uma vez:
+ * o texto foi para o lugar errado E mudou o papel do item que o recebeu.
+ *
+ * Continuação de verdade é o RESTO de uma frase cortada ao colar: começa em
+ * minúscula, ou por conectivo/pontuação. Uma linha que abre em maiúscula, tem
+ * verbo próprio e faz sentido sozinha não é sobra — é um item que veio sem
+ * numeração.
+ *
+ * Na dúvida, NÃO anexa: deixar o item de fora é visível na contagem e na lista
+ * de descarte; misturá-lo no título alheio é silencioso e ainda contamina o
+ * papel.
+ */
+const pareceContinuacao = (linha: string): boolean => {
+  const t = (linha || "").trim();
+  if (!t) return false;
+  // Fragmento curto ("de stakeholders", "do projeto") é o caso clássico.
+  if (t.length <= 3) return true;
+  // Começa em minúscula: ninguém escreve item de EAP assim.
+  const primeira = t[0];
+  if (primeira === primeira.toLowerCase() && primeira !== primeira.toUpperCase()) return true;
+  // Abre por conectivo ou pontuação de continuação.
+  if (/^(e|ou|de|da|do|das|dos|para|com|em|no|na|nos|nas|por|a|à|ao|aos|às)\s/i.test(t)) return true;
+  if (/^[,;:)\]\-–—]/.test(t)) return true;
+  return false;
+};
+
 /* ------------------------------------------------------------------ */
 /*  Parser FLEXÍVEL: aceita código numérico (1.2.3), bullets (• - – *)  */
 /*  e indentação por espaços/tabs. Sempre produz uma hierarquia com     */
@@ -230,7 +262,11 @@ const parseFlexible = (text: string): ResultadoParse => {
     for (const r of raws) {
       if (!r.explicitCode) {
         const prev = nodes[nodes.length - 1];
-        if (prev) {
+        // SÓ ANEXA O QUE PARECE SOBRA. Antes juntava qualquer linha sem código
+        // ao título de cima: "Marco M1 — TAP aprovado" virou parte de
+        // "1.1.1.11 Aprovar TAP", e a palavra "Marco" no título resultante
+        // ainda transformou a atividade em Marco. Ver `pareceContinuacao`.
+        if (prev && pareceContinuacao(r.title)) {
           prev.title = `${prev.title} ${r.title}`.trim();
           // ANEXADA não é perda: o texto entrou no item de cima. Registrada
           // como informação, não como alerta — antes ela inflava o contador de
@@ -240,7 +276,10 @@ const parseFlexible = (text: string): ResultadoParse => {
             anexadaEm: `${prev.code} ${prev.title}`.trim(),
           });
         } else {
-          // Sem item anterior não há onde anexar — aí é perda de verdade.
+          // Linha completa sem numeração (ou sem item anterior onde anexar):
+          // fica de fora e é REGISTRADA, com o número da linha para achar e
+          // corrigir. Não vira item porque não há como saber onde ela entra na
+          // hierarquia — inventar uma posição seria pior que avisar.
           descartadas.push({ numero: r.numero, texto: r.title, motivo: "sem-codigo" });
         }
         continue;
