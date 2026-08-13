@@ -435,6 +435,26 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
   const [detalheAberto, setDetalheAberto] = useState(false);
 
   /**
+   * Quantas linhas foram coladas — descontando as vazias, que ninguém conta
+   * como conteúdo. É o número que a pessoa confere contra a origem ("a planilha
+   * tinha 20 tarefas").
+   */
+  const totalLinhasColadas = useMemo(
+    () => text.split("\n").filter((l) => l.trim().length > 0).length,
+    [text],
+  );
+
+  /**
+   * Itens que o parser INVENTOU para segurar a hierarquia — o "1" criado quando
+   * o texto começa em "1.2". Eles não vieram de linha nenhuma, então sem
+   * separá-los a conta "20 linhas → 23 itens" pareceria defeito.
+   */
+  const totalInventados = useMemo(
+    () => tree.filter((n) => n.title.startsWith("(sem título)")).length,
+    [tree],
+  );
+
+  /**
    * Rola o campo de texto até a linha e a seleciona.
    *
    * Corrigir acontece onde o texto está — mandar a pessoa procurar a linha 7 à
@@ -841,8 +861,20 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 linhas, dentro de um flex com min-h-0).
                 `h-full` explícito: com `flex-1 min-h-0` a altura colapsava a
                 zero e o campo ficava sem área clicável. */}
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 shrink-0">
-              Cole aqui
+            {/* A CONTAGEM FECHA A CONTA. O rodapé dizia quantos itens entram
+                (1 fase, 15 atividades), mas nada ligava isso ao que foi colado:
+                não dava para responder "colei 20 linhas, entraram 20?" sem
+                contar à mão. Agora cada painel diz o seu número, e a diferença
+                entre os dois é exatamente o que a lista de descarte explica. */}
+            <div className="flex items-baseline justify-between gap-2 mb-3 shrink-0">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Cole aqui
+              </span>
+              {totalLinhasColadas > 0 && (
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {totalLinhasColadas} {totalLinhasColadas === 1 ? "linha" : "linhas"}
+                </span>
+              )}
             </div>
             <textarea
                 ref={textareaRef}
@@ -883,8 +915,23 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
           {/* Pré-visualização em árvore */}
           <div className="p-6 flex flex-col min-h-0">
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 shrink-0">
-              {tree.length === 0 ? "O que vai acontecer" : "Pré-visualização"}
+            <div className="flex items-baseline justify-between gap-2 mb-3 shrink-0">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {tree.length === 0 ? "O que vai acontecer" : "Pré-visualização"}
+              </span>
+              {tree.length > 0 && (
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {tree.length} {tree.length === 1 ? "item" : "itens"}
+                  {/* Os ancestrais que o parser INVENTA (o "1" criado quando o
+                      texto começa em "1.2") não vieram de linha nenhuma — sem
+                      dizer isso, a conta "20 linhas → 23 itens" pareceria erro. */}
+                  {totalInventados > 0 && (
+                    <span className="text-muted-foreground/70">
+                      {" "}({totalInventados} {totalInventados === 1 ? "criado" : "criados"})
+                    </span>
+                  )}
+                </span>
+              )}
             </div>
             {tree.length === 0 ? (
               /* A ÁREA VAZIA ENSINA. Antes dizia "a árvore aparece aqui
