@@ -1,4 +1,17 @@
 'use client';
+/**
+ * SEM USO desde 13/08/2026 — nenhuma tela importa este componente.
+ *
+ * Era a tela "Configurar colunas do quadro", aberta pelo painel "Colunas" do
+ * fim da fila. Esse painel foi removido (havia dois botões "Colunas" com o
+ * mesmo destino, e ficou o da régua), e a tabela `kanban/GerenciarColunas`
+ * cobre o que ele fazia: nome, cor, categoria, progresso, visibilidade e ordem.
+ *
+ * MANTIDO no repositório por uma coisa que a tabela NÃO faz: atribuir
+ * participantes por etapa (`workflow_stage_members`, o botão 👥). Se esse
+ * recurso for necessário, ele volta daqui — apagar agora perderia a única
+ * implementação. Se for descartado, o arquivo inteiro sai.
+ */
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

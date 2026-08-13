@@ -146,7 +146,6 @@ import { KanbanCard, SortableKanbanCard } from "./kanban/KanbanCard";
 import {
   SortableColumn,
   DroppableColumn,
-  StageListButton,
   FilterOptionList,
   ColumnFilterPanel,
 } from "./kanban/KanbanColumn";
@@ -3034,26 +3033,11 @@ export const ActivityKanban = ({
             return (
               <>
                 {visibleStages.map((stage, idx) => renderColumn(stage, idx))}
-                {/* O acesso do FIM DA FILA continua — Linear e Notion mantêm
-                    criar/administrar coluna exatamente aqui, onde a posição já
-                    ensina a ação. Mudou o destino: "Gerenciar colunas…" abre a
-                    MESMA tabela do botão da régua, em vez da tela antiga.
-                    Havia três portas para o mesmo assunto; agora são duas
-                    entradas para um só lugar. */}
-                {(isAdmin || canCreate) && (
-                  <StageListButton
-                    projectId={projectId}
-                    onChanged={fetchStages}
-                    stages={stages}
-                    countByStage={countByStage}
-                    canManage={isAdmin || canCreate}
-                    onToggleVisible={handleToggleStageVisible}
-                    // As mesmas ações do menu ⋯ do cabeçalho. Sem elas, a
-                    // coluna oculta não teria como ser editada em lugar nenhum.
-                    acoes={acoesDeColuna}
-                    onGerenciar={() => setGerenciarColunasOpen(true)}
-                  />
-                )}
+                {/* O "Colunas" do FIM DA FILA saiu em 13/08/2026: havia dois
+                    botões com o mesmo nome e o mesmo destino — um na régua,
+                    ao lado de Visões, e outro aqui, só alcançável depois de
+                    rolar o quadro inteiro para a direita. Ficou o da régua,
+                    que está sempre à vista. */}
               </>
             );
           }
