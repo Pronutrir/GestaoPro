@@ -903,6 +903,54 @@ export const BacklogSection = ({
       toast({ title: "Nenhuma tarefa selecionada", variant: "destructive" });
       return;
     }
+
+    /**
+     * A CAIXA NÃO ANDA NA FRENTE DO CONTEÚDO — mesma regra do quadro.
+     *
+     * O Kanban já barra isso (`filhosForaDaColuna`, em ActivityKanban), mas
+     * aqui a caixa ia sozinha: dava para mandar uma fase para "Em Revisão"
+     * com as onze tarefas paradas, e a lista anunciava uma fase em revisão sem
+     * ninguém ter revisado nada. Duas telas, dois comportamentos, o mesmo
+     * gesto.
+     *
+     * Filho que está NA MESMA SELEÇÃO não bloqueia: ele vai junto, nesta
+     * operação, e exigir que já estivesse lá tornaria impossível mover uma
+     * fase inteira de uma vez — que é o caso comum.
+     *
+     * Filho cancelado também não: saiu do escopo, não é trabalho pendente.
+     */
+    const bloqueios: { pai: Activity; faltam: Activity[] }[] = [];
+    for (const id of ids) {
+      const filhos = childrenByParent.get(id) || [];
+      if (filhos.length === 0) continue;
+      const faltam = filhos.filter((f) => {
+        if (selectedIds.has(f.id)) return false;
+        const col = allStages.find((s) => s.id === f.workflow_stage_id);
+        const cat = col
+          ? parseWorkflowCategory((col as { categoria?: string }).categoria) ?? categoryFromLegacyFlags(col as never)
+          : null;
+        if (cat === "cancelada") return false;
+        return f.workflow_stage_id !== targetStageId;
+      });
+      const pai = activities.find((a) => a.id === id);
+      if (faltam.length > 0 && pai) bloqueios.push({ pai, faltam });
+    }
+
+    if (bloqueios.length > 0) {
+      setIsMoving(false);
+      const destino = allStages.find((s) => s.id === targetStageId)?.title ?? "essa coluna";
+      const primeiro = bloqueios[0];
+      const n = primeiro.faltam.length;
+      toast({
+        title: "Mova o que está dentro primeiro",
+        description:
+          `"${primeiro.pai.title}" tem ${n} ${n === 1 ? "item" : "itens"} fora de "${destino}"` +
+          `${bloqueios.length > 1 ? ` (e mais ${bloqueios.length - 1} ${bloqueios.length === 2 ? "fase" : "fases"} na mesma situação)` : ""}. ` +
+          "Selecione o conteúdo junto, ou mova-o antes — quando o último chegar, a fase acompanha sozinha.",
+        variant: "destructive",
+      });
+      return;
+    }
     const updateData: Database['public']['Tables']['activities']['Update'] = { workflow_stage_id: targetStageId };
     if (assignee && assignee !== "__none__") updateData.assigned_to = assignee;
 
