@@ -1,10 +1,11 @@
 'use client';
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Layers, Circle, Diamond, Package, AlertTriangle, FolderTree, AlignLeft } from "lucide-react";
+import { Upload, Layers, Circle, Diamond, Package, AlertTriangle, FolderTree, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { cn } from "@/lib/utils";
 import {
   splitColumns, pareceCabecalho, detectarColunas, lerLinha, statusPorDatas,
@@ -27,24 +28,16 @@ interface TreeNode {
   /** O código veio ESCRITO no texto, ou foi inventado pelo recuo? Decide se a
    *  posição pode vencer a palavra "Marco" no título — ver eapRoleForImport. */
   codigoExplicito?: boolean;
-  /** Datas, horas, custo, responsável e descrição lidos das colunas da planilha. */
+  /** Datas, horas, custo e responsável lidos das colunas da planilha. */
   vals?: ColValues;
-}
-
-/**
- * Resultado do parser.
- *
- * `descartadas` são as linhas que o parser LEU e não conseguiu virar item. Antes
- * o rodapé estimava esse número subtraindo os itens das linhas coladas, e a
- * conta errava sempre que a colagem não fosse 1 linha = 1 item: a linha de
- * CABEÇALHO entrava na conta e nunca vira item, então toda planilha com
- * cabeçalho acusava "1 linha não reconhecida" sem ter nada de errado — e uma
- * descrição multilinha somava um falso alarme por linha de texto. Um aviso que
- * mente é pior que aviso nenhum: ele existe para denunciar descarte silencioso.
- */
-interface ParseResult {
-  nodes: TreeNode[];
-  descartadas: number;
+  /**
+   * Número da linha no texto colado — só para item SEM código (marco solto).
+   *
+   * A árvore é ordenada por `code`, e quem não tem código não teria lugar: iria
+   * parar no começo ou no fim, longe de onde foi escrito. Este número devolve a
+   * posição original na hora de ordenar.
+   */
+  ordemNoTexto?: number;
 }
 
 interface ImportWBSDialogProps {
@@ -102,12 +95,88 @@ const aplicarPapeis = (nodes: TreeNode[]) => {
   }
 };
 
+/**
+ * Uma linha colada que NÃO virou item — com o porquê.
+ *
+ * Antes o parser descartava com um `continue` mudo, e a prévia reconstruía a
+ * contagem por SUBTRAÇÃO (coladas − reconhecidas). Por isso o aviso dizia "1
+ * linha" e nunca "a linha 7": não existia lista nenhuma para mostrar.
+ *
+ * `anexada` não é perda — é o título que quebrou em duas ao colar e foi juntado
+ * ao item anterior. Aparecia no mesmo contador e assustava à toa: o texto FOI
+ * importado.
+ */
+type LinhaDescartada = {
+  /** Número da linha no texto colado, contando a partir de 1. */
+  numero: number;
+  texto: string;
+  motivo: "sem-codigo" | "codigo-invalido" | "sem-titulo" | "anexada" | "numerada";
+  /** Para `anexada`: em qual item o texto entrou. Para `numerada`: o código dado. */
+  anexadaEm?: string;
+};
+
+const MOTIVO_LABEL: Record<LinhaDescartada["motivo"], string> = {
+  "sem-codigo": "sem código EAP",
+  "codigo-invalido": "código fora do padrão",
+  "sem-titulo": "sem título",
+  "anexada": "juntada à linha anterior",
+  // `numerada` NÃO é perda: a linha ENTROU na EAP, sem código, no lugar em que
+  // foi colada. Fica na lista para a decisão ser visível e conferível.
+  "numerada": "entrou sem código, na posição do texto",
+};
+
+/**
+ * Motivos que NÃO representam perda — a linha foi aproveitada de algum jeito.
+ *
+ * Fora do componente porque é constante: dentro, o Set seria recriado a cada
+ * render e as memoizações que dependem dele nunca segurariam nada.
+ */
+const MOTIVOS_SEM_PERDA = new Set<LinhaDescartada["motivo"]>(["anexada", "numerada"]);
+
+type ResultadoParse = { nodes: TreeNode[]; descartadas: LinhaDescartada[] };
+
+/**
+ * A linha sem código é CONTINUAÇÃO da anterior, ou um item por conta própria?
+ *
+ * O parser anexava qualquer linha sem código ao título de cima, sem perguntar.
+ * O resultado apareceu na tela: "Marco M1 — TAP aprovado", numa linha própria,
+ * virou parte de "1.1.1.11 Aprovar TAP" — e a palavra "Marco" no título assim
+ * formado ainda fez o item ser classificado como Marco. Dois erros de uma vez:
+ * o texto foi para o lugar errado E mudou o papel do item que o recebeu.
+ *
+ * Continuação de verdade é o RESTO de uma frase cortada ao colar: começa em
+ * minúscula, ou por conectivo/pontuação. Uma linha que abre em maiúscula, tem
+ * verbo próprio e faz sentido sozinha não é sobra — é um item que veio sem
+ * numeração.
+ *
+ * Na dúvida, NÃO anexa: deixar o item de fora é visível na contagem e na lista
+ * de descarte; misturá-lo no título alheio é silencioso e ainda contamina o
+ * papel.
+ */
+const pareceContinuacao = (linha: string): boolean => {
+  const t = (linha || "").trim();
+  if (!t) return false;
+  // Fragmento curto ("de stakeholders", "do projeto") é o caso clássico.
+  if (t.length <= 3) return true;
+  // Começa em minúscula: ninguém escreve item de EAP assim.
+  const primeira = t[0];
+  if (primeira === primeira.toLowerCase() && primeira !== primeira.toUpperCase()) return true;
+  // Abre por conectivo ou pontuação de continuação.
+  if (/^(e|ou|de|da|do|das|dos|para|com|em|no|na|nos|nas|por|a|à|ao|aos|às)\s/i.test(t)) return true;
+  if (/^[,;:)\]\-–—]/.test(t)) return true;
+  return false;
+};
+
 /* ------------------------------------------------------------------ */
 /*  Parser FLEXÍVEL: aceita código numérico (1.2.3), bullets (• - – *)  */
 /*  e indentação por espaços/tabs. Sempre produz uma hierarquia com     */
 /*  códigos normalizados (1, 1.1, 1.1.2...).                            */
+/*                                                                      */
+/*  Devolve TAMBÉM o que descartou: a prévia precisa dizer QUAL linha    */
+/*  ficou de fora, e o motivo é diferente em cada caso.                 */
 /* ------------------------------------------------------------------ */
-const parseFlexible = (text: string): ParseResult => {
+const parseFlexible = (text: string): ResultadoParse => {
+  const descartadas: LinhaDescartada[] = [];
   // MODO PLANILHA: quando vem com TAB, as colunas são lidas antes de tudo.
   // Sem isto o TAB virava espaço e datas/horas entravam no TÍTULO — a
   // informação não era só perdida, sujava o nome da tarefa.
@@ -116,18 +185,32 @@ const parseFlexible = (text: string): ParseResult => {
     const temCab = pareceCabecalho(grid[0]);
     const roles = detectarColunas(grid, temCab);
     const corpo = temCab ? grid.slice(1) : grid;
+    // O ÍNDICE ORIGINAL viaja junto: sem ele o aviso não teria número de linha
+    // para citar, e clicar não teria para onde levar. O +1 do cabeçalho e o +1
+    // da contagem humana (linha 1, não linha 0) entram aqui.
+    const deslocamento = (temCab ? 1 : 0) + 1;
     const linhas = corpo
-      .map((row) => ({ vals: lerLinha(row, roles), row }))
-      .filter((x) => (x.vals.titulo || "").trim().length > 0);
+      .map((row, i) => ({ vals: lerLinha(row, roles), row, numero: i + deslocamento }))
+      .filter((x) => {
+        if ((x.vals.titulo || "").trim().length > 0) return true;
+        descartadas.push({ numero: x.numero, texto: x.row.join(" ").trim(), motivo: "sem-titulo" });
+        return false;
+      });
 
     const nodes: TreeNode[] = [];
-    for (const { vals } of linhas) {
+    for (const { vals, numero, row } of linhas) {
       // Sem código não há como posicionar na árvore. Este descarte já custou
       // caro: um código com ponto final ("1.") era rejeitado pelo CODIGO_RE e
       // a fase sumia da prévia SEM AVISO — a linha estava visível no campo e
-      // ausente do resultado. O regex foi corrigido, e a prévia agora compara
-      // linhas coladas × itens reconhecidos para avisar quando sobra alguma.
-      if (!vals.codigo) continue;
+      // ausente do resultado. Agora ele é REGISTRADO em vez de silencioso.
+      if (!vals.codigo) {
+        descartadas.push({
+          numero,
+          texto: (vals.titulo || row.join(" ")).trim(),
+          motivo: "sem-codigo",
+        });
+        continue;
+      }
       const parts = vals.codigo.split(".");
       while (parts.length > 1 && parts[parts.length - 1] === "0") parts.pop();
       const code = parts.join(".");
@@ -143,30 +226,38 @@ const parseFlexible = (text: string): ParseResult => {
     }
     aplicarPapeis(nodes);
     nodes.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
-    // No modo planilha nada é inventado, então a diferença é exata: são as
-    // linhas sem código reconhecível ou sem título.
-    return { nodes, descartadas: corpo.length - nodes.length };
+    return { nodes, descartadas };
   }
 
-  const rawLines = text.split("\n").map((l) => l.replace(/\t/g, "  ")).filter((l) => l.trim().length > 0);
-  if (rawLines.length === 0) return { nodes: [], descartadas: 0 };
+  // O NÚMERO DA LINHA vem do texto ORIGINAL, antes de descartar as vazias —
+  // é o número que a pessoa vê no campo e para onde o clique vai rolar. Contar
+  // depois do filtro daria um número que não existe na tela.
+  const rawLines = text.split("\n")
+    .map((l, i) => ({ linha: l.replace(/\t/g, "  "), numero: i + 1 }))
+    .filter((x) => x.linha.trim().length > 0);
+  if (rawLines.length === 0) return { nodes: [], descartadas };
 
   // Aceita "1.1 Título", "1.1. Título", "1.1) Título" e "1.1 - Título".
   // O separador opcional depois do código evita que uma EAP colada do Word,
   // que costuma usar ")" ou "-", deixe de ser reconhecida como numerada.
   const numRe = /^\s*(\d+(?:\.\d+)*)\s*[.)]?\s*[-–—]?\s+(.+)$/;
 
-  type Raw = { indent: number; title: string; explicitCode: string | null };
-  const raws: Raw[] = rawLines.map((line) => {
-    const indent = line.length - line.trimStart().length;
-    let body = line.trim();
+  type Raw = { indent: number; title: string; explicitCode: string | null; numero: number; original: string };
+  const raws: Raw[] = rawLines.map(({ linha, numero }) => {
+    const indent = linha.length - linha.trimStart().length;
+    let body = linha.trim();
     let explicitCode: string | null = null;
     const m = body.match(numRe);
     if (m) { explicitCode = m[1]; body = m[2].trim(); }
     // remove marcadores de bullet no início
     body = body.replace(/^[•\-–—*•]+\s*/, "").trim();
-    return { indent, title: body, explicitCode };
-  }).filter((r) => r.title.length > 0);
+    return { indent, title: body, explicitCode, numero, original: linha.trim() };
+  }).filter((r) => {
+    if (r.title.length > 0) return true;
+    // Sobrou só o código, ou só um bullet: não há o que nomear.
+    descartadas.push({ numero: r.numero, texto: r.original, motivo: "sem-titulo" });
+    return false;
+  });
 
   // Decide o modo pelo que REALMENTE foi extraído, não por um segundo teste
   // sobre o texto cru. E o critério é "existe hierarquia numérica de verdade"
@@ -182,7 +273,6 @@ const parseFlexible = (text: string): ParseResult => {
     withCode.length >= Math.ceil(raws.length * 0.3);
 
   const nodes: TreeNode[] = [];
-  let descartadas = 0;
 
   if (useNumbered) {
     // Modo código: a profundidade vem do número de segmentos do código.
@@ -192,10 +282,52 @@ const parseFlexible = (text: string): ParseResult => {
     for (const r of raws) {
       if (!r.explicitCode) {
         const prev = nodes[nodes.length - 1];
-        // Anexada ao item anterior é APROVEITAMENTO, não descarte — só conta
-        // como perdida a linha que não tem nem código nem item anterior.
-        if (prev) prev.title = `${prev.title} ${r.title}`.trim();
-        else descartadas++;
+        // SÓ ANEXA O QUE PARECE SOBRA. Antes juntava qualquer linha sem código
+        // ao título de cima: "Marco M1 — TAP aprovado" virou parte de
+        // "1.1.1.11 Aprovar TAP", e a palavra "Marco" no título resultante
+        // ainda transformou a atividade em Marco. Ver `pareceContinuacao`.
+        if (prev && pareceContinuacao(r.title)) {
+          prev.title = `${prev.title} ${r.title}`.trim();
+          // ANEXADA não é perda: o texto entrou no item de cima. Registrada
+          // como informação, não como alerta — antes ela inflava o contador de
+          // "não reconhecidas" e assustava sem ter havido perda nenhuma.
+          descartadas.push({
+            numero: r.numero, texto: r.title, motivo: "anexada",
+            anexadaEm: `${prev.code} ${prev.title}`.trim(),
+          });
+        } else if (prev) {
+          // LINHA COMPLETA SEM NUMERAÇÃO: entra ONDE FOI COLADA, sem código.
+          //
+          // Marco se escreve assim — "Marco M1 — TAP aprovado" solto entre as
+          // atividades, sem numeração própria. É o formato de EAP real, não um
+          // descuido: o marco não é uma etapa do trabalho, é um ponto de
+          // controle, e por isso não recebe posição na numeração.
+          //
+          // `wbs_code` não é obrigatório no banco, então ele pode existir sem
+          // código. O que importa é o PAI — ele pende de onde estava no texto,
+          // que é o mesmo pai do item logo acima.
+          //
+          // `codigoExplicito: false` faz a palavra "Marco" no título vencer a
+          // posição em eapRoleForImport — é assim que ele vira Marco de fato.
+          nodes.push({
+            code: "",              // sem código: o marco não entra na numeração
+            title: r.title,
+            depth: prev.depth,     // mesmo nível do irmão de cima
+            role: "atividade",     // aplicarPapeis decide; o título declara marco
+            parentCode: prev.parentCode,
+            codigoExplicito: false,
+            ordemNoTexto: r.numero, // preserva o lugar na ordenação por código
+          });
+          // Registrada como INFORMAÇÃO: entrou na EAP, só não tem código.
+          descartadas.push({
+            numero: r.numero, texto: r.title, motivo: "numerada",
+            anexadaEm: prev.parentCode || "raiz",
+          });
+        } else {
+          // Sem item anterior não há posição de onde deduzir — aí fica de fora
+          // mesmo, registrada com o número da linha para achar e corrigir.
+          descartadas.push({ numero: r.numero, texto: r.title, motivo: "sem-codigo" });
+        }
         continue;
       }
       // Zeros à direita são decorativos: "1.0" é nível 1, não 2. Formato comum
@@ -230,7 +362,19 @@ const parseFlexible = (text: string): ParseResult => {
     }
     nodes.push(...missing);
     // Reordena por código para a árvore sair na ordem natural da EAP.
-    nodes.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+    //
+    // ITEM SEM CÓDIGO (marco solto) usa a chave do IRMÃO DE CIMA com um sufixo:
+    // ordenar "" pelo `localeCompare` o jogaria para o começo da lista, longe
+    // de onde foi escrito. Com a chave do vizinho + "~" (que vem depois de
+    // qualquer dígito), ele fica exatamente na linha em que foi colado.
+    const chaveDeOrdem = new Map<TreeNode, string>();
+    let ultimaChave = "";
+    for (const n of nodes) {
+      if (n.code) { ultimaChave = n.code; chaveDeOrdem.set(n, n.code); }
+      else chaveDeOrdem.set(n, `${ultimaChave}~${n.ordemNoTexto ?? 0}`);
+    }
+    nodes.sort((a, b) =>
+      (chaveDeOrdem.get(a) ?? "").localeCompare(chaveDeOrdem.get(b) ?? "", undefined, { numeric: true }));
   } else {
     // Modo indentação/bullets: a profundidade vem do recuo. Gera códigos.
     // Pilha de ancestrais: cada nível guarda { indent, count, code }.
@@ -291,8 +435,11 @@ const parseFlexible = (text: string): ParseResult => {
 
 export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogProps) => {
   const { toast } = useToast();
+  const appConfirm = useAppConfirm();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  /** Para o clique numa linha descartada rolar o campo até ela. */
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [importing, setImporting] = useState(false);
   /** Selo clicado no rodapé: recorta a prévia por papel. Null = mostra tudo.
    *  Só afeta o que se VÊ — a importação leva a árvore inteira. */
@@ -345,6 +492,54 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     return fasesExistentes.get(partes.join(".")) ?? null;
   };
 
+  /**
+   * ATIVIDADES que já ocupam um código EAP no projeto.
+   *
+   * As FASES já eram reaproveitadas (`phaseIdMap`, na gravação), mas as
+   * atividades não: colar a mesma EAP duas vezes criava um jogo novo inteiro,
+   * em silêncio. Foi assim que um projeto chegou a 653 atividades com 243
+   * cópias — seis "Revisar TAP" com o mesmo 1.1.10, e mover uma não mexia nas
+   * outras cinco.
+   *
+   * O código EAP é um endereço: duas coisas não moram no mesmo número. Quando
+   * ele já está ocupado, a importação avisa e a pessoa decide — não inventa
+   * uma segunda linha com o mesmo endereço.
+   */
+  const [codigosOcupados, setCodigosOcupados] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!open || !projectId) return;
+    let cancelado = false;
+    void supabase
+      .from("activities")
+      .select("title, wbs_code")
+      .eq("project_id", projectId)
+      .eq("is_trashed", false)
+      .not("wbs_code", "is", null)
+      .then(({ data, error }) => {
+        if (cancelado || error) return;
+        const m = new Map<string, string>();
+        for (const a of ((data as { title?: string; wbs_code?: string }[]) || [])) {
+          const cod = (a.wbs_code || "").trim();
+          if (!cod) continue;
+          const partes = cod.split(".");
+          while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+          const chave = partes.join(".");
+          if (!m.has(chave)) m.set(chave, String(a.title || ""));
+        }
+        setCodigosOcupados(m);
+      });
+    return () => { cancelado = true; };
+  }, [open, projectId]);
+
+  /** Título da atividade que já ocupa este código, se houver. */
+  const codigoOcupado = (code: string): string | null => {
+    if (!code) return null;
+    const partes = code.split(".");
+    while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+    return codigosOcupados.get(partes.join(".")) ?? null;
+  };
+
   const parsed = useMemo(() => parseFlexible(text), [text]);
   const tree = parsed.nodes;
   const counts = useMemo(() => {
@@ -364,26 +559,168 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
   );
 
   /**
-   * Linhas coladas que NÃO viraram item.
+   * Linhas coladas que NÃO viraram item, com número e motivo.
    *
-   * O parser descarta em silêncio o que não consegue posicionar na árvore, e
-   * isso já escondeu um bug: um código com ponto final ("1.") era rejeitado e
-   * a fase sumia da prévia — visível no campo, ausente do resultado, sem
-   * nenhum aviso. Este contador é a rede de segurança.
+   * Antes isto era uma SUBTRAÇÃO (coladas − reconhecidas) e por isso o aviso
+   * dizia "1 linha" sem poder dizer QUAL: não havia lista, só um número. Agora
+   * o parser registra cada descarte e a prévia mostra a linha, o texto e o
+   * porquê — cada motivo pede uma correção diferente.
    *
-   * Agora vem do próprio parser (ver `ParseResult.descartadas`), que sabe o que
-   * jogou fora. A estimativa anterior — linhas coladas menos itens — acusava
-   * falso em toda colagem cujo mapeamento não fosse 1 linha = 1 item: o
-   * cabeçalho da planilha, o título quebrado em duas linhas e cada linha de uma
-   * descrição multilinha entravam como "não reconhecidas".
+   * DOIS motivos ficam FORA do alerta porque não houve perda:
+   *   `anexada`  — o texto entrou no item anterior (título quebrado ao colar)
+   *   `numerada` — a linha virou item, com código deduzido da posição
+   *
+   * Os dois entravam no contador antigo e assustavam à toa. Continuam na lista,
+   * em tom neutro: são informação de "o que o parser decidiu por você", não
+   * aviso de perda.
    */
-  const linhasIgnoradas = parsed.descartadas;
+  const linhasPerdidas = useMemo(
+    () => parsed.descartadas.filter((d) => !MOTIVOS_SEM_PERDA.has(d.motivo)),
+    [parsed.descartadas],
+  );
+  const linhasAnexadas = useMemo(
+    () => parsed.descartadas.filter((d) => MOTIVOS_SEM_PERDA.has(d.motivo)),
+    [parsed.descartadas],
+  );
+  const [detalheAberto, setDetalheAberto] = useState(false);
+
+  /**
+   * Quantas linhas foram coladas — descontando as vazias, que ninguém conta
+   * como conteúdo. É o número que a pessoa confere contra a origem ("a planilha
+   * tinha 20 tarefas").
+   */
+  const totalLinhasColadas = useMemo(
+    () => text.split("\n").filter((l) => l.trim().length > 0).length,
+    [text],
+  );
+
+  /**
+   * Itens que o parser INVENTOU para segurar a hierarquia — o "1" criado quando
+   * o texto começa em "1.2". Eles não vieram de linha nenhuma, então sem
+   * separá-los a conta "20 linhas → 23 itens" pareceria defeito.
+   */
+  const totalInventados = useMemo(
+    () => tree.filter((n) => n.title.startsWith("(sem título)")).length,
+    [tree],
+  );
+
+  /**
+   * Os códigos deste texto que JÁ EXISTEM no projeto.
+   *
+   * Marco fica de fora (não tem código, nunca colide) e ancestral inventado
+   * também: o "1" criado para segurar a árvore é justamente o caso em que
+   * reaproveitar a fase existente é o comportamento certo — e já é o que a
+   * gravação faz.
+   */
+  const codigosEmConflito = useMemo(
+    () =>
+      tree
+        .filter((n) => n.code && !n.title.startsWith("(sem título)"))
+        .map((n) => ({ code: n.code, novo: n.title, existente: codigoOcupado(n.code) }))
+        .filter((x): x is { code: string; novo: string; existente: string } => x.existente !== null),
+    // `codigosOcupados` entra pela função; sem ele na lista o aviso ficaria
+    // congelado no primeiro render, antes de a consulta responder.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tree, codigosOcupados],
+  );
+
+  /**
+   * Rola o campo de texto até a linha e a seleciona.
+   *
+   * Corrigir acontece onde o texto está — mandar a pessoa procurar a linha 7 à
+   * mão, num campo com 80 linhas, seria devolver o mesmo trabalho que o aviso
+   * deveria poupar.
+   */
+  const irParaLinha = (numero: number) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const linhas = ta.value.split("\n");
+    const inicio = linhas.slice(0, numero - 1).reduce((n, l) => n + l.length + 1, 0);
+    const fim = inicio + (linhas[numero - 1]?.length ?? 0);
+    ta.focus();
+    ta.setSelectionRange(inicio, fim);
+    // Aproxima a linha do meio do campo: `scrollTop` direto colocaria ela na
+    // primeira posição visível, sem contexto em volta.
+    const alturaLinha = ta.scrollHeight / Math.max(1, linhas.length);
+    ta.scrollTop = Math.max(0, (numero - 1) * alturaLinha - ta.clientHeight / 2);
+  };
 
   const resetAndClose = () => { setText(""); setFiltroPapel(null); setOpen(false); };
 
 
   const handleImport = async () => {
     if (tree.length === 0) return;
+
+    /**
+     * CÓDIGO JÁ OCUPADO: bloqueia antes de duplicar.
+     *
+     * Sem isto, colar a mesma EAP de novo criava um jogo inteiro de cópias em
+     * silêncio — mesmo código, mesmo título, linhas diferentes. Um projeto
+     * chegou a 653 atividades com 243 cópias assim, e o efeito na tela era
+     * "movi a tarefa e ela continua no Backlog": havia seis dela.
+     *
+     * Não é uma trava absoluta. Reimportar de propósito (para corrigir títulos,
+     * por exemplo) é legítimo, e "Importar mesmo assim" continua ali — mas
+     * agora é uma escolha, com o número na frente.
+     */
+    if (codigosEmConflito.length > 0) {
+      const n = codigosEmConflito.length;
+      const amostra = codigosEmConflito
+        .slice(0, 3)
+        .map((c) => `${c.code} ("${c.existente}")`)
+        .join(", ");
+      const resto = n > 3 ? ` e mais ${n - 3}` : "";
+      const ok = await appConfirm({
+        title: n === 1
+          ? "Este código EAP já existe no projeto"
+          : `${n} códigos EAP já existem no projeto`,
+        description:
+          `${amostra}${resto}. ` +
+          "O código é o endereço do item na EAP — importar de novo cria uma " +
+          "segunda linha no mesmo endereço, e depois não há como saber qual é " +
+          "a boa. Se quer corrigir o que já existe, edite no Backlog; se é " +
+          "conteúdo novo, renumere antes de colar.",
+        confirmText: "Importar mesmo assim (duplica)",
+        cancelText: "Voltar",
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+
+    // PERDA SILENCIOSA, NÃO. O aviso dizia "1 linha não reconhecida", mas nada
+    // impedia clicar em Importar e a linha sumir sem que ninguém percebesse —
+    // era o caso do "Marco M1 — TAP aprovado", que ficava de fora da EAP e só
+    // se descobria depois, conferindo o Backlog contra o texto original.
+    //
+    // Só as PERDAS confirmam: linha juntada ao item anterior não entra aqui,
+    // porque o texto dela foi importado.
+    if (linhasPerdidas.length > 0) {
+      const n = linhasPerdidas.length;
+      // O diálogo de confirmação renderiza a descrição num parágrafo só (sem
+      // preservar quebras), então a amostra vai em linha corrida.
+      const amostra = linhasPerdidas
+        .slice(0, 3)
+        .map((d) => `linha ${d.numero} ("${d.texto}")`)
+        .join(", ");
+      const resto = n > 3 ? ` e mais ${n - 3}` : "";
+      const ok = await appConfirm({
+        title: n === 1 ? "Uma linha vai ficar de fora" : `${n} linhas vão ficar de fora`,
+        description:
+          `${amostra}${resto}. ` +
+          (n === 1 ? "Ela não tem" : "Elas não têm") +
+          " código EAP, então não há como saber onde entra" + (n === 1 ? "" : "m") +
+          " na estrutura. Para incluir, volte e dê um código a cada uma (ex.: 1.2.3).",
+        confirmText: "Importar assim mesmo",
+        cancelText: "Voltar e corrigir",
+      });
+      if (!ok) {
+        // Abre a lista: quem escolheu corrigir precisa VER quais são, sem ter
+        // de procurar o selo depois de fechar o aviso.
+        setDetalheAberto(true);
+        return;
+      }
+    }
+
     setImporting(true);
     try {
       // A LINHA DO PROJETO NÃO É IMPORTADA. O nível 1 é o projeto, que já
@@ -441,8 +778,6 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       let phasesHasWbs = true;
       // Idem para as datas: a migration que as cria pode não ter rodado ainda.
       let phasesHasDates = true;
-      // E para a descrição da fase, pelo mesmo motivo.
-      let phasesHasDescription = true;
       // Colunas que o banco não tinha e foram descartadas para a importação
       // seguir. Avisadas no fim: silenciar faria o item nascer sem o campo sem
       // ninguém saber (ex.: sem código EAP, que define o papel Fase/Atividade).
@@ -511,10 +846,6 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           display_order: phaseOrder++,
         };
         if (phasesHasWbs) base.wbs_code = phase.code;
-        // A fase também tem descrição (e o painel dela já edita esse campo):
-        // deixar a coluna da planilha de fora obrigaria a redigitar à mão
-        // justamente o texto que explica a fase.
-        if (phasesHasDescription && phase.vals?.descricao) base.description = phase.vals.descricao;
         // Datas da linha da fase, quando a planilha as traz. É dado diferente
         // da soma dos filhos: esta é a data PLANEJADA para a fase, e a
         // divergência entre as duas é justamente o que interessa ver.
@@ -526,16 +857,12 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           if (v.actual_end_date) base.actual_end_date = v.actual_end_date;
         }
 
-        // Cada degrade abaixo remove um campo de `base` e tenta de novo — a
-        // inserção é a mesma, então fica num lugar só.
-        const inserirFase = () => supabase.from("phases").insert(base as any).select("id").single();
-
-        let res = await inserirFase();
+        let res = await supabase.from("phases").insert(base as any).select("id").single();
         if (res.error && /wbs_code/i.test(res.error.message)) {
           phasesHasWbs = false;
           delete base.wbs_code;
           base.title = `${phase.code} ${phase.title}`;
-          res = await inserirFase();
+          res = await supabase.from("phases").insert(base as any).select("id").single();
         }
         // Datas ausentes em phases: descarta as quatro de uma vez (vêm da mesma
         // migration) e segue — a fase sem data ainda é melhor que nenhuma fase.
@@ -543,14 +870,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           phasesHasDates = false;
           for (const c of ["start_date", "end_date", "actual_start_date", "actual_end_date"]) delete base[c];
           droppedCols.add("datas da fase");
-          res = await inserirFase();
-        }
-        // Descrição ausente em phases: desiste do campo, não da fase.
-        if (res.error && /description/i.test(res.error.message)) {
-          phasesHasDescription = false;
-          delete base.description;
-          droppedCols.add("descrição da fase");
-          res = await inserirFase();
+          res = await supabase.from("phases").insert(base as any).select("id").single();
         }
         if (res.error) throw res.error;
         phaseIdMap[phase.code] = res.data.id;
@@ -569,7 +889,17 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
        * importada junto com seus filhos, e o item "1" precisa achar a fase "1".
        */
       const findPhaseId = (node: TreeNode): string | null => {
-        const parts = node.code.split(".");
+        // MARCO NÃO TEM CÓDIGO (`code: ""`), e `"".split(".")` devolve [""] —
+        // que não casa com fase nenhuma. O marco nascia SEM FASE, solto no
+        // Backlog, embora tivesse sido colado dentro de uma.
+        //
+        // A fase dele é a do PAI: é de lá que ele pende, e `parentCode` já
+        // guarda essa posição (ver a montagem do nó, onde ele herda o
+        // `parentCode` do irmão de cima). O código não entra na EAP; a
+        // ancoragem, sim.
+        const referencia = node.code || node.parentCode || "";
+        if (!referencia) return null;
+        const parts = referencia.split(".");
         for (let len = parts.length; len >= 1; len--) {
           const ancestor = parts.slice(0, len).join(".");
           if (phaseIdMap[ancestor]) return phaseIdMap[ancestor];
@@ -627,11 +957,6 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           if (v.actual_end_date) basePayload.actual_end_date = v.actual_end_date;
           if (v.hours != null) basePayload.hours = v.hours;
           if (v.cost != null) basePayload.cost = v.cost;
-          // Descrição da planilha vai para o mesmo campo que o editor de
-          // atividade usa, com as quebras de linha preservadas (a tela exibe
-          // com `whitespace-pre-wrap`). Se o banco não tiver a coluna, o
-          // degrade genérico abaixo a descarta e avisa no fim.
-          if (v.descricao) basePayload.description = v.descricao;
 
           const st = statusPorDatas(v);
           basePayload.status = st;
@@ -750,7 +1075,13 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           <Upload className="w-4 h-4" /> Importar EAP
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl w-[94vw] h-[82vh] overflow-hidden p-0 gap-0 flex flex-col">
+      {/* 6xl/90vh, não 4xl/82vh: são DUAS colunas de texto lado a lado, e uma
+          EAP tem código longo ("1.1.2.4") junto de título comprido. No tamanho
+          anterior sobravam ~170px por painel — cerca de 8 linhas, para uma EAP
+          de 20 itens. Importadores são largos por natureza (Jira CSV, Asana):
+          comparar "o que colei" com "o que vai entrar" exige os dois legíveis
+          ao mesmo tempo. */}
+      <DialogContent className="max-w-6xl w-[96vw] h-[90vh] overflow-hidden p-0 gap-0 flex flex-col">
         {/* Cabeçalho enxuto */}
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <DialogTitle className="text-base font-semibold">Importar EAP</DialogTitle>
@@ -760,15 +1091,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
               uma EAP. A regra saiu do texto e virou o de/para ao lado do campo,
               onde se lê comparando com o exemplo em vez de decorando. */}
           <p className="text-[13px] text-muted-foreground mt-0.5">
-            Cole sua estrutura em qualquer formato.{" "}
-            <span className="text-foreground">
-              O nível 1 é o próprio projeto e não é importado. <span className="font-mono">1.1</span> vira Fase,{" "}
-              <span className="font-mono">1.1.1</span> Entrega, e daí em diante Atividade.
-              {" "}Para um <strong className="font-medium">Marco</strong>, comece o título com{" "}
-              <code className="px-1 py-0.5 rounded bg-muted text-[12px] font-mono">Marco:</code>.
-            </span>{" "}
-            Colando de planilha, as colunas de data, horas, custo, responsável e{" "}
-            <strong className="font-medium">descrição</strong> são reconhecidas pelo cabeçalho.
+            Cole a estrutura do seu projeto. De planilha, as colunas de data,
+            horas e responsável são reconhecidas.
           </p>
         </DialogHeader>
 
@@ -788,10 +1112,23 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 linhas, dentro de um flex com min-h-0).
                 `h-full` explícito: com `flex-1 min-h-0` a altura colapsava a
                 zero e o campo ficava sem área clicável. */}
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 shrink-0">
-              Cole aqui
+            {/* A CONTAGEM FECHA A CONTA. O rodapé dizia quantos itens entram
+                (1 fase, 15 atividades), mas nada ligava isso ao que foi colado:
+                não dava para responder "colei 20 linhas, entraram 20?" sem
+                contar à mão. Agora cada painel diz o seu número, e a diferença
+                entre os dois é exatamente o que a lista de descarte explica. */}
+            <div className="flex items-baseline justify-between gap-2 mb-3 shrink-0">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Cole aqui
+              </span>
+              {totalLinhasColadas > 0 && (
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {totalLinhasColadas} {totalLinhasColadas === 1 ? "linha" : "linhas"}
+                </span>
+              )}
             </div>
             <textarea
+                ref={textareaRef}
                 value={text}
                 /* Limpa o recorte ao editar: o papel filtrado pode deixar de
                    existir no texto novo, e a prévia ficaria vazia sem dizer
@@ -799,7 +1136,7 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 onChange={(e) => { setText(e.target.value); setFiltroPapel(null); }}
                 spellCheck={false}
                 autoFocus
-                className="h-full w-full min-h-[240px] resize-none rounded-md border border-input bg-muted/50 px-3 py-2 font-mono text-[13px] leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="h-full w-full min-h-[240px] resize-none rolagem-visivel rounded-md border border-input bg-muted/50 px-3 py-2 font-mono text-[13px] leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 // O exemplo mostra os TRÊS papéis que a importação produz, cada
                 // um numa situação em que ele de fato aparece: 1 é Fase (nível
                 // 1); 1.1 é Entrega porque tem subitens; 1.1.1 e 1.2 são
@@ -829,8 +1166,31 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
           {/* Pré-visualização em árvore */}
           <div className="p-6 flex flex-col min-h-0">
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-3 shrink-0">
-              {tree.length === 0 ? "O que vai acontecer" : "Pré-visualização"}
+            <div className="flex items-baseline justify-between gap-2 mb-3 shrink-0">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {tree.length === 0 ? "O que vai acontecer" : "Pré-visualização"}
+              </span>
+              {tree.length > 0 && (
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {tree.length} {tree.length === 1 ? "item" : "itens"}
+                  {/* Os ancestrais que o parser INVENTA (o "1" criado quando o
+                      texto começa em "1.2") não vieram de linha nenhuma — sem
+                      dizer isso, a conta "20 linhas → 23 itens" pareceria erro. */}
+                  {totalInventados > 0 && (
+                    <span className="text-muted-foreground/70">
+                      {" "}({totalInventados} {totalInventados === 1 ? "criado" : "criados"})
+                    </span>
+                  )}
+                  {/* O número de conflitos AQUI, não só no selo de cada linha:
+                      numa EAP de 80 itens ninguém percorre a lista para
+                      descobrir que 40 já existem. */}
+                  {codigosEmConflito.length > 0 && (
+                    <span className="text-destructive font-medium">
+                      {" "}· {codigosEmConflito.length} já {codigosEmConflito.length === 1 ? "existe" : "existem"}
+                    </span>
+                  )}
+                </span>
+              )}
             </div>
             {tree.length === 0 ? (
               /* A ÁREA VAZIA ENSINA. Antes dizia "a árvore aparece aqui
@@ -862,62 +1222,93 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                 </div>
               </div>
             ) : (
-              <div className="flex-1 min-h-0 overflow-y-auto space-y-1 -mx-1 px-1">
+              /* `rolagem-visivel`: a área já rolava, mas com a barra fina do
+                 sistema — nada dizia que havia mais itens abaixo, e a lista
+                 parecia acabar onde a área terminava. */
+              <div className="flex-1 min-h-0 overflow-y-auto rolagem-visivel space-y-1 -mx-1 px-1">
                 {(filtroPapel ? tree.filter((n) => n.role === filtroPapel) : tree).map((n) => {
                   // Ancestral inventado pelo parser (o texto começou em "1.2",
                   // então o "1" foi criado para a árvore não ficar quebrada).
                   const inventado = n.title.startsWith("(sem título)");
                   const jaExiste = inventado ? faseExistente(n.code) : null;
+                  // Só para item de verdade: inventado reaproveita a fase (selo
+                  // verde acima), e marco não tem código para colidir.
+                  const ocupado = !inventado && n.code ? codigoOcupado(n.code) : null;
                   return (
-                  <div key={n.code} className="flex items-center gap-2.5 py-1" style={{ paddingLeft: (n.depth - 1) * 20 }}>
-                    <span className={cn("inline-flex items-center text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0", ROLE_META[n.role].cls)}>
+                  // `key` cai na linha do texto quando não há código: marco
+                  // solto tem code vazio, e keys vazias colidem entre si.
+                  // `items-start`, não `items-center`: com o título quebrando em
+                  // duas linhas, centralizar faria o selo e o código flutuarem no
+                  // meio do bloco — a coluna deles deixaria de se ler de cima a
+                  // baixo. Pelo topo, cada linha começa alinhada com a anterior.
+                  <div key={n.code || `linha:${n.ordemNoTexto}`} className="flex items-start gap-2.5 py-1" style={{ paddingLeft: (n.depth - 1) * 20 }}>
+                    <span className={cn("inline-flex items-center text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 mt-px", ROLE_META[n.role].cls)}>
                       {ROLE_META[n.role].short}
                     </span>
-                    <span className="text-[11px] font-mono text-muted-foreground shrink-0">{n.code}</span>
+                    {/* Sem código, mostra um traço em vez de espaço vazio: o
+                        marco não entra na numeração da EAP de propósito, e um
+                        branco ali pareceria informação faltando. */}
+                    <span className="text-[11px] font-mono text-muted-foreground shrink-0 mt-0.5" title={n.code ? undefined : "Marco não entra na numeração da EAP"}>
+                      {n.code || "—"}
+                    </span>
                     {/* A fase JÁ EXISTE: mostra o título real e avisa que será
                         reaproveitada. Antes dizia "(sem título) 1" e prometia
                         uma fase nova que a importação não cria — ela reaproveita
                         a existente. */}
+                    {/* TÍTULO QUEBRA, não corta. `truncate` cortava numa linha
+                        só E sem `title`: o texto perdido não voltava nem no
+                        hover. Some mais do que parece — cada nível recua 20px,
+                        então "1.1.1.1" começa 60px à direita e ainda divide a
+                        linha com o selo e o código.
+                        Esta é a tela de CONFERIR antes de gravar; o que não se
+                        lê não se verifica. Jira e Asana quebram o texto na
+                        prévia pelo mesmo motivo.
+                        `line-clamp-3` é o teto: título colado por engano (200+
+                        caracteres) não pode ocupar meia tela — aí o tooltip
+                        mostra o resto. */}
                     {jaExiste ? (
                       <>
-                        <span className="text-[13px] truncate">{jaExiste}</span>
+                        <span className="text-[13px] break-words line-clamp-3 min-w-0 flex-1" title={jaExiste}>{jaExiste}</span>
                         <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded border border-success/40 bg-success/5 text-success">
                           já existe · será reaproveitada
                         </span>
                       </>
                     ) : inventado ? (
                       <>
-                        <span className="text-[13px] truncate text-muted-foreground italic">sem título</span>
+                        <span className="text-[13px] text-muted-foreground italic min-w-0">sem título</span>
                         <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded border border-warning/40 bg-warning/5 text-warning"
                               title={`O código ${n.code} não estava no texto colado, mas "${tree.find((x) => x.parentCode === n.code)?.code ?? ""}" precisa dele. Será criada sem título.`}>
                           criada automaticamente
                         </span>
                       </>
                     ) : (
-                      <span className="text-[13px] truncate">{n.title}</span>
+                      <>
+                        <span className="text-[13px] break-words line-clamp-3 min-w-0 flex-1" title={n.title}>{n.title}</span>
+                        {/* CÓDIGO JÁ OCUPADO. Diferente do selo verde acima —
+                            fase existente é reaproveitada, atividade existente
+                            vira CÓPIA. O selo diz qual item já mora nesse
+                            endereço, para a conferência acontecer aqui e não
+                            depois, no Backlog, com duas linhas iguais. */}
+                        {ocupado && (
+                          <span
+                            className="text-[10px] shrink-0 px-1.5 py-0.5 rounded border border-destructive/40 bg-destructive/5 text-destructive"
+                            title={`O código ${n.code} já é de "${ocupado}". Importar cria uma segunda linha no mesmo endereço.`}
+                          >
+                            código já usado
+                          </span>
+                        )}
+                      </>
                     )}
                     {/* O que veio das colunas: conferir aqui evita descobrir
                         que a data entrou errada só depois de importar. */}
                     {n.vals && (
-                      <span className="ml-auto flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
+                      <span className="ml-auto flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground mt-0.5">
                         {(n.vals.start_date || n.vals.end_date) && (
                           <span className="font-mono">
                             {fmtDia(n.vals.start_date)}→{fmtDia(n.vals.end_date)}
                           </span>
                         )}
                         {n.vals.hours != null && <span className="font-mono">{n.vals.hours}h</span>}
-                        {/* A descrição não cabe na linha da prévia, mas some sem
-                            deixar rastro se nada a mencionar: o ícone confirma
-                            que a coluna foi lida, e o título mostra o texto que
-                            será gravado — inclusive as quebras de linha. */}
-                        {n.vals.descricao && (
-                          <span
-                            className="inline-flex items-center"
-                            title={`Descrição:\n${n.vals.descricao}`}
-                          >
-                            <AlignLeft className="w-3 h-3" />
-                          </span>
-                        )}
                         {n.vals.actual_end_date && (
                           <span className="px-1 rounded border border-success/40 text-success">concluída</span>
                         )}
@@ -935,6 +1326,73 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           </div>
         </div>
 
+        {/* A LISTA do que ficou de fora — linha, texto e motivo.
+            Cada motivo pede uma correção diferente: "sem código EAP" é uma
+            observação solta, "código fora do padrão" é numeração que o parser
+            não lê. Um aviso genérico obrigava a adivinhar qual era o caso. */}
+        {detalheAberto && parsed.descartadas.length > 0 && (
+          // ALTURA PRÓPRIA, não `shrink-0` solto. Antes ela crescia conforme o
+          // conteúdo e EMPURRAVA o corpo: a última linha do campo colado sumia
+          // atrás dela ("1.1.2.4 Classificar stakeholders" cortado ao meio).
+          // Com `h-[136px] shrink-0`, o corpo (que é `flex-1 min-h-0`) encolhe
+          // para caber — o painel tem lugar em vez de invadir.
+          <div className="h-[136px] shrink-0 border-t bg-muted/20 flex flex-col">
+            {/* Cabeçalho com o resumo e o fechar: sem ele, sair da lista exigia
+                achar o selo lá no rodapé, que a própria lista empurrou. */}
+            <div className="flex items-center justify-between gap-3 px-6 py-1.5 shrink-0">
+              <span className="text-[11px] text-muted-foreground">
+                {linhasPerdidas.length > 0 && (
+                  <span className="text-warning font-medium">
+                    {linhasPerdidas.length} fora da importação
+                  </span>
+                )}
+                {linhasPerdidas.length > 0 && linhasAnexadas.length > 0 && " · "}
+                {linhasAnexadas.length > 0 && (
+                  <span>{linhasAnexadas.length} juntada{linhasAnexadas.length > 1 ? "s" : ""} ao item anterior</span>
+                )}
+                <span className="text-muted-foreground/70"> — clique para ir até a linha</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setDetalheAberto(false)}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              >
+                Fechar
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto rolagem-visivel px-6 pb-2.5">
+              <div className="rounded-md border border-border bg-background divide-y divide-border/60">
+                {parsed.descartadas.map((d) => {
+                  const anexada = d.motivo === "anexada";
+                  return (
+                    <button
+                      key={`${d.numero}-${d.motivo}`}
+                      type="button"
+                      onClick={() => irParaLinha(d.numero)}
+                      className="w-full flex items-baseline gap-2.5 px-2.5 py-1.5 text-left hover:bg-muted/60 transition-colors"
+                      title="Ir para esta linha no texto colado"
+                    >
+                      <span className="text-[10.5px] text-muted-foreground/70 tabular-nums w-6 text-right shrink-0">
+                        {d.numero}
+                      </span>
+                      <span className="flex-1 min-w-0 truncate font-mono text-[12px]">{d.texto}</span>
+                      <span
+                        className={cn(
+                          "text-[10.5px] shrink-0 whitespace-nowrap",
+                          anexada ? "text-muted-foreground" : "text-warning",
+                        )}
+                        title={anexada ? `O texto entrou em "${d.anexadaEm}"` : undefined}
+                      >
+                        {MOTIVO_LABEL[d.motivo]}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Rodapé: contadores + ações (sempre visível) */}
         <div className="flex flex-wrap items-center gap-3 px-6 py-3.5 border-t bg-muted/30 shrink-0">
           {tree.length > 0 ? (
@@ -943,17 +1401,37 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
               {counts.entrega > 0 && <CountBadge role="entrega" n={counts.entrega} />}
               <CountBadge role="atividade" n={counts.atividade} />
               {counts.marco > 0 && <CountBadge role="marco" n={counts.marco} />}
-              {/* REDE DE SEGURANÇA: linha colada que não virou item some sem
-                  deixar rastro. Foi assim que o código com ponto final ("1.")
-                  fez a fase desaparecer da prévia sem nenhum aviso. */}
-              {linhasIgnoradas > 0 && (
-                <span
-                  className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-warning/40 bg-warning/5 text-warning text-[11px] font-medium"
-                  title="Essas linhas não têm código EAP reconhecível (ex.: numeração fora do padrão 1, 1.2, 1.2.3) ou estão sem título, e não serão importadas. Confira o texto colado."
+              {/* O AVISO ABRE. Antes era um número calculado por subtração
+                  (coladas − reconhecidas), então dizia "1 linha" sem poder
+                  dizer QUAL — não existia lista para mostrar. Agora o parser
+                  registra cada descarte e o selo revela a lista. */}
+              {linhasPerdidas.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setDetalheAberto((v) => !v)}
+                  className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-warning/40 bg-warning/5 text-warning text-[11px] font-medium hover:bg-warning/10 transition-colors"
+                  title="Ver quais linhas ficaram de fora"
+                  aria-expanded={detalheAberto}
                 >
                   <AlertTriangle className="w-3 h-3 shrink-0" />
-                  {linhasIgnoradas} linha(s) não reconhecida(s)
-                </span>
+                  {linhasPerdidas.length} {linhasPerdidas.length === 1 ? "linha não reconhecida" : "linhas não reconhecidas"}
+                  <ChevronDown className={cn("w-3 h-3 shrink-0 opacity-60 transition-transform", detalheAberto && "rotate-180")} />
+                </button>
+              )}
+              {/* Anexadas NÃO são perda: o texto entrou no item anterior. Ficam
+                  em tom neutro, longe do âmbar — antes entravam no mesmo
+                  contador e assustavam sem ter havido perda nenhuma. */}
+              {linhasAnexadas.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setDetalheAberto((v) => !v)}
+                  className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-border bg-muted/40 text-muted-foreground text-[11px] hover:text-foreground transition-colors"
+                  title="Títulos que quebraram em duas linhas e foram juntados ao item anterior"
+                  aria-expanded={detalheAberto}
+                >
+                  {linhasAnexadas.length} {linhasAnexadas.length === 1 ? "linha juntada" : "linhas juntadas"}
+                  <ChevronDown className={cn("w-3 h-3 shrink-0 opacity-60 transition-transform", detalheAberto && "rotate-180")} />
+                </button>
               )}
             </div>
           ) : (

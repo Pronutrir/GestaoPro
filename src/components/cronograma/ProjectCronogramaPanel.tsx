@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState, useCallback, Fragment, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { resolveEapKind, phaseIdFromSyntheticRow, isSyntheticPhaseRow } from "@/lib/eapModel";
+import { resolveEapKind, phaseIdFromSyntheticRow, isSyntheticPhaseRow, EAP_LABELS } from "@/lib/eapModel";
 import { EditPhaseDialog } from "@/components/EditPhaseDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { computeActivityProgress } from "@/lib/activityProgress";
@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import {
   Table2, GanttChart, ExternalLink, AlertTriangle, AlertCircle, CalendarOff,
   CalendarDays, Settings2, Filter, FolderKanban, Search, X,
-  ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, ChevronDown, Layers, Diamond, GripVertical,
+  ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, ChevronDown, Layers, Diamond, GripVertical, Package,
   Info, Flag, Link2Off, GitBranch,
 } from "lucide-react";
 import {
@@ -44,6 +44,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PersonCombobox } from "@/components/PersonCombobox";
+import { DateField } from "@/components/ui/date-field";
+import { CelulaEditavel } from "@/components/cronograma/CelulaEditavel";
 import { cn } from "@/lib/utils";
 import {
   format, parseISO, differenceInBusinessDays, addDays, eachDayOfInterval,
@@ -135,6 +139,28 @@ const COL_LABELS: Record<ColKey, string> = {
   mainResource: "Recurso Principal", effort: "Esforço (h)",
   compression: "Compressão", observation: "Observações",
   project: "Projeto", blockedDays: "Dias Bloqueada",
+};
+
+/**
+ * O mínimo que a EDIÇÃO NA CÉLULA precisa saber de uma linha.
+ *
+ * O estado `activities` é `any[]` — herdado, e trocar isso é outra conversa.
+ * Este alias cobre só o caminho novo, para as funções de edição não propagarem
+ * `any` por assinaturas que eu mesma escrevi.
+ */
+type LinhaEditavel = {
+  id: string;
+  assigned_to?: string | null;
+  workflow_stage_id?: string | null;
+  project_id?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  actual_start_date?: string | null;
+  actual_end_date?: string | null;
+  hours?: number | null;
+  description?: string | null;
+  wbs_code?: string | null;
+  is_milestone?: boolean | null;
 };
 
 const DEFAULT_VISIBLE: ColKey[] = [
@@ -261,6 +287,8 @@ export function ProjectCronogramaPanel({
   const [phases, setPhases] = useState<any[]>([]);
   const [deps, setDeps] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, { name: string; sector: string; avatar?: string }>>({});
+  /** A mesma gente, em lista — é o formato que `PersonCombobox` consome. */
+  const [pessoas, setPessoas] = useState<{ id: string; full_name: string; sector?: string | null; role_title?: string | null; avatar_url?: string | null }[]>([]);
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [projectDeadlines, setProjectDeadlines] = useState<Record<string, string | null>>({});
   const [mode, setMode] = useState<CronogramaMode>(defaultMode);
@@ -470,7 +498,7 @@ export function ProjectCronogramaPanel({
     const [{ data: acts }, { data: phs }, { data: profs }, { data: stgs }] = await Promise.all([
       actsQ,
       supabase.from("phases").select("*").in("project_id", scopedProjectIds).eq("is_trashed", false).order("display_order", { ascending: true }),
-      supabase.from("profiles").select("id, full_name, sector, avatar_url"),
+      supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url"),
       stagesQ,
     ]);
     setActivities(acts || []);
@@ -485,6 +513,18 @@ export function ProjectCronogramaPanel({
       };
     });
     setProfiles(map);
+    // Mesma lista, no formato que `PersonCombobox` espera — `profiles` é um
+    // mapa por id, montado para a busca por responsável nas linhas.
+    setPessoas((profs || []).map((p: {
+      id: string; full_name: string; sector?: string | null;
+      role_title?: string | null; avatar_url?: unknown;
+    }) => ({
+      id: p.id,
+      full_name: p.full_name,
+      sector: p.sector ?? null,
+      role_title: p.role_title ?? null,
+      avatar_url: typeof p.avatar_url === "string" ? p.avatar_url : null,
+    })));
     const pm: Record<string, string> = {};
     const pdl: Record<string, string | null> = {};
     visibleProjects.forEach((p) => {
@@ -1268,6 +1308,115 @@ export function ProjectCronogramaPanel({
     toast({ title: "Datas atualizadas", description: `${format(parseISO(startISO), "dd/MM/yy")} → ${format(parseISO(endISO), "dd/MM/yy")}` });
   }, [toast, fetchData]);
 
+  /**
+   * Grava um campo direto da célula — a base da edição na linha.
+   *
+   * OTIMISTA COM REVERSÃO: o valor entra na tela antes da resposta, porque
+   * esperar o banco a cada tecla tornaria a tabela lenta justamente no uso que
+   * ela ganha (preencher 40 prazos seguidos). Se o banco recusar, o valor
+   * antigo volta e o aviso diz por quê — a tela nunca mostra o que não gravou.
+   *
+   * `fetchData` depois: duração, folga e CPM saem das datas, então mudar um
+   * campo muda números de outras colunas e de outras linhas.
+   */
+  const gravarCampo = useCallback(async (
+    id: string,
+    patch: Record<string, unknown>,
+    descricao: string,
+  ): Promise<boolean> => {
+    // Linha sintética de fase não é `activity` — não tem o que gravar aqui.
+    if (String(id).startsWith("phase:")) return false;
+    const anterior = activities.find((a) => a.id === id);
+    setActivities((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+
+    const { error } = await supabase.from("activities").update(patch as never).eq("id", id);
+    if (error) {
+      if (anterior) setActivities((prev) => prev.map((a) => (a.id === id ? anterior : a)));
+      toast({ title: "Não foi possível salvar", description: error.message, variant: "destructive" });
+      return false;
+    }
+    fetchData();
+    toast({ title: descricao });
+    return true;
+  }, [activities, fetchData, toast]);
+
+  /**
+   * Esta linha aceita edição na célula?
+   *
+   * Fase (linha sintética) não: ela vive na tabela `phases` e não tem os
+   * campos. Agrupador não recebe DATA — as dele são derivadas dos filhos, e
+   * aceitar um valor que o próximo cálculo sobrescreve é pior que recusar.
+   */
+  const podeEditarCelula = useCallback((a: LinhaEditavel, campo: "data" | "outro"): { ok: boolean; motivo?: string } => {
+    if (isSyntheticPhaseRow(a)) return { ok: false, motivo: "A fase é editada na própria tela de fases." };
+    if (campo === "data" && isGroupRow(a)) {
+      return { ok: false, motivo: "Datas de fase e entrega vêm das tarefas de dentro." };
+    }
+    return { ok: true };
+  }, [isGroupRow]);
+
+  /**
+   * As quatro datas usam a mesma célula — só muda o campo e o rótulo.
+   *
+   * Escrever o bloco quatro vezes era convite a divergirem no primeiro ajuste:
+   * uma ganharia a validação e as outras não.
+   *
+   * A validação é a única regra própria daqui: fim antes do início produz uma
+   * duração negativa, que o CPM não sabe tratar — melhor recusar na hora, com
+   * o motivo, do que gravar e mostrar "-3d" na coluna ao lado.
+   */
+  const celulaDeData = useCallback((
+    a: LinhaEditavel,
+    campo: "start_date" | "end_date" | "actual_start_date" | "actual_end_date",
+    rotulo: string,
+    conteudo: ReactNode,
+  ) => {
+    const perm = podeEditarCelula(a, "data");
+    const parDe: Record<string, { outro: string; ehFim: boolean }> = {
+      start_date: { outro: "end_date", ehFim: false },
+      end_date: { outro: "start_date", ehFim: true },
+      actual_start_date: { outro: "actual_end_date", ehFim: false },
+      actual_end_date: { outro: "actual_start_date", ehFim: true },
+    };
+    return (
+      <td className="px-2 py-1.5 text-center">
+        <CelulaEditavel
+          rotulo={rotulo}
+          editavel={perm.ok}
+          vazio={!a[campo]}
+          motivoBloqueio={perm.motivo}
+          editor={(fechar) => (
+            <DateField
+              value={(a[campo] || "").slice(0, 10)}
+              className="h-7 text-xs w-[128px]"
+              onChange={async (v) => {
+                const novo = v || null;
+                const par = parDe[campo];
+                const outro = (a[par.outro] || "").slice(0, 10) || null;
+                if (novo && outro) {
+                  const [ini, fim] = par.ehFim ? [outro, novo] : [novo, outro];
+                  if (fim < ini) {
+                    toast({
+                      title: "Data recusada",
+                      description: `O término (${formatDateBR(fim)}) não pode ser antes do início (${formatDateBR(ini)}).`,
+                      variant: "destructive",
+                    });
+                    fechar(false);
+                    return;
+                  }
+                }
+                const ok = await gravarCampo(a.id, { [campo]: novo }, `${rotulo}: ${novo ? formatDateBR(novo) : "removida"}`);
+                fechar(ok);
+              }}
+            />
+          )}
+        >
+          {conteudo}
+        </CelulaEditavel>
+      </td>
+    );
+  }, [gravarCampo, podeEditarCelula, toast]);
+
   // ===== Setas de dependência =====
   // 41 ligações desenhadas ao mesmo tempo viram um emaranhado ilegível. Só a
   // cadeia da linha sob o cursor é traçada; "ver todas" existe para quem quiser.
@@ -1569,25 +1718,36 @@ export function ProjectCronogramaPanel({
       case "title": return (
         <td className="px-2 py-1.5">
           <div className="flex items-center gap-1.5 min-w-0" style={{ paddingLeft: depth > 0 ? depth * 12 : 0 }}>
-            {a.is_milestone ? (
-              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-orange-500/15 text-orange-700 border-orange-500/40 shrink-0 gap-1">
-                <Diamond className="h-2.5 w-2.5 fill-orange-500 text-orange-500" />
-                Marco
-              </Badge>
-            ) : isGroupRow(a) ? (
-              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-primary/10 text-primary border-primary/30 shrink-0 gap-1">
-                <Layers className="h-2.5 w-2.5" />
-                Fase / Entrega
-              </Badge>
-            ) : a.parent_id ? (
-              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-amber-500/10 text-amber-700 border-amber-500/30 shrink-0">
-                Subatividade
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-emerald-500/10 text-emerald-700 border-emerald-500/30 shrink-0">
-                Atividade
-              </Badge>
-            )}
+            {/* O PAPEL VEM DA FONTE ÚNICA (lib/eapModel), como no Backlog.
+                Aqui havia uma classificação paralela, e ela discordava da EAP:
+                "Fase / Entrega" fundia dois papéis num rótulo só, "Subatividade"
+                era um papel que o modelo não tem (qualquer item com pai virava
+                isso), e o que agrupa abaixo da fase — a Entrega — aparecia como
+                "Atividade". O mesmo 1.1.1 se chamava Entrega numa tela e
+                Atividade na outra.
+
+                `isGroupRow` continua mandando na LINHA SINTÉTICA de fase: ela
+                é montada da tabela `phases` e já sabe o que é — perguntar a
+                `resolveEapKind` daria chance de a resposta ser "não" quando
+                `phases.wbs_code` não existe na base (ver o comentário lá). */}
+            {(() => {
+              const kind = isSyntheticPhaseRow(a) ? "fase" : resolveEapKind(a, isGroupRow(a));
+              const estilo: Record<string, string> = {
+                projeto: "bg-primary/10 text-primary border-primary/30",
+                fase: "bg-primary/10 text-primary border-primary/30",
+                entrega: "bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/30",
+                atividade: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+                marco: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/40",
+              };
+              return (
+                <Badge variant="outline" className={`text-[10px] py-0 px-1.5 shrink-0 gap-1 ${estilo[kind]}`}>
+                  {kind === "marco" && <Diamond className="h-2.5 w-2.5 fill-orange-500 text-orange-500" />}
+                  {(kind === "fase" || kind === "projeto") && <Layers className="h-2.5 w-2.5" />}
+                  {kind === "entrega" && <Package className="h-2.5 w-2.5" />}
+                  {EAP_LABELS[kind]}
+                </Badge>
+              );
+            })()}
             <button
               type="button"
               onClick={() => openFromCronograma(a)}
@@ -1682,15 +1842,83 @@ export function ProjectCronogramaPanel({
           )}
         </td>
       );
-      case "responsible": return <td className="px-2 py-1.5 truncate max-w-[160px]" title={responsible}>{responsible}</td>;
+      case "responsible": return (() => {
+        const perm = podeEditarCelula(a, "outro");
+        // `text-center`: sem responsável, a célula vazia é um chip curto —
+        // encostado à esquerda ele fica desalinhado da própria coluna e do
+        // seletor que abre no lugar.
+        return (
+          <td className="px-2 py-1.5 max-w-[160px] text-center">
+            <CelulaEditavel
+              rotulo="Responsável"
+              editavel={perm.ok}
+              vazio={!responsible}
+              motivoBloqueio={perm.motivo}
+              editor={(fechar) => (
+                <PersonCombobox
+                  people={pessoas}
+                  value={pessoas.find((p) => p.full_name === a.assigned_to)?.id ?? null}
+                  placeholder="Sem responsável"
+                  // Largura fixa: sem ela o gatilho encolhe para o texto e o
+                  // popover nasce estreito, cortando os nomes.
+                  className="h-7 text-xs w-[152px]"
+                  onSelect={async (p) => {
+                    const ok = await gravarCampo(a.id, { assigned_to: p.full_name }, `Responsável: ${p.full_name}`);
+                    fechar(ok);
+                  }}
+                  onClear={async () => {
+                    const ok = await gravarCampo(a.id, { assigned_to: null }, "Responsável removido");
+                    fechar(ok);
+                  }}
+                />
+              )}
+            >
+              <span className={cn("truncate", !responsible && "text-muted-foreground")} title={responsible}>
+                {responsible || "—"}
+              </span>
+            </CelulaEditavel>
+          </td>
+        );
+      })();
       case "column": return (() => {
         const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
-        if (!stageInfo) return <td className="px-2 py-1.5 text-center text-muted-foreground">—</td>;
+        const perm = podeEditarCelula(a, "outro");
+        const doProjeto = stagesByProject.get(a.project_id) || [];
         return (
           <td className="px-2 py-1.5 text-center">
-            <Badge variant="outline" className="text-[10px] py-0 px-1.5" style={{ borderColor: stageInfo.color, color: stageInfo.color }}>
-              {stageInfo.title}
-            </Badge>
+            <CelulaEditavel
+              rotulo="Coluna"
+              editavel={perm.ok && doProjeto.length > 0}
+              vazio={!stageInfo}
+              motivoBloqueio={perm.motivo}
+              editor={(fechar) => (
+                <Select
+                  defaultOpen
+                  value={a.workflow_stage_id || undefined}
+                  onValueChange={async (v) => {
+                    const nome = doProjeto.find((s: { id: string; title: string }) => s.id === v)?.title ?? "";
+                    const ok = await gravarCampo(a.id, { workflow_stage_id: v }, `Movida para "${nome}"`);
+                    fechar(ok);
+                  }}
+                  onOpenChange={(o) => { if (!o) fechar(false); }}
+                >
+                  <SelectTrigger className="h-7 text-xs w-[150px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {doProjeto.map((s: { id: string; title: string }) => (
+                      <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            >
+              {stageInfo ? (
+                <Badge variant="outline" className="text-[10px] py-0 px-1.5" style={{ borderColor: stageInfo.color, color: stageInfo.color }}>
+                  {stageInfo.title}
+                </Badge>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </CelulaEditavel>
           </td>
         );
       })();
@@ -1716,22 +1944,26 @@ export function ProjectCronogramaPanel({
           </td>
         );
       })();
-      case "duration": return <td className="px-2 py-1.5 text-center">{dur ?? "—"}</td>;
-      case "plannedStart": return <td className="px-2 py-1.5 text-center">{formatDateBR(a.start_date)}</td>;
-      case "plannedEnd": return (
-        <td className="px-2 py-1.5 text-center">
-          {isOverdue ? (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-destructive bg-destructive/10 text-destructive animate-pulse-overdue">
-              <AlertCircle className="h-2.5 w-2.5 mr-0.5" />
-              {formatDateBR(a.end_date)}
-            </Badge>
-          ) : (
-            formatDateBR(a.end_date)
-          )}
+      // Calculada: o tooltip diz de onde vem. Não ganha fundo próprio — as
+      // editáveis já se distinguem por acenderem no hover, e pintar cinco
+      // colunas de forma permanente polui a tabela sem dizer mais nada.
+      case "duration": return (
+        <td className="px-2 py-1.5 text-center" title="Calculada a partir das datas de início e término">
+          {dur ?? "—"}
         </td>
       );
-      case "actualStart": return <td className="px-2 py-1.5 text-center text-muted-foreground">{formatDateBR(a.actual_start_date || null)}</td>;
-      case "actualEnd": return <td className="px-2 py-1.5 text-center text-muted-foreground">{formatDateBR(a.actual_end_date || null)}</td>;
+      case "plannedStart": return celulaDeData(a, "start_date", "Início Previsto", formatDateBR(a.start_date));
+      case "plannedEnd": return celulaDeData(a, "end_date", "Térm. Previsto",
+        isOverdue ? (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-destructive bg-destructive/10 text-destructive animate-pulse-overdue">
+            <AlertCircle className="h-2.5 w-2.5 mr-0.5" />
+            {formatDateBR(a.end_date)}
+          </Badge>
+        ) : formatDateBR(a.end_date));
+      case "actualStart": return celulaDeData(a, "actual_start_date", "Início Real",
+        <span className="text-muted-foreground">{formatDateBR(a.actual_start_date || null)}</span>);
+      case "actualEnd": return celulaDeData(a, "actual_end_date", "Térm. Real",
+        <span className="text-muted-foreground">{formatDateBR(a.actual_end_date || null)}</span>);
       case "variance": {
         const real = a.actual_end_date || null;
         const v = endVariance(real, a.baseline_end_date, a.end_date);
@@ -1824,7 +2056,47 @@ export function ProjectCronogramaPanel({
         </td>
       );
       case "mainResource": return <td className="px-2 py-1.5 truncate max-w-[140px]" title={mock.mainResource}>{mock.mainResource}</td>;
-      case "effort": return <td className="px-2 py-1.5 text-center font-mono">{mock.effortHours}</td>;
+      /* ESFORÇO passa a ser DADO, não sorteio. Mostrava `mock.effortHours` —
+         um número derivado do hash do id — e quem lia a tabela via "12h" como
+         se fosse real. O campo `hours` existe no banco e estava vazio. */
+      case "effort": return (() => {
+        const perm = podeEditarCelula(a, "outro");
+        const h = a.hours == null ? null : Number(a.hours);
+        return (
+          <td className="px-2 py-1.5 text-center font-mono">
+            <CelulaEditavel
+              rotulo="Esforço"
+              editavel={perm.ok}
+              vazio={h == null}
+              motivoBloqueio={perm.motivo}
+              editor={(fechar) => (
+                <Input
+                  autoFocus
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  defaultValue={h ?? ""}
+                  className="h-7 text-xs w-[76px] text-center"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") { e.preventDefault(); fechar(false); }
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                  onBlur={async (e) => {
+                    const bruto = e.target.value.trim();
+                    const novo = bruto === "" ? null : Number(bruto);
+                    if (novo !== null && (Number.isNaN(novo) || novo < 0)) { fechar(false); return; }
+                    if (novo === h) { fechar(false); return; }
+                    const ok = await gravarCampo(a.id, { hours: novo }, `Esforço: ${novo == null ? "removido" : `${novo}h`}`);
+                    fechar(ok);
+                  }}
+                />
+              )}
+            >
+              {h == null ? <span className="text-muted-foreground">—</span> : h}
+            </CelulaEditavel>
+          </td>
+        );
+      })();
       case "compression": return (
         <td className="px-2 py-1.5 text-center">
           <Badge variant="outline" className={cn(
@@ -1836,11 +2108,47 @@ export function ProjectCronogramaPanel({
           )}>{mock.compression}</Badge>
         </td>
       );
-      case "observation": return (
-        <td className="px-2 py-1.5 text-muted-foreground italic truncate max-w-[220px]" title={mock.observation}>
-          {mock.observation || "—"}
-        </td>
-      );
+      /* OBSERVAÇÕES idem: mostrava uma de quatro frases sorteadas ("Aguardando
+         aprovação do PO"...), que ninguém escreveu. Passa a ler e gravar
+         `description`, o campo real — vazio até agora porque nada o alimentava
+         por aqui. */
+      case "observation": return (() => {
+        const perm = podeEditarCelula(a, "outro");
+        const texto = (a.description || "").trim();
+        return (
+          <td className="px-2 py-1.5 max-w-[220px]">
+            <CelulaEditavel
+              rotulo="Observações"
+              editavel={perm.ok}
+              vazio={!texto}
+              rotuloVazio="Anotar"
+              motivoBloqueio={perm.motivo}
+              editor={(fechar) => (
+                <Input
+                  autoFocus
+                  defaultValue={texto}
+                  placeholder="Anotar…"
+                  className="h-7 text-xs w-[200px]"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") { e.preventDefault(); fechar(false); }
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                  onBlur={async (e) => {
+                    const novo = e.target.value.trim();
+                    if (novo === texto) { fechar(false); return; }
+                    const ok = await gravarCampo(a.id, { description: novo || null }, "Observação salva");
+                    fechar(ok);
+                  }}
+                />
+              )}
+            >
+              <span className={cn("truncate", !texto && "text-muted-foreground")} title={texto}>
+                {texto || "—"}
+              </span>
+            </CelulaEditavel>
+          </td>
+        );
+      })();
     }
   };
 
@@ -2076,7 +2384,10 @@ export function ProjectCronogramaPanel({
                       <span className="absolute right-0 top-1.5" style={{ width: 0, height: 0, borderLeft: "3px solid transparent", borderRight: "3px solid transparent", borderTop: "5px solid hsl(var(--foreground) / 0.55)" }} />
                     </span>
                   }
-                  title="Fase / Entrega"
+                  /* Aqui os dois papéis dividem legitimamente a mesma linha: a
+                     legenda descreve a FORMA da barra, e Fase e Entrega
+                     desenham igual. O selo da tabela, esse sim, distingue. */
+                  title="Agrupador (Fase ou Entrega)"
                   desc="Barra-resumo cinza com abas nas pontas; datas derivadas das tarefas filhas."
                 />
                 <LegendRow
@@ -2693,7 +3004,15 @@ export function ProjectCronogramaPanel({
                                 </div>
                               )}
                               {a.is_milestone && <div>🎯 Marco</div>}
-                              {isPhase && <div>📚 Fase / Entrega — datas derivadas dos filhos</div>}
+                              {/* O tooltip tem a atividade em mãos, então diz o
+                                  papel EXATO — não precisa do rótulo genérico
+                                  que a legenda usa para descrever a forma. */}
+                              {isPhase && (
+                                <div>
+                                  📚 {EAP_LABELS[isSyntheticPhaseRow(a) ? "fase" : resolveEapKind(a, true)]}
+                                  {" "}— datas derivadas dos filhos
+                                </div>
+                              )}
                             </div>
                           </TooltipContent>
                         </Tooltip>

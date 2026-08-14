@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ import {
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { resolveEapKind, type EapKind } from "@/lib/eapModel";
+import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
 import {
   avaliarProntidao, resumirProntidao, principaisCarencias,
   PRONTIDAO_LABELS, PRONTIDAO_LABELS_LONGOS,
@@ -139,6 +140,22 @@ export const BacklogSection = ({
   const [backlogStageId, setBacklogStageId] = useState<string | null>(null);
   // Todos os stages, incluindo o "Backlog" (display_order=0), para mostrar badge de status
   const [allStages, setAllStages] = useState<WorkflowStage[]>([]);
+  /**
+   * "Tudo" (padrão) × "só a fila".
+   *
+   * O BACKLOG É A LISTA COMPLETA DO PROJETO, e o Kanban é outra visão dos
+   * mesmos itens — decisão de 13/08/2026. Um item movido para o quadro NÃO
+   * some daqui: ele continua na lista, com a coluna onde está no selo de
+   * status. Backlog responde "o que existe"; Kanban responde "onde está".
+   *
+   * Isto reverte o padrão que eu tinha adotado (só a fila). O modelo Jira —
+   * item está OU no backlog OU no sprint — não é o desta ferramenta: aqui a
+   * aba é a EAP inteira, com responsável e prazo à vista.
+   *
+   * O recorte de fila continua disponível no interruptor, para quem quiser
+   * ver só o que ainda não começou.
+   */
+  const [mostrarTudo, setMostrarTudo] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [targetStageId, setTargetStageId] = useState<string>("");
@@ -268,11 +285,32 @@ export const BacklogSection = ({
   // O mínimo da coluna Tarefa é baixo de propósito: ela tem `truncate`, então
   // encolher corta o texto com reticências — o que é preferível a empurrar a
   // coluna de ações para fora da tela.
-  // A coluna de 26px é da CAIXA DE SELEÇÃO e só existe no modo seleção em lote.
-  // Ela era fixa: depois que o botão de concluir saiu dali, sobrava uma faixa
-  // vazia antes de cada tarefa e o conteúdo todo começava deslocado à direita,
-  // sem nada ocupando o espaço.
-  const backlogGrid = `20px ${selectMode ? "26px " : ""}minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
+  // A coluna de 26px é da CAIXA DE SELEÇÃO. Ela existe SEMPRE: fora do modo
+  // seleção a caixa é a porta de entrada para ele, e antes dividia os mesmos
+  // 20px com a seta — empilhadas, a seta sumindo no hover para a caixa tomar
+  // o lugar. Quem mirava a seta via o alvo trocar de função debaixo do cursor.
+  // Duas coisas clicáveis, duas células.
+  const backlogGrid = `26px 20px minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
+
+  /**
+   * A caixa aparece no HOVER — mas na coluna dela, não por cima da seta.
+   *
+   * Duas correções seguidas, e o meio-termo é este. Primeiro a caixa vivia
+   * empilhada sobre a seta e a substituía no hover: mirar o expandir fazia o
+   * alvo trocar de função debaixo do cursor. Aí eu as separei em colunas e
+   * deixei as duas sempre visíveis — e a tela virou uma fileira de quadrados
+   * azuis descendo a lateral inteira, disputando atenção com o título, que é
+   * o que a pessoa lê.
+   *
+   * O que causava a armadilha era a SOBREPOSIÇÃO, não o hover. Com célula
+   * própria, a caixa some sem mexer na seta: o expandir fica firme no lugar,
+   * a linha continua dizendo se está aberta, e a lateral fica limpa.
+   *
+   * `focus-visible` mantém o teclado: quem navega por Tab precisa ver onde
+   * está, e ninguém dá hover com teclado.
+   */
+  const caixaNoHover =
+    "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity";
 
   useEffect(() => {
     const ids = activities.map((a) => a.id);
@@ -327,8 +365,11 @@ export const BacklogSection = ({
     const fetchStages = async () => {
       const { data } = await supabase
         .from("workflow_stages")
-        // is_final: decide se mover para esta coluna conclui a tarefa.
-        .select("id, display_order, title, color, is_final")
+        // `*` em vez da lista de campos: a coluna `categoria` não está nos
+        // tipos gerados até a migration rodar, e nomeá-la aqui quebraria o
+        // typecheck. Ela decide se o item está NA FILA — é o que separa o
+        // backlog do trabalho em curso.
+        .select("*")
         .eq("project_id", projectId)
         .order("display_order");
       if (data) {
@@ -349,8 +390,30 @@ export const BacklogSection = ({
 
   useEffect(() => { if (showTrash) fetchTrashedActivities(); }, [showTrash, projectId]);
 
+  /**
+   * A FASE VOLTA COM A TAREFA.
+   *
+   * Arquivar a última tarefa de uma fase leva a fase junto (ver
+   * `aplicarEmLote`), então restaurar só a tarefa a devolveria para uma fase
+   * arquivada: ela reapareceria em "Sem fase", com o vínculo intacto no banco
+   * mas invisível na tela — o pior dos dois mundos.
+   *
+   * Desarquiva sem perguntar: a fase é o contêiner, e ninguém restaura uma
+   * tarefa querendo que ela caia fora do lugar de onde saiu.
+   */
+  const restaurarFaseDe = async (activityId: string) => {
+    const alvo = trashedActivities.find((a) => a.id === activityId);
+    if (!alvo?.phase_id) return;
+    await supabase
+      .from("phases")
+      .update({ is_trashed: false, trashed_at: null } as never)
+      .eq("id", alvo.phase_id)
+      .eq("is_trashed", true);
+  };
+
   const handleRestore = async (activityId: string) => {
     await (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any) as any).eq("id", activityId);
+    await restaurarFaseDe(activityId);
     toast({ title: "Atividade restaurada!" });
     fetchTrashedActivities();
     onDataChanged();
@@ -369,7 +432,19 @@ export const BacklogSection = ({
       confirmText: "Restaurar",
     });
     if (!ok) return;
+    // As fases das tarefas restauradas voltam junto — mesma razão de
+    // `restaurarFaseDe`, aplicada ao lote inteiro de uma vez.
+    const fases = [...new Set(trashedActivities.map((a) => a.phase_id).filter(Boolean))] as string[];
     await (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any).eq("project_id", projectId) as any).eq("is_trashed", true);
+    if (fases.length > 0) {
+      await mutateInChunks(fases, (batch) =>
+        supabase
+          .from("phases")
+          .update({ is_trashed: false, trashed_at: null } as never)
+          .in("id", batch)
+          .eq("is_trashed", true),
+      );
+    }
     toast({ title: "Todas as atividades restauradas!" });
     fetchTrashedActivities();
     onDataChanged();
@@ -395,8 +470,87 @@ export const BacklogSection = ({
   // "Receber demanda da Diretoria (3)" com três subatividades excluídas
   // aparecendo aqui, enquanto a aba Subatividades do diálogo, que filtra
   // corretamente, mostrava vazio. As duas telas liam a mesma coisa e discordavam.
+  /**
+   * O item ainda está NA FILA?
+   *
+   * Categoria `backlog` ou `a_iniciar` = não começou. Qualquer outra (andamento,
+   * espera, revisão, concluída, cancelada) significa que o trabalho já anda no
+   * quadro.
+   *
+   * Item SEM coluna conta como fila: foi criado e ainda não foi posicionado.
+   *
+   * Serve só ao RECORTE OPCIONAL "ver só o que não começou" — a aba mostra o
+   * projeto inteiro por padrão, e nada some daqui por ter ido para o quadro.
+   */
+  const naFila = (a: Activity): boolean => {
+    if (!a.workflow_stage_id) return true;
+    const col = allStages.find((s) => s.id === a.workflow_stage_id);
+    if (!col) return true; // coluna desconhecida: não esconde o item
+    const cat = parseWorkflowCategory((col as { categoria?: string }).categoria)
+      ?? categoryFromLegacyFlags(col as never);
+    return cat === "backlog" || cat === "a_iniciar";
+  };
+
+  /**
+   * A aba mostra SÓ A FILA — o que ainda não começou.
+   *
+   * Antes exibia `activities.filter(a => !a.is_trashed)`: tudo que não estava
+   * na lixeira, inclusive concluídas e em andamento. Uma tarefa arrastada no
+   * Kanban continuava aqui como se ainda esperasse, e a fila deixava de
+   * responder "o que vem primeiro?" — priorizar 200 itens dos quais 150 já
+   * saíram é trabalho jogado fora. Pior: os números do topo ("prontas para
+   * executar", "falta responsável em 16") mediam o projeto inteiro.
+   *
+   * Jira, Azure DevOps e Linear separam pelo ESTADO do item, e sair do estado
+   * tira da fila automaticamente. O Trello e o contraexemplo — tudo convive, e
+   * a lista cresce sem fim.
+   *
+   * AGRUPADOR fica enquanto tiver descendente na fila: a estrutura existe para
+   * segurar o conteúdo, não sozinha.
+   */
+  const soAFila = (lista: Activity[]): Activity[] => {
+    // SÓ AS FOLHAS decidem. Agrupador não tem coluna própria (é rollup), então
+    // `naFila` o aprovaria por si mesmo — e uma fase com todos os filhos
+    // concluídos continuaria na lista, vazia. Ele entra depois, pelo caminho de
+    // volta, quando algum descendente estiver na fila.
+    const temFilho = new Set(lista.filter((a) => a.parent_id).map((a) => a.parent_id as string));
+    const folhasNaFila = new Set(
+      lista.filter((a) => !temFilho.has(a.id) && naFila(a)).map((a) => a.id),
+    );
+    const porId = new Map(lista.map((a) => [a.id, a]));
+    // Sobe de cada item da fila até a raiz, mantendo os ancestrais no caminho.
+    const manter = new Set(folhasNaFila);
+    for (const id of folhasNaFila) {
+      let atual = porId.get(id);
+      const visto = new Set<string>([id]);
+      while (atual?.parent_id && !visto.has(atual.parent_id)) {
+        visto.add(atual.parent_id);
+        manter.add(atual.parent_id);
+        atual = porId.get(atual.parent_id);
+      }
+    }
+    return lista.filter((a) => manter.has(a.id));
+  };
+
+  /**
+   * Quantas FOLHAS saíram da fila — o número do aviso.
+   *
+   * Só folhas: agrupador não "sai", ele acompanha os filhos. Contá-lo inflaria
+   * o aviso com estrutura, não com trabalho.
+   */
+  const foraDaFila = useMemo(() => {
+    const temFilho = new Set(
+      activities.filter((a) => !a.is_trashed && a.parent_id).map((a) => a.parent_id as string),
+    );
+    return activities.filter((a) => !a.is_trashed && !temFilho.has(a.id) && !naFila(a)).length;
+    // `naFila` depende de allStages; sem ele na lista o número congelaria no
+    // primeiro render, antes de as colunas chegarem.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activities, allStages]);
+
   const backlogActs = (() => {
-    const vivas = activities.filter((a) => !a.is_trashed);
+    const semLixeira = activities.filter((a) => !a.is_trashed);
+    const vivas = mostrarTudo ? semLixeira : soAFila(semLixeira);
     if (prontidaoFilter === "all") return vivas;
 
     // Quem tem filhos não é avaliado (horas e datas são rollup), mas precisa
@@ -554,9 +708,70 @@ export const BacklogSection = ({
     });
   };
 
+  /**
+   * Marcar um agrupador marca o que está DENTRO dele — e desmarcar, idem.
+   *
+   * Sem a cascata, escolher "Fase 1" pegava só a linha do título: arquivar
+   * deixaria as atividades órfãs, visíveis e sem raiz. É o comportamento de
+   * árvore do Explorer, do Finder e da EAP do MS Project.
+   *
+   * Anda pelos DESCENDENTES, não só pelos filhos diretos — Fase → Entrega →
+   * Atividade tem três níveis, e parar no primeiro deixaria os netos de fora.
+   * Alcança ramo RECOLHIDO de propósito: o resultado não pode depender de a
+   * fase estar aberta na hora do clique.
+   */
+  const descendentesDe = (id: string): string[] => {
+    const out: string[] = [];
+    const fila = [id];
+    while (fila.length) {
+      const atual = fila.pop()!;
+      for (const f of childrenByParent.get(atual) || []) {
+        out.push(f.id);
+        fila.push(f.id);
+      }
+    }
+    return out;
+  };
+
+  /**
+   * Todos os ANCESTRAIS de um item, do pai para cima.
+   *
+   * Necessário para o pai não continuar marcado depois que um filho sai: a
+   * marca dele quer dizer "isto e tudo que está dentro", e isso deixa de ser
+   * verdade no instante em que um descendente é desmarcado.
+   */
+  const ancestraisDe = (id: string): string[] => {
+    const out: string[] = [];
+    let atual = backlogActs.find((a) => a.id === id)?.parent_id ?? null;
+    while (atual) {
+      out.push(atual);
+      atual = backlogActs.find((a) => a.id === atual)?.parent_id ?? null;
+    }
+    return out;
+  };
+
   const toggleSelect = (id: string) => {
     const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id); else next.add(id);
+    const familia = [id, ...descendentesDe(id)];
+    // O clique no PAI manda: marcando, entra a família toda; desmarcando, sai
+    // toda. Alternar item a item deixaria o pai marcado com filhos fora.
+    if (next.has(id)) {
+      familia.forEach((x) => next.delete(x));
+      // E OS ANCESTRAIS SAEM JUNTO. Sem isto, desmarcar dois filhos de uma
+      // fase que estava inteira selecionada deixava a fase marcada em sólido:
+      // a caixa dizia "tudo aqui dentro" enquanto dois itens estavam fora, e
+      // arquivar levaria a fase como se estivesse completa.
+      ancestraisDe(id).forEach((x) => next.delete(x));
+    } else {
+      familia.forEach((x) => next.add(x));
+      // Marcar o ÚLTIMO filho que faltava completa o pai — e o avô, se for o
+      // caso. `estadoDaCaixa` já mostraria o sólido pelo cálculo, mas o id do
+      // pai precisa entrar no conjunto para as ações em lote o alcançarem.
+      for (const anc of ancestraisDe(id)) {
+        const filhos = descendentesDe(anc);
+        if (filhos.length > 0 && filhos.every((f) => next.has(f))) next.add(anc);
+      }
+    }
     setSelectedIds(next);
     // Desmarcar a ÚLTIMA sai do modo. Sem isto a coluna das caixas continuava
     // reservada com zero itens marcados — o usuário via o marcador na lateral
@@ -566,21 +781,101 @@ export const BacklogSection = ({
     if (next.size === 0) setSelectMode(false);
   };
 
-  const allBacklogIds = backlogActs.map((a) => a.id);
-  const allSelected = allBacklogIds.length > 0 && selectedIds.size === allBacklogIds.length;
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      // DESLIGA O MODO junto. Limpar só a seleção deixava `selectMode` ligado,
-      // e a coluna da caixa continuava reservada no grid: o "marcador lateral"
-      // ficava fixo na lateral de cada linha depois de desmarcar tudo, sem
-      // nada selecionado e sem jeito de sair.
-      setSelectedIds(new Set());
-      setSelectMode(false);
-    } else {
-      setSelectMode(true);
-      setSelectedIds(new Set(allBacklogIds));
-    }
+  /**
+   * Estado da caixa de um agrupador: marcado, vazio, ou o traço do meio-termo.
+   *
+   * Sem o traço, um pai com metade dos filhos marcados apareceria desmarcado —
+   * e o contador do rodapé diria um número que a tela não confirma.
+   */
+  const estadoDaCaixa = (id: string): boolean | "indeterminate" => {
+    const filhos = descendentesDe(id);
+    // FOLHA: só o próprio id decide.
+    if (filhos.length === 0) return selectedIds.has(id);
+    // AGRUPADOR: quem manda são os FILHOS, não o id dele.
+    //
+    // Antes começava com `if (selectedIds.has(id)) return true`, e o id do pai
+    // ficava no conjunto depois de desmarcar um filho: a fase aparecia sólida
+    // com dois itens em branco embaixo. O `toggleSelect` agora tira o pai nesse
+    // caso, e este cálculo deixa de depender disso para acertar.
+    const marcados = filhos.filter((f) => selectedIds.has(f)).length;
+    if (marcados === 0) return false;
+    return marcados === filhos.length ? true : "indeterminate";
   };
+
+  /**
+   * As FOLHAS da seleção — o que de fato executa trabalho.
+   *
+   * Agrupador (Fase, Entrega, ou qualquer item com subitens) tem horas, datas,
+   * responsável e status DERIVADOS dos filhos. Gravar neles produziria um valor
+   * que discorda do próprio conteúdo — e "mudar status" chegaria a empurrar uma
+   * Fase para uma coluna do Kanban, onde ela não vive.
+   *
+   * A regra que separa as ações:
+   *   ESTRUTURAL (arquivar, excluir, mover) → a seleção inteira, agrupador junto
+   *   EXECUÇÃO (status, responsável, prazo, prioridade, dependência) → só folhas
+   */
+  const idsFolhaSelecionados = (): string[] =>
+    Array.from(selectedIds).filter((id) => (childrenByParent.get(id) || []).length === 0);
+
+  /** Quantos agrupadores há na seleção — para a barra dizer o que vai acontecer. */
+  const totalAgrupadoresSelecionados = Array.from(selectedIds)
+    .filter((id) => (childrenByParent.get(id) || []).length > 0).length;
+
+  /**
+   * Quantas FASES REAIS ficariam sem nenhuma tarefa se a seleção fosse
+   * arquivada — o número que a confirmação precisa mostrar antes do clique.
+   *
+   * Elas não estão em `selectedIds` (vivem na tabela `phases`, ver abaixo),
+   * então não aparecem na contagem de itens: sem este aviso, a fase sumiria da
+   * tela sem nunca ter sido mencionada.
+   */
+  const fasesQueEsvaziam = (() => {
+    if (selectedIds.size === 0) return 0;
+    const candidatas = new Set(
+      activities.filter((a) => selectedIds.has(a.id) && a.phase_id).map((a) => a.phase_id as string),
+    );
+    return [...candidatas].filter(
+      (pid) => !activities.some((a) => a.phase_id === pid && !a.is_trashed && !selectedIds.has(a.id)),
+    ).length;
+  })();
+
+  /**
+   * A FASE REAL (tabela `phases`) é um caso à parte: ela não é uma `activity`,
+   * e as ações em lote gravam em `activities`. Guardar o id dela na seleção
+   * exigiria que cada ação soubesse ignorá-lo — mais código, para um caso que
+   * a maioria dos projetos não usa.
+   *
+   * Então a caixa dela opera sobre o CONTEÚDO: marcar seleciona as tarefas de
+   * dentro (com seus descendentes), desmarcar tira todas. O efeito é o que se
+   * espera ao marcar uma fase; só a linha do título fica fora das operações.
+   */
+  const idsDaFaseReal = (acts: Activity[]): string[] =>
+    acts.flatMap((a) => [a.id, ...descendentesDe(a.id)]);
+
+  const estadoDaFaseReal = (acts: Activity[]): boolean | "indeterminate" => {
+    const ids = idsDaFaseReal(acts);
+    if (ids.length === 0) return false;
+    const marcados = ids.filter((x) => selectedIds.has(x)).length;
+    if (marcados === 0) return false;
+    return marcados === ids.length ? true : "indeterminate";
+  };
+
+  const toggleSelecaoDaFaseReal = (acts: Activity[], forcarMarcar = false) => {
+    const ids = idsDaFaseReal(acts);
+    if (ids.length === 0) return;
+    const next = new Set(selectedIds);
+    // Meio-termo conta como "marcar": clicar num traço completa a seleção, em
+    // vez de zerar o que já estava escolhido.
+    const jaTodas = !forcarMarcar && ids.every((x) => next.has(x));
+    if (jaTodas) ids.forEach((x) => next.delete(x));
+    else ids.forEach((x) => next.add(x));
+    setSelectedIds(next);
+    if (next.size === 0) setSelectMode(false);
+  };
+
+  // `toggleSelectAll` e `allSelected` saíram junto com a caixa duplicada da
+  // barra de ações: só existiam para ela. A caixa do cabeçalho faz o mesmo
+  // trabalho, no lugar onde ele se lê.
 
   const handleMoveSelected = async () => {
     if (!targetStageId) {
@@ -588,7 +883,74 @@ export const BacklogSection = ({
       return;
     }
     setIsMoving(true);
+    /**
+     * O AGRUPADOR VAI JUNTO (13/08/2026).
+     *
+     * Era `idsFolhaSelecionados()`: a fase/entrega ficava de fora, sob o
+     * argumento de que "agrupador não vive numa coluna do Kanban". Só que a
+     * decisão de produto mudou — o que é mandado para o quadro aparece no
+     * quadro, agrupador inclusive — e o efeito era o relatado: você move uma
+     * fase inteira, as tarefas vão e a fase fica para trás no Backlog.
+     *
+     * O medo antigo (marcar a caixa como "concluída" e discordar dos filhos)
+     * já não se aplica: o percentual do agrupador é a média dos filhos e
+     * IGNORA a própria coluna — ver `isGrouper` em activityProgress. Mover a
+     * caixa não move o conteúdo, e o número não mente.
+     */
     const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      setIsMoving(false);
+      toast({ title: "Nenhuma tarefa selecionada", variant: "destructive" });
+      return;
+    }
+
+    /**
+     * A CAIXA NÃO ANDA NA FRENTE DO CONTEÚDO — mesma regra do quadro.
+     *
+     * O Kanban já barra isso (`filhosForaDaColuna`, em ActivityKanban), mas
+     * aqui a caixa ia sozinha: dava para mandar uma fase para "Em Revisão"
+     * com as onze tarefas paradas, e a lista anunciava uma fase em revisão sem
+     * ninguém ter revisado nada. Duas telas, dois comportamentos, o mesmo
+     * gesto.
+     *
+     * Filho que está NA MESMA SELEÇÃO não bloqueia: ele vai junto, nesta
+     * operação, e exigir que já estivesse lá tornaria impossível mover uma
+     * fase inteira de uma vez — que é o caso comum.
+     *
+     * Filho cancelado também não: saiu do escopo, não é trabalho pendente.
+     */
+    const bloqueios: { pai: Activity; faltam: Activity[] }[] = [];
+    for (const id of ids) {
+      const filhos = childrenByParent.get(id) || [];
+      if (filhos.length === 0) continue;
+      const faltam = filhos.filter((f) => {
+        if (selectedIds.has(f.id)) return false;
+        const col = allStages.find((s) => s.id === f.workflow_stage_id);
+        const cat = col
+          ? parseWorkflowCategory((col as { categoria?: string }).categoria) ?? categoryFromLegacyFlags(col as never)
+          : null;
+        if (cat === "cancelada") return false;
+        return f.workflow_stage_id !== targetStageId;
+      });
+      const pai = activities.find((a) => a.id === id);
+      if (faltam.length > 0 && pai) bloqueios.push({ pai, faltam });
+    }
+
+    if (bloqueios.length > 0) {
+      setIsMoving(false);
+      const destino = allStages.find((s) => s.id === targetStageId)?.title ?? "essa coluna";
+      const primeiro = bloqueios[0];
+      const n = primeiro.faltam.length;
+      toast({
+        title: "Mova o que está dentro primeiro",
+        description:
+          `"${primeiro.pai.title}" tem ${n} ${n === 1 ? "item" : "itens"} fora de "${destino}"` +
+          `${bloqueios.length > 1 ? ` (e mais ${bloqueios.length - 1} ${bloqueios.length === 2 ? "fase" : "fases"} na mesma situação)` : ""}. ` +
+          "Selecione o conteúdo junto, ou mova-o antes — quando o último chegar, a fase acompanha sozinha.",
+        variant: "destructive",
+      });
+      return;
+    }
     const updateData: Database['public']['Tables']['activities']['Update'] = { workflow_stage_id: targetStageId };
     if (assignee && assignee !== "__none__") updateData.assigned_to = assignee;
 
@@ -598,37 +960,138 @@ export const BacklogSection = ({
     // concluídas ignorava. Medido em 11/08: 11 atividades nesse estado.
     // O Kanban já fazia esse alinhamento ao arrastar; este caminho não.
     const etapaDestino = allStages.find((s) => s.id === targetStageId);
+    const ehFinal = (etapaDestino as { is_final?: boolean } | undefined)?.is_final === true;
     if (etapaDestino) {
-      const ehFinal = (etapaDestino as { is_final?: boolean }).is_final === true;
       updateData.status = ehFinal ? "completed" : "pending";
       // completed_at só na conclusão; ao reabrir, limpa — manter a data numa
       // tarefa que voltou ao fluxo faz o relatório contar entrega que não houve.
       updateData.completed_at = ehFinal ? new Date().toISOString() : null;
     }
+
+    /**
+     * O AGRUPADOR MUDA DE COLUNA, MAS NÃO DE STATUS.
+     *
+     * Ele acompanha a fase para o quadro (é o que se espera ao mover uma fase
+     * inteira), mas quem conclui são as tarefas de dentro. Gravar
+     * `status: completed` na caixa criaria uma conclusão que nenhum trabalho
+     * sustenta — e que discordaria da média dos filhos, que é o percentual
+     * dela. Move-se o continente; o conteúdo responde por si.
+     */
+    const agrupadores = new Set(
+      ids.filter((id) => (childrenByParent.get(id) || []).length > 0),
+    );
+    const folhas = ids.filter((id) => !agrupadores.has(id));
+    const caixas = ids.filter((id) => agrupadores.has(id));
+
     // EM LOTES: "selecionar todas" numa fase grande manda centenas de uuids
     // numa URL só, que o proxy corta em ~3,7 KB e devolve 502 — o usuário via
     // a ação falhar justamente quando selecionava muito. Ver lib/chunkedIn.
-    const { error } = await mutateInChunks(ids, (batch) =>
-      supabase.from("activities").update(updateData).in("id", batch),
-    );
+    const { error } = folhas.length > 0
+      ? await mutateInChunks(folhas, (batch) =>
+          supabase.from("activities").update(updateData).in("id", batch),
+        )
+      : { error: null };
+
+    let errorCaixas: { message: string } | null = null;
+    if (caixas.length > 0) {
+      const soAColuna: Database['public']['Tables']['activities']['Update'] = {
+        workflow_stage_id: targetStageId,
+      };
+      if (assignee && assignee !== "__none__") soAColuna.assigned_to = assignee;
+      const r = await mutateInChunks(caixas, (batch) =>
+        supabase.from("activities").update(soAColuna).in("id", batch),
+      );
+      errorCaixas = r.error;
+    }
+
+    /**
+     * O PAI ACOMPANHA QUANDO O ÚLTIMO FILHO CHEGA — mesma regra do quadro.
+     *
+     * Sem isto a mensagem mentia: o aviso de bloqueio já dizia "quando o
+     * último chegar, a fase acompanha sozinha", mas só o Kanban tinha essa
+     * lógica (`subirPaisCompletos`). Movendo as cinco tarefas de "1.1.2" daqui
+     * pelo Backlog, elas iam para Aprovada e a entrega ficava no Backlog —
+     * medido na base: 5 de 5 filhos em Aprovada, pai para trás.
+     *
+     * Sobe RECURSIVAMENTE, e só quando TODOS os filhos vivos estão na coluna
+     * de destino. Cancelado não conta (saiu do escopo). `status` não é
+     * gravado: quem conclui são as tarefas.
+     */
+    const subiram: string[] = [];
+    if (!error && !errorCaixas) {
+      const movidos = new Set(ids);
+      const canceladaIds = new Set(
+        allStages.filter((s) =>
+          (parseWorkflowCategory((s as { categoria?: string }).categoria)
+            ?? categoryFromLegacyFlags(s as never)) === "cancelada",
+        ).map((s) => s.id),
+      );
+      const colunaDe = (a: Activity) =>
+        movidos.has(a.id) || subiram.includes(a.id) ? targetStageId : a.workflow_stage_id;
+
+      // Candidatos: pais dos itens movidos, subindo nível a nível. `visto`
+      // protege contra ciclo em parent_id (dado corrompido).
+      const visto = new Set<string>();
+      let fronteira = [...new Set(ids.map((id) => activities.find((a) => a.id === id)?.parent_id).filter(Boolean))] as string[];
+      while (fronteira.length > 0) {
+        const proxima: string[] = [];
+        for (const paiId of fronteira) {
+          if (visto.has(paiId)) continue;
+          visto.add(paiId);
+          const pai = activities.find((a) => a.id === paiId);
+          if (!pai || movidos.has(paiId) || pai.workflow_stage_id === targetStageId) continue;
+          const filhos = (childrenByParent.get(paiId) || [])
+            .filter((f) => !(f.workflow_stage_id && canceladaIds.has(f.workflow_stage_id)));
+          if (filhos.length === 0) continue;
+          if (!filhos.every((f) => colunaDe(f) === targetStageId)) continue;
+          subiram.push(paiId);
+          if (pai.parent_id) proxima.push(pai.parent_id);
+        }
+        fronteira = proxima;
+      }
+
+      if (subiram.length > 0) {
+        await mutateInChunks(subiram, (batch) =>
+          supabase.from("activities")
+            .update({ workflow_stage_id: targetStageId } as never)
+            .in("id", batch),
+        );
+      }
+    }
+
     setSelectedIds(new Set());
     setMoveDialogOpen(false);
     setTargetStageId("");
     setAssignee("");
     setIsMoving(false);
     onDataChanged();
-    if (error) {
+    const falha = error || errorCaixas;
+    if (falha) {
       // Não é transacional: os lotes anteriores já gravaram. Por isso o
       // onDataChanged acima roda mesmo no erro — a tela precisa refletir o
       // banco, não o que se esperava dele.
       toast({
-        title: "Nem todas as tarefas foram atualizadas",
-        description: error.message,
+        title: "Nem tudo foi movido",
+        description: falha.message,
         variant: "destructive",
       });
       return;
     }
-    toast({ title: `Status de ${ids.length} tarefa(s) atualizado` });
+    toast({
+      title: `${ids.length} ${ids.length === 1 ? "item movido" : "itens movidos"}`,
+      description: [
+        // A fase que subiu sozinha: ela não estava na seleção, então some da
+        // coluna antiga sem ter sido pedida — dizer evita o "por que mudou?".
+        subiram.length > 0
+          ? `${subiram.length} ${subiram.length === 1 ? "fase/entrega acompanhou" : "fases/entregas acompanharam"} — o último item de dentro chegou.`
+          : null,
+        // Dizer que a caixa foi mas não concluiu: sem isto, mover uma fase para
+        // "Concluída" e ver o agrupador sem o status parece falha da operação.
+        caixas.length > 0 && ehFinal
+          ? `${caixas.length} fase(s)/entrega(s) mudaram de coluna; a conclusão é das tarefas de dentro.`
+          : null,
+      ].filter(Boolean).join(" ") || undefined,
+    });
   };
 
   /**
@@ -645,14 +1108,75 @@ export const BacklogSection = ({
   const aplicarEmLote = async (
     patch: Record<string, unknown>,
     descricao: string,
+    /**
+     * `estrutural` decide quem recebe o patch.
+     *
+     * ARQUIVAR é estrutural: leva a fase E o conteúdo. Antes arquivava só o que
+     * estava marcado — o pai sumia e os filhos ficavam órfãos, visíveis e sem
+     * raiz. Já responsável, prazo e prioridade são de EXECUÇÃO: agrupador não
+     * tem valor próprio para eles (é rollup dos filhos), então só as folhas.
+     */
+    estrutural = false,
   ) => {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
+    const ids = estrutural ? Array.from(selectedIds) : idsFolhaSelecionados();
+    if (ids.length === 0) {
+      setBulkField(null);
+      toast({
+        title: "Nenhuma tarefa recebeu a mudança",
+        description: "A seleção só tem fases e entregas — o valor delas vem das tarefas de dentro.",
+        variant: "destructive",
+      });
+      return;
+    }
     setBulkField(null);
 
     const { error } = await mutateInChunks(ids, (batch) =>
       (supabase.from("activities").update(patch as never) as any).in("id", batch),
     );
+
+    /**
+     * A FASE QUE FICOU VAZIA VAI JUNTO.
+     *
+     * `selectedIds` só carrega ids de `activities` — a fase real vive na tabela
+     * `phases` e não cabe ali. Arquivar tudo mandava as atividades para a
+     * lixeira e deixava o cabeçalho da fase na tela, vazio, como se ainda
+     * houvesse um plano ali.
+     *
+     * Só quando a fase fica SEM NENHUMA tarefa viva: uma fase que ainda tem
+     * conteúdo continua de pé, mesmo que parte dele tenha sido arquivada.
+     *
+     * Diferente de `handleDeleteFase`, que solta as tarefas (`phase_id = null`)
+     * antes de arquivar a fase: lá o alvo é a fase e o conteúdo sobrevive; aqui
+     * o alvo é o conteúdo e a fase é que perde a razão de existir.
+     */
+    let fasesArquivadas = 0;
+    if (!error && (patch as { is_trashed?: boolean }).is_trashed === true) {
+      const arquivados = new Set(ids);
+      // Fases tocadas pela operação — as demais nem entram na conta.
+      const candidatas = new Set(
+        activities.filter((a) => arquivados.has(a.id) && a.phase_id).map((a) => a.phase_id as string),
+      );
+      const vazias = [...candidatas].filter(
+        (pid) => !activities.some((a) => a.phase_id === pid && !a.is_trashed && !arquivados.has(a.id)),
+      );
+      if (vazias.length > 0) {
+        const { error: errFase } = await mutateInChunks(vazias, (batch) =>
+          supabase
+            .from("phases")
+            .update({ is_trashed: true, trashed_at: new Date().toISOString() } as never)
+            .in("id", batch),
+        );
+        if (errFase) {
+          toast({
+            title: "As tarefas foram arquivadas, as fases não",
+            description: errFase.message,
+            variant: "destructive",
+          });
+        } else {
+          fasesArquivadas = vazias.length;
+        }
+      }
+    }
 
     // Recarrega mesmo no erro: mutateInChunks não é transacional, então os
     // lotes anteriores já gravaram e a tela precisa refletir o banco.
@@ -666,7 +1190,14 @@ export const BacklogSection = ({
       });
       return;
     }
-    toast({ title: descricao, description: `${ids.length} tarefa(s) atualizada(s).` });
+    toast({
+      title: descricao,
+      description: fasesArquivadas > 0
+        // Dizer que a fase foi junto: ela some da tela e some do seletor de
+        // fase das outras telas — silêncio aqui vira "sumiu sozinha".
+        ? `${ids.length} tarefa(s) e ${fasesArquivadas} fase(s) que ficaram vazias.`
+        : `${ids.length} tarefa(s) atualizada(s).`,
+    });
   };
 
   /**
@@ -684,8 +1215,12 @@ export const BacklogSection = ({
    * cobre a esmagadora maioria das dependências de projeto.
    */
   const ligarEmSequencia = async () => {
+    // SÓ AS FOLHAS. Encadear fases criaria dependência entre coisas que já se
+    // relacionam por hierarquia — e a data da fase é rollup dos filhos, então a
+    // dependência não teria o que mover.
+    const folhas = new Set(idsFolhaSelecionados());
     const ordenadas = backlogActs
-      .filter((a) => selectedIds.has(a.id))
+      .filter((a) => folhas.has(a.id))
       .sort((a, b) => {
         // Mesma regra da árvore: código EAP quando existe, senão display_order.
         const wa = (a.wbs_code || "").trim(), wb = (b.wbs_code || "").trim();
@@ -860,9 +1395,6 @@ export const BacklogSection = ({
       className="grid items-center gap-2 px-3 py-1.5 bg-muted/40 border-b border-border text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground"
       style={{ gridTemplateColumns: backlogGrid }}
     >
-      {/* expand + (caixa de seleção, só no modo) — espelha as células da linha */}
-      <span />
-      {selectMode && <span />}
       {/* MARCAR TODAS / NENHUMA — e o modo liga sozinho ao primeiro clique.
           Esta caixa passou por dois erros meus. Primeiro pedia dois cliques (um
           para ligar o modo, outro para marcar) com um link "sair" que empurrava
@@ -873,33 +1405,41 @@ export const BacklogSection = ({
           Agora tem três estados, como qualquer tabela: vazia (nada), traço
           (algumas) e marcada (todas). Clicar com nada marcado seleciona tudo;
           com algo marcado, limpa e sai — e no meio-termo o usuário mexe nas
-          caixas das linhas, que é o que faltava. */}
-      <span className="flex items-center gap-2">
+          caixas das linhas, que é o que faltava.
+
+          FICA NA COLUNA DAS CAIXAS (13/08/2026), não colada ao rótulo "Tarefa".
+          Antes ela vivia dentro da célula do título, deslocada uns 30px para a
+          direita da coluna que comanda — e por isso não se lia como "todas
+          desta coluna". Aqui ela alinha com as caixas das linhas, que é o que a
+          torna compreensível sem legenda. */}
+      {/* Duas células SEMPRE — [caixa][expandir] —, na mesma ordem das linhas.
+          Antes o cabeçalho alternava entre uma e duas conforme o modo, e a
+          caixa mudava de coluna ao ligar a seleção. */}
+      <span className="flex items-center justify-center">
         <Checkbox
           checked={
-            selectMode && selectedIds.size > 0
-              ? (selectedIds.size === backlogActs.length ? true : "indeterminate")
-              : false
+            !selectMode ? false
+              : selectedIds.size === backlogActs.length ? true
+              : "indeterminate"
           }
           onCheckedChange={() => {
-            // Algo marcado → limpa e sai. Nada marcado → marca tudo.
-            if (selectMode && selectedIds.size > 0) {
-              setSelectedIds(new Set());
-              setSelectMode(false);
-            } else {
+            if (!selectMode) {
               setSelectMode(true);
               setSelectedIds(new Set(backlogActs.map((a) => a.id)));
+              return;
             }
+            setSelectedIds(new Set());
+            setSelectMode(false);
           }}
-          className="h-3.5 w-3.5"
-          title={
-            selectMode && selectedIds.size > 0
-              ? `Limpar seleção (${selectedIds.size})`
-              : `Selecionar todas as ${backlogActs.length}`
-          }
+          /* Mesmo tamanho das caixas das linhas (h-4, o padrão do componente).
+             Estava em h-3.5 de quando ela era a caixinha discreta do hover:
+             empilhada na coluna, ninguém comparava. Lado a lado numa coluna
+             própria, a diferença de 2px aparece como desalinho. */
+          title={selectMode ? `Limpar seleção (${selectedIds.size})` : `Selecionar todas as ${backlogActs.length}`}
         />
-        Tarefa
       </span>
+      <span />
+      <span>Tarefa</span>
       {activeCols.map((c) => (
         <span key={c.id}>{c.label}</span>
       ))}
@@ -1043,54 +1583,44 @@ export const BacklogSection = ({
             onEditActivity(activity);
           }}
         >
-          {/* col: expand — ou a caixa de seleção, no hover.
+          {/* col: CAIXA — sempre à vista, na coluna dela.
               ENTRAR NA SELEÇÃO PELA LINHA. Antes o modo só ligava pelo
               cabeçalho, e ligá-lo marcava tudo: para escolher três tarefas era
-              preciso marcar as 718 e desmarcar 715. A caixa aparece ao passar o
-              mouse sobre a linha e liga o modo já com aquela tarefa marcada —
-              que é o gesto natural de "quero estas".
-              Ocupa o lugar do expandir só quando o item não tem filhos; com
-              filhos, o expandir continua e a seleção se faz no cabeçalho ou nas
-              outras linhas. */}
+              preciso marcar as 718 e desmarcar 715. O primeiro clique na caixa
+              liga o modo já com aquela tarefa marcada — o gesto natural de
+              "quero estas" — e, em agrupador, com a família junto.
+
+              `estadoDaCaixa` traz o traço do meio-termo: pai com ALGUNS filhos
+              marcados. Sem ele o pai pareceria desmarcado e o contador do
+              rodapé diria um número que a tela não confirma. */}
+          <Checkbox
+            checked={selectMode ? estadoDaCaixa(activity.id) : false}
+            onCheckedChange={() => {
+              if (!selectMode) {
+                setSelectMode(true);
+                // Já entra com a família: quem clica na caixa de um
+                // agrupador quer o conjunto, não a linha do título.
+                setSelectedIds(new Set([activity.id, ...descendentesDe(activity.id)]));
+                return;
+              }
+              toggleSelect(activity.id);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Selecionar ${activity.title}`}
+            title={hasChildren ? "Seleciona este item e o que está dentro" : "Selecionar esta tarefa"}
+            className={cn("shrink-0", !selectMode && caixaNoHover)}
+          />
           {hasChildren ? (
             <button
               type="button"
               className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
               onClick={(e) => { e.stopPropagation(); toggleParent(activity.id); }}
+              title={isCollapsed ? "Expandir" : "Recolher"}
             >
               {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
-          ) : selectMode ? (
-            <span className="w-5" />
           ) : (
-            <span className="w-5 flex items-center justify-center">
-              <Checkbox
-                checked={false}
-                onCheckedChange={() => {
-                  setSelectMode(true);
-                  setSelectedIds(new Set([activity.id]));
-                }}
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Selecionar ${activity.title}`}
-                title="Selecionar esta tarefa"
-                className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-              />
-            </span>
-          )}
-
-          {/* col: caixa de seleção em lote — só existe no modo seleção.
-              O botão redondo de concluir saiu daqui (eram dois círculos quase
-              iguais no começo da linha, lidos como checkbox duplicado) e a
-              coluna ficou reservada e vazia, empurrando todo o conteúdo para a
-              direita. Agora a célula não é emitida e a coluna some do grid —
-              ver backlogGrid, que também é condicional. */}
-          {selectMode && (
-            <Checkbox
-              checked={isSelected}
-              onCheckedChange={() => toggleSelect(activity.id)}
-              onClick={(e) => e.stopPropagation()}
-              aria-label={`Selecionar ${activity.title}`}
-            />
+            <span className="w-5 shrink-0" />
           )}
 
           {/* col: ícone de tipo (clicável) + título + código EAP + deps.
@@ -1345,21 +1875,59 @@ export const BacklogSection = ({
             como abrir a fase — ela nem tinha tela própria. */}
         <div
           className={cn(
-            "flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50",
+            "group flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50",
             phaseId && "cursor-pointer hover:bg-muted/70 transition-colors",
           )}
-          onClick={() => { if (phaseId) openPhase(phaseId, phaseTitle); }}
+          onClick={() => {
+            if (selectMode && phaseId) { toggleSelecaoDaFaseReal(acts); return; }
+            if (phaseId) openPhase(phaseId, phaseTitle);
+          }}
         >
+          {/* A FASE REAL seleciona o CONTEÚDO, não a si mesma.
+              Ela vive na tabela `phases`, e as ações em lote gravam em
+              `activities` — o id dela não caberia em `selectedIds`. Marcar
+              pega as atividades de dentro, que é o efeito que se espera; a
+              linha da fase em si não entra em nenhuma operação.
+
+              CAIXA E SETA LADO A LADO, SEMPRE. Antes, fora do modo seleção,
+              as duas dividiam os mesmos 20px empilhadas: a seta sumia no
+              hover e a caixa tomava o lugar dela. Quem mirava a seta para
+              expandir via o alvo desaparecer debaixo do cursor e clicava em
+              "selecionar". Alvo que troca de função ao ser mirado não é
+              affordance, é armadilha — e some com a leitura da linha, que
+              deixa de dizer se a fase está aberta ou fechada. */}
           {phaseId ? (
-            <button
-              type="button"
-              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-              title={isCollapsed ? "Expandir" : "Recolher"}
-              onClick={(e) => { e.stopPropagation(); togglePhase(phaseId); }}
-            >
-              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
+            <>
+              {acts.length > 0 ? (
+                <Checkbox
+                  checked={selectMode ? estadoDaFaseReal(acts) : false}
+                  onCheckedChange={() => {
+                    if (!selectMode) { setSelectMode(true); toggleSelecaoDaFaseReal(acts, true); return; }
+                    toggleSelecaoDaFaseReal(acts);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Selecionar as tarefas de ${phaseTitle}`}
+                  title="Seleciona as tarefas desta fase"
+                  className={cn("shrink-0", !selectMode && caixaNoHover)}
+                />
+              ) : (
+                /* Fase vazia não tem o que selecionar, mas o espaçador fica:
+                   sem ele o título desta linha sai do prumo com o das outras. */
+                <span className="w-4 shrink-0" />
+              )}
+              <button
+                type="button"
+                className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
+                title={isCollapsed ? "Expandir" : "Recolher"}
+                onClick={(e) => { e.stopPropagation(); togglePhase(phaseId); }}
+              >
+                {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </>
           ) : (
+            /* Fase virtual (agrupador sem linha em `phases`): não tem o que
+               colapsar nem o que selecionar — só o espaçador, para o título
+               alinhar com o das fases reais. */
             <span className="w-5 shrink-0" />
           )}
           <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-primary/10 text-primary shrink-0">
@@ -1436,11 +2004,11 @@ export const BacklogSection = ({
                 className="grid items-center gap-2 border-b px-3 py-1.5 bg-primary/5"
                 style={{ gridTemplateColumns: backlogGrid }}
               >
-                {/* expand + (caixa, só no modo seleção). O ícone Plus ficava
-                    sozinho numa coluna que agora é condicional; foi para dentro
-                    da célula do título, ao lado do campo. */}
+                {/* As duas células do começo da linha — caixa e expandir —
+                    vazias aqui. O ícone Plus vive dentro da célula do título,
+                    ao lado do campo. */}
                 <span />
-                {selectMode && <span />}
+                <span />
                 <div className="flex items-center gap-2 min-w-0">
                   <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                   <Input
@@ -1483,13 +2051,37 @@ export const BacklogSection = ({
       <div key={phaseAct.id}>
         {/* Mesmo gesto da fase real: clique abre, chevron colapsa. */}
         <div
-          className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
-          onClick={() => onEditActivity(phaseAct)}
+          className="group flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+          onClick={() => {
+            if (selectMode) { toggleSelect(phaseAct.id); return; }
+            onEditActivity(phaseAct);
+          }}
         >
+          {/* A CAIXA QUE FALTAVA. Esta linha desenha as Fases e Entregas de
+              topo e nunca emitiu checkbox nenhum — nem no modo seleção. Ela é
+              uma `activity` de verdade, com id real: todas as ações em lote já
+              funcionariam sobre ela, só não havia como marcá-la.
+              Caixa e seta LADO A LADO, sempre — ver o comentário do grid. */}
+          <Checkbox
+            checked={selectMode ? estadoDaCaixa(phaseAct.id) : false}
+            onCheckedChange={() => {
+              if (!selectMode) {
+                setSelectMode(true);
+                setSelectedIds(new Set([phaseAct.id, ...descendentesDe(phaseAct.id)]));
+                return;
+              }
+              toggleSelect(phaseAct.id);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Selecionar ${phaseAct.title}`}
+            title="Seleciona esta fase e o que está dentro"
+            className={cn("shrink-0", !selectMode && caixaNoHover)}
+          />
           <button
             type="button"
             className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
             onClick={(e) => { e.stopPropagation(); toggleParent(phaseAct.id); }}
+            title={isCollapsed ? "Expandir" : "Recolher"}
           >
             {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -1543,6 +2135,25 @@ export const BacklogSection = ({
           {/* gap-2: mesmo alinhamento do cabeçalho de fase real.
               stopPropagation: a faixa colapsa; os botões daqui não devem. */}
           <div className="flex items-center gap-2 ml-auto shrink-0" onClick={(e) => e.stopPropagation()}>
+            {/* EM QUE COLUNA ESTÁ. As linhas de tarefa sempre mostraram isso;
+                a faixa de fase/entrega, não — e desde que o agrupador passou a
+                acompanhar o conteúdo para o quadro, era a única linha da tela
+                que não dizia onde está. Você movia a fase e não tinha como
+                conferir se ela foi. */}
+            {(() => {
+              const stgFase = phaseAct.workflow_stage_id ? stageById.get(phaseAct.workflow_stage_id) : null;
+              if (!stgFase) return null;
+              return (
+                <span
+                  className="inline-flex items-center gap-1.5 h-5 px-2 rounded border text-[11px] font-medium shrink-0"
+                  style={{ borderColor: `${stgFase.color}55`, backgroundColor: `${stgFase.color}12`, color: stgFase.color }}
+                  title={`Está em "${stgFase.title}"`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: stgFase.color }} aria-hidden />
+                  {stgFase.title}
+                </span>
+              );
+            })()}
             {progTotal > 0 && (
               <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
                 <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
@@ -1609,11 +2220,11 @@ export const BacklogSection = ({
                 className="grid items-center gap-2 border-b px-3 py-1.5 bg-primary/5"
                 style={{ gridTemplateColumns: backlogGrid }}
               >
-                {/* expand + (caixa, só no modo seleção). O ícone Plus ficava
-                    sozinho numa coluna que agora é condicional; foi para dentro
-                    da célula do título, ao lado do campo. */}
+                {/* As duas células do começo da linha — caixa e expandir —
+                    vazias aqui. O ícone Plus vive dentro da célula do título,
+                    ao lado do campo. */}
                 <span />
-                {selectMode && <span />}
+                <span />
                 <div className="flex items-center gap-2 min-w-0">
                   <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                   <Input
@@ -1660,7 +2271,13 @@ export const BacklogSection = ({
   // do backlog — clicar em "Incompletas" mostraria "0 prontas", que é verdade
   // sobre a tela e mentira sobre o projeto.
   const prontidaoResumo = (() => {
-    const vivas = activities.filter((a) => !a.is_trashed);
+    // A MESMA FILA que a lista mostra. Antes contava TODAS as vivas do projeto,
+    // e o resultado era um contador que falava de outra coisa: a tela dizia
+    // "Todas 16 · Incompletas 16" com a fila VAZIA na frente, porque as 16
+    // estavam no quadro, não no backlog. Contador tem de contar o que está à
+    // vista — senão vira número sem referente.
+    const semLixeira = activities.filter((a) => !a.is_trashed);
+    const vivas = mostrarTudo ? semLixeira : soAFila(semLixeira);
     const temFilho = new Set(vivas.filter((a) => a.parent_id).map((a) => a.parent_id as string));
     return resumirProntidao(vivas.map((a) => ({ tarefa: a, temFilhos: temFilho.has(a.id) })));
   })();
@@ -1885,8 +2502,15 @@ export const BacklogSection = ({
         <div className="flex items-center justify-between gap-3 flex-wrap px-0.5">
           {/* Legenda de contexto — total + quebra por tipo */}
           <p className="text-[13px] text-muted-foreground flex items-center gap-2 flex-wrap">
+            {/* No modo seleção, separa fases de tarefas: as ações tratam os
+                dois de forma diferente (fase entra em arquivar, fica fora de
+                status e prazo), e um número único escondia isso. */}
             {selectMode && selectedIds.size > 0 ? (
-              <span className="text-foreground font-medium">{selectedIds.size} de {typeCounts.total} selecionada(s)</span>
+              <span className="text-foreground font-medium">
+                {totalAgrupadoresSelecionados > 0
+                  ? `${totalAgrupadoresSelecionados} ${totalAgrupadoresSelecionados === 1 ? "fase" : "fases"} e ${selectedIds.size - totalAgrupadoresSelecionados} ${selectedIds.size - totalAgrupadoresSelecionados === 1 ? "tarefa" : "tarefas"}`
+                  : `${selectedIds.size} de ${typeCounts.total} selecionada(s)`}
+              </span>
             ) : (
               /* SEM O TOTAL. "16 tarefas · 15 atividades · 1 marco" lia como
                  16 mais 15 mais 1, quando 15 + 1 É o 16 — a palavra "tarefas"
@@ -1895,13 +2519,39 @@ export const BacklogSection = ({
                  e seguia somado no total do que há para fazer.
                  Cada palavra passa a nomear uma coisa só; a soma se faz de
                  cabeça. */
-              <span className="text-muted-foreground/90">
-                {[
-                  typeCounts.fase && `${typeCounts.fase} fase${typeCounts.fase > 1 ? "s" : ""}`,
-                  typeCounts.atividade && `${typeCounts.atividade} atividade${typeCounts.atividade > 1 ? "s" : ""}`,
-                  typeCounts.marco && `${typeCounts.marco} marco${typeCounts.marco > 1 ? "s" : ""}`,
-                ].filter(Boolean).join(" · ")}
-              </span>
+              <>
+                <span className="text-muted-foreground/90">
+                  {[
+                    typeCounts.fase && `${typeCounts.fase} fase${typeCounts.fase > 1 ? "s" : ""}`,
+                    typeCounts.atividade && `${typeCounts.atividade} atividade${typeCounts.atividade > 1 ? "s" : ""}`,
+                    typeCounts.marco && `${typeCounts.marco} marco${typeCounts.marco > 1 ? "s" : ""}`,
+                  ].filter(Boolean).join(" · ")}
+                </span>
+                {/* A lista está inteira: o interruptor RECORTA, não expande.
+                    Antes era o contrário — a aba abria filtrada e o link servia
+                    para revelar o que faltava. Com o Backlog como lista
+                    completa, o texto tem de dizer o que o clique ESCONDE. */}
+                {mostrarTudo && foraDaFila > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setMostrarTudo(false)}
+                    className="text-muted-foreground/80 hover:text-foreground underline decoration-dotted underline-offset-2 transition-colors"
+                    title="Esconder o que já está em andamento e ver só o que não começou"
+                  >
+                    · ver só o que não começou
+                  </button>
+                )}
+                {!mostrarTudo && (
+                  <button
+                    type="button"
+                    onClick={() => setMostrarTudo(true)}
+                    className="text-muted-foreground/80 hover:text-foreground underline decoration-dotted underline-offset-2 transition-colors"
+                    title="Voltar a mostrar o projeto inteiro"
+                  >
+                    · {foraDaFila} em andamento ocultas, ver tudo
+                  </button>
+                )}
+              </>
             )}
             {/* O link de carência saiu daqui: a barra de prontidão acima já
                 traz "falta responsável em 16 · prioridade em 16", com as DUAS
@@ -1914,17 +2564,12 @@ export const BacklogSection = ({
           <div className="flex items-center gap-1.5">
             {selectMode && selectedIds.size > 0 && (
               <>
-                {/* Estender para TODAS sem voltar ao cabeçalho da tabela —
-                    útil quando se selecionou algumas e se decidiu que era o
-                    conjunto inteiro. Mostra o traço no meio-termo, como a do
-                    cabeçalho, para não sugerir que nada está marcado. */}
-                <Checkbox
-                  checked={allSelected ? true : "indeterminate"}
-                  onCheckedChange={toggleSelectAll}
-                  aria-label={allSelected ? "Desmarcar todas" : "Selecionar todas"}
-                  title={allSelected ? "Desmarcar todas" : `Selecionar todas as ${allBacklogIds.length}`}
-                  className="ml-1"
-                />
+                {/* A caixa de "selecionar todas" SAIU daqui (13/08/2026): era a
+                    segunda na tela fazendo a mesma coisa que a do cabeçalho da
+                    tabela, a poucos pixels dela. Duas caixas idênticas lado a
+                    lado não se distinguem — o usuário perguntou qual era qual.
+                    Ficou a do cabeçalho, que está na coluna das caixas das
+                    linhas e por isso se lê como "todas desta coluna". */}
                 <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => setMoveDialogOpen(true)}>
                   <ArrowRight className="w-3.5 h-3.5" /> Mudar status ({selectedIds.size})
                 </Button>
@@ -2077,16 +2722,34 @@ export const BacklogSection = ({
                   title={isAdmin ? "Arquivar as selecionadas" : (deleteBlockedReason || "Você não tem permissão para arquivar")}
                   onClick={async () => {
                     const n = selectedIds.size;
+                    const g = totalAgrupadoresSelecionados;
                     const ok = await appConfirm({
-                      title: `Arquivar ${n} ${n === 1 ? "tarefa" : "tarefas"}?`,
-                      description: "Elas saem do Backlog e podem ser restauradas na Lixeira, aqui embaixo.",
+                      title: `Arquivar ${n} ${n === 1 ? "item" : "itens"}?`,
+                      // Diz que a fase leva o conteúdo junto: arquivar um
+                      // agrupador sozinho deixaria os filhos órfãos, e a
+                      // seleção em cascata já os incluiu — a confirmação
+                      // precisa mostrar isso antes, não depois.
+                      //
+                      // E avisa da fase que ESVAZIA: ela é o cabeçalho azul da
+                      // tabela `phases`, não entra em `selectedIds` e por isso
+                      // não aparece na contagem — mas some da tela junto.
+                      description: [
+                        g > 0
+                          ? `Inclui ${g} ${g === 1 ? "fase/entrega" : "fases/entregas"} e o que está dentro.`
+                          : null,
+                        fasesQueEsvaziam > 0
+                          ? `${fasesQueEsvaziam} ${fasesQueEsvaziam === 1 ? "fase fica" : "fases ficam"} sem nenhuma tarefa e ${fasesQueEsvaziam === 1 ? "vai" : "vão"} junto.`
+                          : null,
+                        "Tudo pode ser restaurado na Lixeira, aqui embaixo.",
+                      ].filter(Boolean).join(" "),
                       confirmText: "Arquivar",
                       destructive: true,
                     });
                     if (!ok) return;
                     await aplicarEmLote(
                       { is_trashed: true, trashed_at: new Date().toISOString() },
-                      `${n} ${n === 1 ? "tarefa arquivada" : "tarefas arquivadas"}`,
+                      `${n} ${n === 1 ? "item arquivado" : "itens arquivados"}`,
+                      true, // estrutural: a fase vai junto com o conteúdo
                     );
                     setSelectedIds(new Set());
                     setSelectMode(false);
@@ -2334,7 +2997,18 @@ export const BacklogSection = ({
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent className="sm:max-w-2xl w-[95vw]">
           <DialogHeader>
-            <DialogTitle>Alterar status de {selectedIds.size} tarefa(s)</DialogTitle>
+            <DialogTitle>
+              Mover {selectedIds.size} {selectedIds.size === 1 ? "item" : "itens"}
+            </DialogTitle>
+            {/* "Tarefa(s)" escondia que fase e entrega vão junto — e é
+                justamente o que faltava antes: elas ficavam para trás. */}
+            {totalAgrupadoresSelecionados > 0 && (
+              <p className="text-[13px] text-muted-foreground">
+                Inclui {totalAgrupadoresSelecionados}{" "}
+                {totalAgrupadoresSelecionados === 1 ? "fase/entrega" : "fases/entregas"}.
+                {" "}O percentual delas continua sendo a média do que está dentro.
+              </p>
+            )}
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">

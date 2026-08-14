@@ -6,16 +6,26 @@
 // isso, o card do Kanban já subia arquivo normalmente. Mesma tabela, dois modos
 // de entrada incompatíveis.
 //
-// O arraste continua aceitando link colado, porque documento externo (norma,
-// legislação, planilha compartilhada) é caso real — só deixa de ser o único
-// caminho possível.
+// O LINK VOLTOU A SER ESCOLHA. Ele existia só como fallback automático quando
+// o bucket não estava criado no ambiente — nunca por vontade de quem cadastra.
+// Para registrar uma norma da Anvisa ou uma planilha compartilhada era preciso
+// baixar e subir de novo, criando uma cópia que envelhece sozinha enquanto a
+// original continua mudando.
+//
+// Documento externo é caso real (norma, legislação, planilha viva). Só não pode
+// ser ASSINADO: o fluxo formal calcula o hash do conteúdo para provar que o que
+// foi assinado é o que está lá, e um endereço pode apontar para outra coisa
+// amanhã. A tela diz isso onde a escolha é feita.
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, X, FileText, Loader2 } from "lucide-react";
+import { Upload, X, FileText, Loader2, Link as LinkIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { MAX_UPLOAD_BYTES, formatSize, safeFileName, fileExtension } from "@/lib/documentCenter";
+import {
+  MAX_UPLOAD_BYTES, formatSize, safeFileName, fileExtension,
+  urlValida, nomeSugeridoDaUrl,
+} from "@/lib/documentCenter";
 import { cn } from "@/lib/utils";
 
 export interface UploadResult {
@@ -38,7 +48,6 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
   const [dragging, setDragging] = useState(false);
   const [linkMode, setLinkMode] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
-  const [linkName, setLinkName] = useState("");
   const { toast } = useToast();
 
   const upload = async (file: File) => {
@@ -82,7 +91,11 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
     });
   };
 
-  if (value) {
+  // No modo link o campo NÃO dá lugar ao resumo: o valor é confirmado a cada
+  // tecla, e trocar a tela no meio da digitação tiraria o campo debaixo do
+  // cursor. Para arquivo o resumo continua — ali o valor vem de uma escolha
+  // única, não de algo que se continua editando.
+  if (value && !linkMode) {
     return (
       <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
         <FileText className="w-4 h-4 text-primary shrink-0" />
@@ -100,38 +113,100 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
     );
   }
 
+  /* SELETOR ARQUIVO / LINK.
+     O modo link já existia, mas só como FALLBACK automático quando o bucket
+     não estava criado — nunca por escolha. Resultado: para registrar uma norma
+     da Anvisa ou uma planilha compartilhada era preciso baixar e subir de
+     novo, criando uma cópia que envelhece sozinha enquanto a original muda.
+     O banco sempre aceitou link (`file_url` é texto e `storage_path` nulo já
+     identifica externo, que é como a edição distingue os dois hoje). Faltava
+     a porta de entrada. */
+  const Seletor = () => (
+    <div className="inline-flex rounded-md border border-input overflow-hidden h-8 mb-2">
+      {([
+        { modo: false, icone: <Upload className="w-3.5 h-3.5" />, label: "Arquivo" },
+        { modo: true, icone: <LinkIcon className="w-3.5 h-3.5" />, label: "Link" },
+      ]).map((op, i) => (
+        <button
+          key={op.label}
+          type="button"
+          onClick={() => setLinkMode(op.modo)}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3 text-[12.5px] transition-colors",
+            i > 0 && "border-l border-input",
+            linkMode === op.modo
+              ? "bg-primary text-primary-foreground font-medium"
+              : "text-muted-foreground hover:bg-muted/60",
+          )}
+        >
+          {op.icone} {op.label}
+        </button>
+      ))}
+    </div>
+  );
+
   if (linkMode) {
+    const url = linkUrl.trim();
+    const valida = urlValida(url);
     return (
-      <div className="space-y-2">
-        <Input placeholder="Nome do documento" value={linkName}
-          onChange={(e) => setLinkName(e.target.value)} />
-        <div className="flex gap-2">
-          <Input placeholder="https://…" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
-          <Button type="button" variant="secondary" className="shrink-0"
-            disabled={!linkUrl.trim()}
-            onClick={() => {
-              const name = linkName.trim() || linkUrl.split("/").pop() || "Documento";
-              onChange({
-                fileName: name, fileUrl: linkUrl.trim(), storagePath: null,
-                fileType: "link", fileSize: null,
-              });
-            }}>
-            Usar link
-          </Button>
+      <div>
+        <Seletor />
+        <div className="space-y-2">
+          {/* Confirma sozinho assim que o endereço fica válido. Digitar já é a
+              intenção: exigir um segundo clique para dizer "sim, era isso" é o
+              tipo de etapa que existe para o programa, não para quem usa. */}
+          <Input
+            placeholder="https://…"
+            value={linkUrl}
+            autoFocus
+            onChange={(e) => {
+              const v = e.target.value;
+              setLinkUrl(v);
+              const limpo = v.trim();
+              if (urlValida(limpo)) {
+                onChange({
+                  fileName: nomeSugeridoDaUrl(limpo) || "Documento",
+                  fileUrl: limpo,
+                  storagePath: null,
+                  fileType: "link",
+                  fileSize: null,
+                });
+              } else if (value) {
+                // Apagar ou estragar o endereço desfaz a confirmação: senão o
+                // formulário guardaria um link que não está mais no campo.
+                onChange(null);
+              }
+            }}
+            className={cn("font-mono text-[13px]", url && !valida && "border-destructive")}
+          />
+          {/* SEM BOTÃO "USAR LINK" e sem campo de nome.
+              Colar o endereço JÁ É a ação — o modo arquivo não pede confirmação
+              depois de escolher o arquivo, e o link não tinha por que pedir. O
+              campo de nome era duplicata do que existe logo abaixo; o nome
+              sugerido vai direto para lá, como o upload já fazia.
+              O aviso sobre assinatura saiu daqui: explicava uma regra de um
+              fluxo que ainda não começou, antes de a pessoa ter feito nada.
+              Ele aparece quando importa — ao tentar circular para assinatura
+              (DocumentManager:177), com a instrução do que fazer. */}
+          {url && !valida ? (
+            <p className="text-[11px] text-destructive">
+              Precisa começar com <span className="font-mono">http://</span> ou{" "}
+              <span className="font-mono">https://</span>.
+            </p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              O documento fica fora do sistema — o endereço aponta para onde ele
+              está hoje.
+            </p>
+          )}
         </div>
-        {/* Só se chega aqui por FALLBACK (bucket ausente), nunca por escolha.
-            Voltar levaria a um upload que falha de novo — em vez do botão,
-            explica o que está acontecendo e o que o link não permite. */}
-        <p className="text-[11px] text-muted-foreground">
-          O envio de arquivo ainda não está habilitado neste ambiente. Documento
-          por link pode receber ciência e aprovação, mas <strong>não assinatura</strong>:
-          um arquivo fora do sistema pode ser trocado depois de assinado.
-        </p>
       </div>
     );
   }
 
   return (
+    <div>
+    <Seletor />
     <div
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
@@ -155,12 +230,6 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
         </span>
       ) : (
         <>
-          {/* Sem atalho para "usar um link externo": ele desfazia a melhoria
-              num clique e levava a um documento que NÃO pode ser assinado
-              (link pode ser trocado pelo dono, e o hash falha em silêncio).
-              O modo link continua existindo como FALLBACK automático, quando o
-              bucket ainda não foi criado no ambiente — ali não é escolha, é a
-              única forma de cadastrar. */}
           <Upload className="w-5 h-5 mx-auto mb-2 text-muted-foreground" />
           <p className="text-[13px] text-foreground mb-1">
             Arraste o arquivo aqui ou{" "}
@@ -174,6 +243,7 @@ export function FileUploadField({ projectId, value, onChange }: Props) {
           </p>
         </>
       )}
+    </div>
     </div>
   );
 }

@@ -3,13 +3,28 @@
  *
  * DUAS FONTES, nesta ordem:
  *
- *  1. SUBATIVIDADES, quando existem — % de subatividades concluídas. A coluna
- *     diz onde o cartão está; as subatividades dizem quanto do trabalho
- *     acabou. Quando discordam, o trabalho é a verdade: arrastar um cartão
- *     para "Concluída" não conclui o que está dentro dele.
+ *  1. SUBATIVIDADES, quando existem — MÉDIA DO AVANÇO de cada uma, não
+ *     contagem das concluídas. A coluna diz onde o cartão está; as
+ *     subatividades dizem quanto do trabalho andou. Quando discordam, o
+ *     trabalho é a verdade: arrastar um cartão para "Concluída" não conclui o
+ *     que está dentro dele.
+ *
+ *     Cada filho vale o que a coluna DELE vale (regra 2, recursivamente) — o
+ *     mesmo j/(K+1), o mesmo % fixo por coluna. Contar 0-ou-1 fazia um pai com
+ *     três filhos em andamento exibir 0%, e deixava o pai mais burro que o
+ *     filho: sozinho o filho mostrava 50%, dentro do pai valia nada.
  *
  *  2. POSIÇÃO DA COLUNA, para quem não tem subatividade — as regras abaixo,
  *     inalteradas.
+ *
+ * TRÊS PAPÉIS, TRÊS RÉGUAS (decisão de 13/08/2026):
+ *
+ *   • ATIVIDADE — a coluna onde está. É trabalho que alguém executa, e a
+ *     coluna diz o estágio.
+ *   • MARCO — 0 ou 100 (`isMilestone`). Ponto no tempo, sem duração.
+ *   • FASE · PACOTE · ENTREGA — a média dos filhos, SEMPRE (`isGrouper`), e a
+ *     própria coluna é ignorada. Não é trabalho, é caixa: mover a caixa não
+ *     move o que está dentro dela.
  *
  * Regras da coluna (decisão de produto, 29/07/2026):
  *  - Backlog e "A iniciar" (a_iniciar) são SEMPRE 0% — existir/estar na fila
@@ -28,6 +43,7 @@
 
 import {
   categoryFromLegacyFlags,
+  ehTrabalhoEmCurso,
   parseWorkflowCategory,
   WORKFLOW_CATEGORY_META,
 } from "./workflowCategory";
@@ -66,6 +82,11 @@ export interface SubActivityLike {
   status?: string | null;
   /** Coluna da subatividade — usada quando `status` não é conclusivo. */
   workflow_stage_id?: string | null;
+  /**
+   * Marco não tem meio-caminho: é um ponto no tempo, sem duração, sem horas e
+   * sem custo (ver o cabeçalho de `eapModel.ts`). Ou aconteceu, ou não.
+   */
+  is_milestone?: boolean | null;
 }
 
 const PERCENT_LABELS: Record<number, string> = {
@@ -114,13 +135,90 @@ function subFeita(s: SubActivityLike, stages: ProgressStageLike[] | null | undef
   return parseWorkflowCategory(col.categoria) === "concluida" || col.is_final === true;
 }
 
+/**
+ * QUANTO uma subatividade avançou — não "acabou, sim ou não".
+ *
+ * Antes o pai contava cabeças (`feitas / total`) e cada filho valia 0 ou 1. Um
+ * cartão com três filhos em pleno andamento mostrava 0%: o quadro dizia que
+ * nada tinha começado. E era pior que isso — o filho sozinho mostrava 50% pela
+ * coluna dele, então o PAI era mais burro que o FILHO, e o Fixo configurado na
+ * tela de colunas não chegava ao cartão-pai.
+ *
+ * Agora cada filho vale o que a COLUNA dele diz — a mesma conta j/(K+1), o
+ * mesmo Fixo, a mesma função que já calcula o cartão sem filhos. Uma fonte só.
+ *
+ * `null` = fora da média (cancelada), não zero: zerar puniria o pai por algo
+ * que saiu do escopo. Pausada devolve o percentual congelado, ou 0 quando não
+ * há valor congelado — parada não avança, mas também não some da conta.
+ *
+ * MARCO é 0 ou 100, nunca o meio. Ele não tem duração: é um ponto no tempo, e
+ * arrastá-lo para "Em Revisão" não significa que meio marco aconteceu.
+ */
+function subAvanco(
+  s: SubActivityLike,
+  stages: ProgressStageLike[] | null | undefined,
+): number | null {
+  // `status` fecha a questão: concluída é 100, independente da coluna.
+  if ((s.status || "").toLowerCase() === "completed") return 100;
+  // Sem coluna não há o que ler — não iniciada.
+  if (!s.workflow_stage_id || !stages || stages.length === 0) return 0;
+  // Marco: só a coluna FINAL o realiza. Qualquer posição intermediária é 0 —
+  // ele não avança, acontece. `subFeita` já faz esse teste (status ou coluna
+  // concluída), que é exatamente a pergunta binária que o marco aceita.
+  if (s.is_milestone) return subFeita(s, stages) ? 100 : 0;
+  // Sem netos aqui: `SubActivityLike` não os carrega, e buscá-los abriria uma
+  // recursão que nenhuma das telas alimenta hoje. Um nível é o que existe.
+  const p = computeActivityProgress(s.workflow_stage_id, stages);
+  return p.percent;
+}
+
+/**
+ * Quanto uma coluna vale QUANDO NÃO TEM PERCENTUAL PRÓPRIO — o "auto".
+ *
+ * O número sai da POSIÇÃO no fluxo: a j-ésima de K colunas de trabalho vale
+ * j/(K+1). Divide por K+1, não por K, para nunca dar 100% antes da coluna
+ * final. Logo o valor MUDA sozinho ao inserir, remover ou reordenar colunas —
+ * é essa a diferença entre "auto" e um número fixo.
+ *
+ * Existe para a tela de gerenciar colunas poder MOSTRAR quanto o auto vale.
+ * Antes o campo dizia só "auto" e escondia o número; quem quisesse saber tinha
+ * de calcular de cabeça. Mesmas regras de `computeActivityProgress` — se
+ * divergirem, a tela mente sobre o próprio sistema.
+ *
+ * Devolve `null` quando a coluna não entra na conta (backlog, bloqueio,
+ * exceção, ou marcada para não contribuir): nesses casos não há "auto" a
+ * exibir, o valor é 0 por definição.
+ */
+export function percentualAutomaticoDaColuna(
+  stageId: string,
+  stages: ProgressStageLike[] | null | undefined,
+): number | null {
+  if (!stages || stages.length === 0) return null;
+  const current = stages.find((s) => s.id === stageId);
+  if (!current) return null;
+
+  const category = parseWorkflowCategory(current.categoria) ?? categoryFromLegacyFlags(current);
+  if (category === "concluida" || current.is_final) return 100;
+  if (category === "backlog" || isBacklogStage(current)) return null;
+  if (current.is_blocked || current.is_exception) return null;
+  if (current.contributes_to_progress === false) return null;
+
+  // Mesmo denominador de computeActivityProgress: só colunas de "andamento".
+  const flow = stages
+    .filter((s) => ehTrabalhoEmCurso(parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s)))
+    .sort((a, b) => a.display_order - b.display_order);
+  const j = flow.findIndex((s) => s.id === current.id) + 1;
+  if (j <= 0) return null;
+  return clampPercent((j / (flow.length + 1)) * 100);
+}
+
 export function computeActivityProgress(
   currentStageId: string | null | undefined,
   stages: ProgressStageLike[] | null | undefined,
   lastProgressStageId?: string | null,
   /**
    * Subatividades da atividade. QUANDO EXISTEM, elas mandam: a coluna diz onde
-   * o cartão está, as subatividades dizem quanto do trabalho acabou — e mover
+   * o cartão está, as subatividades dizem quanto do trabalho andou — e mover
    * um cartão não conclui nada.
    *
    * Medido em 03/08/2026: 703 das 1.317 atividades sao subatividades e o
@@ -128,15 +226,61 @@ export function computeActivityProgress(
    * 100% tendo filho aberto (uma com 5 de 11 feitas).
    */
   subActivities?: SubActivityLike[] | null,
+  /**
+   * A PRÓPRIA atividade é um marco. Marco não tem percentual de avanço: é um
+   * ponto no tempo, sem duração, sem horas e sem custo — ou aconteceu, ou não.
+   * Sem esta marca ele herdava a régua das atividades e exibia 33%, 67%, como
+   * se um marco pudesse estar pela metade.
+   */
+  isMilestone?: boolean | null,
+  /**
+   * A PRÓPRIA atividade é um AGRUPADOR (Fase, Pacote, Entrega) — uma caixa que
+   * contém trabalho, não trabalho que alguém executa.
+   *
+   * Quando true, a coluna onde a caixa está é IGNORADA: ela vale a média dos
+   * filhos, e só. Mover a caixa não move o que está dentro dela — arrastar uma
+   * Entrega para "Aprovada" não faz ninguém escrever o manual.
+   *
+   * Sem esta marca a caixa herdava a régua das atividades: ir para uma coluna
+   * de 80% anunciava 80% de trabalho pronto sem nada ter sido feito. É o mesmo
+   * defeito do marco (ver `isMilestone`), com outra fantasia.
+   */
+  isGrouper?: boolean | null,
 ): ActivityProgress {
+  // ── MARCO: binário, decidido antes de tudo ─────────────────────────────
+  // Antes das subatividades de propósito: marco não agrupa (o trigger do banco
+  // recusa), então filho aqui é dado inconsistente e não deve mandar no número.
+  // Bloqueio ainda vence, porque "travado" descreve o cartão, não o avanço.
+  if (isMilestone) {
+    const col = currentStageId && stages ? stages.find((s) => s.id === currentStageId) : null;
+    if (col?.is_blocked) return { percent: null, paused: true, label: "Pausada" };
+    const feito = subFeita({ workflow_stage_id: currentStageId }, stages);
+    return {
+      percent: feito ? 100 : 0,
+      paused: false,
+      label: feito ? "Atingido" : "Não atingido",
+    };
+  }
+
   // ── Subatividades mandam quando existem ────────────────────────────────
-  if (subActivities && subActivities.length > 0) {
+  // MÉDIA DO AVANÇO, não contagem de concluídas. Cada filho entra com quanto
+  // andou (ver `subAvanco`), então "Em Revisão" vale 75 em vez de 0.
+  //
+  // Média simples, não ponderada por horas: só 48% das atividades têm horas
+  // preenchidas, e ponderar por um campo ausente em metade da base produziria
+  // números piores. Trocar é uma linha, se isso mudar.
+  //
+  // `avancos` vazio = TODOS os filhos cancelados: não há trabalho a medir
+  // neles. Cair para 0% seria mentir por omissão, então o bloco inteiro é
+  // pulado e o pai volta a responder pela própria coluna, logo abaixo.
+  const avancos = (subActivities ?? [])
+    .map((s) => subAvanco(s, stages))
+    .filter((v): v is number => v !== null);
+
+  if (subActivities && subActivities.length > 0 && avancos.length > 0) {
     const total = subActivities.length;
     const feitas = subActivities.filter((s) => subFeita(s, stages)).length;
-    // Contagem simples, não ponderada por horas: só 48% das atividades têm
-    // horas preenchidas, e ponderar por um campo ausente em metade da base
-    // produziria números piores. Trocar é uma linha, se isso mudar.
-    const percent = clampPercent((feitas / total) * 100);
+    const percent = clampPercent(avancos.reduce((a, b) => a + b, 0) / avancos.length);
 
     const col = currentStageId && stages ? stages.find((s) => s.id === currentStageId) : null;
     const colunaConcluida = !!col && (parseWorkflowCategory(col.categoria) === "concluida" || col.is_final === true);
@@ -158,6 +302,17 @@ export function computeActivityProgress(
     };
   }
 
+  // ── AGRUPADOR sem filhos a medir: NÃO herda a coluna ───────────────────
+  // Chega aqui a caixa vazia, ou a caixa cujos filhos foram todos cancelados.
+  // Deixá-la seguir para a régua das atividades era o defeito: uma Entrega
+  // arrastada para "Aprovada" anunciaria 80% sem ninguém ter trabalhado.
+  // Caixa sem conteúdo mensurável é 0% — não há trabalho a reportar.
+  if (isGrouper) {
+    const col = currentStageId && stages ? stages.find((s) => s.id === currentStageId) : null;
+    if (col?.is_blocked) return { percent: null, paused: true, label: "Pausada" };
+    return { percent: 0, paused: false, label: "Sem atividades" };
+  }
+
   // ── Sem subatividades: posição na coluna, exatamente como antes ────────
   if (!currentStageId || !stages || stages.length === 0) {
     return { percent: 0, paused: false, label: PERCENT_LABELS[0] };
@@ -173,12 +328,21 @@ export function computeActivityProgress(
   // trabalho (ver cabeçalho) — o peso fixo do META vira só fallback.
   const category = parseWorkflowCategory(current.categoria);
   if (category) {
+    // ESPERA congela: o percentual para onde estava, e a atividade se anuncia
+    // como parada. Vem ANTES do teste de peso nulo porque "espera" e
+    // "cancelada" compartilham `progressWeight: null` por motivos opostos —
+    // uma está pausada e volta, a outra saiu dos indicadores para sempre.
+    // Sem esta guarda, uma coluna de espera exibiria "Cancelada".
+    if (category === "espera") {
+      const congelado = current.progress_percent != null ? clampPercent(current.progress_percent) : null;
+      return { percent: congelado, paused: true, label: "Em espera" };
+    }
     const weight = WORKFLOW_CATEGORY_META[category].progressWeight;
     if (weight === null) {
       // Cancelada: fora dos indicadores, sem percentual.
       return { percent: null, paused: false, label: "Cancelada" };
     }
-    if (category === "andamento") {
+    if (ehTrabalhoEmCurso(category)) {
       // 1) % explícito da coluna (menu "Definir % da coluna") vence a posição.
       if (current.progress_percent != null) {
         const explicit = clampPercent(current.progress_percent);
@@ -189,7 +353,7 @@ export function computeActivityProgress(
       //    Colunas sem categoria explícita entram pela leitura legada, para o
       //    fluxo ficar completo em quadros mistos (pré/pós-backfill).
       const flow = stages
-        .filter((s) => (parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s)) === "andamento")
+        .filter((s) => ehTrabalhoEmCurso(parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s)))
         .sort((a, b) => a.display_order - b.display_order);
       const j = flow.findIndex((s) => s.id === current.id) + 1;
       if (j > 0) {

@@ -1,6 +1,8 @@
 // Tipos, constantes e helpers compartilhados do Kanban.
 // Fonte de medidas visuais: lib/kanbanTokens (a imagem aprovada).
-import type { WorkflowCategory } from "@/lib/workflowCategory";
+import {
+  parseWorkflowCategory, categoryFromLegacyFlags, type WorkflowCategory,
+} from "@/lib/workflowCategory";
 
 export const formatHours = (hours: number): string => {
   if (!hours || hours <= 0) return "";
@@ -209,6 +211,69 @@ export const MIN_COLUMN_WIDTH = 272;
 // Medidas do quadro: fonte única em lib/kanbanTokens (a imagem aprovada).
 // Nunca reintroduzir tabelas de densidade aqui — ver o comentário no token.
 
+/**
+ * A coluna de ENTRADA — onde a atividade nasce: criação rápida, importação de
+ * EAP e reabertura sem destino melhor. Uma por projeto, e ela não se exclui.
+ *
+ * O papel virou uma MARCA (`is_entry_point`) em 12/08/2026. Antes era
+ * `display_order = 0`, o que amarrava duas coisas diferentes: para "A Fazer"
+ * ser a entrada era preciso excluir o Backlog — a única coluna protegida
+ * contra exclusão —, e reordenar podia trocar quem recebe as tarefas novas em
+ * silêncio.
+ *
+ * Enquanto a migração não roda na VM, `is_entry_point` chega indefinido e vale
+ * a leitura antiga. As duas convivem de propósito: nenhum quadro fica sem
+ * entrada por causa da ordem de deploy.
+ */
+export const ehColunaDeEntrada = (s: { display_order: number; is_entry_point?: boolean }) =>
+  s.is_entry_point === true || (s.is_entry_point === undefined && s.display_order === 0);
+
+/**
+ * O que o QUADRO desenha. Fonte única — antes cada tela repetia o filtro, e
+ * elas divergiram: o Kanban escondia de um jeito, o quadro de User Stories de
+ * outro, e o agente de IA tinha uma terceira cópia (`isVisibleKanbanStage`, em
+ * api/ai/agent/route.ts).
+ *
+ * QUEM MANDA É `is_visible` — o interruptor "No quadro", inclusive para o
+ * Backlog.
+ *
+ * Antes a categoria `backlog` era excluída aqui, incondicionalmente, e o
+ * interruptor não tinha efeito nenhum sobre ela: a pessoa ligava e a coluna
+ * continuava fora. Um controle que aceita o clique e ignora é pior do que não
+ * existir — mente sobre o próprio estado.
+ *
+ * A separação Kanban × Backlog continua valendo, mas onde ela pertence: no
+ * PADRÃO. O Backlog nasce com `is_visible = false` (o quadro diz "onde está
+ * cada coisa", a fila diz "o que vem primeiro"; misturar enche o quadro com uma
+ * lista que só cresce — o problema do Trello, que Jira e Azure evitam separando
+ * as telas). Quem quiser a fila no quadro liga o interruptor e assume a escolha.
+ */
+export const colunasDoQuadro = <T extends { is_visible?: boolean }>(stages: T[]): T[] =>
+  stages.filter((s) => s.is_visible !== false);
+
+/** Colunas escondidas por decisão do projeto (`is_visible = false`). */
+/**
+ * Colunas ESCONDIDAS POR ENGANO — as que alguém desligou em "No quadro" e que
+ * ainda guardam tarefas. É o que o aviso âmbar da régua denuncia.
+ *
+ * A coluna de BACKLOG não entra, mesmo cheia. Ela sai do quadro por DECISÃO DE
+ * PRODUTO (Kanban é fluxo, Backlog é fila — ver `colunasDoQuadro`), e as tarefas
+ * dela estão à vista na aba própria. Tratá-la como escondida acendia o alerta
+ * permanentemente, num projeto sem nada de errado: foi o que aconteceu quando
+ * tirei o Backlog do quadro sem voltar aqui.
+ *
+ * O aviso serve para o caso em que a pessoa oculta uma coluna e esquece
+ * trabalho dentro — aí ninguém vê aquele status em lugar nenhum.
+ */
+export const colunasOcultas = <T extends {
+  is_visible?: boolean; display_order?: number; categoria?: WorkflowCategory; is_final?: boolean; is_blocked?: boolean;
+}>(stages: T[]): T[] =>
+  stages.filter((s) => {
+    if (s.is_visible !== false) return false;
+    const cat = parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s as never);
+    return cat !== "backlog";
+  });
+
 export interface WorkflowStage {
   id: string;
   project_id: string;
@@ -225,6 +290,11 @@ export interface WorkflowStage {
   wip_strict?: boolean | null;
   /** Categoria semântica — fonte da verdade, independente do título. */
   categoria?: WorkflowCategory;
+  /**
+   * Onde a atividade nasce. Indefinido em banco sem a migração
+   * `20260812140000_coluna_de_entrada` — aí vale `display_order === 0`.
+   */
+  is_entry_point?: boolean;
 }
 
 export interface Phase {

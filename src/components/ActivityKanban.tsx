@@ -52,6 +52,7 @@ import {
   Link2,
   User,
   Layers,
+  List,
   Search,
   Filter,
 } from "lucide-react";
@@ -97,6 +98,7 @@ import { KANBAN_TOKENS } from "@/lib/kanbanTokens";
 import {
   computeActivityProgress,
   type ActivityProgress,
+  type SubActivityLike,
 } from "@/lib/activityProgress";
 import { useAuth } from "@/contexts/AuthContext";
 import { normalizeGut, GUT_META, type GutLevel } from "@/lib/gutPriority";
@@ -107,7 +109,7 @@ import {
 } from "@/lib/workflowCategory";
 import { SHOW_USER_STORIES } from "@/lib/featureFlags";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { resolveEapKind, EAP_LABELS as EAP_LABELS_CANON } from "@/lib/eapModel";
+import { resolveEapKind, eapCanGroup, EAP_LABELS as EAP_LABELS_CANON } from "@/lib/eapModel";
 import { ToastAction } from "@/components/ui/toast";
 import { computeCardAging, CARD_AGING_CLASSES } from "@/lib/cardAging";
 import { cn } from "@/lib/utils";
@@ -124,6 +126,10 @@ import {
   EMPTY_COLUMN_FILTER,
   columnFilterActive,
   DEFAULT_CARD_FIELDS,
+  DEFAULT_BOARD_SORT,
+  colunasDoQuadro,
+  colunasOcultas,
+  ehColunaDeEntrada,
   type GroupByValue,
   type CardFields,
   type WorkflowStage,
@@ -134,11 +140,13 @@ import {
   type SubActivityStatusSummary,
   type ActivityKanbanProps,
 } from "./kanban/shared";
+import { useKanbanPrefs } from "@/hooks/useKanbanPrefs";
+import { migrarOrdenacaoDasColunas } from "@/lib/kanbanPrefs";
+import { GerenciarColunas, type PlanoDeSalvamento } from "./kanban/GerenciarColunas";
 import { KanbanCard, SortableKanbanCard } from "./kanban/KanbanCard";
 import {
   SortableColumn,
   DroppableColumn,
-  StageListButton,
   FilterOptionList,
   ColumnFilterPanel,
 } from "./kanban/KanbanColumn";
@@ -188,38 +196,45 @@ export const ActivityKanban = ({
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
-  const columnWidthsKey = `kanban-col-widths:${projectId}`;
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
-    if (typeof window === "undefined") return {};
-    try {
-      const raw = window.localStorage.getItem(`kanban-col-widths:${projectId}`);
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  });
-  // Colunas recolhidas (só front-end, persistido por projeto).
-  const collapsedStagesKey = `kanban-collapsed-stages:${projectId}`;
-  const [collapsedStages, setCollapsedStages] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      const raw = window.localStorage.getItem(`kanban-collapsed-stages:${projectId}`);
-      return raw ? new Set<string>(JSON.parse(raw)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
+
+  // Preferências de exibição (campos do card, raias, larguras, colunas
+  // recolhidas, ordenação por coluna). Ficavam em cinco chaves soltas de
+  // localStorage e não seguiam a pessoa: configurar o quadro no trabalho e
+  // abrir em casa devolvia tudo ao padrão. Agora o navegador é cache e o banco
+  // é a verdade — ver lib/kanbanPrefs.ts.
+  //
+  // FILTROS continuam locais de propósito (busca do momento, não gosto).
+  const { user, profile } = useAuth();
+  // `restaurarPrefs` existe no hook mas não é usado aqui: o "Restaurar" da tela
+  // fica sob "Campos do card" e restaura só eles — zerar larguras e raias num
+  // clique com esse rótulo surpreenderia.
+  const { prefs, setPrefs } = useKanbanPrefs(projectId, user?.id ?? null);
+  const columnWidths = prefs.columnWidths;
+  // Espelho para o handler de arrasto ler a largura atual sem entrar nas deps
+  // do useCallback (recriar o handler no meio do gesto perderia o movimento).
+  const columnWidthsRef = useRef<Record<string, number>>(columnWidths);
+  const collapsedStages = useMemo(() => new Set(prefs.collapsedStages), [prefs.collapsedStages]);
   const toggleCollapsedStage = useCallback((stageId: string) => {
-    setCollapsedStages((prev) => {
-      const next = new Set(prev);
+    setPrefs((p) => {
+      const next = new Set(p.collapsedStages);
       if (next.has(stageId)) next.delete(stageId);
       else next.add(stageId);
-      try {
-        window.localStorage.setItem(collapsedStagesKey, JSON.stringify([...next]));
-      } catch { /* quota */ }
-      return next;
+      return { collapsedStages: [...next] };
     });
-  }, [collapsedStagesKey]);
+  }, [setPrefs]);
+  const setColumnSort = useCallback((stageId: string, value: string) => {
+    setPrefs((p) => ({ columnSorts: { ...p.columnSorts, [stageId]: value } }));
+  }, [setPrefs]);
+  // A ordenação por coluna morava em `kanban-col-sort:{stageId}`, chave sem o
+  // projectId — só dá para achá-la depois que os stages chegam. Sem esta
+  // varredura, quem escolheu "por prazo" perderia a escolha nesta versão.
+  const ordenacoesMigradas = useRef(false);
+  useEffect(() => {
+    if (ordenacoesMigradas.current || stages.length === 0) return;
+    const achadas = migrarOrdenacaoDasColunas(stages.map((s) => s.id), prefs.columnSorts);
+    ordenacoesMigradas.current = true;
+    if (achadas) setPrefs((p) => ({ columnSorts: { ...achadas, ...p.columnSorts } }));
+  }, [stages, prefs.columnSorts, setPrefs]);
   const [storyLinkedActivities, setStoryLinkedActivities] = useState<Map<string, number>>(new Map());
   const [dependencyCounts, setDependencyCounts] = useState<Map<string, { pred: number; succ: number }>>(new Map());
   // Predecessoras ainda nao concluidas por atividade (dependencia bloqueante).
@@ -250,49 +265,16 @@ export const ActivityKanban = ({
   // Optimistic overrides: activityId -> new workflow_stage_id
   const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
 
-  // Chaves de preferência substituídas por versões novas: limpa a antiga
-  // para não acumular lixo indefinidamente no localStorage do usuário.
-  // - kanban-density (Fase 0): densidade S/M/G removida, o quadro tem um só
-  //   tamanho, o da imagem aprovada (lib/kanbanTokens).
-  // - kanban-card-fields v1 (Fase 1): campo virou versionado porque o merge
-  //   com o default antigo (participants/hours/subCount=true) sobrescrevia
-  //   o novo padrão para quem já tinha usado o quadro; ver cardFieldsKey.
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(`kanban-density:${projectId}`);
-      window.localStorage.removeItem(`kanban-card-fields:${projectId}`);
-    }
-  }, [projectId]);
-
-  // Campos visíveis do card (⚙ Card), persistido por projeto. Faz merge com os
-  // defaults para tolerar chaves novas adicionadas em versões futuras.
-  //
-  // Chave em v2 (Fase 1): quem já usava o quadro tinha participants/hours/
-  // subCount=true salvos no v1 — o merge "...DEFAULT_CARD_FIELDS, ...raw"
-  // faria o valor salvo vencer e a mudança de padrão nunca apareceria para
-  // ninguém que já tivesse aberto a tela antes. Bump de versão zera todo
-  // mundo para o novo padrão uma vez; o v1 fica órfão e inofensivo.
-  const cardFieldsKey = `kanban-card-fields:v2:${projectId}`;
-  const [cardFields, setCardFields] = useState<CardFields>(() => {
-    if (typeof window === "undefined") return DEFAULT_CARD_FIELDS;
-    try {
-      const raw = window.localStorage.getItem(cardFieldsKey);
-      return raw ? { ...DEFAULT_CARD_FIELDS, ...JSON.parse(raw) } : DEFAULT_CARD_FIELDS;
-    } catch {
-      return DEFAULT_CARD_FIELDS;
-    }
-  });
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try { window.localStorage.setItem(cardFieldsKey, JSON.stringify(cardFields)); } catch { /* quota */ }
-    }
-  }, [cardFields, cardFieldsKey]);
+  // Campos visíveis do card (⚙ Card). A limpeza das chaves antigas e o merge
+  // com os defaults moraram aqui até 12/08/2026; hoje são responsabilidade de
+  // lib/kanbanPrefs (limparChavesAntigas / sanearPrefs), junto com a lição de
+  // versionar a chave sempre que um DEFAULT_* persistido mudar de valor.
+  const cardFields = prefs.cardFields;
   const toggleCardField = useCallback((key: keyof CardFields) => {
-    setCardFields((prev) => ({ ...prev, [key]: !prev[key] }));
-  }, []);
+    setPrefs((p) => ({ cardFields: { ...p.cardFields, [key]: !p.cardFields[key] } }));
+  }, [setPrefs]);
 
   // Filtro "Apenas minhas tarefas" — persistido por projeto
-  const { user, profile } = useAuth();
   const myName = (profile?.full_name || "").trim().toLowerCase();
   const myId = user?.id || null;
   const onlyMineKey = `kanban-only-mine:${projectId}`;
@@ -306,26 +288,16 @@ export const ActivityKanban = ({
     }
   }, [onlyMine, onlyMineKey]);
 
-  // Agrupamento em raias (swimlanes) e ordenação padrão do quadro — ajustes de
-  // exibição persistidos por projeto, como os demais (localStorage; a migração
-  // para prefs no banco foi adiada por decisão do usuário).
-  const groupByKey = `kanban-group-by:${projectId}`;
-  const [groupBy, setGroupBy] = useState<GroupByValue>(() => {
-    if (typeof window === "undefined") return "none";
-    const raw = window.localStorage.getItem(groupByKey);
-    return raw && (GROUP_BY_VALUES as readonly string[]).includes(raw) ? (raw as GroupByValue) : "none";
-  });
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try { window.localStorage.setItem(groupByKey, groupBy); } catch { /* quota */ }
-    }
-  }, [groupBy, groupByKey]);
+  // Agrupamento em raias (swimlanes) — segue a pessoa entre computadores.
+  const groupBy = prefs.groupBy;
+  const setGroupBy = useCallback((v: GroupByValue) => setPrefs({ groupBy: v }), [setPrefs]);
   // Times de raia (nível B): grupos nomeados de pessoas, por projeto,
   // compartilhados via banco. Alimentam a "Raia por time" quando o usuário
   // escolhe agrupar por time — não alteram o comportamento padrão do Kanban.
   type LaneTeam = { id: string; name: string; members: string[] };
   const [laneGroups, setLaneGroups] = useState<LaneTeam[]>([]);
   const [manageGroupsOpen, setManageGroupsOpen] = useState(false);
+  const [gerenciarColunasOpen, setGerenciarColunasOpen] = useState(false);
   const [teamsUnavailable, setTeamsUnavailable] = useState(false); // migration ainda não aplicada
 
   const fetchTeams = useCallback(async () => {
@@ -551,8 +523,12 @@ export const ActivityKanban = ({
     setFilterStartRange(f.startRange ?? { from: "", to: "" });
     setFilterHoursRange(f.hoursRange ?? { min: "", max: "" });
     setOnlyMine(!!f.onlyMine);
-    setGroupBy((GROUP_BY_VALUES as readonly string[]).includes(c.groupBy ?? "") ? (c.groupBy as GroupByValue) : "none");
-    setCardFields({ ...DEFAULT_CARD_FIELDS, ...(c.cardFields ?? {}) });
+    // Raia e campos do card num setPrefs só: separados, o segundo leria o
+    // estado anterior ao primeiro e uma das duas mudanças se perderia.
+    setPrefs({
+      groupBy: (GROUP_BY_VALUES as readonly string[]).includes(c.groupBy ?? "") ? (c.groupBy as GroupByValue) : "none",
+      cardFields: { ...DEFAULT_CARD_FIELDS, ...(c.cardFields ?? {}) },
+    });
     setActiveViewId(v.id);
   };
 
@@ -618,11 +594,13 @@ export const ActivityKanban = ({
   /** Filhos por pai — a barra de progresso passa a medir trabalho feito
    *  (subatividades concluídas) em vez de posição no quadro. */
   const filhosPorPai = useMemo(() => {
-    const m = new Map<string, { status?: string | null; workflow_stage_id?: string | null }[]>();
+    const m = new Map<string, SubActivityLike[]>();
     activities.forEach((a) => {
       if (!a.parent_id) return;
       const arr = m.get(a.parent_id) || [];
-      arr.push({ status: a.status, workflow_stage_id: a.workflow_stage_id });
+      // `is_milestone` vai junto: marco entra na média como 0 ou 100, nunca
+      // pelo meio — arrastá-lo para "Em Revisão" não realiza meio marco.
+      arr.push({ status: a.status, workflow_stage_id: a.workflow_stage_id, is_milestone: a.is_milestone });
       m.set(a.parent_id, arr);
     });
     return m;
@@ -632,6 +610,12 @@ export const ActivityKanban = ({
   // Fase/Entrega (agrupa; cobre 'pacote' legado e itens com filhos), Atividade, Marco.
   const activityEapType = useCallback((a: Activity): string => {
     return resolveEapKind(a, parentIdsWithChildren.has(a.id));
+  }, [parentIdsWithChildren]);
+
+  /** Fase, Pacote ou Entrega — a CAIXA, que vale a média dos filhos e ignora a
+   *  própria coluna. Mover a caixa não move o que está dentro dela. */
+  const ehAgrupador = useCallback((a: Activity): boolean => {
+    return eapCanGroup(resolveEapKind(a, parentIdsWithChildren.has(a.id)));
   }, [parentIdsWithChildren]);
 
   const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -900,20 +884,33 @@ export const ActivityKanban = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
 
-  // Initialize equal column widths when stages change
-  useEffect(() => {
-    const visibleStages = stages.filter((s) => s.display_order > 0);
-    if (visibleStages.length === 0) return;
-    // Only initialize if no widths set yet
-    setColumnWidths((prev) => {
-      const hasAll = visibleStages.every((s) => prev[s.id]);
-      if (hasAll) return prev;
-      const equalWidth = 100 / visibleStages.length;
-      const widths: Record<string, number> = {};
-      visibleStages.forEach((s) => (widths[s.id] = prev[s.id] || equalWidth));
-      return widths;
-    });
+  // Largura de quem ainda não tem: divide o espaço em partes iguais. É CÁLCULO,
+  // não preferência — por isso não vai para `setPrefs`. Gravar aqui criaria uma
+  // linha no banco em todo primeiro acesso, com larguras que ninguém escolheu,
+  // e o efeito se realimentaria (lê columnWidths, escreve columnWidths).
+  const larguraPadrao = useMemo(() => {
+    const visiveis = colunasDoQuadro(stages);
+    if (visiveis.length === 0) return {};
+    const igual = 100 / visiveis.length;
+    const out: Record<string, number> = {};
+    for (const s of visiveis) out[s.id] = igual;
+    return out;
   }, [stages]);
+
+  // Largura durante o arrasto: estado efêmero, fora das preferências. Cada
+  // pixel do movimento entraria no debounce e viraria escrita no banco — o
+  // valor só vira preferência quando a mão solta. Enquanto arrasta, a coluna
+  // segue este valor; em repouso, `larguraArrastando` é null e vale a pref.
+  const [larguraArrastando, setLarguraArrastando] = useState<Record<string, number> | null>(null);
+  // O que a pessoa escolheu vence o padrão calculado, coluna a coluna.
+  const larguraEfetiva = useMemo(
+    () => ({ ...larguraPadrao, ...(larguraArrastando ?? columnWidths) }),
+    [larguraPadrao, larguraArrastando, columnWidths],
+  );
+  // O handler de arrasto lê daqui: precisa das larguras JÁ resolvidas (com o
+  // padrão preenchido), senão arrastar a primeira coluna gravaria só ela e as
+  // outras voltariam ao cálculo na próxima carga.
+  useEffect(() => { columnWidthsRef.current = larguraEfetiva; }, [larguraEfetiva]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent, stageId: string, currentWidthPct: number) => {
     e.preventDefault();
@@ -922,13 +919,17 @@ export const ActivityKanban = ({
     const containerWidth = containerRef.current.offsetWidth;
     const startWidth = (currentWidthPct / 100) * containerWidth;
     resizingRef.current = { stageId, startX: e.clientX, startWidth };
+    let ultimo: Record<string, number> | null = null;
 
     const handleMouseMove = (ev: MouseEvent) => {
       if (!resizingRef.current || !containerRef.current) return;
       const diff = ev.clientX - resizingRef.current.startX;
       const newWidthPx = Math.max(160, resizingRef.current.startWidth + diff);
       const newWidthPct = (newWidthPx / containerRef.current.offsetWidth) * 100;
-      setColumnWidths((prev) => ({ ...prev, [resizingRef.current!.stageId]: newWidthPct }));
+      setLarguraArrastando((prev) => {
+        ultimo = { ...(prev ?? columnWidthsRef.current), [resizingRef.current!.stageId]: newWidthPct };
+        return ultimo;
+      });
     };
 
     const handleMouseUp = () => {
@@ -937,18 +938,16 @@ export const ActivityKanban = ({
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
-      // Persiste a largura ao soltar (nao a cada pixel).
-      setColumnWidths((prev) => {
-        try { window.localStorage.setItem(columnWidthsKey, JSON.stringify(prev)); } catch { /* quota */ }
-        return prev;
-      });
+      // Persiste ao soltar (não a cada pixel): uma escrita por gesto.
+      if (ultimo) setPrefs({ columnWidths: ultimo });
+      setLarguraArrastando(null);
     };
 
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-  }, [columnWidthsKey]);
+  }, [setPrefs]);
 
   // KeyboardSensor além do ponteiro: sem ele o quadro é inoperável por teclado
   // (mover card só com mouse). O Backlog já usava este par — o Kanban ficou
@@ -1244,6 +1243,108 @@ export const ActivityKanban = ({
   };
 
   /**
+   * Filhos diretos que AINDA NÃO estão na coluna de destino — a lista que
+   * impede o pai de andar na frente do conteúdo.
+   *
+   * Fonte única das duas portas de entrada (arrastar e menu "mover para"):
+   * regra de negócio duplicada é regra que diverge no primeiro ajuste.
+   *
+   * Filho cancelado não conta: saiu do escopo, não é trabalho pendente.
+   * `optimisticMoves` entra porque o filho recém-arrastado ainda não voltou do
+   * banco — sem isso, mover o pai logo depois seria barrado por engano.
+   *
+   * Só DESCENDENTE DIRETO decide: o neto é problema do filho, e se o filho
+   * está na coluna é porque a regra já foi aplicada a ele.
+   */
+  const filhosForaDaColuna = useCallback((paiId: string, destinoId: string) => {
+    const canceladaIds = new Set(
+      stages.filter((s) => parseWorkflowCategory((s as { categoria?: string }).categoria) === "cancelada")
+        .map((s) => s.id),
+    );
+    return activities.filter((f) => {
+      if (f.parent_id !== paiId) return false;
+      if (f.workflow_stage_id && canceladaIds.has(f.workflow_stage_id)) return false;
+      return (optimisticMoves[f.id] || f.workflow_stage_id) !== destinoId;
+    });
+  }, [activities, optimisticMoves, stages]);
+
+  /**
+   * O PAI ACOMPANHA QUANDO TODOS OS FILHOS CHEGAM À MESMA COLUNA.
+   *
+   * Mover o pai não move os filhos — proposital: a caixa pode avançar antes do
+   * conteúdo. O caminho inverso já existia, mas SÓ PARA A COLUNA FINAL: o
+   * bloco `ancestorsToComplete` do arrasto leva o pai quando todos os filhos
+   * ficam `completed`.
+   *
+   * O buraco era a coluna INTERMEDIÁRIA. Levar as cinco atividades de uma
+   * entrega para "Em Revisão" deixava a entrega em "A Fazer", sozinha, sem
+   * nada acontecendo ali — e o quadro mostrava um agrupador num lugar onde o
+   * trabalho não está mais.
+   *
+   * Sobe RECURSIVAMENTE: se a entrega era a última pendência da fase, a fase
+   * vai junto.
+   *
+   * `status` não é gravado (diferente do caminho da coluna final, onde a
+   * conclusão dos filhos É a conclusão do pai): numa coluna intermediária não
+   * há o que concluir. O percentual da caixa é a média dos filhos e ignora a
+   * coluna dela (ver `isGrouper`), então o número segue verdadeiro.
+   */
+  const subirPaisCompletos = useCallback(async (activityId: string, stageId: string) => {
+    const porId = new Map(activities.map((a) => [a.id, a]));
+    const filhosDe = new Map<string, Activity[]>();
+    for (const a of activities) {
+      if (!a.parent_id) continue;
+      filhosDe.set(a.parent_id, [...(filhosDe.get(a.parent_id) ?? []), a]);
+    }
+    const subiram: string[] = [];
+    // `visto` protege contra ciclo em parent_id (dado corrompido): sem ele um
+    // A↔B travaria o laço para sempre.
+    const visto = new Set<string>([activityId]);
+    let atual = porId.get(activityId);
+    while (atual?.parent_id && !visto.has(atual.parent_id)) {
+      visto.add(atual.parent_id);
+      const pai = porId.get(atual.parent_id);
+      if (!pai) break;
+      const irmaos = filhosDe.get(pai.id) ?? [];
+      // A coluna do item recém-movido ainda não voltou do banco, então o valor
+      // dele vem do argumento — não de `activities`, que está desatualizado.
+      const todosLa = irmaos.every((f) =>
+        (f.id === activityId ? stageId : f.workflow_stage_id) === stageId,
+      );
+      if (!todosLa || pai.workflow_stage_id === stageId) break;
+      if (!canMutateActivity(pai)) break;
+      subiram.push(pai.id);
+      atual = pai;
+    }
+    if (subiram.length === 0) return;
+
+    setOptimisticMoves((prev) => {
+      const next = { ...prev };
+      for (const id of subiram) next[id] = stageId;
+      return next;
+    });
+    const { error } = await supabase
+      .from("activities")
+      .update({ workflow_stage_id: stageId } as never)
+      .in("id", subiram);
+    if (error) {
+      setOptimisticMoves((prev) => {
+        const next = { ...prev };
+        for (const id of subiram) delete next[id];
+        return next;
+      });
+      return;
+    }
+    const nomes = subiram.map((id) => porId.get(id)?.title).filter(Boolean);
+    toast({
+      title: subiram.length === 1
+        ? "A fase acompanhou"
+        : `${subiram.length} agrupadores acompanharam`,
+      description: `${nomes.join(", ")} — todos os itens de dentro chegaram aqui.`,
+    });
+  }, [activities, canMutateActivity, toast]);
+
+  /**
    * Move o card para QUALQUER coluna do quadro. Generaliza o antigo
    * handleMoveToBacklog, que só mandava para o stage display_order=0 — uma
    * coluna que o quadro não renderiza, então o card sumia da tela sem aviso.
@@ -1260,6 +1361,22 @@ export const ActivityKanban = ({
     }
     const target = stages.find((s) => s.id === stageId);
     if (!target) return;
+
+    // Mesma regra do arrasto: a caixa não anda na frente do conteúdo.
+    const bloqueio = filhosForaDaColuna(activityId, stageId);
+    if (bloqueio.length > 0) {
+      const n = bloqueio.length;
+      toast({
+        title: "Mova o que está dentro primeiro",
+        description:
+          `${n} ${n === 1 ? "item ainda não está" : "itens ainda não estão"} em ` +
+          `"${getStageDisplayTitle(target.title)}": ${bloqueio.slice(0, 3).map((f) => `"${f.title}"`).join(", ")}` +
+          `${n > 3 ? ` e mais ${n - 3}` : ""}. Quando o último chegar, a fase acompanha sozinha.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     const previousStageId = activity?.workflow_stage_id ?? null;
 
     setOptimisticMoves((prev) => ({ ...prev, [activityId]: stageId }));
@@ -1299,8 +1416,9 @@ export const ActivityKanban = ({
         </ToastAction>
       ) : undefined,
     });
+    await subirPaisCompletos(activityId, stageId);
     onDataChanged();
-  }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, stages, toast]);
+  }, [activities, canMutateActivity, filhosForaDaColuna, onDataChanged, projectLocked, showProjectLockedToast, stages, subirPaisCompletos, toast]);
 
   /** Duplica a atividade (com a subárvore). A capacidade já existia em
    *  lib/duplicateActivity, usada só dentro do diálogo de edição. */
@@ -1538,14 +1656,18 @@ export const ActivityKanban = ({
       const overColId = (over.id as string).replace("col-", "");
       if (activeColId === overColId) return;
 
-      const visibleStages = stages.filter((s) => s.display_order > 0);
-      const oldIndex = visibleStages.findIndex((s) => s.id === activeColId);
-      const newIndex = visibleStages.findIndex((s) => s.id === overColId);
+      // A coluna de entrada APARECE no quadro mas não entra no arrasto: ela é
+      // definida por `display_order = 0` e trocá-la de lugar mudaria onde as
+      // atividades nascem. Arrastar outra para cima dela também não a desloca —
+      // as demais são renumeradas a partir de 1.
+      const reordenaveis = stages.filter((s) => !ehColunaDeEntrada(s));
+      const oldIndex = reordenaveis.findIndex((s) => s.id === activeColId);
+      const newIndex = reordenaveis.findIndex((s) => s.id === overColId);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      const reordered = arrayMove(visibleStages, oldIndex, newIndex);
+      const reordered = arrayMove(reordenaveis, oldIndex, newIndex);
       // Update local state immediately
-      const backlogStages = stages.filter((s) => s.display_order === 0);
+      const backlogStages = stages.filter(ehColunaDeEntrada);
       const updatedStages = [
         ...backlogStages,
         ...reordered.map((s, i) => ({ ...s, display_order: i + 1 })),
@@ -1661,42 +1783,35 @@ export const ActivityKanban = ({
 
     const newStatus = stage?.is_final ? "completed" : "pending";
 
-    if (draggedActivity && newStatus === "completed") {
-      const { data: hierarchyRows } = await supabase
-        .from("activities")
-        .select("id,parent_id,status")
-        .eq("project_id", projectId)
-        .eq("is_trashed", false);
-
-      const childrenMap = new Map<string, Array<{ id: string; status: string; parent_id: string | null }>>();
-      (hierarchyRows || []).forEach((candidate) => {
-        if (!candidate.parent_id) return;
-        const arr = childrenMap.get(candidate.parent_id) || [];
-        arr.push(candidate as { id: string; status: string; parent_id: string | null });
-        childrenMap.set(candidate.parent_id, arr);
-      });
-
-      const stack = [...(childrenMap.get(draggedActivity.id) || [])];
-      const seen = new Set<string>();
-      let pendingCount = 0;
-
-      while (stack.length > 0) {
-        const current = stack.pop()!;
-        if (seen.has(current.id)) continue;
-        seen.add(current.id);
-
-        if (current.status !== "completed") {
-          pendingCount += 1;
-        }
-
-        const children = childrenMap.get(current.id) || [];
-        children.forEach((child) => stack.push(child));
-      }
-
-      if (pendingCount > 0) {
+    /**
+     * A CAIXA NÃO ANDA NA FRENTE DO CONTEÚDO.
+     *
+     * Antes a trava valia só para a coluna FINAL e olhava `status`: dava para
+     * arrastar uma fase de "A Fazer" para "Em Revisão" com as onze tarefas
+     * paradas atrás. O quadro dizia que a fase estava em revisão sem que
+     * ninguém tivesse revisado coisa alguma.
+     *
+     * Agora vale para QUALQUER coluna e olha ONDE os filhos estão: o pai só
+     * entra numa coluna quando todos os filhos vivos já estão nela — que é o
+     * mesmo critério pelo qual o pai SOBE sozinho quando o último filho chega
+     * (`subirPaisCompletos`). Os dois sentidos passam a ter uma regra só.
+     *
+     * Filho cancelado não trava: saiu do escopo, não é trabalho pendente.
+     *
+     * Só DESCENDENTES DIRETOS decidem. O neto é problema do filho — se ele
+     * está na coluna, é porque a regra já foi aplicada a ele.
+     */
+    if (draggedActivity) {
+      const foraDaColuna = filhosForaDaColuna(draggedActivity.id, targetStageId);
+      if (foraDaColuna.length > 0) {
+        const n = foraDaColuna.length;
+        const amostra = foraDaColuna.slice(0, 3).map((f) => `"${f.title}"`).join(", ");
         toast({
-          title: "Atividade com pendências",
-          description: `Não é possível concluir enquanto existirem ${pendingCount} subatividade(s) pendente(s).`,
+          title: "Mova o que está dentro primeiro",
+          description:
+            `${n} ${n === 1 ? "item ainda não está" : "itens ainda não estão"} em ` +
+            `"${getStageDisplayTitle(stage?.title || "")}": ${amostra}${n > 3 ? ` e mais ${n - 3}` : ""}. ` +
+            "Quando o último chegar, a fase acompanha sozinha.",
           variant: "destructive",
         });
         return;
@@ -1823,6 +1938,14 @@ export const ActivityKanban = ({
               .in("activity_id", ancestorsToReopen);
           }
         }
+
+        // COLUNA INTERMEDIÁRIA: o bloco acima só leva o pai para a FINAL, e
+        // só quando os filhos ficam `completed`. Levar as cinco tarefas de uma
+        // entrega para "Em Revisão" não conclui nada — mas deixa a entrega
+        // sozinha na coluna antiga. Aqui ela acompanha.
+        if (!stage?.is_final && targetStageId) {
+          await subirPaisCompletos(activityId, targetStageId);
+        }
       })()
     )
       .then(() => onDataChanged())
@@ -1870,7 +1993,9 @@ export const ActivityKanban = ({
   };
 
 
-  const visibleStages = useMemo(() => stages.filter((s) => s.display_order > 0 && s.is_visible !== false), [stages]);
+  // A coluna de entrada (Backlog) entra aqui desde 12/08/2026 — ver
+  // `colunasDoQuadro` em kanban/shared para o porquê e as referências.
+  const visibleStages = useMemo(() => colunasDoQuadro(stages), [stages]);
 
   /**
    * Colunas ocultas e quantas tarefas há em cada uma.
@@ -1880,10 +2005,7 @@ export const ActivityKanban = ({
    * aquele status e some junto, sem aparecer em lugar nenhum. O marcador ao
    * fim do quadro existe para isso não ser silencioso.
    */
-  const hiddenStages = useMemo(
-    () => stages.filter((s) => s.display_order > 0 && s.is_visible === false),
-    [stages],
-  );
+  const hiddenStages = useMemo(() => colunasOcultas(stages), [stages]);
   const countByStage = useMemo(() => {
     const m = new Map<string, number>();
     activities.forEach((a) => {
@@ -1924,7 +2046,10 @@ export const ActivityKanban = ({
       }
       if (e.key === "n" || e.key === "N") {
         if (!canCreate) return;
-        const first = stages.find((s) => s.display_order > 0 && s.is_visible !== false);
+        // De propósito pula a coluna de entrada: o atalho é para começar a
+        // trabalhar numa tarefa, não para engrossar a fila. Quem quer somar ao
+        // Backlog usa o "+" da própria coluna, que agora está à vista.
+        const first = stages.find((s) => !ehColunaDeEntrada(s) && s.is_visible !== false);
         if (first && onOpenCreateTask) {
           e.preventDefault();
           onOpenCreateTask(first.id);
@@ -2172,6 +2297,156 @@ export const ActivityKanban = ({
     await supabase.from("workflow_stages").update({ is_visible: !current }).eq("id", id);
     fetchStages();
   }, [fetchStages]);
+
+  // Aplica de uma vez o que a tela "Gerenciar colunas" montou. Ela edita uma
+  // CÓPIA e só chega aqui no Salvar, então este é o único ponto que escreve.
+  //
+  // Ordem: excluir → alterar → criar → reordenar. Excluir antes evita gastar
+  // ordem com linha que vai sumir; reordenar por último trabalha sobre a lista
+  // final, já com as novas dentro.
+  const handleSalvarColunas = useCallback(async (plano: PlanoDeSalvamento) => {
+    const falhas: string[] = [];
+
+    for (const id of plano.excluidas) {
+      const { error } = await supabase.from("workflow_stages").delete().eq("id", id);
+      if (error) falhas.push(`excluir: ${error.message}`);
+    }
+
+    for (const l of plano.alteradas) {
+      const titulo = getStageDisplayTitle(l.title.trim());
+      const { error } = await supabase
+        .from("workflow_stages")
+        .update({
+          title: titulo,
+          color: l.color,
+          progress_percent: l.progress_percent,
+          wip_limit: l.wip_limit,
+          is_visible: l.is_visible,
+          categoria: l.categoria,
+          // `is_final` é a leitura legada de "concluída" — o quadro pré-migration
+          // ainda depende dela. Mantidas em acordo para os dois caminhos darem a
+          // mesma resposta; divergir faria o progresso mudar conforme quem lê.
+          is_final: l.categoria === "concluida",
+        } as never)
+        .eq("id", l.id);
+      if (error) falhas.push(`"${titulo}": ${error.message}`);
+    }
+
+    // As novas entram no fim; a reordenação logo abaixo põe cada uma no lugar.
+    let ordemLivre = stages.reduce((m, s) => Math.max(m, s.display_order), 0) + 1;
+    const idPorChave = new Map<string, string>();
+    for (const l of plano.criadas) {
+      const titulo = getStageDisplayTitle(l.title.trim());
+      if (!titulo) continue;
+      // A categoria vem ESCOLHIDA da tabela — o palpite pelo título só
+      // pré-preenche o campo lá, e a pessoa vê e confirma. Antes ele era
+      // gravado direto e virava definitivo.
+      // Continua valendo a precaução do índice único: se outra coluna já é a
+      // "concluída" do projeto, o insert falharia depois de a pessoa salvar.
+      let categoria = l.categoria;
+      if (categoria === "concluida" && stages.some((s) => s.categoria === "concluida")) {
+        categoria = "andamento";
+      }
+      const base = {
+        project_id: projectId,
+        title: titulo,
+        color: l.color,
+        display_order: ordemLivre++,
+        progress_percent: l.progress_percent,
+        wip_limit: l.wip_limit,
+        is_visible: l.is_visible,
+        categoria,
+        is_final: categoria === "concluida",
+      };
+      let criado = await supabase.from("workflow_stages").insert(base as never).select("id").single();
+      if (criado.error && /categoria/i.test(criado.error.message || "")) {
+        const { categoria: _fora, ...semCategoria } = base;
+        criado = await supabase.from("workflow_stages").insert(semCategoria as never).select("id").single();
+      }
+      if (criado.error) falhas.push(`criar "${titulo}": ${criado.error.message}`);
+      else if (criado.data?.id) idPorChave.set(l.id, criado.data.id);
+    }
+
+    if (plano.ordem) {
+      // Troca as chaves temporárias ("novo:0") pelos ids que o banco devolveu.
+      const ids = plano.ordem.map((id) => idPorChave.get(id) ?? id).filter((id) => !id.startsWith("novo:"));
+      // A partir de 1, NUNCA de 0: `display_order = 0` é o que marca a coluna
+      // de entrada. Numerando de 0, a primeira coluna reordenada assumiria esse
+      // papel e passaria a receber tudo que nasce no projeto — e a entrada
+      // original viraria uma coluna comum. A entrada é excluída da renumeração.
+      const idEntrada = stages.find(ehColunaDeEntrada)?.id;
+      const resultados = await Promise.all(
+        ids
+          .filter((id) => id !== idEntrada)
+          .map((id, i) =>
+            supabase.from("workflow_stages").update({ display_order: i + 1 }).eq("id", id),
+          ),
+      );
+      const erro = resultados.find((r) => r.error);
+      if (erro?.error) falhas.push(`ordem: ${erro.error.message}`);
+    }
+
+    if (plano.entrada) {
+      // Desmarca a anterior ANTES de marcar a nova: o banco tem índice único
+      // parcial de uma entrada por projeto, e marcar primeiro colidiria.
+      const novaEntrada = idPorChave.get(plano.entrada) ?? plano.entrada;
+      const anterior = stages.find(ehColunaDeEntrada);
+      if (anterior && anterior.id !== novaEntrada) {
+        const r = await supabase
+          .from("workflow_stages")
+          .update({ is_entry_point: false } as never)
+          .eq("id", anterior.id);
+        if (r.error && !/is_entry_point/i.test(r.error.message || "")) {
+          falhas.push(`entrada: ${r.error.message}`);
+        }
+      }
+      const r = await supabase
+        .from("workflow_stages")
+        .update({ is_entry_point: true } as never)
+        .eq("id", novaEntrada);
+      if (r.error) {
+        // Coluna ausente = migration não rodou: o quadro segue no comportamento
+        // antigo (a primeira é a entrada) em vez de acusar erro à toa.
+        if (/is_entry_point|column|schema cache/i.test(r.error.message || "")) {
+          toast({
+            title: "Coluna de entrada não pôde ser alterada",
+            description: "Aplique a migration apply-coluna-de-entrada.sh na VM para habilitar.",
+            variant: "destructive",
+          });
+        } else {
+          falhas.push(`entrada: ${r.error.message}`);
+        }
+      }
+    }
+
+    await fetchStages();
+
+    if (falhas.length > 0) {
+      toast({
+        title: falhas.length === 1 ? "Uma mudança não foi salva" : `${falhas.length} mudanças não foram salvas`,
+        description: falhas[0],
+        variant: "destructive",
+      });
+    }
+  }, [projectId, stages, fetchStages, toast]);
+
+  // As 8 ações de administrar coluna, num objeto só. Memoizado porque vai como
+  // prop: literal inline recriaria a identidade a cada render do quadro.
+  const acoesDeColuna = useMemo(() => ({
+    onRename: handleRenameStage,
+    onDelete: handleDeleteStage,
+    onChangeColor: handleChangeStageColor,
+    onSetProgress: handleSetStageProgress,
+    onSetWipLimit: handleSetStageWipLimit,
+    onToggleWipStrict: handleToggleStageWipStrict,
+    onToggleContributes: handleToggleStageContributes,
+    onToggleFinal: handleToggleStageFinal,
+    onToggleVisible: handleToggleStageVisible,
+  }), [
+    handleRenameStage, handleDeleteStage, handleChangeStageColor,
+    handleSetStageProgress, handleSetStageWipLimit, handleToggleStageWipStrict,
+    handleToggleStageContributes, handleToggleStageFinal, handleToggleStageVisible,
+  ]);
 
   const activeActivity = dragType === "card" && activeId ? activities.find((a) => a.id === activeId) : null;
   const activeColumn = dragType === "column" && activeId ? visibleStages.find((s) => `col-${s.id}` === activeId) : null;
@@ -2461,11 +2736,13 @@ export const ActivityKanban = ({
                   </AccordionSection>
                 )}
 
-                {/* Coluna / Status do fluxo */}
-                {stages.filter((s) => s.display_order > 0).length > 0 && (
+                {/* Coluna / Status do fluxo. Inclui a coluna de entrada: ela
+                    aparece no quadro, então filtrar por ela precisa funcionar —
+                    antes o filtro a omitia e não havia como isolar a fila. */}
+                {stages.length > 0 && (
                   <AccordionSection id="stage" label="Coluna / Status" summary={summaryStage} active={filterStages.size > 0}>
                     <FilterOptionList
-                      options={stages.filter((s) => s.display_order > 0).map((s) => ({ value: s.id, label: s.title }))}
+                      options={stages.map((s) => ({ value: s.id, label: s.title }))}
                       selected={(v) => filterStages.has(v)}
                       onToggle={(v) => toggleInSet(setFilterStages, v)}
                       searchPlaceholder="Buscar coluna..."
@@ -2641,11 +2918,33 @@ export const ActivityKanban = ({
               onManageGroups={() => setManageGroupsOpen(true)}
               cardFields={cardFields}
               onToggleCardField={toggleCardField}
-              onRestoreCardFields={() => setCardFields(DEFAULT_CARD_FIELDS)}
+              onRestoreCardFields={() => setPrefs({ cardFields: DEFAULT_CARD_FIELDS })}
               alerta={hiddenStages.some((s) => (countByStage.get(s.id) ?? 0) > 0)}
             />
           );
         })()}
+        {/* COLUNAS — vizinho de Visões porque é da mesma família: o que o
+            quadro mostra. Antes só existia no FIM da fila de colunas, onde só
+            aparecia depois de rolar o quadro inteiro até a direita. O ponto
+            âmbar é o mesmo aviso de tarefa presa em coluna oculta. */}
+        {(isAdmin || canCreate) && (
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-7 gap-1.5 text-xs",
+              hiddenStages.some((s) => (countByStage.get(s.id) ?? 0) > 0) && "border-warning text-warning",
+            )}
+            onClick={() => setGerenciarColunasOpen(true)}
+            title="Nome, cor, progresso, limite de WIP, visibilidade e ordem das colunas"
+          >
+            <List className="w-3.5 h-3.5 shrink-0" />
+            Colunas
+            {hiddenStages.some((s) => (countByStage.get(s.id) ?? 0) > 0) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" title="Há tarefa em coluna oculta" />
+            )}
+          </Button>
+        )}
         {/* "Por time" depende de existir um time cadastrado, mas o cadastro
             estava escondido dois níveis abaixo, no fim do menu de outra função —
             quem não sabia que existia, não achava. Com a raia por time ativa, o
@@ -2729,7 +3028,7 @@ export const ActivityKanban = ({
                       }}
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
-                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id, filhosPorPai.get(activity.id))}
+                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id, filhosPorPai.get(activity.id), activity.is_milestone, ehAgrupador(activity))}
                       cardFields={cardFields}
                       hoursStat={hoursStatsByActivity.get(activity.id)}
                       profilesMap={profilesMap}
@@ -2744,13 +3043,16 @@ export const ActivityKanban = ({
           const renderColumn = (stage: WorkflowStage, idx: number, laneMatch?: (a: Activity) => boolean, laneId?: string) => {
             const base = activitiesByStage[stage.id] || [];
             const stageActivities = laneMatch ? base.filter(laneMatch) : base;
-            const widthPct = columnWidths[stage.id] || (100 / visibleStages.length);
+            const widthPct = larguraEfetiva[stage.id] || (100 / visibleStages.length);
             return (
               <SortableColumn
                 key={laneId ? `${laneId}-${stage.id}` : stage.id}
                 laneId={laneId}
                 collapsed={collapsedStages.has(stage.id)}
                 onToggleCollapse={toggleCollapsedStage}
+                colSort={prefs.columnSorts[stage.id] ?? DEFAULT_BOARD_SORT}
+                onChangeColSort={setColumnSort}
+                onAbrirGerenciarColunas={() => setGerenciarColunasOpen(true)}
                 columnFilterSlot={
                   <ColumnFilterPanel
                     stageId={stage.id}
@@ -2860,20 +3162,11 @@ export const ActivityKanban = ({
             return (
               <>
                 {visibleStages.map((stage, idx) => renderColumn(stage, idx))}
-                {/* "Colunas" fica no fim da fila — Linear e Notion mantêm o
-                    acesso a criar/administrar coluna exatamente aqui, onde a
-                    posição já ensina a ação. Recebe TODAS as colunas: oculta
-                    e visível na mesma lista, como no Notion. */}
-                {(isAdmin || canCreate) && (
-                  <StageListButton
-                    projectId={projectId}
-                    onChanged={fetchStages}
-                    stages={stages}
-                    countByStage={countByStage}
-                    canManage={isAdmin || canCreate}
-                    onToggleVisible={handleToggleStageVisible}
-                  />
-                )}
+                {/* O "Colunas" do FIM DA FILA saiu em 13/08/2026: havia dois
+                    botões com o mesmo nome e o mesmo destino — um na régua,
+                    ao lado de Visões, e outro aqui, só alcançável depois de
+                    rolar o quadro inteiro para a direita. Ficou o da régua,
+                    que está sempre à vista. */}
               </>
             );
           }
@@ -2923,7 +3216,7 @@ export const ActivityKanban = ({
               onDelete={() => {}}
               onToggle={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
-              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id, filhosPorPai.get(activeActivity.id))}
+              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id, filhosPorPai.get(activeActivity.id), activeActivity.is_milestone, ehAgrupador(activeActivity))}
               cardFields={cardFields}
               profilesMap={profilesMap}
               profileAvatarMap={profileAvatarMap}
@@ -3084,6 +3377,18 @@ export const ActivityKanban = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Gerenciar colunas — a tabela com todas de uma vez (nome, cor,
+          progresso, WIP, visibilidade e ordem). Recebe TODAS as colunas:
+          a oculta precisa aparecer aqui, senão volta a não ter onde ser
+          editada. */}
+      <GerenciarColunas
+        open={gerenciarColunasOpen}
+        onOpenChange={setGerenciarColunasOpen}
+        stages={stages}
+        countByStage={countByStage}
+        onSalvar={handleSalvarColunas}
+      />
 
       {/* Gerenciar grupos de raia (estilo Jira: uma raia agrega vários responsáveis) */}
       <Dialog open={manageGroupsOpen} onOpenChange={setManageGroupsOpen}>

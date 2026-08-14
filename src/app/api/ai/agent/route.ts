@@ -85,8 +85,20 @@ function normalizeStageName(value: string): string {
     .trim();
 }
 
+/**
+ * Colunas que o agente pode citar e usar como destino.
+ *
+ * Era `display_order > 0 && is_visible !== false` — uma terceira cópia da regra
+ * do quadro, e ela excluía a coluna de entrada (Backlog). O efeito passava do
+ * cosmético: pedir "mova para o Backlog" respondia "Coluna Backlog não
+ * encontrada", porque ela nem entrava na lista de destinos possíveis.
+ *
+ * A coluna de entrada aparece no quadro desde 12/08/2026 (ver `colunasDoQuadro`
+ * em components/kanban/shared) — aqui a regra acompanha. Duplicada de propósito:
+ * esta rota roda no servidor e não importa componente de UI.
+ */
 function isVisibleKanbanStage(stage: { display_order?: number | null; is_visible?: boolean | null }): boolean {
-  return (stage.display_order ?? 0) > 0 && stage.is_visible !== false;
+  return stage.is_visible !== false;
 }
 
 function stageNameMatchesInput(stageTitle: string, requestedStageName: string): boolean {

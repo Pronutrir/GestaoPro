@@ -337,7 +337,16 @@ export const EAP_HINTS: Record<EapKind, string> = {
 export function eapTitleDeclaresMilestone(titulo: string): boolean {
   const t = (titulo || "").trim();
   if (!t) return false;
-  return /(^|\s)(marco|milestone)(\s|:|-|–|—|$)/i.test(t) || /🏁|\[m\]/i.test(t);
+  // NO COMEÇO do título, não em qualquer posição. Aceitar a palavra no meio
+  // fez "Aprovar TAP Marco M1 — TAP aprovado" (título formado ao anexar uma
+  // linha solta ao item de cima) virar Marco: a atividade "1.1.1.11 Aprovar
+  // TAP" mudou de papel por causa de texto que nem era dela.
+  //
+  // Quem declara marco escreve "Marco: entrega X" ou "Milestone – kickoff" —
+  // sempre abrindo o título. No meio da frase a palavra é descritiva
+  // ("Revisar o marco contratual"), e tratá-la como declaração inverte o
+  // sentido do que a pessoa escreveu.
+  return /^(marco|milestone)(\s|:|-|–|—|$)/i.test(t) || /^(🏁|\[m\])/i.test(t);
 }
 
 /**

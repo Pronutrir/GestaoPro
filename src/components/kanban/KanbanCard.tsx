@@ -349,10 +349,20 @@ function KanbanCardBase({
   const progressPercent = progressInfo.percent ?? 0;
   const progressBarColor = getProgressBarColor(progressPercent, progressPaused);
   const progressBarWidth = progressPaused ? 100 : progressPercent;
+  // Marco não tem percentual: mostrar "0%" nele sugere um avanço que não
+  // existe — ou o marco foi atingido, ou não. O selo diz o estado, não o
+  // número, e a barra fica cheia ou vazia (nunca no meio).
+  const ehMarco = activity.is_milestone === true;
   const progressTooltip = progressPaused
     ? "Pausada (coluna de bloqueio)"
-    : `${progressPercent}% — ${progressInfo.label}`;
-  const progressBadge = progressPaused ? "⏸" : `${progressPercent}%`;
+    : ehMarco
+      ? `Marco ${progressPercent >= 100 ? "atingido" : "não atingido"}`
+      : `${progressPercent}% — ${progressInfo.label}`;
+  const progressBadge = progressPaused
+    ? "⏸"
+    : ehMarco
+      ? progressPercent >= 100 ? "✓" : "◇"
+      : `${progressPercent}%`;
   const assigneeRaw = (activity.assigned_to || "").trim();
   const assigneeName = assigneeRaw
     ? (profilesMap[assigneeRaw] ?? assigneeRaw)
