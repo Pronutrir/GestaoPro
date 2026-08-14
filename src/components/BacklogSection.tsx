@@ -292,6 +292,26 @@ export const BacklogSection = ({
   // Duas coisas clicáveis, duas células.
   const backlogGrid = `26px 20px minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
 
+  /**
+   * A caixa aparece no HOVER — mas na coluna dela, não por cima da seta.
+   *
+   * Duas correções seguidas, e o meio-termo é este. Primeiro a caixa vivia
+   * empilhada sobre a seta e a substituía no hover: mirar o expandir fazia o
+   * alvo trocar de função debaixo do cursor. Aí eu as separei em colunas e
+   * deixei as duas sempre visíveis — e a tela virou uma fileira de quadrados
+   * azuis descendo a lateral inteira, disputando atenção com o título, que é
+   * o que a pessoa lê.
+   *
+   * O que causava a armadilha era a SOBREPOSIÇÃO, não o hover. Com célula
+   * própria, a caixa some sem mexer na seta: o expandir fica firme no lugar,
+   * a linha continua dizendo se está aberta, e a lateral fica limpa.
+   *
+   * `focus-visible` mantém o teclado: quem navega por Tab precisa ver onde
+   * está, e ninguém dá hover com teclado.
+   */
+  const caixaNoHover =
+    "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity";
+
   useEffect(() => {
     const ids = activities.map((a) => a.id);
     if (ids.length === 0) {
@@ -1328,7 +1348,7 @@ export const BacklogSection = ({
             onClick={(e) => e.stopPropagation()}
             aria-label={`Selecionar ${activity.title}`}
             title={hasChildren ? "Seleciona este item e o que está dentro" : "Selecionar esta tarefa"}
-            className="shrink-0"
+            className={cn("shrink-0", !selectMode && caixaNoHover)}
           />
           {hasChildren ? (
             <button
@@ -1628,6 +1648,7 @@ export const BacklogSection = ({
                   onClick={(e) => e.stopPropagation()}
                   aria-label={`Selecionar as tarefas de ${phaseTitle}`}
                   title="Seleciona as tarefas desta fase"
+                  className={cn("shrink-0", !selectMode && caixaNoHover)}
                 />
               ) : (
                 /* Fase vazia não tem o que selecionar, mas o espaçador fica:
@@ -1794,7 +1815,7 @@ export const BacklogSection = ({
             onClick={(e) => e.stopPropagation()}
             aria-label={`Selecionar ${phaseAct.title}`}
             title="Seleciona esta fase e o que está dentro"
-            className="shrink-0"
+            className={cn("shrink-0", !selectMode && caixaNoHover)}
           />
           <button
             type="button"
