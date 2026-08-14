@@ -925,6 +925,9 @@ export const BacklogSection = ({
       if (filhos.length === 0) continue;
       const faltam = filhos.filter((f) => {
         if (selectedIds.has(f.id)) return false;
+        // Marco não entra no quadro (ver ActivityKanban), então nunca chegaria
+        // à coluna de destino — contá-lo travaria o pai para sempre.
+        if (f.is_milestone) return false;
         const col = allStages.find((s) => s.id === f.workflow_stage_id);
         const cat = col
           ? parseWorkflowCategory((col as { categoria?: string }).categoria) ?? categoryFromLegacyFlags(col as never)
@@ -1041,6 +1044,7 @@ export const BacklogSection = ({
           const pai = activities.find((a) => a.id === paiId);
           if (!pai || movidos.has(paiId) || pai.workflow_stage_id === targetStageId) continue;
           const filhos = (childrenByParent.get(paiId) || [])
+            .filter((f) => !f.is_milestone)
             .filter((f) => !(f.workflow_stage_id && canceladaIds.has(f.workflow_stage_id)));
           if (filhos.length === 0) continue;
           if (!filhos.every((f) => colunaDe(f) === targetStageId)) continue;
@@ -1732,7 +1736,18 @@ export const BacklogSection = ({
                   onSelect={() => onToggleActivity(activity.id, activity.status)}
                   className={activity.status === "completed" ? "" : "text-success focus:text-success focus:bg-success/10"}
                 >
-                  {activity.status === "completed" ? (
+                  {/* MARCO tem vocabulário próprio: ele não se "conclui", é
+                      ATINGIDO — e desde que saiu do quadro (14/08/2026), este é
+                      o gesto principal, não mais o arrasto para a coluna final.
+                      Chamar de "concluir tarefa" sugeriria trabalho onde há um
+                      ponto de controle. */}
+                  {activity.is_milestone ? (
+                    activity.status === "completed" ? (
+                      <><Diamond className="w-3.5 h-3.5 mr-2" /> Desfazer marco atingido</>
+                    ) : (
+                      <><Diamond className="w-3.5 h-3.5 mr-2 fill-current" /> Marcar como atingido</>
+                    )
+                  ) : activity.status === "completed" ? (
                     <><Circle className="w-3.5 h-3.5 mr-2" /> Reabrir tarefa</>
                   ) : (
                     <><CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Concluir tarefa</>

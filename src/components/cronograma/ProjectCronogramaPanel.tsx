@@ -1341,6 +1341,29 @@ export function ProjectCronogramaPanel({
   }, [activities, fetchData, toast]);
 
   /**
+   * Atingir / desfazer um marco.
+   *
+   * Ele não passa por colunas — não tem estágio a percorrer, só aconteceu ou
+   * não. `completed_at` acompanha porque é a data que o relatório usa; ao
+   * desfazer ela é limpa, senão o relatório conta uma entrega que não houve.
+   *
+   * A coluna também é gravada, quando existe uma final: outras telas ainda
+   * leem `workflow_stage_id` para saber se algo fechou, e deixá-la para trás
+   * criaria um marco "atingido" que o Backlog mostra como pendente.
+   */
+  const alternarMarco = useCallback(async (a: LinhaEditavel & { status?: string; project_id?: string }) => {
+    const atingido = a.status === "completed";
+    const finais = (stagesByProject.get(a.project_id || "") || []) as { id: string; is_final?: boolean }[];
+    const colunaFinal = finais.find((s) => s.is_final)?.id ?? null;
+    const patch: Record<string, unknown> = {
+      status: atingido ? "pending" : "completed",
+      completed_at: atingido ? null : new Date().toISOString(),
+    };
+    if (colunaFinal && !atingido) patch.workflow_stage_id = colunaFinal;
+    await gravarCampo(a.id, patch, atingido ? "Marco reaberto" : "Marco atingido");
+  }, [gravarCampo, stagesByProject]);
+
+  /**
    * Esta linha aceita edição na célula?
    *
    * Fase (linha sintética) não: ela vive na tabela `phases` e não tem os
@@ -1936,6 +1959,33 @@ export function ProjectCronogramaPanel({
           : progressInfo.paused
             ? "bg-amber-500/10 text-amber-700 border-amber-500/40"
             : "bg-primary/10 text-primary border-primary/30";
+        /* MARCO É ATINGIDO AQUI. Ele saiu do quadro (14/08/2026) — Kanban mede
+           trabalho passando por estágios, e marco não passa, acontece. Com o
+           arrasto fora, o gesto precisa existir onde ele vive: Backlog e
+           Cronograma. Um clique alterna, sem abrir o diálogo. */
+        if (a.is_milestone) {
+          const atingido = a.status === "completed";
+          return (
+            <td className="px-2 py-1.5 text-center">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); void alternarMarco(a); }}
+                title={atingido ? "Clique para desfazer" : "Clique para marcar como atingido"}
+                className="inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              >
+                <Badge variant="outline" className={cn(
+                  "text-[10px] py-0 px-1.5 gap-1 cursor-pointer transition-colors",
+                  atingido
+                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/40"
+                    : "border-dashed border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10",
+                )}>
+                  <Diamond className={cn("h-2.5 w-2.5", atingido && "fill-current")} />
+                  {atingido ? "Atingido" : "Marcar atingido"}
+                </Badge>
+              </button>
+            </td>
+          );
+        }
         return (
           <td className="px-2 py-1.5 text-center">
             <Badge variant="outline" className={cn("text-[10px] py-0 px-1.5", cls)}>

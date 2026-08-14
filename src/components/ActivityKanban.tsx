@@ -1264,6 +1264,11 @@ export const ActivityKanban = ({
     return activities.filter((f) => {
       if (f.parent_id !== paiId) return false;
       if (f.workflow_stage_id && canceladaIds.has(f.workflow_stage_id)) return false;
+      // MARCO FICA FORA DA CONTA. Ele não entra no quadro, então nunca
+      // "chegaria" a coluna nenhuma — contá-lo travaria o pai para sempre em
+      // qualquer fase que tenha um. Ele é ponto de controle, não trabalho
+      // pendente: quem responde pelo avanço são as atividades.
+      if (f.is_milestone) return false;
       return (optimisticMoves[f.id] || f.workflow_stage_id) !== destinoId;
     });
   }, [activities, optimisticMoves, stages]);
@@ -1305,7 +1310,10 @@ export const ActivityKanban = ({
       visto.add(atual.parent_id);
       const pai = porId.get(atual.parent_id);
       if (!pai) break;
-      const irmaos = filhosDe.get(pai.id) ?? [];
+      // Marco fora da conta: ele não entra no quadro, então nunca chegaria a
+      // esta coluna — contá-lo impediria o pai de subir para sempre.
+      const irmaos = (filhosDe.get(pai.id) ?? []).filter((f) => !f.is_milestone);
+      if (irmaos.length === 0) break;
       // A coluna do item recém-movido ainda não voltou do banco, então o valor
       // dele vem do argumento — não de `activities`, que está desatualizado.
       const todosLa = irmaos.every((f) =>
@@ -1541,8 +1549,25 @@ export const ActivityKanban = ({
     const map: Record<string, Activity[]> = {};
     stages.forEach((s) => (map[s.id] = []));
 
-    // "onlyMine" sempre se aplica; o filtro geral/coluna é decidido POR coluna.
-    const source = onlyMine ? activities.filter(isMineActivity) : activities;
+    /**
+     * MARCO NÃO ENTRA NO QUADRO (14/08/2026).
+     *
+     * Kanban mede TRABALHO passando por estágios. Marco não passa: ele
+     * acontece — é um ponto no tempo, sem duração, horas ou custo. O lugar
+     * dele é o Backlog (a lista do que existe) e o Cronograma (o losango do
+     * Gantt), onde a data é o que importa.
+     *
+     * Já vínhamos tapando o buraco de trás para a frente: o marco valia 0 ou
+     * 100 porque a régua das colunas não servia para ele. A causa era estar
+     * numa régua que não é a dele.
+     *
+     * O gesto de atingir passa a ser um BOTÃO no Backlog e no Cronograma —
+     * arrastar deixa de ser o único caminho.
+     *
+     * "onlyMine" sempre se aplica; o filtro geral/coluna é decidido POR coluna.
+     */
+    const semMarcos = activities.filter((a) => !a.is_milestone);
+    const source = onlyMine ? semMarcos.filter(isMineActivity) : semMarcos;
     source.forEach((a) => {
       // Use optimistic override if available
       const stageId = optimisticMoves[a.id] || a.workflow_stage_id;
