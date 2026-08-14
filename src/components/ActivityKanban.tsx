@@ -1243,6 +1243,82 @@ export const ActivityKanban = ({
   };
 
   /**
+   * O PAI ACOMPANHA QUANDO TODOS OS FILHOS CHEGAM À MESMA COLUNA.
+   *
+   * Mover o pai não move os filhos — proposital: a caixa pode avançar antes do
+   * conteúdo. O caminho inverso já existia, mas SÓ PARA A COLUNA FINAL: o
+   * bloco `ancestorsToComplete` do arrasto leva o pai quando todos os filhos
+   * ficam `completed`.
+   *
+   * O buraco era a coluna INTERMEDIÁRIA. Levar as cinco atividades de uma
+   * entrega para "Em Revisão" deixava a entrega em "A Fazer", sozinha, sem
+   * nada acontecendo ali — e o quadro mostrava um agrupador num lugar onde o
+   * trabalho não está mais.
+   *
+   * Sobe RECURSIVAMENTE: se a entrega era a última pendência da fase, a fase
+   * vai junto.
+   *
+   * `status` não é gravado (diferente do caminho da coluna final, onde a
+   * conclusão dos filhos É a conclusão do pai): numa coluna intermediária não
+   * há o que concluir. O percentual da caixa é a média dos filhos e ignora a
+   * coluna dela (ver `isGrouper`), então o número segue verdadeiro.
+   */
+  const subirPaisCompletos = useCallback(async (activityId: string, stageId: string) => {
+    const porId = new Map(activities.map((a) => [a.id, a]));
+    const filhosDe = new Map<string, Activity[]>();
+    for (const a of activities) {
+      if (!a.parent_id) continue;
+      filhosDe.set(a.parent_id, [...(filhosDe.get(a.parent_id) ?? []), a]);
+    }
+    const subiram: string[] = [];
+    // `visto` protege contra ciclo em parent_id (dado corrompido): sem ele um
+    // A↔B travaria o laço para sempre.
+    const visto = new Set<string>([activityId]);
+    let atual = porId.get(activityId);
+    while (atual?.parent_id && !visto.has(atual.parent_id)) {
+      visto.add(atual.parent_id);
+      const pai = porId.get(atual.parent_id);
+      if (!pai) break;
+      const irmaos = filhosDe.get(pai.id) ?? [];
+      // A coluna do item recém-movido ainda não voltou do banco, então o valor
+      // dele vem do argumento — não de `activities`, que está desatualizado.
+      const todosLa = irmaos.every((f) =>
+        (f.id === activityId ? stageId : f.workflow_stage_id) === stageId,
+      );
+      if (!todosLa || pai.workflow_stage_id === stageId) break;
+      if (!canMutateActivity(pai)) break;
+      subiram.push(pai.id);
+      atual = pai;
+    }
+    if (subiram.length === 0) return;
+
+    setOptimisticMoves((prev) => {
+      const next = { ...prev };
+      for (const id of subiram) next[id] = stageId;
+      return next;
+    });
+    const { error } = await supabase
+      .from("activities")
+      .update({ workflow_stage_id: stageId } as never)
+      .in("id", subiram);
+    if (error) {
+      setOptimisticMoves((prev) => {
+        const next = { ...prev };
+        for (const id of subiram) delete next[id];
+        return next;
+      });
+      return;
+    }
+    const nomes = subiram.map((id) => porId.get(id)?.title).filter(Boolean);
+    toast({
+      title: subiram.length === 1
+        ? "A fase acompanhou"
+        : `${subiram.length} agrupadores acompanharam`,
+      description: `${nomes.join(", ")} — todos os itens de dentro chegaram aqui.`,
+    });
+  }, [activities, canMutateActivity, toast]);
+
+  /**
    * Move o card para QUALQUER coluna do quadro. Generaliza o antigo
    * handleMoveToBacklog, que só mandava para o stage display_order=0 — uma
    * coluna que o quadro não renderiza, então o card sumia da tela sem aviso.
@@ -1298,8 +1374,9 @@ export const ActivityKanban = ({
         </ToastAction>
       ) : undefined,
     });
+    await subirPaisCompletos(activityId, stageId);
     onDataChanged();
-  }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, stages, toast]);
+  }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, stages, subirPaisCompletos, toast]);
 
   /** Duplica a atividade (com a subárvore). A capacidade já existia em
    *  lib/duplicateActivity, usada só dentro do diálogo de edição. */
@@ -1825,6 +1902,14 @@ export const ActivityKanban = ({
             await supabase.from("user_stories").update({ stage_id: reopenStageId })
               .in("activity_id", ancestorsToReopen);
           }
+        }
+
+        // COLUNA INTERMEDIÁRIA: o bloco acima só leva o pai para a FINAL, e
+        // só quando os filhos ficam `completed`. Levar as cinco tarefas de uma
+        // entrega para "Em Revisão" não conclui nada — mas deixa a entrega
+        // sozinha na coluna antiga. Aqui ela acompanha.
+        if (!stage?.is_final && targetStageId) {
+          await subirPaisCompletos(activityId, targetStageId);
         }
       })()
     )

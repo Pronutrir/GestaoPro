@@ -2024,6 +2024,25 @@ export const BacklogSection = ({
           {/* gap-2: mesmo alinhamento do cabeçalho de fase real.
               stopPropagation: a faixa colapsa; os botões daqui não devem. */}
           <div className="flex items-center gap-2 ml-auto shrink-0" onClick={(e) => e.stopPropagation()}>
+            {/* EM QUE COLUNA ESTÁ. As linhas de tarefa sempre mostraram isso;
+                a faixa de fase/entrega, não — e desde que o agrupador passou a
+                acompanhar o conteúdo para o quadro, era a única linha da tela
+                que não dizia onde está. Você movia a fase e não tinha como
+                conferir se ela foi. */}
+            {(() => {
+              const stgFase = phaseAct.workflow_stage_id ? stageById.get(phaseAct.workflow_stage_id) : null;
+              if (!stgFase) return null;
+              return (
+                <span
+                  className="inline-flex items-center gap-1.5 h-5 px-2 rounded border text-[11px] font-medium shrink-0"
+                  style={{ borderColor: `${stgFase.color}55`, backgroundColor: `${stgFase.color}12`, color: stgFase.color }}
+                  title={`Está em "${stgFase.title}"`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: stgFase.color }} aria-hidden />
+                  {stgFase.title}
+                </span>
+              );
+            })()}
             {progTotal > 0 && (
               <span className="flex items-center gap-1.5" title={`${progDone} de ${progTotal} concluída(s)`}>
                 <span className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
