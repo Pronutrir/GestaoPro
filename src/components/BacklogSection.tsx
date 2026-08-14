@@ -883,16 +883,24 @@ export const BacklogSection = ({
       return;
     }
     setIsMoving(true);
-    // SÓ AS FOLHAS: agrupador não vive numa coluna do Kanban, e marcar um como
-    // "concluído" criaria um status que discorda dos filhos.
-    const ids = idsFolhaSelecionados();
+    /**
+     * O AGRUPADOR VAI JUNTO (13/08/2026).
+     *
+     * Era `idsFolhaSelecionados()`: a fase/entrega ficava de fora, sob o
+     * argumento de que "agrupador não vive numa coluna do Kanban". Só que a
+     * decisão de produto mudou — o que é mandado para o quadro aparece no
+     * quadro, agrupador inclusive — e o efeito era o relatado: você move uma
+     * fase inteira, as tarefas vão e a fase fica para trás no Backlog.
+     *
+     * O medo antigo (marcar a caixa como "concluída" e discordar dos filhos)
+     * já não se aplica: o percentual do agrupador é a média dos filhos e
+     * IGNORA a própria coluna — ver `isGrouper` em activityProgress. Mover a
+     * caixa não move o conteúdo, e o número não mente.
+     */
+    const ids = Array.from(selectedIds);
     if (ids.length === 0) {
       setIsMoving(false);
-      toast({
-        title: "Nenhuma tarefa para mover",
-        description: "A seleção só tem fases e entregas — elas não vivem numa coluna do quadro.",
-        variant: "destructive",
-      });
+      toast({ title: "Nenhuma tarefa selecionada", variant: "destructive" });
       return;
     }
     const updateData: Database['public']['Tables']['activities']['Update'] = { workflow_stage_id: targetStageId };
@@ -904,37 +912,75 @@ export const BacklogSection = ({
     // concluídas ignorava. Medido em 11/08: 11 atividades nesse estado.
     // O Kanban já fazia esse alinhamento ao arrastar; este caminho não.
     const etapaDestino = allStages.find((s) => s.id === targetStageId);
+    const ehFinal = (etapaDestino as { is_final?: boolean } | undefined)?.is_final === true;
     if (etapaDestino) {
-      const ehFinal = (etapaDestino as { is_final?: boolean }).is_final === true;
       updateData.status = ehFinal ? "completed" : "pending";
       // completed_at só na conclusão; ao reabrir, limpa — manter a data numa
       // tarefa que voltou ao fluxo faz o relatório contar entrega que não houve.
       updateData.completed_at = ehFinal ? new Date().toISOString() : null;
     }
+
+    /**
+     * O AGRUPADOR MUDA DE COLUNA, MAS NÃO DE STATUS.
+     *
+     * Ele acompanha a fase para o quadro (é o que se espera ao mover uma fase
+     * inteira), mas quem conclui são as tarefas de dentro. Gravar
+     * `status: completed` na caixa criaria uma conclusão que nenhum trabalho
+     * sustenta — e que discordaria da média dos filhos, que é o percentual
+     * dela. Move-se o continente; o conteúdo responde por si.
+     */
+    const agrupadores = new Set(
+      ids.filter((id) => (childrenByParent.get(id) || []).length > 0),
+    );
+    const folhas = ids.filter((id) => !agrupadores.has(id));
+    const caixas = ids.filter((id) => agrupadores.has(id));
+
     // EM LOTES: "selecionar todas" numa fase grande manda centenas de uuids
     // numa URL só, que o proxy corta em ~3,7 KB e devolve 502 — o usuário via
     // a ação falhar justamente quando selecionava muito. Ver lib/chunkedIn.
-    const { error } = await mutateInChunks(ids, (batch) =>
-      supabase.from("activities").update(updateData).in("id", batch),
-    );
+    const { error } = folhas.length > 0
+      ? await mutateInChunks(folhas, (batch) =>
+          supabase.from("activities").update(updateData).in("id", batch),
+        )
+      : { error: null };
+
+    let errorCaixas: { message: string } | null = null;
+    if (caixas.length > 0) {
+      const soAColuna: Database['public']['Tables']['activities']['Update'] = {
+        workflow_stage_id: targetStageId,
+      };
+      if (assignee && assignee !== "__none__") soAColuna.assigned_to = assignee;
+      const r = await mutateInChunks(caixas, (batch) =>
+        supabase.from("activities").update(soAColuna).in("id", batch),
+      );
+      errorCaixas = r.error;
+    }
     setSelectedIds(new Set());
     setMoveDialogOpen(false);
     setTargetStageId("");
     setAssignee("");
     setIsMoving(false);
     onDataChanged();
-    if (error) {
+    const falha = error || errorCaixas;
+    if (falha) {
       // Não é transacional: os lotes anteriores já gravaram. Por isso o
       // onDataChanged acima roda mesmo no erro — a tela precisa refletir o
       // banco, não o que se esperava dele.
       toast({
-        title: "Nem todas as tarefas foram atualizadas",
-        description: error.message,
+        title: "Nem tudo foi movido",
+        description: falha.message,
         variant: "destructive",
       });
       return;
     }
-    toast({ title: `Status de ${ids.length} tarefa(s) atualizado` });
+    toast({
+      title: `${ids.length} ${ids.length === 1 ? "item movido" : "itens movidos"}`,
+      // Dizer que a caixa foi mas não concluiu: sem isto, mover uma fase para
+      // "Concluída" e ver o agrupador sem o status parece falha da operação.
+      description: caixas.length > 0 && ehFinal
+        ? `${caixas.length} fase(s)/entrega(s) mudaram de coluna; a conclusão é das tarefas de dentro.`
+        : undefined,
+    });
   };
 
   /**
@@ -2821,7 +2867,18 @@ export const BacklogSection = ({
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent className="sm:max-w-2xl w-[95vw]">
           <DialogHeader>
-            <DialogTitle>Alterar status de {selectedIds.size} tarefa(s)</DialogTitle>
+            <DialogTitle>
+              Mover {selectedIds.size} {selectedIds.size === 1 ? "item" : "itens"}
+            </DialogTitle>
+            {/* "Tarefa(s)" escondia que fase e entrega vão junto — e é
+                justamente o que faltava antes: elas ficavam para trás. */}
+            {totalAgrupadoresSelecionados > 0 && (
+              <p className="text-[13px] text-muted-foreground">
+                Inclui {totalAgrupadoresSelecionados}{" "}
+                {totalAgrupadoresSelecionados === 1 ? "fase/entrega" : "fases/entregas"}.
+                {" "}O percentual delas continua sendo a média do que está dentro.
+              </p>
+            )}
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
