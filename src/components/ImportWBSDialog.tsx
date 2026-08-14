@@ -492,6 +492,54 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
     return fasesExistentes.get(partes.join(".")) ?? null;
   };
 
+  /**
+   * ATIVIDADES que já ocupam um código EAP no projeto.
+   *
+   * As FASES já eram reaproveitadas (`phaseIdMap`, na gravação), mas as
+   * atividades não: colar a mesma EAP duas vezes criava um jogo novo inteiro,
+   * em silêncio. Foi assim que um projeto chegou a 653 atividades com 243
+   * cópias — seis "Revisar TAP" com o mesmo 1.1.10, e mover uma não mexia nas
+   * outras cinco.
+   *
+   * O código EAP é um endereço: duas coisas não moram no mesmo número. Quando
+   * ele já está ocupado, a importação avisa e a pessoa decide — não inventa
+   * uma segunda linha com o mesmo endereço.
+   */
+  const [codigosOcupados, setCodigosOcupados] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!open || !projectId) return;
+    let cancelado = false;
+    void supabase
+      .from("activities")
+      .select("title, wbs_code")
+      .eq("project_id", projectId)
+      .eq("is_trashed", false)
+      .not("wbs_code", "is", null)
+      .then(({ data, error }) => {
+        if (cancelado || error) return;
+        const m = new Map<string, string>();
+        for (const a of ((data as { title?: string; wbs_code?: string }[]) || [])) {
+          const cod = (a.wbs_code || "").trim();
+          if (!cod) continue;
+          const partes = cod.split(".");
+          while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+          const chave = partes.join(".");
+          if (!m.has(chave)) m.set(chave, String(a.title || ""));
+        }
+        setCodigosOcupados(m);
+      });
+    return () => { cancelado = true; };
+  }, [open, projectId]);
+
+  /** Título da atividade que já ocupa este código, se houver. */
+  const codigoOcupado = (code: string): string | null => {
+    if (!code) return null;
+    const partes = code.split(".");
+    while (partes.length > 1 && partes[partes.length - 1] === "0") partes.pop();
+    return codigosOcupados.get(partes.join(".")) ?? null;
+  };
+
   const parsed = useMemo(() => parseFlexible(text), [text]);
   const tree = parsed.nodes;
   const counts = useMemo(() => {
@@ -557,6 +605,26 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
   );
 
   /**
+   * Os códigos deste texto que JÁ EXISTEM no projeto.
+   *
+   * Marco fica de fora (não tem código, nunca colide) e ancestral inventado
+   * também: o "1" criado para segurar a árvore é justamente o caso em que
+   * reaproveitar a fase existente é o comportamento certo — e já é o que a
+   * gravação faz.
+   */
+  const codigosEmConflito = useMemo(
+    () =>
+      tree
+        .filter((n) => n.code && !n.title.startsWith("(sem título)"))
+        .map((n) => ({ code: n.code, novo: n.title, existente: codigoOcupado(n.code) }))
+        .filter((x): x is { code: string; novo: string; existente: string } => x.existente !== null),
+    // `codigosOcupados` entra pela função; sem ele na lista o aviso ficaria
+    // congelado no primeiro render, antes de a consulta responder.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tree, codigosOcupados],
+  );
+
+  /**
    * Rola o campo de texto até a linha e a seleciona.
    *
    * Corrigir acontece onde o texto está — mandar a pessoa procurar a linha 7 à
@@ -582,6 +650,42 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
   const handleImport = async () => {
     if (tree.length === 0) return;
+
+    /**
+     * CÓDIGO JÁ OCUPADO: bloqueia antes de duplicar.
+     *
+     * Sem isto, colar a mesma EAP de novo criava um jogo inteiro de cópias em
+     * silêncio — mesmo código, mesmo título, linhas diferentes. Um projeto
+     * chegou a 653 atividades com 243 cópias assim, e o efeito na tela era
+     * "movi a tarefa e ela continua no Backlog": havia seis dela.
+     *
+     * Não é uma trava absoluta. Reimportar de propósito (para corrigir títulos,
+     * por exemplo) é legítimo, e "Importar mesmo assim" continua ali — mas
+     * agora é uma escolha, com o número na frente.
+     */
+    if (codigosEmConflito.length > 0) {
+      const n = codigosEmConflito.length;
+      const amostra = codigosEmConflito
+        .slice(0, 3)
+        .map((c) => `${c.code} ("${c.existente}")`)
+        .join(", ");
+      const resto = n > 3 ? ` e mais ${n - 3}` : "";
+      const ok = await appConfirm({
+        title: n === 1
+          ? "Este código EAP já existe no projeto"
+          : `${n} códigos EAP já existem no projeto`,
+        description:
+          `${amostra}${resto}. ` +
+          "O código é o endereço do item na EAP — importar de novo cria uma " +
+          "segunda linha no mesmo endereço, e depois não há como saber qual é " +
+          "a boa. Se quer corrigir o que já existe, edite no Backlog; se é " +
+          "conteúdo novo, renumere antes de colar.",
+        confirmText: "Importar mesmo assim (duplica)",
+        cancelText: "Voltar",
+        destructive: true,
+      });
+      if (!ok) return;
+    }
 
     // PERDA SILENCIOSA, NÃO. O aviso dizia "1 linha não reconhecida", mas nada
     // impedia clicar em Importar e a linha sumir sem que ninguém percebesse —
@@ -1077,6 +1181,14 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                       {" "}({totalInventados} {totalInventados === 1 ? "criado" : "criados"})
                     </span>
                   )}
+                  {/* O número de conflitos AQUI, não só no selo de cada linha:
+                      numa EAP de 80 itens ninguém percorre a lista para
+                      descobrir que 40 já existem. */}
+                  {codigosEmConflito.length > 0 && (
+                    <span className="text-destructive font-medium">
+                      {" "}· {codigosEmConflito.length} já {codigosEmConflito.length === 1 ? "existe" : "existem"}
+                    </span>
+                  )}
                 </span>
               )}
             </div>
@@ -1119,6 +1231,9 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                   // então o "1" foi criado para a árvore não ficar quebrada).
                   const inventado = n.title.startsWith("(sem título)");
                   const jaExiste = inventado ? faseExistente(n.code) : null;
+                  // Só para item de verdade: inventado reaproveita a fase (selo
+                  // verde acima), e marco não tem código para colidir.
+                  const ocupado = !inventado && n.code ? codigoOcupado(n.code) : null;
                   return (
                   // `key` cai na linha do texto quando não há código: marco
                   // solto tem code vazio, e keys vazias colidem entre si.
@@ -1167,7 +1282,22 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
                         </span>
                       </>
                     ) : (
-                      <span className="text-[13px] break-words line-clamp-3 min-w-0 flex-1" title={n.title}>{n.title}</span>
+                      <>
+                        <span className="text-[13px] break-words line-clamp-3 min-w-0 flex-1" title={n.title}>{n.title}</span>
+                        {/* CÓDIGO JÁ OCUPADO. Diferente do selo verde acima —
+                            fase existente é reaproveitada, atividade existente
+                            vira CÓPIA. O selo diz qual item já mora nesse
+                            endereço, para a conferência acontecer aqui e não
+                            depois, no Backlog, com duas linhas iguais. */}
+                        {ocupado && (
+                          <span
+                            className="text-[10px] shrink-0 px-1.5 py-0.5 rounded border border-destructive/40 bg-destructive/5 text-destructive"
+                            title={`O código ${n.code} já é de "${ocupado}". Importar cria uma segunda linha no mesmo endereço.`}
+                          >
+                            código já usado
+                          </span>
+                        )}
+                      </>
                     )}
                     {/* O que veio das colunas: conferir aqui evita descobrir
                         que a data entrou errada só depois de importar. */}
