@@ -657,6 +657,9 @@ export function SortableColumn({
         is_milestone: c.is_milestone,
       })),
       activity.is_milestone,
+      // Este ramo só existe para PAI com filhos — ou seja, uma caixa. Ela vale
+      // a média dos filhos e ignora a própria coluna.
+      true,
     );
     const expanded = expandedIds.has(activity.id);
     const isMirrorParent = !stageActivityIds.has(activity.id) && inlineChildren.length > 0;

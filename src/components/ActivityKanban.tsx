@@ -109,7 +109,7 @@ import {
 } from "@/lib/workflowCategory";
 import { SHOW_USER_STORIES } from "@/lib/featureFlags";
 import { getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { resolveEapKind, EAP_LABELS as EAP_LABELS_CANON } from "@/lib/eapModel";
+import { resolveEapKind, eapCanGroup, EAP_LABELS as EAP_LABELS_CANON } from "@/lib/eapModel";
 import { ToastAction } from "@/components/ui/toast";
 import { computeCardAging, CARD_AGING_CLASSES } from "@/lib/cardAging";
 import { cn } from "@/lib/utils";
@@ -610,6 +610,12 @@ export const ActivityKanban = ({
   // Fase/Entrega (agrupa; cobre 'pacote' legado e itens com filhos), Atividade, Marco.
   const activityEapType = useCallback((a: Activity): string => {
     return resolveEapKind(a, parentIdsWithChildren.has(a.id));
+  }, [parentIdsWithChildren]);
+
+  /** Fase, Pacote ou Entrega — a CAIXA, que vale a média dos filhos e ignora a
+   *  própria coluna. Mover a caixa não move o que está dentro dela. */
+  const ehAgrupador = useCallback((a: Activity): boolean => {
+    return eapCanGroup(resolveEapKind(a, parentIdsWithChildren.has(a.id)));
   }, [parentIdsWithChildren]);
 
   const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -2902,7 +2908,7 @@ export const ActivityKanban = ({
                       }}
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
-                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id, filhosPorPai.get(activity.id), activity.is_milestone)}
+                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id, filhosPorPai.get(activity.id), activity.is_milestone, ehAgrupador(activity))}
                       cardFields={cardFields}
                       hoursStat={hoursStatsByActivity.get(activity.id)}
                       profilesMap={profilesMap}
@@ -3090,7 +3096,7 @@ export const ActivityKanban = ({
               onDelete={() => {}}
               onToggle={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
-              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id, filhosPorPai.get(activeActivity.id), activeActivity.is_milestone)}
+              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id, filhosPorPai.get(activeActivity.id), activeActivity.is_milestone, ehAgrupador(activeActivity))}
               cardFields={cardFields}
               profilesMap={profilesMap}
               profileAvatarMap={profileAvatarMap}

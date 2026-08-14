@@ -17,6 +17,15 @@
  *  2. POSIÇÃO DA COLUNA, para quem não tem subatividade — as regras abaixo,
  *     inalteradas.
  *
+ * TRÊS PAPÉIS, TRÊS RÉGUAS (decisão de 13/08/2026):
+ *
+ *   • ATIVIDADE — a coluna onde está. É trabalho que alguém executa, e a
+ *     coluna diz o estágio.
+ *   • MARCO — 0 ou 100 (`isMilestone`). Ponto no tempo, sem duração.
+ *   • FASE · PACOTE · ENTREGA — a média dos filhos, SEMPRE (`isGrouper`), e a
+ *     própria coluna é ignorada. Não é trabalho, é caixa: mover a caixa não
+ *     move o que está dentro dela.
+ *
  * Regras da coluna (decisão de produto, 29/07/2026):
  *  - Backlog e "A iniciar" (a_iniciar) são SEMPRE 0% — existir/estar na fila
  *    não é avanço.
@@ -224,6 +233,19 @@ export function computeActivityProgress(
    * se um marco pudesse estar pela metade.
    */
   isMilestone?: boolean | null,
+  /**
+   * A PRÓPRIA atividade é um AGRUPADOR (Fase, Pacote, Entrega) — uma caixa que
+   * contém trabalho, não trabalho que alguém executa.
+   *
+   * Quando true, a coluna onde a caixa está é IGNORADA: ela vale a média dos
+   * filhos, e só. Mover a caixa não move o que está dentro dela — arrastar uma
+   * Entrega para "Aprovada" não faz ninguém escrever o manual.
+   *
+   * Sem esta marca a caixa herdava a régua das atividades: ir para uma coluna
+   * de 80% anunciava 80% de trabalho pronto sem nada ter sido feito. É o mesmo
+   * defeito do marco (ver `isMilestone`), com outra fantasia.
+   */
+  isGrouper?: boolean | null,
 ): ActivityProgress {
   // ── MARCO: binário, decidido antes de tudo ─────────────────────────────
   // Antes das subatividades de propósito: marco não agrupa (o trigger do banco
@@ -278,6 +300,17 @@ export function computeActivityProgress(
       subs: { feitas, total },
       divergente,
     };
+  }
+
+  // ── AGRUPADOR sem filhos a medir: NÃO herda a coluna ───────────────────
+  // Chega aqui a caixa vazia, ou a caixa cujos filhos foram todos cancelados.
+  // Deixá-la seguir para a régua das atividades era o defeito: uma Entrega
+  // arrastada para "Aprovada" anunciaria 80% sem ninguém ter trabalhado.
+  // Caixa sem conteúdo mensurável é 0% — não há trabalho a reportar.
+  if (isGrouper) {
+    const col = currentStageId && stages ? stages.find((s) => s.id === currentStageId) : null;
+    if (col?.is_blocked) return { percent: null, paused: true, label: "Pausada" };
+    return { percent: 0, paused: false, label: "Sem atividades" };
   }
 
   // ── Sem subatividades: posição na coluna, exatamente como antes ────────

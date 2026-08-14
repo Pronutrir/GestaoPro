@@ -2025,7 +2025,13 @@ export const BacklogSection = ({
   // do backlog — clicar em "Incompletas" mostraria "0 prontas", que é verdade
   // sobre a tela e mentira sobre o projeto.
   const prontidaoResumo = (() => {
-    const vivas = activities.filter((a) => !a.is_trashed);
+    // A MESMA FILA que a lista mostra. Antes contava TODAS as vivas do projeto,
+    // e o resultado era um contador que falava de outra coisa: a tela dizia
+    // "Todas 16 · Incompletas 16" com a fila VAZIA na frente, porque as 16
+    // estavam no quadro, não no backlog. Contador tem de contar o que está à
+    // vista — senão vira número sem referente.
+    const semLixeira = activities.filter((a) => !a.is_trashed);
+    const vivas = mostrarTudo ? semLixeira : soAFila(semLixeira);
     const temFilho = new Set(vivas.filter((a) => a.parent_id).map((a) => a.parent_id as string));
     return resumirProntidao(vivas.map((a) => ({ tarefa: a, temFilhos: temFilho.has(a.id) })));
   })();
