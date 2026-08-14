@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState, useCallback, Fragment, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { resolveEapKind, phaseIdFromSyntheticRow, isSyntheticPhaseRow } from "@/lib/eapModel";
+import { resolveEapKind, phaseIdFromSyntheticRow, isSyntheticPhaseRow, EAP_LABELS } from "@/lib/eapModel";
 import { EditPhaseDialog } from "@/components/EditPhaseDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { computeActivityProgress } from "@/lib/activityProgress";
@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import {
   Table2, GanttChart, ExternalLink, AlertTriangle, AlertCircle, CalendarOff,
   CalendarDays, Settings2, Filter, FolderKanban, Search, X,
-  ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, ChevronDown, Layers, Diamond, GripVertical,
+  ArrowUp, ArrowDown, ArrowUpDown, ChevronRight, ChevronDown, Layers, Diamond, GripVertical, Package,
   Info, Flag, Link2Off, GitBranch,
 } from "lucide-react";
 import {
@@ -1569,25 +1569,36 @@ export function ProjectCronogramaPanel({
       case "title": return (
         <td className="px-2 py-1.5">
           <div className="flex items-center gap-1.5 min-w-0" style={{ paddingLeft: depth > 0 ? depth * 12 : 0 }}>
-            {a.is_milestone ? (
-              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-orange-500/15 text-orange-700 border-orange-500/40 shrink-0 gap-1">
-                <Diamond className="h-2.5 w-2.5 fill-orange-500 text-orange-500" />
-                Marco
-              </Badge>
-            ) : isGroupRow(a) ? (
-              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-primary/10 text-primary border-primary/30 shrink-0 gap-1">
-                <Layers className="h-2.5 w-2.5" />
-                Fase / Entrega
-              </Badge>
-            ) : a.parent_id ? (
-              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-amber-500/10 text-amber-700 border-amber-500/30 shrink-0">
-                Subatividade
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-emerald-500/10 text-emerald-700 border-emerald-500/30 shrink-0">
-                Atividade
-              </Badge>
-            )}
+            {/* O PAPEL VEM DA FONTE ÚNICA (lib/eapModel), como no Backlog.
+                Aqui havia uma classificação paralela, e ela discordava da EAP:
+                "Fase / Entrega" fundia dois papéis num rótulo só, "Subatividade"
+                era um papel que o modelo não tem (qualquer item com pai virava
+                isso), e o que agrupa abaixo da fase — a Entrega — aparecia como
+                "Atividade". O mesmo 1.1.1 se chamava Entrega numa tela e
+                Atividade na outra.
+
+                `isGroupRow` continua mandando na LINHA SINTÉTICA de fase: ela
+                é montada da tabela `phases` e já sabe o que é — perguntar a
+                `resolveEapKind` daria chance de a resposta ser "não" quando
+                `phases.wbs_code` não existe na base (ver o comentário lá). */}
+            {(() => {
+              const kind = isSyntheticPhaseRow(a) ? "fase" : resolveEapKind(a, isGroupRow(a));
+              const estilo: Record<string, string> = {
+                projeto: "bg-primary/10 text-primary border-primary/30",
+                fase: "bg-primary/10 text-primary border-primary/30",
+                entrega: "bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/30",
+                atividade: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+                marco: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/40",
+              };
+              return (
+                <Badge variant="outline" className={`text-[10px] py-0 px-1.5 shrink-0 gap-1 ${estilo[kind]}`}>
+                  {kind === "marco" && <Diamond className="h-2.5 w-2.5 fill-orange-500 text-orange-500" />}
+                  {(kind === "fase" || kind === "projeto") && <Layers className="h-2.5 w-2.5" />}
+                  {kind === "entrega" && <Package className="h-2.5 w-2.5" />}
+                  {EAP_LABELS[kind]}
+                </Badge>
+              );
+            })()}
             <button
               type="button"
               onClick={() => openFromCronograma(a)}
@@ -2076,7 +2087,10 @@ export function ProjectCronogramaPanel({
                       <span className="absolute right-0 top-1.5" style={{ width: 0, height: 0, borderLeft: "3px solid transparent", borderRight: "3px solid transparent", borderTop: "5px solid hsl(var(--foreground) / 0.55)" }} />
                     </span>
                   }
-                  title="Fase / Entrega"
+                  /* Aqui os dois papéis dividem legitimamente a mesma linha: a
+                     legenda descreve a FORMA da barra, e Fase e Entrega
+                     desenham igual. O selo da tabela, esse sim, distingue. */
+                  title="Agrupador (Fase ou Entrega)"
                   desc="Barra-resumo cinza com abas nas pontas; datas derivadas das tarefas filhas."
                 />
                 <LegendRow
@@ -2693,7 +2707,15 @@ export function ProjectCronogramaPanel({
                                 </div>
                               )}
                               {a.is_milestone && <div>🎯 Marco</div>}
-                              {isPhase && <div>📚 Fase / Entrega — datas derivadas dos filhos</div>}
+                              {/* O tooltip tem a atividade em mãos, então diz o
+                                  papel EXATO — não precisa do rótulo genérico
+                                  que a legenda usa para descrever a forma. */}
+                              {isPhase && (
+                                <div>
+                                  📚 {EAP_LABELS[isSyntheticPhaseRow(a) ? "fase" : resolveEapKind(a, true)]}
+                                  {" "}— datas derivadas dos filhos
+                                </div>
+                              )}
                             </div>
                           </TooltipContent>
                         </Tooltip>
