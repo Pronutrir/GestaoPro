@@ -141,14 +141,21 @@ export const BacklogSection = ({
   // Todos os stages, incluindo o "Backlog" (display_order=0), para mostrar badge de status
   const [allStages, setAllStages] = useState<WorkflowStage[]>([]);
   /**
-   * "Só a fila" (padrão) × "tudo".
+   * "Tudo" (padrão) × "só a fila".
    *
-   * A aba servia de lista geral do projeto — é onde se via tudo de uma vez, com
-   * responsável e prazo. Filtrar sem oferecer a volta tiraria esse uso de quem
-   * o tinha; o interruptor mantém os dois, começando no que a aba se propõe a
-   * ser.
+   * O BACKLOG É A LISTA COMPLETA DO PROJETO, e o Kanban é outra visão dos
+   * mesmos itens — decisão de 13/08/2026. Um item movido para o quadro NÃO
+   * some daqui: ele continua na lista, com a coluna onde está no selo de
+   * status. Backlog responde "o que existe"; Kanban responde "onde está".
+   *
+   * Isto reverte o padrão que eu tinha adotado (só a fila). O modelo Jira —
+   * item está OU no backlog OU no sprint — não é o desta ferramenta: aqui a
+   * aba é a EAP inteira, com responsável e prazo à vista.
+   *
+   * O recorte de fila continua disponível no interruptor, para quem quiser
+   * ver só o que ainda não começou.
    */
-  const [mostrarTudo, setMostrarTudo] = useState(false);
+  const [mostrarTudo, setMostrarTudo] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [targetStageId, setTargetStageId] = useState<string>("");
@@ -412,10 +419,13 @@ export const BacklogSection = ({
    * O item ainda está NA FILA?
    *
    * Categoria `backlog` ou `a_iniciar` = não começou. Qualquer outra (andamento,
-   * espera, revisão, concluída, cancelada) significa que o trabalho saiu da fila
-   * e vive no quadro.
+   * espera, revisão, concluída, cancelada) significa que o trabalho já anda no
+   * quadro.
    *
    * Item SEM coluna conta como fila: foi criado e ainda não foi posicionado.
+   *
+   * Serve só ao RECORTE OPCIONAL "ver só o que não começou" — a aba mostra o
+   * projeto inteiro por padrão, e nada some daqui por ter ido para o quadro.
    */
   const naFila = (a: Activity): boolean => {
     if (!a.workflow_stage_id) return true;
@@ -2281,27 +2291,28 @@ export const BacklogSection = ({
                     typeCounts.marco && `${typeCounts.marco} marco${typeCounts.marco > 1 ? "s" : ""}`,
                   ].filter(Boolean).join(" · ")}
                 </span>
-                {/* QUANTOS SAÍRAM DA FILA. Some, mas não sem explicação: quem
-                    procura uma tarefa que "estava aqui ontem" precisa saber que
-                    ela avançou, e não que sumiu. Clicar mostra tudo. */}
-                {!mostrarTudo && foraDaFila > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setMostrarTudo(true)}
-                    className="text-muted-foreground/80 hover:text-foreground underline decoration-dotted underline-offset-2 transition-colors"
-                    title="A fila mostra só o que ainda não começou. Clique para ver o projeto inteiro."
-                  >
-                    · {foraDaFila} já em andamento
-                  </button>
-                )}
-                {mostrarTudo && (
+                {/* A lista está inteira: o interruptor RECORTA, não expande.
+                    Antes era o contrário — a aba abria filtrada e o link servia
+                    para revelar o que faltava. Com o Backlog como lista
+                    completa, o texto tem de dizer o que o clique ESCONDE. */}
+                {mostrarTudo && foraDaFila > 0 && (
                   <button
                     type="button"
                     onClick={() => setMostrarTudo(false)}
                     className="text-muted-foreground/80 hover:text-foreground underline decoration-dotted underline-offset-2 transition-colors"
-                    title="Voltar a mostrar só o que ainda não começou"
+                    title="Esconder o que já está em andamento e ver só o que não começou"
                   >
-                    · mostrando tudo, voltar à fila
+                    · ver só o que não começou
+                  </button>
+                )}
+                {!mostrarTudo && (
+                  <button
+                    type="button"
+                    onClick={() => setMostrarTudo(true)}
+                    className="text-muted-foreground/80 hover:text-foreground underline decoration-dotted underline-offset-2 transition-colors"
+                    title="Voltar a mostrar o projeto inteiro"
+                  >
+                    · {foraDaFila} em andamento ocultas, ver tudo
                   </button>
                 )}
               </>
