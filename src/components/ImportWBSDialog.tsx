@@ -785,7 +785,17 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
        * importada junto com seus filhos, e o item "1" precisa achar a fase "1".
        */
       const findPhaseId = (node: TreeNode): string | null => {
-        const parts = node.code.split(".");
+        // MARCO NÃO TEM CÓDIGO (`code: ""`), e `"".split(".")` devolve [""] —
+        // que não casa com fase nenhuma. O marco nascia SEM FASE, solto no
+        // Backlog, embora tivesse sido colado dentro de uma.
+        //
+        // A fase dele é a do PAI: é de lá que ele pende, e `parentCode` já
+        // guarda essa posição (ver a montagem do nó, onde ele herda o
+        // `parentCode` do irmão de cima). O código não entra na EAP; a
+        // ancoragem, sim.
+        const referencia = node.code || node.parentCode || "";
+        if (!referencia) return null;
+        const parts = referencia.split(".");
         for (let len = parts.length; len >= 1; len--) {
           const ancestor = parts.slice(0, len).join(".");
           if (phaseIdMap[ancestor]) return phaseIdMap[ancestor];

@@ -1151,7 +1151,10 @@ export const BacklogSection = ({
             setSelectedIds(new Set());
             setSelectMode(false);
           }}
-          className="h-3.5 w-3.5"
+          /* Mesmo tamanho das caixas das linhas (h-4, o padrão do componente).
+             Estava em h-3.5 de quando ela era a caixinha discreta do hover:
+             empilhada na coluna, ninguém comparava. Lado a lado numa coluna
+             própria, a diferença de 2px aparece como desalinho. */
           title={selectMode ? `Limpar seleção (${selectedIds.size})` : `Selecionar todas as ${backlogActs.length}`}
         />
       </span>
@@ -1300,23 +1303,16 @@ export const BacklogSection = ({
             onEditActivity(activity);
           }}
         >
-          {/* col: expand — ou a caixa de seleção, no hover.
+          {/* col: CAIXA — sempre à vista, na coluna dela.
               ENTRAR NA SELEÇÃO PELA LINHA. Antes o modo só ligava pelo
               cabeçalho, e ligá-lo marcava tudo: para escolher três tarefas era
-              preciso marcar as 718 e desmarcar 715. A caixa aparece ao passar o
-              mouse sobre a linha e liga o modo já com aquela tarefa marcada —
-              que é o gesto natural de "quero estas".
+              preciso marcar as 718 e desmarcar 715. O primeiro clique na caixa
+              liga o modo já com aquela tarefa marcada — o gesto natural de
+              "quero estas" — e, em agrupador, com a família junto.
 
-              QUEM TEM FILHOS TAMBÉM ENTRA (13/08/2026). Antes a condição era
-              `hasChildren ? seta : caixa` — a seta vencia, e agrupador ficava
-              sem forma de iniciar a seleção. Pior: a condição era ter filhos,
-              não o papel na EAP, então uma Atividade com subitens perdia a
-              caixa e uma Fase vazia a mantinha. Agora a seta cede o lugar à
-              caixa enquanto o mouse está sobre a linha: as duas ocupam a mesma
-              célula sem disputa, e o expandir volta assim que o mouse sai. */}
-          {/* CAIXA sempre à vista, na coluna dela. `estadoDaCaixa` traz o traço
-              do meio-termo (pai com ALGUNS filhos marcados); fora do modo, o
-              primeiro clique liga a seleção já com a família. */}
+              `estadoDaCaixa` traz o traço do meio-termo: pai com ALGUNS filhos
+              marcados. Sem ele o pai pareceria desmarcado e o contador do
+              rodapé diria um número que a tela não confirma. */}
           <Checkbox
             checked={selectMode ? estadoDaCaixa(activity.id) : false}
             onCheckedChange={() => {
