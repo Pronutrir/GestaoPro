@@ -4,10 +4,11 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PersonCombobox } from "@/components/PersonCombobox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
-  ChevronsUpDown, ChevronsDownUp, Diamond,
+  ChevronsUpDown, ChevronsDownUp, Diamond, EyeOff,
   Rows3, MoreHorizontal, Pencil, Package, IndentIncrease, SlidersHorizontal, Search,
   User, Flag, Calendar as CalendarIcon, Link2, X,
 } from "lucide-react";
@@ -339,7 +340,7 @@ export const BacklogSection = ({
   useEffect(() => {
     const fetchProfiles = async () => {
       const [{ data: profilesData }, { data: adminRoles }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, email, avatar_url").eq("is_active", true).order("full_name"),
+        supabase.from("profiles").select("id, full_name, email, avatar_url, sector, role_title").eq("is_active", true).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
       ]);
       if (profilesData) {
@@ -3028,35 +3029,62 @@ export const BacklogSection = ({
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Novo status *</Label>
+              {/* COLUNA OCULTA SE ANUNCIA. A lista era sete nomes soltos:
+                  mover para "Backlog" fazia a tarefa sumir do quadro, e nada
+                  avisava. Duas seções resolvem sem tirar opção — esconder as
+                  ocultas seria pior, porque mandar algo para fora do quadro é
+                  uso legítimo. O dado é o `is_visible`, o mesmo interruptor
+                  "No quadro" da tela de colunas; aqui ele só passa a ser lido. */}
               <Select value={targetStageId} onValueChange={setTargetStageId}>
                 <SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger>
                 <SelectContent>
-                  {allStages.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}
+                  {(() => {
+                    const noQuadro = allStages.filter((s) => (s as { is_visible?: boolean }).is_visible !== false);
+                    const fora = allStages.filter((s) => (s as { is_visible?: boolean }).is_visible === false);
+                    return (
+                      <>
+                        {noQuadro.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}
+                        {fora.length > 0 && (
+                          <>
+                            <div className="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Fora do quadro
+                            </div>
+                            {fora.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                <span className="inline-flex items-center gap-2">
+                                  <EyeOff className="w-3 h-3 shrink-0 text-muted-foreground" />
+                                  {s.title}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label>Responsável (opcional)</Label>
-              <Select value={assignee} onValueChange={setAssignee}>
-                <SelectTrigger><SelectValue placeholder="Selecione o responsável" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Nenhum</SelectItem>
-                  {profiles.map((p) => (
-                    <SelectItem key={p.id} value={p.full_name || p.id}>
-                      <span className="inline-flex items-center gap-2 min-w-0 w-full">
-                        <Avatar className="h-5 w-5 shrink-0">
-                          {(() => {
-                            const avatar = resolveAvatarFromLookup(p.id, p.full_name || p.email || p.id, profileAvatarMap);
-                            return avatar ? <AvatarImage src={avatar} alt={p.full_name || "Usuário"} /> : null;
-                          })()}
-                          <AvatarFallback className="text-[9px]">{getAvatarInitials(p.full_name || p.email || "Sem nome")}</AvatarFallback>
-                        </Avatar>
-                        <span className="truncate">{p.full_name || "Sem nome"}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Era um `Select` com dezenas de nomes em ordem alfabética, sem
+                  busca: "Antonio Carlos" e "Antonio Ventura" apareciam
+                  seguidos e nada os distinguia. O `PersonCombobox` — o mesmo da
+                  edição da atividade e das células do Cronograma — busca por
+                  nome, setor E função, e mostra os três. */}
+              <PersonCombobox
+                people={profiles.map((p) => ({
+                  id: p.id,
+                  full_name: p.full_name || p.email || "Sem nome",
+                  sector: (p as { sector?: string | null }).sector ?? null,
+                  role_title: (p as { role_title?: string | null }).role_title ?? null,
+                  avatar_url: resolveAvatarFromLookup(p.id, p.full_name || p.email || p.id, profileAvatarMap) ?? null,
+                }))}
+                value={profiles.find((p) => (p.full_name || p.id) === assignee)?.id ?? null}
+                placeholder="Selecione o responsável"
+                onSelect={(p) => setAssignee(p.full_name)}
+                onClear={() => setAssignee("__none__")}
+              />
             </div>
           </div>
           <DialogFooter>

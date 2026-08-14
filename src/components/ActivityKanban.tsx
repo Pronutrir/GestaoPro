@@ -1868,7 +1868,13 @@ export const ActivityKanban = ({
         // Recalcula os pais: só ficam concluídos quando 100% dos filhos diretos estiverem concluídos.
         const { data: stageRows } = await supabase
           .from("workflow_stages")
-          .select("id, title, display_order, is_final")
+          // `select("*")` por causa de `categoria`: ela existe no banco mas
+          // ainda não nos tipos gerados (a migration não rodou em toda VM), e
+          // nomeá-la no select faz o TS recusar a query inteira. É o mesmo
+          // recurso já usado nas outras leituras de coluna deste arquivo.
+          // Precisamos dela para achar a coluna de reabertura por PAPEL, e não
+          // pelo título — que mudou de "A Fazer" para "Não iniciado".
+          .select("*")
           .eq("project_id", projectId)
           .order("display_order", { ascending: true });
 
@@ -1884,9 +1890,27 @@ export const ActivityKanban = ({
           targetStageId && stage?.is_final
             ? targetStageId
             : stageList.find((s) => s.is_final)?.id || null;
-        const explicitAFazer = stageList.find((s) => {
+        /**
+         * A COLUNA DE REABERTURA VEM DA CATEGORIA, não do título.
+         *
+         * Procurava por `title === "a fazer"` — e a coluna passou a se chamar
+         * "Não iniciado" (migration 20260814120000). A busca por nome deixaria
+         * de achar, e a tarefa reaberta cairia no fallback: `display_order 1`,
+         * que pode ser qualquer coluna.
+         *
+         * `a_iniciar` é o que define esse papel, e sobrevive a renomeação —
+         * era exatamente para isso que a categoria foi criada.
+         *
+         * O teste por título fica como ÚLTIMO recurso, para bases onde o
+         * backfill de categoria ainda não rodou.
+         */
+        const porCategoria = stageList.find(
+          (s) => parseWorkflowCategory((s as { categoria?: string }).categoria) === "a_iniciar",
+        );
+        const explicitAFazer = porCategoria ?? stageList.find((s) => {
           const title = normalized(s.title);
-          return title === "a fazer" || title === "afazer" || title.includes("a fazer");
+          return title === "a fazer" || title === "afazer" || title.includes("a fazer")
+            || title === "nao iniciado" || title === "não iniciado";
         });
         const displayOrderOne = stageList.find((s) => !s.is_final && s.display_order === 1);
         const firstActiveStage = stageList.find((s) => !s.is_final && s.display_order > 0);

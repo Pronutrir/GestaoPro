@@ -1082,7 +1082,7 @@ export default function ProjectDetailsPage() {
     if (id) {
       const { data: stageRows } = await supabase
         .from("workflow_stages")
-        .select("id, title, display_order, is_final")
+        .select("*")
         .eq("project_id", id)
         .order("display_order", { ascending: true });
 
@@ -1096,9 +1096,17 @@ export default function ProjectDetailsPage() {
           .toLowerCase()
           .trim();
 
-      const explicitAFazer = stageList.find((stage) => {
+      // A coluna de reabertura vem da CATEGORIA, não do título: ela passou a
+      // se chamar "Não iniciado" (migration 20260814120000), e a busca por nome
+      // deixaria de achar — a tarefa reaberta cairia numa coluna qualquer, pelo
+      // fallback de `display_order`. Ver o mesmo trecho em ActivityKanban.
+      const porCategoria = stageList.find(
+        (stage) => (stage as { categoria?: string }).categoria === "a_iniciar",
+      );
+      const explicitAFazer = porCategoria ?? stageList.find((stage) => {
         const title = normalized(stage.title);
-        return title === "a fazer" || title === "afazer" || title.includes("a fazer");
+        return title === "a fazer" || title === "afazer" || title.includes("a fazer")
+          || title === "nao iniciado" || title === "não iniciado";
       });
       const displayOrderOne = stageList.find(
         (stage) => !stage.is_final && stage.display_order === 1,
