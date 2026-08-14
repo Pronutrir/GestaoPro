@@ -390,8 +390,30 @@ export const BacklogSection = ({
 
   useEffect(() => { if (showTrash) fetchTrashedActivities(); }, [showTrash, projectId]);
 
+  /**
+   * A FASE VOLTA COM A TAREFA.
+   *
+   * Arquivar a última tarefa de uma fase leva a fase junto (ver
+   * `aplicarEmLote`), então restaurar só a tarefa a devolveria para uma fase
+   * arquivada: ela reapareceria em "Sem fase", com o vínculo intacto no banco
+   * mas invisível na tela — o pior dos dois mundos.
+   *
+   * Desarquiva sem perguntar: a fase é o contêiner, e ninguém restaura uma
+   * tarefa querendo que ela caia fora do lugar de onde saiu.
+   */
+  const restaurarFaseDe = async (activityId: string) => {
+    const alvo = trashedActivities.find((a) => a.id === activityId);
+    if (!alvo?.phase_id) return;
+    await supabase
+      .from("phases")
+      .update({ is_trashed: false, trashed_at: null } as never)
+      .eq("id", alvo.phase_id)
+      .eq("is_trashed", true);
+  };
+
   const handleRestore = async (activityId: string) => {
     await (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any) as any).eq("id", activityId);
+    await restaurarFaseDe(activityId);
     toast({ title: "Atividade restaurada!" });
     fetchTrashedActivities();
     onDataChanged();
@@ -410,7 +432,19 @@ export const BacklogSection = ({
       confirmText: "Restaurar",
     });
     if (!ok) return;
+    // As fases das tarefas restauradas voltam junto — mesma razão de
+    // `restaurarFaseDe`, aplicada ao lote inteiro de uma vez.
+    const fases = [...new Set(trashedActivities.map((a) => a.phase_id).filter(Boolean))] as string[];
     await (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any).eq("project_id", projectId) as any).eq("is_trashed", true);
+    if (fases.length > 0) {
+      await mutateInChunks(fases, (batch) =>
+        supabase
+          .from("phases")
+          .update({ is_trashed: false, trashed_at: null } as never)
+          .in("id", batch)
+          .eq("is_trashed", true),
+      );
+    }
     toast({ title: "Todas as atividades restauradas!" });
     fetchTrashedActivities();
     onDataChanged();
@@ -788,6 +822,24 @@ export const BacklogSection = ({
     .filter((id) => (childrenByParent.get(id) || []).length > 0).length;
 
   /**
+   * Quantas FASES REAIS ficariam sem nenhuma tarefa se a seleção fosse
+   * arquivada — o número que a confirmação precisa mostrar antes do clique.
+   *
+   * Elas não estão em `selectedIds` (vivem na tabela `phases`, ver abaixo),
+   * então não aparecem na contagem de itens: sem este aviso, a fase sumiria da
+   * tela sem nunca ter sido mencionada.
+   */
+  const fasesQueEsvaziam = (() => {
+    if (selectedIds.size === 0) return 0;
+    const candidatas = new Set(
+      activities.filter((a) => selectedIds.has(a.id) && a.phase_id).map((a) => a.phase_id as string),
+    );
+    return [...candidatas].filter(
+      (pid) => !activities.some((a) => a.phase_id === pid && !a.is_trashed && !selectedIds.has(a.id)),
+    ).length;
+  })();
+
+  /**
    * A FASE REAL (tabela `phases`) é um caso à parte: ela não é uma `activity`,
    * e as ações em lote gravam em `activities`. Guardar o id dela na seleção
    * exigiria que cada ação soubesse ignorá-lo — mais código, para um caso que
@@ -925,6 +977,50 @@ export const BacklogSection = ({
       (supabase.from("activities").update(patch as never) as any).in("id", batch),
     );
 
+    /**
+     * A FASE QUE FICOU VAZIA VAI JUNTO.
+     *
+     * `selectedIds` só carrega ids de `activities` — a fase real vive na tabela
+     * `phases` e não cabe ali. Arquivar tudo mandava as atividades para a
+     * lixeira e deixava o cabeçalho da fase na tela, vazio, como se ainda
+     * houvesse um plano ali.
+     *
+     * Só quando a fase fica SEM NENHUMA tarefa viva: uma fase que ainda tem
+     * conteúdo continua de pé, mesmo que parte dele tenha sido arquivada.
+     *
+     * Diferente de `handleDeleteFase`, que solta as tarefas (`phase_id = null`)
+     * antes de arquivar a fase: lá o alvo é a fase e o conteúdo sobrevive; aqui
+     * o alvo é o conteúdo e a fase é que perde a razão de existir.
+     */
+    let fasesArquivadas = 0;
+    if (!error && (patch as { is_trashed?: boolean }).is_trashed === true) {
+      const arquivados = new Set(ids);
+      // Fases tocadas pela operação — as demais nem entram na conta.
+      const candidatas = new Set(
+        activities.filter((a) => arquivados.has(a.id) && a.phase_id).map((a) => a.phase_id as string),
+      );
+      const vazias = [...candidatas].filter(
+        (pid) => !activities.some((a) => a.phase_id === pid && !a.is_trashed && !arquivados.has(a.id)),
+      );
+      if (vazias.length > 0) {
+        const { error: errFase } = await mutateInChunks(vazias, (batch) =>
+          supabase
+            .from("phases")
+            .update({ is_trashed: true, trashed_at: new Date().toISOString() } as never)
+            .in("id", batch),
+        );
+        if (errFase) {
+          toast({
+            title: "As tarefas foram arquivadas, as fases não",
+            description: errFase.message,
+            variant: "destructive",
+          });
+        } else {
+          fasesArquivadas = vazias.length;
+        }
+      }
+    }
+
     // Recarrega mesmo no erro: mutateInChunks não é transacional, então os
     // lotes anteriores já gravaram e a tela precisa refletir o banco.
     onDataChanged();
@@ -937,7 +1033,14 @@ export const BacklogSection = ({
       });
       return;
     }
-    toast({ title: descricao, description: `${ids.length} tarefa(s) atualizada(s).` });
+    toast({
+      title: descricao,
+      description: fasesArquivadas > 0
+        // Dizer que a fase foi junto: ela some da tela e some do seletor de
+        // fase das outras telas — silêncio aqui vira "sumiu sozinha".
+        ? `${ids.length} tarefa(s) e ${fasesArquivadas} fase(s) que ficaram vazias.`
+        : `${ids.length} tarefa(s) atualizada(s).`,
+    });
   };
 
   /**
@@ -2450,9 +2553,19 @@ export const BacklogSection = ({
                       // agrupador sozinho deixaria os filhos órfãos, e a
                       // seleção em cascata já os incluiu — a confirmação
                       // precisa mostrar isso antes, não depois.
-                      description: g > 0
-                        ? `Inclui ${g} ${g === 1 ? "fase/entrega" : "fases/entregas"} e o que está dentro. Tudo sai do Backlog e pode ser restaurado na Lixeira, aqui embaixo.`
-                        : "Elas saem do Backlog e podem ser restauradas na Lixeira, aqui embaixo.",
+                      //
+                      // E avisa da fase que ESVAZIA: ela é o cabeçalho azul da
+                      // tabela `phases`, não entra em `selectedIds` e por isso
+                      // não aparece na contagem — mas some da tela junto.
+                      description: [
+                        g > 0
+                          ? `Inclui ${g} ${g === 1 ? "fase/entrega" : "fases/entregas"} e o que está dentro.`
+                          : null,
+                        fasesQueEsvaziam > 0
+                          ? `${fasesQueEsvaziam} ${fasesQueEsvaziam === 1 ? "fase fica" : "fases ficam"} sem nenhuma tarefa e ${fasesQueEsvaziam === 1 ? "vai" : "vão"} junto.`
+                          : null,
+                        "Tudo pode ser restaurado na Lixeira, aqui embaixo.",
+                      ].filter(Boolean).join(" "),
                       confirmText: "Arquivar",
                       destructive: true,
                     });
