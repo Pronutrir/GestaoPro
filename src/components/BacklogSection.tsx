@@ -285,11 +285,12 @@ export const BacklogSection = ({
   // O mínimo da coluna Tarefa é baixo de propósito: ela tem `truncate`, então
   // encolher corta o texto com reticências — o que é preferível a empurrar a
   // coluna de ações para fora da tela.
-  // A coluna de 26px é da CAIXA DE SELEÇÃO e só existe no modo seleção em lote.
-  // Ela era fixa: depois que o botão de concluir saiu dali, sobrava uma faixa
-  // vazia antes de cada tarefa e o conteúdo todo começava deslocado à direita,
-  // sem nada ocupando o espaço.
-  const backlogGrid = `20px ${selectMode ? "26px " : ""}minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
+  // A coluna de 26px é da CAIXA DE SELEÇÃO. Ela existe SEMPRE: fora do modo
+  // seleção a caixa é a porta de entrada para ele, e antes dividia os mesmos
+  // 20px com a seta — empilhadas, a seta sumindo no hover para a caixa tomar
+  // o lugar. Quem mirava a seta via o alvo trocar de função debaixo do cursor.
+  // Duas coisas clicáveis, duas células.
+  const backlogGrid = `26px 20px minmax(120px,1fr) ${activeCols.map((c) => c.width).join(" ")} 32px`;
 
   useEffect(() => {
     const ids = activities.map((a) => a.id);
@@ -1131,37 +1132,30 @@ export const BacklogSection = ({
           direita da coluna que comanda — e por isso não se lia como "todas
           desta coluna". Aqui ela alinha com as caixas das linhas, que é o que a
           torna compreensível sem legenda. */}
-      {selectMode ? (
-        // A caixa vem PRIMEIRO, antes da célula do expandir: é assim que a
-        // linha da fase desenha (caixa, depois chevron), e o cabeçalho precisa
-        // casar com ela — senão fica 34px à direita das caixas que comanda.
-        <>
-          <span className="flex items-center justify-center">
-            <Checkbox
-              checked={selectedIds.size === backlogActs.length ? true : "indeterminate"}
-              onCheckedChange={() => { setSelectedIds(new Set()); setSelectMode(false); }}
-              className="h-3.5 w-3.5"
-              title={`Limpar seleção (${selectedIds.size})`}
-            />
-          </span>
-          <span />
-        </>
-      ) : (
-        // Fora do modo, a caixa toma o lugar do expandir — mesma célula que a
-        // caixa de hover das linhas ocupa, então a coluna não muda de largura
-        // ao entrar no modo.
-        <span className="flex items-center justify-center">
-          <Checkbox
-            checked={false}
-            onCheckedChange={() => {
+      {/* Duas células SEMPRE — [caixa][expandir] —, na mesma ordem das linhas.
+          Antes o cabeçalho alternava entre uma e duas conforme o modo, e a
+          caixa mudava de coluna ao ligar a seleção. */}
+      <span className="flex items-center justify-center">
+        <Checkbox
+          checked={
+            !selectMode ? false
+              : selectedIds.size === backlogActs.length ? true
+              : "indeterminate"
+          }
+          onCheckedChange={() => {
+            if (!selectMode) {
               setSelectMode(true);
               setSelectedIds(new Set(backlogActs.map((a) => a.id)));
-            }}
-            className="h-3.5 w-3.5"
-            title={`Selecionar todas as ${backlogActs.length}`}
-          />
-        </span>
-      )}
+              return;
+            }
+            setSelectedIds(new Set());
+            setSelectMode(false);
+          }}
+          className="h-3.5 w-3.5"
+          title={selectMode ? `Limpar seleção (${selectedIds.size})` : `Selecionar todas as ${backlogActs.length}`}
+        />
+      </span>
+      <span />
       <span>Tarefa</span>
       {activeCols.map((c) => (
         <span key={c.id}>{c.label}</span>
@@ -1320,65 +1314,37 @@ export const BacklogSection = ({
               caixa e uma Fase vazia a mantinha. Agora a seta cede o lugar à
               caixa enquanto o mouse está sobre a linha: as duas ocupam a mesma
               célula sem disputa, e o expandir volta assim que o mouse sai. */}
-          {selectMode ? (
-            hasChildren ? (
-              <button
-                type="button"
-                className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-                onClick={(e) => { e.stopPropagation(); toggleParent(activity.id); }}
-              >
-                {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-            ) : (
-              <span className="w-5" />
-            )
+          {/* CAIXA sempre à vista, na coluna dela. `estadoDaCaixa` traz o traço
+              do meio-termo (pai com ALGUNS filhos marcados); fora do modo, o
+              primeiro clique liga a seleção já com a família. */}
+          <Checkbox
+            checked={selectMode ? estadoDaCaixa(activity.id) : false}
+            onCheckedChange={() => {
+              if (!selectMode) {
+                setSelectMode(true);
+                // Já entra com a família: quem clica na caixa de um
+                // agrupador quer o conjunto, não a linha do título.
+                setSelectedIds(new Set([activity.id, ...descendentesDe(activity.id)]));
+                return;
+              }
+              toggleSelect(activity.id);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Selecionar ${activity.title}`}
+            title={hasChildren ? "Seleciona este item e o que está dentro" : "Selecionar esta tarefa"}
+            className="shrink-0"
+          />
+          {hasChildren ? (
+            <button
+              type="button"
+              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
+              onClick={(e) => { e.stopPropagation(); toggleParent(activity.id); }}
+              title={isCollapsed ? "Expandir" : "Recolher"}
+            >
+              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
           ) : (
-            <span className="w-5 h-5 relative shrink-0">
-              {hasChildren && (
-                <button
-                  type="button"
-                  className="absolute inset-0 flex items-center justify-center rounded hover:bg-muted text-muted-foreground group-hover:opacity-0 transition-opacity"
-                  onClick={(e) => { e.stopPropagation(); toggleParent(activity.id); }}
-                  title={isCollapsed ? "Expandir" : "Recolher"}
-                >
-                  {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              )}
-              <span className="absolute inset-0 flex items-center justify-center">
-                <Checkbox
-                  checked={false}
-                  onCheckedChange={() => {
-                    setSelectMode(true);
-                    // Já entra com a família: quem clica na caixa de um
-                    // agrupador quer o conjunto, não a linha do título.
-                    setSelectedIds(new Set([activity.id, ...descendentesDe(activity.id)]));
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  aria-label={`Selecionar ${activity.title}`}
-                  title={hasChildren ? "Selecionar este item e o que está dentro" : "Selecionar esta tarefa"}
-                  className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                />
-              </span>
-            </span>
-          )}
-
-          {/* col: caixa de seleção em lote — só existe no modo seleção.
-              O botão redondo de concluir saiu daqui (eram dois círculos quase
-              iguais no começo da linha, lidos como checkbox duplicado) e a
-              coluna ficou reservada e vazia, empurrando todo o conteúdo para a
-              direita. Agora a célula não é emitida e a coluna some do grid —
-              ver backlogGrid, que também é condicional. */}
-          {selectMode && (
-            <Checkbox
-              // `estadoDaCaixa` traz o traço do meio-termo: pai com ALGUNS
-              // filhos marcados. Sem ele o pai pareceria desmarcado, e o
-              // contador do rodapé diria um número que a tela não confirma.
-              checked={estadoDaCaixa(activity.id)}
-              onCheckedChange={() => toggleSelect(activity.id)}
-              onClick={(e) => e.stopPropagation()}
-              aria-label={`Selecionar ${activity.title}`}
-              title={hasChildren ? "Seleciona este item e o que está dentro" : undefined}
-            />
+            <span className="w-5 shrink-0" />
           )}
 
           {/* col: ícone de tipo (clicável) + título + código EAP + deps.
@@ -1646,51 +1612,45 @@ export const BacklogSection = ({
               `activities` — o id dela não caberia em `selectedIds`. Marcar
               pega as atividades de dentro, que é o efeito que se espera; a
               linha da fase em si não entra em nenhuma operação.
-              Fora do modo, a caixa aparece no hover sobre o chevron. */}
+
+              CAIXA E SETA LADO A LADO, SEMPRE. Antes, fora do modo seleção,
+              as duas dividiam os mesmos 20px empilhadas: a seta sumia no
+              hover e a caixa tomava o lugar dela. Quem mirava a seta para
+              expandir via o alvo desaparecer debaixo do cursor e clicava em
+              "selecionar". Alvo que troca de função ao ser mirado não é
+              affordance, é armadilha — e some com a leitura da linha, que
+              deixa de dizer se a fase está aberta ou fechada. */}
           {phaseId ? (
-            selectMode ? (
-              <>
+            <>
+              {acts.length > 0 ? (
                 <Checkbox
-                  checked={estadoDaFaseReal(acts)}
-                  onCheckedChange={() => toggleSelecaoDaFaseReal(acts)}
+                  checked={selectMode ? estadoDaFaseReal(acts) : false}
+                  onCheckedChange={() => {
+                    if (!selectMode) { setSelectMode(true); toggleSelecaoDaFaseReal(acts, true); return; }
+                    toggleSelecaoDaFaseReal(acts);
+                  }}
                   onClick={(e) => e.stopPropagation()}
                   aria-label={`Selecionar as tarefas de ${phaseTitle}`}
                   title="Seleciona as tarefas desta fase"
                 />
-                <button
-                  type="button"
-                  className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-                  title={isCollapsed ? "Expandir" : "Recolher"}
-                  onClick={(e) => { e.stopPropagation(); togglePhase(phaseId); }}
-                >
-                  {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              </>
-            ) : (
-              <span className="w-5 h-5 relative shrink-0">
-                <button
-                  type="button"
-                  className="absolute inset-0 flex items-center justify-center rounded hover:bg-muted text-muted-foreground group-hover:opacity-0 transition-opacity"
-                  title={isCollapsed ? "Expandir" : "Recolher"}
-                  onClick={(e) => { e.stopPropagation(); togglePhase(phaseId); }}
-                >
-                  {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-                {acts.length > 0 && (
-                  <span className="absolute inset-0 flex items-center justify-center">
-                    <Checkbox
-                      checked={false}
-                      onCheckedChange={() => { setSelectMode(true); toggleSelecaoDaFaseReal(acts, true); }}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label={`Selecionar as tarefas de ${phaseTitle}`}
-                      title="Selecionar as tarefas desta fase"
-                      className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                    />
-                  </span>
-                )}
-              </span>
-            )
+              ) : (
+                /* Fase vazia não tem o que selecionar, mas o espaçador fica:
+                   sem ele o título desta linha sai do prumo com o das outras. */
+                <span className="w-4 shrink-0" />
+              )}
+              <button
+                type="button"
+                className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
+                title={isCollapsed ? "Expandir" : "Recolher"}
+                onClick={(e) => { e.stopPropagation(); togglePhase(phaseId); }}
+              >
+                {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </>
           ) : (
+            /* Fase virtual (agrupador sem linha em `phases`): não tem o que
+               colapsar nem o que selecionar — só o espaçador, para o título
+               alinhar com o das fases reais. */
             <span className="w-5 shrink-0" />
           )}
           <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-primary/10 text-primary shrink-0">
@@ -1767,11 +1727,11 @@ export const BacklogSection = ({
                 className="grid items-center gap-2 border-b px-3 py-1.5 bg-primary/5"
                 style={{ gridTemplateColumns: backlogGrid }}
               >
-                {/* expand + (caixa, só no modo seleção). O ícone Plus ficava
-                    sozinho numa coluna que agora é condicional; foi para dentro
-                    da célula do título, ao lado do campo. */}
+                {/* As duas células do começo da linha — caixa e expandir —
+                    vazias aqui. O ícone Plus vive dentro da célula do título,
+                    ao lado do campo. */}
                 <span />
-                {selectMode && <span />}
+                <span />
                 <div className="flex items-center gap-2 min-w-0">
                   <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                   <Input
@@ -1824,50 +1784,30 @@ export const BacklogSection = ({
               topo e nunca emitiu checkbox nenhum — nem no modo seleção. Ela é
               uma `activity` de verdade, com id real: todas as ações em lote já
               funcionariam sobre ela, só não havia como marcá-la.
-              Fora do modo, a caixa aparece no hover e toma o lugar do chevron;
-              dentro do modo, ela é fixa e o chevron volta ao lado. */}
-          {selectMode ? (
-            <>
-              <Checkbox
-                checked={estadoDaCaixa(phaseAct.id)}
-                onCheckedChange={() => toggleSelect(phaseAct.id)}
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Selecionar ${phaseAct.title}`}
-                title="Seleciona esta fase e o que está dentro"
-              />
-              <button
-                type="button"
-                className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
-                onClick={(e) => { e.stopPropagation(); toggleParent(phaseAct.id); }}
-              >
-                {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-            </>
-          ) : (
-            <span className="w-5 h-5 relative shrink-0">
-              <button
-                type="button"
-                className="absolute inset-0 flex items-center justify-center rounded hover:bg-muted text-muted-foreground group-hover:opacity-0 transition-opacity"
-                onClick={(e) => { e.stopPropagation(); toggleParent(phaseAct.id); }}
-                title={isCollapsed ? "Expandir" : "Recolher"}
-              >
-                {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-              <span className="absolute inset-0 flex items-center justify-center">
-                <Checkbox
-                  checked={false}
-                  onCheckedChange={() => {
-                    setSelectMode(true);
-                    setSelectedIds(new Set([phaseAct.id, ...descendentesDe(phaseAct.id)]));
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  aria-label={`Selecionar ${phaseAct.title}`}
-                  title="Selecionar esta fase e o que está dentro"
-                  className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                />
-              </span>
-            </span>
-          )}
+              Caixa e seta LADO A LADO, sempre — ver o comentário do grid. */}
+          <Checkbox
+            checked={selectMode ? estadoDaCaixa(phaseAct.id) : false}
+            onCheckedChange={() => {
+              if (!selectMode) {
+                setSelectMode(true);
+                setSelectedIds(new Set([phaseAct.id, ...descendentesDe(phaseAct.id)]));
+                return;
+              }
+              toggleSelect(phaseAct.id);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Selecionar ${phaseAct.title}`}
+            title="Seleciona esta fase e o que está dentro"
+            className="shrink-0"
+          />
+          <button
+            type="button"
+            className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground shrink-0"
+            onClick={(e) => { e.stopPropagation(); toggleParent(phaseAct.id); }}
+            title={isCollapsed ? "Expandir" : "Recolher"}
+          >
+            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
           {/* Fase = camadas empilhadas; Entrega = pacote, em tom mais discreto.
               A entrega está DENTRO da fase, e o peso visual precisa dizer isso. */}
           <span className={cn(
@@ -1984,11 +1924,11 @@ export const BacklogSection = ({
                 className="grid items-center gap-2 border-b px-3 py-1.5 bg-primary/5"
                 style={{ gridTemplateColumns: backlogGrid }}
               >
-                {/* expand + (caixa, só no modo seleção). O ícone Plus ficava
-                    sozinho numa coluna que agora é condicional; foi para dentro
-                    da célula do título, ao lado do campo. */}
+                {/* As duas células do começo da linha — caixa e expandir —
+                    vazias aqui. O ícone Plus vive dentro da célula do título,
+                    ao lado do campo. */}
                 <span />
-                {selectMode && <span />}
+                <span />
                 <div className="flex items-center gap-2 min-w-0">
                   <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                   <Input
