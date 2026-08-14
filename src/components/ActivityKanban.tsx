@@ -1243,6 +1243,32 @@ export const ActivityKanban = ({
   };
 
   /**
+   * Filhos diretos que AINDA NÃO estão na coluna de destino — a lista que
+   * impede o pai de andar na frente do conteúdo.
+   *
+   * Fonte única das duas portas de entrada (arrastar e menu "mover para"):
+   * regra de negócio duplicada é regra que diverge no primeiro ajuste.
+   *
+   * Filho cancelado não conta: saiu do escopo, não é trabalho pendente.
+   * `optimisticMoves` entra porque o filho recém-arrastado ainda não voltou do
+   * banco — sem isso, mover o pai logo depois seria barrado por engano.
+   *
+   * Só DESCENDENTE DIRETO decide: o neto é problema do filho, e se o filho
+   * está na coluna é porque a regra já foi aplicada a ele.
+   */
+  const filhosForaDaColuna = useCallback((paiId: string, destinoId: string) => {
+    const canceladaIds = new Set(
+      stages.filter((s) => parseWorkflowCategory((s as { categoria?: string }).categoria) === "cancelada")
+        .map((s) => s.id),
+    );
+    return activities.filter((f) => {
+      if (f.parent_id !== paiId) return false;
+      if (f.workflow_stage_id && canceladaIds.has(f.workflow_stage_id)) return false;
+      return (optimisticMoves[f.id] || f.workflow_stage_id) !== destinoId;
+    });
+  }, [activities, optimisticMoves, stages]);
+
+  /**
    * O PAI ACOMPANHA QUANDO TODOS OS FILHOS CHEGAM À MESMA COLUNA.
    *
    * Mover o pai não move os filhos — proposital: a caixa pode avançar antes do
@@ -1335,6 +1361,22 @@ export const ActivityKanban = ({
     }
     const target = stages.find((s) => s.id === stageId);
     if (!target) return;
+
+    // Mesma regra do arrasto: a caixa não anda na frente do conteúdo.
+    const bloqueio = filhosForaDaColuna(activityId, stageId);
+    if (bloqueio.length > 0) {
+      const n = bloqueio.length;
+      toast({
+        title: "Mova o que está dentro primeiro",
+        description:
+          `${n} ${n === 1 ? "item ainda não está" : "itens ainda não estão"} em ` +
+          `"${getStageDisplayTitle(target.title)}": ${bloqueio.slice(0, 3).map((f) => `"${f.title}"`).join(", ")}` +
+          `${n > 3 ? ` e mais ${n - 3}` : ""}. Quando o último chegar, a fase acompanha sozinha.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     const previousStageId = activity?.workflow_stage_id ?? null;
 
     setOptimisticMoves((prev) => ({ ...prev, [activityId]: stageId }));
@@ -1376,7 +1418,7 @@ export const ActivityKanban = ({
     });
     await subirPaisCompletos(activityId, stageId);
     onDataChanged();
-  }, [activities, canMutateActivity, onDataChanged, projectLocked, showProjectLockedToast, stages, subirPaisCompletos, toast]);
+  }, [activities, canMutateActivity, filhosForaDaColuna, onDataChanged, projectLocked, showProjectLockedToast, stages, subirPaisCompletos, toast]);
 
   /** Duplica a atividade (com a subárvore). A capacidade já existia em
    *  lib/duplicateActivity, usada só dentro do diálogo de edição. */
@@ -1741,42 +1783,35 @@ export const ActivityKanban = ({
 
     const newStatus = stage?.is_final ? "completed" : "pending";
 
-    if (draggedActivity && newStatus === "completed") {
-      const { data: hierarchyRows } = await supabase
-        .from("activities")
-        .select("id,parent_id,status")
-        .eq("project_id", projectId)
-        .eq("is_trashed", false);
-
-      const childrenMap = new Map<string, Array<{ id: string; status: string; parent_id: string | null }>>();
-      (hierarchyRows || []).forEach((candidate) => {
-        if (!candidate.parent_id) return;
-        const arr = childrenMap.get(candidate.parent_id) || [];
-        arr.push(candidate as { id: string; status: string; parent_id: string | null });
-        childrenMap.set(candidate.parent_id, arr);
-      });
-
-      const stack = [...(childrenMap.get(draggedActivity.id) || [])];
-      const seen = new Set<string>();
-      let pendingCount = 0;
-
-      while (stack.length > 0) {
-        const current = stack.pop()!;
-        if (seen.has(current.id)) continue;
-        seen.add(current.id);
-
-        if (current.status !== "completed") {
-          pendingCount += 1;
-        }
-
-        const children = childrenMap.get(current.id) || [];
-        children.forEach((child) => stack.push(child));
-      }
-
-      if (pendingCount > 0) {
+    /**
+     * A CAIXA NÃO ANDA NA FRENTE DO CONTEÚDO.
+     *
+     * Antes a trava valia só para a coluna FINAL e olhava `status`: dava para
+     * arrastar uma fase de "A Fazer" para "Em Revisão" com as onze tarefas
+     * paradas atrás. O quadro dizia que a fase estava em revisão sem que
+     * ninguém tivesse revisado coisa alguma.
+     *
+     * Agora vale para QUALQUER coluna e olha ONDE os filhos estão: o pai só
+     * entra numa coluna quando todos os filhos vivos já estão nela — que é o
+     * mesmo critério pelo qual o pai SOBE sozinho quando o último filho chega
+     * (`subirPaisCompletos`). Os dois sentidos passam a ter uma regra só.
+     *
+     * Filho cancelado não trava: saiu do escopo, não é trabalho pendente.
+     *
+     * Só DESCENDENTES DIRETOS decidem. O neto é problema do filho — se ele
+     * está na coluna, é porque a regra já foi aplicada a ele.
+     */
+    if (draggedActivity) {
+      const foraDaColuna = filhosForaDaColuna(draggedActivity.id, targetStageId);
+      if (foraDaColuna.length > 0) {
+        const n = foraDaColuna.length;
+        const amostra = foraDaColuna.slice(0, 3).map((f) => `"${f.title}"`).join(", ");
         toast({
-          title: "Atividade com pendências",
-          description: `Não é possível concluir enquanto existirem ${pendingCount} subatividade(s) pendente(s).`,
+          title: "Mova o que está dentro primeiro",
+          description:
+            `${n} ${n === 1 ? "item ainda não está" : "itens ainda não estão"} em ` +
+            `"${getStageDisplayTitle(stage?.title || "")}": ${amostra}${n > 3 ? ` e mais ${n - 3}` : ""}. ` +
+            "Quando o último chegar, a fase acompanha sozinha.",
           variant: "destructive",
         });
         return;
