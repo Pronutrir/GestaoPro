@@ -75,6 +75,7 @@ import {
   MIN_COLUMN_WIDTH,
   EMPTY_COLUMN_FILTER,
   columnFilterActive,
+  colunasDoQuadro,
   type CardFields,
   type WorkflowStage,
   type Phase,
@@ -662,7 +663,28 @@ export function SortableColumn({
       true,
     );
     const expanded = expandedIds.has(activity.id);
-    const isMirrorParent = !stageActivityIds.has(activity.id) && inlineChildren.length > 0;
+    /**
+     * ESPELHO só quando o pai NÃO ESTÁ no quadro.
+     *
+     * O espelho (`readOnlyPreview` + selo "Pai agrupador") existe para dar
+     * contexto ao filho quando o pai não tem cartão em lugar nenhum: sem ele,
+     * as subtarefas apareceriam soltas, sem dizer de que fase saíram.
+     *
+     * Desde que agrupador passou a acompanhar a fase para o quadro
+     * (BacklogSection.handleMoveSelected), ele TEM cartão próprio — e o espelho
+     * virou uma segunda aparição do mesmo item na mesma tela. Era a duplicação
+     * relatada, e a causa fui eu: mudei um lado sem revisitar o outro.
+     *
+     * `estaNoQuadro` olha o item em todas as colunas VISÍVEIS, não só nesta: o
+     * cartão real pode estar na coluna ao lado, e ali o espelho já sobra. Tem
+     * de ser visível — pai numa coluna oculta não tem cartão em tela nenhuma,
+     * e aí o espelho volta a ser a única pista de onde o filho saiu.
+     */
+    const estaNoQuadro = activity.workflow_stage_id
+      ? colunasDoQuadro(allStages).some((s) => s.id === activity.workflow_stage_id)
+      : false;
+    const isMirrorParent =
+      !stageActivityIds.has(activity.id) && inlineChildren.length > 0 && !estaNoQuadro;
     const parentAct = activity.parent_id ? activities.find((p) => p.id === activity.parent_id) : null;
     const parentBreadcrumb = parentAct && parentAct.workflow_stage_id !== activity.workflow_stage_id
       ? { id: parentAct.id, title: parentAct.title, wbsCode: parentAct.wbs_code }
