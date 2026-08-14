@@ -1383,6 +1383,7 @@ export function ProjectCronogramaPanel({
         <CelulaEditavel
           rotulo={rotulo}
           editavel={perm.ok}
+          vazio={!a[campo]}
           motivoBloqueio={perm.motivo}
           editor={(fechar) => (
             <DateField
@@ -1843,18 +1844,24 @@ export function ProjectCronogramaPanel({
       );
       case "responsible": return (() => {
         const perm = podeEditarCelula(a, "outro");
+        // `text-center`: sem responsável, a célula vazia é um chip curto —
+        // encostado à esquerda ele fica desalinhado da própria coluna e do
+        // seletor que abre no lugar.
         return (
-          <td className="px-2 py-1.5 max-w-[160px]">
+          <td className="px-2 py-1.5 max-w-[160px] text-center">
             <CelulaEditavel
               rotulo="Responsável"
               editavel={perm.ok}
+              vazio={!responsible}
               motivoBloqueio={perm.motivo}
               editor={(fechar) => (
                 <PersonCombobox
                   people={pessoas}
                   value={pessoas.find((p) => p.full_name === a.assigned_to)?.id ?? null}
                   placeholder="Sem responsável"
-                  className="h-7 text-xs"
+                  // Largura fixa: sem ela o gatilho encolhe para o texto e o
+                  // popover nasce estreito, cortando os nomes.
+                  className="h-7 text-xs w-[152px]"
                   onSelect={async (p) => {
                     const ok = await gravarCampo(a.id, { assigned_to: p.full_name }, `Responsável: ${p.full_name}`);
                     fechar(ok);
@@ -1882,6 +1889,7 @@ export function ProjectCronogramaPanel({
             <CelulaEditavel
               rotulo="Coluna"
               editavel={perm.ok && doProjeto.length > 0}
+              vazio={!stageInfo}
               motivoBloqueio={perm.motivo}
               editor={(fechar) => (
                 <Select
@@ -2059,6 +2067,7 @@ export function ProjectCronogramaPanel({
             <CelulaEditavel
               rotulo="Esforço"
               editavel={perm.ok}
+              vazio={h == null}
               motivoBloqueio={perm.motivo}
               editor={(fechar) => (
                 <Input
@@ -2111,6 +2120,8 @@ export function ProjectCronogramaPanel({
             <CelulaEditavel
               rotulo="Observações"
               editavel={perm.ok}
+              vazio={!texto}
+              rotuloVazio="Anotar"
               motivoBloqueio={perm.motivo}
               editor={(fechar) => (
                 <Input
