@@ -627,7 +627,18 @@ export const BacklogSection = ({
   topLevelByPhase.forEach((arr, key) => {
     const filtered: Activity[] = [];
     for (const a of arr) {
-      if (isPhaseLikeActivity(a) && !a.phase_id) virtualPhaseActs.push(a);
+      /**
+       * Agrupador de TOPO vira card de fase.
+       *
+       * Era `!a.phase_id`: só o item sem fase virava card, para não arrancar
+       * uma Entrega de dentro do grupo dela. Com as fases migradas para
+       * `activities` (14/08/2026), a fase migrada TEM `phase_id` — aponta para
+       * a fase de origem — e ficava presa dentro da própria faixa.
+       *
+       * `!a.parent_id` é o teste certo: quem não tem pai é topo da árvore,
+       * venha de onde vier. A Entrega continua no lugar, porque ela tem pai.
+       */
+      if (isPhaseLikeActivity(a) && !a.parent_id) virtualPhaseActs.push(a);
       else filtered.push(a);
     }
     topLevelByPhase.set(key, filtered);
@@ -2918,8 +2929,17 @@ export const BacklogSection = ({
           </div>
         )}
 
-        {/* Modo Fase (padrão): árvore EAP completa */}
-        {groupBy === "phase" && phases.map((p) => renderPhaseGroup(p.id, p.title))}
+        {/* Modo Fase (padrão): árvore EAP completa.
+            A FAIXA CEDE O LUGAR À ATIVIDADE-FASE. Desde que as fases viraram
+            `activities` (14/08/2026), cada uma existe nas duas tabelas: a faixa
+            vinha de `phases` e o card de `activities`, com o mesmo nome, um
+            dentro do outro — um nível a mais que não significa nada.
+            A faixa só é desenhada para fase que AINDA não migrou; quando a
+            atividade-fase existe, ela manda, e traz junto o que a faixa nunca
+            teve: coluna, percentual e a seleção em lote. */}
+        {groupBy === "phase" && phases
+          .filter((p) => !backlogActs.some((a) => a.item_type === "fase" && a.phase_id === p.id && !a.parent_id))
+          .map((p) => renderPhaseGroup(p.id, p.title))}
 
         {/* Atividades-fase (item_type='fase') em qualquer nível top-level viram cards de fase virtuais */}
         {groupBy === "phase" && virtualPhaseActs.map((vp) => renderVirtualPhase(vp))}

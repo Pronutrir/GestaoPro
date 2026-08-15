@@ -3438,9 +3438,35 @@ export const ActivityKanban = ({
                     {todos ? "Desmarcar todas" : "Marcar todas"}
                   </button>
                 </div>
+                {/* A FASE VEM PRIMEIRO — ela é o pai, e a EAP se lê de cima
+                    para baixo (1.1.2 antes de 1.1.2.1). Estava no rodapé, como
+                    se fosse rodapé de um total; ali parecia consequência da
+                    lista em vez do item que a contém.
+
+                    Ela não tem caixa: vai quando todos os filhos vão, e fica
+                    quando algum sobra — deixá-la avançar com trabalho para trás
+                    é o que o bloqueio existe para impedir. A linha diz qual dos
+                    dois é. */}
+                <div className={cn(
+                  "flex items-center gap-2 px-2.5 py-2 rounded-md text-[12px] border",
+                  paiVai ? "bg-primary/5 border-primary/25" : "bg-muted/30 border-border",
+                )}>
+                  <Layers className={cn("w-3.5 h-3.5 shrink-0", paiVai ? "text-primary" : "text-muted-foreground")} />
+                  {moverJunto.pai.wbs_code && (
+                    <span className="font-mono text-[10px] text-muted-foreground bg-background border border-border rounded px-1.5 py-0.5 shrink-0">
+                      {moverJunto.pai.wbs_code}
+                    </span>
+                  )}
+                  <span className="flex-1 min-w-0 truncate font-medium">{moverJunto.pai.title}</span>
+                  <span className={cn("text-[10.5px] shrink-0", paiVai ? "font-semibold text-primary" : "text-muted-foreground")}>
+                    {paiVai ? `→ ${moverJunto.destinoNome}` : "fica onde está"}
+                  </span>
+                </div>
+
                 {/* Rola quando a fase é grande: 30 subatividades não podem empurrar
-                    os botões para fora da tela. */}
-                <div className="max-h-[280px] overflow-y-auto rolagem-visivel space-y-1 -mx-1 px-1">
+                    os botões para fora da tela. O recuo diz que são o conteúdo
+                    da linha acima. */}
+                <div className="max-h-[280px] overflow-y-auto rolagem-visivel space-y-1 -mx-1 px-1 pl-4">
                   {moverJunto.filhos.map((a) => {
                     const de = a.workflow_stage_id ? stages.find((s) => s.id === a.workflow_stage_id) : null;
                     const marcada = filhosMarcados.has(a.id);
@@ -3482,25 +3508,6 @@ export const ActivityKanban = ({
                   })}
                 </div>
 
-                {/* A FASE É CONSEQUÊNCIA, não escolha. Ela não tem caixa: vai
-                    quando todos os filhos vão, e fica quando algum sobra —
-                    deixá-la avançar com trabalho para trás é exatamente o que o
-                    bloqueio existe para impedir. A linha diz qual dos dois é. */}
-                <div className={cn(
-                  "flex items-center gap-2 px-2.5 py-2 rounded-md text-[12px] border",
-                  paiVai ? "bg-primary/5 border-primary/25" : "bg-muted/30 border-border",
-                )}>
-                  <Layers className={cn("w-3.5 h-3.5 shrink-0", paiVai ? "text-primary" : "text-muted-foreground")} />
-                  {moverJunto.pai.wbs_code && (
-                    <span className="font-mono text-[10px] text-muted-foreground bg-background border border-border rounded px-1.5 py-0.5 shrink-0">
-                      {moverJunto.pai.wbs_code}
-                    </span>
-                  )}
-                  <span className="flex-1 min-w-0 truncate font-medium">{moverJunto.pai.title}</span>
-                  <span className={cn("text-[10.5px] shrink-0", paiVai ? "font-semibold text-primary" : "text-muted-foreground")}>
-                    {paiVai ? `→ ${moverJunto.destinoNome}` : "fica onde está"}
-                  </span>
-                </div>
                 {!paiVai && filhosMarcados.size > 0 && (
                   <p className="text-[11.5px] text-muted-foreground">
                     A fase acompanha sozinha quando o último item chegar.
