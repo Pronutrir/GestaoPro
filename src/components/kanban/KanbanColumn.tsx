@@ -365,6 +365,8 @@ export function SortableColumn({
   onToggleStageBlocked,
   onToggleStageVisible,
   allStages,
+  selecionados,
+  onToggleSelecao,
   cardFields,
   profilesMap = {},
   profileAvatarMap = {},
@@ -423,6 +425,9 @@ export function SortableColumn({
   onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
   onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
   allStages: WorkflowStage[];
+  /** Seleção em lote — vive no quadro, porque atravessa colunas. */
+  selecionados?: Set<string>;
+  onToggleSelecao?: (id: string, e: React.MouseEvent) => void;
   cardFields: CardFields;
   hoursStatsByActivity?: Map<string, HoursStat>;
   profilesMap?: Record<string, string>;
@@ -696,6 +701,13 @@ export function SortableColumn({
     const commonCardProps = {
       activity,
       phases,
+      // Seleção em lote: a coluna só repassa: quem guarda o conjunto é o
+      // quadro, porque a seleção atravessa colunas.
+      selecionado: selecionados?.has(activity.id) ?? false,
+      modoSelecao: (selecionados?.size ?? 0) > 0,
+      onToggleSelecao: onToggleSelecao
+        ? (e: React.MouseEvent) => onToggleSelecao(activity.id, e)
+        : undefined,
       onEdit: () => onEditActivity(activity),
       onDelete: () => onDeleteActivity(activity.id),
       onToggle: () => onToggleActivity(activity.id, activity.status),

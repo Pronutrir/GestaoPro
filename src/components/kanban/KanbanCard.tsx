@@ -256,6 +256,9 @@ function KanbanCardBase({
   readOnlyPreview = false,
   profilesMap = {},
   profileAvatarMap = {},
+  selecionado = false,
+  modoSelecao = false,
+  onToggleSelecao,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -300,6 +303,19 @@ function KanbanCardBase({
   readOnlyPreview?: boolean;
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
+  /**
+   * SELEÇÃO EM LOTE.
+   *
+   * A caixa aparece no hover (ou fixa, quando o modo já está ligado) e é a
+   * ÚNICA porta para o lote: o clique no cartão continua abrindo a edição,
+   * que é o gesto mais usado do quadro e não pode ser trocado.
+   *
+   * Existe para o caso que o bloqueio "mova o que está dentro primeiro"
+   * criava: uma entrega com 5 filhos exigia cinco arrastes.
+   */
+  selecionado?: boolean;
+  modoSelecao?: boolean;
+  onToggleSelecao?: (e: React.MouseEvent) => void;
 }) {
   // estaAtrasado compara DIA com DIA. A conta local anterior montava a data às
   // 00:00 e comparava com `new Date()` (com hora), então tudo que vencia HOJE
@@ -376,9 +392,38 @@ function KanbanCardBase({
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`relative bg-card border border-border rounded-lg ${d.card} ${dragListeners ? "pl-[18px]" : ""} shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`}
-            onClick={onEdit}
+            className={cn(
+              `relative bg-card border border-border rounded-lg ${d.card} ${dragListeners ? "pl-[18px]" : ""} shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`,
+              // Selecionado se anuncia pelo anel, não pelo fundo: o fundo já
+              // carrega o estado de bloqueio/atraso, e somar cor sobre cor
+              // deixaria os dois ilegíveis.
+              selecionado && "ring-2 ring-primary ring-offset-1 ring-offset-background",
+            )}
+            // No MODO SELEÇÃO o clique no card marca em vez de abrir: quem está
+            // escolhendo vários quer clicar rápido, e mirar a caixinha de 14px
+            // a cada item é trabalho desnecessário. Fora do modo, abre a edição
+            // como sempre — o gesto mais usado do quadro não muda.
+            onClick={modoSelecao && onToggleSelecao ? onToggleSelecao : onEdit}
           >
+            {/* A CAIXA. No hover fora do modo (a porta de entrada), fixa dentro
+                dele. `stopPropagation` porque o card inteiro já é clicável. */}
+            {onToggleSelecao && !readOnlyPreview && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onToggleSelecao(e); }}
+                aria-label={selecionado ? "Desmarcar" : "Selecionar"}
+                title={selecionado ? "Desmarcar" : "Selecionar para mover em lote"}
+                className={cn(
+                  "absolute right-1.5 top-1.5 z-10 w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all",
+                  selecionado
+                    ? "bg-primary border-primary text-primary-foreground opacity-100"
+                    : "bg-card border-muted-foreground/40 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                  modoSelecao && "opacity-100",
+                )}
+              >
+                {selecionado && <Check className="w-3 h-3" strokeWidth={3} />}
+              </button>
+            )}
             {/* Alça de arrastar FORA do fluxo: como coluna fixa ela roubava
                 ~20px de largura de todo card, o tempo todo, para uma ação que
                 só importa no hover. Flutua sobre a borda esquerda; o card

@@ -195,6 +195,19 @@ export const ActivityKanban = ({
   }, [toast]);
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  /**
+   * SELEÇÃO EM LOTE — arrastar vários cartões de uma vez.
+   *
+   * Nasceu do bloqueio "mova o que está dentro primeiro": uma entrega com 5
+   * filhos exigia cinco arrastes, e o aviso pedia isso sem oferecer o caminho.
+   *
+   * A seleção é pela CAIXA do cartão (ou pelo card inteiro, uma vez no modo).
+   * Clicar num cartão fora do modo continua abrindo a edição — é o gesto mais
+   * usado do quadro.
+   */
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  /** Âncora do Shift+clique: o último marcado, para pegar o intervalo. */
+  const ultimoMarcado = useRef<string | null>(null);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
 
   // Preferências de exibição (campos do card, raias, larguras, colunas
@@ -1243,6 +1256,54 @@ export const ActivityKanban = ({
   };
 
   /**
+   * Marca / desmarca um cartão.
+   *
+   * `Shift` pega o INTERVALO desde o último marcado, na ordem em que a coluna
+   * desenha — é o que se espera de uma lista, e evita 20 cliques para pegar 20
+   * itens seguidos. Só dentro da MESMA coluna: entre colunas a "ordem" não
+   * existe, e o intervalo pegaria itens que a pessoa não vê.
+   */
+  const alternarSelecao = useCallback((id: string, e?: { shiftKey?: boolean }) => {
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      const ancora = ultimoMarcado.current;
+      const atual = activities.find((a) => a.id === id);
+      const daAncora = ancora ? activities.find((a) => a.id === ancora) : null;
+
+      const colunaDe = (a: Activity) => optimisticMoves[a.id] || a.workflow_stage_id;
+      if (e?.shiftKey && daAncora && atual && colunaDe(daAncora) === colunaDe(atual)) {
+        // A ordem é a de `activities`, que é a mesma que alimenta a coluna —
+        // `activitiesByStage` só existe mais abaixo no arquivo.
+        const naColuna = activities.filter((a) => colunaDe(a) === colunaDe(atual)).map((a) => a.id);
+        const i = naColuna.indexOf(ancora!);
+        const j = naColuna.indexOf(id);
+        if (i >= 0 && j >= 0) {
+          for (const x of naColuna.slice(Math.min(i, j), Math.max(i, j) + 1)) next.add(x);
+          return next;
+        }
+      }
+
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      ultimoMarcado.current = next.has(id) ? id : null;
+      return next;
+    });
+  }, [activities, optimisticMoves]);
+
+  const limparSelecao = useCallback(() => {
+    setSelecionados(new Set());
+    ultimoMarcado.current = null;
+  }, []);
+
+  // Esc sai do modo — a saída precisa existir sem procurar botão.
+  useEffect(() => {
+    if (selecionados.size === 0) return;
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") limparSelecao(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selecionados.size, limparSelecao]);
+
+  /**
    * Filhos diretos que AINDA NÃO estão na coluna de destino — a lista que
    * impede o pai de andar na frente do conteúdo.
    *
@@ -1843,8 +1904,33 @@ export const ActivityKanban = ({
       }
     }
 
+    /**
+     * ARRASTAR O CONJUNTO.
+     *
+     * Se o cartão puxado está numa seleção, os outros marcados vão junto — é o
+     * gesto que o bloqueio "mova o que está dentro primeiro" pedia sem
+     * oferecer: uma entrega com 5 filhos exigia cinco arrastes.
+     *
+     * Se ele NÃO está na seleção, o arrasto é dele só: pegar um cartão fora
+     * do conjunto é sinal de que a pessoa mudou de ideia sobre o alvo, não de
+     * que quer levar o conjunto para lá.
+     *
+     * Os companheiros pulam a validação de filhos — ela vale para o cartão
+     * puxado, e reaplicá-la a cada um recusaria o lote inteiro por causa de
+     * uma folha que também está selecionada.
+     */
+    const emLote = selecionados.has(activityId)
+      ? [...selecionados].filter((id) => id !== activityId
+          && (optimisticMoves[id] || activities.find((a) => a.id === id)?.workflow_stage_id) !== targetStageId)
+      : [];
+
     // Optimistic update — move card instantly in the UI (após validações)
-    setOptimisticMoves((prev) => ({ ...prev, [activityId]: targetStageId! }));
+    setOptimisticMoves((prev) => {
+      const next = { ...prev, [activityId]: targetStageId! };
+      for (const id of emLote) next[id] = targetStageId!;
+      return next;
+    });
+    if (emLote.length > 0) limparSelecao();
 
     const completedAt = stage?.is_final ? new Date().toISOString() : null;
 
@@ -1864,6 +1950,19 @@ export const ActivityKanban = ({
           .from("user_stories")
           .update({ stage_id: targetStageId })
           .eq("activity_id", activityId);
+
+        // Os COMPANHEIROS do lote. Em bloco, não um a um: são até dezenas de
+        // ids, e uma chamada por cartão faria o quadro piscar em cascata.
+        if (emLote.length > 0) {
+          await supabase
+            .from("activities")
+            .update({ workflow_stage_id: targetStageId, status: newStatus, completed_at: completedAt })
+            .in("id", emLote);
+          await supabase
+            .from("user_stories")
+            .update({ stage_id: targetStageId })
+            .in("activity_id", emLote);
+        }
 
         // Recalcula os pais: só ficam concluídos quando 100% dos filhos diretos estiverem concluídos.
         const { data: stageRows } = await supabase
@@ -3199,6 +3298,8 @@ export const ActivityKanban = ({
                 onToggleStageBlocked={handleToggleStageBlocked}
                 onToggleStageVisible={handleToggleStageVisible}
                 allStages={stages}
+                selecionados={selecionados}
+                onToggleSelecao={(id, e) => alternarSelecao(id, e)}
                 cardFields={cardFields}
                 profilesMap={profilesMap}
                 profileAvatarMap={profileAvatarMap}
@@ -3255,9 +3356,35 @@ export const ActivityKanban = ({
         </div>
       </SortableContext>
 
+      {/* BARRA DO LOTE. Flutua no rodapé porque o quadro rola na horizontal —
+          presa ao topo, sairia da vista ao percorrer as colunas. Só aparece
+          com algo marcado, e some ao limpar: fora do modo, o quadro é o de
+          sempre. */}
+      {selecionados.size > 0 && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-xl border border-primary bg-card shadow-xl">
+          <span className="text-[13px] font-semibold text-primary tabular-nums">
+            {selecionados.size} {selecionados.size === 1 ? "selecionada" : "selecionadas"}
+          </span>
+          <span className="text-[11.5px] text-muted-foreground">
+            Arraste qualquer uma para mover todas
+          </span>
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={limparSelecao}>
+            Limpar
+          </Button>
+          <span className="text-[10.5px] text-muted-foreground/70">Esc</span>
+        </div>
+      )}
+
       <DragOverlay>
         {activeActivity ? (
-          <div className="rotate-2 opacity-90 w-[260px]">
+          <div className="rotate-2 opacity-90 w-[260px] relative">
+            {/* QUANTOS VÃO JUNTO. Sem o número, arrastar 6 cartões parecia
+                arrastar 1 — e a pessoa só descobriria ao soltar. */}
+            {selecionados.has(activeActivity.id) && selecionados.size > 1 && (
+              <span className="absolute -right-2 -top-2 z-20 min-w-[22px] h-[22px] px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-bold grid place-items-center shadow-lg">
+                {selecionados.size}
+              </span>
+            )}
             <KanbanCard
               activity={activeActivity}
               phases={phases}
