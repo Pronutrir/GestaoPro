@@ -341,16 +341,21 @@ function KanbanCardBase({
       ? "border-amber-500 border-l-[4px] border-l-amber-500 bg-amber-500/5"
       : isOverdue
         ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue"
-        // FILHO GANHA FAIXA PRÓPRIA. Antes a linha vivia no container do grupo
-        // — dizia "estes pertencem ao de cima" e nada mais: filho concluído e
-        // filho atrasado ficavam iguais. Na borda de cada card, ela entra na
-        // MESMA linguagem que a raiz já usa para bloqueio e atraso, e a coluna
-        // passa a se ler de cima a baixo com uma regra só. O vínculo continua
-        // visível pelo recuo, que é o que sempre o comunicou.
+        // FILHO GANHA FAIXA PRÓPRIA, NA COR DA COLUNA (14/08/2026).
+        //
+        // Antes a linha vivia no container do grupo: dizia "estes pertencem ao
+        // de cima" e nada mais. Passou para a borda de cada card — mas em azul,
+        // que é a cor do primário e competia com a coluna "Em Andamento".
+        //
+        // Agora a faixa usa a COR DA PRÓPRIA COLUNA (`stageColor`, aplicado
+        // inline abaixo). Assim ela diz onde o filho está, que é a informação
+        // que falta quando ele mora numa coluna diferente do pai — e nunca
+        // discorda do cabeçalho, porque é a mesma cor.
+        //
+        // O vínculo com o pai continua visível pelo recuo, que sempre o
+        // comunicou.
         : ehFilho
-          ? (activity.status === "completed"
-              ? "border-l-[3px] border-l-success"
-              : "border-l-[3px] border-l-primary/60")
+          ? "border-l-[3px]"
           : "border-border";
 
   const tooltipLines = [
@@ -409,6 +414,13 @@ function KanbanCardBase({
               // deixaria os dois ilegíveis.
               selecionado && "ring-2 ring-primary ring-offset-1 ring-offset-background",
             )}
+            /* A faixa do filho vem do BANCO (cor da coluna), então não cabe em
+               classe do Tailwind. Só o filho SEM estado próprio a recebe:
+               bloqueio, marco e atraso já pintam a borda com o que precisam
+               dizer, e sobrepor a cor da coluna apagaria o alerta. */
+            style={ehFilho && !isBlocked && !isMilestone && !isOverdue && stageColor
+              ? { borderLeftColor: stageColor }
+              : undefined}
             // No MODO SELEÇÃO o clique no card marca em vez de abrir: quem está
             // escolhendo vários quer clicar rápido, e mirar a caixinha de 14px
             // a cada item é trabalho desnecessário. Fora do modo, abre a edição

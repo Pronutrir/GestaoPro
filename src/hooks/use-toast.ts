@@ -19,15 +19,36 @@ function toast({ title, description, variant, action }: Toast) {
     options.description = description;
   }
 
-  if (action) {
-    // Sonner não usa o mesmo elemento de ação do Radix Toast.
-    // Mantemos compatibilidade silenciosa sem renderizar ação inválida.
+  /**
+   * A AÇÃO ERA DESCARTADA EM SILÊNCIO.
+   *
+   * O app monta o Sonner (`providers.tsx`), não o `<Toaster>` do Radix — e
+   * este hook aceitava `action` como elemento React só para "manter
+   * compatibilidade", jogando fora. Resultado: TODO botão de aviso do sistema
+   * nunca apareceu. O "Desfazer" de mover card, o "Levar N junto" do
+   * bloqueio — nenhum deles chegou à tela, e ninguém percebeu porque o toast
+   * aparecia normalmente, só sem o botão.
+   *
+   * Aqui o elemento é traduzido para o formato do Sonner: `{ label, onClick }`.
+   * `altText` vira o rótulo — é o texto que o Radix já exigia para leitor de
+   * tela, então descreve a ação; `children` cobre quem não passou `altText`.
+   */
+  const opcoes = options as {
+    description?: string;
+    action?: { label: string; onClick: () => void };
+  };
+  if (action && typeof action === "object" && "props" in action) {
+    const p = (action as { props?: { altText?: string; children?: unknown; onClick?: () => void } }).props;
+    const rotulo = p?.altText ?? (typeof p?.children === "string" ? p.children : null);
+    if (rotulo && typeof p?.onClick === "function") {
+      opcoes.action = { label: rotulo, onClick: p.onClick };
+    }
   }
 
   const id =
     variant === "destructive"
-      ? sonnerToast.error(titleText, options)
-      : sonnerToast(titleText, options);
+      ? sonnerToast.error(titleText, opcoes)
+      : sonnerToast(titleText, opcoes);
 
   return {
     id,
