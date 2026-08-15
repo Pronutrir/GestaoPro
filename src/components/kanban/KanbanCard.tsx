@@ -976,11 +976,19 @@ function KanbanCardBase({
                     </span>
                   )}
                 </div>
+                {/* UMA LINHA SÓ: contador + resumo lado a lado.
+                    Eram irmãos empilhados — o selo caía numa linha própria e
+                    somava altura a todo card com subatividades. `flex-wrap`
+                    porque em coluna estreita o selo desce em vez de espremer o
+                    contador.
+                    `empty:hidden` para a linha não reservar 6px de margem num
+                    card sem subatividade nenhuma. */}
+                <div className="flex items-center gap-2 flex-wrap mt-1.5 empty:hidden empty:mt-0">
                 {(isPhase || cardFields.subCount) && subActivityCount && subActivityCount > 0 ? (
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}
-                    className="flex items-center gap-1 mt-1.5 text-[10px] font-medium text-primary hover:text-primary/80 hover:underline transition-colors"
+                    className="flex items-center gap-1 text-[10px] font-medium text-primary hover:text-primary/80 hover:underline transition-colors"
                     title={isExpanded ? "Recolher subatividades" : "Expandir subatividades"}
                   >
                     {/* O `GitFork` saiu: é o ícone de "ramificar repositório",
@@ -999,7 +1007,7 @@ function KanbanCardBase({
                 {cardFields.subSummary && subActivityStatusSummary && (subActivityStatusSummary.completed > 0 || subActivityStatusSummary.pending > 0) ? (
                   <Badge
                     variant="outline"
-                    className="mt-1 text-[10px] px-1.5 py-0 gap-1.5 bg-muted/40 border-border/60 text-muted-foreground font-normal"
+                    className="text-[10px] px-1.5 py-0 gap-1.5 bg-muted/40 border-border/60 text-muted-foreground font-normal"
                     title={`${subActivityStatusSummary.completed} de ${subActivityStatusSummary.completed + subActivityStatusSummary.pending} subatividades concluídas`}
                   >
                     {subActivityStatusSummary.completed > 0 && (
@@ -1014,6 +1022,7 @@ function KanbanCardBase({
                     )}
                   </Badge>
                 ) : null}
+                </div>
               </div>
             </div>
 
