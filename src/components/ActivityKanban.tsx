@@ -1485,9 +1485,18 @@ export const ActivityKanban = ({
     const previousStageId = activity?.workflow_stage_id ?? null;
 
     setOptimisticMoves((prev) => ({ ...prev, [activityId]: stageId }));
+    // O status acompanha a coluna, como no arrasto: sem isto, mover pelo menu
+    // para "Concluída" deixava o card sem riscar, e o caminho de volta deixava
+    // uma tarefa `completed` numa coluna que não é final.
+    const destinoFinal = target.is_final === true
+      || parseWorkflowCategory((target as { categoria?: string }).categoria) === "concluida";
     const { error } = await supabase
       .from("activities")
-      .update({ workflow_stage_id: stageId } as never)
+      .update({
+        workflow_stage_id: stageId,
+        status: destinoFinal ? "completed" : "pending",
+        completed_at: destinoFinal ? new Date().toISOString() : null,
+      } as never)
       .eq("id", activityId);
     if (error) {
       setOptimisticMoves((prev) => {
@@ -3544,9 +3553,32 @@ export const ActivityKanban = ({
                     for (const id of ids) next[id] = destino;
                     return next;
                   });
+                  /**
+                   * O STATUS ACOMPANHA A COLUNA.
+                   *
+                   * Gravava só `workflow_stage_id`, e o `status` ficava como
+                   * estava. Voltar uma fase concluída para "Não iniciado"
+                   * deixava seis itens com `status: completed` numa coluna que
+                   * não é final: o card aparecia riscado, com 100% e "5
+                   * concluídas", dentro da coluna de quem não começou.
+                   *
+                   * É a mesma regra que o arrasto e o mover em lote do Backlog
+                   * já aplicam — este caminho nasceu sem ela.
+                   *
+                   * `completed_at` limpo ao reabrir: manter a data numa tarefa
+                   * que voltou ao fluxo faz o relatório contar entrega que não
+                   * houve.
+                   */
+                  const colDestino = stages.find((s) => s.id === destino);
+                  const destinoFinal = colDestino?.is_final === true
+                    || parseWorkflowCategory((colDestino as { categoria?: string } | undefined)?.categoria) === "concluida";
                   const { error: erroLote } = await supabase
                     .from("activities")
-                    .update({ workflow_stage_id: destino } as never)
+                    .update({
+                      workflow_stage_id: destino,
+                      status: destinoFinal ? "completed" : "pending",
+                      completed_at: destinoFinal ? new Date().toISOString() : null,
+                    } as never)
                     .in("id", ids);
                   setMovendoJunto(false);
                   setMoverJunto(null);
