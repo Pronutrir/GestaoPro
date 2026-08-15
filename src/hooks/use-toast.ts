@@ -42,6 +42,18 @@ function toast({ title, description, variant, action }: Toast) {
     const rotulo = p?.altText ?? (typeof p?.children === "string" ? p.children : null);
     if (rotulo && typeof p?.onClick === "function") {
       opcoes.action = { label: rotulo, onClick: p.onClick };
+      /**
+       * AVISO COM AÇÃO FICA MAIS TEMPO.
+       *
+       * O padrão do Sonner é 4s — suficiente para "salvo", curto demais para
+       * um aviso que PEDE UMA DECISÃO: a pessoa precisa ler três nomes de
+       * tarefa, entender o que falta e mirar o botão. Some antes disso e a
+       * ação vira uma piscada que ninguém alcança.
+       *
+       * 12s é o que Gmail e Linear usam no "Desfazer" — tempo de ler, decidir
+       * e clicar sem pressa, e ainda assim sair sozinho.
+       */
+      (opcoes as { duration?: number }).duration = 12000;
     }
   }
 

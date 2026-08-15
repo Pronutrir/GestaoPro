@@ -1907,13 +1907,17 @@ export const ActivityKanban = ({
         const destino = targetStageId;
         const idsJunto = [draggedActivity.id, ...foraDaColuna.map((f) => f.id)];
         toast({
-          title: "Falta mover o que está dentro",
+          // O TÍTULO diz o que fazer, não o que deu errado. Ele é a linha que
+          // se lê primeiro (e às vezes a única), e o botão ao lado responde
+          // exatamente a ela — antes dizia "Falta mover o que está dentro" e a
+          // pessoa tinha de ler três linhas para achar a saída.
+          title: `Mover a fase e ${n === 1 ? "seu item" : `seus ${n} itens`} junto?`,
           description:
-            `${n} ${n === 1 ? "item ainda não está" : "itens ainda não estão"} em ` +
+            `${n === 1 ? "1 item ainda não está" : `${n} itens ainda não estão`} em ` +
             `"${getStageDisplayTitle(stage?.title || "")}": ${amostra}${n > 3 ? ` e mais ${n - 3}` : ""}.`,
           action: (
             <ToastAction
-              altText={`Levar ${n} junto`}
+              altText="Mover tudo"
               onClick={async () => {
                 setOptimisticMoves((prev) => {
                   const next = { ...prev };
@@ -1937,7 +1941,7 @@ export const ActivityKanban = ({
                 toast({ title: `${idsJunto.length} itens movidos` });
               }}
             >
-              Levar {n} junto
+              Mover tudo
             </ToastAction>
           ),
           variant: "destructive",

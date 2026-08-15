@@ -725,7 +725,16 @@ export function SortableColumn({
       onStoryClick: () => onStoryClick(activity.id),
       onCreateStory: () => onCreateStory(activity),
       isQualityProject,
-      stageColor: stage.color,
+      /**
+       * A cor é da coluna DO CARD, não da que está desenhando.
+       *
+       * `stage.color` é o container: um filho aninhado sob um pai de OUTRA
+       * coluna aparece aqui, e recebia a cor de onde está sendo pintado — a
+       * faixa mentia sobre onde ele está. Era o que aparecia ao mover: o card
+       * ia para a coluna nova com a cor certa, mas a cópia aninhada sob o pai,
+       * na origem, ficava com a antiga.
+       */
+      stageColor: (allStages.find((s) => s.id === activity.workflow_stage_id)?.color) ?? stage.color,
       dependencyCount: dependencyCounts?.get(activity.id),
       waitingOnCount: waitingOnCounts?.get(activity.id),
       commentCount: commentCounts?.get(activity.id),
