@@ -68,14 +68,19 @@ function SortableTab({
     <div
       ref={setNodeRef}
       style={style}
+      /* A ABA ATIVA GANHA FUNDO e se liga ao conteúdo abaixo — a barra deixa de
+         ser uma faixa solta e vira a borda de cima do que está sendo mostrado.
+         Antes era sublinhado escuro, que competia com a borda da própria faixa:
+         duas linhas horizontais quase juntas, dizendo a mesma coisa.
+         O sublinhado fica, mas na cor de destaque e sobre o fundo branco. */
       className={`
         group/tab relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium cursor-pointer select-none
-        transition-all duration-150 whitespace-nowrap border-b-2
+        transition-all duration-150 whitespace-nowrap rounded-t-md border-b-2
         ${isDragging ? "shadow-md scale-105 bg-muted/40" : ""}
         ${
           isActive
-            ? "text-foreground border-foreground"
-            : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted-foreground/20"
+            ? "bg-background text-foreground border-primary"
+            : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted-foreground/10"
         }
       `}
       onClick={onClick}

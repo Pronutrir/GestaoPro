@@ -1407,12 +1407,16 @@ export default function ProjectDetailsPage() {
                 )}
               </div>
 
-              {/* METADADOS À DIREITA, menores e separados por pontos: eles se
-                  CONSULTAM, não se leem. Sem rótulo — o nome de uma pessoa no
-                  cabeçalho é o responsável, e uma data com calendário é o
-                  prazo. `ml-auto` empurra tudo para a borda, deixando o nome
-                  respirar. */}
-              <div className="flex items-center gap-2 text-[12px] text-muted-foreground ml-auto shrink-0">
+              {/* METADADOS: menores e separados por pontos — eles se CONSULTAM,
+                  não se leem. Sem rótulo: o nome de uma pessoa no cabeçalho é o
+                  responsável, e uma data com calendário é o prazo.
+
+                  `ml-6`, NÃO `ml-auto`: empurrar para a borda abria um vão de
+                  400px no meio da faixa, e informação separada por vazio deixa
+                  de se ler como um conjunto. Agora ela segue o nome, com uma
+                  folga fixa — a linha se lê da esquerda para a direita sem
+                  buraco, e a largura sobra à direita em vez de no meio. */}
+              <div className="flex items-center gap-2 text-[12px] text-muted-foreground ml-6 min-w-0">
                 {/* UMA pessoa só no topo: mostrar Líder e Gestor lado a lado
                     enchia a barra sem acrescentar — quem olha o cabeçalho quer
                     saber a quem recorrer, não o organograma. A ficha continua

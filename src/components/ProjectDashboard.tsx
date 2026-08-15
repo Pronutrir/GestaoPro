@@ -319,19 +319,32 @@ export const ProjectDashboard = ({ activities, phases, project, onNavigateToActi
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {kpiCards.map((kpi) => (
+          /* CARTÃO COMPACTO. Era `p-4 space-y-2` com o rótulo acima do número:
+             "Total de Atividades" quebrava em duas linhas e o cartão crescia
+             para ~130px — para mostrar "413".
+
+             Agora o número vem primeiro e grande (é o que se lê), o rótulo
+             abaixo em uma linha só, e o ícone ao lado. Mesma informação, ~40%
+             menos altura. */
           <Card
             key={kpi.label}
-            className={`p-4 space-y-2 ${kpi.items.length > 0 ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`}
+            className={`px-3.5 py-3 ${kpi.items.length > 0 ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`}
             onClick={() => kpi.items.length > 0 && setDialogData({ title: kpi.label, items: kpi.items })}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">{kpi.label}</span>
-              <div className={`p-1.5 rounded-md ${kpi.bg}`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xl font-bold text-foreground leading-tight">{kpi.value}</p>
+                <p className="text-[11.5px] font-medium text-muted-foreground truncate" title={kpi.label}>
+                  {kpi.label}
+                </p>
+                {kpi.subtitle && (
+                  <p className="text-[10.5px] text-muted-foreground/70 truncate">{kpi.subtitle}</p>
+                )}
+              </div>
+              <div className={`p-1.5 rounded-md shrink-0 ${kpi.bg}`}>
                 <kpi.icon className={`w-3.5 h-3.5 ${kpi.color}`} />
               </div>
             </div>
-            <p className="text-2xl font-bold text-foreground">{kpi.value}</p>
-            {kpi.subtitle && <p className="text-[11px] text-muted-foreground">{kpi.subtitle}</p>}
           </Card>
         ))}
       </div>
