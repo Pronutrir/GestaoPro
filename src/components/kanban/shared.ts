@@ -114,7 +114,7 @@ export type CardFields = {
 // Defaults = exatamente os campos da imagem aprovada (Fase 1): prioridade,
 // barra de progresso, responsável e prazo. participants/hours/subCount
 // estavam ligados por padrão e não aparecem na imagem — eram o motivo do
-// card acumular "0h/10h · 2 subtarefas" ao lado da barra. Continuam
+// card acumular "0h/10h · 2 subatividades" ao lado da barra. Continuam
 // disponíveis no painel "⚙ Card", só passam a começar desligados.
 export const DEFAULT_CARD_FIELDS: CardFields = {
   priority: true,
@@ -149,8 +149,8 @@ export const CARD_FIELD_GROUPS: { group: string; items: { key: keyof CardFields;
     { key: "tags", label: "Tags / etiquetas" },
     { key: "dependencies", label: "Dependências" },
   ]},
-  { group: "Subtarefas", items: [
-    { key: "subCount", label: "Contador de subtarefas" },
+  { group: "Subatividades", items: [
+    { key: "subCount", label: "Contador de subatividades" },
     { key: "subSummary", label: "Resumo (feitas / abertas)" },
   ]},
 ];

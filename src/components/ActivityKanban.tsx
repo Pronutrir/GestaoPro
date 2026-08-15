@@ -1499,7 +1499,7 @@ export const ActivityKanban = ({
     try {
       const { duplicateActivity } = await import("@/lib/duplicateActivity");
       await duplicateActivity({ activityId, includeChildren: true });
-      toast({ title: "Atividade duplicada", description: "As subtarefas também foram duplicadas." });
+      toast({ title: "Atividade duplicada", description: "As subatividades também foram duplicadas." });
       onDataChanged();
     } catch (e) {
       toast({
@@ -1887,17 +1887,59 @@ export const ActivityKanban = ({
      * Só DESCENDENTES DIRETOS decidem. O neto é problema do filho — se ele
      * está na coluna, é porque a regra já foi aplicada a ele.
      */
+    /**
+     * O AVISO OFERECE A SAÍDA, em vez de só barrar.
+     *
+     * Antes ele dizia "mova o que está dentro primeiro" e parava aí — mas o
+     * que estava dentro vinha COLAPSADO no próprio card que a pessoa acabou de
+     * arrastar. Era preciso expandir, e arrastar um a um. O aviso pedia
+     * trabalho sem mostrar o caminho, e apareceu três vezes na mesma conversa.
+     *
+     * Agora ele traz "Levar os N junto": um clique faz o que o bloqueio
+     * pedia. A regra continua de pé — a caixa não anda sozinha na frente do
+     * conteúdo — mas cumprir a regra deixa de ser tarefa manual.
+     */
     if (draggedActivity) {
       const foraDaColuna = filhosForaDaColuna(draggedActivity.id, targetStageId);
       if (foraDaColuna.length > 0) {
         const n = foraDaColuna.length;
         const amostra = foraDaColuna.slice(0, 3).map((f) => `"${f.title}"`).join(", ");
+        const destino = targetStageId;
+        const idsJunto = [draggedActivity.id, ...foraDaColuna.map((f) => f.id)];
         toast({
-          title: "Mova o que está dentro primeiro",
+          title: "Falta mover o que está dentro",
           description:
             `${n} ${n === 1 ? "item ainda não está" : "itens ainda não estão"} em ` +
-            `"${getStageDisplayTitle(stage?.title || "")}": ${amostra}${n > 3 ? ` e mais ${n - 3}` : ""}. ` +
-            "Quando o último chegar, a fase acompanha sozinha.",
+            `"${getStageDisplayTitle(stage?.title || "")}": ${amostra}${n > 3 ? ` e mais ${n - 3}` : ""}.`,
+          action: (
+            <ToastAction
+              altText={`Levar ${n} junto`}
+              onClick={async () => {
+                setOptimisticMoves((prev) => {
+                  const next = { ...prev };
+                  for (const id of idsJunto) next[id] = destino;
+                  return next;
+                });
+                const { error: erroLote } = await supabase
+                  .from("activities")
+                  .update({ workflow_stage_id: destino } as never)
+                  .in("id", idsJunto);
+                if (erroLote) {
+                  setOptimisticMoves((prev) => {
+                    const next = { ...prev };
+                    for (const id of idsJunto) delete next[id];
+                    return next;
+                  });
+                  toast({ title: "Não foi possível mover", description: erroLote.message, variant: "destructive" });
+                  return;
+                }
+                onDataChanged();
+                toast({ title: `${idsJunto.length} itens movidos` });
+              }}
+            >
+              Levar {n} junto
+            </ToastAction>
+          ),
           variant: "destructive",
         });
         return;

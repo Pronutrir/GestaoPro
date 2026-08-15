@@ -1247,7 +1247,7 @@ export default function ProjectDetailsPage() {
     });
     if (!ok) return;
     const trashedAt = new Date().toISOString();
-    // Coletar a atividade + todos os descendentes (subtarefas em qualquer nível)
+    // Coletar a atividade + todos os descendentes (subatividades em qualquer nível)
     const idsToTrash = new Set<string>([activityId]);
     let frontier: string[] = [activityId];
     while (frontier.length > 0) {
@@ -1292,7 +1292,7 @@ export default function ProjectDetailsPage() {
     const trashedIds = Array.from(idsToTrash);
     toast.success(
       trashedIds.length > 1
-        ? `Atividade e ${trashedIds.length - 1} subtarefa(s) movidas para a lixeira`
+        ? `Atividade e ${trashedIds.length - 1} subatividade(s) movidas para a lixeira`
         : "Atividade movida para a lixeira",
       {
         action: {

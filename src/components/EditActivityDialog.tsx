@@ -122,7 +122,7 @@ type OptionalFieldKey = "hours" | "cost" | "wbs";
 // não é mais oferecido como opção de tipo.
 type EapType = "fase" | "pacote" | "atividade";
 
-// Normaliza qualquer valor legado de item_type (tarefa/subtarefa/atividade/…)
+// Normaliza qualquer valor legado de item_type (tarefa/subatividade/atividade/…)
 // para um dos papéis EAP. historia_usuario e desconhecidos caem em "atividade".
 const toEapType = (raw: unknown): EapType =>
   raw === "fase" ? "fase" : raw === "pacote" ? "pacote" : "atividade";
@@ -1454,7 +1454,7 @@ export const EditActivityDialog = ({
       await duplicateActivity({ activityId, includeChildren: true });
       toast({
         title: kind === "subatividade" ? "Subatividade duplicada!" : "Atividade duplicada!",
-        description: "A hierarquia de subtarefas tambem foi duplicada.",
+        description: "A hierarquia de subatividades tambem foi duplicada.",
       });
       onActivityUpdated();
       if (effectiveActivity) {
@@ -3298,7 +3298,7 @@ export const EditActivityDialog = ({
                               e.stopPropagation();
                               handleDuplicateActivity(sub.id, "subatividade");
                             }}
-                            title={duplicatingId === sub.id ? "Duplicando..." : "Duplicar subtarefa"}
+                            title={duplicatingId === sub.id ? "Duplicando..." : "Duplicar subatividade"}
                           >
                             <Copy className="w-3 h-3" />
                           </Button>

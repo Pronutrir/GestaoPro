@@ -20,10 +20,8 @@ import {
   GripVertical,
   AlertCircle,
   BookOpen,
-  GitFork,
   MoreHorizontal,
   Check,
-  Copy,
   ArrowRightLeft,
   MessageSquare,
   Paperclip,
@@ -333,6 +331,8 @@ function KanbanCardBase({
   // 'pacote' legado e qualquer item com filhos. Exibido sempre como Fase.
   const isPhase =
     !isMilestone && (eapType === "fase" || eapType === "pacote" || (subActivityCount ?? 0) > 0);
+  /** Está aninhado sob outro card? A faixa lateral colorida é dele. */
+  const ehFilho = !!activity.parent_id;
   // Bloqueio vem ANTES de marco: é o estado que exige ação, e um marco
   // travado precisa ser lido como travado.
   const cardBorderClass = isBlocked
@@ -341,7 +341,17 @@ function KanbanCardBase({
       ? "border-amber-500 border-l-[4px] border-l-amber-500 bg-amber-500/5"
       : isOverdue
         ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue"
-        : "border-border";
+        // FILHO GANHA FAIXA PRÓPRIA. Antes a linha vivia no container do grupo
+        // — dizia "estes pertencem ao de cima" e nada mais: filho concluído e
+        // filho atrasado ficavam iguais. Na borda de cada card, ela entra na
+        // MESMA linguagem que a raiz já usa para bloqueio e atraso, e a coluna
+        // passa a se ler de cima a baixo com uma regra só. O vínculo continua
+        // visível pelo recuo, que é o que sempre o comunicou.
+        : ehFilho
+          ? (activity.status === "completed"
+              ? "border-l-[3px] border-l-success"
+              : "border-l-[3px] border-l-primary/60")
+          : "border-border";
 
   const tooltipLines = [
     activity.title,
@@ -449,7 +459,7 @@ function KanbanCardBase({
                       onOpenRelated?.(parentBreadcrumb.id);
                     }}
                     className="flex items-center gap-1 mb-1 px-1.5 py-0.5 rounded bg-muted/60 hover:bg-muted text-[10px] text-muted-foreground hover:text-foreground max-w-full"
-                    title={`Subtarefa de: ${parentBreadcrumb.title}`}
+                    title={`Subatividade de: ${parentBreadcrumb.title}`}
                   >
                     <span className="shrink-0">↳</span>
                     {parentBreadcrumb.wbsCode ? (
@@ -511,13 +521,9 @@ function KanbanCardBase({
                 className={`shrink-0 flex items-center gap-0.5 -mt-0.5 -mr-1 transition-opacity ${menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"}`}
                 onClick={(e) => e.stopPropagation()}
               >
-                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-success/10 hover:text-success" onClick={onToggle} title={activity.status === "completed" ? "Reabrir atividade" : "Concluir atividade"}>
-                  {activity.status === "completed" ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-                  ) : (
-                    <Circle className="w-3.5 h-3.5 text-muted-foreground" />
-                  )}
-                </Button>
+                {/* O círculo de concluir saiu daqui — foi para dentro do "…".
+                    Eram dois círculos quase iguais no topo do card, e o outro
+                    (o de progresso) é o que a pessoa lê. */}
                 <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
                   <DropdownMenuTrigger asChild>
                     <button
@@ -537,15 +543,30 @@ function KanbanCardBase({
                     onPointerDown={(e) => e.stopPropagation()}
                   >
                     {/* "Editar" saiu: clicar em qualquer lugar do card já abre a
-                        edição (onClick={onEdit} no card), então o item era morto. */}
-                    {onDuplicate && (
-                      <DropdownMenuItem
-                        className="focus:bg-muted/60 focus:text-foreground"
-                        onSelect={() => onDuplicate()}
-                      >
-                        <Copy className="w-3.5 h-3.5 mr-2" /> Duplicar
-                      </DropdownMenuItem>
-                    )}
+                        edição (onClick={onEdit} no card), então o item era morto.
+
+                        "Duplicar" saiu do QUADRO (14/08/2026): duplicar é ação
+                        de planejamento — nasce da EAP, com código e posição —, e
+                        no fluxo ela criava um card órfão no meio da coluna. O
+                        Backlog continua tendo, que é onde a EAP se monta.
+
+                        CONCLUIR entra aqui, no lugar do círculo que ficava ao
+                        lado do "…": eram dois círculos quase iguais no topo do
+                        card, disputando leitura com o de progresso. A ação não
+                        se perde — muda de lugar, e arrastar para a coluna final
+                        segue concluindo. */}
+                    <DropdownMenuItem
+                      className={activity.status === "completed"
+                        ? "focus:bg-muted/60 focus:text-foreground"
+                        : "text-success focus:text-success focus:bg-success/10"}
+                      onSelect={() => onToggle()}
+                    >
+                      {activity.status === "completed" ? (
+                        <><Circle className="w-3.5 h-3.5 mr-2" /> Reabrir atividade</>
+                      ) : (
+                        <><CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Concluir atividade</>
+                      )}
+                    </DropdownMenuItem>
                     {/* "Mover para →" substitui o antigo "Mover para Backlog", que
                         mandava o card para o stage display_order=0 — coluna que o
                         quadro não renderiza, fazendo o card desaparecer sem aviso. */}
@@ -742,7 +763,7 @@ function KanbanCardBase({
                   {!!blockedSubsCount && blockedSubsCount > 0 && (
                     <Badge
                       className="bg-destructive/15 text-destructive border-destructive/30 text-[10px] px-1.5 py-0 animate-pulse"
-                      title={`${blockedSubsCount} subtarefa(s) impedida(s)`}
+                      title={`${blockedSubsCount} subatividade(s) impedida(s)`}
                     >
                       ⚠ {blockedSubsCount} sub{blockedSubsCount > 1 ? "s" : ""} impedida{blockedSubsCount > 1 ? "s" : ""}
                     </Badge>
@@ -948,11 +969,14 @@ function KanbanCardBase({
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}
                     className="flex items-center gap-1 mt-1.5 text-[10px] font-medium text-primary hover:text-primary/80 hover:underline transition-colors"
-                    title={isExpanded ? "Recolher subtarefas" : "Expandir subtarefas"}
+                    title={isExpanded ? "Recolher subatividades" : "Expandir subatividades"}
                   >
+                    {/* O `GitFork` saiu: é o ícone de "ramificar repositório",
+                        do vocabulário do Git, e não significava nada aqui.
+                        Disputava 90px com a seta e o texto, que já dizem tudo —
+                        a seta que expande, o número quantas. */}
                     {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    <GitFork className="w-3 h-3" />
-                    <span>{subActivityCount} {subActivityCount === 1 ? "subtarefa" : "subtarefas"}</span>
+                    <span>{subActivityCount} {subActivityCount === 1 ? "subatividade" : "subatividades"}</span>
                   </button>
                 ) : null}
                 {cardFields.subSummary && subActivityStatusSummary && (subActivityStatusSummary.completed > 0 || subActivityStatusSummary.pending > 0) ? (
