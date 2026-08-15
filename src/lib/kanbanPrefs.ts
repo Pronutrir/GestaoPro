@@ -44,6 +44,14 @@ export type KanbanPrefs = {
    * componente desmente).
    */
   columnSorts: Record<string, string>;
+  /**
+   * O usuario ja DECIDIU sobre o resumo de subatividades?
+   *
+   * `subSummary` virou ligado por padrao, mas quem ja usava o quadro tinha um
+   * `false` gravado que nunca escolheu. Enquanto esta marca nao existe, aquele
+   * `false` e ignorado na leitura; depois dela, a escolha do usuario manda.
+   */
+  subSummaryVisto?: boolean;
 };
 
 export const DEFAULT_PREFS: KanbanPrefs = {
@@ -87,6 +95,20 @@ export function sanearPrefs(raw: unknown): KanbanPrefs {
   const cf = o.cardFields;
   if (cf && typeof cf === "object") {
     for (const k of Object.keys(DEFAULT_CARD_FIELDS) as (keyof CardFields)[]) {
+      /**
+       * CAMPO NOVO NÃO HERDA O `false` ANTIGO.
+       *
+       * A preferência gravada sobrescreve o padrão — é o que se espera de uma
+       * escolha do usuário. Mas `subSummary` passou de desligado a LIGADO por
+       * padrão (14/08/2026), e quem já tinha usado o quadro carregava um
+       * `false` que nunca escolheu: ele foi salvo junto com os outros campos
+       * na primeira vez que qualquer coisa mudou.
+       *
+       * Aqui o `false` gravado desse campo é ignorado UMA vez, para o novo
+       * padrão valer. Desligar de propósito continua funcionando: a partir do
+       * momento em que `subSummaryVisto` é gravado, a escolha manda.
+       */
+      if (k === "subSummary" && !(o as { subSummaryVisto?: boolean }).subSummaryVisto) continue;
       const v = (cf as Record<string, unknown>)[k];
       if (typeof v === "boolean") cardFields[k] = v;
     }
@@ -116,7 +138,12 @@ export function sanearPrefs(raw: unknown): KanbanPrefs {
     }
   }
 
-  return { cardFields, groupBy, columnWidths, collapsedStages, columnSorts };
+  // `subSummaryVisto` viaja de volta: sem isso a marca se perderia a cada
+  // saneamento, e o `false` do usuário nunca chegaria a valer.
+  return {
+    cardFields, groupBy, columnWidths, collapsedStages, columnSorts,
+    ...(o.subSummaryVisto === true ? { subSummaryVisto: true } : {}),
+  };
 }
 
 /** Lê o cache local. Nunca lança — cache corrompido vira default. */

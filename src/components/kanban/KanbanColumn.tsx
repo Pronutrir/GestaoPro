@@ -663,9 +663,19 @@ export function SortableColumn({
         is_milestone: c.is_milestone,
       })),
       activity.is_milestone,
-      // Este ramo só existe para PAI com filhos — ou seja, uma caixa. Ela vale
-      // a média dos filhos e ignora a própria coluna.
-      true,
+      /**
+       * AGRUPADOR SÓ QUANDO TEM FILHOS.
+       *
+       * Estava `true` fixo, com o comentário "este ramo só existe para pai com
+       * filhos". Estava errado: `renderActivityNode` desenha TODO card da
+       * coluna, folha inclusive.
+       *
+       * O efeito era o relatado: uma atividade concluída na coluna final
+       * mostrava 0% — como agrupador sem filhos, ela caía em "Sem atividades",
+       * que é 0 por definição. O card ficava riscado, na coluna verde, com a
+       * barra vazia.
+       */
+      (childrenByParent.get(activity.id) || []).length > 0,
     );
     const expanded = expandedIds.has(activity.id);
     /**

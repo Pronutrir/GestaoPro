@@ -314,7 +314,13 @@ export const ActivityKanban = ({
   // versionar a chave sempre que um DEFAULT_* persistido mudar de valor.
   const cardFields = prefs.cardFields;
   const toggleCardField = useCallback((key: keyof CardFields) => {
-    setPrefs((p) => ({ cardFields: { ...p.cardFields, [key]: !p.cardFields[key] } }));
+    setPrefs((p) => ({
+      cardFields: { ...p.cardFields, [key]: !p.cardFields[key] },
+      // Marca que o usuário DECIDIU sobre o resumo. Antes disso, o `false`
+      // gravado é ignorado na leitura, para o novo padrão (ligado) valer —
+      // ver `kanbanPrefs.ts`. A partir daqui a escolha dele manda.
+      ...(key === "subSummary" ? { subSummaryVisto: true } : {}),
+    }));
   }, [setPrefs]);
 
   // Filtro "Apenas minhas tarefas" — persistido por projeto
