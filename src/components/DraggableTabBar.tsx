@@ -80,9 +80,15 @@ function SortableTab({
       `}
       onClick={onClick}
     >
+      {/* A ALÇA SÓ NO HOVER. Aparecia em toda aba, o tempo todo, para um gesto
+          que quase não se usa — reordenar abas é coisa de uma vez, e o ⠿ ficava
+          disputando leitura com o nome da aba em cada uma delas.
+          `w-0 group-hover:w-3` em vez de `opacity`: escondida por opacidade ela
+          continuaria ocupando o espaço, e a barra não encolheria. */}
       <button
-        className="cursor-grab active:cursor-grabbing text-current/50 hover:text-current -ml-1"
+        className="cursor-grab active:cursor-grabbing text-current/50 hover:text-current -ml-1 w-0 overflow-hidden opacity-0 group-hover/tab:w-3 group-hover/tab:opacity-100 focus-visible:w-3 focus-visible:opacity-100 transition-all"
         onClick={(e) => e.stopPropagation()}
+        aria-label="Arrastar para reordenar"
         {...attributes}
         {...listeners}
       >

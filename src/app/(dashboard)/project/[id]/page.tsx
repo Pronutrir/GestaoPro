@@ -1374,29 +1374,45 @@ export default function ProjectDetailsPage() {
     <main className="px-4 py-4 bg-muted/70 dark:bg-background min-h-[calc(100vh-3.5rem)]">
         <div className="space-y-6">
           {/* Project Info Card */}
-          <Card className="px-5 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4 text-sm">
+          {/* CABEÇALHO: identidade à esquerda, o que se consulta à direita.
+              Antes tudo tinha o mesmo peso — "Projeto:", "Líder:", "Entrega
+              em:", "Progresso:" no mesmo tamanho e cor. O nome do projeto, que
+              é a identidade da tela, competia com rótulos de campo e ainda era
+              truncado em 20 caracteres enquanto "18 D Restantes" piscava com
+              espaço de sobra.
+              Nada foi removido: o que muda é hierarquia. */}
+          <Card className="px-5 py-2.5">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <Button
                   variant={showDashboard ? "default" : "outline"}
                   size="sm"
-                  className="gap-1.5 h-8"
+                  className="gap-1.5 h-8 shrink-0"
                   onClick={() => setShowDashboard(!showDashboard)}
+                  title="Painel do projeto"
                 >
                   <LayoutDashboard className="w-3.5 h-3.5" />
-                  Dashboard
+                  <span className="hidden sm:inline">Dashboard</span>
                 </Button>
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-muted-foreground">Projeto:</span>
-                  <span className="font-semibold text-foreground truncate max-w-[260px]" title={project.title}>
-                    {project.title}
-                  </span>
-                </div>
+                {/* O rótulo "Projeto:" saiu: numa tela de projeto, o nome em
+                    destaque é obviamente o projeto. O espaço vai para o nome,
+                    que agora cabe inteiro. */}
+                <h1 className="text-[15px] font-semibold text-foreground truncate min-w-0" title={project.title}>
+                  {project.title}
+                </h1>
                 {canEdit && (
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingProject(project); setEditDialogOpen(true); }}>
-                    <Pencil className="w-3.5 h-3.5" />
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-muted-foreground" title="Editar projeto" onClick={() => { setEditingProject(project); setEditDialogOpen(true); }}>
+                    <Pencil className="w-3 h-3" />
                   </Button>
                 )}
+              </div>
+
+              {/* METADADOS À DIREITA, menores e separados por pontos: eles se
+                  CONSULTAM, não se leem. Sem rótulo — o nome de uma pessoa no
+                  cabeçalho é o responsável, e uma data com calendário é o
+                  prazo. `ml-auto` empurra tudo para a borda, deixando o nome
+                  respirar. */}
+              <div className="flex items-center gap-2 text-[12px] text-muted-foreground ml-auto shrink-0">
                 {/* UMA pessoa só no topo: mostrar Líder e Gestor lado a lado
                     enchia a barra sem acrescentar — quem olha o cabeçalho quer
                     saber a quem recorrer, não o organograma. A ficha continua
@@ -1411,33 +1427,35 @@ export default function ProjectDetailsPage() {
                   const quem = gestor || lider;
                   if (!quem) return null;
                   return (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground">{gestor ? "Gestor:" : "Líder:"}</span>
-                      <span className="font-medium text-foreground">{quem}</span>
-                    </div>
+                    <span className="hidden md:inline truncate max-w-[150px]" title={`${gestor ? "Gestor" : "Líder"}: ${quem}`}>
+                      {quem}
+                    </span>
                   );
                 })()}
                 {project.due_date && (() => {
-                  const { dueDate, diffDays, isOverdue, isUrgent } = getProjectDeadlineInfo(project.due_date);
+                  const { diffDays, isOverdue, isUrgent } = getProjectDeadlineInfo(project.due_date);
                   return (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-primary" />
-                      <span className="font-semibold text-foreground">Entrega em:</span>
-                      <span className="font-semibold text-foreground">{formatProjectDueDate(project.due_date)}</span>
-                      <span className={`font-bold text-xs px-2 py-0.5 rounded-full animate-pulse ${isOverdue ? "bg-destructive/90 text-destructive-foreground" : isUrgent ? "bg-warning/90 text-warning-foreground" : "bg-success/90 text-success-foreground"}`}>
-                        {isOverdue ? `${Math.abs(diffDays)}d atrasado` : diffDays === 0 ? "Hoje!" : `${diffDays} D Restantes`}
+                    <>
+                      <span className="text-muted-foreground/40 hidden md:inline">·</span>
+                      <span className="inline-flex items-center gap-1.5" title={`Entrega em ${formatProjectDueDate(project.due_date)}`}>
+                        <Calendar className="w-3.5 h-3.5 shrink-0" />
+                        <span className="hidden lg:inline">{formatProjectDueDate(project.due_date)}</span>
                       </span>
-                    </div>
+                      {/* O `animate-pulse` saiu: algo piscando o tempo todo deixa
+                          de ser alerta e vira ruído de fundo. A cor já diz a
+                          urgência, e "18 dias" lê melhor que "18 D Restantes". */}
+                      <span className={`font-semibold text-[11px] px-2 py-0.5 rounded-full shrink-0 ${isOverdue ? "bg-destructive/90 text-destructive-foreground" : isUrgent ? "bg-warning/90 text-warning-foreground" : "bg-success/90 text-success-foreground"}`}>
+                        {isOverdue ? `${Math.abs(diffDays)}d atrasado` : diffDays === 0 ? "Hoje!" : `${diffDays} dias`}
+                      </span>
+                    </>
                   );
                 })()}
                 {project.blockers && (
-                  <div className="flex items-center gap-1.5 text-destructive">
-                    <span>⚠️</span>
-                    <span className="font-medium text-xs">{project.blockers}</span>
-                  </div>
+                  <span className="inline-flex items-center gap-1 text-destructive shrink-0" title={project.blockers}>
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span className="font-medium truncate max-w-[120px] hidden lg:inline">{project.blockers}</span>
+                  </span>
                 )}
-              </div>
-              <div className="flex items-center gap-3 text-sm">
                 {/* Riscos ao lado do progresso: é a informação que muda uma
                     decisão de gestão, e antes não aparecia em tela nenhuma.
                     Só surge quando há risco aberto — projeto sem risco não
@@ -1461,11 +1479,21 @@ export default function ProjectDetailsPage() {
                     </span>
                   </button>
                 )}
-                <span className="text-muted-foreground">Progresso:</span>
-                <span className="font-medium text-foreground">{completedActivities}/{activities.length} tarefas ({activityProgress.toFixed(0)}%)</span>
-                <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-success transition-all" style={{ width: `${activityProgress}%` }} />
-                </div>
+                {/* PROGRESSO sem o rótulo "Progresso:": a barra já diz o que é.
+                    O percentual vem em destaque (é o número que se olha), e a
+                    contagem fica ao lado, discreta — quem quer o detalhe lê,
+                    quem quer o resumo não precisa. */}
+                <span className="text-muted-foreground/40">·</span>
+                <span
+                  className="inline-flex items-center gap-2 shrink-0"
+                  title={`${completedActivities} de ${activities.length} tarefas concluídas`}
+                >
+                  <span className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <span className="block h-full bg-success transition-all" style={{ width: `${activityProgress}%` }} />
+                  </span>
+                  <span className="font-semibold text-foreground tabular-nums">{activityProgress.toFixed(0)}%</span>
+                  <span className="tabular-nums hidden lg:inline">{completedActivities}/{activities.length}</span>
+                </span>
               </div>
             </div>
           </Card>
@@ -1556,6 +1584,11 @@ export default function ProjectDetailsPage() {
                 if (activeTab === val) setActiveTab(next[0] ?? "kanban");
               };
 
+              // "+ Visualização" vai para o FIM da fila (extraSlotPosition
+              // abaixo). Abria a barra, antes das abas — e adicionar uma visão
+              // acontece talvez uma vez por mês, enquanto trocar de aba
+              // acontece dezenas de vezes por dia. O que é raro sai da frente
+              // do que é constante.
               return (
                 <div className="mb-2">
                   <DraggableTabBar
@@ -1565,15 +1598,16 @@ export default function ProjectDetailsPage() {
                     tabs={renderedTabs}
                     onRemoveTab={handleRemoveTab}
                     removableValues={renderedTabs.map(t => t.value)}
-                    extraSlotPosition="left"
+                    extraSlotPosition="right"
                     extraSlot={
                       <Popover open={tabPickerOpen} onOpenChange={setTabPickerOpen}>
                         <PopoverTrigger asChild>
                           <button
-                            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors"
+                            className="flex items-center gap-1 ml-1 px-2.5 py-1.5 rounded-md border border-dashed border-border text-xs font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:border-solid transition-colors"
                             aria-label="Adicionar visualização"
+                            title="Adicionar visualização"
                           >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-3.5 h-3.5" />
                             Visualização
                           </button>
                         </PopoverTrigger>
