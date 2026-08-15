@@ -226,6 +226,18 @@ export const ActivityKanban = ({
     destinoNome: string;
   } | null>(null);
   const [movendoJunto, setMovendoJunto] = useState(false);
+  /**
+   * Quais filhos vão — a escolha é sua, item a item.
+   *
+   * Levar tudo é o caso comum, então abre com todos marcados. Mas às vezes só
+   * três das cinco avançaram, e obrigar o "tudo ou nada" empurraria de volta
+   * para arrastar um por um, que era o problema de origem.
+   *
+   * O PAI é consequência, não escolha: ele só acompanha quando TODOS forem —
+   * é a mesma regra do quadro, e deixá-lo ir com filho para trás recriaria a
+   * mentira que o bloqueio existe para impedir.
+   */
+  const [filhosMarcados, setFilhosMarcados] = useState<Set<string>>(new Set());
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
 
   // Preferências de exibição (campos do card, raias, larguras, colunas
@@ -1926,6 +1938,9 @@ export const ActivityKanban = ({
           destinoId: targetStageId,
           destinoNome: getStageDisplayTitle(stage?.title || ""),
         });
+        // Abre com tudo marcado: levar a fase inteira é o caso comum, e o
+        // diálogo nasceu justamente para poupar o arrasto um a um.
+        setFilhosMarcados(new Set(foraDaColuna.map((f) => f.id)));
         return;
       }
     }
@@ -3397,49 +3412,119 @@ export const ActivityKanban = ({
               </p>
             )}
           </DialogHeader>
-          {moverJunto && (
-            <>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Vão junto
-              </div>
-              {/* Rola quando a fase é grande: 30 subatividades não podem empurrar
-                  os botões para fora da tela. */}
-              <div className="max-h-[280px] overflow-y-auto rolagem-visivel space-y-1 -mx-1 px-1">
-                {[moverJunto.pai, ...moverJunto.filhos].map((a) => {
-                  const de = a.workflow_stage_id ? stages.find((s) => s.id === a.workflow_stage_id) : null;
-                  return (
-                    <div key={a.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/40 text-[12px]">
-                      {a.wbs_code && (
-                        <span className="font-mono text-[10px] text-muted-foreground bg-background border border-border rounded px-1.5 py-0.5 shrink-0">
-                          {a.wbs_code}
+          {moverJunto && (() => {
+            const todos = filhosMarcados.size === moverJunto.filhos.length;
+            const paiVai = todos;
+            return (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    O que vai
+                  </span>
+                  {/* Marcar/desmarcar tudo: com 30 subatividades, desmarcar uma a
+                      uma para ficar com duas é pior que o arrasto que o diálogo
+                      veio substituir. */}
+                  <button
+                    type="button"
+                    className="text-[11px] text-primary hover:underline"
+                    onClick={() => setFilhosMarcados(todos ? new Set() : new Set(moverJunto.filhos.map((f) => f.id)))}
+                  >
+                    {todos ? "Desmarcar todas" : "Marcar todas"}
+                  </button>
+                </div>
+                {/* Rola quando a fase é grande: 30 subatividades não podem empurrar
+                    os botões para fora da tela. */}
+                <div className="max-h-[280px] overflow-y-auto rolagem-visivel space-y-1 -mx-1 px-1">
+                  {moverJunto.filhos.map((a) => {
+                    const de = a.workflow_stage_id ? stages.find((s) => s.id === a.workflow_stage_id) : null;
+                    const marcada = filhosMarcados.has(a.id);
+                    return (
+                      <button
+                        type="button"
+                        key={a.id}
+                        onClick={() => setFilhosMarcados((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
+                          return next;
+                        })}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-left transition-colors",
+                          marcada ? "bg-muted/40" : "bg-transparent opacity-50 hover:opacity-80",
+                        )}
+                      >
+                        <span className={cn(
+                          "w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0",
+                          marcada ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40",
+                        )}>
+                          {marcada && <Check className="w-3 h-3" strokeWidth={3} />}
                         </span>
-                      )}
-                      <span className="flex-1 min-w-0 truncate">{a.title}</span>
-                      <span className="text-[10.5px] text-muted-foreground shrink-0">
-                        {de ? getStageDisplayTitle(de.title) : "—"}
-                      </span>
-                      <span className="text-muted-foreground shrink-0">→</span>
-                      <span className="text-[10.5px] font-semibold text-primary shrink-0">
-                        {moverJunto.destinoNome}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
+                        {a.wbs_code && (
+                          <span className="font-mono text-[10px] text-muted-foreground bg-background border border-border rounded px-1.5 py-0.5 shrink-0">
+                            {a.wbs_code}
+                          </span>
+                        )}
+                        <span className="flex-1 min-w-0 truncate">{a.title}</span>
+                        <span className="text-[10.5px] text-muted-foreground shrink-0">
+                          {de ? getStageDisplayTitle(de.title) : "—"}
+                        </span>
+                        <span className="text-muted-foreground shrink-0">→</span>
+                        <span className="text-[10.5px] font-semibold text-primary shrink-0">
+                          {moverJunto.destinoNome}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* A FASE É CONSEQUÊNCIA, não escolha. Ela não tem caixa: vai
+                    quando todos os filhos vão, e fica quando algum sobra —
+                    deixá-la avançar com trabalho para trás é exatamente o que o
+                    bloqueio existe para impedir. A linha diz qual dos dois é. */}
+                <div className={cn(
+                  "flex items-center gap-2 px-2.5 py-2 rounded-md text-[12px] border",
+                  paiVai ? "bg-primary/5 border-primary/25" : "bg-muted/30 border-border",
+                )}>
+                  <Layers className={cn("w-3.5 h-3.5 shrink-0", paiVai ? "text-primary" : "text-muted-foreground")} />
+                  {moverJunto.pai.wbs_code && (
+                    <span className="font-mono text-[10px] text-muted-foreground bg-background border border-border rounded px-1.5 py-0.5 shrink-0">
+                      {moverJunto.pai.wbs_code}
+                    </span>
+                  )}
+                  <span className="flex-1 min-w-0 truncate font-medium">{moverJunto.pai.title}</span>
+                  <span className={cn("text-[10.5px] shrink-0", paiVai ? "font-semibold text-primary" : "text-muted-foreground")}>
+                    {paiVai ? `→ ${moverJunto.destinoNome}` : "fica onde está"}
+                  </span>
+                </div>
+                {!paiVai && filhosMarcados.size > 0 && (
+                  <p className="text-[11.5px] text-muted-foreground">
+                    A fase acompanha sozinha quando o último item chegar.
+                  </p>
+                )}
+              </>
+            );
+          })()}
           <DialogFooter className="sm:justify-between">
             <span className="text-[11.5px] text-muted-foreground self-center">
-              {moverJunto ? `${moverJunto.filhos.length + 1} itens ao todo` : ""}
+              {moverJunto
+                ? `${filhosMarcados.size} de ${moverJunto.filhos.length} ${moverJunto.filhos.length === 1 ? "item" : "itens"}`
+                : ""}
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setMoverJunto(null)}>Cancelar</Button>
               <Button
-                disabled={movendoJunto}
+                // Nada marcado, nada a fazer: o botão desabilitado evita o
+                // clique que abriria e fecharia o diálogo sem mover nada.
+                disabled={movendoJunto || filhosMarcados.size === 0}
                 onClick={async () => {
                   if (!moverJunto) return;
                   setMovendoJunto(true);
-                  const ids = [moverJunto.pai.id, ...moverJunto.filhos.map((f) => f.id)];
+                  // O PAI só entra quando TODOS os filhos vão — mesma regra do
+                  // quadro. Com algum sobrando, ele fica e sobe depois sozinho.
+                  const paiVai = filhosMarcados.size === moverJunto.filhos.length;
+                  const ids = [
+                    ...(paiVai ? [moverJunto.pai.id] : []),
+                    ...moverJunto.filhos.filter((f) => filhosMarcados.has(f.id)).map((f) => f.id),
+                  ];
                   const destino = moverJunto.destinoId;
                   setOptimisticMoves((prev) => {
                     const next = { ...prev };
@@ -3466,7 +3551,11 @@ export const ActivityKanban = ({
                   toast({ title: `${ids.length} itens movidos para "${moverJunto.destinoNome}"` });
                 }}
               >
-                {movendoJunto ? "Movendo…" : `Mover os ${moverJunto ? moverJunto.filhos.length + 1 : 0}`}
+                {/* O número conta a FASE quando ela vai: o botão promete o que
+                    a lista mostra, e some com a dúvida de "6 inclui a fase?". */}
+                {movendoJunto
+                  ? "Movendo…"
+                  : `Mover ${filhosMarcados.size + (moverJunto && filhosMarcados.size === moverJunto.filhos.length ? 1 : 0)}`}
               </Button>
             </div>
           </DialogFooter>
