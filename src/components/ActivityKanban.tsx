@@ -208,6 +208,24 @@ export const ActivityKanban = ({
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   /** Âncora do Shift+clique: o último marcado, para pegar o intervalo. */
   const ultimoMarcado = useRef<string | null>(null);
+
+  /**
+   * MOVER A FASE COM O CONTEÚDO — diálogo, não aviso.
+   *
+   * Era um toast: passava no canto, sumia sozinho e citava "3 e mais 2" que
+   * ninguém sabia quais. Mas aqui NADA ACONTECEU AINDA e a escolha muda vários
+   * itens — toast informa o que já foi, diálogo decide o que será.
+   *
+   * A lista completa entra: quem confirma precisa ver o que vai junto, com a
+   * coluna de origem de cada um.
+   */
+  const [moverJunto, setMoverJunto] = useState<{
+    pai: Activity;
+    filhos: Activity[];
+    destinoId: string;
+    destinoNome: string;
+  } | null>(null);
+  const [movendoJunto, setMovendoJunto] = useState(false);
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
 
   // Preferências de exibição (campos do card, raias, larguras, colunas
@@ -1902,49 +1920,11 @@ export const ActivityKanban = ({
     if (draggedActivity) {
       const foraDaColuna = filhosForaDaColuna(draggedActivity.id, targetStageId);
       if (foraDaColuna.length > 0) {
-        const n = foraDaColuna.length;
-        const amostra = foraDaColuna.slice(0, 3).map((f) => `"${f.title}"`).join(", ");
-        const destino = targetStageId;
-        const idsJunto = [draggedActivity.id, ...foraDaColuna.map((f) => f.id)];
-        toast({
-          // O TÍTULO diz o que fazer, não o que deu errado. Ele é a linha que
-          // se lê primeiro (e às vezes a única), e o botão ao lado responde
-          // exatamente a ela — antes dizia "Falta mover o que está dentro" e a
-          // pessoa tinha de ler três linhas para achar a saída.
-          title: `Mover a fase e ${n === 1 ? "seu item" : `seus ${n} itens`} junto?`,
-          description:
-            `${n === 1 ? "1 item ainda não está" : `${n} itens ainda não estão`} em ` +
-            `"${getStageDisplayTitle(stage?.title || "")}": ${amostra}${n > 3 ? ` e mais ${n - 3}` : ""}.`,
-          action: (
-            <ToastAction
-              altText="Mover tudo"
-              onClick={async () => {
-                setOptimisticMoves((prev) => {
-                  const next = { ...prev };
-                  for (const id of idsJunto) next[id] = destino;
-                  return next;
-                });
-                const { error: erroLote } = await supabase
-                  .from("activities")
-                  .update({ workflow_stage_id: destino } as never)
-                  .in("id", idsJunto);
-                if (erroLote) {
-                  setOptimisticMoves((prev) => {
-                    const next = { ...prev };
-                    for (const id of idsJunto) delete next[id];
-                    return next;
-                  });
-                  toast({ title: "Não foi possível mover", description: erroLote.message, variant: "destructive" });
-                  return;
-                }
-                onDataChanged();
-                toast({ title: `${idsJunto.length} itens movidos` });
-              }}
-            >
-              Mover tudo
-            </ToastAction>
-          ),
-          variant: "destructive",
+        setMoverJunto({
+          pai: draggedActivity,
+          filhos: foraDaColuna,
+          destinoId: targetStageId,
+          destinoNome: getStageDisplayTitle(stage?.title || ""),
         });
         return;
       }
@@ -3401,6 +3381,97 @@ export const ActivityKanban = ({
           })()}
         </div>
       </SortableContext>
+
+      {/* MOVER A FASE COM O CONTEÚDO. A lista inteira à vista, com a coluna de
+          origem de cada item: quem confirma precisa ver o que vai junto, e o
+          toast anterior citava três nomes e "mais 2" que ninguém sabia quais. */}
+      <Dialog open={!!moverJunto} onOpenChange={(o) => { if (!o) setMoverJunto(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Mover a fase e o que está dentro?</DialogTitle>
+            {moverJunto && (
+              <p className="text-[13px] text-muted-foreground">
+                “{moverJunto.pai.title}” tem {moverJunto.filhos.length}{" "}
+                {moverJunto.filhos.length === 1 ? "item fora" : "itens fora"} de{" "}
+                <span className="font-medium text-foreground">{moverJunto.destinoNome}</span>.
+              </p>
+            )}
+          </DialogHeader>
+          {moverJunto && (
+            <>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Vão junto
+              </div>
+              {/* Rola quando a fase é grande: 30 subatividades não podem empurrar
+                  os botões para fora da tela. */}
+              <div className="max-h-[280px] overflow-y-auto rolagem-visivel space-y-1 -mx-1 px-1">
+                {[moverJunto.pai, ...moverJunto.filhos].map((a) => {
+                  const de = a.workflow_stage_id ? stages.find((s) => s.id === a.workflow_stage_id) : null;
+                  return (
+                    <div key={a.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/40 text-[12px]">
+                      {a.wbs_code && (
+                        <span className="font-mono text-[10px] text-muted-foreground bg-background border border-border rounded px-1.5 py-0.5 shrink-0">
+                          {a.wbs_code}
+                        </span>
+                      )}
+                      <span className="flex-1 min-w-0 truncate">{a.title}</span>
+                      <span className="text-[10.5px] text-muted-foreground shrink-0">
+                        {de ? getStageDisplayTitle(de.title) : "—"}
+                      </span>
+                      <span className="text-muted-foreground shrink-0">→</span>
+                      <span className="text-[10.5px] font-semibold text-primary shrink-0">
+                        {moverJunto.destinoNome}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          <DialogFooter className="sm:justify-between">
+            <span className="text-[11.5px] text-muted-foreground self-center">
+              {moverJunto ? `${moverJunto.filhos.length + 1} itens ao todo` : ""}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setMoverJunto(null)}>Cancelar</Button>
+              <Button
+                disabled={movendoJunto}
+                onClick={async () => {
+                  if (!moverJunto) return;
+                  setMovendoJunto(true);
+                  const ids = [moverJunto.pai.id, ...moverJunto.filhos.map((f) => f.id)];
+                  const destino = moverJunto.destinoId;
+                  setOptimisticMoves((prev) => {
+                    const next = { ...prev };
+                    for (const id of ids) next[id] = destino;
+                    return next;
+                  });
+                  const { error: erroLote } = await supabase
+                    .from("activities")
+                    .update({ workflow_stage_id: destino } as never)
+                    .in("id", ids);
+                  setMovendoJunto(false);
+                  setMoverJunto(null);
+                  if (erroLote) {
+                    // Reverte o otimista: a tela não pode mostrar o que não gravou.
+                    setOptimisticMoves((prev) => {
+                      const next = { ...prev };
+                      for (const id of ids) delete next[id];
+                      return next;
+                    });
+                    toast({ title: "Não foi possível mover", description: erroLote.message, variant: "destructive" });
+                    return;
+                  }
+                  onDataChanged();
+                  toast({ title: `${ids.length} itens movidos para "${moverJunto.destinoNome}"` });
+                }}
+              >
+                {movendoJunto ? "Movendo…" : `Mover os ${moverJunto ? moverJunto.filhos.length + 1 : 0}`}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* BARRA DO LOTE. Flutua no rodapé porque o quadro rola na horizontal —
           presa ao topo, sairia da vista ao percorrer as colunas. Só aparece

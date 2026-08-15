@@ -991,13 +991,27 @@ function KanbanCardBase({
                     <span>{subActivityCount} {subActivityCount === 1 ? "subatividade" : "subatividades"}</span>
                   </button>
                 ) : null}
+                {/* "1 concluída · 4 abertas" — não "Subs: 1 concluidas / 4
+                    pendentes". O prefixo repetia o que a linha acima já diz, e
+                    o texto ocupava a largura do card inteiro para uma
+                    informação de dois números. O ponto verde dá o estado sem
+                    palavra nenhuma. */}
                 {cardFields.subSummary && subActivityStatusSummary && (subActivityStatusSummary.completed > 0 || subActivityStatusSummary.pending > 0) ? (
                   <Badge
                     variant="outline"
-                    className="mt-1 text-[10px] px-1.5 py-0 bg-muted/40 border-border/60 text-muted-foreground"
-                    title="Resumo das subatividades"
+                    className="mt-1 text-[10px] px-1.5 py-0 gap-1.5 bg-muted/40 border-border/60 text-muted-foreground font-normal"
+                    title={`${subActivityStatusSummary.completed} de ${subActivityStatusSummary.completed + subActivityStatusSummary.pending} subatividades concluídas`}
                   >
-                    Subs: {subActivityStatusSummary.completed} concluidas / {subActivityStatusSummary.pending} pendentes
+                    {subActivityStatusSummary.completed > 0 && (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" aria-hidden />
+                        {subActivityStatusSummary.completed} concluída{subActivityStatusSummary.completed > 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {subActivityStatusSummary.completed > 0 && subActivityStatusSummary.pending > 0 && <span className="opacity-40">·</span>}
+                    {subActivityStatusSummary.pending > 0 && (
+                      <span>{subActivityStatusSummary.pending} aberta{subActivityStatusSummary.pending > 1 ? "s" : ""}</span>
+                    )}
                   </Badge>
                 ) : null}
               </div>

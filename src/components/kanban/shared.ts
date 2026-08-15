@@ -126,7 +126,18 @@ export const DEFAULT_CARD_FIELDS: CardFields = {
   subCount: false,
   description: false,
   breadcrumb: false,
-  subSummary: false,
+  /**
+   * LIGADO por padrão (14/08/2026).
+   *
+   * Nascia desligado, escondido em Visões → campos do cartão — e ninguém o
+   * encontrava. O resultado na tela: um card com 1 de 5 subatividades
+   * concluídas mostrava só "36%", e para saber o que tinha andado era preciso
+   * abrir a atividade e ir na aba Subatividades.
+   *
+   * O percentual é CONSEQUÊNCIA; quantas fecharam é a informação. Quem não
+   * quiser, desliga onde sempre esteve.
+   */
+  subSummary: true,
   tags: false,
   dependencies: false,
 };
