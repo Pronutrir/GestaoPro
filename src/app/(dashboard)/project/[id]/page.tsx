@@ -1496,7 +1496,13 @@ export default function ProjectDetailsPage() {
                     <span className="block h-full bg-success transition-all" style={{ width: `${activityProgress}%` }} />
                   </span>
                   <span className="font-semibold text-foreground tabular-nums">{activityProgress.toFixed(0)}%</span>
-                  <span className="tabular-nums hidden lg:inline">{completedActivities}/{activities.length}</span>
+                  {/* O ponto separa os dois números: sem ele "0%" e "0/413"
+                      encostam e se leem como um valor só. É o mesmo separador
+                      que divide os demais metadados da faixa. */}
+                  <span className="tabular-nums hidden lg:inline">
+                    <span className="text-muted-foreground/40 mr-1.5">·</span>
+                    {completedActivities}/{activities.length}
+                  </span>
                 </span>
               </div>
             </div>
