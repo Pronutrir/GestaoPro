@@ -177,6 +177,16 @@ export const ActivityKanban = ({
   onToggleActivity,
   isAdmin = false,
   canCreate = false,
+  /**
+   * Permissões do MEMBRO no projeto (`project_members.can_edit` / `can_move`).
+   *
+   * Elas existiam no banco e na página, mas nunca chegavam aqui: o quadro só
+   * recebia `isAdmin={canDelete}`, então quem tinha `can_edit` sem
+   * `can_delete` não conseguia mexer em nada. Medido em 17/08/2026: 39 pessoas
+   * nessa situação.
+   */
+  canEdit = false,
+  canMove = false,
   projectLocked = false,
   isQualityProject = false,
   onOpenCreateTask,
@@ -919,6 +929,19 @@ export const ActivityKanban = ({
   const canMutateActivity = useCallback((a?: Activity | null) => {
     if (!a) return false;
     if (isAdmin) return true;
+    /**
+     * MEMBRO DA EQUIPE COM PERMISSÃO TAMBÉM MEXE.
+     *
+     * A regra reconhecia só três papéis — admin, criador e responsável — e
+     * ignorava `project_members.can_edit`/`can_move`, que a tela de equipe
+     * grava e que a página já lia. Quem foi convidado para o projeto com
+     * permissão de editar não conseguia mover um card sequer.
+     *
+     * `canEdit || canMove` porque as duas são formas de mexer na atividade, e
+     * quem tem uma sem a outra ainda precisa passar por aqui — o caminho
+     * específico (mover, bloquear, editar) valida a sua no ponto de uso.
+     */
+    if (canEdit || canMove) return true;
     if (myId && a.created_by === myId) return true;
     if (myId && a.assigned_to === myId) return true;
     if (myName) {
@@ -928,7 +951,7 @@ export const ActivityKanban = ({
       if (resolvedAssigned && resolvedAssigned === myName) return true;
     }
     return false;
-  }, [isAdmin, myId, myName, profilesMap]);
+  }, [isAdmin, canEdit, canMove, myId, myName, profilesMap]);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);

@@ -390,6 +390,9 @@ export interface ActivityKanbanProps {
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   isAdmin?: boolean;
   canCreate?: boolean;
+  /** `project_members.can_edit` / `can_move` — permissão do membro no projeto. */
+  canEdit?: boolean;
+  canMove?: boolean;
   projectLocked?: boolean;
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;

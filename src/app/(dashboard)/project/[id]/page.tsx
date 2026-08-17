@@ -1668,6 +1668,8 @@ export default function ProjectDetailsPage() {
                 onToggleActivity={handleToggleActivity}
                 isAdmin={canDelete}
                 canCreate={canCreate}
+                canEdit={canEdit}
+                canMove={canMove}
                 projectLocked={isProjectConcluded}
                 isQualityProject={isQualityProject}
                 profilesMap={profilesMap}
