@@ -1492,15 +1492,22 @@ export default function ProjectDetailsPage() {
                   className="inline-flex items-center gap-2 shrink-0"
                   title={`${completedActivities} de ${activities.length} tarefas concluídas`}
                 >
-                  <span className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <span className="block h-full bg-success transition-all" style={{ width: `${activityProgress}%` }} />
-                  </span>
+                  {/* A BARRA SÓ QUANDO TEM O QUE MOSTRAR. Com 0% ela é um
+                      trilho cinza de 64px que não informa nada — ocupa o espaço
+                      entre o selo do prazo e o número, e o vazio parece falha
+                      de carregamento. Abaixo de 1% o percentual fala sozinho. */}
+                  {activityProgress >= 1 && (
+                    <span className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <span className="block h-full bg-success transition-all" style={{ width: `${activityProgress}%` }} />
+                    </span>
+                  )}
+                  {/* UM separador só nesta sequência: havia um ponto antes da
+                      barra e outro antes da contagem, e "18 dias · ▬ 0% · 1/413"
+                      vira uma fila de pontos que picota a leitura. O percentual
+                      e a contagem são o MESMO dado em duas formas — ficam juntos,
+                      separados por espaço, não por pontuação. */}
                   <span className="font-semibold text-foreground tabular-nums">{activityProgress.toFixed(0)}%</span>
-                  {/* O ponto separa os dois números: sem ele "0%" e "0/413"
-                      encostam e se leem como um valor só. É o mesmo separador
-                      que divide os demais metadados da faixa. */}
-                  <span className="tabular-nums hidden lg:inline">
-                    <span className="text-muted-foreground/40 mr-1.5">·</span>
+                  <span className="tabular-nums text-muted-foreground/70 hidden lg:inline">
                     {completedActivities}/{activities.length}
                   </span>
                 </span>
