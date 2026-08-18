@@ -45,6 +45,50 @@ interface ProjectMembersManagerProps {
   projectId: string;
 }
 
+/**
+ * TRÊS PAPÉIS, no lugar de dois seletores e quatro caixas vazias.
+ *
+ * O formulário abria com "Nível de acesso" (Contribuidor/Commenter/Viewer),
+ * um "template de permissão" opcional que ninguém escolhia, e as quatro
+ * caixas DESMARCADAS. Clicar em "Adicionar" sem tocar nelas era o caminho
+ * mais rápido — e criava alguém que não editava nada.
+ *
+ * Medido em 18/08/2026: 28 vínculos nasceram assim, com o mesmo padrão
+ * (`create=1, edit=0, move=0, delete=0`) repetido de maio a agosto. Nenhuma
+ * combinação intermediária — ninguém marcou "editar sim, excluir não". Era
+ * default, não escolha.
+ *
+ * `Executar` é o padrão porque é o que "adicionar à equipe" significa na
+ * maioria das vezes. Quem quer outro clica; o silêncio deixa de significar
+ * "sem permissão".
+ */
+const PAPEIS = [
+  {
+    id: "acompanhar" as const,
+    nome: "Acompanhar",
+    hint: "lê e comenta",
+    nivel: "commenter" as const,
+    perms: { can_create: false, can_edit: false, can_delete: false, can_move: false },
+  },
+  {
+    id: "executar" as const,
+    nome: "Executar",
+    hint: "cria, edita, move",
+    nivel: "contributor" as const,
+    perms: { can_create: true, can_edit: true, can_delete: false, can_move: true },
+  },
+  {
+    id: "coordenar" as const,
+    nome: "Coordenar",
+    hint: "+ excluir",
+    nivel: "contributor" as const,
+    perms: { can_create: true, can_edit: true, can_delete: true, can_move: true },
+  },
+];
+
+/** Permissões de quem entra na equipe sem escolher papel: `Executar`. */
+const PERMS_PADRAO = PAPEIS.find((p) => p.id === "executar")!.perms;
+
 export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps) => {
   const { toast } = useToast();
   const getInitials = (name: string | null | undefined) =>
@@ -62,12 +106,9 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
   const [selectedUser, setSelectedUser] = useState("");
   const [selectedSector, setSelectedSector] = useState("");
   const [selectedAccessLevel, setSelectedAccessLevel] = useState<"viewer" | "commenter" | "contributor">("contributor");
-  const [permissions, setPermissions] = useState({
-    can_create: false,
-    can_edit: false,
-    can_delete: false,
-    can_move: false,
-  });
+  // Nasce em "Executar" — ver o comentário de PAPEIS. Antes começava tudo
+  // `false`, e quem não percebia convidava alguém que não editava nada.
+  const [permissions, setPermissions] = useState({ ...PERMS_PADRAO });
   const [showNewMember, setShowNewMember] = useState(false);
   const [newMemberName, setNewMemberName] = useState("");
   const [newMemberEmail, setNewMemberEmail] = useState("");
@@ -110,6 +151,32 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
     });
   };
 
+  /**
+   * Qual papel as permissões atuais representam?
+   *
+   * Derivado, não guardado: as caixas continuam editáveis uma a uma, e quem
+   * ajusta uma delas sai do papel — o segmentado desmarca sozinho, em vez de
+   * mentir que ainda é "Executar" com a caixa de mover desligada.
+   */
+  const papelAtual = PAPEIS.find(
+    (p) =>
+      p.nivel === selectedAccessLevel &&
+      p.perms.can_create === permissions.can_create &&
+      p.perms.can_edit === permissions.can_edit &&
+      p.perms.can_delete === permissions.can_delete &&
+      p.perms.can_move === permissions.can_move,
+  )?.id ?? null;
+
+  const aplicarPapel = (id: string) => {
+    const p = PAPEIS.find((x) => x.id === id);
+    if (!p) return;
+    setSelectedAccessLevel(p.nivel);
+    setPermissions(p.perms);
+    // Template e papel diziam a mesma coisa por dois caminhos: escolher um
+    // limpa o outro, para a tela não mostrar duas respostas divergentes.
+    setSelectedScheme("");
+  };
+
   useEffect(() => { fetchData(); }, [projectId]);
 
   const availableUsers = profiles.filter(
@@ -138,7 +205,9 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
       setSelectedSector("");
       setSelectedAccessLevel("contributor");
       setSelectedScheme("");
-      setPermissions({ can_create: false, can_edit: false, can_delete: false, can_move: false });
+      // Volta ao padrão "Executar", não ao vazio: convidar duas pessoas
+      // seguidas não deve exigir remarcar tudo na segunda.
+      setPermissions({ ...PERMS_PADRAO });
       fetchData();
     }
   };
@@ -324,14 +393,49 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
         </div>
         {selectedUser && (
           <>
+            {/* O PAPEL, no lugar do "Nível de acesso" + template opcional.
+                Os dois diziam a mesma coisa por caminhos diferentes, e nenhum
+                era escolhido: o resultado eram 28 pessoas sem permissão. */}
+            <div>
+              <Label className="text-xs text-muted-foreground">
+                O que essa pessoa vai fazer <span className="text-foreground font-medium">neste projeto</span>
+              </Label>
+              <div className="grid grid-cols-3 gap-1.5 mt-1">
+                {PAPEIS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => aplicarPapel(p.id)}
+                    className={`px-2 py-1.5 rounded-md border text-center transition-colors ${
+                      papelAtual === p.id
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-background text-muted-foreground hover:bg-muted/60"
+                    }`}
+                  >
+                    <span className={`block text-xs ${papelAtual === p.id ? "font-semibold" : "font-medium"}`}>
+                      {p.nome}
+                    </span>
+                    <span className="block text-[10px] opacity-80">{p.hint}</span>
+                  </button>
+                ))}
+              </div>
+              {/* Nenhum papel casa = as caixas foram ajustadas à mão. Dizer
+                  isso é melhor que deixar os três apagados sem explicação. */}
+              {papelAtual === null && (
+                <p className="text-[10.5px] text-muted-foreground mt-1.5">
+                  Permissões ajustadas manualmente abaixo.
+                </p>
+              )}
+            </div>
+
             {schemes.length > 0 && (
-              <div>
-                <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Wand2 className="w-3 h-3" /> Aplicar template de permissão
-                </Label>
+              <details className="group">
+                <summary className="text-[11px] text-muted-foreground cursor-pointer list-none flex items-center gap-1 hover:text-foreground">
+                  <Wand2 className="w-3 h-3" /> Usar um template salvo
+                </summary>
                 <Select value={selectedScheme} onValueChange={applyScheme}>
-                  <SelectTrigger className="h-8 text-sm mt-1">
-                    <SelectValue placeholder="Escolher um template (opcional)..." />
+                  <SelectTrigger className="h-8 text-sm mt-1.5">
+                    <SelectValue placeholder="Escolher um template..." />
                   </SelectTrigger>
                   <SelectContent>
                     {schemes.map((s) => (
@@ -341,7 +445,7 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </details>
             )}
             <div>
               <Label className="text-xs text-muted-foreground">Setor neste projeto</Label>
@@ -352,35 +456,34 @@ export const ProjectMembersManager = ({ projectId }: ProjectMembersManagerProps)
                 onChange={(e) => setSelectedSector(e.target.value)}
               />
             </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Nível de acesso</Label>
-              <Select value={selectedAccessLevel} onValueChange={(v) => setSelectedAccessLevel(v as any)}>
-                <SelectTrigger className="h-8 text-sm mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="contributor">Contribuidor — pode escrever conforme permissões abaixo</SelectItem>
-                  <SelectItem value="commenter">Commenter — apenas visualiza e comenta</SelectItem>
-                  <SelectItem value="viewer">Viewer — apenas visualiza</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* O seletor "Nível de acesso" saiu: o papel acima já o define
+                (Acompanhar = commenter, os outros = contributor). Eram dois
+                campos para a mesma pergunta, e quem lia um não olhava o outro.
+
+                As caixas FICAM, agora refletindo o papel — quem precisa de uma
+                combinação que os três não cobrem ajusta aqui, e o segmentado
+                acima se desmarca sozinho. */}
             {selectedAccessLevel === "contributor" && (
-            <div className="flex flex-wrap gap-3">
-              {[
-                { key: "can_create", label: "Criar" },
-                { key: "can_edit", label: "Editar" },
-                { key: "can_delete", label: "Excluir" },
-                { key: "can_move", label: "Mover" },
-              ].map((perm) => (
-                <label key={perm.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <Checkbox
-                    checked={(permissions as any)[perm.key]}
-                    onCheckedChange={(v) => setPermissions({ ...permissions, [perm.key]: !!v })}
-                  />
-                  {perm.label}
-                </label>
-              ))}
+            <div>
+              <Label className="text-xs text-muted-foreground">
+                Permissões <span className="opacity-70">— vêm do papel acima</span>
+              </Label>
+              <div className="flex flex-wrap gap-3 mt-1.5">
+                {[
+                  { key: "can_create", label: "Criar" },
+                  { key: "can_edit", label: "Editar" },
+                  { key: "can_delete", label: "Excluir" },
+                  { key: "can_move", label: "Mover" },
+                ].map((perm) => (
+                  <label key={perm.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <Checkbox
+                      checked={(permissions as any)[perm.key]}
+                      onCheckedChange={(v) => setPermissions({ ...permissions, [perm.key]: !!v })}
+                    />
+                    {perm.label}
+                  </label>
+                ))}
+              </div>
             </div>
             )}
             <Button type="button" size="sm" variant="outline" className="h-8 gap-1 w-full" onClick={handleAdd}>
