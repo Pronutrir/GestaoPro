@@ -45,6 +45,8 @@ interface MemberRow {
    *  teve seletor: 56 dos 71 membros ficaram gravados como "I" só porque é o
    *  valor padrão — o sistema achava que ninguém executa e ninguém aprova. */
   raci: RaciRole | null;
+  /** O que a pessoa PODE FAZER — eixo separado do RACI (ver PAPEIS). */
+  papel: PapelId;
 }
 
 /** R executa · A aprova (só um) · C é consultado · I acompanha. */
@@ -56,6 +58,44 @@ const RACI_OPCOES: { v: RaciRole; label: string; hint: string }[] = [
   { v: "C", label: "C", hint: "Consultado — opina antes da decisão" },
   { v: "I", label: "I", hint: "Informado — só acompanha" },
 ];
+
+/**
+ * PERMISSÃO — o outro eixo, que faltava nesta tela.
+ *
+ * Só a matriz RACI aparecia aqui, e a permissão era decidida em silêncio:
+ * todo membro novo era gravado com `can_edit: false, can_move: false`. Quem
+ * adicionava alguém à equipe via só as letras R/A/C/I e supunha que aquilo
+ * definia acesso — não define. RACI é governança; acesso são as quatro
+ * colunas `can_*`.
+ *
+ * A confusão tinha efeito medido em 18/08/2026: 44 das 50 pessoas rotuladas
+ * "I — só acompanha" podiam mexer no projeto, 34 delas com permissão total.
+ *
+ * `Executar` é o padrão porque é o que "adicionar à equipe" significa na
+ * maioria das vezes. O silêncio deixa de significar "sem permissão".
+ */
+type PapelId = "acompanhar" | "executar" | "coordenar";
+
+const PAPEIS: { id: PapelId; nome: string; hint: string; perms: Record<string, boolean> }[] = [
+  { id: "acompanhar", nome: "Acompanhar", hint: "lê e comenta",
+    perms: { can_create: false, can_edit: false, can_delete: false, can_move: false } },
+  { id: "executar", nome: "Executar", hint: "cria, edita e move atividades",
+    perms: { can_create: true, can_edit: true, can_delete: false, can_move: true } },
+  { id: "coordenar", nome: "Coordenar", hint: "tudo isso e mais excluir",
+    perms: { can_create: true, can_edit: true, can_delete: true, can_move: true } },
+];
+
+const PAPEL_PADRAO: PapelId = "executar";
+
+/** Das quatro colunas para o papel — para a tela abrir mostrando o que vale. */
+const papelDePermissoes = (p: {
+  can_create?: boolean | null; can_edit?: boolean | null;
+  can_delete?: boolean | null; can_move?: boolean | null;
+}): PapelId => {
+  if (p.can_delete) return "coordenar";
+  if (p.can_edit || p.can_move) return "executar";
+  return "acompanhar";
+};
 
 interface Project {
   id: string;
@@ -157,13 +197,18 @@ export const EditProjectDialog = ({
     });
   };
 
+  /** Troca o que a pessoa pode fazer. Eixo separado do RACI, de propósito. */
+  const definirPapel = (memberId: string, papel: PapelId) => {
+    setTeam((prev) => prev.map((m) => (m.id === memberId ? { ...m, papel } : m)));
+  };
+
   // Carrega equipe atual do projeto ao abrir
   useEffect(() => {
     const loadTeam = async () => {
       if (!project?.id || !open) return;
       const { data: members } = await supabase
         .from("project_members")
-        .select("id, user_id, invitation_status, raci")
+        .select("id, user_id, invitation_status, raci, can_create, can_edit, can_delete, can_move")
         .eq("project_id", project.id);
       if (!members) { setTeam([]); return; }
       const ids = members.map((m: any) => m.user_id);
@@ -186,6 +231,7 @@ export const EditProjectDialog = ({
             // não definido, para a matriz começar honesta em vez de mentir
             // que todo mundo é Informado.
             raci: (m.raci === "R" || m.raci === "A" || m.raci === "C" ? m.raci : null) as RaciRole | null,
+            papel: papelDePermissoes(m),
           };
         })
       );
@@ -501,8 +547,15 @@ export const EditProjectDialog = ({
           if (respErr) throw respErr;
         }
 
-        // Membros não têm mais distinção Leitor/Editor — permissões ficam zeradas;
-        // a edição vem do papel de participante/responsável da atividade (RLS).
+        // As permissões ficavam ZERADAS aqui, com a justificativa de que "a
+        // edição vem do papel de participante/responsável da atividade (RLS)".
+        // A RLS não dispensa `can_edit` — ela exige `can_edit` OU vínculo com
+        // a atividade. Quem entrava na equipe sem ser responsável por nada não
+        // passava em nenhuma das duas vias.
+        //
+        // Medido em 18/08/2026: das 1.258 edições que a tela permitia, o banco
+        // recusava 1.089 (86,6%), atingindo 7 pessoas. Agora a permissão é
+        // escolhida na tela, e o padrão é `Executar`.
         // Insere novos (sem repetir quem já entrou como Líder/Gestor)
         const newOnes = team.filter((m) => !m.persisted && !responsibleIds.has(m.user_id));
         if (newOnes.length > 0) {
@@ -519,10 +572,7 @@ export const EditProjectDialog = ({
             invitation_status: "pending" as const,
             invited_at: new Date().toISOString(),
             invited_by: user?.id ?? null,
-            can_create: true,
-            can_edit: false,
-            can_delete: false,
-            can_move: false,
+            ...(PAPEIS.find((p) => p.id === m.papel) ?? PAPEIS.find((p) => p.id === PAPEL_PADRAO)!).perms,
             raci: m.raci,
           }));
           const { error: memErr } = await supabase.from("project_members").insert(rows);
@@ -548,14 +598,20 @@ export const EditProjectDialog = ({
           }
         }
 
-        // Papel RACI de quem JÁ era membro. Vai em UPDATEs separados porque
-        // cada linha tem um papel diferente — e falha aqui não pode derrubar
-        // o salvamento do projeto, que já foi gravado acima.
+        // Permissão e papel RACI de quem JÁ era membro. Vai em UPDATEs
+        // separados porque cada linha tem valores diferentes — e falha aqui
+        // não pode derrubar o salvamento do projeto, que já foi gravado acima.
         const paraAtualizar = team.filter((m) => m.persisted);
         if (paraAtualizar.length > 0) {
           await Promise.all(
             paraAtualizar.map((m) =>
-              supabase.from("project_members").update({ raci: m.raci }).eq("id", m.id),
+              supabase
+                .from("project_members")
+                .update({
+                  raci: m.raci,
+                  ...(PAPEIS.find((p) => p.id === m.papel) ?? PAPEIS.find((p) => p.id === PAPEL_PADRAO)!).perms,
+                })
+                .eq("id", m.id),
             ),
           );
         }
@@ -903,8 +959,9 @@ export const EditProjectDialog = ({
                     return (
                     <div
                       key={m.id}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-md border border-border hover:border-border/80 hover:bg-muted/40 transition-colors group"
+                      className="flex flex-col gap-2 px-2 py-2 rounded-md border border-border hover:border-border/80 hover:bg-muted/40 transition-colors group"
                     >
+                      <div className="flex items-center gap-2">
                       <Avatar className="h-6 w-6 shrink-0">
                         {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
                         <AvatarFallback className="text-[9px]">{initials || "?"}</AvatarFallback>
@@ -930,31 +987,6 @@ export const EditProjectDialog = ({
                           </span>
                         )}
                       </div>
-                      {/* Matriz RACI — quem executa, aprova, é consultado ou
-                          só acompanha. Clicar no papel já marcado desmarca. */}
-                      <div className="flex items-center gap-0.5 shrink-0">
-                        {RACI_OPCOES.map((op) => {
-                          const ativo = m.raci === op.v;
-                          return (
-                            <button
-                              key={op.v}
-                              type="button"
-                              title={op.hint}
-                              onClick={() => definirRaci(m.id, ativo ? null : op.v)}
-                              className={cn(
-                                "w-7 h-7 rounded text-[11px] font-bold transition-colors",
-                                ativo
-                                  ? op.v === "A"
-                                    ? "bg-success/15 text-success ring-1 ring-success/40"
-                                    : "bg-primary/10 text-primary ring-1 ring-primary/40"
-                                  : "text-muted-foreground/50 hover:bg-muted hover:text-foreground",
-                              )}
-                            >
-                              {op.label}
-                            </button>
-                          );
-                        })}
-                      </div>
                       <div className="flex items-center gap-1 shrink-0">
                       <Button
                         type="button"
@@ -966,6 +998,73 @@ export const EditProjectDialog = ({
                         <X className="w-3.5 h-3.5" />
                       </Button>
                       </div>
+                    </div>
+
+                    {/* OS DOIS EIXOS, rotulados e separados.
+                        Antes só a matriz RACI aparecia nesta linha, e a
+                        permissão era decidida em silêncio (todo mundo entrava
+                        com can_edit=false). Quem via as letras R/A/C/I supunha
+                        que aquilo definia acesso — não define. Agora a tela faz
+                        as duas perguntas, com o nome de cada uma. */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-8">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-[68px] shrink-0">
+                          Pode fazer
+                        </span>
+                        <div className="flex rounded-md border border-border overflow-hidden">
+                          {PAPEIS.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              title={p.hint}
+                              onClick={() => definirPapel(m.id, p.id)}
+                              className={cn(
+                                "px-2.5 py-1 text-[11px] transition-colors border-r border-border last:border-r-0",
+                                m.papel === p.id
+                                  ? "bg-primary text-primary-foreground font-semibold"
+                                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                              )}
+                            >
+                              {p.nome}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Matriz RACI — quem executa, aprova, é consultado ou
+                          só acompanha. Clicar no papel já marcado desmarca.
+                          É RÓTULO de governança: não concede nem tira acesso.
+                          Hoje sua única consequência é sugerir o aprovador do
+                          TAP (quem é "A"). */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-[68px] shrink-0">
+                          No projeto
+                        </span>
+                        <div className="flex items-center gap-0.5">
+                          {RACI_OPCOES.map((op) => {
+                            const ativo = m.raci === op.v;
+                            return (
+                              <button
+                                key={op.v}
+                                type="button"
+                                title={op.hint}
+                                onClick={() => definirRaci(m.id, ativo ? null : op.v)}
+                                className={cn(
+                                  "w-7 h-7 rounded text-[11px] font-bold transition-colors",
+                                  ativo
+                                    ? op.v === "A"
+                                      ? "bg-success/15 text-success ring-1 ring-success/40"
+                                      : "bg-primary/10 text-primary ring-1 ring-primary/40"
+                                    : "text-muted-foreground/50 hover:bg-muted hover:text-foreground",
+                                )}
+                              >
+                                {op.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
                     </div>
                     );
                   })}
@@ -994,8 +1093,12 @@ export const EditProjectDialog = ({
                         avatar_url: p.avatar_url || null,
                         invitation_status: "pending",
                         persisted: false,
-                        // Entra sem papel: quem adiciona decide na matriz.
+                        // Entra sem papel RACI: quem adiciona decide na matriz.
                         raci: null,
+                        // Mas COM permissão: "adicionar à equipe" quer dizer
+                        // que a pessoa vai trabalhar no projeto. O silêncio
+                        // não deve significar "sem acesso".
+                        papel: PAPEL_PADRAO,
                       },
                     ]);
                   }}
