@@ -38,7 +38,7 @@ import {
   Layers, GanttChart, BookOpen, FileText, Flag, History,
   ChevronRight, Kanban, Users, AlertTriangle,
   Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
-  NotebookPen, Search, X,
+  NotebookPen, Search, X, Info,
 } from "lucide-react";
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -454,10 +454,15 @@ export default function ProjectDetailsPage() {
     };
   }, [id, authLoading]);
 
+  // `activityScopedAccess` saiu das dependências: ele existia aqui porque a
+  // busca FILTRAVA a lista por ele, então mudar o escopo exigia refazer o
+  // fetch. A lista não é mais filtrada (a visão é igual para todos; o que muda
+  // é o que se pode editar), então o refetch virava trabalho repetido — a flag
+  // hoje só decide se o aviso aparece, e isso é render, não busca.
   useEffect(() => {
     if (authLoading || permissionsLoading || !id) return;
     fetchProjectData();
-  }, [activityScopedAccess, authLoading, permissionsLoading, id]);
+  }, [authLoading, permissionsLoading, id]);
 
   const loadAccess = useCallback(async (silent = false) => {
     if (!id) return;
@@ -506,7 +511,7 @@ export default function ProjectDetailsPage() {
       const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }] = await Promise.all([
         supabase
           .from("project_members")
-          .select("id, invitation_status, can_create, can_edit, can_delete, can_move")
+          .select("id, invitation_status, can_create, can_edit, can_delete, can_move, can_edit_own")
           .eq("project_id", id)
           .eq("user_id", currentUser.id)
           .maybeSingle(),
@@ -582,12 +587,26 @@ export default function ProjectDetailsPage() {
       }
       setAccessDenied(false);
       setActivityScopedAccess(isActivityScoped);
-      // If member exists, use those granular permissions. Otherwise (Líder/Participante),
-      // grant full operational permissions by default.
+      /**
+       * A permissão do membro vem TODA do banco.
+       *
+       * `can_create` era forçado a `true` aqui, ignorando a coluna: o nível
+       * mais baixo da tela de equipe ("lê e comenta") não impedia criar
+       * atividade. A tela oferecia quatro escolhas e o sistema cumpria três —
+       * e quem escolhia o nível mais restrito não recebia o que escolheu.
+       *
+       * A RLS de INSERT (`can_create_activity_v2` → `can_member_action(...,
+       * 'create')`) sempre leu a coluna. Eram os dois lados discordando de
+       * novo, com o front sendo o mais permissivo desta vez.
+       *
+       * Quem não é membro mas lidera/gerencia continua com acesso pleno; quem
+       * entra só por atividade continua sem permissão de projeto — edita as
+       * suas pelo vínculo com a atividade, não por esta linha.
+       */
       setUserPerms(
         hasValidMembership
           ? {
-              can_create: true,
+              can_create: !!perms.can_create,
               can_edit: !!perms.can_edit,
               can_delete: !!perms.can_delete,
               can_move: !!perms.can_move,
@@ -958,33 +977,27 @@ export default function ProjectDetailsPage() {
       if (phasesError) throw new Error(toErrorMessage(phasesError, "phases"));
       if (activitiesError) throw new Error(toErrorMessage(activitiesError, "activities"));
 
-      const candidateUsers = buildUserCandidates([
-        profile?.full_name,
-        profile?.email,
-        currentUser?.email,
-        profile?.id,
-        currentUser?.id,
-      ]);
-
-      const visibleActivities = activityScopedAccess
-        ? (activitiesData || []).filter((activity: any) => (
-            matchesIdentity(activity.assigned_to, candidateUsers) ||
-            (Array.isArray(activity.participants) && anyMatchesIdentity(activity.participants, candidateUsers))
-          ))
-        : (activitiesData || []);
-
-      const visiblePhaseIds = new Set(
-        visibleActivities
-          .map((activity: any) => activity.phase_id)
-          .filter((phaseId: string | null | undefined): phaseId is string => Boolean(phaseId)),
-      );
-
-      setPhases(
-        activityScopedAccess
-          ? (phasesData || []).filter((phase) => visiblePhaseIds.has(phase.id))
-          : (phasesData || []),
-      );
-      setActivities(visibleActivities);
+      /**
+       * VISIBILIDADE E EDIÇÃO SÃO EIXOS INDEPENDENTES.
+       *
+       * Aqui a tela filtrava a lista para quem não é da equipe: mostrava só as
+       * atividades da pessoa e escondia as fases que não continham nenhuma
+       * delas. Quem tem uma atividade num projeto de 40 via um projeto de uma
+       * atividade — e não havia nada dizendo que a visão era parcial.
+       *
+       * Isso confundia duas perguntas diferentes: "posso mexer nisto?" e "sei
+       * que isto existe?". O acesso por atividade restringe a PRIMEIRA
+       * (`canMutateActivity` já cuida disso, e a RLS também); não deveria
+       * responder à segunda. É a regra que o monday publica ("todos continuam
+       * vendo todos os itens" mesmo com a edição restrita) e a razão de o Jira
+       * separar `Browse Projects` de `Edit Issues`.
+       *
+       * A RLS acompanha: `can_view_project_work_v2` (20260818150000) passou a
+       * reconhecer o vínculo por atividade na LEITURA. Sem ela esta mudança não
+       * teria efeito — o banco devolveria a lista curta de qualquer jeito.
+       */
+      setPhases(phasesData || []);
+      setActivities(activitiesData || []);
 
       // Build consumed-minutes map for kanban cards
       const map: Record<string, number> = {};
@@ -1373,6 +1386,24 @@ export default function ProjectDetailsPage() {
   return (
     <main className="px-4 py-4 bg-muted/70 dark:bg-background min-h-[calc(100vh-3.5rem)]">
         <div className="space-y-6">
+          {/* ACESSO POR ATIVIDADE, dito na tela.
+              Quem entra por ter uma atividade atribuída — sem estar na equipe —
+              vê o projeto inteiro, mas só edita o que é seu. Antes isso era
+              invisível: a pessoa descobria a limitação ao tentar salvar e levar
+              erro. O aviso nomeia a regra E a saída (pedir à equipe), no mesmo
+              espírito de `avisoSemPermissao` no Kanban. */}
+          {activityScopedAccess && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-warning/40 bg-warning/10 px-3.5 py-2.5">
+              <Info className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+              <p className="text-xs text-foreground/80 leading-relaxed">
+                <span className="font-semibold text-warning">Você participa deste projeto por atividade.</span>{" "}
+                Vê tudo o que acontece aqui, mas só edita as atividades em que é responsável ou participante.
+                {project?.manager?.trim() || project?.owner?.trim()
+                  ? ` Para editar o restante, peça a ${(project?.manager?.trim() || project?.owner?.trim())} para incluir você na equipe.`
+                  : " Para editar o restante, peça ao líder do projeto para incluir você na equipe."}
+              </p>
+            </div>
+          )}
           {/* Project Info Card */}
           {/* CABEÇALHO: identidade à esquerda, o que se consulta à direita.
               Antes tudo tinha o mesmo peso — "Projeto:", "Líder:", "Entrega

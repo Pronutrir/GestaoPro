@@ -28,10 +28,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { GutPriorityField } from "@/components/GutPriorityField";
-import { UserPlus, X } from "lucide-react";
+import { UserPlus, X, Lock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { gutLabel, gutScore } from "@/lib/gutPriority";
 import { cn } from "@/lib/utils";
+import {
+  PAPEIS_PROJETO,
+  PAPEL_PADRAO,
+  papelDePermissoes,
+  papelPorId,
+  permissoesDoPapel,
+  type PapelId,
+} from "@/lib/projectRoles";
 
 interface MemberRow {
   id: string; // project_members.id (existing) or temp uuid for pending add
@@ -41,61 +49,42 @@ interface MemberRow {
   avatar_url?: string | null;
   invitation_status: "pending" | "accepted" | "declined";
   persisted: boolean;
-  /** Papel na matriz RACI. A coluna já existia em project_members, mas nunca
-   *  teve seletor: 56 dos 71 membros ficaram gravados como "I" só porque é o
-   *  valor padrão — o sistema achava que ninguém executa e ninguém aprova. */
-  raci: RaciRole | null;
-  /** O que a pessoa PODE FAZER — eixo separado do RACI (ver PAPEIS). */
+  /** O que a pessoa PODE FAZER neste projeto. Ver lib/projectRoles.ts. */
   papel: PapelId;
+  /**
+   * O papel COMO ESTAVA ao abrir o diálogo. Serve para gravar só quem mudou.
+   *
+   * `papelDePermissoes` é lossy — há mais combinações de colunas do que
+   * presets, e as que não casam com nenhum são aproximadas. Sem comparar com
+   * o valor original, salvar o diálogo reescreveria a linha de TODOS os
+   * membros e promoveria em silêncio quem estivesse numa combinação torta.
+   * Ausente em quem ainda não foi gravado (`persisted: false`).
+   */
+  papelOriginal?: PapelId;
 }
 
-/** R executa · A aprova (só um) · C é consultado · I acompanha. */
-type RaciRole = "R" | "A" | "C" | "I";
-
-const RACI_OPCOES: { v: RaciRole; label: string; hint: string }[] = [
-  { v: "R", label: "R", hint: "Responsável — executa" },
-  { v: "A", label: "A", hint: "Aprova — aval final (só um por projeto)" },
-  { v: "C", label: "C", hint: "Consultado — opina antes da decisão" },
-  { v: "I", label: "I", hint: "Informado — só acompanha" },
-];
-
 /**
- * PERMISSÃO — o outro eixo, que faltava nesta tela.
+ * PERMISSÃO — a única pergunta que esta tela faz sobre cada membro.
  *
- * Só a matriz RACI aparecia aqui, e a permissão era decidida em silêncio:
- * todo membro novo era gravado com `can_edit: false, can_move: false`. Quem
- * adicionava alguém à equipe via só as letras R/A/C/I e supunha que aquilo
- * definia acesso — não define. RACI é governança; acesso são as quatro
- * colunas `can_*`.
+ * Antes eram duas: a permissão e a matriz RACI, lado a lado, com o mesmo peso
+ * visual. Pareciam a mesma pergunta duplicada, e nada distinguia o que o
+ * sistema ENFORÇA do que é só rótulo de governança.
  *
- * A confusão tinha efeito medido em 18/08/2026: 44 das 50 pessoas rotuladas
- * "I — só acompanha" podiam mexer no projeto, 34 delas com permissão total.
+ * O RACI saiu daqui e passou a ser editado no TAP (seção Matriz de
+ * Responsabilidades), junto de onde é usado: sua única consequência no sistema
+ * é indicar o aprovador na seção de Aprovações. Editado aqui, longe do uso,
+ * ele não era preenchido — em 18/08/2026, NENHUM dos 43 projetos tinha um "A"
+ * definido, e 44 das 50 marcações "I" vieram do default do banco.
  *
- * `Executar` é o padrão porque é o que "adicionar à equipe" significa na
- * maioria das vezes. O silêncio deixa de significar "sem permissão".
+ * A coluna `project_members.raci` continua onde estava. Mudou só a tela que a
+ * edita.
+ *
+ * Os níveis, rótulos e o padrão saíram para `lib/projectRoles.ts`. Estavam
+ * definidos DENTRO deste componente, e foi por isso que o AddProjectDialog
+ * pôde divergir por meses gravando outra coisa para a mesma ação. Agora as
+ * duas telas leem da mesma fonte, como já acontece com lib/accessLevels.ts e
+ * lib/orgLevels.ts nos outros dois eixos.
  */
-type PapelId = "acompanhar" | "executar" | "coordenar";
-
-const PAPEIS: { id: PapelId; nome: string; hint: string; perms: Record<string, boolean> }[] = [
-  { id: "acompanhar", nome: "Acompanhar", hint: "lê e comenta",
-    perms: { can_create: false, can_edit: false, can_delete: false, can_move: false } },
-  { id: "executar", nome: "Executar", hint: "cria, edita e move atividades",
-    perms: { can_create: true, can_edit: true, can_delete: false, can_move: true } },
-  { id: "coordenar", nome: "Coordenar", hint: "tudo isso e mais excluir",
-    perms: { can_create: true, can_edit: true, can_delete: true, can_move: true } },
-];
-
-const PAPEL_PADRAO: PapelId = "executar";
-
-/** Das quatro colunas para o papel — para a tela abrir mostrando o que vale. */
-const papelDePermissoes = (p: {
-  can_create?: boolean | null; can_edit?: boolean | null;
-  can_delete?: boolean | null; can_move?: boolean | null;
-}): PapelId => {
-  if (p.can_delete) return "coordenar";
-  if (p.can_edit || p.can_move) return "executar";
-  return "acompanhar";
-};
 
 interface Project {
   id: string;
@@ -172,32 +161,7 @@ export const EditProjectDialog = ({
     if (open) fetchProfiles();
   }, [open]);
 
-  /**
-   * Define o papel RACI de um membro.
-   *
-   * Regra do A único: é o consenso mais forte da literatura de RACI — dois
-   * aprovadores significa nenhum decidindo. Marcar um novo A rebaixa o
-   * anterior a C (Consultado), que é o papel mais próximo de quem antes
-   * aprovava: continua opinando, mas não dá o aval final.
-   */
-  const definirRaci = (memberId: string, papel: RaciRole | null) => {
-    setTeam((prev) => {
-      const anteriorA = papel === "A" ? prev.find((m) => m.raci === "A" && m.id !== memberId) : null;
-      if (anteriorA) {
-        toast({
-          title: "Aprovador substituído",
-          description: `${anteriorA.full_name} passou a Consultado — só uma pessoa aprova por projeto.`,
-        });
-      }
-      return prev.map((m) => {
-        if (m.id === memberId) return { ...m, raci: papel };
-        if (papel === "A" && m.raci === "A") return { ...m, raci: "C" as RaciRole };
-        return m;
-      });
-    });
-  };
-
-  /** Troca o que a pessoa pode fazer. Eixo separado do RACI, de propósito. */
+  /** Troca o que a pessoa pode fazer neste projeto. */
   const definirPapel = (memberId: string, papel: PapelId) => {
     setTeam((prev) => prev.map((m) => (m.id === memberId ? { ...m, papel } : m)));
   };
@@ -208,7 +172,7 @@ export const EditProjectDialog = ({
       if (!project?.id || !open) return;
       const { data: members } = await supabase
         .from("project_members")
-        .select("id, user_id, invitation_status, raci, can_create, can_edit, can_delete, can_move")
+        .select("id, user_id, invitation_status, can_create, can_edit, can_delete, can_move, can_edit_own")
         .eq("project_id", project.id);
       if (!members) { setTeam([]); return; }
       const ids = members.map((m: any) => m.user_id);
@@ -227,11 +191,13 @@ export const EditProjectDialog = ({
             avatar_url: p?.avatar_url || null,
             invitation_status: (m.invitation_status as MemberRow["invitation_status"]) || "pending",
             persisted: true,
-            // "I" gravado por default não é escolha de ninguém — trata como
-            // não definido, para a matriz começar honesta em vez de mentir
-            // que todo mundo é Informado.
-            raci: (m.raci === "R" || m.raci === "A" || m.raci === "C" ? m.raci : null) as RaciRole | null,
             papel: papelDePermissoes(m),
+            // O papel COMO ESTAVA ao abrir. Sem isto, salvar o diálogo
+            // reescrevia as quatro colunas de TODOS os membros, e quem
+            // estivesse num estado que não casa exatamente com um preset era
+            // PROMOVIDO em silêncio — trocar o título do projeto podia dar
+            // permissão de exclusão a alguém. Ver `paraAtualizar`.
+            papelOriginal: papelDePermissoes(m),
           };
         })
       );
@@ -572,8 +538,11 @@ export const EditProjectDialog = ({
             invitation_status: "pending" as const,
             invited_at: new Date().toISOString(),
             invited_by: user?.id ?? null,
-            ...(PAPEIS.find((p) => p.id === m.papel) ?? PAPEIS.find((p) => p.id === PAPEL_PADRAO)!).perms,
-            raci: m.raci,
+            // Sem `raci`: quem entra na equipe nasce sem papel de governança,
+            // e a matriz é preenchida no TAP. A coluna tem DEFAULT nulo desde
+            // 20260818130000 — antes nascia "I" e o sistema achava que ninguém
+            // executava e ninguém aprovava.
+            ...permissoesDoPapel(m.papel),
           }));
           const { error: memErr } = await supabase.from("project_members").insert(rows);
           if (memErr) {
@@ -598,19 +567,32 @@ export const EditProjectDialog = ({
           }
         }
 
-        // Permissão e papel RACI de quem JÁ era membro. Vai em UPDATEs
-        // separados porque cada linha tem valores diferentes — e falha aqui
-        // não pode derrubar o salvamento do projeto, que já foi gravado acima.
-        const paraAtualizar = team.filter((m) => m.persisted);
+        /**
+         * SÓ QUEM MUDOU. Antes o UPDATE rodava para TODOS os membros a cada
+         * salvamento, sem comparar com nada.
+         *
+         * Isso não é só trabalho extra: `papelDePermissoes` mapeia as quatro
+         * colunas para um dos presets, e nem toda combinação existente casa
+         * exatamente com um. Uma linha com `can_delete` sozinho, por exemplo,
+         * é lida como o preset mais alto e VOLTA para o banco com as quatro
+         * permissões ligadas. O efeito: trocar o título do projeto e salvar
+         * concedia permissão a quem ninguém tinha tocado — sem clique, sem
+         * aviso, e a RLS não barra porque quem salva é o gestor do projeto.
+         *
+         * Comparar com `papelOriginal` fecha isso: quem não foi mexido na tela
+         * não é escrito, e nenhuma normalização acontece pelas costas. Corrigir
+         * dado torto é papel de migration, onde fica registrado.
+         *
+         * O RACI saiu daqui — passou a ser editado no TAP, junto de onde é
+         * usado (ver ProjectCharter). Este bloco grava só permissão.
+         */
+        const paraAtualizar = team.filter((m) => m.persisted && m.papel !== m.papelOriginal);
         if (paraAtualizar.length > 0) {
           await Promise.all(
             paraAtualizar.map((m) =>
               supabase
                 .from("project_members")
-                .update({
-                  raci: m.raci,
-                  ...(PAPEIS.find((p) => p.id === m.papel) ?? PAPEIS.find((p) => p.id === PAPEL_PADRAO)!).perms,
-                })
+                .update(permissoesDoPapel(m.papel))
                 .eq("id", m.id),
             ),
           );
@@ -1000,71 +982,43 @@ export const EditProjectDialog = ({
                       </div>
                     </div>
 
-                    {/* OS DOIS EIXOS, rotulados e separados.
-                        Antes só a matriz RACI aparecia nesta linha, e a
-                        permissão era decidida em silêncio (todo mundo entrava
-                        com can_edit=false). Quem via as letras R/A/C/I supunha
-                        que aquilo definia acesso — não define. Agora a tela faz
-                        as duas perguntas, com o nome de cada uma. */}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-8">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-[68px] shrink-0">
-                          Pode fazer
-                        </span>
-                        <div className="flex rounded-md border border-border overflow-hidden">
-                          {PAPEIS.map((p) => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              title={p.hint}
-                              onClick={() => definirPapel(m.id, p.id)}
-                              className={cn(
-                                "px-2.5 py-1 text-[11px] transition-colors border-r border-border last:border-r-0",
-                                m.papel === p.id
-                                  ? "bg-primary text-primary-foreground font-semibold"
-                                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                              )}
-                            >
-                              {p.nome}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Matriz RACI — quem executa, aprova, é consultado ou
-                          só acompanha. Clicar no papel já marcado desmarca.
-                          É RÓTULO de governança: não concede nem tira acesso.
-                          Hoje sua única consequência é sugerir o aprovador do
-                          TAP (quem é "A"). */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-[68px] shrink-0">
-                          No projeto
-                        </span>
-                        <div className="flex items-center gap-0.5">
-                          {RACI_OPCOES.map((op) => {
-                            const ativo = m.raci === op.v;
-                            return (
-                              <button
-                                key={op.v}
-                                type="button"
-                                title={op.hint}
-                                onClick={() => definirRaci(m.id, ativo ? null : op.v)}
-                                className={cn(
-                                  "w-7 h-7 rounded text-[11px] font-bold transition-colors",
-                                  ativo
-                                    ? op.v === "A"
-                                      ? "bg-success/15 text-success ring-1 ring-success/40"
-                                      : "bg-primary/10 text-primary ring-1 ring-primary/40"
-                                    : "text-muted-foreground/50 hover:bg-muted hover:text-foreground",
-                                )}
-                              >
-                                {op.label}
-                              </button>
-                            );
-                          })}
-                        </div>
+                    {/* UMA pergunta por linha: o que a pessoa pode fazer.
+                        Antes eram duas — permissão e RACI, lado a lado e do
+                        mesmo tamanho, como se fossem a mesma coisa perguntada
+                        duas vezes. O RACI foi para o TAP, junto de onde é
+                        usado. Aqui fica só o que o sistema enforça, com
+                        cadeado e descrição sempre visível.
+                        Padrão de Notion, Asana e Jira. */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pl-8">
+                      <div className="flex items-center gap-1.5">
+                        {/* O cadeado marca o que o sistema de fato aplica. */}
+                        <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
+                        {/* Select simples, não SearchSelect: são quatro opções
+                            fixas — campo de busca aqui seria ruído. */}
+                        <Select
+                          value={m.papel}
+                          onValueChange={(v) => definirPapel(m.id, v as PapelId)}
+                        >
+                          <SelectTrigger className="h-7 w-[190px] text-[12px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAPEIS_PROJETO.map((p) => (
+                              <SelectItem key={p.id} value={p.id} className="text-[12px]">
+                                {p.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
+
+                    {/* A descrição do nível fica SEMPRE na tela, não escondida
+                        num title="". Microcopy no padrão Notion: quem escolhe
+                        precisa ler o que está escolhendo. */}
+                    <p className="pl-8 text-[11px] text-muted-foreground leading-snug">
+                      {papelPorId(m.papel).hint}
+                    </p>
                     </div>
                     );
                   })}

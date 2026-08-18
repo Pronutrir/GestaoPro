@@ -31,6 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { GutPriorityField } from "@/components/GutPriorityField";
 import { useAuth } from "@/contexts/AuthContext";
+import { PAPEL_PADRAO, permissoesDoPapel } from "@/lib/projectRoles";
 
 interface PendingMember {
   user_id: string;
@@ -278,10 +279,20 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
             invitation_status: "pending" as const,
             invited_at: new Date().toISOString(),
             invited_by: invitedBy,
-            can_create: true,
-            can_edit: false,
-            can_delete: false,
-            can_move: false,
+            /**
+             * MESMO PADRÃO DO EditProjectDialog — antes as duas telas
+             * discordavam.
+             *
+             * Aqui gravava `can_create: true` com o resto `false`: a pessoa
+             * podia criar atividade mas não editar nem mover, nem a que
+             * acabara de criar. Não há nível na tela de equipe que signifique
+             * isso, então ela aparecia como "Acompanhar", que está errado nos
+             * dois sentidos. Eram 2 membros na base (migration 20260818160000).
+             *
+             * "Adicionar à equipe" tem que significar a mesma coisa nas duas
+             * telas. A fonte única é PAPEL_PADRAO, em lib/projectRoles.ts.
+             */
+            ...permissoesDoPapel(PAPEL_PADRAO),
           }));
 
           // Toda a equipe já entrou como responsável — nada a inserir.

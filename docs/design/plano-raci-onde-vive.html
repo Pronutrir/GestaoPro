@@ -1,0 +1,271 @@
+<title>RACI: ficha ou TAP</title>
+<style>
+  :root {
+    --bg:#f7f8fa; --surface:#ffffff; --surface-2:#f1f2f5; --border:#e2e4ea; --border-strong:#cfd2db;
+    --ink:#1c1f26; --ink-2:#565b66; --ink-3:#868b96; --accent:#5b5bd6; --accent-soft:#ecebfb;
+    --ok:#17915b; --ok-soft:#e2f4ea; --warn:#b3730a; --warn-soft:#fbeed6; --bad:#cc3340; --bad-soft:#fbe4e6;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}}
+  :root[data-theme="dark"]{--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:940px;margin:0 auto;padding:40px 24px 80px;}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600;}
+  h1{font-size:30px;line-height:1.15;margin:6px 0 10px;text-wrap:balance;letter-spacing:-.01em;}
+  .lede{color:var(--ink-2);font-size:15px;max-width:66ch;}
+  section{margin-top:46px;}
+  .sec-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:16px;}
+  .sec-num{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);}
+  .sec-head h2{font-size:20px;margin:0;letter-spacing:-.01em;}
+  .sec-sub{color:var(--ink-2);font-size:14px;margin:0 0 18px;max-width:72ch;}
+  .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px;}
+  @media(max-width:780px){.stat{grid-template-columns:1fr 1fr;}}
+  .stat div{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface);}
+  .stat .v{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--ink);line-height:1.1;}
+  .stat .v.bad{color:var(--bad);}
+  .stat .l{font-size:11.5px;color:var(--ink-3);margin-top:4px;}
+  .note{margin-top:20px;border-left:3px solid var(--accent);background:var(--accent-soft);padding:14px 16px;border-radius:0 8px 8px 0;font-size:13.5px;}
+  .badbox{margin-top:16px;border:1px solid var(--bad);background:var(--bad-soft);border-radius:10px;padding:14px 16px;font-size:13.5px;}
+  .badbox b{color:var(--bad);}
+  .okbox{margin-top:16px;border:1px solid var(--ok);background:var(--ok-soft);border-radius:10px;padding:14px 16px;font-size:13.5px;}
+  .okbox b{color:var(--ok);}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;}
+  @media(max-width:780px){.cards{grid-template-columns:1fr;}}
+  .opt{border:1px solid var(--border);border-radius:12px;padding:18px;background:var(--surface);display:flex;flex-direction:column;}
+  .opt.rec{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok);}
+  .opt.no{opacity:.92;}
+  .opt .tag{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:2px 8px;border-radius:999px;align-self:flex-start;margin-bottom:10px;}
+  .tag.light{background:var(--surface-2);color:var(--ink-3);} .tag.rec{background:var(--ok-soft);color:var(--ok);font-weight:700;}
+  .opt h3{font-size:16px;margin:0 0 4px;} .opt .where{font-size:12px;color:var(--ink-3);margin-bottom:10px;font-family:var(--mono);}
+  .opt p{font-size:13px;color:var(--ink-2);margin:0 0 12px;}
+  .opt ul{margin:0;padding-left:0;list-style:none;font-size:12.5px;}
+  .opt li{padding:3px 0 3px 18px;position:relative;color:var(--ink-2);}
+  .opt li.y::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700;}
+  .opt li.n::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700;}
+  .verdict{margin-top:auto;padding-top:12px;font-size:12px;color:var(--ink-3);border-top:1px solid var(--border);}
+  .mock{border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);padding:16px;margin-top:14px;}
+  .mock .cap{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:10px;}
+  .row{border:1px solid var(--border);border-radius:10px;padding:11px 13px;background:var(--surface);margin-bottom:9px;}
+  .row:last-child{margin-bottom:0;}
+  .rtop{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .av{width:25px;height:25px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;font-family:var(--mono);}
+  .nm{font-size:13.5px;font-weight:600;}
+  .chip{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-3);}
+  .rbot{display:flex;align-items:center;gap:9px;margin-top:9px;padding-left:35px;flex-wrap:wrap;}
+  .sel{border:1px solid var(--border-strong);border-radius:8px;padding:5px 10px;font-size:12px;background:var(--surface-2);display:inline-flex;align-items:center;gap:7px;}
+  .raci{display:inline-flex;gap:3px;}
+  .raci span{width:21px;height:21px;border-radius:6px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;color:var(--ink-3);border:1px dashed var(--border-strong);font-family:var(--mono);}
+  .raci span.on{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);}
+  .hint{font-size:11px;color:var(--ink-3);margin-top:5px;padding-left:35px;}
+  .strike{position:relative;}
+  .strike::after{content:"";position:absolute;left:-4px;right:-4px;top:50%;height:2px;background:var(--bad);opacity:.75;}
+  .tapbox{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:14px;margin-top:10px;}
+  .taphead{font-size:12px;font-weight:700;color:var(--ink-2);border-bottom:2px solid var(--accent);padding-bottom:6px;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .taphead .n{font-family:var(--mono);font-size:10px;background:var(--accent-soft);color:var(--accent);padding:2px 7px;border-radius:999px;}
+  table.raci{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.raci th,table.raci td{padding:7px 9px;border-bottom:1px solid var(--border);text-align:left;}
+  table.raci th{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);}
+  table.raci td.letras{width:130px;}
+  .scroll{overflow-x:auto;}
+  table.cmp{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;min-width:600px;}
+  table.cmp th,table.cmp td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+  table.cmp th{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);}
+  table.cmp td:first-child{font-weight:500;white-space:nowrap;}
+  .y{color:var(--ok);font-weight:600;} .n{color:var(--bad);font-weight:600;} .m{color:var(--warn);font-weight:600;}
+  .q{margin-top:46px;border:1px solid var(--border);border-radius:12px;padding:22px 24px;background:var(--surface);}
+  .q h2{font-size:17px;margin:0 0 10px;} .q ol{margin:0;padding-left:18px;font-size:14px;} .q li{margin-bottom:12px;} .q b{color:var(--accent);}
+  code.inl{font-family:var(--mono);font-size:12px;background:var(--surface-2);padding:1px 5px;border-radius:4px;}
+  .flow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:12.5px;}
+  .flow .st{border:1px solid var(--border-strong);border-radius:8px;padding:8px 12px;background:var(--surface);}
+  .flow .st.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600;}
+  .flow .ar{color:var(--ink-3);font-family:var(--mono);}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">GestãoPro · RACI · Onde o dado deve viver</div>
+    <h1>RACI: fica na ficha ou vai para o TAP?</h1>
+    <p class="lede">Sua intuição está certa, e os dados são mais duros do que eu esperava: o RACI existe hoje para alimentar <b>uma única função</b> no TAP — e essa função <b>nunca disparou nenhuma vez</b> em 43 projetos.</p>
+  </header>
+
+  <div class="stat">
+    <div><div class="v bad">0</div><div class="l">projetos com um "A" definido</div></div>
+    <div><div class="v">50</div><div class="l">membros marcados "I", 44 por default do banco</div></div>
+    <div><div class="v">5</div><div class="l">membros com "R" — o único preenchimento deliberado</div></div>
+    <div><div class="v bad">0</div><div class="l">TAPs emitidos (43/43 em rascunho)</div></div>
+  </div>
+
+  <div class="badbox">
+    <b>O número que decide a conversa:</b> a única consequência do RACI no sistema inteiro é, na seção 8 do TAP, sugerir como aprovador quem for "A". Nenhum projeto tem um "A". Logo, <b>o campo é preenchido na ficha e não produz efeito nenhum em lugar algum</b> — e as 50 marcações "I" que existem vieram do <code class="inl">DEFAULT 'I'</code> do banco, não de escolha de ninguém.
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Por que ele está na ficha hoje</h2></div>
+    <p class="sec-sub">Não foi decisão de arquitetura. Foi a ordem em que as coisas apareceram.</p>
+    <div class="flow">
+      <span class="st">Coluna <code class="inl">raci</code> criada em 12/05</span>
+      <span class="ar">→</span>
+      <span class="st">sem seletor por 3 meses<br><span style="color:var(--ink-3);font-size:11px">todo mundo virava "I"</span></span>
+      <span class="ar">→</span>
+      <span class="st">TAP passa a ler o "A" (01/08)</span>
+      <span class="ar">→</span>
+      <span class="st on">seletor entra na ficha (18/08)<br><span style="font-size:11px">porque a coluna já morava lá</span></span>
+    </div>
+    <div class="note">
+      O seletor foi para a ficha da equipe porque a <b>coluna</b> está em <code class="inl">project_members</code> — e a ficha é a tela que edita essa tabela. É uma razão de <i>implementação</i>, não de produto. A pergunta que você fez é a certa: quem precisa desse dado é o TAP.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>O argumento a favor de mover</h2></div>
+    <p class="sec-sub">Três razões, em ordem de força.</p>
+
+    <div class="scroll">
+    <table class="cmp">
+      <tr><th>Razão</th><th>Evidência</th><th>Peso</th></tr>
+      <tr>
+        <td><b>O consumidor é o TAP</b></td>
+        <td>Único ponto do sistema que lê <code class="inl">raci</code>: <code class="inl">ProjectCharter.tsx:1295-1306</code>, para sugerir aprovador. Mais nada no código usa a coluna.</td>
+        <td class="y">Alto</td>
+      </tr>
+      <tr>
+        <td><b>Editar longe de usar gera dado morto</b></td>
+        <td>Quem abre a ficha para mexer na equipe não está pensando em governança. Resultado medido: 44 dos 50 "I" são default, e 0 projetos têm "A" — o campo mais importante da matriz é o que ninguém preenche.</td>
+        <td class="y">Alto</td>
+      </tr>
+      <tr>
+        <td><b>Tira ruído da linha do membro</b></td>
+        <td>A linha faz duas perguntas de naturezas diferentes; uma delas é enforçada e a outra é rótulo. Sobra uma pergunta por linha — a que decide acesso.</td>
+        <td class="m">Médio</td>
+      </tr>
+    </table>
+    </div>
+
+    <div class="okbox">
+      <b>E o mercado concorda com a separação.</b> Dos 10 produtos pesquisados, <b>nenhum</b> tem RACI como campo de primeira classe junto da permissão. Onde RACI aparece na Atlassian, na Smartsheet e na TeamGantt, é como <b>modelo de documento</b> — exatamente o que o TAP é. O PMBOK define RACI como matriz de comunicação num artefato de projeto, não como atributo do cadastro de membro.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>O argumento contra — e por que ele não se sustenta</h2></div>
+    <p class="sec-sub">Sendo honesto com o outro lado antes de recomendar.</p>
+    <div class="scroll">
+    <table class="cmp">
+      <tr><th>Objeção</th><th>Resposta</th></tr>
+      <tr>
+        <td>"O RACI é da equipe, e a equipe vive na ficha"</td>
+        <td class="m">Verdade conceitual, mas a matriz RACI não é a lista de pessoas: é a atribuição de <b>papéis de decisão</b>, que só faz sentido junto do que se está decidindo. É por isso que ela nasce em documentos de abertura, não em cadastros.</td>
+      </tr>
+      <tr>
+        <td>"Se sair da ficha, ninguém vai preencher"</td>
+        <td class="y">Hoje já ninguém preenche: 0 "A" em 43 projetos. Não há o que perder — <b>o TAP é a primeira tela onde a pergunta tem consequência visível</b> (o aprovador aparece na seção 8).</td>
+      </tr>
+      <tr>
+        <td>"Vai dar retrabalho, dois lugares para manter"</td>
+        <td class="y">Não: <b>a coluna não muda de lugar</b>. Continua em <code class="inl">project_members</code>. Muda só ONDE se edita. Zero migration.</td>
+      </tr>
+      <tr>
+        <td>"E quem não usa TAP?"</td>
+        <td class="m">Legítima. Mas o TAP existe em 43/43 projetos (todos em rascunho) — não é opcional no fluxo, é uma aba do projeto. E quem não usa TAP também não usa RACI.</td>
+      </tr>
+    </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>Visualmente: antes e depois</h2></div>
+
+    <div class="cards">
+      <div class="opt no">
+        <span class="tag light">Hoje · na ficha</span>
+        <h3>Duas perguntas por linha</h3>
+        <div class="mock" style="margin-top:4px;">
+          <div class="cap">Ficha do projeto › Equipe</div>
+          <div class="row">
+            <div class="rtop"><span class="av">GG</span><span class="nm">Guilherme Gomes</span></div>
+            <div class="rbot">
+              <span class="sel">🔒 <b>Editar tudo</b> ▾</span>
+              <span style="color:var(--ink-3);font-size:10px;">·</span>
+              <span style="font-family:var(--mono);font-size:9px;color:var(--ink-3);font-weight:700;">RACI</span>
+              <span class="raci"><span class="on">R</span><span>A</span><span>C</span><span>I</span></span>
+            </div>
+            <div class="hint">cria, edita e move qualquer atividade. Não exclui</div>
+          </div>
+        </div>
+        <ul style="margin-top:12px;">
+          <li class="n">Governança misturada com acesso</li>
+          <li class="n">Editado longe de onde é usado</li>
+          <li class="n">Resultado: 0 "A" em 43 projetos</li>
+        </ul>
+        <div class="verdict">O dado é coletado e não vira nada.</div>
+      </div>
+
+      <div class="opt rec">
+        <span class="tag rec">Proposta · no TAP</span>
+        <h3>Uma pergunta por linha</h3>
+        <div class="mock" style="margin-top:4px;">
+          <div class="cap">Ficha do projeto › Equipe</div>
+          <div class="row">
+            <div class="rtop"><span class="av">GG</span><span class="nm">Guilherme Gomes</span></div>
+            <div class="rbot">
+              <span class="sel">🔒 <b>Editar tudo</b> ▾</span>
+            </div>
+            <div class="hint">cria, edita e move qualquer atividade. Não exclui</div>
+          </div>
+        </div>
+        <div class="tapbox">
+          <div class="taphead"><span class="n">7</span> Matriz de Responsabilidades (RACI)</div>
+          <table class="raci">
+            <tr><th>Pessoa</th><th class="letras">Papel</th></tr>
+            <tr>
+              <td>Guilherme Gomes</td>
+              <td class="letras"><span class="raci"><span class="on">R</span><span>A</span><span>C</span><span>I</span></span></td>
+            </tr>
+            <tr>
+              <td>Raphael Telles</td>
+              <td class="letras"><span class="raci"><span>R</span><span class="on">A</span><span>C</span><span>I</span></span></td>
+            </tr>
+          </table>
+          <div style="font-size:11px;color:var(--ok);margin-top:9px;padding-top:8px;border-top:1px solid var(--border);">
+            ↓ seção 8 · <b>Raphael Telles</b> entra como aprovador
+          </div>
+        </div>
+        <ul style="margin-top:12px;">
+          <li class="y">Pergunta feita onde tem consequência</li>
+          <li class="y">A matriz aparece inteira, comparável</li>
+          <li class="y">O "A" vira aprovador na seção seguinte</li>
+        </ul>
+        <div class="verdict">Preencher passa a ter efeito visível.</div>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>O ganho não é só tirar da ficha — é a matriz virar TABELA.</b> Na ficha, o RACI é uma tira de 4 letras por pessoa, e você nunca vê a matriz como um todo: para saber quem aprova, precisa varrer linha por linha. Numa tabela do TAP, as colunas se comparam de relance, e a regra do "A único" fica óbvia porque as marcas ficam na mesma coluna. É assim que a matriz é publicada em todo modelo de RACI de mercado.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>Recomendação</h2></div>
+    <div class="okbox">
+      <b>Mover — mas mover, não duplicar.</b> O seletor sai da linha do membro na ficha e vira uma seção própria no TAP, imediatamente antes das Aprovações. A coluna <code class="inl">project_members.raci</code> fica onde está: nenhuma migration, nenhum dado perdido, os 5 "R" preservados.
+    </div>
+    <div class="note">
+      <b>Uma ressalva que eu preciso registrar:</b> mover o RACI para o TAP acopla governança a um documento que <b>nunca foi emitido em nenhum projeto</b> — os 43 estão em rascunho. Se o TAP não for de fato adotado no fluxo, o RACI passa de "preenchido e inútil" para "não preenchido" — o que, sinceramente, é mais honesto, mas não é ganho de gestão. <b>Mover só é uma vitória se o TAP for pra valer.</b> Se a intenção é que ele seja o ato formal de abertura, mover é claramente certo.
+    </div>
+  </section>
+
+  <div class="q">
+    <h2>O que eu preciso confirmar com você</h2>
+    <ol>
+      <li>
+        <b>Movo o RACI para o TAP?</b> Minha recomendação é sim, como seção própria antes das Aprovações. A ficha fica só com a permissão — uma pergunta por linha.
+      </li>
+      <li>
+        <b>O TAP é pra valer no fluxo?</b> É a condição para o item 1 fazer sentido. Se os 43 rascunhos indicam que o TAP ainda não pegou, dá para mover mesmo assim (não piora nada), mas o ganho real depende disso.
+      </li>
+      <li>
+        <b>E o outro RACI, o de atividade?</b> Descobri que existe <code class="inl">activities.raci_role</code> — 48 atividades marcadas "A", <b>sem nenhuma tela que edite ou mostre</b>. Ou some (coluna morta) ou ganha propósito. Fica como pergunta separada, mas é do mesmo assunto.
+      </li>
+    </ol>
+  </div>
+</div>
