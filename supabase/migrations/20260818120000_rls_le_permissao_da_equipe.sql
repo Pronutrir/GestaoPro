@@ -25,6 +25,16 @@
 -- Mercado: Jira exige `Browse Projects` mas o concede ao papel dinamico
 -- "Current Assignee"; Asana da acesso a tarefa a quem e atribuido. O degrau
 -- entre "membro pleno" e "sem acesso" e o que a via 2 representa.
+--
+-- UMA RESTRICAO NOVA, de proposito: `can_member_action` exige
+-- `invitation_status = 'accepted'`, e a regra anterior nao exigia. Quem foi
+-- convidado e ainda nao respondeu deixa de editar pela via da equipe --
+-- continua editando o que e seu, pela via 2.
+--
+-- Hoje isso nao tira acesso de ninguem (dos 7 convites pendentes, nenhum tem
+-- can_edit nem can_move), mas passa a importar: a partir da mudanca no
+-- EditProjectDialog, membro novo nasce com permissao de Executar E fica
+-- `pending` ate aceitar. O convite volta a significar alguma coisa.
 
 -- `is_activity_actor_v2` comparava assigned_to so com nome e email. Na base
 -- ha 73 atividades onde a coluna guarda o UUID do perfil -- essas pessoas nao
@@ -130,6 +140,15 @@ COMMENT ON FUNCTION public.can_create_activity_v2(uuid, uuid) IS
 -- criador como dono (isMineActivity) desde antes -- a divergencia entre os
 -- dois lados e que produzia o "posso na tela, nao posso no banco".
 DROP POLICY IF EXISTS "Members can update activities" ON public.activities;
+
+-- E ha uma TERCEIRA, que ninguem lembrava: "Members or activity actors can
+-- update activities" (13/05, 20260513131231). Ela foi criada e NUNCA dropada
+-- por migration nenhuma -- varri as 17 policies de `activities` ja criadas no
+-- repositorio e e a unica nessa situacao. Enquanto existir, o acesso real e a
+-- uniao de tres regras, e ler qualquer uma delas isolada da resposta errada
+-- sobre quem pode editar. Tudo o que ela concede (can_member_action 'edit' e
+-- ator da atividade) esta contemplado acima.
+DROP POLICY IF EXISTS "Members or activity actors can update activities" ON public.activities;
 
 -- A policy de UPDATE nao tinha WITH CHECK. Sem ele o Postgres reaplica o
 -- USING a linha NOVA -- so que `can_update_activity_v2(id, ...)` consulta a
