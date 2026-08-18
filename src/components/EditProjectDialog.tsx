@@ -885,38 +885,58 @@ export const EditProjectDialog = ({
                   aqui para o time ficar visível num lugar só; para trocá-los,
                   usa-se o campo acima (não o X da lista). */}
               {(() => {
-                const roleRows = [
+                /**
+                 * UMA LINHA POR PESSOA, não por cargo.
+                 *
+                 * Antes eram duas entradas fixas (Gestor e Líder), então quem
+                 * acumula os dois papéis — o caso comum em projeto pequeno —
+                 * aparecia DUAS VEZES, com o mesmo nome, um abaixo do outro.
+                 * Parecia duplicata de cadastro.
+                 *
+                 * Agrupa por nome e mostra os cargos como etiquetas na mesma
+                 * linha; o "Trocar" leva ao campo do primeiro cargo da pessoa.
+                 */
+                const porPessoa = new Map<string, string[]>();
+                for (const r of [
                   { role: "Gestor", name: formData.manager },
                   { role: "Líder", name: formData.owner },
-                ].filter((r) => !!r.name);
-                if (roleRows.length === 0) return null;
+                ]) {
+                  if (!r.name) continue;
+                  porPessoa.set(r.name, [...(porPessoa.get(r.name) ?? []), r.role]);
+                }
+                if (porPessoa.size === 0) return null;
                 return (
-                  <div className="space-y-1.5">
-                    {roleRows.map((r) => {
-                      const p = profiles.find((x) => x.full_name === r.name);
+                  <div className="space-y-1">
+                    {[...porPessoa.entries()].map(([name, roles]) => {
+                      const p = profiles.find((x) => x.full_name === name);
                       return (
-                        <div key={r.role} className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-primary/5 border border-primary/25">
-                          <Avatar className="h-6 w-6 shrink-0">
-                            {p?.avatar_url ? <AvatarImage src={p.avatar_url} alt={r.name} /> : null}
-                            <AvatarFallback className="text-[9px]">
-                              {r.name.split(" ").filter(Boolean).slice(0, 2).map((n) => n[0]?.toUpperCase()).join("")}
+                        <div key={name} className="flex items-center gap-2 px-2 py-1 rounded-md bg-primary/5 border border-primary/25">
+                          <Avatar className="h-5 w-5 shrink-0">
+                            {p?.avatar_url ? <AvatarImage src={p.avatar_url} alt={name} /> : null}
+                            <AvatarFallback className="text-[8px]">
+                              {name.split(" ").filter(Boolean).slice(0, 2).map((n) => n[0]?.toUpperCase()).join("")}
                             </AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
-                            <span className="text-sm font-medium truncate">{r.name}</span>
-                            {p?.sector && <span className="text-[11px] text-muted-foreground truncate shrink-0">· {p.sector}</span>}
+                            <span className="text-[13px] font-medium truncate">{name}</span>
+                            {p?.sector && <span className="text-[10px] text-muted-foreground truncate shrink-0">· {p.sector}</span>}
                           </div>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 shrink-0">
-                            {r.role}
-                          </span>
+                          {roles.map((role) => (
+                            <span
+                              key={role}
+                              className="text-[9px] font-semibold uppercase tracking-wide text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-px shrink-0"
+                            >
+                              {role}
+                            </span>
+                          ))}
                           {/* O X de remover não serve aqui (deixaria o projeto
                               sem responsável em silêncio) — mas sem nada a linha
                               parecia travada. "Trocar" leva ao campo do cargo. */}
                           <button
                             type="button"
-                            onClick={() => focusRoleField(r.role as "Líder" | "Gestor")}
-                            title={`Trocar o ${r.role} no campo acima`}
-                            className="text-[11px] font-medium text-primary hover:underline shrink-0 px-1"
+                            onClick={() => focusRoleField(roles[0] as "Líder" | "Gestor")}
+                            title={`Trocar o ${roles.join(" / ")} no campo acima`}
+                            className="text-[10px] font-medium text-primary hover:underline shrink-0 px-1"
                           >
                             Trocar
                           </button>
@@ -928,7 +948,7 @@ export const EditProjectDialog = ({
               })()}
 
               {team.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-1">
                   {/* Quem é Líder/Gestor já aparece no bloco de cargos acima —
                       sai daqui para não constar duas vezes na mesma equipe. */}
                   {team.filter((m) => m.full_name !== formData.owner && m.full_name !== formData.manager).map((m) => {
@@ -939,86 +959,100 @@ export const EditProjectDialog = ({
                       .map((n) => n[0]?.toUpperCase())
                       .join("");
                     return (
+                    /**
+                     * UMA LINHA POR PESSOA.
+                     *
+                     * Eram três alturas empilhadas: nome, seletor e descrição,
+                     * cada uma numa faixa. Com 5 membros a lista tomava a tela
+                     * inteira e a rolagem escondia o resto do formulário — e
+                     * quase todo esse espaço era texto repetido, já que a
+                     * descrição do nível se repete em quem tem o mesmo nível.
+                     *
+                     * Agora: identidade à esquerda, permissão à direita, na
+                     * mesma faixa. A descrição foi para DENTRO do dropdown, que
+                     * é onde ela importa — quem está escolhendo lê as quatro
+                     * opções com o que cada uma faz; quem só está conferindo lê
+                     * o nome do nível, que basta.
+                     */
                     <div
                       key={m.id}
-                      className="flex flex-col gap-2 px-2 py-2 rounded-md border border-border hover:border-border/80 hover:bg-muted/40 transition-colors group"
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-md border border-border hover:border-border/80 hover:bg-muted/40 transition-colors group"
                     >
-                      <div className="flex items-center gap-2">
                       <Avatar className="h-6 w-6 shrink-0">
                         {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
                         <AvatarFallback className="text-[9px]">{initials || "?"}</AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-foreground truncate">{m.full_name}</span>
+                      <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                        <span className="text-[13px] font-medium text-foreground truncate">{m.full_name}</span>
                         {m.sector && (
-                          <span className="px-2 py-0.5 rounded-full bg-muted text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
-                            {m.sector}
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-tight shrink-0">
+                            · {m.sector}
                           </span>
                         )}
                         {/* Situação do convite. Sem isto o "aguardando" seria
                             invisível: a lista mostrava todo mundo igual, como
-                            se já tivesse aceitado. */}
+                            se já tivesse aceitado. Encurtado para "Aguardando":
+                            na mesma faixa do seletor, o texto longo empurrava
+                            o nome para a reticência. */}
                         {m.invitation_status !== "accepted" && (
                           <span className={cn(
-                            "px-2 py-0.5 rounded-full text-[10px] font-semibold border",
+                            "px-1.5 py-px rounded-full text-[9px] font-semibold border shrink-0",
                             m.invitation_status === "declined"
                               ? "bg-destructive/10 text-destructive border-destructive/30"
                               : "bg-warning/10 text-warning border-warning/30",
                           )}>
-                            {m.invitation_status === "declined" ? "Recusou" : "Aguardando aceite"}
+                            {m.invitation_status === "declined" ? "Recusou" : "Aguardando"}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
+
+                      {/* O cadeado marca o que o sistema de fato aplica — o
+                          RACI, que ficava ao lado, foi para o TAP. */}
+                      <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
+                      {/* Select simples, não SearchSelect: são quatro opções
+                          fixas — campo de busca aqui seria ruído. */}
+                      <Select
+                        value={m.papel}
+                        onValueChange={(v) => definirPapel(m.id, v as PapelId)}
+                      >
+                        <SelectTrigger className="h-7 w-[178px] text-[12px] shrink-0">
+                          {/* O gatilho mostra só o NOME. A descrição não pode
+                              entrar no <SelectItem> direto: o Radix clona o
+                              conteúdo do item selecionado aqui dentro, e as
+                              duas linhas estourariam a altura de 28px. Por isso
+                              o texto do gatilho é renderizado à parte. */}
+                          <span className="truncate">{papelPorId(m.papel).nome}</span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAPEIS_PROJETO.map((p) => (
+                            <SelectItem
+                              key={p.id}
+                              value={p.id}
+                              // `textValue` mantém a busca por digitação do
+                              // Radix funcionando pelo nome, já que o conteúdo
+                              // do item deixou de ser texto simples.
+                              textValue={p.nome}
+                              className="text-[12px] items-start max-w-[280px]"
+                            >
+                              <span className="font-medium">{p.nome}</span>
+                              <span className="block text-[10.5px] text-muted-foreground leading-tight whitespace-normal">
+                                {p.hint}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
                       <Button
                         type="button"
                         size="icon"
                         variant="ghost"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        title="Remover da equipe"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         onClick={() => setTeam((prev) => prev.filter((x) => x.id !== m.id))}
                       >
                         <X className="w-3.5 h-3.5" />
                       </Button>
-                      </div>
-                    </div>
-
-                    {/* UMA pergunta por linha: o que a pessoa pode fazer.
-                        Antes eram duas — permissão e RACI, lado a lado e do
-                        mesmo tamanho, como se fossem a mesma coisa perguntada
-                        duas vezes. O RACI foi para o TAP, junto de onde é
-                        usado. Aqui fica só o que o sistema enforça, com
-                        cadeado e descrição sempre visível.
-                        Padrão de Notion, Asana e Jira. */}
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pl-8">
-                      <div className="flex items-center gap-1.5">
-                        {/* O cadeado marca o que o sistema de fato aplica. */}
-                        <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
-                        {/* Select simples, não SearchSelect: são quatro opções
-                            fixas — campo de busca aqui seria ruído. */}
-                        <Select
-                          value={m.papel}
-                          onValueChange={(v) => definirPapel(m.id, v as PapelId)}
-                        >
-                          <SelectTrigger className="h-7 w-[190px] text-[12px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PAPEIS_PROJETO.map((p) => (
-                              <SelectItem key={p.id} value={p.id} className="text-[12px]">
-                                {p.nome}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {/* A descrição do nível fica SEMPRE na tela, não escondida
-                        num title="". Microcopy no padrão Notion: quem escolhe
-                        precisa ler o que está escolhendo. */}
-                    <p className="pl-8 text-[11px] text-muted-foreground leading-snug">
-                      {papelPorId(m.papel).hint}
-                    </p>
                     </div>
                     );
                   })}
@@ -1047,9 +1081,7 @@ export const EditProjectDialog = ({
                         avatar_url: p.avatar_url || null,
                         invitation_status: "pending",
                         persisted: false,
-                        // Entra sem papel RACI: quem adiciona decide na matriz.
-                        raci: null,
-                        // Mas COM permissão: "adicionar à equipe" quer dizer
+                        // Entra COM permissão: "adicionar à equipe" quer dizer
                         // que a pessoa vai trabalhar no projeto. O silêncio
                         // não deve significar "sem acesso".
                         papel: PAPEL_PADRAO,

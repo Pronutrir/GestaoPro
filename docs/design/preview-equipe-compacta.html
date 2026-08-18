@@ -1,0 +1,255 @@
+<title>Equipe compacta</title>
+<style>
+  :root{
+    --bg:#f7f8fa;--surface:#fff;--surface-2:#f1f2f5;--border:#e2e4ea;--border-strong:#cfd2db;
+    --ink:#1c1f26;--ink-2:#565b66;--ink-3:#868b96;--accent:#5b5bd6;--accent-soft:#eef0fe;
+    --ok:#17915b;--ok-soft:#e2f4ea;--warn:#b3730a;--warn-soft:#fbeed6;--bad:#cc3340;--bad-soft:#fbe4e6;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}}
+  :root[data-theme="dark"]{--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:36px 20px 70px}
+  .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  h1{font-size:26px;margin:6px 0 8px;letter-spacing:-.01em}
+  .lede{color:var(--ink-2);font-size:14.5px;max-width:62ch}
+  .stat{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}
+  @media(max-width:700px){.stat{grid-template-columns:1fr}}
+  .stat div{border:1px solid var(--border);border-radius:10px;padding:11px 13px;background:var(--surface)}
+  .stat .v{font-family:var(--mono);font-size:21px;font-weight:700;line-height:1.1}
+  .stat .v.ok{color:var(--ok)}
+  .stat .l{font-size:11px;color:var(--ink-3);margin-top:3px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:26px;align-items:start}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden}
+  .panel.rec{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
+  .ph{padding:9px 13px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface-2)}
+  .ph .tag{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:999px}
+  .tag.old{background:var(--bad-soft);color:var(--bad);font-weight:700}
+  .tag.new{background:var(--ok-soft);color:var(--ok);font-weight:700}
+  .ph .h{font-size:13px;font-weight:600}
+  .ph .px{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
+  .body{padding:11px}
+  .sechead{font-size:14px;font-weight:600;margin-bottom:2px}
+  .secsub{font-size:11px;color:var(--ink-3);margin-bottom:9px}
+
+  /* linha de cargo */
+  .rolerow{display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:7px;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);margin-bottom:4px}
+  .rolerow.big{padding:7px 9px;margin-bottom:6px}
+  .av{width:20px;height:20px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;font-family:var(--mono)}
+  .av.big{width:24px;height:24px;font-size:9px}
+  .nm{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nm.big{font-size:14px}
+  .sec{font-size:10px;color:var(--ink-3);white-space:nowrap}
+  .badge{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:4px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);white-space:nowrap}
+  .badge.big{font-size:10px;padding:2px 7px}
+  .lnk{font-size:10px;color:var(--accent);font-weight:500;white-space:nowrap}
+  .lnk.big{font-size:11px}
+  .grow{flex:1;min-width:0;display:flex;align-items:baseline;gap:6px;overflow:hidden}
+
+  /* linha de membro */
+  .mrow{border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:4px}
+  .mrow.one{display:flex;align-items:center;gap:7px;padding:5px 8px}
+  .mrow.three{padding:8px;display:flex;flex-direction:column;gap:7px}
+  .r1{display:flex;align-items:center;gap:8px}
+  .selbox{display:inline-flex;align-items:center;justify-content:space-between;border:1px solid var(--border-strong);border-radius:6px;padding:3px 7px;font-size:11.5px;background:var(--surface);width:178px;flex:none;gap:6px}
+  .selbox .cv{font-family:var(--mono);font-size:9px;color:var(--ink-3)}
+  .lock{font-size:10px;color:var(--ink-3);flex:none}
+  .xb{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:13px;flex:none}
+  .hintline{font-size:10.5px;color:var(--ink-3);padding-left:30px;line-height:1.3}
+  .raci{display:inline-flex;gap:2px;align-items:center}
+  .raci .lb{font-family:var(--mono);font-size:8.5px;color:var(--ink-3);font-weight:700;margin-right:2px}
+  .raci span.k{width:19px;height:19px;border-radius:5px;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;color:var(--ink-3);border:1px solid var(--border);font-family:var(--mono)}
+  .raci span.k.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+  .pend{font-size:9px;font-weight:600;padding:1px 5px;border-radius:999px;background:var(--warn-soft);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);white-space:nowrap}
+
+  /* dropdown aberto */
+  .dd{margin-top:6px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);box-shadow:0 8px 24px rgba(0,0,0,.10);overflow:hidden;max-width:290px}
+  .ddi{padding:5px 9px 5px 26px;position:relative;border-bottom:1px solid var(--border)}
+  .ddi:last-child{border-bottom:0}
+  .ddi.sel{background:var(--surface-2)}
+  .ddi.sel::before{content:"✓";position:absolute;left:8px;top:5px;color:var(--accent);font-size:11px;font-weight:700}
+  .ddi .n{font-size:11.5px;font-weight:500}
+  .ddi .d{font-size:10px;color:var(--ink-3);line-height:1.25}
+  .note{margin-top:22px;border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 14px;border-radius:0 8px 8px 0;font-size:13px}
+  .badbox{margin-top:14px;border:1px solid var(--bad);background:var(--bad-soft);border-radius:9px;padding:12px 14px;font-size:13px}
+  .badbox b{color:var(--bad)}
+  ul.pts{margin:10px 0 0;padding-left:0;list-style:none;font-size:12.5px}
+  ul.pts li{padding:3px 0 3px 17px;position:relative;color:var(--ink-2)}
+  ul.pts li::before{content:"→";position:absolute;left:0;color:var(--accent);font-weight:700}
+  code.inl{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);padding:1px 4px;border-radius:4px}
+</style>
+
+<div class="wrap">
+  <div class="kicker">GestãoPro · Ficha do projeto · Equipe</div>
+  <h1>A lista de equipe em uma linha por pessoa</h1>
+  <p class="lede">Cada membro ocupava três faixas empilhadas — nome, seletor e descrição. Com 5 pessoas a lista tomava a tela e empurrava o resto do formulário para fora da rolagem.</p>
+
+  <div class="stat">
+    <div><div class="v">~96px</div><div class="l">altura por membro, antes</div></div>
+    <div><div class="v ok">~38px</div><div class="l">altura por membro, agora</div></div>
+    <div><div class="v ok">−60%</div><div class="l">de altura na lista inteira</div></div>
+  </div>
+
+  <div class="badbox">
+    <b>Dois defeitos que apareceram no print, além do tamanho:</b>
+    <ul style="margin:7px 0 0;padding-left:17px;">
+      <li><b>"Felipe Cavalcanti" duas vezes</b> — as linhas de cargo eram uma por PAPEL, então quem acumula Gestor e Líder aparecia duplicado, com o mesmo nome. Agora é uma linha por pessoa, com as duas etiquetas.</li>
+      <li><b>O RACI ainda estava na tela</b> — o print é da versão anterior ao build. No código ele já tinha ido para o TAP.</li>
+    </ul>
+  </div>
+
+  <div class="cols">
+    <div class="panel">
+      <div class="ph"><span class="tag old">Antes</span><span class="h">Três faixas por pessoa</span><span class="px">~96px</span></div>
+      <div class="body">
+        <div class="sechead">Equipe do Projeto</div>
+        <div class="secsub">Adicione ou remova membros. Novos membros recebem um convite ao salvar.</div>
+
+        <div class="rolerow big">
+          <span class="av big">FC</span>
+          <span class="grow"><span class="nm big">Felipe Cavalcanti</span><span class="sec">· TI</span></span>
+          <span class="badge big">GESTOR</span><span class="lnk big">Trocar</span>
+        </div>
+        <div class="rolerow big">
+          <span class="av big">FC</span>
+          <span class="grow"><span class="nm big">Felipe Cavalcanti</span><span class="sec">· TI</span></span>
+          <span class="badge big">LÍDER</span><span class="lnk big">Trocar</span>
+        </div>
+
+        <div class="mrow three">
+          <div class="r1">
+            <span class="av big">RL</span>
+            <span class="grow"><span class="nm">Raphael Luis Gomes Telles</span><span class="badge" style="color:var(--ink-3);background:var(--surface-2);border-color:var(--border)">NOVOS NEGÓCIOS</span></span>
+            <span class="xb">×</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding-left:30px">
+            <span class="lock">🔒</span>
+            <span class="selbox">Editar e excluir <span class="cv">▾</span></span>
+            <span class="raci"><span class="lb">RACI</span><span class="k on">R</span><span class="k">A</span><span class="k">C</span><span class="k">I</span></span>
+          </div>
+          <div class="hintline">cria, edita, move e exclui qualquer atividade do projeto</div>
+        </div>
+
+        <div class="mrow three">
+          <div class="r1">
+            <span class="av big">RT</span>
+            <span class="grow"><span class="nm">Raphael Telles</span></span>
+            <span class="xb">×</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding-left:30px">
+            <span class="lock">🔒</span>
+            <span class="selbox">Editar tudo <span class="cv">▾</span></span>
+            <span class="raci"><span class="lb">RACI</span><span class="k on">R</span><span class="k">A</span><span class="k">C</span><span class="k">I</span></span>
+          </div>
+          <div class="hintline">cria, edita e move qualquer atividade. Não exclui</div>
+        </div>
+
+        <div class="mrow three">
+          <div class="r1">
+            <span class="av big">GG</span>
+            <span class="grow"><span class="nm">Guilherme Gomes</span></span>
+            <span class="xb">×</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding-left:30px">
+            <span class="lock">🔒</span>
+            <span class="selbox">Editar tudo <span class="cv">▾</span></span>
+            <span class="raci"><span class="lb">RACI</span><span class="k on">R</span><span class="k">A</span><span class="k">C</span><span class="k">I</span></span>
+          </div>
+          <div class="hintline">cria, edita e move qualquer atividade. Não exclui</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel rec">
+      <div class="ph"><span class="tag new">Agora</span><span class="h">Uma linha por pessoa</span><span class="px">~38px</span></div>
+      <div class="body">
+        <div class="sechead">Equipe do Projeto</div>
+        <div class="secsub">Adicione ou remova membros. Novos membros recebem um convite ao salvar.</div>
+
+        <div class="rolerow">
+          <span class="av">FC</span>
+          <span class="grow"><span class="nm">Felipe Cavalcanti</span><span class="sec">· TI</span></span>
+          <span class="badge">GESTOR</span><span class="badge">LÍDER</span><span class="lnk">Trocar</span>
+        </div>
+
+        <div class="mrow one">
+          <span class="av">RL</span>
+          <span class="grow"><span class="nm">Raphael Luis Gomes Telles</span><span class="sec">· NOVOS NEGÓCIOS</span></span>
+          <span class="lock">🔒</span>
+          <span class="selbox">Editar e excluir <span class="cv">▾</span></span>
+          <span class="xb">×</span>
+        </div>
+
+        <div class="mrow one">
+          <span class="av">RT</span>
+          <span class="grow"><span class="nm">Raphael Telles</span></span>
+          <span class="lock">🔒</span>
+          <span class="selbox">Editar tudo <span class="cv">▾</span></span>
+          <span class="xb">×</span>
+        </div>
+
+        <div class="mrow one">
+          <span class="av">GG</span>
+          <span class="grow"><span class="nm">Guilherme Gomes</span></span>
+          <span class="lock">🔒</span>
+          <span class="selbox">Editar tudo <span class="cv">▾</span></span>
+          <span class="xb">×</span>
+        </div>
+
+        <div class="mrow one">
+          <span class="av">WC</span>
+          <span class="grow"><span class="nm">Williame Correia de Lima</span><span class="sec">· TI</span></span>
+          <span class="lock">🔒</span>
+          <span class="selbox">Editar tudo <span class="cv">▾</span></span>
+          <span class="xb">×</span>
+        </div>
+
+        <div class="mrow one">
+          <span class="av">TM</span>
+          <span class="grow"><span class="nm">Tiago Moreira</span><span class="pend">Aguardando</span></span>
+          <span class="lock">🔒</span>
+          <span class="selbox">Editar apenas as… <span class="cv">▾</span></span>
+          <span class="xb">×</span>
+        </div>
+
+        <div style="font-size:10.5px;color:var(--ink-3);margin-top:9px;padding-left:2px">
+          ↑ os 5 membros cabem no espaço que antes mostrava 2 e meio
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Para onde foi a descrição do nível.</b> Ela se repetia em toda linha de quem tem o mesmo nível — três "cria, edita e move qualquer atividade" idênticos empilhados. Agora ela aparece <b>dentro do dropdown</b>, que é onde importa: quem está escolhendo lê as quatro opções com o que cada uma faz; quem só está conferindo lê o nome do nível, que basta.
+  </div>
+
+  <div style="margin-top:14px;display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+    <div>
+      <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:4px">Dropdown aberto</div>
+      <span class="selbox" style="width:178px">Editar tudo <span class="cv">▾</span></span>
+      <div class="dd">
+        <div class="ddi"><div class="n">Editar e excluir</div><div class="d">cria, edita, move e exclui qualquer atividade do projeto</div></div>
+        <div class="ddi sel"><div class="n">Editar tudo</div><div class="d">cria, edita e move qualquer atividade. Não exclui</div></div>
+        <div class="ddi"><div class="n">Editar apenas as minhas</div><div class="d">vê todas as atividades. Edita só onde é responsável ou participante</div></div>
+        <div class="ddi"><div class="n">Visualizar e comentar</div><div class="d">lê e comenta. Não cria, não edita, não move</div></div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:260px">
+      <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:4px">O que mudou, em resumo</div>
+      <ul class="pts">
+        <li>Três faixas viram <b>uma</b>: identidade à esquerda, permissão à direita</li>
+        <li>Cargos agrupados <b>por pessoa</b> — acabou o nome repetido</li>
+        <li>Avatar 24→20px, nome 14→13px, etiquetas menores</li>
+        <li>Descrição do nível migrou para dentro do dropdown</li>
+        <li>"Aguardando aceite" virou <b>"Aguardando"</b>: o texto longo empurrava o nome para a reticência</li>
+        <li>Espaçamento entre linhas de 8px para 4px</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note" style="border-left-color:var(--warn);background:var(--warn-soft)">
+    <b>Um detalhe técnico que quase quebrou.</b> A descrição não pode entrar direto no <code class="inl">&lt;SelectItem&gt;</code>: o Radix <b>clona o conteúdo do item selecionado dentro do gatilho</b>, então as duas linhas estourariam a altura de 28px do campo fechado. O gatilho renderiza o nome à parte, e o item usa <code class="inl">textValue</code> para a busca por digitação continuar funcionando.
+  </div>
+</div>
