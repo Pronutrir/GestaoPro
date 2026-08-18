@@ -442,12 +442,15 @@ function ProjectsContent() {
 
       {/* Quadro e Tabela convivem: o quadro é melhor para MOVER um projeto de
           estágio, a tabela para COMPARAR muitos. Cabem ~6 cartões numa tela
-          contra ~20 linhas. */}
+          contra ~20 linhas.
+          A TABELA vem primeiro: comparar a carteira é o que se faz com mais
+          frequência nesta tela, e o primeiro item de um grupo é o que se lê
+          como o principal. */}
       <div className="mb-4 flex items-center gap-2 flex-wrap">
         <div className="inline-flex rounded-md border border-border overflow-hidden">
           {([
-            { id: 'board', label: 'Quadro', Icon: LayoutGrid },
             { id: 'table', label: 'Tabela', Icon: TableIcon },
+            { id: 'board', label: 'Quadro', Icon: LayoutGrid },
           ] as const).map(({ id, label, Icon }) => (
             <button
               key={id}

@@ -109,10 +109,23 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     setIsLoading(true);
 
     try {
-      if (!formData.sector.trim()) {
+      /**
+       * As duas telas exigem o mesmo. Aqui só o setor era cobrado, então dava
+       * para criar um projeto sem responsável nenhum e só descobrir depois, ao
+       * tentar EDITAR — a tela de edição barrava um campo que a de criação
+       * nunca pediu. Três projetos na base estão assim, sem gestor e sem líder.
+       *
+       * GESTOR é o obrigatório, não o Líder: quem responde pelo projeto perante
+       * a organização é o gestor. O líder toca a execução e pode não existir
+       * num projeto pequeno, ou ainda não estar definido na abertura.
+       */
+      const faltando: string[] = [];
+      if (!formData.manager.trim()) faltando.push("Gestor do Projeto");
+      if (!formData.sector.trim()) faltando.push("Setor de Origem");
+      if (faltando.length > 0) {
         toast({
-          title: "Campo obrigatório",
-          description: "Selecione o setor de origem do projeto.",
+          title: "Campos obrigatórios",
+          description: `Preencha: ${faltando.join(", ")}.`,
           variant: "destructive",
         });
         return;
@@ -520,7 +533,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
             {/* items-start: as colunas se alinham pelo topo mesmo que uma cresça. */}
             <div className="grid grid-cols-2 gap-4 items-start">
               <div className="grid gap-2 content-start" ref={managerFieldRef}>
-                <Label>Gestor do Projeto</Label>
+                <Label>Gestor do Projeto *</Label>
                 <PersonCombobox
                   people={profiles}
                   value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}

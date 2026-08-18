@@ -331,7 +331,10 @@ export const EditProjectDialog = ({
     if (!formData.start_date) missingRequiredFields.push("Data de Início");
     if (!formData.due_date) missingRequiredFields.push("Data de Entrega");
     if (!formData.status.trim()) missingRequiredFields.push("Status");
-    if (!formData.owner.trim()) missingRequiredFields.push("Líder do Projeto");
+    // GESTOR é o obrigatório, não o Líder. Quem responde pelo projeto perante
+    // a organização é o gestor; o líder é quem toca a execução, e pode não
+    // existir num projeto pequeno ou ainda não estar definido na abertura.
+    if (!formData.manager.trim()) missingRequiredFields.push("Gestor do Projeto");
     if (!formData.sector.trim()) missingRequiredFields.push("Setor de Origem");
 
     const currentPriority = formData.priority || "pendente";
@@ -829,7 +832,7 @@ export const EditProjectDialog = ({
             {/* items-start: as colunas se alinham pelo topo mesmo que uma cresça. */}
             <div className="grid grid-cols-2 gap-4 items-start">
               <div className="grid gap-2 content-start" ref={managerFieldRef}>
-                <Label>Gestor do Projeto</Label>
+                <Label>Gestor do Projeto *</Label>
                 <PersonCombobox
                   people={profiles}
                   value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}
@@ -842,7 +845,7 @@ export const EditProjectDialog = ({
                 />
               </div>
               <div className="grid gap-2 content-start" ref={ownerFieldRef}>
-                <Label>Líder do Projeto *</Label>
+                <Label>Líder do Projeto</Label>
                 <PersonCombobox
                   people={profiles}
                   value={profiles.find((p) => p.full_name === formData.owner)?.id ?? null}

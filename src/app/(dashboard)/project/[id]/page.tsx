@@ -1838,9 +1838,13 @@ export default function ProjectDetailsPage() {
             </TabsContent>
 
             <TabsContent value="changes" className="mt-0">
+              {/* Gestor primeiro, líder como reserva — o líder passou a ser
+                  OPCIONAL, e este campo sozinho ficaria vazio nos projetos que
+                  só têm gestor, deixando a tela sem a quem apontar. Mesmo
+                  fallback que o Kanban já usa em `projectOwner`. */}
               <ChangeRequestsManager
                 projectId={id!}
-                projectOwner={project.owner}
+                projectOwner={project.manager?.trim() || project.owner?.trim() || null}
                 onChanged={fetchPendingChangeRequests}
               />
             </TabsContent>
