@@ -31,6 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { GutPriorityField } from "@/components/GutPriorityField";
 import { useAuth } from "@/contexts/AuthContext";
+import { PAPEL_PADRAO, permissoesDoPapel } from "@/lib/projectRoles";
 
 interface PendingMember {
   user_id: string;
@@ -108,10 +109,23 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
     setIsLoading(true);
 
     try {
-      if (!formData.sector.trim()) {
+      /**
+       * As duas telas exigem o mesmo. Aqui só o setor era cobrado, então dava
+       * para criar um projeto sem responsável nenhum e só descobrir depois, ao
+       * tentar EDITAR — a tela de edição barrava um campo que a de criação
+       * nunca pediu. Três projetos na base estão assim, sem gestor e sem líder.
+       *
+       * GESTOR é o obrigatório, não o Líder: quem responde pelo projeto perante
+       * a organização é o gestor. O líder toca a execução e pode não existir
+       * num projeto pequeno, ou ainda não estar definido na abertura.
+       */
+      const faltando: string[] = [];
+      if (!formData.manager.trim()) faltando.push("Gestor do Projeto");
+      if (!formData.sector.trim()) faltando.push("Setor de Origem");
+      if (faltando.length > 0) {
         toast({
-          title: "Campo obrigatório",
-          description: "Selecione o setor de origem do projeto.",
+          title: "Campos obrigatórios",
+          description: `Preencha: ${faltando.join(", ")}.`,
           variant: "destructive",
         });
         return;
@@ -278,10 +292,20 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
             invitation_status: "pending" as const,
             invited_at: new Date().toISOString(),
             invited_by: invitedBy,
-            can_create: true,
-            can_edit: false,
-            can_delete: false,
-            can_move: false,
+            /**
+             * MESMO PADRÃO DO EditProjectDialog — antes as duas telas
+             * discordavam.
+             *
+             * Aqui gravava `can_create: true` com o resto `false`: a pessoa
+             * podia criar atividade mas não editar nem mover, nem a que
+             * acabara de criar. Não há nível na tela de equipe que signifique
+             * isso, então ela aparecia como "Acompanhar", que está errado nos
+             * dois sentidos. Eram 2 membros na base (migration 20260818160000).
+             *
+             * "Adicionar à equipe" tem que significar a mesma coisa nas duas
+             * telas. A fonte única é PAPEL_PADRAO, em lib/projectRoles.ts.
+             */
+            ...permissoesDoPapel(PAPEL_PADRAO),
           }));
 
           // Toda a equipe já entrou como responsável — nada a inserir.
@@ -509,7 +533,7 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
             {/* items-start: as colunas se alinham pelo topo mesmo que uma cresça. */}
             <div className="grid grid-cols-2 gap-4 items-start">
               <div className="grid gap-2 content-start" ref={managerFieldRef}>
-                <Label>Gestor do Projeto</Label>
+                <Label>Gestor do Projeto *</Label>
                 <PersonCombobox
                   people={profiles}
                   value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}

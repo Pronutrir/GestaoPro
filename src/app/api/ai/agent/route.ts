@@ -369,7 +369,7 @@ Diretrizes gerais:
 - Quando o usuário pedir para criar ou atualizar algo, use as ferramentas disponíveis — nunca simule
 - Confirme o que foi criado/atualizado citando o nome e o ID retornado pela ferramenta
 - Se o usuário enviar um chamado GLPI (texto livre), chame analyzeGlpiTicket IMEDIATAMENTE e use a sugestão para preencher o máximo de dados
-- Após validar projeto/coluna, para criar tarefa principal+subtarefas de chamado GLPI e vincular a história na aba da tarefa, use createGlpiWorkPackage
+- Após validar projeto/coluna, para criar tarefa principal+subatividades de chamado GLPI e vincular a história na aba da tarefa, use createGlpiWorkPackage
 - Para vincular histórias em tarefas GLPI antigas (sem história na aba), use backfillGlpiTaskStories
 - Para criar uma atividade: chame listProjects IMEDIATAMENTE — a ferramenta retornará um formatted_response, copie-o exatamente
 - Após o usuário escolher o projeto: chame listWorkflowStages IMEDIATAMENTE — a ferramenta retornará um formatted_response, copie-o exatamente
@@ -381,9 +381,9 @@ Diretrizes gerais:
 Perguntas de esclarecimento — regras obrigatórias:
 - NUNCA liste todas as perguntas de uma vez. Faça EXATAMENTE UMA pergunta, aguarde a resposta e só então faça a próxima
 - NUNCA use bullet points ou listas numeradas para coletar informações
-- Em chamado GLPI, preencha automaticamente: user story (persona/ação/benefício), tarefas, subtarefas, horas e GUT usando analyzeGlpiTicket/suggestGutPriority
-- Em chamado GLPI, crie UMA tarefa principal por chamado; os subchamados/itens derivados devem virar subtarefas dessa tarefa
-- Em chamado GLPI, preencha automaticamente: user story (persona/ação/benefício), tarefas, subtarefas, horas e GUT usando analyzeGlpiTicket/suggestGutPriority
+- Em chamado GLPI, preencha automaticamente: user story (persona/ação/benefício), tarefas, subatividades, horas e GUT usando analyzeGlpiTicket/suggestGutPriority
+- Em chamado GLPI, crie UMA tarefa principal por chamado; os subchamados/itens derivados devem virar subatividades dessa tarefa
+- Em chamado GLPI, preencha automaticamente: user story (persona/ação/benefício), tarefas, subatividades, horas e GUT usando analyzeGlpiTicket/suggestGutPriority
 - Em chamado GLPI, só pergunte o que faltar para execução (ex.: projeto, coluna e confirmação final)
 - Fluxo obrigatório para criar tarefa: (1) projeto → (2) coluna/stage → (3) título → (4) responsável → (5) prioridade → (6) prazo (opcional) → executar
 - Ao perguntar o responsável, ofereça sempre o usuário logado como primeira opção clicável: [${userName}] | [Outro]
@@ -702,7 +702,7 @@ export async function POST(req: Request) {
       }),
 
       analyzeGlpiTicket: tool({
-        description: 'Analisa o texto de um chamado GLPI e sugere automaticamente história do usuário (persona/ação/benefício), tarefas, subtarefas, horas estimadas e GUT. Use sempre que o usuário colar um chamado GLPI.',
+        description: 'Analisa o texto de um chamado GLPI e sugere automaticamente história do usuário (persona/ação/benefício), tarefas, subatividades, horas estimadas e GUT. Use sempre que o usuário colar um chamado GLPI.',
         inputSchema: z.object({
           ticket_text: z.string().describe('Texto completo do chamado GLPI'),
           ticket_title: z.string().optional().describe('Título opcional do chamado'),
@@ -763,7 +763,7 @@ export async function POST(req: Request) {
       }),
 
       createGlpiWorkPackage: tool({
-        description: 'Cria um pacote completo de execução para chamado GLPI: UMA tarefa principal com subtarefas e história do usuário vinculada na aba Histórias da tarefa, incluindo GUT e horas estimadas.',
+        description: 'Cria um pacote completo de execução para chamado GLPI: UMA tarefa principal com subatividades e história do usuário vinculada na aba Histórias da tarefa, incluindo GUT e horas estimadas.',
         inputSchema: z.object({
           project_id: z.string().describe('ID do projeto onde a estrutura será criada'),
           workflow_stage_name: z.string().describe('Nome exato da coluna/estágio para criação dos itens'),
@@ -855,7 +855,7 @@ export async function POST(req: Request) {
             `Chamado GLPI:\n${original_ticket_text}\n\n` +
             `História do usuário:\n${userStoryText}\n\n` +
             `GUT: G${g} U${u} T${t}\n\n` +
-            `Use as subtarefas para detalhar a execução.`;
+            `Use as subatividades para detalhar a execução.`;
 
           const { data: mainTask, error: mainTaskError } = await adminClient
             .from('activities')
@@ -960,7 +960,7 @@ export async function POST(req: Request) {
             if (subtaskError) {
               return {
                 error: subtaskError.message,
-                warning: `Falha ao criar subtarefa "${subtaskTitle}"`,
+                warning: `Falha ao criar subatividade "${subtaskTitle}"`,
                 created_tasks: [mainTask],
                 created_tasks_count: 1,
                 created_subtasks_count: subtasksCount,
@@ -984,7 +984,7 @@ export async function POST(req: Request) {
                 ? `🔗 **História vinculada na aba da tarefa**\n${createdLinkedStory.title}\n\n`
                 : ''}` +
               `✓ **Atividades Criadas**\n` +
-              `${subtasksCount} subtarefa${subtasksCount !== 1 ? 's' : ''} para execução\n\n` +
+              `${subtasksCount} subatividade${subtasksCount !== 1 ? 's' : ''} para execução\n\n` +
               `🎯 **Prioridade Aplicada**\n` +
               `G${g} (Gravidade) | U${u} (Urgência) | T${t} (Tendência) = **Score ${g * u * t}**\n\n` +
               `⏱️ **Estimativa Total:** ${totalHours}h` +

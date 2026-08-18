@@ -51,7 +51,6 @@ export type Database = {
           priority_score: number | null
           progress_flag: number
           project_id: string
-          raci_role: string | null
           sprint_id: string | null
           start_date: string | null
           status: string
@@ -102,7 +101,6 @@ export type Database = {
           priority_score?: number | null
           progress_flag?: number
           project_id: string
-          raci_role?: string | null
           sprint_id?: string | null
           start_date?: string | null
           status?: string
@@ -153,7 +151,6 @@ export type Database = {
           priority_score?: number | null
           progress_flag?: number
           project_id?: string
-          raci_role?: string | null
           sprint_id?: string | null
           start_date?: string | null
           status?: string
@@ -1465,6 +1462,7 @@ export type Database = {
           can_create: boolean
           can_delete: boolean
           can_edit: boolean
+          can_edit_own: boolean
           can_move: boolean
           created_at: string
           decline_reason: string | null
@@ -1484,6 +1482,7 @@ export type Database = {
           can_create?: boolean
           can_delete?: boolean
           can_edit?: boolean
+          can_edit_own?: boolean
           can_move?: boolean
           created_at?: string
           decline_reason?: string | null
@@ -1503,6 +1502,7 @@ export type Database = {
           can_create?: boolean
           can_delete?: boolean
           can_edit?: boolean
+          can_edit_own?: boolean
           can_move?: boolean
           created_at?: string
           decline_reason?: string | null

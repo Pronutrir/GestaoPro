@@ -177,6 +177,17 @@ export const ActivityKanban = ({
   onToggleActivity,
   isAdmin = false,
   canCreate = false,
+  /**
+   * Permissões do MEMBRO no projeto (`project_members.can_edit` / `can_move`).
+   *
+   * Elas existiam no banco e na página, mas nunca chegavam aqui: o quadro só
+   * recebia `isAdmin={canDelete}`, então quem tinha `can_edit` sem
+   * `can_delete` não conseguia mexer em nada. Medido em 17/08/2026: 39 pessoas
+   * nessa situação.
+   */
+  projectOwner,
+  canEdit = false,
+  canMove = false,
   projectLocked = false,
   isQualityProject = false,
   onOpenCreateTask,
@@ -195,6 +206,49 @@ export const ActivityKanban = ({
   }, [toast]);
   const [stages, setStages] = useState<WorkflowStage[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  /**
+   * SELEÇÃO EM LOTE — arrastar vários cartões de uma vez.
+   *
+   * Nasceu do bloqueio "mova o que está dentro primeiro": uma entrega com 5
+   * filhos exigia cinco arrastes, e o aviso pedia isso sem oferecer o caminho.
+   *
+   * A seleção é pela CAIXA do cartão (ou pelo card inteiro, uma vez no modo).
+   * Clicar num cartão fora do modo continua abrindo a edição — é o gesto mais
+   * usado do quadro.
+   */
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  /** Âncora do Shift+clique: o último marcado, para pegar o intervalo. */
+  const ultimoMarcado = useRef<string | null>(null);
+
+  /**
+   * MOVER A FASE COM O CONTEÚDO — diálogo, não aviso.
+   *
+   * Era um toast: passava no canto, sumia sozinho e citava "3 e mais 2" que
+   * ninguém sabia quais. Mas aqui NADA ACONTECEU AINDA e a escolha muda vários
+   * itens — toast informa o que já foi, diálogo decide o que será.
+   *
+   * A lista completa entra: quem confirma precisa ver o que vai junto, com a
+   * coluna de origem de cada um.
+   */
+  const [moverJunto, setMoverJunto] = useState<{
+    pai: Activity;
+    filhos: Activity[];
+    destinoId: string;
+    destinoNome: string;
+  } | null>(null);
+  const [movendoJunto, setMovendoJunto] = useState(false);
+  /**
+   * Quais filhos vão — a escolha é sua, item a item.
+   *
+   * Levar tudo é o caso comum, então abre com todos marcados. Mas às vezes só
+   * três das cinco avançaram, e obrigar o "tudo ou nada" empurraria de volta
+   * para arrastar um por um, que era o problema de origem.
+   *
+   * O PAI é consequência, não escolha: ele só acompanha quando TODOS forem —
+   * é a mesma regra do quadro, e deixá-lo ir com filho para trás recriaria a
+   * mentira que o bloqueio existe para impedir.
+   */
+  const [filhosMarcados, setFilhosMarcados] = useState<Set<string>>(new Set());
   const [dragType, setDragType] = useState<"card" | "column" | null>(null);
 
   // Preferências de exibição (campos do card, raias, larguras, colunas
@@ -271,7 +325,13 @@ export const ActivityKanban = ({
   // versionar a chave sempre que um DEFAULT_* persistido mudar de valor.
   const cardFields = prefs.cardFields;
   const toggleCardField = useCallback((key: keyof CardFields) => {
-    setPrefs((p) => ({ cardFields: { ...p.cardFields, [key]: !p.cardFields[key] } }));
+    setPrefs((p) => ({
+      cardFields: { ...p.cardFields, [key]: !p.cardFields[key] },
+      // Marca que o usuário DECIDIU sobre o resumo. Antes disso, o `false`
+      // gravado é ignorado na leitura, para o novo padrão (ligado) valer —
+      // ver `kanbanPrefs.ts`. A partir daqui a escolha dele manda.
+      ...(key === "subSummary" ? { subSummaryVisto: true } : {}),
+    }));
   }, [setPrefs]);
 
   // Filtro "Apenas minhas tarefas" — persistido por projeto
@@ -867,19 +927,67 @@ export const ActivityKanban = ({
     [myId, myName, profilesMap]
   );
 
+  /**
+   * TRÊS NÍVEIS DE ACESSO, deduzidos do vínculo mais forte (18/08/2026).
+   *
+   *   PROJETO — equipe com permissão, líder, gestor, criador do projeto.
+   *             Mexe em QUALQUER atividade.
+   *   TAREFA  — responsável, participante ou criador DAQUELA atividade.
+   *             Mexe só nas dela.
+   *   LEITURA — nenhum vínculo. Vê e comenta.
+   *
+   * Antes era binário: ou a pessoa passava por `canEdit`, ou caía no teste de
+   * "é minha". Quem não tinha vínculo nenhum com o projeto recebia acesso
+   * TOTAL — mais permissão que 28 pessoas que foram formalmente convidadas.
+   *
+   * Enumerado na base: há SEIS formas de estar ligado a um projeto, e duas
+   * eu não havia contado — 6 pessoas lideram projetos sem constar na equipe,
+   * e 8 participam de atividades na mesma situação. Cortar por equipe apenas
+   * as deixaria de fora do próprio trabalho.
+   *
+   * Mercado: Jira exige `Browse Projects` mas o concede ao papel dinâmico
+   * "Current Assignee"; Asana dá acesso À TAREFA a quem é atribuído, com
+   * nível configurável; Linear só permite atribuir a quem já é membro. Todos
+   * têm um degrau entre "membro pleno" e "sem acesso" — é esse degrau.
+   *
+   * A regra vive em `canMutateActivity`, logo abaixo.
+   */
+
+  /**
+   * O aviso de bloqueio, com o CAMINHO e não só a regra.
+   *
+   * Os quatro avisos diziam "Somente o criador ou responsável da atividade
+   * pode X" — verdade, mas a pessoa ficava sem saber a quem pedir. Agora o
+   * texto nomeia quem resolve (o líder do projeto) e as duas saídas: entrar
+   * na equipe, ou receber a atividade.
+   */
+  const avisoSemPermissao = useCallback((acao: string) => {
+    const quem = (projectOwner || "").trim();
+    toast({
+      title: `Você não pode ${acao}`,
+      description: quem
+        ? `Só a equipe do projeto e quem responde pela atividade podem. Peça a ${quem} para incluir você na equipe, ou para atribuir esta atividade a você.`
+        : "Só a equipe do projeto e quem responde pela atividade podem. Peça ao líder do projeto para incluir você na equipe, ou para atribuir esta atividade a você.",
+      variant: "destructive",
+    });
+  }, [projectOwner, toast]);
+
   const canMutateActivity = useCallback((a?: Activity | null) => {
     if (!a) return false;
     if (isAdmin) return true;
-    if (myId && a.created_by === myId) return true;
-    if (myId && a.assigned_to === myId) return true;
-    if (myName) {
-      const assignedRaw = (a.assigned_to || "").trim().toLowerCase();
-      const resolvedAssigned = a.assigned_to ? (profilesMap[a.assigned_to] || "").trim().toLowerCase() : "";
-      if (assignedRaw && assignedRaw === myName) return true;
-      if (resolvedAssigned && resolvedAssigned === myName) return true;
-    }
-    return false;
-  }, [isAdmin, myId, myName, profilesMap]);
+    // NÍVEL PROJETO: mexe em qualquer atividade.
+    if (canEdit || canMove) return true;
+    /**
+     * NÍVEL TAREFA: só nas suas.
+     *
+     * `isMineActivity` já resolve os três casos — criador, responsável e
+     * PARTICIPANTE — e ainda traduz UUID para nome, que é como
+     * `assigned_to` chega em parte da base. A regra daqui repetia dois deles
+     * e esquecia o participante: 8 pessoas colaboram em atividades sem ser
+     * responsáveis, e não passariam.
+     */
+    return isMineActivity(a);
+  }, [isAdmin, canEdit, canMove, isMineActivity]);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
@@ -1175,7 +1283,7 @@ export const ActivityKanban = ({
     }
     const activity = activities.find((a) => a.id === activityId);
     if (!canMutateActivity(activity)) {
-      toast({ title: "Somente o criador ou responsável da atividade pode bloquear.", variant: "destructive" });
+      avisoSemPermissao("bloquear esta atividade");
       return;
     }
     if (activity?.is_blocked) {
@@ -1222,7 +1330,7 @@ export const ActivityKanban = ({
     }
     const activity = activities.find((a) => a.id === activityId);
     if (!canMutateActivity(activity)) {
-      toast({ title: "Somente o criador ou responsável da atividade pode mover para backlog.", variant: "destructive" });
+      avisoSemPermissao("mover para o backlog");
       return;
     }
     const backlogStage = stages.find((s) => s.display_order === 0);
@@ -1241,6 +1349,54 @@ export const ActivityKanban = ({
       .eq("activity_id", activityId); 
     onDataChanged();
   };
+
+  /**
+   * Marca / desmarca um cartão.
+   *
+   * `Shift` pega o INTERVALO desde o último marcado, na ordem em que a coluna
+   * desenha — é o que se espera de uma lista, e evita 20 cliques para pegar 20
+   * itens seguidos. Só dentro da MESMA coluna: entre colunas a "ordem" não
+   * existe, e o intervalo pegaria itens que a pessoa não vê.
+   */
+  const alternarSelecao = useCallback((id: string, e?: { shiftKey?: boolean }) => {
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      const ancora = ultimoMarcado.current;
+      const atual = activities.find((a) => a.id === id);
+      const daAncora = ancora ? activities.find((a) => a.id === ancora) : null;
+
+      const colunaDe = (a: Activity) => optimisticMoves[a.id] || a.workflow_stage_id;
+      if (e?.shiftKey && daAncora && atual && colunaDe(daAncora) === colunaDe(atual)) {
+        // A ordem é a de `activities`, que é a mesma que alimenta a coluna —
+        // `activitiesByStage` só existe mais abaixo no arquivo.
+        const naColuna = activities.filter((a) => colunaDe(a) === colunaDe(atual)).map((a) => a.id);
+        const i = naColuna.indexOf(ancora!);
+        const j = naColuna.indexOf(id);
+        if (i >= 0 && j >= 0) {
+          for (const x of naColuna.slice(Math.min(i, j), Math.max(i, j) + 1)) next.add(x);
+          return next;
+        }
+      }
+
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      ultimoMarcado.current = next.has(id) ? id : null;
+      return next;
+    });
+  }, [activities, optimisticMoves]);
+
+  const limparSelecao = useCallback(() => {
+    setSelecionados(new Set());
+    ultimoMarcado.current = null;
+  }, []);
+
+  // Esc sai do modo — a saída precisa existir sem procurar botão.
+  useEffect(() => {
+    if (selecionados.size === 0) return;
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") limparSelecao(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selecionados.size, limparSelecao]);
 
   /**
    * Filhos diretos que AINDA NÃO estão na coluna de destino — a lista que
@@ -1264,6 +1420,11 @@ export const ActivityKanban = ({
     return activities.filter((f) => {
       if (f.parent_id !== paiId) return false;
       if (f.workflow_stage_id && canceladaIds.has(f.workflow_stage_id)) return false;
+      // MARCO FICA FORA DA CONTA. Ele não entra no quadro, então nunca
+      // "chegaria" a coluna nenhuma — contá-lo travaria o pai para sempre em
+      // qualquer fase que tenha um. Ele é ponto de controle, não trabalho
+      // pendente: quem responde pelo avanço são as atividades.
+      if (f.is_milestone) return false;
       return (optimisticMoves[f.id] || f.workflow_stage_id) !== destinoId;
     });
   }, [activities, optimisticMoves, stages]);
@@ -1305,7 +1466,10 @@ export const ActivityKanban = ({
       visto.add(atual.parent_id);
       const pai = porId.get(atual.parent_id);
       if (!pai) break;
-      const irmaos = filhosDe.get(pai.id) ?? [];
+      // Marco fora da conta: ele não entra no quadro, então nunca chegaria a
+      // esta coluna — contá-lo impediria o pai de subir para sempre.
+      const irmaos = (filhosDe.get(pai.id) ?? []).filter((f) => !f.is_milestone);
+      if (irmaos.length === 0) break;
       // A coluna do item recém-movido ainda não voltou do banco, então o valor
       // dele vem do argumento — não de `activities`, que está desatualizado.
       const todosLa = irmaos.every((f) =>
@@ -1356,7 +1520,7 @@ export const ActivityKanban = ({
     }
     const activity = activities.find((a) => a.id === activityId);
     if (!canMutateActivity(activity)) {
-      toast({ title: "Somente o criador ou responsável da atividade pode mover.", variant: "destructive" });
+      avisoSemPermissao("mover esta atividade");
       return;
     }
     const target = stages.find((s) => s.id === stageId);
@@ -1380,9 +1544,18 @@ export const ActivityKanban = ({
     const previousStageId = activity?.workflow_stage_id ?? null;
 
     setOptimisticMoves((prev) => ({ ...prev, [activityId]: stageId }));
+    // O status acompanha a coluna, como no arrasto: sem isto, mover pelo menu
+    // para "Concluída" deixava o card sem riscar, e o caminho de volta deixava
+    // uma tarefa `completed` numa coluna que não é final.
+    const destinoFinal = target.is_final === true
+      || parseWorkflowCategory((target as { categoria?: string }).categoria) === "concluida";
     const { error } = await supabase
       .from("activities")
-      .update({ workflow_stage_id: stageId } as never)
+      .update({
+        workflow_stage_id: stageId,
+        status: destinoFinal ? "completed" : "pending",
+        completed_at: destinoFinal ? new Date().toISOString() : null,
+      } as never)
       .eq("id", activityId);
     if (error) {
       setOptimisticMoves((prev) => {
@@ -1418,7 +1591,7 @@ export const ActivityKanban = ({
     });
     await subirPaisCompletos(activityId, stageId);
     onDataChanged();
-  }, [activities, canMutateActivity, filhosForaDaColuna, onDataChanged, projectLocked, showProjectLockedToast, stages, subirPaisCompletos, toast]);
+  }, [activities, avisoSemPermissao, canMutateActivity, filhosForaDaColuna, onDataChanged, projectLocked, showProjectLockedToast, stages, subirPaisCompletos, toast]);
 
   /** Duplica a atividade (com a subárvore). A capacidade já existia em
    *  lib/duplicateActivity, usada só dentro do diálogo de edição. */
@@ -1430,7 +1603,7 @@ export const ActivityKanban = ({
     try {
       const { duplicateActivity } = await import("@/lib/duplicateActivity");
       await duplicateActivity({ activityId, includeChildren: true });
-      toast({ title: "Atividade duplicada", description: "As subtarefas também foram duplicadas." });
+      toast({ title: "Atividade duplicada", description: "As subatividades também foram duplicadas." });
       onDataChanged();
     } catch (e) {
       toast({
@@ -1541,8 +1714,25 @@ export const ActivityKanban = ({
     const map: Record<string, Activity[]> = {};
     stages.forEach((s) => (map[s.id] = []));
 
-    // "onlyMine" sempre se aplica; o filtro geral/coluna é decidido POR coluna.
-    const source = onlyMine ? activities.filter(isMineActivity) : activities;
+    /**
+     * MARCO NÃO ENTRA NO QUADRO (14/08/2026).
+     *
+     * Kanban mede TRABALHO passando por estágios. Marco não passa: ele
+     * acontece — é um ponto no tempo, sem duração, horas ou custo. O lugar
+     * dele é o Backlog (a lista do que existe) e o Cronograma (o losango do
+     * Gantt), onde a data é o que importa.
+     *
+     * Já vínhamos tapando o buraco de trás para a frente: o marco valia 0 ou
+     * 100 porque a régua das colunas não servia para ele. A causa era estar
+     * numa régua que não é a dele.
+     *
+     * O gesto de atingir passa a ser um BOTÃO no Backlog e no Cronograma —
+     * arrastar deixa de ser o único caminho.
+     *
+     * "onlyMine" sempre se aplica; o filtro geral/coluna é decidido POR coluna.
+     */
+    const semMarcos = activities.filter((a) => !a.is_milestone);
+    const source = onlyMine ? semMarcos.filter(isMineActivity) : semMarcos;
     source.forEach((a) => {
       // Use optimistic override if available
       const stageId = optimisticMoves[a.id] || a.workflow_stage_id;
@@ -1714,7 +1904,7 @@ export const ActivityKanban = ({
 
     const draggedActivity = activities.find((a) => a.id === activityId);
     if (!canMutateActivity(draggedActivity)) {
-      toast({ title: "Somente o criador ou responsável da atividade pode mover no kanban.", variant: "destructive" });
+      avisoSemPermissao("mover no kanban");
       return;
     }
     const currentStageId = draggedActivity?.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
@@ -1801,25 +1991,61 @@ export const ActivityKanban = ({
      * Só DESCENDENTES DIRETOS decidem. O neto é problema do filho — se ele
      * está na coluna, é porque a regra já foi aplicada a ele.
      */
+    /**
+     * O AVISO OFERECE A SAÍDA, em vez de só barrar.
+     *
+     * Antes ele dizia "mova o que está dentro primeiro" e parava aí — mas o
+     * que estava dentro vinha COLAPSADO no próprio card que a pessoa acabou de
+     * arrastar. Era preciso expandir, e arrastar um a um. O aviso pedia
+     * trabalho sem mostrar o caminho, e apareceu três vezes na mesma conversa.
+     *
+     * Agora ele traz "Levar os N junto": um clique faz o que o bloqueio
+     * pedia. A regra continua de pé — a caixa não anda sozinha na frente do
+     * conteúdo — mas cumprir a regra deixa de ser tarefa manual.
+     */
     if (draggedActivity) {
       const foraDaColuna = filhosForaDaColuna(draggedActivity.id, targetStageId);
       if (foraDaColuna.length > 0) {
-        const n = foraDaColuna.length;
-        const amostra = foraDaColuna.slice(0, 3).map((f) => `"${f.title}"`).join(", ");
-        toast({
-          title: "Mova o que está dentro primeiro",
-          description:
-            `${n} ${n === 1 ? "item ainda não está" : "itens ainda não estão"} em ` +
-            `"${getStageDisplayTitle(stage?.title || "")}": ${amostra}${n > 3 ? ` e mais ${n - 3}` : ""}. ` +
-            "Quando o último chegar, a fase acompanha sozinha.",
-          variant: "destructive",
+        setMoverJunto({
+          pai: draggedActivity,
+          filhos: foraDaColuna,
+          destinoId: targetStageId,
+          destinoNome: getStageDisplayTitle(stage?.title || ""),
         });
+        // Abre com tudo marcado: levar a fase inteira é o caso comum, e o
+        // diálogo nasceu justamente para poupar o arrasto um a um.
+        setFilhosMarcados(new Set(foraDaColuna.map((f) => f.id)));
         return;
       }
     }
 
+    /**
+     * ARRASTAR O CONJUNTO.
+     *
+     * Se o cartão puxado está numa seleção, os outros marcados vão junto — é o
+     * gesto que o bloqueio "mova o que está dentro primeiro" pedia sem
+     * oferecer: uma entrega com 5 filhos exigia cinco arrastes.
+     *
+     * Se ele NÃO está na seleção, o arrasto é dele só: pegar um cartão fora
+     * do conjunto é sinal de que a pessoa mudou de ideia sobre o alvo, não de
+     * que quer levar o conjunto para lá.
+     *
+     * Os companheiros pulam a validação de filhos — ela vale para o cartão
+     * puxado, e reaplicá-la a cada um recusaria o lote inteiro por causa de
+     * uma folha que também está selecionada.
+     */
+    const emLote = selecionados.has(activityId)
+      ? [...selecionados].filter((id) => id !== activityId
+          && (optimisticMoves[id] || activities.find((a) => a.id === id)?.workflow_stage_id) !== targetStageId)
+      : [];
+
     // Optimistic update — move card instantly in the UI (após validações)
-    setOptimisticMoves((prev) => ({ ...prev, [activityId]: targetStageId! }));
+    setOptimisticMoves((prev) => {
+      const next = { ...prev, [activityId]: targetStageId! };
+      for (const id of emLote) next[id] = targetStageId!;
+      return next;
+    });
+    if (emLote.length > 0) limparSelecao();
 
     const completedAt = stage?.is_final ? new Date().toISOString() : null;
 
@@ -1840,10 +2066,29 @@ export const ActivityKanban = ({
           .update({ stage_id: targetStageId })
           .eq("activity_id", activityId);
 
+        // Os COMPANHEIROS do lote. Em bloco, não um a um: são até dezenas de
+        // ids, e uma chamada por cartão faria o quadro piscar em cascata.
+        if (emLote.length > 0) {
+          await supabase
+            .from("activities")
+            .update({ workflow_stage_id: targetStageId, status: newStatus, completed_at: completedAt })
+            .in("id", emLote);
+          await supabase
+            .from("user_stories")
+            .update({ stage_id: targetStageId })
+            .in("activity_id", emLote);
+        }
+
         // Recalcula os pais: só ficam concluídos quando 100% dos filhos diretos estiverem concluídos.
         const { data: stageRows } = await supabase
           .from("workflow_stages")
-          .select("id, title, display_order, is_final")
+          // `select("*")` por causa de `categoria`: ela existe no banco mas
+          // ainda não nos tipos gerados (a migration não rodou em toda VM), e
+          // nomeá-la no select faz o TS recusar a query inteira. É o mesmo
+          // recurso já usado nas outras leituras de coluna deste arquivo.
+          // Precisamos dela para achar a coluna de reabertura por PAPEL, e não
+          // pelo título — que mudou de "A Fazer" para "Não iniciado".
+          .select("*")
           .eq("project_id", projectId)
           .order("display_order", { ascending: true });
 
@@ -1859,9 +2104,27 @@ export const ActivityKanban = ({
           targetStageId && stage?.is_final
             ? targetStageId
             : stageList.find((s) => s.is_final)?.id || null;
-        const explicitAFazer = stageList.find((s) => {
+        /**
+         * A COLUNA DE REABERTURA VEM DA CATEGORIA, não do título.
+         *
+         * Procurava por `title === "a fazer"` — e a coluna passou a se chamar
+         * "Não iniciado" (migration 20260814120000). A busca por nome deixaria
+         * de achar, e a tarefa reaberta cairia no fallback: `display_order 1`,
+         * que pode ser qualquer coluna.
+         *
+         * `a_iniciar` é o que define esse papel, e sobrevive a renomeação —
+         * era exatamente para isso que a categoria foi criada.
+         *
+         * O teste por título fica como ÚLTIMO recurso, para bases onde o
+         * backfill de categoria ainda não rodou.
+         */
+        const porCategoria = stageList.find(
+          (s) => parseWorkflowCategory((s as { categoria?: string }).categoria) === "a_iniciar",
+        );
+        const explicitAFazer = porCategoria ?? stageList.find((s) => {
           const title = normalized(s.title);
-          return title === "a fazer" || title === "afazer" || title.includes("a fazer");
+          return title === "a fazer" || title === "afazer" || title.includes("a fazer")
+            || title === "nao iniciado" || title === "não iniciado";
         });
         const displayOrderOne = stageList.find((s) => !s.is_final && s.display_order === 1);
         const firstActiveStage = stageList.find((s) => !s.is_final && s.display_order > 0);
@@ -3150,6 +3413,9 @@ export const ActivityKanban = ({
                 onToggleStageBlocked={handleToggleStageBlocked}
                 onToggleStageVisible={handleToggleStageVisible}
                 allStages={stages}
+                podeMutar={canMutateActivity}
+                selecionados={selecionados}
+                onToggleSelecao={(id, e) => alternarSelecao(id, e)}
                 cardFields={cardFields}
                 profilesMap={profilesMap}
                 profileAvatarMap={profileAvatarMap}
@@ -3206,9 +3472,230 @@ export const ActivityKanban = ({
         </div>
       </SortableContext>
 
+      {/* MOVER A FASE COM O CONTEÚDO. A lista inteira à vista, com a coluna de
+          origem de cada item: quem confirma precisa ver o que vai junto, e o
+          toast anterior citava três nomes e "mais 2" que ninguém sabia quais. */}
+      <Dialog open={!!moverJunto} onOpenChange={(o) => { if (!o) setMoverJunto(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Mover a fase e o que está dentro?</DialogTitle>
+            {moverJunto && (
+              <p className="text-[13px] text-muted-foreground">
+                “{moverJunto.pai.title}” tem {moverJunto.filhos.length}{" "}
+                {moverJunto.filhos.length === 1 ? "item fora" : "itens fora"} de{" "}
+                <span className="font-medium text-foreground">{moverJunto.destinoNome}</span>.
+              </p>
+            )}
+          </DialogHeader>
+          {moverJunto && (() => {
+            const todos = filhosMarcados.size === moverJunto.filhos.length;
+            const paiVai = todos;
+            return (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    O que vai
+                  </span>
+                  {/* Marcar/desmarcar tudo: com 30 subatividades, desmarcar uma a
+                      uma para ficar com duas é pior que o arrasto que o diálogo
+                      veio substituir. */}
+                  <button
+                    type="button"
+                    className="text-[11px] text-primary hover:underline"
+                    onClick={() => setFilhosMarcados(todos ? new Set() : new Set(moverJunto.filhos.map((f) => f.id)))}
+                  >
+                    {todos ? "Desmarcar todas" : "Marcar todas"}
+                  </button>
+                </div>
+                {/* A FASE VEM PRIMEIRO — ela é o pai, e a EAP se lê de cima
+                    para baixo (1.1.2 antes de 1.1.2.1). Estava no rodapé, como
+                    se fosse rodapé de um total; ali parecia consequência da
+                    lista em vez do item que a contém.
+
+                    Ela não tem caixa: vai quando todos os filhos vão, e fica
+                    quando algum sobra — deixá-la avançar com trabalho para trás
+                    é o que o bloqueio existe para impedir. A linha diz qual dos
+                    dois é. */}
+                <div className={cn(
+                  "flex items-center gap-2 px-2.5 py-2 rounded-md text-[12px] border",
+                  paiVai ? "bg-primary/5 border-primary/25" : "bg-muted/30 border-border",
+                )}>
+                  <Layers className={cn("w-3.5 h-3.5 shrink-0", paiVai ? "text-primary" : "text-muted-foreground")} />
+                  {moverJunto.pai.wbs_code && (
+                    <span className="font-mono text-[10px] text-muted-foreground bg-background border border-border rounded px-1.5 py-0.5 shrink-0">
+                      {moverJunto.pai.wbs_code}
+                    </span>
+                  )}
+                  <span className="flex-1 min-w-0 truncate font-medium">{moverJunto.pai.title}</span>
+                  <span className={cn("text-[10.5px] shrink-0", paiVai ? "font-semibold text-primary" : "text-muted-foreground")}>
+                    {paiVai ? `→ ${moverJunto.destinoNome}` : "fica onde está"}
+                  </span>
+                </div>
+
+                {/* Rola quando a fase é grande: 30 subatividades não podem empurrar
+                    os botões para fora da tela. O recuo diz que são o conteúdo
+                    da linha acima. */}
+                <div className="max-h-[280px] overflow-y-auto rolagem-visivel space-y-1 -mx-1 px-1 pl-4">
+                  {moverJunto.filhos.map((a) => {
+                    const de = a.workflow_stage_id ? stages.find((s) => s.id === a.workflow_stage_id) : null;
+                    const marcada = filhosMarcados.has(a.id);
+                    return (
+                      <button
+                        type="button"
+                        key={a.id}
+                        onClick={() => setFilhosMarcados((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
+                          return next;
+                        })}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-left transition-colors",
+                          marcada ? "bg-muted/40" : "bg-transparent opacity-50 hover:opacity-80",
+                        )}
+                      >
+                        <span className={cn(
+                          "w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0",
+                          marcada ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40",
+                        )}>
+                          {marcada && <Check className="w-3 h-3" strokeWidth={3} />}
+                        </span>
+                        {a.wbs_code && (
+                          <span className="font-mono text-[10px] text-muted-foreground bg-background border border-border rounded px-1.5 py-0.5 shrink-0">
+                            {a.wbs_code}
+                          </span>
+                        )}
+                        <span className="flex-1 min-w-0 truncate">{a.title}</span>
+                        <span className="text-[10.5px] text-muted-foreground shrink-0">
+                          {de ? getStageDisplayTitle(de.title) : "—"}
+                        </span>
+                        <span className="text-muted-foreground shrink-0">→</span>
+                        <span className="text-[10.5px] font-semibold text-primary shrink-0">
+                          {moverJunto.destinoNome}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {!paiVai && filhosMarcados.size > 0 && (
+                  <p className="text-[11.5px] text-muted-foreground">
+                    A fase acompanha sozinha quando o último item chegar.
+                  </p>
+                )}
+              </>
+            );
+          })()}
+          <DialogFooter className="sm:justify-between">
+            <span className="text-[11.5px] text-muted-foreground self-center">
+              {moverJunto
+                ? `${filhosMarcados.size} de ${moverJunto.filhos.length} ${moverJunto.filhos.length === 1 ? "item" : "itens"}`
+                : ""}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setMoverJunto(null)}>Cancelar</Button>
+              <Button
+                // Nada marcado, nada a fazer: o botão desabilitado evita o
+                // clique que abriria e fecharia o diálogo sem mover nada.
+                disabled={movendoJunto || filhosMarcados.size === 0}
+                onClick={async () => {
+                  if (!moverJunto) return;
+                  setMovendoJunto(true);
+                  // O PAI só entra quando TODOS os filhos vão — mesma regra do
+                  // quadro. Com algum sobrando, ele fica e sobe depois sozinho.
+                  const paiVai = filhosMarcados.size === moverJunto.filhos.length;
+                  const ids = [
+                    ...(paiVai ? [moverJunto.pai.id] : []),
+                    ...moverJunto.filhos.filter((f) => filhosMarcados.has(f.id)).map((f) => f.id),
+                  ];
+                  const destino = moverJunto.destinoId;
+                  setOptimisticMoves((prev) => {
+                    const next = { ...prev };
+                    for (const id of ids) next[id] = destino;
+                    return next;
+                  });
+                  /**
+                   * O STATUS ACOMPANHA A COLUNA.
+                   *
+                   * Gravava só `workflow_stage_id`, e o `status` ficava como
+                   * estava. Voltar uma fase concluída para "Não iniciado"
+                   * deixava seis itens com `status: completed` numa coluna que
+                   * não é final: o card aparecia riscado, com 100% e "5
+                   * concluídas", dentro da coluna de quem não começou.
+                   *
+                   * É a mesma regra que o arrasto e o mover em lote do Backlog
+                   * já aplicam — este caminho nasceu sem ela.
+                   *
+                   * `completed_at` limpo ao reabrir: manter a data numa tarefa
+                   * que voltou ao fluxo faz o relatório contar entrega que não
+                   * houve.
+                   */
+                  const colDestino = stages.find((s) => s.id === destino);
+                  const destinoFinal = colDestino?.is_final === true
+                    || parseWorkflowCategory((colDestino as { categoria?: string } | undefined)?.categoria) === "concluida";
+                  const { error: erroLote } = await supabase
+                    .from("activities")
+                    .update({
+                      workflow_stage_id: destino,
+                      status: destinoFinal ? "completed" : "pending",
+                      completed_at: destinoFinal ? new Date().toISOString() : null,
+                    } as never)
+                    .in("id", ids);
+                  setMovendoJunto(false);
+                  setMoverJunto(null);
+                  if (erroLote) {
+                    // Reverte o otimista: a tela não pode mostrar o que não gravou.
+                    setOptimisticMoves((prev) => {
+                      const next = { ...prev };
+                      for (const id of ids) delete next[id];
+                      return next;
+                    });
+                    toast({ title: "Não foi possível mover", description: erroLote.message, variant: "destructive" });
+                    return;
+                  }
+                  onDataChanged();
+                  toast({ title: `${ids.length} itens movidos para "${moverJunto.destinoNome}"` });
+                }}
+              >
+                {/* O número conta a FASE quando ela vai: o botão promete o que
+                    a lista mostra, e some com a dúvida de "6 inclui a fase?". */}
+                {movendoJunto
+                  ? "Movendo…"
+                  : `Mover ${filhosMarcados.size + (moverJunto && filhosMarcados.size === moverJunto.filhos.length ? 1 : 0)}`}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* BARRA DO LOTE. Flutua no rodapé porque o quadro rola na horizontal —
+          presa ao topo, sairia da vista ao percorrer as colunas. Só aparece
+          com algo marcado, e some ao limpar: fora do modo, o quadro é o de
+          sempre. */}
+      {selecionados.size > 0 && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-xl border border-primary bg-card shadow-xl">
+          <span className="text-[13px] font-semibold text-primary tabular-nums">
+            {selecionados.size} {selecionados.size === 1 ? "selecionada" : "selecionadas"}
+          </span>
+          <span className="text-[11.5px] text-muted-foreground">
+            Arraste qualquer uma para mover todas
+          </span>
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={limparSelecao}>
+            Limpar
+          </Button>
+          <span className="text-[10.5px] text-muted-foreground/70">Esc</span>
+        </div>
+      )}
+
       <DragOverlay>
         {activeActivity ? (
-          <div className="rotate-2 opacity-90 w-[260px]">
+          <div className="rotate-2 opacity-90 w-[260px] relative">
+            {/* QUANTOS VÃO JUNTO. Sem o número, arrastar 6 cartões parecia
+                arrastar 1 — e a pessoa só descobriria ao soltar. */}
+            {selecionados.has(activeActivity.id) && selecionados.size > 1 && (
+              <span className="absolute -right-2 -top-2 z-20 min-w-[22px] h-[22px] px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-bold grid place-items-center shadow-lg">
+                {selecionados.size}
+              </span>
+            )}
             <KanbanCard
               activity={activeActivity}
               phases={phases}

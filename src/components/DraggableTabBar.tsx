@@ -68,21 +68,32 @@ function SortableTab({
     <div
       ref={setNodeRef}
       style={style}
+      /* A ABA ATIVA GANHA FUNDO e se liga ao conteúdo abaixo — a barra deixa de
+         ser uma faixa solta e vira a borda de cima do que está sendo mostrado.
+         Antes era sublinhado escuro, que competia com a borda da própria faixa:
+         duas linhas horizontais quase juntas, dizendo a mesma coisa.
+         O sublinhado fica, mas na cor de destaque e sobre o fundo branco. */
       className={`
         group/tab relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium cursor-pointer select-none
-        transition-all duration-150 whitespace-nowrap border-b-2
+        transition-all duration-150 whitespace-nowrap rounded-t-md border-b-2
         ${isDragging ? "shadow-md scale-105 bg-muted/40" : ""}
         ${
           isActive
-            ? "text-foreground border-foreground"
-            : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted-foreground/20"
+            ? "bg-background text-foreground border-primary"
+            : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted-foreground/10"
         }
       `}
       onClick={onClick}
     >
+      {/* A ALÇA SÓ NO HOVER. Aparecia em toda aba, o tempo todo, para um gesto
+          que quase não se usa — reordenar abas é coisa de uma vez, e o ⠿ ficava
+          disputando leitura com o nome da aba em cada uma delas.
+          `w-0 group-hover:w-3` em vez de `opacity`: escondida por opacidade ela
+          continuaria ocupando o espaço, e a barra não encolheria. */}
       <button
-        className="cursor-grab active:cursor-grabbing text-current/50 hover:text-current -ml-1"
+        className="cursor-grab active:cursor-grabbing text-current/50 hover:text-current -ml-1 w-0 overflow-hidden opacity-0 group-hover/tab:w-3 group-hover/tab:opacity-100 focus-visible:w-3 focus-visible:opacity-100 transition-all"
         onClick={(e) => e.stopPropagation()}
+        aria-label="Arrastar para reordenar"
         {...attributes}
         {...listeners}
       >

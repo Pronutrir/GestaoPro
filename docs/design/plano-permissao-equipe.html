@@ -1,0 +1,481 @@
+<title>Permissão da equipe</title>
+<style>
+  :root {
+    --bg:#f7f8fa; --surface:#ffffff; --surface-2:#f1f2f5; --border:#e2e4ea; --border-strong:#cfd2db;
+    --ink:#1c1f26; --ink-2:#565b66; --ink-3:#868b96; --accent:#5b5bd6; --accent-soft:#ecebfb;
+    --ok:#17915b; --ok-soft:#e2f4ea; --warn:#b3730a; --warn-soft:#fbeed6; --bad:#cc3340; --bad-soft:#fbe4e6;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}}
+  :root[data-theme="dark"]{--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px;}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600;}
+  h1{font-size:30px;line-height:1.15;margin:6px 0 10px;text-wrap:balance;letter-spacing:-.01em;}
+  .lede{color:var(--ink-2);font-size:15px;max-width:66ch;}
+  section{margin-top:46px;}
+  .sec-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:16px;}
+  .sec-num{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);}
+  .sec-head h2{font-size:20px;margin:0;letter-spacing:-.01em;}
+  .sec-sub{color:var(--ink-2);font-size:14px;margin:0 0 18px;max-width:72ch;}
+  .cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+  @media(max-width:780px){.cards{grid-template-columns:1fr;}}
+  .opt{border:1px solid var(--border);border-radius:12px;padding:18px;background:var(--surface);display:flex;flex-direction:column;}
+  .opt.rec{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+  .opt .tag{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:2px 8px;border-radius:999px;align-self:flex-start;margin-bottom:10px;}
+  .tag.light{background:var(--surface-2);color:var(--ink-3);} .tag.rec{background:var(--accent-soft);color:var(--accent);font-weight:700;}
+  .tag.bad{background:var(--bad-soft);color:var(--bad);font-weight:700;}
+  .opt h3{font-size:15.5px;margin:0 0 4px;} .opt .where{font-size:12px;color:var(--ink-3);margin-bottom:10px;font-family:var(--mono);}
+  .opt p{font-size:13px;color:var(--ink-2);margin:0 0 12px;}
+  .opt ul{margin:0;padding-left:0;list-style:none;font-size:12.5px;}
+  .opt li{padding:3px 0 3px 18px;position:relative;color:var(--ink-2);}
+  .opt li.y::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700;}
+  .opt li.n::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700;}
+  .verdict{margin-top:auto;padding-top:12px;font-size:12px;color:var(--ink-3);border-top:1px solid var(--border);}
+  .scroll{overflow-x:auto;}
+  table.cmp{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;min-width:660px;}
+  table.cmp th,table.cmp td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+  table.cmp th{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);}
+  table.cmp td:first-child{font-weight:500;white-space:nowrap;}
+  .y{color:var(--ok);font-weight:600;} .n{color:var(--bad);font-weight:600;} .m{color:var(--warn);font-weight:600;}
+  .note{margin-top:20px;border-left:3px solid var(--accent);background:var(--accent-soft);padding:14px 16px;border-radius:0 8px 8px 0;font-size:13.5px;}
+  .bugbox{margin-top:16px;border:1px solid var(--warn);background:var(--warn-soft);border-radius:10px;padding:14px 16px;font-size:13.5px;}
+  .bugbox b{color:var(--warn);}
+  .badbox{margin-top:16px;border:1px solid var(--bad);background:var(--bad-soft);border-radius:10px;padding:14px 16px;font-size:13.5px;}
+  .badbox b{color:var(--bad);}
+  .q{margin-top:46px;border:1px solid var(--border);border-radius:12px;padding:22px 24px;background:var(--surface);}
+  .q h2{font-size:17px;margin:0 0 10px;} .q ol{margin:0;padding-left:18px;font-size:14px;} .q li{margin-bottom:14px;} .q b{color:var(--accent);}
+  .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px;}
+  @media(max-width:780px){.stat{grid-template-columns:1fr 1fr;}}
+  .stat div{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface);}
+  .stat .v{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--ink);line-height:1.1;}
+  .stat .l{font-size:11.5px;color:var(--ink-3);margin-top:4px;}
+  .mock{border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);padding:16px;margin-top:16px;}
+  .row{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface);margin-bottom:10px;}
+  .row:last-child{margin-bottom:0;}
+  .rtop{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .av{width:26px;height:26px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;font-family:var(--mono);}
+  .nm{font-size:14px;font-weight:600;}
+  .chip{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-3);}
+  .chip.warn{background:var(--warn-soft);color:var(--warn);}
+  .rbot{display:flex;align-items:center;gap:10px;margin-top:10px;padding-left:36px;flex-wrap:wrap;}
+  .sel{border:1px solid var(--border-strong);border-radius:8px;padding:5px 10px;font-size:12.5px;background:var(--surface-2);display:inline-flex;align-items:center;gap:7px;}
+  .sel .lock{font-size:11px;color:var(--ink-3);}
+  .sel b{font-weight:600;}
+  .raci{display:inline-flex;gap:3px;}
+  .raci span{width:22px;height:22px;border-radius:6px;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;color:var(--ink-3);border:1px dashed var(--border-strong);font-family:var(--mono);}
+  .raci span.on{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);}
+  .hint{font-size:11.5px;color:var(--ink-3);margin-top:6px;padding-left:36px;}
+  .lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);font-family:var(--mono);}
+  .ladder{margin-top:16px;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .lv{display:grid;grid-template-columns:210px 1fr;gap:0;border-bottom:1px solid var(--border);}
+  .lv:last-child{border-bottom:0;}
+  @media(max-width:640px){.lv{grid-template-columns:1fr;}}
+  .lv .a{padding:12px 14px;background:var(--surface-2);font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:8px;}
+  .lv .b{padding:12px 14px;font-size:13px;color:var(--ink-2);background:var(--surface);}
+  .lv .b code{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);padding:1px 5px;border-radius:4px;color:var(--ink-2);}
+  .dot{width:8px;height:8px;border-radius:999px;flex:none;}
+  .fase{border:1px solid var(--border);border-radius:12px;padding:16px 18px;background:var(--surface);margin-bottom:12px;}
+  .fase h3{margin:0 0 6px;font-size:15px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+  .fase .num{font-family:var(--mono);font-size:10px;font-weight:700;background:var(--accent-soft);color:var(--accent);padding:3px 8px;border-radius:999px;}
+  .fase p{margin:0 0 8px;font-size:13px;color:var(--ink-2);}
+  .fase ul{margin:0;padding-left:17px;font-size:12.5px;color:var(--ink-2);} .fase li{margin-bottom:3px;}
+  .fase .cost{font-size:11.5px;color:var(--ink-3);font-family:var(--mono);margin-top:8px;}
+  code.inl{font-family:var(--mono);font-size:12px;background:var(--surface-2);padding:1px 5px;border-radius:4px;}
+  .axes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:16px;}
+  @media(max-width:780px){.axes{grid-template-columns:1fr;}}
+  .ax{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface);}
+  .ax .h{font-size:14px;font-weight:700;margin-bottom:3px;}
+  .ax .w{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-bottom:9px;}
+  .ax .d{font-size:12.5px;color:var(--ink-2);margin-bottom:10px;}
+  .ax .vals{font-size:12px;color:var(--ink-2);border-top:1px solid var(--border);padding-top:9px;}
+  .ax .vals b{color:var(--bad);}
+  .ex{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-top:14px;color:var(--ink-2);}
+  .ex b{color:var(--ink);}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">GestãoPro · Equipe do projeto · Plano final</div>
+    <h1>Três eixos, quatro níveis, e quem fica de fora</h1>
+    <p class="lede">Você apontou o problema certo: "Coordenar" no projeto colide com "Coordenador" cargo <i>e</i> "Coordenador" acesso global — três coisas diferentes com quase a mesma palavra. A pesquisa em 10 produtos mostrou por quê, e qual é a saída. E a segunda pergunta — <b>quem não é da equipe</b> — destapou o defeito mais grave do documento: <b>8 pessoas com 149 atividades que o banco não deixa ler</b>.</p>
+  </header>
+
+  <div class="note" style="margin-top:22px;">
+    <b>A resposta curta sobre nomenclatura:</b> todo produto que nomeia permissão com <b>substantivo</b> cai em Administrador / Gestor / Membro / Colaborador / Visualizador / Externo — exatamente as palavras que seus outros dois vocabulários já ocupam. Substantivo nomeia <i>um tipo de pessoa</i>, e você já tem dois vocabulários fazendo isso. <b>Verbo descreve a ação</b>, vive num eixo gramatical diferente e não colide. Seu conjunto atual já era de verbos — só "Coordenar" quebrou a regra, por ser o verbo de um cargo que você já usa.
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Os três eixos, e por que precisam de vocabulários distintos</h2></div>
+    <p class="sec-sub">Não são três formas de dizer a mesma coisa. São três perguntas independentes, e uma pessoa responde as três ao mesmo tempo.</p>
+    <div class="axes">
+      <div class="ax">
+        <div class="h">1 · Cargo</div>
+        <div class="w">profiles.role_title</div>
+        <div class="d">Quem a pessoa <b>é</b> na organização. Descritivo, texto livre, não concede nada.</div>
+        <div class="vals">Direção · Gestor · <b>Coordenador</b> · Colaborador · Externo<br><span style="color:var(--ink-3);font-size:11.5px;">na base: "Coordenadora de Vendas", "Analista de sistemas"…</span></div>
+      </div>
+      <div class="ax">
+        <div class="h">2 · Acesso ao sistema</div>
+        <div class="w">user_roles.role + módulos</div>
+        <div class="d">A que <b>telas</b> a pessoa chega. Vale no sistema inteiro. É um <b>teto</b> sobre o eixo 3.</div>
+        <div class="vals">Gestor · <b>Coordenador</b> · Colaborador · Visualizador · Externo<br><span style="color:var(--ink-3);font-size:11.5px;">em uso hoje: só <code style="font-size:11px">user</code> (17), <code style="font-size:11px">gestor</code> (4), <code style="font-size:11px">admin</code> (3)</span></div>
+      </div>
+      <div class="ax">
+        <div class="h">3 · Papel no projeto</div>
+        <div class="w">project_members.can_*</div>
+        <div class="d">O que a pessoa <b>faz</b> nas atividades <i>deste</i> projeto. Muda de projeto para projeto.</div>
+        <div class="vals">Acompanhar · Executar · <b>Coordenar</b><br><span style="color:var(--ink-3);font-size:11.5px;">é este eixo que este plano renomeia</span></div>
+      </div>
+    </div>
+    <div class="ex">
+      Hoje, uma frase possível e legítima:<br>
+      "<b>Coordenadora</b> de Vendas (cargo), acesso de <b>Colaborador</b> (sistema), <b>Coordenar</b> no projeto Tasy."<br>
+      <span style="color:var(--bad)">Três vezes a mesma raiz, três significados diferentes.</span>
+    </div>
+    <div class="note">
+      O <b>RACI é um quarto eixo</b>, e continua separado por decisão — não por descuido. Ele não concede acesso nenhum: é lido só pelo TAP, para sugerir quem aprova. O PMBOK define RACI como matriz de <i>comunicação e clareza de papéis</i>, e <b>nenhum dos 10 produtos pesquisados</b> usa rótulo de governança como mecanismo de acesso. O GestãoPro já acerta nisso; o erro é só visual — os dois eixos têm o mesmo peso na linha, então parecem a mesma pergunta duplicada.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>Nomenclatura: o que o mercado escreve em português</h2></div>
+    <p class="sec-sub">Dez produtos, priorizando os brasileiros. A coluna "forma" é a que decide.</p>
+    <div class="scroll">
+    <table class="cmp">
+      <tr><th>Produto</th><th>Strings PT</th><th>Forma</th><th>Colide com seus eixos?</th></tr>
+      <tr><td><b>monday.com</b> (PT)</td><td>Editar tudo · Editar apenas conteúdo · <b>Editar apenas elementos atribuídos</b> · Visualizar e comentar</td><td class="y">Verbo</td><td class="y">Não</td></tr>
+      <tr><td><b>Notion</b> (PT)</td><td>Acesso completo · Pode editar · Pode criar · Pode comentar · Pode visualizar</td><td class="y">Capacidade</td><td class="y">Não</td></tr>
+      <tr><td><b>Bitrix24</b> (BR)</td><td>Permissão para criar / editar todas / excluir todas / exibir todas as tarefas</td><td class="y">Verbo</td><td class="y">Não</td></tr>
+      <tr><td><b>Asana</b> (PT)</td><td>Pode editar · Pode comentar <span style="color:var(--ink-3)">(no seletor)</span></td><td class="m">Ambos</td><td class="m">Só na prosa</td></tr>
+      <tr><td><b>Runrun.it</b> (BR)</td><td>Administrador · <b>Gestor</b> · Líder de Equipe · <b>Colaborador</b></td><td class="n">Substantivo</td><td class="n">Sim — 2 palavras</td></tr>
+      <tr><td><b>Artia</b> (BR)</td><td>Administrador · Líder · Restrito · <b>Externo</b></td><td class="n">Substantivo</td><td class="n">Sim</td></tr>
+      <tr><td><b>ClickUp</b> (BR)</td><td>Proprietário · Administrador · Membro · Convidado</td><td class="n">Substantivo</td><td class="n">Risco</td></tr>
+      <tr><td><b>Pipefy</b> (BR)</td><td>Administrador · Membro · Convidado da empresa / externo</td><td class="n">Substantivo</td><td class="n">Risco</td></tr>
+      <tr><td><b>Google Drive</b></td><td>Leitor · Comentarista · Editor</td><td class="n">Substantivo</td><td class="m">Parcial</td></tr>
+      <tr><td><b>monday</b> Enterprise</td><td>Proprietário · Editor · Contribuidor · <b>Visualizador</b></td><td class="n">Substantivo</td><td class="n">Sim</td></tr>
+    </table>
+    </div>
+    <div class="note">
+      <b>O padrão salta aos olhos:</b> das 10 linhas, as 4 que usam <b>verbo/capacidade</b> não colidem com nada; das 6 que usam <b>substantivo</b>, quatro colidem direto com Gestor / Colaborador / Externo / Visualizador. Isso não é coincidência — substantivo de permissão e cargo ocupam o mesmo espaço semântico (o nome de um tipo de pessoa), então competem.
+      <br><br>
+      <b>Sobre o nível 3:</b> o monday é o único com string real em português para "só as minhas" — <i>"Editar apenas elementos atribuídos"</i>. E é verbo, porque esse nível é praticamente <b>impossível de nomear com substantivo</b>: não existe a palavra para "a pessoa que edita só o que é dela".
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Os nomes: três conjuntos</h2></div>
+    <p class="sec-sub">Todos são de verbo, todos passam no teste de colisão. A diferença é o tom.</p>
+    <div class="cards">
+      <div class="opt rec">
+        <span class="tag rec">Recomendado</span>
+        <h3>A · Alinhado ao mercado</h3>
+        <div class="where">padrão monday PT</div>
+        <ul style="font-size:13px;margin-bottom:12px;">
+          <li class="y"><b>Editar e excluir</b></li>
+          <li class="y"><b>Editar tudo</b></li>
+          <li class="y"><b>Editar apenas as minhas</b></li>
+          <li class="y"><b>Visualizar e comentar</b></li>
+        </ul>
+        <p style="font-size:12.5px;">Dois dos quatro são quase literais do monday em português. O usuário que já usou outra ferramenta reconhece.</p>
+        <div class="verdict">A escada se lê de cima a baixo sozinha.</div>
+      </div>
+      <div class="opt">
+        <span class="tag light">B</span>
+        <h3>B · "Pode…"</h3>
+        <div class="where">padrão Notion / Drive</div>
+        <ul style="font-size:13px;margin-bottom:12px;">
+          <li class="y">Pode excluir</li>
+          <li class="y">Pode editar</li>
+          <li class="y">Pode editar as suas</li>
+          <li class="y">Pode comentar</li>
+        </ul>
+        <p style="font-size:12.5px;">A forma mais familiar ao usuário brasileiro — Drive, Notion e Asana todos usam "Pode editar".</p>
+        <div class="verdict">"Pode excluir" no topo soa mais <i>estreito</i> que "Pode editar". A ordem não se lê sozinha.</div>
+      </div>
+      <div class="opt">
+        <span class="tag light">C</span>
+        <h3>C · Escopo de acesso</h3>
+        <div class="where">rótulos curtos</div>
+        <ul style="font-size:13px;margin-bottom:12px;">
+          <li class="y">Acesso total</li>
+          <li class="y">Edição total</li>
+          <li class="y">Edição limitada</li>
+          <li class="y">Somente leitura</li>
+        </ul>
+        <p style="font-size:12.5px;">Rótulos curtos, hierarquia óbvia, cabe em espaço apertado.</p>
+        <div class="verdict">"Limitada" diz que restringe sem dizer <i>o quê</i> — joga todo o peso na descrição.</div>
+      </div>
+    </div>
+    <div class="bugbox">
+      <b>Nunca reutilizar, em nenhuma forma:</b> Coordenar / Coordenador (é verbo de um cargo seu), Editor, Contribuidor, Membro, Administrador, Responsável, Líder, Proprietário, Gestor, Colaborador, Externo. Todas são strings reais de produtos da tabela — e todas nomeiam <i>um tipo de pessoa</i>, que é o trabalho dos eixos 1 e 2.
+      <br><br>
+      Uma ressalva honesta no conjunto A: <b>"Visualizar"</b> compartilha raiz com "Visualizador" do acesso global. O substantivo é que está ocupado, o infinitivo se distingue — e é o que o monday publica em português. Se quiser raiz zero, <b>"Ler e comentar"</b> resolve.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>A escada final</h2></div>
+    <p class="sec-sub">Conjunto A aplicado, com a microcopy que aparece embaixo do seletor.</p>
+    <div class="ladder">
+      <div class="lv">
+        <div class="a"><span class="dot" style="background:var(--accent)"></span>Editar e excluir</div>
+        <div class="b">Cria, edita, move e <b>exclui</b> qualquer atividade do projeto. <code>can_create · can_edit · can_move · can_delete</code></div>
+      </div>
+      <div class="lv">
+        <div class="a"><span class="dot" style="background:var(--ok)"></span>Editar tudo</div>
+        <div class="b">Cria, edita e move <b>qualquer</b> atividade. Não exclui. <code>can_create · can_edit · can_move</code></div>
+      </div>
+      <div class="lv">
+        <div class="a"><span class="dot" style="background:var(--warn)"></span>Editar apenas as minhas</div>
+        <div class="b"><b>Vê todas</b>; edita e move só onde é responsável, participante ou criador. <span class="m">NOVO — o nível que já funciona no código e nunca teve nome.</span></div>
+      </div>
+      <div class="lv">
+        <div class="a"><span class="dot" style="background:var(--ink-3)"></span>Visualizar e comentar</div>
+        <div class="b">Lê e comenta. Não cria, não edita, não move. <span class="n">Hoje não é verdade: <code>can_create</code> é forçado a <code>true</code>.</span></div>
+      </div>
+    </div>
+    <div class="note">
+      <b>Como o eixo 2 conversa com o eixo 3 — a regra do mais restritivo.</b> O acesso ao sistema é um <b>teto</b>, nunca um piso: <code class="inl">canWrite</code> zera toda escrita para Visualizador, independentemente do papel no projeto. Quem é Visualizador no sistema e "Editar tudo" num projeto <b>não edita nada</b>. Isso já funciona assim; o plano só torna explícito na tela — o seletor aparece desabilitado com a explicação, em vez de prometer o que o sistema vai negar.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>O layout da linha</h2></div>
+    <p class="sec-sub">Equipes aqui são pequenas — mediana de 1 membro, a maior tem 6. Linha-por-pessoa continua certo; o que muda é a hierarquia dentro dela: permissão vira dropdown com cadeado e descrição, RACI recua para chip declarativo.</p>
+    <div class="mock">
+      <div class="row">
+        <div class="rtop">
+          <span class="av">RL</span><span class="nm">Raphael Luis Gomes Telles</span>
+          <span class="chip">Novos Negócios</span>
+        </div>
+        <div class="rbot">
+          <span class="sel"><span class="lock">🔒</span><b>Editar e excluir</b> ▾</span>
+          <span style="color:var(--ink-3);font-size:11px;">·</span>
+          <span class="lbl">RACI</span>
+          <span class="raci"><span class="on">R</span><span>A</span><span>C</span><span>I</span></span>
+        </div>
+        <div class="hint">Cria, edita, move e exclui qualquer atividade do projeto.</div>
+      </div>
+      <div class="row">
+        <div class="rtop">
+          <span class="av">GG</span><span class="nm">Guilherme Gomes</span>
+        </div>
+        <div class="rbot">
+          <span class="sel"><span class="lock">🔒</span><b>Editar tudo</b> ▾</span>
+          <span style="color:var(--ink-3);font-size:11px;">·</span>
+          <span class="lbl">RACI</span>
+          <span class="raci"><span class="on">R</span><span>A</span><span>C</span><span>I</span></span>
+        </div>
+        <div class="hint">Cria, edita e move qualquer atividade. Não exclui.</div>
+      </div>
+      <div class="row">
+        <div class="rtop">
+          <span class="av">TM</span><span class="nm">Tiago Moreira</span>
+          <span class="chip">TI</span>
+          <span class="chip warn">Aguardando aceite</span>
+        </div>
+        <div class="rbot">
+          <span class="sel"><span class="lock">🔒</span><b>Editar apenas as minhas</b> ▾</span>
+          <span style="color:var(--ink-3);font-size:11px;">·</span>
+          <span class="lbl">RACI</span>
+          <span class="raci"><span>R</span><span>A</span><span>C</span><span class="on">I</span></span>
+        </div>
+        <div class="hint">Vê todas as atividades. Edita só onde é responsável ou participante.</div>
+      </div>
+    </div>
+    <div class="note">
+      <b>Quatro decisões embutidas no mockup:</b>
+      o <b>cadeado</b> marca o que é enforçado — o RACI não tem, porque não enforça nada;
+      a <b>descrição</b> fica sempre visível (padrão Notion), em vez de escondida no <code class="inl">title=""</code> como hoje;
+      o RACI perde o rótulo "No projeto" e vira só <b>"RACI"</b>, porque quem usa a matriz conhece a sigla e quem não usa não deve ser convidado a mexer;
+      e as letras não escolhidas ficam <b>tracejadas</b> — "nenhum" é estado legítimo, e hoje 17 membros estão assim.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2>Quem NÃO é da equipe</h2></div>
+    <p class="sec-sub">Os quatro níveis acima só valem para quem está na equipe. Mas há gente trabalhando em projetos sem constar nela — e é aqui que está o defeito mais grave que encontrei.</p>
+
+    <div class="scroll">
+    <table class="cmp">
+      <tr><th>Via de acesso</th><th>Como entra</th><th>Casos hoje</th><th>Situação</th></tr>
+      <tr><td><b>Líder</b> (owner)</td><td>nome bate com <code class="inl">projects.owner</code></td><td>10 projetos</td><td class="y">Funciona — acesso total</td></tr>
+      <tr><td><b>Gerente</b> (manager)</td><td>nome bate com <code class="inl">projects.manager</code></td><td>0 fora da equipe</td><td class="y">Funciona</td></tr>
+      <tr><td><b>Criador</b></td><td><code class="inl">created_by</code></td><td>1 projeto</td><td class="y">Funciona</td></tr>
+      <tr><td><b>Participante do projeto</b></td><td><code class="inl">projects.assignees</code></td><td class="n">0 — coluna vazia em 43/43</td><td class="n">Via morta</td></tr>
+      <tr><td><b>Só atividade atribuída</b></td><td>é responsável ou participante de alguma atividade</td><td><b>9 pessoas · 10 projetos · 165 atividades</b></td><td class="n">QUEBRADO</td></tr>
+    </table>
+    </div>
+
+    <div class="badbox">
+      <b>O front e o banco discordam — e desta vez o banco é mais restritivo.</b>
+      <br><br>
+      O front deixa entrar quem tem atividade atribuída (<code class="inl">activityAssignmentMatch</code>) e mostra <b>só as atividades dela</b>. A RLS, porém, exige admin, líder ou <b>membro</b> para ler qualquer atividade — <code class="inl">can_view_project_v2</code> não conhece a via "tenho atividade aqui".
+      <br><br>
+      <b>Testado com dados reais:</b> das 10 duplas pessoa-projeto nessa situação, <b>8 recebem <code class="inl">false</code> do banco</b> — <b>149 atividades</b>. O caso extremo é uma pessoa com <b>131 atividades</b> num projeto que o banco não deixa ela ler. Ela passa da tela de acesso, o Kanban carrega, e a lista chega vazia. Sem erro, sem explicação — parece um projeto vazio.
+      <br><br>
+      As 2 duplas que funcionam só funcionam por acidente: as pessoas são líderes daqueles projetos por outra via.
+    </div>
+
+    <div class="note">
+      <b>E há uma contradição de produto por baixo do defeito técnico.</b> Sua regra diz "<i>visualiza todas e não edita as que não são suas</i>". Mas o front, para quem não é da equipe, <b>filtra a visão</b> — mostra só as atividades da pessoa, e ainda esconde as fases que não contêm nenhuma delas. Isso não é o que você descreveu, e não é o que o mercado faz: o monday deixa explícito que "todos continuam vendo todos os itens" mesmo com edição restrita, e o Jira separa <code class="inl">Browse Projects</code> de <code class="inl">Edit Issues</code> justamente para isso.
+      <br><br>
+      <b>Visibilidade e edição são eixos independentes.</b> Restringir edição não deveria restringir a visão — é a diferença entre "não posso mexer nisso" e "não sei que isso existe".
+    </div>
+
+    <p class="lbl" style="margin-top:22px;">A decisão de produto</p>
+    <div class="cards" style="margin-top:10px;">
+      <div class="opt rec">
+        <span class="tag rec">Recomendado</span>
+        <h3>1 · Convidado da atividade</h3>
+        <div class="where">alinha com sua regra</div>
+        <p>Quem tem atividade atribuída <b>vê o projeto inteiro</b> e edita só as suas — exatamente o nível 3 da escada, só que sem constar na equipe.</p>
+        <ul>
+          <li class="y">É literalmente a regra que você enunciou</li>
+          <li class="y">Padrão Jira (<i>Current Assignee</i>) e Asana</li>
+          <li class="y">Resolve as 149 atividades hoje invisíveis</li>
+          <li class="n">Exige mexer na RLS de leitura</li>
+        </ul>
+        <div class="verdict">Um só conceito, duas portas de entrada.</div>
+      </div>
+      <div class="opt">
+        <span class="tag light">2</span>
+        <h3>2 · Vira membro automaticamente</h3>
+        <div class="where">sem exceção no modelo</div>
+        <p>Atribuir atividade a alguém de fora <b>o adiciona à equipe</b> no nível "Editar apenas as minhas".</p>
+        <ul>
+          <li class="y">Um caminho só; a equipe reflete quem trabalha</li>
+          <li class="y">Nada de RLS especial</li>
+          <li class="n">Equipe cresce sozinha, sem quem convide</li>
+          <li class="n">Padrão Linear: só atribui a quem já é membro</li>
+        </ul>
+        <div class="verdict">Mais simples, menos controle.</div>
+      </div>
+      <div class="opt">
+        <span class="tag light">3</span>
+        <h3>3 · Bloqueia a atribuição</h3>
+        <div class="where">o mais rígido</div>
+        <p>Não dá para atribuir atividade a quem não é da equipe. Quem atribui precisa convidar antes.</p>
+        <ul>
+          <li class="y">Elimina a categoria inteira</li>
+          <li class="y">Convite volta a significar algo</li>
+          <li class="n">Quebra 165 atribuições existentes</li>
+          <li class="n">Atrito real no dia a dia</li>
+        </ul>
+        <div class="verdict">Coerente, mas caro de adotar agora.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">07</span><h2>O que está quebrado por baixo</h2></div>
+    <p class="sec-sub">Medido na base hoje: 72 membros, 41 projetos. Renomear sem corrigir isto seria trocar o rótulo de uma promessa que o sistema não cumpre.</p>
+    <div class="stat">
+      <div><div class="v">39</div><div class="l">podem excluir (54%) — por herança, não escolha</div></div>
+      <div><div class="v">44</div><div class="l">de 50 "I — só acompanha" podem mexer no projeto</div></div>
+      <div><div class="v">241</div><div class="l">atividades no nível "só as minhas"</div></div>
+      <div><div class="v">2</div><div class="l">membros num estado que a tela não sabe exibir</div></div>
+    </div>
+    <div class="badbox">
+      <b>Quatro defeitos, todos verificados no código e na base:</b>
+      <ol style="margin:8px 0 0;padding-left:18px;">
+        <li><b>"Visualizar e comentar" não impede criar.</b> Em <code class="inl">project/[id]/page.tsx:590</code> todo membro recebe <code class="inl">can_create: true</code> fixo — o valor do banco é ignorado.</li>
+        <li><b>As duas telas discordam.</b> Criar projeto (<code class="inl">AddProjectDialog.tsx:281</code>) grava <code class="inl">can_create:true</code> + resto <code class="inl">false</code>; editar projeto grava o preset "Executar". Mesma ação, resultado diferente — e o AddProjectDialog não tem seletor nenhum.</li>
+        <li><b>Os 39 que podem excluir vêm de uma linha de maio.</b> A migration <code class="inl">20260512202958</code> deu as quatro permissões a todo mundo que estava zerado, como backward-compat. Mesmo padrão do "I" default: herança apresentada como decisão.</li>
+        <li><b>O nível do meio é invisível.</b> 241 atividades têm responsável sem permissão de projeto — 228 delas com responsável <b>fora da equipe</b>. São 12 pessoas cujo acesso depende de uma regra que nunca apareceu na tela.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">08</span><h2>Plano de execução</h2></div>
+    <p class="sec-sub">Defeitos antes de nomes, nomes antes de layout. As fases 0 a 2 valem por si, mesmo que você descarte o resto.</p>
+
+    <div class="fase">
+      <h3><span class="num">FASE 0</span> Aplicar o que já está pronto</h3>
+      <p>Três migrations commitadas hoje ainda não rodaram na VM — conferi por sondagem de comportamento, não só pelo registro. Enquanto não rodarem, a RLS segue recusando 86,6% das edições que a tela permite.</p>
+      <ul>
+        <li><code class="inl">apply-permissao-equipe-e-raci.sh</code> — RLS passa a ler <code class="inl">can_edit</code>; RACI para de nascer "I"</li>
+        <li><code class="inl">apply-coluna-do-agrupador.sh</code> · <code class="inl">apply-a-fazer-nao-iniciado.sh</code></li>
+      </ul>
+      <div class="cost">sem código novo · roda por psql na VM</div>
+    </div>
+
+    <div class="fase">
+      <h3><span class="num">FASE 1</span> Fazer o nível mais baixo significar alguma coisa</h3>
+      <p>Ler <code class="inl">can_create</code> do banco em vez de forçar <code class="inl">true</code>, e unificar as duas telas de escrita. Sem isso, qualquer nome novo continua prometendo o que o sistema não cumpre.</p>
+      <ul>
+        <li>Ler <code class="inl">perms.can_create</code> em <code class="inl">project/[id]/page.tsx</code></li>
+        <li><code class="inl">AddProjectDialog</code> passa a usar o mesmo preset do <code class="inl">EditProjectDialog</code></li>
+        <li>Normalizar os 2 membros órfãos · conferir a RLS de INSERT (os dois lados, sempre)</li>
+      </ul>
+      <div class="cost">2 arquivos + 1 migration de dados · risco baixo</div>
+    </div>
+
+    <div class="fase">
+      <h3><span class="num">FASE 2</span> Fonte única + os quatro nomes</h3>
+      <p>Criar <code class="inl">lib/projectRoles.ts</code>, irmão de <code class="inl">accessLevels.ts</code> e <code class="inl">orgLevels.ts</code>. Hoje os presets moram dentro do <code class="inl">EditProjectDialog</code> — é por isso que o AddProjectDialog pôde divergir.</p>
+      <ul>
+        <li>Os 4 níveis, rótulos e microcopy num arquivo só</li>
+        <li>A decisão nº 1 abaixo define como gravar "Editar apenas as minhas"</li>
+        <li><code class="inl">papelDePermissoes()</code> passa a deduzir 4 níveis, não 3</li>
+      </ul>
+      <div class="cost">1 lib nova + 1 migration · risco médio</div>
+      <div class="note" style="margin-top:12px;font-size:12.5px;">
+        <b>O renome em si é barato.</b> Verifiquei: os três nomes vivem só em <code class="inl">EditProjectDialog.tsx:77-88</code> e <b>não são gravados no banco</b> — são derivados dos quatro <code class="inl">can_*</code> em tempo de execução. Trocar as palavras é mudança de um arquivo, sem migration. <b>O caro é o nível 3</b>, que as quatro colunas não conseguem expressar por não terem noção de <i>escopo</i> — daí a decisão nº 1 ser a que carrega o peso desta fase.
+      </div>
+    </div>
+
+    <div class="fase">
+      <h3><span class="num">FASE 2B</span> Quem não é da equipe <span style="font-family:var(--mono);font-size:10px;background:var(--bad-soft);color:var(--bad);padding:3px 8px;border-radius:999px;">o mais urgente</span></h3>
+      <p>8 pessoas com 149 atividades que o banco não deixa ler. É o defeito de maior impacto do documento e independe de renomear qualquer coisa — pode ir antes de tudo, exceto a Fase 0.</p>
+      <ul>
+        <li><code class="inl">can_view_project_v2</code> passa a reconhecer o vínculo por atividade (decisão nº 4)</li>
+        <li>Front para de filtrar a visão de quem não é da equipe — <b>vê todas, edita as suas</b></li>
+        <li>Aviso na tela explicando o acesso por atividade, hoje inexistente</li>
+        <li>Decidir o que fazer com <code class="inl">projects.assignees</code>, vazia em 43/43 projetos</li>
+      </ul>
+      <div class="cost">1 migration de RLS + page.tsx · risco médio</div>
+    </div>
+
+    <div class="fase">
+      <h3><span class="num">FASE 3</span> O layout novo</h3>
+      <p>Dropdown com descrição + RACI recuado. Só agora — antes disso o layout desenharia uma escada de 4 degraus da qual 2 não funcionam.</p>
+      <ul>
+        <li>Select de 4 níveis com microcopy visível, no lugar dos 3 botões</li>
+        <li>RACI vira chip discreto; letras não escolhidas tracejadas</li>
+        <li>Seletor desabilitado com explicação quando o eixo 2 já barra (Visualizador)</li>
+      </ul>
+      <div class="cost">componente compartilhado pelos dois diálogos</div>
+    </div>
+
+    <div class="fase">
+      <h3><span class="num">FASE 4</span> Avisar quando os eixos se contradizem</h3>
+      <p>"A — aprova" com "Visualizar e comentar" é legítimo (patrocinador que assina e não executa). "I — só acompanha" com "Editar e excluir" quase certamente é engano — eram 34 casos. Aviso discreto na linha, <b>nunca</b> correção automática: nenhum produto pesquisado deixa rótulo de governança alterar acesso.</p>
+      <div class="cost">opcional · só depois das fases 1–3</div>
+    </div>
+  </section>
+
+  <div class="q">
+    <h2>Quatro decisões que preciso de você</h2>
+    <ol>
+      <li>
+        <b>Quem não é da equipe mas tem atividade — o que ele é?</b> <span style="color:var(--bad);font-weight:700;">(a mais urgente)</span><br>
+        Hoje é uma categoria acidental: o front deixa entrar, o banco recusa a leitura, e 8 pessoas com 149 atividades ficam olhando para um projeto que parece vazio. Recomendo a opção <b>1 — "Convidado da atividade"</b>: vê o projeto inteiro, edita só as suas. É exatamente a regra que você enunciou, é o padrão do Jira e do Asana, e reaproveita o nível 3 da escada sem inventar conceito novo. As opções 2 e 3 estão na seção 06 com os trade-offs.
+      </li>
+      <li>
+        <b>Como gravar "Editar apenas as minhas" no banco?</b><br>
+        Hoje esse nível e "Visualizar e comentar" gravam os mesmos quatro <code class="inl">false</code> — a diferença nasce em tempo de execução, do vínculo com a atividade. Ou (a) coluna nova <code class="inl">can_edit_own</code>, explícita e legível na RLS; ou (b) convenção, sem coluna. <i>Recomendo (a):</i> a RLS fica auditável e o estado deixa de ser inferido — e a lição desta semana foi exatamente sobre os dois lados divergirem em silêncio. <span style="color:var(--ink-3)">(Nota: o Jira faz isso pelo destinatário da permissão, não por um nome novo; a coluna aqui guarda a <i>intenção de quem escolheu</i>, que é o que falta.)</span>
+      </li>
+      <li>
+        <b>Qual vira o padrão de quem é convidado?</b><br>
+        Hoje é "Executar" (edita tudo). Com o nível novo, <b>"Editar apenas as minhas"</b> é o padrão mais defensável — a pessoa entra podendo trabalhar no que é dela, sem mexer no alheio. Muda o significado de "adicionar à equipe", então é sua chamada.
+      </li>
+      <li>
+        <b>Mexer nos 39 que hoje podem excluir?</b><br>
+        Agora sei a origem: a migration de maio deu tudo a todos que estavam zerados. Não foi escolha de ninguém. Posso propor um rebaixamento medido para "Editar tudo", preservando quem de fato coordena — ou deixamos como está e só corrigimos daqui pra frente.
+      </li>
+    </ol>
+  </div>
+</div>

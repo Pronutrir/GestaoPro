@@ -365,6 +365,9 @@ export function SortableColumn({
   onToggleStageBlocked,
   onToggleStageVisible,
   allStages,
+  podeMutar,
+  selecionados,
+  onToggleSelecao,
   cardFields,
   profilesMap = {},
   profileAvatarMap = {},
@@ -423,6 +426,11 @@ export function SortableColumn({
   onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
   onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
   allStages: WorkflowStage[];
+  /** A pessoa pode mexer nesta atividade? Desenha o cadeado no card. */
+  podeMutar?: (a: Activity) => boolean;
+  /** Seleção em lote — vive no quadro, porque atravessa colunas. */
+  selecionados?: Set<string>;
+  onToggleSelecao?: (id: string, e: React.MouseEvent) => void;
   cardFields: CardFields;
   hoursStatsByActivity?: Map<string, HoursStat>;
   profilesMap?: Record<string, string>;
@@ -606,7 +614,7 @@ export function SortableColumn({
     return sortStageItems(
       stageActivities.filter((a) => {
         if (!a.parent_id) return true;
-        // Subtarefa: só esconde da raiz se o PAI também estiver nesta coluna
+        // Subatividade: só esconde da raiz se o PAI também estiver nesta coluna
         // (nesse caso ela aparece aninhada sob o pai). Caso contrário, aparece
         // como card independente com breadcrumb do pai.
         return !stageActivityIds.has(a.parent_id);
@@ -658,9 +666,19 @@ export function SortableColumn({
         is_milestone: c.is_milestone,
       })),
       activity.is_milestone,
-      // Este ramo só existe para PAI com filhos — ou seja, uma caixa. Ela vale
-      // a média dos filhos e ignora a própria coluna.
-      true,
+      /**
+       * AGRUPADOR SÓ QUANDO TEM FILHOS.
+       *
+       * Estava `true` fixo, com o comentário "este ramo só existe para pai com
+       * filhos". Estava errado: `renderActivityNode` desenha TODO card da
+       * coluna, folha inclusive.
+       *
+       * O efeito era o relatado: uma atividade concluída na coluna final
+       * mostrava 0% — como agrupador sem filhos, ela caía em "Sem atividades",
+       * que é 0 por definição. O card ficava riscado, na coluna verde, com a
+       * barra vazia.
+       */
+      (childrenByParent.get(activity.id) || []).length > 0,
     );
     const expanded = expandedIds.has(activity.id);
     /**
@@ -668,7 +686,7 @@ export function SortableColumn({
      *
      * O espelho (`readOnlyPreview` + selo "Pai agrupador") existe para dar
      * contexto ao filho quando o pai não tem cartão em lugar nenhum: sem ele,
-     * as subtarefas apareceriam soltas, sem dizer de que fase saíram.
+     * as subatividades apareceriam soltas, sem dizer de que fase saíram.
      *
      * Desde que agrupador passou a acompanhar a fase para o quadro
      * (BacklogSection.handleMoveSelected), ele TEM cartão próprio — e o espelho
@@ -689,13 +707,23 @@ export function SortableColumn({
     const parentBreadcrumb = parentAct && parentAct.workflow_stage_id !== activity.workflow_stage_id
       ? { id: parentAct.id, title: parentAct.title, wbsCode: parentAct.wbs_code }
       : null;
-    // Subtarefas impedidas: agora pela flag da própria atividade, não por
+    // Subatividades impedidas: agora pela flag da própria atividade, não por
     // estarem numa coluna de bloqueio.
     const blockedSubsCount = allChildren.filter((c) => c.is_blocked).length;
 
     const commonCardProps = {
       activity,
       phases,
+      // Cadeado no card quando a pessoa não pode mexer nesta atividade — ela
+      // vê antes de tentar, em vez de descobrir pelo aviso de erro.
+      podeMexer: podeMutar ? podeMutar(activity) : true,
+      // Seleção em lote: a coluna só repassa: quem guarda o conjunto é o
+      // quadro, porque a seleção atravessa colunas.
+      selecionado: selecionados?.has(activity.id) ?? false,
+      modoSelecao: (selecionados?.size ?? 0) > 0,
+      onToggleSelecao: onToggleSelecao
+        ? (e: React.MouseEvent) => onToggleSelecao(activity.id, e)
+        : undefined,
       onEdit: () => onEditActivity(activity),
       onDelete: () => onDeleteActivity(activity.id),
       onToggle: () => onToggleActivity(activity.id, activity.status),
@@ -713,7 +741,16 @@ export function SortableColumn({
       onStoryClick: () => onStoryClick(activity.id),
       onCreateStory: () => onCreateStory(activity),
       isQualityProject,
-      stageColor: stage.color,
+      /**
+       * A cor é da coluna DO CARD, não da que está desenhando.
+       *
+       * `stage.color` é o container: um filho aninhado sob um pai de OUTRA
+       * coluna aparece aqui, e recebia a cor de onde está sendo pintado — a
+       * faixa mentia sobre onde ele está. Era o que aparecia ao mover: o card
+       * ia para a coluna nova com a cor certa, mas a cópia aninhada sob o pai,
+       * na origem, ficava com a antiga.
+       */
+      stageColor: (allStages.find((s) => s.id === activity.workflow_stage_id)?.color) ?? stage.color,
       dependencyCount: dependencyCounts?.get(activity.id),
       waitingOnCount: waitingOnCounts?.get(activity.id),
       commentCount: commentCounts?.get(activity.id),
@@ -752,8 +789,11 @@ export function SortableColumn({
         ) : (
           <KanbanCard {...commonCardProps} />
         )}
+        {/* A borda saiu do container: agora é a faixa lateral de CADA card
+            filho (ver `ehFilho` em KanbanCard), que além do vínculo diz o
+            estado. Aqui fica só o recuo, que sempre comunicou a hierarquia. */}
         {expanded && (inlineChildren.length > 0 || externalChildren.length > 0) && (
-          <div className="ml-4 pl-2 border-l-2 border-primary/30 space-y-1.5">
+          <div className="ml-4 space-y-1.5">
             {isMirrorParent && (
               <div className="px-1">
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/5 text-primary border-primary/20">
@@ -771,7 +811,7 @@ export function SortableColumn({
                       <span
                         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide text-white"
                         style={{ backgroundColor: childStage.color }}
-                        title={`Esta subtarefa está em "${getStageDisplayTitle(childStage.title)}"`}
+                        title={`Esta subatividade está em "${getStageDisplayTitle(childStage.title)}"`}
                       >
                         <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
                         {getStageDisplayTitle(childStage.title)}

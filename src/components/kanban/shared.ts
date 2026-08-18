@@ -114,7 +114,7 @@ export type CardFields = {
 // Defaults = exatamente os campos da imagem aprovada (Fase 1): prioridade,
 // barra de progresso, responsável e prazo. participants/hours/subCount
 // estavam ligados por padrão e não aparecem na imagem — eram o motivo do
-// card acumular "0h/10h · 2 subtarefas" ao lado da barra. Continuam
+// card acumular "0h/10h · 2 subatividades" ao lado da barra. Continuam
 // disponíveis no painel "⚙ Card", só passam a começar desligados.
 export const DEFAULT_CARD_FIELDS: CardFields = {
   priority: true,
@@ -126,7 +126,18 @@ export const DEFAULT_CARD_FIELDS: CardFields = {
   subCount: false,
   description: false,
   breadcrumb: false,
-  subSummary: false,
+  /**
+   * LIGADO por padrão (14/08/2026).
+   *
+   * Nascia desligado, escondido em Visões → campos do cartão — e ninguém o
+   * encontrava. O resultado na tela: um card com 1 de 5 subatividades
+   * concluídas mostrava só "36%", e para saber o que tinha andado era preciso
+   * abrir a atividade e ir na aba Subatividades.
+   *
+   * O percentual é CONSEQUÊNCIA; quantas fecharam é a informação. Quem não
+   * quiser, desliga onde sempre esteve.
+   */
+  subSummary: true,
   tags: false,
   dependencies: false,
 };
@@ -149,8 +160,8 @@ export const CARD_FIELD_GROUPS: { group: string; items: { key: keyof CardFields;
     { key: "tags", label: "Tags / etiquetas" },
     { key: "dependencies", label: "Dependências" },
   ]},
-  { group: "Subtarefas", items: [
-    { key: "subCount", label: "Contador de subtarefas" },
+  { group: "Subatividades", items: [
+    { key: "subCount", label: "Contador de subatividades" },
     { key: "subSummary", label: "Resumo (feitas / abertas)" },
   ]},
 ];
@@ -379,6 +390,11 @@ export interface ActivityKanbanProps {
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   isAdmin?: boolean;
   canCreate?: boolean;
+  /** Líder do projeto — citado no aviso de bloqueio, para a pessoa saber a quem pedir. */
+  projectOwner?: string | null;
+  /** `project_members.can_edit` / `can_move` — permissão do membro no projeto. */
+  canEdit?: boolean;
+  canMove?: boolean;
   projectLocked?: boolean;
   isQualityProject?: boolean;
   onOpenCreateTask?: (stageId: string) => void;

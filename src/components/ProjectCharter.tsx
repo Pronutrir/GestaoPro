@@ -68,9 +68,27 @@ interface MemberRow {
   sector: string | null;
   invitation_status: "pending" | "accepted" | "declined";
   decline_reason: string | null;
-  /** Papel na matriz RACI, definido na ficha do projeto. */
+  /** Papel na matriz RACI (seção 8). Rótulo de governança, não permissão. */
   raci?: string | null;
 }
+
+/**
+ * R executa · A aprova (só um) · C é consultado · I acompanha.
+ *
+ * Veio de EditProjectDialog junto com o seletor: a matriz é editada aqui, no
+ * documento que a usa, e não na ficha da equipe. Ver o comentário da seção 8.
+ *
+ * É RÓTULO, não permissão — não concede nem tira acesso a nada. Quem decide
+ * acesso são as colunas `can_*` de project_members (lib/projectRoles.ts).
+ * Nenhum dos 10 produtos de mercado pesquisados usa rótulo de governança como
+ * mecanismo de acesso, e o PMBOK define RACI como matriz de comunicação.
+ */
+const RACI_OPCOES: { v: "R" | "A" | "C" | "I"; hint: string }[] = [
+  { v: "R", hint: "Responsável — executa" },
+  { v: "A", hint: "Aprova — aval final (só um por projeto)" },
+  { v: "C", hint: "Consultado — opina antes da decisão" },
+  { v: "I", hint: "Informado — só acompanha" },
+];
 const inviteBadge = (s: MemberRow["invitation_status"]) => {
   if (s === "accepted") return { label: "Aceito", cls: "bg-success/15 text-success border-success/40" };
   if (s === "declined") return { label: "Recusado", cls: "bg-destructive/15 text-destructive border-destructive/40" };
@@ -258,6 +276,10 @@ const SECAO_NOMES: Record<number, string> = {
   5: "Escopo",
   6: "Premissas",
   7: "Benefícios",
+  // A matriz RACI entra no índice porque tem contagem própria (quantos membros
+  // já têm papel). Aprovações (9) continua fora: não é campo a preencher, é
+  // assinatura — e assinatura não se mede em "3 de 4".
+  8: "RACI",
 };
 
 /**
@@ -463,8 +485,23 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     const totalCampos = 6 + secoes.reduce((n, s) => n + s.total, 0);
     const totalPreenchidos = essenciais + secoes.reduce((n, s) => n + s.preenchidos, 0);
 
+    /**
+     * A seção 8 (RACI) fica FORA do `secoes` acima de propósito: ali cada
+     * entrada é uma lista de campos de texto, e a matriz conta pessoas com
+     * papel definido. Somá-la ao total de campos do TAP faria a barra do topo
+     * oscilar com o tamanho da equipe, não com o preenchimento do documento.
+     *
+     * Entra só no índice, para o chip mostrar o estado — e por isso é anexada
+     * a `porSecao` aqui, depois do cálculo dos totais.
+     */
+    const raciDefinidos = memberRows.filter((m) => m.raci).length;
+    const porSecao: Record<number, { preenchidos: number; total: number }> = {
+      ...Object.fromEntries(secoes.map((s) => [s.n, { preenchidos: s.preenchidos, total: s.total }])),
+      8: { preenchidos: raciDefinidos, total: Math.max(memberRows.length, 1) },
+    };
+
     return {
-      porSecao: Object.fromEntries(secoes.map((s) => [s.n, { preenchidos: s.preenchidos, total: s.total }])),
+      porSecao,
       essenciais,
       preenchidos: totalPreenchidos,
       total: totalCampos,
@@ -472,7 +509,9 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       // Lista para o aviso ao aprovar — informa, não impede.
       faltando: secoes.filter((s) => s.preenchidos < s.total),
     };
-  }, [data, form, project]);
+    // `memberRows` entra porque a seção 8 conta pessoas com papel RACI: sem
+    // ela, o chip do índice congelaria no valor da primeira renderização.
+  }, [data, form, project, memberRows]);
 
   // Conteúdo pré-existente nas seções do PMBOK abre a camada 2 sozinha.
   useEffect(() => {
@@ -610,6 +649,42 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     await fetchRelations();
     onMembersChanged?.();
     toast({ title: "Membro adicionado!" });
+  };
+
+  /**
+   * Define o papel RACI de um membro. Grava direto, como as demais ações da
+   * equipe nesta tela (convidar, remover) — não espera o "Salvar" do TAP.
+   *
+   * Regra do A único: é o consenso mais forte da literatura de RACI — dois
+   * aprovadores significa nenhum decidindo. Marcar um novo A rebaixa o
+   * anterior a C (Consultado), que é o papel mais próximo de quem antes
+   * aprovava: continua opinando, mas não dá o aval final.
+   *
+   * O rebaixamento vai em UPDATE separado, e não numa transação: falhar em
+   * rebaixar o anterior deixaria dois "A", que a seção 9 trata sem quebrar
+   * (`sugerirAprovadores` devolve TODOS os "A", não só o primeiro).
+   */
+  const definirRaci = async (memberId: string, papel: "R" | "A" | "C" | "I" | null) => {
+    const anteriorA = papel === "A"
+      ? memberRows.find((m) => (m.raci || "").toUpperCase() === "A" && m.id !== memberId)
+      : null;
+
+    const { error } = await supabase.from("project_members").update({ raci: papel }).eq("id", memberId);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    if (anteriorA) {
+      await supabase.from("project_members").update({ raci: "C" }).eq("id", anteriorA.id);
+      toast({
+        title: "Aprovador substituído",
+        description: `${anteriorA.full_name} passou a Consultado — só uma pessoa aprova por projeto.`,
+      });
+    }
+
+    await fetchRelations();
+    onMembersChanged?.();
   };
 
   const handleRemoveStakeholder = async (memberId: string) => {
@@ -1290,8 +1365,105 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
         )}
       </SectionBlock>
 
-      {/* 8. APROVAÇÕES */}
-      <SectionBlock n={8} title="Aprovações Formais" editing={editing}>
+      {/* 8. MATRIZ RACI — veio da ficha da equipe.
+          O seletor morava na linha do membro, em EditProjectDialog, porque a
+          coluna vive em `project_members` e aquela é a tela que edita a
+          tabela. Razão de implementação, não de produto: quem abre a ficha
+          para mexer na equipe não está pensando em governança, e o resultado
+          medido em 18/08/2026 foi que NENHUM dos 43 projetos tinha um "A"
+          definido — o campo mais importante da matriz era o que ninguém
+          preenchia, enquanto 44 dos 50 "I" vinham do default do banco.
+          Aqui a pergunta tem consequência imediata: quem for "A" aparece na
+          seção seguinte como aprovador. E a matriz vira TABELA, comparável de
+          relance — na ficha era uma tira de 4 letras por pessoa, e para saber
+          quem aprovava era preciso varrer linha por linha.
+          A coluna não mudou de lugar: só a tela que a edita. */}
+      <SectionBlock
+        n={8}
+        title="Matriz de Responsabilidades (RACI)"
+        status={{ preenchidos: memberRows.filter((m) => m.raci).length, total: Math.max(memberRows.length, 1) }}
+        editing={editing}
+      >
+        {memberRows.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">
+            Nenhum membro na equipe. Adicione pessoas na seção anterior para definir os papéis.
+          </p>
+        ) : (
+          <>
+            <div className="overflow-x-auto -mx-1 px-1">
+              <table className="w-full text-sm border border-border rounded-md overflow-hidden">
+                <thead>
+                  <tr className="bg-primary/10">
+                    <th className="px-3 py-2 text-left font-semibold border-b-2 border-primary/30">Pessoa</th>
+                    {RACI_OPCOES.map((op) => (
+                      <th
+                        key={op.v}
+                        title={op.hint}
+                        className="px-2 py-2 text-center font-semibold border-b-2 border-primary/30 w-14"
+                      >
+                        {op.v}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {memberRows.map((m) => (
+                    <tr key={m.id} className="border-b border-border last:border-b-0">
+                      <td className="px-3 py-1.5">
+                        <span className="text-sm">{m.full_name}</span>
+                        {m.sector && <span className="text-xs text-muted-foreground"> — {m.sector}</span>}
+                      </td>
+                      {RACI_OPCOES.map((op) => {
+                        const ativo = (m.raci || "").toUpperCase() === op.v;
+                        return (
+                          <td key={op.v} className="px-2 py-1.5 text-center">
+                            <button
+                              type="button"
+                              disabled={!editing}
+                              title={editing ? op.hint : undefined}
+                              // Clicar no papel já marcado desmarca: "nenhum" é
+                              // estado legítimo, e sem isso não haveria como
+                              // desfazer uma marcação errada.
+                              onClick={() => definirRaci(m.id, ativo ? null : op.v)}
+                              className={cn(
+                                "w-7 h-7 rounded text-xs font-bold transition-colors",
+                                ativo
+                                  ? op.v === "A"
+                                    ? "bg-success/15 text-success ring-1 ring-success/40"
+                                    : "bg-primary/10 text-primary ring-1 ring-primary/40"
+                                  : "text-muted-foreground/40 border border-dashed border-border",
+                                editing && !ativo && "hover:bg-muted hover:text-foreground",
+                                !editing && "cursor-default",
+                              )}
+                            >
+                              {ativo ? op.v : ""}
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-muted-foreground">
+              {RACI_OPCOES.map((op) => (
+                <span key={op.v}>
+                  <b className="text-foreground">{op.v}</b> — {op.hint.replace(/^[A-Za-zÀ-ú]+ — /, "")}
+                </span>
+              ))}
+            </div>
+            {!editing && (
+              <p className="text-[11px] text-muted-foreground mt-2 print:hidden">
+                Edite o TAP para definir os papéis.
+              </p>
+            )}
+          </>
+        )}
+      </SectionBlock>
+
+      {/* 9. APROVAÇÕES */}
+      <SectionBlock n={9} title="Aprovações Formais" editing={editing}>
         {/* A matriz RACI vira operação aqui: quem é "A" na equipe é quem dá o
             aval final do projeto, então já entra como aprovador em vez de ser
             cadastrado de novo à mão. */}

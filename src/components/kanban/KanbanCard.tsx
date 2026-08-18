@@ -20,10 +20,8 @@ import {
   GripVertical,
   AlertCircle,
   BookOpen,
-  GitFork,
   MoreHorizontal,
   Check,
-  Copy,
   ArrowRightLeft,
   MessageSquare,
   Paperclip,
@@ -36,6 +34,7 @@ import {
   Link2,
   Layers,
   EyeOff,
+  Lock,
 } from "lucide-react";
 import { type DraggableSyntheticListeners } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
@@ -87,6 +86,7 @@ import {
 
 export function SortableKanbanCard({
   activity,
+  podeMexer = true,
   phases,
   onEdit,
   onDelete,
@@ -162,9 +162,14 @@ export function SortableKanbanCard({
   hoursStat?: HoursStat;
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
+  podeMexer?: boolean;
 }) {
+  // `disabled` na RAIZ, não só o cadeado no lugar da alça: o dnd-kit também
+  // ativa o arrasto pelo corpo do card. Sem isto o card ainda saía do lugar
+  // para quem não pode mexer, e o bloqueio só aparecia ao soltar — o erro
+  // depois da ação, que é justamente o que o cadeado veio evitar.
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: activity.id });
+    useSortable({ id: activity.id, disabled: !podeMexer });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -185,6 +190,7 @@ export function SortableKanbanCard({
         moveTargets={moveTargets}
         onLinkParent={onLinkParent}
         dragListeners={listeners}
+        podeMexer={podeMexer}
         isAdmin={isAdmin}
         isBlocked={isBlocked}
         onToggleBlocked={onToggleBlocked}
@@ -256,6 +262,10 @@ function KanbanCardBase({
   readOnlyPreview = false,
   profilesMap = {},
   profileAvatarMap = {},
+  selecionado = false,
+  modoSelecao = false,
+  onToggleSelecao,
+  podeMexer = true,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -300,6 +310,27 @@ function KanbanCardBase({
   readOnlyPreview?: boolean;
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
+  /**
+   * SELEÇÃO EM LOTE.
+   *
+   * A caixa aparece no hover (ou fixa, quando o modo já está ligado) e é a
+   * ÚNICA porta para o lote: o clique no cartão continua abrindo a edição,
+   * que é o gesto mais usado do quadro e não pode ser trocado.
+   *
+   * Existe para o caso que o bloqueio "mova o que está dentro primeiro"
+   * criava: uma entrega com 5 filhos exigia cinco arrastes.
+   */
+  selecionado?: boolean;
+  modoSelecao?: boolean;
+  onToggleSelecao?: (e: React.MouseEvent) => void;
+  /**
+   * A pessoa pode mexer NESTA atividade?
+   *
+   * `false` desenha um cadeado no lugar da alça de arrastar. Antes o card
+   * parecia arrastável para todo mundo, e o aviso só aparecia DEPOIS de
+   * soltar — a pessoa descobria o bloqueio pelo erro.
+   */
+  podeMexer?: boolean;
 }) {
   // estaAtrasado compara DIA com DIA. A conta local anterior montava a data às
   // 00:00 e comparava com `new Date()` (com hora), então tudo que vencia HOJE
@@ -317,6 +348,8 @@ function KanbanCardBase({
   // 'pacote' legado e qualquer item com filhos. Exibido sempre como Fase.
   const isPhase =
     !isMilestone && (eapType === "fase" || eapType === "pacote" || (subActivityCount ?? 0) > 0);
+  /** Está aninhado sob outro card? A faixa lateral colorida é dele. */
+  const ehFilho = !!activity.parent_id;
   // Bloqueio vem ANTES de marco: é o estado que exige ação, e um marco
   // travado precisa ser lido como travado.
   const cardBorderClass = isBlocked
@@ -325,7 +358,22 @@ function KanbanCardBase({
       ? "border-amber-500 border-l-[4px] border-l-amber-500 bg-amber-500/5"
       : isOverdue
         ? "border-destructive border-l-[3px] border-l-destructive animate-pulse-overdue"
-        : "border-border";
+        // FILHO GANHA FAIXA PRÓPRIA, NA COR DA COLUNA (14/08/2026).
+        //
+        // Antes a linha vivia no container do grupo: dizia "estes pertencem ao
+        // de cima" e nada mais. Passou para a borda de cada card — mas em azul,
+        // que é a cor do primário e competia com a coluna "Em Andamento".
+        //
+        // Agora a faixa usa a COR DA PRÓPRIA COLUNA (`stageColor`, aplicado
+        // inline abaixo). Assim ela diz onde o filho está, que é a informação
+        // que falta quando ele mora numa coluna diferente do pai — e nunca
+        // discorda do cabeçalho, porque é a mesma cor.
+        //
+        // O vínculo com o pai continua visível pelo recuo, que sempre o
+        // comunicou.
+        : ehFilho
+          ? "border-l-[3px]"
+          : "border-border";
 
   const tooltipLines = [
     activity.title,
@@ -376,15 +424,61 @@ function KanbanCardBase({
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`relative bg-card border border-border rounded-lg ${d.card} ${dragListeners ? "pl-[18px]" : ""} shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`}
-            onClick={onEdit}
+            className={cn(
+              `relative bg-card border border-border rounded-lg ${d.card} ${dragListeners ? "pl-[18px]" : ""} shadow-md hover:shadow-lg transition-shadow cursor-pointer group ${cardBorderClass}`,
+              // Selecionado se anuncia pelo anel, não pelo fundo: o fundo já
+              // carrega o estado de bloqueio/atraso, e somar cor sobre cor
+              // deixaria os dois ilegíveis.
+              selecionado && "ring-2 ring-primary ring-offset-1 ring-offset-background",
+            )}
+            /* A faixa do filho vem do BANCO (cor da coluna), então não cabe em
+               classe do Tailwind. Só o filho SEM estado próprio a recebe:
+               bloqueio, marco e atraso já pintam a borda com o que precisam
+               dizer, e sobrepor a cor da coluna apagaria o alerta. */
+            style={ehFilho && !isBlocked && !isMilestone && !isOverdue && stageColor
+              ? { borderLeftColor: stageColor }
+              : undefined}
+            // No MODO SELEÇÃO o clique no card marca em vez de abrir: quem está
+            // escolhendo vários quer clicar rápido, e mirar a caixinha de 14px
+            // a cada item é trabalho desnecessário. Fora do modo, abre a edição
+            // como sempre — o gesto mais usado do quadro não muda.
+            onClick={modoSelecao && onToggleSelecao ? onToggleSelecao : onEdit}
           >
+            {/* A CAIXA. No hover fora do modo (a porta de entrada), fixa dentro
+                dele. `stopPropagation` porque o card inteiro já é clicável. */}
+            {onToggleSelecao && !readOnlyPreview && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onToggleSelecao(e); }}
+                aria-label={selecionado ? "Desmarcar" : "Selecionar"}
+                title={selecionado ? "Desmarcar" : "Selecionar para mover em lote"}
+                className={cn(
+                  "absolute right-1.5 top-1.5 z-10 w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all",
+                  selecionado
+                    ? "bg-primary border-primary text-primary-foreground opacity-100"
+                    : "bg-card border-muted-foreground/40 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                  modoSelecao && "opacity-100",
+                )}
+              >
+                {selecionado && <Check className="w-3 h-3" strokeWidth={3} />}
+              </button>
+            )}
             {/* Alça de arrastar FORA do fluxo: como coluna fixa ela roubava
                 ~20px de largura de todo card, o tempo todo, para uma ação que
                 só importa no hover. Flutua sobre a borda esquerda; o card
                 reserva 18px (pl acima) só quando arrastável, senão a alça
                 cobria o nº EAP no hover. */}
-            {dragListeners ? (
+            {/* CADEADO no lugar da alça quando a pessoa não pode mexer. Antes
+                o card parecia arrastável para todo mundo e o bloqueio só
+                aparecia DEPOIS de soltar — descobria-se pelo erro. */}
+            {!podeMexer && !readOnlyPreview ? (
+              <span
+                className="absolute left-0 top-0 bottom-0 w-4 flex items-start justify-center pt-2 text-muted-foreground/40"
+                title="Você não pode mover esta atividade — não faz parte da equipe do projeto nem é responsável por ela"
+              >
+                <Lock className="w-3 h-3" />
+              </span>
+            ) : dragListeners ? (
               <button
                 className="absolute left-0 top-0 bottom-0 w-4 flex items-start justify-center pt-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
                 onClick={(e) => e.stopPropagation()}
@@ -404,7 +498,7 @@ function KanbanCardBase({
                       onOpenRelated?.(parentBreadcrumb.id);
                     }}
                     className="flex items-center gap-1 mb-1 px-1.5 py-0.5 rounded bg-muted/60 hover:bg-muted text-[10px] text-muted-foreground hover:text-foreground max-w-full"
-                    title={`Subtarefa de: ${parentBreadcrumb.title}`}
+                    title={`Subatividade de: ${parentBreadcrumb.title}`}
                   >
                     <span className="shrink-0">↳</span>
                     {parentBreadcrumb.wbsCode ? (
@@ -466,13 +560,9 @@ function KanbanCardBase({
                 className={`shrink-0 flex items-center gap-0.5 -mt-0.5 -mr-1 transition-opacity ${menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"}`}
                 onClick={(e) => e.stopPropagation()}
               >
-                <Button size="icon" variant="ghost" className="h-[22px] w-[22px] text-muted-foreground hover:bg-success/10 hover:text-success" onClick={onToggle} title={activity.status === "completed" ? "Reabrir atividade" : "Concluir atividade"}>
-                  {activity.status === "completed" ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-                  ) : (
-                    <Circle className="w-3.5 h-3.5 text-muted-foreground" />
-                  )}
-                </Button>
+                {/* O círculo de concluir saiu daqui — foi para dentro do "…".
+                    Eram dois círculos quase iguais no topo do card, e o outro
+                    (o de progresso) é o que a pessoa lê. */}
                 <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
                   <DropdownMenuTrigger asChild>
                     <button
@@ -492,15 +582,30 @@ function KanbanCardBase({
                     onPointerDown={(e) => e.stopPropagation()}
                   >
                     {/* "Editar" saiu: clicar em qualquer lugar do card já abre a
-                        edição (onClick={onEdit} no card), então o item era morto. */}
-                    {onDuplicate && (
-                      <DropdownMenuItem
-                        className="focus:bg-muted/60 focus:text-foreground"
-                        onSelect={() => onDuplicate()}
-                      >
-                        <Copy className="w-3.5 h-3.5 mr-2" /> Duplicar
-                      </DropdownMenuItem>
-                    )}
+                        edição (onClick={onEdit} no card), então o item era morto.
+
+                        "Duplicar" saiu do QUADRO (14/08/2026): duplicar é ação
+                        de planejamento — nasce da EAP, com código e posição —, e
+                        no fluxo ela criava um card órfão no meio da coluna. O
+                        Backlog continua tendo, que é onde a EAP se monta.
+
+                        CONCLUIR entra aqui, no lugar do círculo que ficava ao
+                        lado do "…": eram dois círculos quase iguais no topo do
+                        card, disputando leitura com o de progresso. A ação não
+                        se perde — muda de lugar, e arrastar para a coluna final
+                        segue concluindo. */}
+                    <DropdownMenuItem
+                      className={activity.status === "completed"
+                        ? "focus:bg-muted/60 focus:text-foreground"
+                        : "text-success focus:text-success focus:bg-success/10"}
+                      onSelect={() => onToggle()}
+                    >
+                      {activity.status === "completed" ? (
+                        <><Circle className="w-3.5 h-3.5 mr-2" /> Reabrir atividade</>
+                      ) : (
+                        <><CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Concluir atividade</>
+                      )}
+                    </DropdownMenuItem>
                     {/* "Mover para →" substitui o antigo "Mover para Backlog", que
                         mandava o card para o stage display_order=0 — coluna que o
                         quadro não renderiza, fazendo o card desaparecer sem aviso. */}
@@ -697,7 +802,7 @@ function KanbanCardBase({
                   {!!blockedSubsCount && blockedSubsCount > 0 && (
                     <Badge
                       className="bg-destructive/15 text-destructive border-destructive/30 text-[10px] px-1.5 py-0 animate-pulse"
-                      title={`${blockedSubsCount} subtarefa(s) impedida(s)`}
+                      title={`${blockedSubsCount} subatividade(s) impedida(s)`}
                     >
                       ⚠ {blockedSubsCount} sub{blockedSubsCount > 1 ? "s" : ""} impedida{blockedSubsCount > 1 ? "s" : ""}
                     </Badge>
@@ -898,27 +1003,53 @@ function KanbanCardBase({
                     </span>
                   )}
                 </div>
+                {/* UMA LINHA SÓ: contador + resumo lado a lado.
+                    Eram irmãos empilhados — o selo caía numa linha própria e
+                    somava altura a todo card com subatividades. `flex-wrap`
+                    porque em coluna estreita o selo desce em vez de espremer o
+                    contador.
+                    `empty:hidden` para a linha não reservar 6px de margem num
+                    card sem subatividade nenhuma. */}
+                <div className="flex items-center gap-2 flex-wrap mt-1.5 empty:hidden empty:mt-0">
                 {(isPhase || cardFields.subCount) && subActivityCount && subActivityCount > 0 ? (
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}
-                    className="flex items-center gap-1 mt-1.5 text-[10px] font-medium text-primary hover:text-primary/80 hover:underline transition-colors"
-                    title={isExpanded ? "Recolher subtarefas" : "Expandir subtarefas"}
+                    className="flex items-center gap-1 text-[10px] font-medium text-primary hover:text-primary/80 hover:underline transition-colors"
+                    title={isExpanded ? "Recolher subatividades" : "Expandir subatividades"}
                   >
+                    {/* O `GitFork` saiu: é o ícone de "ramificar repositório",
+                        do vocabulário do Git, e não significava nada aqui.
+                        Disputava 90px com a seta e o texto, que já dizem tudo —
+                        a seta que expande, o número quantas. */}
                     {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    <GitFork className="w-3 h-3" />
-                    <span>{subActivityCount} {subActivityCount === 1 ? "subtarefa" : "subtarefas"}</span>
+                    <span>{subActivityCount} {subActivityCount === 1 ? "subatividade" : "subatividades"}</span>
                   </button>
                 ) : null}
+                {/* "1 concluída · 4 abertas" — não "Subs: 1 concluidas / 4
+                    pendentes". O prefixo repetia o que a linha acima já diz, e
+                    o texto ocupava a largura do card inteiro para uma
+                    informação de dois números. O ponto verde dá o estado sem
+                    palavra nenhuma. */}
                 {cardFields.subSummary && subActivityStatusSummary && (subActivityStatusSummary.completed > 0 || subActivityStatusSummary.pending > 0) ? (
                   <Badge
                     variant="outline"
-                    className="mt-1 text-[10px] px-1.5 py-0 bg-muted/40 border-border/60 text-muted-foreground"
-                    title="Resumo das subatividades"
+                    className="text-[10px] px-1.5 py-0 gap-1.5 bg-muted/40 border-border/60 text-muted-foreground font-normal"
+                    title={`${subActivityStatusSummary.completed} de ${subActivityStatusSummary.completed + subActivityStatusSummary.pending} subatividades concluídas`}
                   >
-                    Subs: {subActivityStatusSummary.completed} concluidas / {subActivityStatusSummary.pending} pendentes
+                    {subActivityStatusSummary.completed > 0 && (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" aria-hidden />
+                        {subActivityStatusSummary.completed} concluída{subActivityStatusSummary.completed > 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {subActivityStatusSummary.completed > 0 && subActivityStatusSummary.pending > 0 && <span className="opacity-40">·</span>}
+                    {subActivityStatusSummary.pending > 0 && (
+                      <span>{subActivityStatusSummary.pending} aberta{subActivityStatusSummary.pending > 1 ? "s" : ""}</span>
+                    )}
                   </Badge>
                 ) : null}
+                </div>
               </div>
             </div>
 

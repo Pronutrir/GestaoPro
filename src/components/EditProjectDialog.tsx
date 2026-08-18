@@ -28,10 +28,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { AIAssistButton } from "@/components/AIAssistButton";
 import { GutPriorityField } from "@/components/GutPriorityField";
-import { UserPlus, X } from "lucide-react";
+import { UserPlus, X, Lock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { gutLabel, gutScore } from "@/lib/gutPriority";
 import { cn } from "@/lib/utils";
+import {
+  PAPEIS_PROJETO,
+  PAPEL_PADRAO,
+  papelDePermissoes,
+  papelPorId,
+  permissoesDoPapel,
+  type PapelId,
+} from "@/lib/projectRoles";
 
 interface MemberRow {
   id: string; // project_members.id (existing) or temp uuid for pending add
@@ -41,21 +49,42 @@ interface MemberRow {
   avatar_url?: string | null;
   invitation_status: "pending" | "accepted" | "declined";
   persisted: boolean;
-  /** Papel na matriz RACI. A coluna já existia em project_members, mas nunca
-   *  teve seletor: 56 dos 71 membros ficaram gravados como "I" só porque é o
-   *  valor padrão — o sistema achava que ninguém executa e ninguém aprova. */
-  raci: RaciRole | null;
+  /** O que a pessoa PODE FAZER neste projeto. Ver lib/projectRoles.ts. */
+  papel: PapelId;
+  /**
+   * O papel COMO ESTAVA ao abrir o diálogo. Serve para gravar só quem mudou.
+   *
+   * `papelDePermissoes` é lossy — há mais combinações de colunas do que
+   * presets, e as que não casam com nenhum são aproximadas. Sem comparar com
+   * o valor original, salvar o diálogo reescreveria a linha de TODOS os
+   * membros e promoveria em silêncio quem estivesse numa combinação torta.
+   * Ausente em quem ainda não foi gravado (`persisted: false`).
+   */
+  papelOriginal?: PapelId;
 }
 
-/** R executa · A aprova (só um) · C é consultado · I acompanha. */
-type RaciRole = "R" | "A" | "C" | "I";
-
-const RACI_OPCOES: { v: RaciRole; label: string; hint: string }[] = [
-  { v: "R", label: "R", hint: "Responsável — executa" },
-  { v: "A", label: "A", hint: "Aprova — aval final (só um por projeto)" },
-  { v: "C", label: "C", hint: "Consultado — opina antes da decisão" },
-  { v: "I", label: "I", hint: "Informado — só acompanha" },
-];
+/**
+ * PERMISSÃO — a única pergunta que esta tela faz sobre cada membro.
+ *
+ * Antes eram duas: a permissão e a matriz RACI, lado a lado, com o mesmo peso
+ * visual. Pareciam a mesma pergunta duplicada, e nada distinguia o que o
+ * sistema ENFORÇA do que é só rótulo de governança.
+ *
+ * O RACI saiu daqui e passou a ser editado no TAP (seção Matriz de
+ * Responsabilidades), junto de onde é usado: sua única consequência no sistema
+ * é indicar o aprovador na seção de Aprovações. Editado aqui, longe do uso,
+ * ele não era preenchido — em 18/08/2026, NENHUM dos 43 projetos tinha um "A"
+ * definido, e 44 das 50 marcações "I" vieram do default do banco.
+ *
+ * A coluna `project_members.raci` continua onde estava. Mudou só a tela que a
+ * edita.
+ *
+ * Os níveis, rótulos e o padrão saíram para `lib/projectRoles.ts`. Estavam
+ * definidos DENTRO deste componente, e foi por isso que o AddProjectDialog
+ * pôde divergir por meses gravando outra coisa para a mesma ação. Agora as
+ * duas telas leem da mesma fonte, como já acontece com lib/accessLevels.ts e
+ * lib/orgLevels.ts nos outros dois eixos.
+ */
 
 interface Project {
   id: string;
@@ -132,29 +161,9 @@ export const EditProjectDialog = ({
     if (open) fetchProfiles();
   }, [open]);
 
-  /**
-   * Define o papel RACI de um membro.
-   *
-   * Regra do A único: é o consenso mais forte da literatura de RACI — dois
-   * aprovadores significa nenhum decidindo. Marcar um novo A rebaixa o
-   * anterior a C (Consultado), que é o papel mais próximo de quem antes
-   * aprovava: continua opinando, mas não dá o aval final.
-   */
-  const definirRaci = (memberId: string, papel: RaciRole | null) => {
-    setTeam((prev) => {
-      const anteriorA = papel === "A" ? prev.find((m) => m.raci === "A" && m.id !== memberId) : null;
-      if (anteriorA) {
-        toast({
-          title: "Aprovador substituído",
-          description: `${anteriorA.full_name} passou a Consultado — só uma pessoa aprova por projeto.`,
-        });
-      }
-      return prev.map((m) => {
-        if (m.id === memberId) return { ...m, raci: papel };
-        if (papel === "A" && m.raci === "A") return { ...m, raci: "C" as RaciRole };
-        return m;
-      });
-    });
+  /** Troca o que a pessoa pode fazer neste projeto. */
+  const definirPapel = (memberId: string, papel: PapelId) => {
+    setTeam((prev) => prev.map((m) => (m.id === memberId ? { ...m, papel } : m)));
   };
 
   // Carrega equipe atual do projeto ao abrir
@@ -163,7 +172,7 @@ export const EditProjectDialog = ({
       if (!project?.id || !open) return;
       const { data: members } = await supabase
         .from("project_members")
-        .select("id, user_id, invitation_status, raci")
+        .select("id, user_id, invitation_status, can_create, can_edit, can_delete, can_move, can_edit_own")
         .eq("project_id", project.id);
       if (!members) { setTeam([]); return; }
       const ids = members.map((m: any) => m.user_id);
@@ -182,10 +191,13 @@ export const EditProjectDialog = ({
             avatar_url: p?.avatar_url || null,
             invitation_status: (m.invitation_status as MemberRow["invitation_status"]) || "pending",
             persisted: true,
-            // "I" gravado por default não é escolha de ninguém — trata como
-            // não definido, para a matriz começar honesta em vez de mentir
-            // que todo mundo é Informado.
-            raci: (m.raci === "R" || m.raci === "A" || m.raci === "C" ? m.raci : null) as RaciRole | null,
+            papel: papelDePermissoes(m),
+            // O papel COMO ESTAVA ao abrir. Sem isto, salvar o diálogo
+            // reescrevia as quatro colunas de TODOS os membros, e quem
+            // estivesse num estado que não casa exatamente com um preset era
+            // PROMOVIDO em silêncio — trocar o título do projeto podia dar
+            // permissão de exclusão a alguém. Ver `paraAtualizar`.
+            papelOriginal: papelDePermissoes(m),
           };
         })
       );
@@ -319,7 +331,10 @@ export const EditProjectDialog = ({
     if (!formData.start_date) missingRequiredFields.push("Data de Início");
     if (!formData.due_date) missingRequiredFields.push("Data de Entrega");
     if (!formData.status.trim()) missingRequiredFields.push("Status");
-    if (!formData.owner.trim()) missingRequiredFields.push("Líder do Projeto");
+    // GESTOR é o obrigatório, não o Líder. Quem responde pelo projeto perante
+    // a organização é o gestor; o líder é quem toca a execução, e pode não
+    // existir num projeto pequeno ou ainda não estar definido na abertura.
+    if (!formData.manager.trim()) missingRequiredFields.push("Gestor do Projeto");
     if (!formData.sector.trim()) missingRequiredFields.push("Setor de Origem");
 
     const currentPriority = formData.priority || "pendente";
@@ -501,8 +516,15 @@ export const EditProjectDialog = ({
           if (respErr) throw respErr;
         }
 
-        // Membros não têm mais distinção Leitor/Editor — permissões ficam zeradas;
-        // a edição vem do papel de participante/responsável da atividade (RLS).
+        // As permissões ficavam ZERADAS aqui, com a justificativa de que "a
+        // edição vem do papel de participante/responsável da atividade (RLS)".
+        // A RLS não dispensa `can_edit` — ela exige `can_edit` OU vínculo com
+        // a atividade. Quem entrava na equipe sem ser responsável por nada não
+        // passava em nenhuma das duas vias.
+        //
+        // Medido em 18/08/2026: das 1.258 edições que a tela permitia, o banco
+        // recusava 1.089 (86,6%), atingindo 7 pessoas. Agora a permissão é
+        // escolhida na tela, e o padrão é `Executar`.
         // Insere novos (sem repetir quem já entrou como Líder/Gestor)
         const newOnes = team.filter((m) => !m.persisted && !responsibleIds.has(m.user_id));
         if (newOnes.length > 0) {
@@ -519,11 +541,11 @@ export const EditProjectDialog = ({
             invitation_status: "pending" as const,
             invited_at: new Date().toISOString(),
             invited_by: user?.id ?? null,
-            can_create: true,
-            can_edit: false,
-            can_delete: false,
-            can_move: false,
-            raci: m.raci,
+            // Sem `raci`: quem entra na equipe nasce sem papel de governança,
+            // e a matriz é preenchida no TAP. A coluna tem DEFAULT nulo desde
+            // 20260818130000 — antes nascia "I" e o sistema achava que ninguém
+            // executava e ninguém aprovava.
+            ...permissoesDoPapel(m.papel),
           }));
           const { error: memErr } = await supabase.from("project_members").insert(rows);
           if (memErr) {
@@ -548,14 +570,33 @@ export const EditProjectDialog = ({
           }
         }
 
-        // Papel RACI de quem JÁ era membro. Vai em UPDATEs separados porque
-        // cada linha tem um papel diferente — e falha aqui não pode derrubar
-        // o salvamento do projeto, que já foi gravado acima.
-        const paraAtualizar = team.filter((m) => m.persisted);
+        /**
+         * SÓ QUEM MUDOU. Antes o UPDATE rodava para TODOS os membros a cada
+         * salvamento, sem comparar com nada.
+         *
+         * Isso não é só trabalho extra: `papelDePermissoes` mapeia as quatro
+         * colunas para um dos presets, e nem toda combinação existente casa
+         * exatamente com um. Uma linha com `can_delete` sozinho, por exemplo,
+         * é lida como o preset mais alto e VOLTA para o banco com as quatro
+         * permissões ligadas. O efeito: trocar o título do projeto e salvar
+         * concedia permissão a quem ninguém tinha tocado — sem clique, sem
+         * aviso, e a RLS não barra porque quem salva é o gestor do projeto.
+         *
+         * Comparar com `papelOriginal` fecha isso: quem não foi mexido na tela
+         * não é escrito, e nenhuma normalização acontece pelas costas. Corrigir
+         * dado torto é papel de migration, onde fica registrado.
+         *
+         * O RACI saiu daqui — passou a ser editado no TAP, junto de onde é
+         * usado (ver ProjectCharter). Este bloco grava só permissão.
+         */
+        const paraAtualizar = team.filter((m) => m.persisted && m.papel !== m.papelOriginal);
         if (paraAtualizar.length > 0) {
           await Promise.all(
             paraAtualizar.map((m) =>
-              supabase.from("project_members").update({ raci: m.raci }).eq("id", m.id),
+              supabase
+                .from("project_members")
+                .update(permissoesDoPapel(m.papel))
+                .eq("id", m.id),
             ),
           );
         }
@@ -791,7 +832,7 @@ export const EditProjectDialog = ({
             {/* items-start: as colunas se alinham pelo topo mesmo que uma cresça. */}
             <div className="grid grid-cols-2 gap-4 items-start">
               <div className="grid gap-2 content-start" ref={managerFieldRef}>
-                <Label>Gestor do Projeto</Label>
+                <Label>Gestor do Projeto *</Label>
                 <PersonCombobox
                   people={profiles}
                   value={profiles.find((p) => p.full_name === formData.manager)?.id ?? null}
@@ -804,7 +845,7 @@ export const EditProjectDialog = ({
                 />
               </div>
               <div className="grid gap-2 content-start" ref={ownerFieldRef}>
-                <Label>Líder do Projeto *</Label>
+                <Label>Líder do Projeto</Label>
                 <PersonCombobox
                   people={profiles}
                   value={profiles.find((p) => p.full_name === formData.owner)?.id ?? null}
@@ -847,38 +888,58 @@ export const EditProjectDialog = ({
                   aqui para o time ficar visível num lugar só; para trocá-los,
                   usa-se o campo acima (não o X da lista). */}
               {(() => {
-                const roleRows = [
+                /**
+                 * UMA LINHA POR PESSOA, não por cargo.
+                 *
+                 * Antes eram duas entradas fixas (Gestor e Líder), então quem
+                 * acumula os dois papéis — o caso comum em projeto pequeno —
+                 * aparecia DUAS VEZES, com o mesmo nome, um abaixo do outro.
+                 * Parecia duplicata de cadastro.
+                 *
+                 * Agrupa por nome e mostra os cargos como etiquetas na mesma
+                 * linha; o "Trocar" leva ao campo do primeiro cargo da pessoa.
+                 */
+                const porPessoa = new Map<string, string[]>();
+                for (const r of [
                   { role: "Gestor", name: formData.manager },
                   { role: "Líder", name: formData.owner },
-                ].filter((r) => !!r.name);
-                if (roleRows.length === 0) return null;
+                ]) {
+                  if (!r.name) continue;
+                  porPessoa.set(r.name, [...(porPessoa.get(r.name) ?? []), r.role]);
+                }
+                if (porPessoa.size === 0) return null;
                 return (
-                  <div className="space-y-1.5">
-                    {roleRows.map((r) => {
-                      const p = profiles.find((x) => x.full_name === r.name);
+                  <div className="space-y-1">
+                    {[...porPessoa.entries()].map(([name, roles]) => {
+                      const p = profiles.find((x) => x.full_name === name);
                       return (
-                        <div key={r.role} className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-primary/5 border border-primary/25">
-                          <Avatar className="h-6 w-6 shrink-0">
-                            {p?.avatar_url ? <AvatarImage src={p.avatar_url} alt={r.name} /> : null}
-                            <AvatarFallback className="text-[9px]">
-                              {r.name.split(" ").filter(Boolean).slice(0, 2).map((n) => n[0]?.toUpperCase()).join("")}
+                        <div key={name} className="flex items-center gap-2 px-2 py-1 rounded-md bg-primary/5 border border-primary/25">
+                          <Avatar className="h-5 w-5 shrink-0">
+                            {p?.avatar_url ? <AvatarImage src={p.avatar_url} alt={name} /> : null}
+                            <AvatarFallback className="text-[8px]">
+                              {name.split(" ").filter(Boolean).slice(0, 2).map((n) => n[0]?.toUpperCase()).join("")}
                             </AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
-                            <span className="text-sm font-medium truncate">{r.name}</span>
-                            {p?.sector && <span className="text-[11px] text-muted-foreground truncate shrink-0">· {p.sector}</span>}
+                            <span className="text-[13px] font-medium truncate">{name}</span>
+                            {p?.sector && <span className="text-[10px] text-muted-foreground truncate shrink-0">· {p.sector}</span>}
                           </div>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 shrink-0">
-                            {r.role}
-                          </span>
+                          {roles.map((role) => (
+                            <span
+                              key={role}
+                              className="text-[9px] font-semibold uppercase tracking-wide text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-px shrink-0"
+                            >
+                              {role}
+                            </span>
+                          ))}
                           {/* O X de remover não serve aqui (deixaria o projeto
                               sem responsável em silêncio) — mas sem nada a linha
                               parecia travada. "Trocar" leva ao campo do cargo. */}
                           <button
                             type="button"
-                            onClick={() => focusRoleField(r.role as "Líder" | "Gestor")}
-                            title={`Trocar o ${r.role} no campo acima`}
-                            className="text-[11px] font-medium text-primary hover:underline shrink-0 px-1"
+                            onClick={() => focusRoleField(roles[0] as "Líder" | "Gestor")}
+                            title={`Trocar o ${roles.join(" / ")} no campo acima`}
+                            className="text-[10px] font-medium text-primary hover:underline shrink-0 px-1"
                           >
                             Trocar
                           </button>
@@ -890,7 +951,7 @@ export const EditProjectDialog = ({
               })()}
 
               {team.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-1">
                   {/* Quem é Líder/Gestor já aparece no bloco de cargos acima —
                       sai daqui para não constar duas vezes na mesma equipe. */}
                   {team.filter((m) => m.full_name !== formData.owner && m.full_name !== formData.manager).map((m) => {
@@ -901,6 +962,21 @@ export const EditProjectDialog = ({
                       .map((n) => n[0]?.toUpperCase())
                       .join("");
                     return (
+                    /**
+                     * UMA LINHA POR PESSOA.
+                     *
+                     * Eram três alturas empilhadas: nome, seletor e descrição,
+                     * cada uma numa faixa. Com 5 membros a lista tomava a tela
+                     * inteira e a rolagem escondia o resto do formulário — e
+                     * quase todo esse espaço era texto repetido, já que a
+                     * descrição do nível se repete em quem tem o mesmo nível.
+                     *
+                     * Agora: identidade à esquerda, permissão à direita, na
+                     * mesma faixa. A descrição foi para DENTRO do dropdown, que
+                     * é onde ela importa — quem está escolhendo lê as quatro
+                     * opções com o que cada uma faz; quem só está conferindo lê
+                     * o nome do nível, que basta.
+                     */
                     <div
                       key={m.id}
                       className="flex items-center gap-2 px-2 py-1.5 rounded-md border border-border hover:border-border/80 hover:bg-muted/40 transition-colors group"
@@ -909,63 +985,77 @@ export const EditProjectDialog = ({
                         {m.avatar_url ? <AvatarImage src={m.avatar_url} alt={m.full_name} /> : null}
                         <AvatarFallback className="text-[9px]">{initials || "?"}</AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-foreground truncate">{m.full_name}</span>
+                      <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                        <span className="text-[13px] font-medium text-foreground truncate">{m.full_name}</span>
                         {m.sector && (
-                          <span className="px-2 py-0.5 rounded-full bg-muted text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
-                            {m.sector}
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-tight shrink-0">
+                            · {m.sector}
                           </span>
                         )}
                         {/* Situação do convite. Sem isto o "aguardando" seria
                             invisível: a lista mostrava todo mundo igual, como
-                            se já tivesse aceitado. */}
+                            se já tivesse aceitado. Encurtado para "Aguardando":
+                            na mesma faixa do seletor, o texto longo empurrava
+                            o nome para a reticência. */}
                         {m.invitation_status !== "accepted" && (
                           <span className={cn(
-                            "px-2 py-0.5 rounded-full text-[10px] font-semibold border",
+                            "px-1.5 py-px rounded-full text-[9px] font-semibold border shrink-0",
                             m.invitation_status === "declined"
                               ? "bg-destructive/10 text-destructive border-destructive/30"
                               : "bg-warning/10 text-warning border-warning/30",
                           )}>
-                            {m.invitation_status === "declined" ? "Recusou" : "Aguardando aceite"}
+                            {m.invitation_status === "declined" ? "Recusou" : "Aguardando"}
                           </span>
                         )}
                       </div>
-                      {/* Matriz RACI — quem executa, aprova, é consultado ou
-                          só acompanha. Clicar no papel já marcado desmarca. */}
-                      <div className="flex items-center gap-0.5 shrink-0">
-                        {RACI_OPCOES.map((op) => {
-                          const ativo = m.raci === op.v;
-                          return (
-                            <button
-                              key={op.v}
-                              type="button"
-                              title={op.hint}
-                              onClick={() => definirRaci(m.id, ativo ? null : op.v)}
-                              className={cn(
-                                "w-7 h-7 rounded text-[11px] font-bold transition-colors",
-                                ativo
-                                  ? op.v === "A"
-                                    ? "bg-success/15 text-success ring-1 ring-success/40"
-                                    : "bg-primary/10 text-primary ring-1 ring-primary/40"
-                                  : "text-muted-foreground/50 hover:bg-muted hover:text-foreground",
-                              )}
+
+                      {/* O cadeado marca o que o sistema de fato aplica — o
+                          RACI, que ficava ao lado, foi para o TAP. */}
+                      <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
+                      {/* Select simples, não SearchSelect: são quatro opções
+                          fixas — campo de busca aqui seria ruído. */}
+                      <Select
+                        value={m.papel}
+                        onValueChange={(v) => definirPapel(m.id, v as PapelId)}
+                      >
+                        <SelectTrigger className="h-7 w-[178px] text-[12px] shrink-0">
+                          {/* O gatilho mostra só o NOME. A descrição não pode
+                              entrar no <SelectItem> direto: o Radix clona o
+                              conteúdo do item selecionado aqui dentro, e as
+                              duas linhas estourariam a altura de 28px. Por isso
+                              o texto do gatilho é renderizado à parte. */}
+                          <span className="truncate">{papelPorId(m.papel).nome}</span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAPEIS_PROJETO.map((p) => (
+                            <SelectItem
+                              key={p.id}
+                              value={p.id}
+                              // `textValue` mantém a busca por digitação do
+                              // Radix funcionando pelo nome, já que o conteúdo
+                              // do item deixou de ser texto simples.
+                              textValue={p.nome}
+                              className="text-[12px] items-start max-w-[280px]"
                             >
-                              {op.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
+                              <span className="font-medium">{p.nome}</span>
+                              <span className="block text-[10.5px] text-muted-foreground leading-tight whitespace-normal">
+                                {p.hint}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
                       <Button
                         type="button"
                         size="icon"
                         variant="ghost"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        title="Remover da equipe"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         onClick={() => setTeam((prev) => prev.filter((x) => x.id !== m.id))}
                       >
                         <X className="w-3.5 h-3.5" />
                       </Button>
-                      </div>
                     </div>
                     );
                   })}
@@ -994,8 +1084,10 @@ export const EditProjectDialog = ({
                         avatar_url: p.avatar_url || null,
                         invitation_status: "pending",
                         persisted: false,
-                        // Entra sem papel: quem adiciona decide na matriz.
-                        raci: null,
+                        // Entra COM permissão: "adicionar à equipe" quer dizer
+                        // que a pessoa vai trabalhar no projeto. O silêncio
+                        // não deve significar "sem acesso".
+                        papel: PAPEL_PADRAO,
                       },
                     ]);
                   }}

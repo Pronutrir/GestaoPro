@@ -122,7 +122,7 @@ type OptionalFieldKey = "hours" | "cost" | "wbs";
 // não é mais oferecido como opção de tipo.
 type EapType = "fase" | "pacote" | "atividade";
 
-// Normaliza qualquer valor legado de item_type (tarefa/subtarefa/atividade/…)
+// Normaliza qualquer valor legado de item_type (tarefa/subatividade/atividade/…)
 // para um dos papéis EAP. historia_usuario e desconhecidos caem em "atividade".
 const toEapType = (raw: unknown): EapType =>
   raw === "fase" ? "fase" : raw === "pacote" ? "pacote" : "atividade";
@@ -434,18 +434,23 @@ export const EditActivityDialog = ({
   const effectiveActivity = createMode ? draftActivity : activity;
 
   /**
-   * Espelha a regra do banco (`can_member_action` OR `is_activity_owner`): quem
-   * é responsável ou participante edita a própria atividade mesmo sem permissão
-   * geral no projeto — modelo do Asana, e o que EditProjectDialog já assumia ao
-   * gravar novos membros com can_edit=false.
+   * Espelha a regra do banco (`can_member_action` OR `is_activity_actor_v2`):
+   * quem responde pela atividade a edita mesmo sem permissão geral no projeto
+   * — modelo do Asana.
    *
    * Os campos são texto livre (uuid, e-mail ou nome digitado), por isso a
    * comparação testa as três formas. Valores vazios são descartados:
    * sem isso, um perfil sem e-mail casaria com assigned_to vazio e daria
    * permissão a qualquer um numa atividade sem responsável.
+   *
+   * O CRIADOR entra junto (18/08/2026): a RLS o aceita por `created_by`, e
+   * aqui ele ficava de fora — quem criava uma atividade num projeto onde não
+   * é da equipe abria a própria atividade em modo leitura, sem motivo visível.
    */
   const souResponsavel = (() => {
     if (!effectiveActivity || !authUser?.id) return false;
+    const criador = (effectiveActivity as { created_by?: string | null }).created_by;
+    if (criador && criador === authUser.id) return true;
     const identidades = new Set(
       [authUser.id, authProfile?.email, authProfile?.full_name]
         .filter((v): v is string => !!v && v.trim().length > 0)
@@ -1454,7 +1459,7 @@ export const EditActivityDialog = ({
       await duplicateActivity({ activityId, includeChildren: true });
       toast({
         title: kind === "subatividade" ? "Subatividade duplicada!" : "Atividade duplicada!",
-        description: "A hierarquia de subtarefas tambem foi duplicada.",
+        description: "A hierarquia de subatividades tambem foi duplicada.",
       });
       onActivityUpdated();
       if (effectiveActivity) {
@@ -3298,7 +3303,7 @@ export const EditActivityDialog = ({
                               e.stopPropagation();
                               handleDuplicateActivity(sub.id, "subatividade");
                             }}
-                            title={duplicatingId === sub.id ? "Duplicando..." : "Duplicar subtarefa"}
+                            title={duplicatingId === sub.id ? "Duplicando..." : "Duplicar subatividade"}
                           >
                             <Copy className="w-3 h-3" />
                           </Button>

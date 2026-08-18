@@ -4,10 +4,11 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PersonCombobox } from "@/components/PersonCombobox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
-  ChevronsUpDown, ChevronsDownUp, Diamond,
+  ChevronsUpDown, ChevronsDownUp, Diamond, EyeOff,
   Rows3, MoreHorizontal, Pencil, Package, IndentIncrease, SlidersHorizontal, Search,
   User, Flag, Calendar as CalendarIcon, Link2, X,
 } from "lucide-react";
@@ -339,7 +340,7 @@ export const BacklogSection = ({
   useEffect(() => {
     const fetchProfiles = async () => {
       const [{ data: profilesData }, { data: adminRoles }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, email, avatar_url").eq("is_active", true).order("full_name"),
+        supabase.from("profiles").select("id, full_name, email, avatar_url, sector, role_title").eq("is_active", true).order("full_name"),
         supabase.from("user_roles").select("user_id").eq("role", "admin"),
       ]);
       if (profilesData) {
@@ -626,7 +627,18 @@ export const BacklogSection = ({
   topLevelByPhase.forEach((arr, key) => {
     const filtered: Activity[] = [];
     for (const a of arr) {
-      if (isPhaseLikeActivity(a) && !a.phase_id) virtualPhaseActs.push(a);
+      /**
+       * Agrupador de TOPO vira card de fase.
+       *
+       * Era `!a.phase_id`: só o item sem fase virava card, para não arrancar
+       * uma Entrega de dentro do grupo dela. Com as fases migradas para
+       * `activities` (14/08/2026), a fase migrada TEM `phase_id` — aponta para
+       * a fase de origem — e ficava presa dentro da própria faixa.
+       *
+       * `!a.parent_id` é o teste certo: quem não tem pai é topo da árvore,
+       * venha de onde vier. A Entrega continua no lugar, porque ela tem pai.
+       */
+      if (isPhaseLikeActivity(a) && !a.parent_id) virtualPhaseActs.push(a);
       else filtered.push(a);
     }
     topLevelByPhase.set(key, filtered);
@@ -925,6 +937,9 @@ export const BacklogSection = ({
       if (filhos.length === 0) continue;
       const faltam = filhos.filter((f) => {
         if (selectedIds.has(f.id)) return false;
+        // Marco não entra no quadro (ver ActivityKanban), então nunca chegaria
+        // à coluna de destino — contá-lo travaria o pai para sempre.
+        if (f.is_milestone) return false;
         const col = allStages.find((s) => s.id === f.workflow_stage_id);
         const cat = col
           ? parseWorkflowCategory((col as { categoria?: string }).categoria) ?? categoryFromLegacyFlags(col as never)
@@ -1041,6 +1056,7 @@ export const BacklogSection = ({
           const pai = activities.find((a) => a.id === paiId);
           if (!pai || movidos.has(paiId) || pai.workflow_stage_id === targetStageId) continue;
           const filhos = (childrenByParent.get(paiId) || [])
+            .filter((f) => !f.is_milestone)
             .filter((f) => !(f.workflow_stage_id && canceladaIds.has(f.workflow_stage_id)));
           if (filhos.length === 0) continue;
           if (!filhos.every((f) => colunaDe(f) === targetStageId)) continue;
@@ -1732,7 +1748,18 @@ export const BacklogSection = ({
                   onSelect={() => onToggleActivity(activity.id, activity.status)}
                   className={activity.status === "completed" ? "" : "text-success focus:text-success focus:bg-success/10"}
                 >
-                  {activity.status === "completed" ? (
+                  {/* MARCO tem vocabulário próprio: ele não se "conclui", é
+                      ATINGIDO — e desde que saiu do quadro (14/08/2026), este é
+                      o gesto principal, não mais o arrasto para a coluna final.
+                      Chamar de "concluir tarefa" sugeriria trabalho onde há um
+                      ponto de controle. */}
+                  {activity.is_milestone ? (
+                    activity.status === "completed" ? (
+                      <><Diamond className="w-3.5 h-3.5 mr-2" /> Desfazer marco atingido</>
+                    ) : (
+                      <><Diamond className="w-3.5 h-3.5 mr-2 fill-current" /> Marcar como atingido</>
+                    )
+                  ) : activity.status === "completed" ? (
                     <><Circle className="w-3.5 h-3.5 mr-2" /> Reabrir tarefa</>
                   ) : (
                     <><CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Concluir tarefa</>
@@ -2902,8 +2929,17 @@ export const BacklogSection = ({
           </div>
         )}
 
-        {/* Modo Fase (padrão): árvore EAP completa */}
-        {groupBy === "phase" && phases.map((p) => renderPhaseGroup(p.id, p.title))}
+        {/* Modo Fase (padrão): árvore EAP completa.
+            A FAIXA CEDE O LUGAR À ATIVIDADE-FASE. Desde que as fases viraram
+            `activities` (14/08/2026), cada uma existe nas duas tabelas: a faixa
+            vinha de `phases` e o card de `activities`, com o mesmo nome, um
+            dentro do outro — um nível a mais que não significa nada.
+            A faixa só é desenhada para fase que AINDA não migrou; quando a
+            atividade-fase existe, ela manda, e traz junto o que a faixa nunca
+            teve: coluna, percentual e a seleção em lote. */}
+        {groupBy === "phase" && phases
+          .filter((p) => !backlogActs.some((a) => a.item_type === "fase" && a.phase_id === p.id && !a.parent_id))
+          .map((p) => renderPhaseGroup(p.id, p.title))}
 
         {/* Atividades-fase (item_type='fase') em qualquer nível top-level viram cards de fase virtuais */}
         {groupBy === "phase" && virtualPhaseActs.map((vp) => renderVirtualPhase(vp))}
@@ -3013,35 +3049,62 @@ export const BacklogSection = ({
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Novo status *</Label>
+              {/* COLUNA OCULTA SE ANUNCIA. A lista era sete nomes soltos:
+                  mover para "Backlog" fazia a tarefa sumir do quadro, e nada
+                  avisava. Duas seções resolvem sem tirar opção — esconder as
+                  ocultas seria pior, porque mandar algo para fora do quadro é
+                  uso legítimo. O dado é o `is_visible`, o mesmo interruptor
+                  "No quadro" da tela de colunas; aqui ele só passa a ser lido. */}
               <Select value={targetStageId} onValueChange={setTargetStageId}>
                 <SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger>
                 <SelectContent>
-                  {allStages.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}
+                  {(() => {
+                    const noQuadro = allStages.filter((s) => (s as { is_visible?: boolean }).is_visible !== false);
+                    const fora = allStages.filter((s) => (s as { is_visible?: boolean }).is_visible === false);
+                    return (
+                      <>
+                        {noQuadro.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}
+                        {fora.length > 0 && (
+                          <>
+                            <div className="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Fora do quadro
+                            </div>
+                            {fora.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                <span className="inline-flex items-center gap-2">
+                                  <EyeOff className="w-3 h-3 shrink-0 text-muted-foreground" />
+                                  {s.title}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label>Responsável (opcional)</Label>
-              <Select value={assignee} onValueChange={setAssignee}>
-                <SelectTrigger><SelectValue placeholder="Selecione o responsável" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Nenhum</SelectItem>
-                  {profiles.map((p) => (
-                    <SelectItem key={p.id} value={p.full_name || p.id}>
-                      <span className="inline-flex items-center gap-2 min-w-0 w-full">
-                        <Avatar className="h-5 w-5 shrink-0">
-                          {(() => {
-                            const avatar = resolveAvatarFromLookup(p.id, p.full_name || p.email || p.id, profileAvatarMap);
-                            return avatar ? <AvatarImage src={avatar} alt={p.full_name || "Usuário"} /> : null;
-                          })()}
-                          <AvatarFallback className="text-[9px]">{getAvatarInitials(p.full_name || p.email || "Sem nome")}</AvatarFallback>
-                        </Avatar>
-                        <span className="truncate">{p.full_name || "Sem nome"}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Era um `Select` com dezenas de nomes em ordem alfabética, sem
+                  busca: "Antonio Carlos" e "Antonio Ventura" apareciam
+                  seguidos e nada os distinguia. O `PersonCombobox` — o mesmo da
+                  edição da atividade e das células do Cronograma — busca por
+                  nome, setor E função, e mostra os três. */}
+              <PersonCombobox
+                people={profiles.map((p) => ({
+                  id: p.id,
+                  full_name: p.full_name || p.email || "Sem nome",
+                  sector: (p as { sector?: string | null }).sector ?? null,
+                  role_title: (p as { role_title?: string | null }).role_title ?? null,
+                  avatar_url: resolveAvatarFromLookup(p.id, p.full_name || p.email || p.id, profileAvatarMap) ?? null,
+                }))}
+                value={profiles.find((p) => (p.full_name || p.id) === assignee)?.id ?? null}
+                placeholder="Selecione o responsável"
+                onSelect={(p) => setAssignee(p.full_name)}
+                onClear={() => setAssignee("__none__")}
+              />
             </div>
           </div>
           <DialogFooter>

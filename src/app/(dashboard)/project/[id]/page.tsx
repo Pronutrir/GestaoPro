@@ -38,7 +38,7 @@ import {
   Layers, GanttChart, BookOpen, FileText, Flag, History,
   ChevronRight, Kanban, Users, AlertTriangle,
   Package, Inbox, DollarSign, ClipboardList, LayoutDashboard, GitPullRequest, Lock,
-  NotebookPen, Search, X,
+  NotebookPen, Search, X, Info,
 } from "lucide-react";
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -454,10 +454,15 @@ export default function ProjectDetailsPage() {
     };
   }, [id, authLoading]);
 
+  // `activityScopedAccess` saiu das dependências: ele existia aqui porque a
+  // busca FILTRAVA a lista por ele, então mudar o escopo exigia refazer o
+  // fetch. A lista não é mais filtrada (a visão é igual para todos; o que muda
+  // é o que se pode editar), então o refetch virava trabalho repetido — a flag
+  // hoje só decide se o aviso aparece, e isso é render, não busca.
   useEffect(() => {
     if (authLoading || permissionsLoading || !id) return;
     fetchProjectData();
-  }, [activityScopedAccess, authLoading, permissionsLoading, id]);
+  }, [authLoading, permissionsLoading, id]);
 
   const loadAccess = useCallback(async (silent = false) => {
     if (!id) return;
@@ -506,7 +511,7 @@ export default function ProjectDetailsPage() {
       const [{ data: perms }, { data: tabPerms, error: tabError }, { data: projectRow }] = await Promise.all([
         supabase
           .from("project_members")
-          .select("id, invitation_status, can_create, can_edit, can_delete, can_move")
+          .select("id, invitation_status, can_create, can_edit, can_delete, can_move, can_edit_own")
           .eq("project_id", id)
           .eq("user_id", currentUser.id)
           .maybeSingle(),
@@ -582,12 +587,26 @@ export default function ProjectDetailsPage() {
       }
       setAccessDenied(false);
       setActivityScopedAccess(isActivityScoped);
-      // If member exists, use those granular permissions. Otherwise (Líder/Participante),
-      // grant full operational permissions by default.
+      /**
+       * A permissão do membro vem TODA do banco.
+       *
+       * `can_create` era forçado a `true` aqui, ignorando a coluna: o nível
+       * mais baixo da tela de equipe ("lê e comenta") não impedia criar
+       * atividade. A tela oferecia quatro escolhas e o sistema cumpria três —
+       * e quem escolhia o nível mais restrito não recebia o que escolheu.
+       *
+       * A RLS de INSERT (`can_create_activity_v2` → `can_member_action(...,
+       * 'create')`) sempre leu a coluna. Eram os dois lados discordando de
+       * novo, com o front sendo o mais permissivo desta vez.
+       *
+       * Quem não é membro mas lidera/gerencia continua com acesso pleno; quem
+       * entra só por atividade continua sem permissão de projeto — edita as
+       * suas pelo vínculo com a atividade, não por esta linha.
+       */
       setUserPerms(
         hasValidMembership
           ? {
-              can_create: true,
+              can_create: !!perms.can_create,
               can_edit: !!perms.can_edit,
               can_delete: !!perms.can_delete,
               can_move: !!perms.can_move,
@@ -958,33 +977,27 @@ export default function ProjectDetailsPage() {
       if (phasesError) throw new Error(toErrorMessage(phasesError, "phases"));
       if (activitiesError) throw new Error(toErrorMessage(activitiesError, "activities"));
 
-      const candidateUsers = buildUserCandidates([
-        profile?.full_name,
-        profile?.email,
-        currentUser?.email,
-        profile?.id,
-        currentUser?.id,
-      ]);
-
-      const visibleActivities = activityScopedAccess
-        ? (activitiesData || []).filter((activity: any) => (
-            matchesIdentity(activity.assigned_to, candidateUsers) ||
-            (Array.isArray(activity.participants) && anyMatchesIdentity(activity.participants, candidateUsers))
-          ))
-        : (activitiesData || []);
-
-      const visiblePhaseIds = new Set(
-        visibleActivities
-          .map((activity: any) => activity.phase_id)
-          .filter((phaseId: string | null | undefined): phaseId is string => Boolean(phaseId)),
-      );
-
-      setPhases(
-        activityScopedAccess
-          ? (phasesData || []).filter((phase) => visiblePhaseIds.has(phase.id))
-          : (phasesData || []),
-      );
-      setActivities(visibleActivities);
+      /**
+       * VISIBILIDADE E EDIÇÃO SÃO EIXOS INDEPENDENTES.
+       *
+       * Aqui a tela filtrava a lista para quem não é da equipe: mostrava só as
+       * atividades da pessoa e escondia as fases que não continham nenhuma
+       * delas. Quem tem uma atividade num projeto de 40 via um projeto de uma
+       * atividade — e não havia nada dizendo que a visão era parcial.
+       *
+       * Isso confundia duas perguntas diferentes: "posso mexer nisto?" e "sei
+       * que isto existe?". O acesso por atividade restringe a PRIMEIRA
+       * (`canMutateActivity` já cuida disso, e a RLS também); não deveria
+       * responder à segunda. É a regra que o monday publica ("todos continuam
+       * vendo todos os itens" mesmo com a edição restrita) e a razão de o Jira
+       * separar `Browse Projects` de `Edit Issues`.
+       *
+       * A RLS acompanha: `can_view_project_work_v2` (20260818150000) passou a
+       * reconhecer o vínculo por atividade na LEITURA. Sem ela esta mudança não
+       * teria efeito — o banco devolveria a lista curta de qualquer jeito.
+       */
+      setPhases(phasesData || []);
+      setActivities(activitiesData || []);
 
       // Build consumed-minutes map for kanban cards
       const map: Record<string, number> = {};
@@ -1082,7 +1095,7 @@ export default function ProjectDetailsPage() {
     if (id) {
       const { data: stageRows } = await supabase
         .from("workflow_stages")
-        .select("id, title, display_order, is_final")
+        .select("*")
         .eq("project_id", id)
         .order("display_order", { ascending: true });
 
@@ -1096,9 +1109,17 @@ export default function ProjectDetailsPage() {
           .toLowerCase()
           .trim();
 
-      const explicitAFazer = stageList.find((stage) => {
+      // A coluna de reabertura vem da CATEGORIA, não do título: ela passou a
+      // se chamar "Não iniciado" (migration 20260814120000), e a busca por nome
+      // deixaria de achar — a tarefa reaberta cairia numa coluna qualquer, pelo
+      // fallback de `display_order`. Ver o mesmo trecho em ActivityKanban.
+      const porCategoria = stageList.find(
+        (stage) => (stage as { categoria?: string }).categoria === "a_iniciar",
+      );
+      const explicitAFazer = porCategoria ?? stageList.find((stage) => {
         const title = normalized(stage.title);
-        return title === "a fazer" || title === "afazer" || title.includes("a fazer");
+        return title === "a fazer" || title === "afazer" || title.includes("a fazer")
+          || title === "nao iniciado" || title === "não iniciado";
       });
       const displayOrderOne = stageList.find(
         (stage) => !stage.is_final && stage.display_order === 1,
@@ -1239,7 +1260,7 @@ export default function ProjectDetailsPage() {
     });
     if (!ok) return;
     const trashedAt = new Date().toISOString();
-    // Coletar a atividade + todos os descendentes (subtarefas em qualquer nível)
+    // Coletar a atividade + todos os descendentes (subatividades em qualquer nível)
     const idsToTrash = new Set<string>([activityId]);
     let frontier: string[] = [activityId];
     while (frontier.length > 0) {
@@ -1284,7 +1305,7 @@ export default function ProjectDetailsPage() {
     const trashedIds = Array.from(idsToTrash);
     toast.success(
       trashedIds.length > 1
-        ? `Atividade e ${trashedIds.length - 1} subtarefa(s) movidas para a lixeira`
+        ? `Atividade e ${trashedIds.length - 1} subatividade(s) movidas para a lixeira`
         : "Atividade movida para a lixeira",
       {
         action: {
@@ -1365,30 +1386,68 @@ export default function ProjectDetailsPage() {
   return (
     <main className="px-4 py-4 bg-muted/70 dark:bg-background min-h-[calc(100vh-3.5rem)]">
         <div className="space-y-6">
+          {/* ACESSO POR ATIVIDADE, dito na tela.
+              Quem entra por ter uma atividade atribuída — sem estar na equipe —
+              vê o projeto inteiro, mas só edita o que é seu. Antes isso era
+              invisível: a pessoa descobria a limitação ao tentar salvar e levar
+              erro. O aviso nomeia a regra E a saída (pedir à equipe), no mesmo
+              espírito de `avisoSemPermissao` no Kanban. */}
+          {activityScopedAccess && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-warning/40 bg-warning/10 px-3.5 py-2.5">
+              <Info className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+              <p className="text-xs text-foreground/80 leading-relaxed">
+                <span className="font-semibold text-warning">Você participa deste projeto por atividade.</span>{" "}
+                Vê tudo o que acontece aqui, mas só edita as atividades em que é responsável ou participante.
+                {project?.manager?.trim() || project?.owner?.trim()
+                  ? ` Para editar o restante, peça a ${(project?.manager?.trim() || project?.owner?.trim())} para incluir você na equipe.`
+                  : " Para editar o restante, peça ao líder do projeto para incluir você na equipe."}
+              </p>
+            </div>
+          )}
           {/* Project Info Card */}
-          <Card className="px-5 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4 text-sm">
+          {/* CABEÇALHO: identidade à esquerda, o que se consulta à direita.
+              Antes tudo tinha o mesmo peso — "Projeto:", "Líder:", "Entrega
+              em:", "Progresso:" no mesmo tamanho e cor. O nome do projeto, que
+              é a identidade da tela, competia com rótulos de campo e ainda era
+              truncado em 20 caracteres enquanto "18 D Restantes" piscava com
+              espaço de sobra.
+              Nada foi removido: o que muda é hierarquia. */}
+          <Card className="px-5 py-2.5">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <Button
                   variant={showDashboard ? "default" : "outline"}
                   size="sm"
-                  className="gap-1.5 h-8"
+                  className="gap-1.5 h-8 shrink-0"
                   onClick={() => setShowDashboard(!showDashboard)}
+                  title="Painel do projeto"
                 >
                   <LayoutDashboard className="w-3.5 h-3.5" />
-                  Dashboard
+                  <span className="hidden sm:inline">Dashboard</span>
                 </Button>
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-muted-foreground">Projeto:</span>
-                  <span className="font-semibold text-foreground truncate max-w-[260px]" title={project.title}>
-                    {project.title}
-                  </span>
-                </div>
+                {/* O rótulo "Projeto:" saiu: numa tela de projeto, o nome em
+                    destaque é obviamente o projeto. O espaço vai para o nome,
+                    que agora cabe inteiro. */}
+                <h1 className="text-[15px] font-semibold text-foreground truncate min-w-0" title={project.title}>
+                  {project.title}
+                </h1>
                 {canEdit && (
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingProject(project); setEditDialogOpen(true); }}>
-                    <Pencil className="w-3.5 h-3.5" />
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-muted-foreground" title="Editar projeto" onClick={() => { setEditingProject(project); setEditDialogOpen(true); }}>
+                    <Pencil className="w-3 h-3" />
                   </Button>
                 )}
+              </div>
+
+              {/* METADADOS: menores e separados por pontos — eles se CONSULTAM,
+                  não se leem. Sem rótulo: o nome de uma pessoa no cabeçalho é o
+                  responsável, e uma data com calendário é o prazo.
+
+                  `ml-6`, NÃO `ml-auto`: empurrar para a borda abria um vão de
+                  400px no meio da faixa, e informação separada por vazio deixa
+                  de se ler como um conjunto. Agora ela segue o nome, com uma
+                  folga fixa — a linha se lê da esquerda para a direita sem
+                  buraco, e a largura sobra à direita em vez de no meio. */}
+              <div className="flex items-center gap-2 text-[12px] text-muted-foreground ml-6 min-w-0">
                 {/* UMA pessoa só no topo: mostrar Líder e Gestor lado a lado
                     enchia a barra sem acrescentar — quem olha o cabeçalho quer
                     saber a quem recorrer, não o organograma. A ficha continua
@@ -1403,33 +1462,35 @@ export default function ProjectDetailsPage() {
                   const quem = gestor || lider;
                   if (!quem) return null;
                   return (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground">{gestor ? "Gestor:" : "Líder:"}</span>
-                      <span className="font-medium text-foreground">{quem}</span>
-                    </div>
+                    <span className="hidden md:inline truncate max-w-[150px]" title={`${gestor ? "Gestor" : "Líder"}: ${quem}`}>
+                      {quem}
+                    </span>
                   );
                 })()}
                 {project.due_date && (() => {
-                  const { dueDate, diffDays, isOverdue, isUrgent } = getProjectDeadlineInfo(project.due_date);
+                  const { diffDays, isOverdue, isUrgent } = getProjectDeadlineInfo(project.due_date);
                   return (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-primary" />
-                      <span className="font-semibold text-foreground">Entrega em:</span>
-                      <span className="font-semibold text-foreground">{formatProjectDueDate(project.due_date)}</span>
-                      <span className={`font-bold text-xs px-2 py-0.5 rounded-full animate-pulse ${isOverdue ? "bg-destructive/90 text-destructive-foreground" : isUrgent ? "bg-warning/90 text-warning-foreground" : "bg-success/90 text-success-foreground"}`}>
-                        {isOverdue ? `${Math.abs(diffDays)}d atrasado` : diffDays === 0 ? "Hoje!" : `${diffDays} D Restantes`}
+                    <>
+                      <span className="text-muted-foreground/40 hidden md:inline">·</span>
+                      <span className="inline-flex items-center gap-1.5" title={`Entrega em ${formatProjectDueDate(project.due_date)}`}>
+                        <Calendar className="w-3.5 h-3.5 shrink-0" />
+                        <span className="hidden lg:inline">{formatProjectDueDate(project.due_date)}</span>
                       </span>
-                    </div>
+                      {/* O `animate-pulse` saiu: algo piscando o tempo todo deixa
+                          de ser alerta e vira ruído de fundo. A cor já diz a
+                          urgência, e "18 dias" lê melhor que "18 D Restantes". */}
+                      <span className={`font-semibold text-[11px] px-2 py-0.5 rounded-full shrink-0 ${isOverdue ? "bg-destructive/90 text-destructive-foreground" : isUrgent ? "bg-warning/90 text-warning-foreground" : "bg-success/90 text-success-foreground"}`}>
+                        {isOverdue ? `${Math.abs(diffDays)}d atrasado` : diffDays === 0 ? "Hoje!" : `${diffDays} dias`}
+                      </span>
+                    </>
                   );
                 })()}
                 {project.blockers && (
-                  <div className="flex items-center gap-1.5 text-destructive">
-                    <span>⚠️</span>
-                    <span className="font-medium text-xs">{project.blockers}</span>
-                  </div>
+                  <span className="inline-flex items-center gap-1 text-destructive shrink-0" title={project.blockers}>
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span className="font-medium truncate max-w-[120px] hidden lg:inline">{project.blockers}</span>
+                  </span>
                 )}
-              </div>
-              <div className="flex items-center gap-3 text-sm">
                 {/* Riscos ao lado do progresso: é a informação que muda uma
                     decisão de gestão, e antes não aparecia em tela nenhuma.
                     Só surge quando há risco aberto — projeto sem risco não
@@ -1453,11 +1514,34 @@ export default function ProjectDetailsPage() {
                     </span>
                   </button>
                 )}
-                <span className="text-muted-foreground">Progresso:</span>
-                <span className="font-medium text-foreground">{completedActivities}/{activities.length} tarefas ({activityProgress.toFixed(0)}%)</span>
-                <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-success transition-all" style={{ width: `${activityProgress}%` }} />
-                </div>
+                {/* PROGRESSO sem o rótulo "Progresso:": a barra já diz o que é.
+                    O percentual vem em destaque (é o número que se olha), e a
+                    contagem fica ao lado, discreta — quem quer o detalhe lê,
+                    quem quer o resumo não precisa. */}
+                <span className="text-muted-foreground/40">·</span>
+                <span
+                  className="inline-flex items-center gap-2 shrink-0"
+                  title={`${completedActivities} de ${activities.length} tarefas concluídas`}
+                >
+                  {/* A BARRA SÓ QUANDO TEM O QUE MOSTRAR. Com 0% ela é um
+                      trilho cinza de 64px que não informa nada — ocupa o espaço
+                      entre o selo do prazo e o número, e o vazio parece falha
+                      de carregamento. Abaixo de 1% o percentual fala sozinho. */}
+                  {activityProgress >= 1 && (
+                    <span className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <span className="block h-full bg-success transition-all" style={{ width: `${activityProgress}%` }} />
+                    </span>
+                  )}
+                  {/* UM separador só nesta sequência: havia um ponto antes da
+                      barra e outro antes da contagem, e "18 dias · ▬ 0% · 1/413"
+                      vira uma fila de pontos que picota a leitura. O percentual
+                      e a contagem são o MESMO dado em duas formas — ficam juntos,
+                      separados por espaço, não por pontuação. */}
+                  <span className="font-semibold text-foreground tabular-nums">{activityProgress.toFixed(0)}%</span>
+                  <span className="tabular-nums text-muted-foreground/70 hidden lg:inline">
+                    {completedActivities}/{activities.length}
+                  </span>
+                </span>
               </div>
             </div>
           </Card>
@@ -1548,6 +1632,11 @@ export default function ProjectDetailsPage() {
                 if (activeTab === val) setActiveTab(next[0] ?? "kanban");
               };
 
+              // "+ Visualização" vai para o FIM da fila (extraSlotPosition
+              // abaixo). Abria a barra, antes das abas — e adicionar uma visão
+              // acontece talvez uma vez por mês, enquanto trocar de aba
+              // acontece dezenas de vezes por dia. O que é raro sai da frente
+              // do que é constante.
               return (
                 <div className="mb-2">
                   <DraggableTabBar
@@ -1557,15 +1646,16 @@ export default function ProjectDetailsPage() {
                     tabs={renderedTabs}
                     onRemoveTab={handleRemoveTab}
                     removableValues={renderedTabs.map(t => t.value)}
-                    extraSlotPosition="left"
+                    extraSlotPosition="right"
                     extraSlot={
                       <Popover open={tabPickerOpen} onOpenChange={setTabPickerOpen}>
                         <PopoverTrigger asChild>
                           <button
-                            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors"
+                            className="flex items-center gap-1 ml-1 px-2.5 py-1.5 rounded-md border border-dashed border-border text-xs font-medium whitespace-nowrap text-muted-foreground hover:text-foreground hover:border-solid transition-colors"
                             aria-label="Adicionar visualização"
+                            title="Adicionar visualização"
                           >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-3.5 h-3.5" />
                             Visualização
                           </button>
                         </PopoverTrigger>
@@ -1609,6 +1699,9 @@ export default function ProjectDetailsPage() {
                 onToggleActivity={handleToggleActivity}
                 isAdmin={canDelete}
                 canCreate={canCreate}
+                projectOwner={project?.manager?.trim() || project?.owner?.trim() || null}
+                canEdit={canEdit}
+                canMove={canMove}
                 projectLocked={isProjectConcluded}
                 isQualityProject={isQualityProject}
                 profilesMap={profilesMap}
@@ -1745,9 +1838,13 @@ export default function ProjectDetailsPage() {
             </TabsContent>
 
             <TabsContent value="changes" className="mt-0">
+              {/* Gestor primeiro, líder como reserva — o líder passou a ser
+                  OPCIONAL, e este campo sozinho ficaria vazio nos projetos que
+                  só têm gestor, deixando a tela sem a quem apontar. Mesmo
+                  fallback que o Kanban já usa em `projectOwner`. */}
               <ChangeRequestsManager
                 projectId={id!}
-                projectOwner={project.owner}
+                projectOwner={project.manager?.trim() || project.owner?.trim() || null}
                 onChanged={fetchPendingChangeRequests}
               />
             </TabsContent>

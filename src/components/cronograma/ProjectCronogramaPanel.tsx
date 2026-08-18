@@ -126,7 +126,7 @@ function LegendRow({ sample, title, desc }: { sample: ReactNode; title: string; 
 type ColKey =
   | "id" | "eap" | "title" | "preds" | "responsible" | "column" | "status" | "duration"
   | "plannedStart" | "plannedEnd" | "actualStart" | "actualEnd"
-  | "variance" | "progress" | "slack" | "slackFree" | "mainResource" | "effort" | "compression"
+  | "variance" | "progress" | "slack" | "slackFree" | "mainResource" | "effort"
   | "observation" | "project" | "blockedDays";
 
 const COL_LABELS: Record<ColKey, string> = {
@@ -137,7 +137,7 @@ const COL_LABELS: Record<ColKey, string> = {
   variance: "Desvio (d)",
   progress: "% Concluído", slack: "Folga Total", slackFree: "Folga Livre",
   mainResource: "Recurso Principal", effort: "Esforço (h)",
-  compression: "Compressão", observation: "Observações",
+  observation: "Observações",
   project: "Projeto", blockedDays: "Dias Bloqueada",
 };
 
@@ -545,15 +545,22 @@ export function ProjectCronogramaPanel({
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // ===== Mock estável (para colunas ainda não persistidas) =====
-  const mockFor = (id: string, idx: number) => {
-    let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
-    return {
-      effortHours: 4 + (h % 36),
-      compression: ["Baixa", "Média", "Alta", "Nenhuma"][h % 4],
-      observation: ["", "Aguardando aprovação do PO", "Risco de overlap com sprint", "Depende de fornecedor externo"][h % 4],
-      mainResource: profiles[activities[idx]?.assigned_to || ""]?.sector || "—",
-    };
-  };
+  /**
+   * O que sobrou do "mock": só `mainResource`, que NUNCA foi inventado — é o
+   * setor do responsável, derivado de dado real.
+   *
+   * As outras três eram sorteio por hash do id, e a tabela as exibia como se
+   * fossem informação: "12h", "Aguardando aprovação do PO", "Alta". Esforço e
+   * Observações passaram a ler `hours` e `description`; Compressão foi
+   * removida — não havia campo no banco, e comprimir cronograma é nivelamento
+   * de recursos, que o sistema não faz.
+   *
+   * O nome fica por ora para não espalhar renomeação por todo o arquivo, mas
+   * o conteúdo já não é falso.
+   */
+  const mockFor = (idx: number) => ({
+    mainResource: profiles[activities[idx]?.assigned_to || ""]?.sector || "—",
+  });
 
   // ===== CPM real =====
   // Traz junto o que o cálculo teve de descartar (ciclo, sem data) e as
@@ -772,7 +779,7 @@ export function ProjectCronogramaPanel({
           __isPhaseRow: true,
         }));
 
-      return [...linhasFase, ...filtered].map((a, idx) => ({ a, idx, mock: mockFor(a.id, idx) }));
+      return [...linhasFase, ...filtered].map((a, idx) => ({ a, idx, mock: mockFor(idx) }));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activities, phases, profiles, stageFilter, projectFilter, onlyUndated]
@@ -1339,6 +1346,29 @@ export function ProjectCronogramaPanel({
     toast({ title: descricao });
     return true;
   }, [activities, fetchData, toast]);
+
+  /**
+   * Atingir / desfazer um marco.
+   *
+   * Ele não passa por colunas — não tem estágio a percorrer, só aconteceu ou
+   * não. `completed_at` acompanha porque é a data que o relatório usa; ao
+   * desfazer ela é limpa, senão o relatório conta uma entrega que não houve.
+   *
+   * A coluna também é gravada, quando existe uma final: outras telas ainda
+   * leem `workflow_stage_id` para saber se algo fechou, e deixá-la para trás
+   * criaria um marco "atingido" que o Backlog mostra como pendente.
+   */
+  const alternarMarco = useCallback(async (a: LinhaEditavel & { status?: string; project_id?: string }) => {
+    const atingido = a.status === "completed";
+    const finais = (stagesByProject.get(a.project_id || "") || []) as { id: string; is_final?: boolean }[];
+    const colunaFinal = finais.find((s) => s.is_final)?.id ?? null;
+    const patch: Record<string, unknown> = {
+      status: atingido ? "pending" : "completed",
+      completed_at: atingido ? null : new Date().toISOString(),
+    };
+    if (colunaFinal && !atingido) patch.workflow_stage_id = colunaFinal;
+    await gravarCampo(a.id, patch, atingido ? "Marco reaberto" : "Marco atingido");
+  }, [gravarCampo, stagesByProject]);
 
   /**
    * Esta linha aceita edição na célula?
@@ -1936,6 +1966,33 @@ export function ProjectCronogramaPanel({
           : progressInfo.paused
             ? "bg-amber-500/10 text-amber-700 border-amber-500/40"
             : "bg-primary/10 text-primary border-primary/30";
+        /* MARCO É ATINGIDO AQUI. Ele saiu do quadro (14/08/2026) — Kanban mede
+           trabalho passando por estágios, e marco não passa, acontece. Com o
+           arrasto fora, o gesto precisa existir onde ele vive: Backlog e
+           Cronograma. Um clique alterna, sem abrir o diálogo. */
+        if (a.is_milestone) {
+          const atingido = a.status === "completed";
+          return (
+            <td className="px-2 py-1.5 text-center">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); void alternarMarco(a); }}
+                title={atingido ? "Clique para desfazer" : "Clique para marcar como atingido"}
+                className="inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              >
+                <Badge variant="outline" className={cn(
+                  "text-[10px] py-0 px-1.5 gap-1 cursor-pointer transition-colors",
+                  atingido
+                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/40"
+                    : "border-dashed border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10",
+                )}>
+                  <Diamond className={cn("h-2.5 w-2.5", atingido && "fill-current")} />
+                  {atingido ? "Atingido" : "Marcar atingido"}
+                </Badge>
+              </button>
+            </td>
+          );
+        }
         return (
           <td className="px-2 py-1.5 text-center">
             <Badge variant="outline" className={cn("text-[10px] py-0 px-1.5", cls)}>
@@ -2097,17 +2154,6 @@ export function ProjectCronogramaPanel({
           </td>
         );
       })();
-      case "compression": return (
-        <td className="px-2 py-1.5 text-center">
-          <Badge variant="outline" className={cn(
-            "text-[10px] py-0 px-1.5",
-            mock.compression === "Alta" && "border-emerald-500/40 text-emerald-700",
-            mock.compression === "Média" && "border-amber-500/40 text-amber-700",
-            mock.compression === "Baixa" && "border-orange-500/40 text-orange-700",
-            mock.compression === "Nenhuma" && "text-muted-foreground",
-          )}>{mock.compression}</Badge>
-        </td>
-      );
       /* OBSERVAÇÕES idem: mostrava uma de quatro frases sorteadas ("Aguardando
          aprovação do PO"...), que ninguém escreveu. Passa a ler e gravar
          `description`, o campo real — vazio até agora porque nada o alimentava

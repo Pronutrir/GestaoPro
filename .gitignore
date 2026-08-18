@@ -37,3 +37,4 @@ scripts/vps-supabase.env
 scripts/vps-supabase-compose.yml
 scripts/reset-password.sh
 scripts/configure-azure-supabase.sh
+backup-*.json
