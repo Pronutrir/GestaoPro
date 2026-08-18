@@ -66,7 +66,7 @@ BEGIN
   WHERE p.is_trashed = false
     AND p.is_milestone IS DISTINCT FROM true
     AND EXISTS (SELECT 1 FROM public.activities f
-                 WHERE f.parent_activity_id = p.id AND f.is_trashed = false);
+                 WHERE f.parent_id = p.id AND f.is_trashed = false);
 
   SELECT count(*) INTO divergentes
   FROM public.activities p
@@ -74,20 +74,20 @@ BEGIN
   WHERE p.is_trashed = false
     AND p.is_milestone IS DISTINCT FROM true
     AND EXISTS (SELECT 1 FROM public.activities f
-                 WHERE f.parent_activity_id = p.id AND f.is_trashed = false)
+                 WHERE f.parent_id = p.id AND f.is_trashed = false)
     AND (
       -- pai fora da coluna final, mas todos os filhos concluídos
       (sp.is_final IS DISTINCT FROM true AND NOT EXISTS (
          SELECT 1 FROM public.activities f
            JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
-          WHERE f.parent_activity_id = p.id AND f.is_trashed = false
+          WHERE f.parent_id = p.id AND f.is_trashed = false
             AND sf.is_final IS DISTINCT FROM true))
       OR
       -- pai na coluna final, mas há filho aberto
       (sp.is_final = true AND EXISTS (
          SELECT 1 FROM public.activities f
            JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
-          WHERE f.parent_activity_id = p.id AND f.is_trashed = false
+          WHERE f.parent_id = p.id AND f.is_trashed = false
             AND sf.is_final IS DISTINCT FROM true))
     );
 
@@ -191,7 +191,7 @@ BEGIN
     INTO n_filhos, n_concluidos, n_iniciados
     FROM public.activities f
     LEFT JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
-   WHERE f.parent_activity_id = p_pai
+   WHERE f.parent_id = p_pai
      AND f.is_trashed = false
      AND lower(coalesce(sf.categoria, '')) IS DISTINCT FROM 'cancelada';
 
@@ -268,16 +268,16 @@ SET search_path = public
 AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
-    PERFORM public.recalcular_coluna_do_pai(OLD.parent_activity_id);
+    PERFORM public.recalcular_coluna_do_pai(OLD.parent_id);
     RETURN OLD;
   END IF;
 
-  PERFORM public.recalcular_coluna_do_pai(NEW.parent_activity_id);
+  PERFORM public.recalcular_coluna_do_pai(NEW.parent_id);
 
   -- Reparenting: o pai ANTIGO também perdeu um filho e precisa recalcular.
   IF TG_OP = 'UPDATE'
-     AND OLD.parent_activity_id IS DISTINCT FROM NEW.parent_activity_id THEN
-    PERFORM public.recalcular_coluna_do_pai(OLD.parent_activity_id);
+     AND OLD.parent_id IS DISTINCT FROM NEW.parent_id THEN
+    PERFORM public.recalcular_coluna_do_pai(OLD.parent_id);
   END IF;
 
   RETURN NEW;
@@ -286,7 +286,7 @@ END $$;
 DROP TRIGGER IF EXISTS trg_filho_recalcula_pai ON public.activities;
 
 CREATE TRIGGER trg_filho_recalcula_pai
-AFTER INSERT OR DELETE OR UPDATE OF workflow_stage_id, is_trashed, parent_activity_id
+AFTER INSERT OR DELETE OR UPDATE OF workflow_stage_id, is_trashed, parent_id
 ON public.activities
 FOR EACH ROW
 EXECUTE FUNCTION public.tg_filho_recalcula_pai();
@@ -299,6 +299,13 @@ EXECUTE FUNCTION public.tg_filho_recalcula_pai();
 -- neto. Ordenar por profundidade decrescente faz cada nível já encontrar os
 -- filhos corrigidos.
 -- ────────────────────────────────────────────────────────────────────────────
+-- Guard defensivo: o backfill chama recalcular_coluna_do_pai, que faz UPDATE em
+-- activities. Se um agrupador divergente cair em projeto concluido, o trigger
+-- trg_prevent_activity_mutation_on_concluded_project abortaria a migration.
+-- Desliga os triggers de negocio (inclui o novo trg_filho_recalcula_pai, ja que
+-- o backfill recursa explicitamente por nivel e nao depende dele). Religado apos.
+SET session_replication_role = replica;
+
 DO $$
 DECLARE
   r record;
@@ -306,19 +313,19 @@ DECLARE
 BEGIN
   FOR r IN
     WITH RECURSIVE arvore AS (
-      SELECT a.id, a.parent_activity_id, 0 AS nivel
+      SELECT a.id, a.parent_id, 0 AS nivel
         FROM public.activities a
-       WHERE a.is_trashed = false AND a.parent_activity_id IS NULL
+       WHERE a.is_trashed = false AND a.parent_id IS NULL
       UNION ALL
-      SELECT a.id, a.parent_activity_id, t.nivel + 1
+      SELECT a.id, a.parent_id, t.nivel + 1
         FROM public.activities a
-        JOIN arvore t ON a.parent_activity_id = t.id
+        JOIN arvore t ON a.parent_id = t.id
        WHERE a.is_trashed = false
     )
     SELECT t.id, t.nivel
       FROM arvore t
      WHERE EXISTS (SELECT 1 FROM public.activities f
-                    WHERE f.parent_activity_id = t.id AND f.is_trashed = false)
+                    WHERE f.parent_id = t.id AND f.is_trashed = false)
      ORDER BY t.nivel DESC
   LOOP
     PERFORM public.recalcular_coluna_do_pai(r.id);
@@ -326,6 +333,9 @@ BEGIN
   END LOOP;
   RAISE NOTICE 'BACKFILL: % agrupadores reavaliados.', n;
 END $$;
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- DEPOIS: a mesma contagem do início. Deve dar ZERO divergentes.
@@ -344,18 +354,18 @@ BEGIN
   WHERE p.is_trashed = false
     AND p.is_milestone IS DISTINCT FROM true
     AND EXISTS (SELECT 1 FROM public.activities f
-                 WHERE f.parent_activity_id = p.id AND f.is_trashed = false)
+                 WHERE f.parent_id = p.id AND f.is_trashed = false)
     AND (
       (sp.is_final IS DISTINCT FROM true AND NOT EXISTS (
          SELECT 1 FROM public.activities f
            JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
-          WHERE f.parent_activity_id = p.id AND f.is_trashed = false
+          WHERE f.parent_id = p.id AND f.is_trashed = false
             AND sf.is_final IS DISTINCT FROM true))
       OR
       (sp.is_final = true AND EXISTS (
          SELECT 1 FROM public.activities f
            JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
-          WHERE f.parent_activity_id = p.id AND f.is_trashed = false
+          WHERE f.parent_id = p.id AND f.is_trashed = false
             AND sf.is_final IS DISTINCT FROM true))
     );
 
