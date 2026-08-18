@@ -365,6 +365,7 @@ export function SortableColumn({
   onToggleStageBlocked,
   onToggleStageVisible,
   allStages,
+  podeMutar,
   selecionados,
   onToggleSelecao,
   cardFields,
@@ -425,6 +426,8 @@ export function SortableColumn({
   onToggleStageBlocked: (id: string, current: boolean) => Promise<void>;
   onToggleStageVisible: (id: string, current: boolean) => Promise<void>;
   allStages: WorkflowStage[];
+  /** A pessoa pode mexer nesta atividade? Desenha o cadeado no card. */
+  podeMutar?: (a: Activity) => boolean;
   /** Seleção em lote — vive no quadro, porque atravessa colunas. */
   selecionados?: Set<string>;
   onToggleSelecao?: (id: string, e: React.MouseEvent) => void;
@@ -711,6 +714,9 @@ export function SortableColumn({
     const commonCardProps = {
       activity,
       phases,
+      // Cadeado no card quando a pessoa não pode mexer nesta atividade — ela
+      // vê antes de tentar, em vez de descobrir pelo aviso de erro.
+      podeMexer: podeMutar ? podeMutar(activity) : true,
       // Seleção em lote: a coluna só repassa: quem guarda o conjunto é o
       // quadro, porque a seleção atravessa colunas.
       selecionado: selecionados?.has(activity.id) ?? false,

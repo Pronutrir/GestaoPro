@@ -34,6 +34,7 @@ import {
   Link2,
   Layers,
   EyeOff,
+  Lock,
 } from "lucide-react";
 import { type DraggableSyntheticListeners } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
@@ -257,6 +258,7 @@ function KanbanCardBase({
   selecionado = false,
   modoSelecao = false,
   onToggleSelecao,
+  podeMexer = true,
 }: {
   activity: Activity;
   phases: Phase[];
@@ -314,6 +316,14 @@ function KanbanCardBase({
   selecionado?: boolean;
   modoSelecao?: boolean;
   onToggleSelecao?: (e: React.MouseEvent) => void;
+  /**
+   * A pessoa pode mexer NESTA atividade?
+   *
+   * `false` desenha um cadeado no lugar da alça de arrastar. Antes o card
+   * parecia arrastável para todo mundo, e o aviso só aparecia DEPOIS de
+   * soltar — a pessoa descobria o bloqueio pelo erro.
+   */
+  podeMexer?: boolean;
 }) {
   // estaAtrasado compara DIA com DIA. A conta local anterior montava a data às
   // 00:00 e comparava com `new Date()` (com hora), então tudo que vencia HOJE
@@ -451,7 +461,17 @@ function KanbanCardBase({
                 só importa no hover. Flutua sobre a borda esquerda; o card
                 reserva 18px (pl acima) só quando arrastável, senão a alça
                 cobria o nº EAP no hover. */}
-            {dragListeners ? (
+            {/* CADEADO no lugar da alça quando a pessoa não pode mexer. Antes
+                o card parecia arrastável para todo mundo e o bloqueio só
+                aparecia DEPOIS de soltar — descobria-se pelo erro. */}
+            {!podeMexer && !readOnlyPreview ? (
+              <span
+                className="absolute left-0 top-0 bottom-0 w-4 flex items-start justify-center pt-2 text-muted-foreground/40"
+                title="Você não pode mover esta atividade — não faz parte da equipe do projeto nem é responsável por ela"
+              >
+                <Lock className="w-3 h-3" />
+              </span>
+            ) : dragListeners ? (
               <button
                 className="absolute left-0 top-0 bottom-0 w-4 flex items-start justify-center pt-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground"
                 onClick={(e) => e.stopPropagation()}

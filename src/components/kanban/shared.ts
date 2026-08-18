@@ -390,6 +390,8 @@ export interface ActivityKanbanProps {
   onToggleActivity: (activityId: string, currentStatus: string) => void;
   isAdmin?: boolean;
   canCreate?: boolean;
+  /** Líder do projeto — citado no aviso de bloqueio, para a pessoa saber a quem pedir. */
+  projectOwner?: string | null;
   /** `project_members.can_edit` / `can_move` — permissão do membro no projeto. */
   canEdit?: boolean;
   canMove?: boolean;

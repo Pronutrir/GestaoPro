@@ -185,6 +185,7 @@ export const ActivityKanban = ({
    * `can_delete` não conseguia mexer em nada. Medido em 17/08/2026: 39 pessoas
    * nessa situação.
    */
+  projectOwner,
   canEdit = false,
   canMove = false,
   projectLocked = false,
@@ -926,32 +927,67 @@ export const ActivityKanban = ({
     [myId, myName, profilesMap]
   );
 
+  /**
+   * TRÊS NÍVEIS DE ACESSO, deduzidos do vínculo mais forte (18/08/2026).
+   *
+   *   PROJETO — equipe com permissão, líder, gestor, criador do projeto.
+   *             Mexe em QUALQUER atividade.
+   *   TAREFA  — responsável, participante ou criador DAQUELA atividade.
+   *             Mexe só nas dela.
+   *   LEITURA — nenhum vínculo. Vê e comenta.
+   *
+   * Antes era binário: ou a pessoa passava por `canEdit`, ou caía no teste de
+   * "é minha". Quem não tinha vínculo nenhum com o projeto recebia acesso
+   * TOTAL — mais permissão que 28 pessoas que foram formalmente convidadas.
+   *
+   * Enumerado na base: há SEIS formas de estar ligado a um projeto, e duas
+   * eu não havia contado — 6 pessoas lideram projetos sem constar na equipe,
+   * e 8 participam de atividades na mesma situação. Cortar por equipe apenas
+   * as deixaria de fora do próprio trabalho.
+   *
+   * Mercado: Jira exige `Browse Projects` mas o concede ao papel dinâmico
+   * "Current Assignee"; Asana dá acesso À TAREFA a quem é atribuído, com
+   * nível configurável; Linear só permite atribuir a quem já é membro. Todos
+   * têm um degrau entre "membro pleno" e "sem acesso" — é esse degrau.
+   *
+   * A regra vive em `canMutateActivity`, logo abaixo.
+   */
+
+  /**
+   * O aviso de bloqueio, com o CAMINHO e não só a regra.
+   *
+   * Os quatro avisos diziam "Somente o criador ou responsável da atividade
+   * pode X" — verdade, mas a pessoa ficava sem saber a quem pedir. Agora o
+   * texto nomeia quem resolve (o líder do projeto) e as duas saídas: entrar
+   * na equipe, ou receber a atividade.
+   */
+  const avisoSemPermissao = useCallback((acao: string) => {
+    const quem = (projectOwner || "").trim();
+    toast({
+      title: `Você não pode ${acao}`,
+      description: quem
+        ? `Só a equipe do projeto e quem responde pela atividade podem. Peça a ${quem} para incluir você na equipe, ou para atribuir esta atividade a você.`
+        : "Só a equipe do projeto e quem responde pela atividade podem. Peça ao líder do projeto para incluir você na equipe, ou para atribuir esta atividade a você.",
+      variant: "destructive",
+    });
+  }, [projectOwner, toast]);
+
   const canMutateActivity = useCallback((a?: Activity | null) => {
     if (!a) return false;
     if (isAdmin) return true;
-    /**
-     * MEMBRO DA EQUIPE COM PERMISSÃO TAMBÉM MEXE.
-     *
-     * A regra reconhecia só três papéis — admin, criador e responsável — e
-     * ignorava `project_members.can_edit`/`can_move`, que a tela de equipe
-     * grava e que a página já lia. Quem foi convidado para o projeto com
-     * permissão de editar não conseguia mover um card sequer.
-     *
-     * `canEdit || canMove` porque as duas são formas de mexer na atividade, e
-     * quem tem uma sem a outra ainda precisa passar por aqui — o caminho
-     * específico (mover, bloquear, editar) valida a sua no ponto de uso.
-     */
+    // NÍVEL PROJETO: mexe em qualquer atividade.
     if (canEdit || canMove) return true;
-    if (myId && a.created_by === myId) return true;
-    if (myId && a.assigned_to === myId) return true;
-    if (myName) {
-      const assignedRaw = (a.assigned_to || "").trim().toLowerCase();
-      const resolvedAssigned = a.assigned_to ? (profilesMap[a.assigned_to] || "").trim().toLowerCase() : "";
-      if (assignedRaw && assignedRaw === myName) return true;
-      if (resolvedAssigned && resolvedAssigned === myName) return true;
-    }
-    return false;
-  }, [isAdmin, canEdit, canMove, myId, myName, profilesMap]);
+    /**
+     * NÍVEL TAREFA: só nas suas.
+     *
+     * `isMineActivity` já resolve os três casos — criador, responsável e
+     * PARTICIPANTE — e ainda traduz UUID para nome, que é como
+     * `assigned_to` chega em parte da base. A regra daqui repetia dois deles
+     * e esquecia o participante: 8 pessoas colaboram em atividades sem ser
+     * responsáveis, e não passariam.
+     */
+    return isMineActivity(a);
+  }, [isAdmin, canEdit, canMove, isMineActivity]);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
@@ -1247,7 +1283,7 @@ export const ActivityKanban = ({
     }
     const activity = activities.find((a) => a.id === activityId);
     if (!canMutateActivity(activity)) {
-      toast({ title: "Somente o criador ou responsável da atividade pode bloquear.", variant: "destructive" });
+      avisoSemPermissao("bloquear esta atividade");
       return;
     }
     if (activity?.is_blocked) {
@@ -1294,7 +1330,7 @@ export const ActivityKanban = ({
     }
     const activity = activities.find((a) => a.id === activityId);
     if (!canMutateActivity(activity)) {
-      toast({ title: "Somente o criador ou responsável da atividade pode mover para backlog.", variant: "destructive" });
+      avisoSemPermissao("mover para o backlog");
       return;
     }
     const backlogStage = stages.find((s) => s.display_order === 0);
@@ -1484,7 +1520,7 @@ export const ActivityKanban = ({
     }
     const activity = activities.find((a) => a.id === activityId);
     if (!canMutateActivity(activity)) {
-      toast({ title: "Somente o criador ou responsável da atividade pode mover.", variant: "destructive" });
+      avisoSemPermissao("mover esta atividade");
       return;
     }
     const target = stages.find((s) => s.id === stageId);
@@ -1555,7 +1591,7 @@ export const ActivityKanban = ({
     });
     await subirPaisCompletos(activityId, stageId);
     onDataChanged();
-  }, [activities, canMutateActivity, filhosForaDaColuna, onDataChanged, projectLocked, showProjectLockedToast, stages, subirPaisCompletos, toast]);
+  }, [activities, avisoSemPermissao, canMutateActivity, filhosForaDaColuna, onDataChanged, projectLocked, showProjectLockedToast, stages, subirPaisCompletos, toast]);
 
   /** Duplica a atividade (com a subárvore). A capacidade já existia em
    *  lib/duplicateActivity, usada só dentro do diálogo de edição. */
@@ -1868,7 +1904,7 @@ export const ActivityKanban = ({
 
     const draggedActivity = activities.find((a) => a.id === activityId);
     if (!canMutateActivity(draggedActivity)) {
-      toast({ title: "Somente o criador ou responsável da atividade pode mover no kanban.", variant: "destructive" });
+      avisoSemPermissao("mover no kanban");
       return;
     }
     const currentStageId = draggedActivity?.workflow_stage_id || (stages.length > 0 ? stages[0].id : null);
@@ -3377,6 +3413,7 @@ export const ActivityKanban = ({
                 onToggleStageBlocked={handleToggleStageBlocked}
                 onToggleStageVisible={handleToggleStageVisible}
                 allStages={stages}
+                podeMutar={canMutateActivity}
                 selecionados={selecionados}
                 onToggleSelecao={(id, e) => alternarSelecao(id, e)}
                 cardFields={cardFields}

@@ -1668,6 +1668,7 @@ export default function ProjectDetailsPage() {
                 onToggleActivity={handleToggleActivity}
                 isAdmin={canDelete}
                 canCreate={canCreate}
+                projectOwner={project?.manager?.trim() || project?.owner?.trim() || null}
                 canEdit={canEdit}
                 canMove={canMove}
                 projectLocked={isProjectConcluded}
