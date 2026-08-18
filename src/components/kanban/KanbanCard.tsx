@@ -86,6 +86,7 @@ import {
 
 export function SortableKanbanCard({
   activity,
+  podeMexer = true,
   phases,
   onEdit,
   onDelete,
@@ -161,9 +162,14 @@ export function SortableKanbanCard({
   hoursStat?: HoursStat;
   profilesMap?: Record<string, string>;
   profileAvatarMap?: Record<string, string>;
+  podeMexer?: boolean;
 }) {
+  // `disabled` na RAIZ, não só o cadeado no lugar da alça: o dnd-kit também
+  // ativa o arrasto pelo corpo do card. Sem isto o card ainda saía do lugar
+  // para quem não pode mexer, e o bloqueio só aparecia ao soltar — o erro
+  // depois da ação, que é justamente o que o cadeado veio evitar.
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: activity.id });
+    useSortable({ id: activity.id, disabled: !podeMexer });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -184,6 +190,7 @@ export function SortableKanbanCard({
         moveTargets={moveTargets}
         onLinkParent={onLinkParent}
         dragListeners={listeners}
+        podeMexer={podeMexer}
         isAdmin={isAdmin}
         isBlocked={isBlocked}
         onToggleBlocked={onToggleBlocked}
