@@ -118,12 +118,12 @@ AS $$
    WHERE s.project_id = p_project_id
      AND CASE p_papel
            WHEN 'concluida' THEN
-             (lower(coalesce(s.categoria, '')) = 'concluida' OR s.is_final = true)
+             (lower(coalesce(s.categoria::text, '')) = 'concluida' OR s.is_final = true)
            WHEN 'inicio' THEN
-             (lower(coalesce(s.categoria, '')) IN ('a_iniciar', 'backlog')
+             (lower(coalesce(s.categoria::text, '')) IN ('a_iniciar', 'backlog')
               OR (s.categoria IS NULL AND s.display_order = 0))
            WHEN 'andamento' THEN
-             (lower(coalesce(s.categoria, '')) IN ('andamento', 'revisao')
+             (lower(coalesce(s.categoria::text, '')) IN ('andamento', 'revisao')
               OR (s.categoria IS NULL
                   AND s.is_final IS DISTINCT FROM true
                   AND s.display_order > 0
@@ -176,7 +176,7 @@ BEGIN
   -- pendente nem entrega feita -- fica fora da conta, como em `subAvanco`.
   SELECT count(*),
          count(*) FILTER (WHERE sf.is_final = true
-                             OR lower(coalesce(sf.categoria, '')) = 'concluida'),
+                             OR lower(coalesce(sf.categoria::text, '')) = 'concluida'),
          -- INICIADO exige uma coluna DE VERDADE. O `sf.id IS NOT NULL` não é
          -- redundante: filho sem `workflow_stage_id` (criado pelo importador,
          -- ou de quadro antigo) faz o LEFT JOIN devolver tudo NULL, e aí
@@ -186,14 +186,14 @@ BEGIN
          -- que é a mesma classe de erro que esta migration foi corrigir.
          count(*) FILTER (WHERE sf.id IS NOT NULL
                              AND sf.is_final IS DISTINCT FROM true
-                             AND lower(coalesce(sf.categoria, '')) NOT IN ('a_iniciar', 'backlog')
+                             AND lower(coalesce(sf.categoria::text, '')) NOT IN ('a_iniciar', 'backlog')
                              AND NOT (sf.categoria IS NULL AND sf.display_order = 0))
     INTO n_filhos, n_concluidos, n_iniciados
     FROM public.activities f
     LEFT JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
    WHERE f.parent_id = p_pai
      AND f.is_trashed = false
-     AND lower(coalesce(sf.categoria, '')) IS DISTINCT FROM 'cancelada';
+     AND lower(coalesce(sf.categoria::text, '')) IS DISTINCT FROM 'cancelada';
 
   -- Sem filhos que contem (folha, ou todos cancelados): o pai volta a
   -- responder pela própria coluna. Não há trabalho a medir, e mover a caixa

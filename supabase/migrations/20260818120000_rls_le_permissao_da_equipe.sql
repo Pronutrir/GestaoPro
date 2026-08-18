@@ -182,6 +182,12 @@ WITH CHECK (
 -- DELETE: continua restrito a admin e lider, MAIS a equipe com can_delete --
 -- que e justamente o que o papel "Coordenar" concede. Sem isto, marcar
 -- Coordenar na tela nao produziria efeito nenhum.
+-- Alem da v2, a VM tem a policy legada "Members can delete activities"
+-- (can_member_action 'delete') que nunca foi dropada -- drift so visivel no
+-- banco real. Enquanto existir, sobram DUAS policies de DELETE e a verificacao
+-- abaixo falha. O consolidado v2 ja cobre o que ela concede (admin OR lider OR
+-- can_member_action 'delete'), entao sai sem tirar acesso de ninguem.
+DROP POLICY IF EXISTS "Members can delete activities" ON public.activities;
 DROP POLICY IF EXISTS "Activities access v2 delete" ON public.activities;
 CREATE POLICY "Activities access v2 delete" ON public.activities
 FOR DELETE TO authenticated
