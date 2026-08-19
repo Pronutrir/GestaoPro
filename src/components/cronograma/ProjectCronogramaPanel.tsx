@@ -1926,8 +1926,36 @@ export function ProjectCronogramaPanel({
                   defaultOpen
                   value={a.workflow_stage_id || undefined}
                   onValueChange={async (v) => {
-                    const nome = doProjeto.find((s: { id: string; title: string }) => s.id === v)?.title ?? "";
-                    const ok = await gravarCampo(a.id, { workflow_stage_id: v }, `Movida para "${nome}"`);
+                    const destino = doProjeto.find((s: { id: string; title: string }) => s.id === v);
+                    const nome = destino?.title ?? "";
+                    /**
+                     * `status` e `completed_at` ACOMPANHAM a coluna.
+                     *
+                     * Aqui gravava só `workflow_stage_id`. Mover uma tarefa
+                     * para "Concluída" pelo Cronograma deixava o `status` em
+                     * "pending": o Backlog, que lê a coluna, mostrava a mudança;
+                     * o Kanban, que também lê o `status`, não — a mesma tarefa
+                     * aparecia concluída numa tela e aberta na outra.
+                     *
+                     * A regra é a da migration 20260811100000: a coluna é o
+                     * fato do dia a dia, e o `status` é consequência dela. O
+                     * Kanban e o Backlog já gravavam os três campos juntos;
+                     * esta tela era a única que não.
+                     *
+                     * `completed_at` entra porque é a data que os relatórios
+                     * usam, e ao reabrir precisa ser limpa — senão fica
+                     * registrada uma entrega que deixou de existir.
+                     */
+                    const isFinal = (destino as { is_final?: boolean } | undefined)?.is_final === true;
+                    const ok = await gravarCampo(
+                      a.id,
+                      {
+                        workflow_stage_id: v,
+                        status: isFinal ? "completed" : "pending",
+                        completed_at: isFinal ? new Date().toISOString() : null,
+                      },
+                      `Movida para "${nome}"`,
+                    );
                     fechar(ok);
                   }}
                   onOpenChange={(o) => { if (!o) fechar(false); }}

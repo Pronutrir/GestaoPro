@@ -1339,9 +1339,13 @@ export const ActivityKanban = ({
       return;
     }
     setOptimisticMoves((prev) => ({ ...prev, [activityId]: backlogStage.id }));
+    // `status` acompanha a coluna: o Backlog nunca é final, então a tarefa
+    // REABRE. Sem esta linha, mandar uma tarefa concluída para o backlog a
+    // deixava com `status: completed` fora da coluna final — o Kanban a
+    // mostrava aberta e os relatórios continuavam contando como entregue.
     await supabase
       .from("activities")
-      .update({ workflow_stage_id: backlogStage.id })
+      .update({ workflow_stage_id: backlogStage.id, status: "pending", completed_at: null } as never)
       .eq("id", activityId);
     await supabase
       .from("user_stories")
@@ -1577,9 +1581,29 @@ export const ActivityKanban = ({
           altText="Desfazer"
           onClick={async () => {
             setOptimisticMoves((prev) => ({ ...prev, [activityId]: previousStageId }));
+            /**
+             * DESFAZER precisa desfazer o status também.
+             *
+             * A ida grava os três campos (coluna, status, completed_at), mas a
+             * volta gravava só a coluna: mover para "Concluída" e clicar em
+             * Desfazer devolvia o cartão à coluna de origem com
+             * `status: completed` — uma tarefa aberta que o relatório contava
+             * como entregue, e que o card mostrava riscada.
+             *
+             * Restaura a partir da coluna de DESTINO da volta, não do status
+             * que a atividade tinha: se ela já estava divergente antes, a volta
+             * corrige em vez de repetir o erro.
+             */
+            const colunaAnterior = stages.find((s) => s.id === previousStageId);
+            const anteriorFinal = colunaAnterior?.is_final === true
+              || parseWorkflowCategory((colunaAnterior as { categoria?: string } | undefined)?.categoria) === "concluida";
             await supabase
               .from("activities")
-              .update({ workflow_stage_id: previousStageId } as never)
+              .update({
+                workflow_stage_id: previousStageId,
+                status: anteriorFinal ? "completed" : "pending",
+                completed_at: anteriorFinal ? new Date().toISOString() : null,
+              } as never)
               .eq("id", activityId);
             await supabase.from("user_stories").update({ stage_id: previousStageId } as never).eq("activity_id", activityId);
             onDataChanged();
