@@ -26,6 +26,13 @@
 -- fato do dia a dia -- e para onde a pessoa arrasta o cartao --, e o `status` e
 -- consequencia dela. Onde os dois discordam, a coluna manda.
 
+-- Guard defensivo: os UPDATE abaixo em activities disparariam
+-- trg_prevent_activity_mutation_on_concluded_project (20260526150000) se uma
+-- divergente cair em projeto concluido. Hoje nenhuma cai (3 divergentes, 0 em
+-- concluido), mas o dado muda. Religado apos o passo 2. Mesma tecnica da
+-- 20260811100000 e das levas seguintes.
+SET session_replication_role = replica;
+
 -- 1) Na coluna final e nao marcada como concluida → conclui.
 --    COALESCE preserva `completed_at` quando ja existe: a data em que a tarefa
 --    de fato terminou vale mais que a do alinhamento. Quem esta sem data recebe
@@ -51,6 +58,9 @@ WHERE a.workflow_stage_id = s.id
   AND s.is_final IS DISTINCT FROM true
   AND a.status = 'completed'
   AND a.is_trashed = false;
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 -- Atividade SEM coluna nao e tocada: nao ha coluna para o status seguir, e
 -- adivinhar seria pior que a divergencia. Mesma decisao da 20260811100000.
