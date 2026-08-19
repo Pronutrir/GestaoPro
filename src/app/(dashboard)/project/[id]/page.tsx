@@ -253,6 +253,26 @@ export default function ProjectDetailsPage() {
     if (!currentUser?.id) return false;
     if (!!activity.created_by && activity.created_by === currentUser.id) return true;
 
+    /**
+     * PERMISSÃO DA EQUIPE — faltava exatamente esta linha.
+     *
+     * Esta função testava admin, criador, líder/gestor e responsável, e parava.
+     * Nunca consultava `can_edit`/`can_move`: um membro da equipe com permissão
+     * de editar, que não fosse nenhum daqueles, era barrado pela TELA em quatro
+     * caminhos — abrir para editar, concluir/reabrir, arquivar e reordenar.
+     *
+     * O banco liberava. Depois de 20260818120000, `can_update_activity_v2`
+     * devolve `true` para esse caso (conferido com dados reais). Era o mesmo
+     * defeito de 18/08 espelhado: antes a tela permitia e a RLS recusava; aqui
+     * a RLS permite e a tela recusa. Os dois lados de novo divergindo, com o
+     * front sendo o mais restritivo desta vez.
+     *
+     * `canEdit`/`canMove` já vêm de `project_members` (via `userPerms`) e são
+     * exatamente o que o ActivityKanban usa na sua própria versão desta função,
+     * que estava certa — as duas existem lado a lado com regras diferentes.
+     */
+    if (canEdit || canMove) return true;
+
     const identityCandidates = buildUserCandidates([
       profile?.full_name,
       profile?.email,
@@ -270,8 +290,16 @@ export default function ProjectDetailsPage() {
       return true;
     }
 
-    return matchesIdentity(activity.assigned_to, identityCandidates);
-  }, [currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, project?.owner, project?.manager]);
+    /**
+     * Responsável OU participante — a RLS (`is_activity_actor_v2`) reconhece os
+     * dois, e aqui só o responsável era testado. Quem colabora numa atividade
+     * sem ser o responsável levava recusa da tela numa edição que o banco
+     * aceitaria.
+     */
+    if (matchesIdentity(activity.assigned_to, identityCandidates)) return true;
+    return Array.isArray(activity.participants)
+      && anyMatchesIdentity(activity.participants, identityCandidates);
+  }, [canEdit, canMove, currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project?.owner, project?.manager]);
 
   // Helper que abre o EditActivityDialog respeitando bloqueios escopados
   const openEditActivity = useCallback((
@@ -294,7 +322,12 @@ export default function ProjectDetailsPage() {
       return;
     }
     if (activity && !canMutateActivity(activity as Activity)) {
-      toast.error("Somente o criador ou responsável da atividade pode editar.");
+      // A mensagem nomeia a regra REAL e a saída. As quatro diziam "somente o
+      // criador ou responsável", que além de incompleto (a equipe também pode)
+      // não dizia a quem pedir.
+      toast.error("Você não pode editar esta atividade", {
+        description: "Só a equipe do projeto e quem responde pela atividade podem. Peça ao gestor do projeto para incluir você na equipe.",
+      });
       return;
     }
     setEditActivityInitialTab(initialTab);
@@ -1046,7 +1079,7 @@ export default function ProjectDetailsPage() {
     }
     const act = activities.find(a => a.id === activityId);
     if (act && !canMutateActivity(act)) {
-      toast.error("Somente o criador ou responsável da atividade pode concluir/reabrir.");
+      toast.error("Você não pode concluir ou reabrir esta atividade. Só a equipe do projeto e quem responde pela atividade podem.");
       return;
     }
     if (act && isActivityBlocked(activityId, act.phase_id)) {
@@ -1245,7 +1278,7 @@ export default function ProjectDetailsPage() {
     }
     const act = activities.find(a => a.id === activityId);
     if (act && !canMutateActivity(act)) {
-      toast.error("Somente o criador ou responsável da atividade pode arquivar.");
+      toast.error("Você não pode arquivar esta atividade. Só a equipe do projeto e quem responde pela atividade podem.");
       return;
     }
     if (act && isActivityBlocked(activityId, act.phase_id)) {
@@ -1336,7 +1369,7 @@ export default function ProjectDetailsPage() {
     const parentActs = activities.filter((a) => !a.parent_id);
     const activeActivity = parentActs.find((a) => a.id === active.id);
     if (activeActivity && !canMutateActivity(activeActivity)) {
-      toast.error("Somente o criador ou responsável da atividade pode reordenar.");
+      toast.error("Você não pode reordenar esta atividade. Só a equipe do projeto e quem responde pela atividade podem.");
       return;
     }
     const oldIndex = parentActs.findIndex((a) => a.id === active.id);
