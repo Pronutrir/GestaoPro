@@ -57,6 +57,7 @@ import { selectInChunks, mutateInChunks } from "@/lib/chunkedIn";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
+import { podeGerenciarProjeto } from "@/lib/projectManage";
 import { buildAvatarLookupMap } from "@/lib/avatarLookup";
 import { eapShouldDemote, isSyntheticPhaseRow } from "@/lib/eapModel";
 
@@ -247,6 +248,39 @@ export default function ProjectDetailsPage() {
   const showProjectLockedToast = useCallback((action: string) => {
     toast.error("Projeto concluído", { description: `Reabra o projeto para ${action}.` });
   }, [toast]);
+  /**
+   * GERENCIA O PROJETO — espelho exato de `can_manage_project_v2` na RLS.
+   *
+   * Editar a FICHA do projeto (datas, orçamento e, sobretudo, a permissão de
+   * cada membro da equipe) é outra permissão que editar ATIVIDADE. O banco
+   * sempre soube disso: as policies de insert/update/delete em
+   * `project_members` exigem `can_manage_project_v2`, que aceita apenas admin,
+   * líder ou gestor do projeto.
+   *
+   * A tela não sabia. O botão de editar aparecia sob `canEdit` — a permissão
+   * de mexer em atividade —, então um membro comum abria a ficha, mudava a
+   * permissão dos colegas, clicava em "Salvar Alterações" e via
+   * "Projeto atualizado!". A gravação da equipe está num try/catch que só
+   * anota `teamSyncError`, e o toast de sucesso sai de qualquer jeito: a
+   * pessoa saía convencida de ter mudado algo que o banco recusou.
+   *
+   * Conferido com dados reais (19/08/2026): para um membro com `can_edit` e
+   * `can_delete` na Revitalização Tasy, `can_manage_project_v2` devolve
+   * `false` e `can_view_project_v2` devolve `true` — ele edita o trabalho, não
+   * decide quem faz o quê. É a mesma separação que Jira e Asana fazem entre
+   * "editar itens" e "administrar o projeto".
+   */
+  const canManageProject = useMemo(
+    () => podeGerenciarProjeto(project, {
+      isAdmin: isRealAdmin,
+      id: currentUser?.id,
+      email: currentUser?.email ?? profile?.email,
+      fullName: profile?.full_name,
+      profileId: profile?.id,
+    }),
+    [currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project],
+  );
+
   const canMutateActivity = useCallback((activity?: Activity | null) => {
     if (!activity) return false;
     if (isRealAdmin) return true;
@@ -1985,7 +2019,7 @@ export default function ProjectDetailsPage() {
           </Tabs>
         </div>
 
-        <EditProjectDialog project={editingProject} open={editDialogOpen} onOpenChange={setEditDialogOpen} onProjectUpdated={fetchProjectData} />
+        <EditProjectDialog project={editingProject} open={editDialogOpen} onOpenChange={setEditDialogOpen} onProjectUpdated={fetchProjectData} podeGerenciarEquipe={canManageProject} />
         <EditActivityDialog
           activity={editingActivity}
           open={editActivityDialogOpen}
