@@ -45,12 +45,12 @@ AS $$
    WHERE s.project_id = p_project_id
      AND CASE p_papel
            WHEN 'concluida' THEN
-             (lower(coalesce(s.categoria, '')) = 'concluida' OR s.is_final = true)
+             (lower(coalesce(s.categoria::text, '')) = 'concluida' OR s.is_final = true)
            WHEN 'inicio' THEN
-             (lower(coalesce(s.categoria, '')) IN ('a_iniciar', 'backlog')
+             (lower(coalesce(s.categoria::text, '')) IN ('a_iniciar', 'backlog')
               OR (s.categoria IS NULL AND s.display_order = 0))
            WHEN 'andamento' THEN
-             (lower(coalesce(s.categoria, '')) IN ('andamento', 'revisao')
+             (lower(coalesce(s.categoria::text, '')) IN ('andamento', 'revisao')
               OR (s.categoria IS NULL
                   AND s.is_final IS DISTINCT FROM true
                   AND s.display_order > 0
@@ -80,6 +80,14 @@ COMMENT ON FUNCTION public.stage_do_papel(uuid, text) IS
 -- Ordem: dos NIVEIS MAIS FUNDOS para os mais rasos. Um avo so pode ser
 -- recalculado depois que os filhos dele (que tambem sao pais) ja estiverem na
 -- coluna certa, senao ele decidiria com base em dado velho.
+-- Guard defensivo: o backfill chama recalcular_coluna_do_pai, que faz UPDATE em
+-- activities. Se um agrupador invisivel cair em projeto concluido, o trigger
+-- trg_prevent_activity_mutation_on_concluded_project abortaria a migration.
+-- Hoje nenhum cai (163 invisiveis, 0 em concluido), mas o dado muda. Desliga os
+-- triggers de negocio (inclui o rollup, que o loop dispensa por recursar por
+-- nivel). Religado apos o loop.
+SET session_replication_role = replica;
+
 DO $$
 DECLARE
   r record;
@@ -117,6 +125,9 @@ BEGIN
 
   RAISE NOTICE 'Agrupadores recalculados (estavam em coluna invisivel): %', n;
 END $$;
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 NOTIFY pgrst, 'reload schema';
 
