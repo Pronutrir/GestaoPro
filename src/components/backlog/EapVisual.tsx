@@ -77,7 +77,7 @@ interface Node {
   code: string | null;
   kind: EapKind;
   progresso: number | null;
-  /** Filhos ANTES do corte por nível/colapso — para saber quantos ficaram ocultos. */
+  /** Filhos ANTES do corte por nível e largura — para contar os ocultos. */
   todosFilhos: Node[];
   filhos: Node[];
   /** Código diz que tem pai, mas `parent_id` está vazio. */
@@ -128,7 +128,6 @@ const GAP_Y = 6;
 
 export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
   const [nivelMax, setNivelMax] = useState(3);
-  const [colapsados, setColapsados] = useState<Set<string>>(new Set());
   /** Pais cujo "+N fases" foi aberto — mostram todos os agrupadores. */
   const [larguraAberta, setLarguraAberta] = useState<Set<string>>(new Set());
   const [foco, setFoco] = useState<string | null>(null);
@@ -311,7 +310,7 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
      * olhando.
      */
     const podar = (n: Node, d: number): Node => {
-      const fechado = colapsados.has(n.id) || d >= nivelMax;
+      const fechado = d >= nivelMax;
       if (fechado) return { ...n, filhos: [] };
 
       const expandido = larguraAberta.has(n.id);
@@ -340,7 +339,7 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
       };
     };
     return podar(exibida, 0);
-  }, [exibida, colapsados, nivelMax, larguraAberta]);
+  }, [exibida, nivelMax, larguraAberta]);
 
   /**
    * LAYOUT HÍBRIDO.
@@ -461,13 +460,6 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
    */
   const ajustar = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
   useEffect(() => { ajustar(); }, [foco, ajustar]);
-
-  const alternar = (id: string) =>
-    setColapsados((prev) => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
 
   /**
    * Baixa o SVG — sem biblioteca, só XMLSerializer.
@@ -873,10 +865,24 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
                     );
                   })}
 
-                  {/* Quantos ficaram de fora, e o clique que os traz */}
+                  {/**
+                    * "N ocultas" REVELA as folhas — não colapsa o nó.
+                    *
+                    * Chamava uma função que FECHAVA o nó inteiro — o oposto do
+                    * que o rótulo promete. Clicando no da raiz, a árvore toda
+                    * sumia e sobrava a caixa do projeto com o próprio contador,
+                    * que é o "explode" do relato.
+                    *
+                    * `larguraAberta` é o conjunto certo: é o mesmo que o
+                    * "+N fases" usa, e a poda o consulta para liberar tanto os
+                    * agrupadores quanto a pilha de folhas.
+                    */}
                   {ocultos > 0 && (
                     <g className="cursor-pointer"
-                      onClick={(e) => { e.stopPropagation(); alternar(d.id); }}>
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLarguraAberta((prev) => new Set(prev).add(d.id));
+                      }}>
                       <rect
                         x={px + 18} y={py + H_GRUPO + 12 + folhas.length * (H_FOLHA + GAP_Y)}
                         width={104} height={H_FOLHA} rx={11}
