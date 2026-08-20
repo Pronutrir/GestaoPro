@@ -277,9 +277,23 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
    * ainda dá (9,6px), mas 10px é o piso do que se considera legível.
    */
   const podada = useMemo(() => {
-    const base = exibida.nivel;
-    const podar = (n: Node): Node => {
-      const fechado = colapsados.has(n.id) || (n.nivel - base) >= nivelMax;
+    /**
+     * A PROFUNDIDADE É CONTADA NA RECURSÃO, não subtraída de `nivel`.
+     *
+     * Antes era `(n.nivel - base) >= nivelMax`, com `base = exibida.nivel`.
+     * Isso depende de `nivel` ter sido atribuído certo na construção — e a
+     * raiz sintética recebe 0 enquanto os itens promovidos a raiz (órfãos,
+     * ciclos) recebem 1, mesmo estando no mesmo lugar da árvore. Ao focar, a
+     * subtração podia dar um número que fechava o próprio nó exibido, e a tela
+     * mostrava só a caixa do foco com "N ocultas" — nenhuma fase, nenhuma
+     * entrega, como no relato.
+     *
+     * Contando na descida, `d` é sempre a distância real até o nó exibido:
+     * 0 é ele mesmo, 1 são os filhos. Não há como fechar a raiz do que se está
+     * olhando.
+     */
+    const podar = (n: Node, d: number): Node => {
+      const fechado = colapsados.has(n.id) || d >= nivelMax;
       if (fechado) return { ...n, filhos: [] };
 
       const expandido = larguraAberta.has(n.id);
@@ -303,11 +317,11 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
       return {
         ...n,
         // A ordem aqui não importa — a renderização separa por papel.
-        filhos: [...gruposVisiveis, ...folhasVisiveis].map(podar),
+        filhos: [...gruposVisiveis, ...folhasVisiveis].map((f) => podar(f, d + 1)),
         gruposOcultos: grupos.length - gruposVisiveis.length,
       };
     };
-    return podar(exibida);
+    return podar(exibida, 0);
   }, [exibida, colapsados, nivelMax, larguraAberta]);
 
   /**
