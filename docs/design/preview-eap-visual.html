@@ -92,10 +92,16 @@
           <span>☰ Lista</span>
           <span class="on">⑂ EAP</span>
         </span>
-        <span class="ctl">▤ Fase <span class="cv">▾</span></span>
         <span class="ctl">Nível 3 <span class="cv">▾</span></span>
+        <span style="width:1px;height:18px;background:var(--border);margin:0 2px"></span>
+        <span class="seg" style="border-radius:7px">
+          <span style="padding:4px 7px">−</span>
+          <span style="padding:4px 6px;font-family:var(--mono);font-size:10.5px">100%</span>
+          <span style="padding:4px 7px">+</span>
+        </span>
         <span class="ctl">⤢ Ajustar</span>
-        <span class="ctl">⟲</span>
+        <span style="margin-left:auto"></span>
+        <span class="ctl">⭳ SVG</span>
         <span class="ctl">⎙ Imprimir</span>
       </div>
       <div class="canvas">
@@ -183,16 +189,15 @@
             <text x="676" y="178" font-size="10" fill="var(--warn)" font-weight="600">Marco 5 — Piloto</text>
           </g>
 
-          <!-- ORFAOS: destacados, sem linha ligando -->
+          <!-- O RESTO DAS FASES, atras de um clique: e o que impede a arvore
+               de crescer 6.000px numa fileira so -->
           <g>
-            <rect x="820" y="86" width="106" height="42" rx="7" fill="var(--bad-soft)" stroke="var(--bad)" stroke-dasharray="4 3"/>
-            <text x="830" y="102" font-size="8.5" font-family="var(--mono)" fill="var(--bad)">1.1.1</text>
-            <text x="830" y="115" font-size="10" fill="var(--bad)" font-weight="600">Lançamento</text>
-            <text x="873" y="146" text-anchor="middle" font-size="9" fill="var(--bad)">sem pai</text>
+            <rect x="820" y="86" width="120" height="42" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-dasharray="4 3" stroke-width="1.3"/>
+            <text x="880" y="112" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="700">+ 24 fases</text>
           </g>
 
           <text x="470" y="380" text-anchor="middle" font-size="11" fill="var(--ink-3)">
-            fases crescem para o lado · atividades descem · marcos são losangos
+6 fases por vez · atividades descem · marcos são losangos
           </text>
         </svg>
       </div>
@@ -201,7 +206,8 @@
         <span><span class="sw" style="background:var(--surface-2);border:1px solid var(--border-strong)"></span> Fase / Entrega</span>
         <span><span class="sw" style="background:var(--surface);border:1px solid var(--border)"></span> Atividade</span>
         <span><span class="sw" style="background:var(--warn-soft);border:1px solid var(--warn);transform:rotate(45deg)"></span> Marco</span>
-        <span><span class="sw" style="background:var(--bad-soft);border:1px dashed var(--bad)"></span> Órfão (código sem pai)</span>
+<span><span class="sw" style="background:var(--accent-soft);border:1px dashed var(--accent)"></span> Mais fases (clique)</span>
+        <span><span class="sw" style="background:var(--bad-soft);border:1px dashed var(--bad)"></span> Fora da árvore</span>
       </div>
     </div>
 
@@ -250,13 +256,14 @@
   <section>
     <div class="sec-head"><span class="sec-num">03</span><h2>O que se pode fazer na tela</h2></div>
     <ul class="pts">
-      <li><b>Clicar num nó</b> → abre o painel da atividade que já existe (mesmo do Backlog)</li>
-      <li><b>Clicar no ▸ de uma fase</b> → recolhe ou expande aquele ramo</li>
-      <li><b>Nível 3 ▾</b> → abre a árvore até o nível escolhido, de uma vez</li>
-      <li><b>⤢ Ajustar</b> → enquadra a árvore inteira na tela</li>
-      <li><b>⟲</b> → gira entre vertical e horizontal (sai de graça do algoritmo)</li>
-      <li><b>⎙ Imprimir</b> → A3 paisagem, vetorial; e baixar como .svg ou .png</li>
-      <li><b>Duplo clique numa fase</b> → modo foco: só aquele ramo, com trilha para voltar</li>
+      <li><b>Clicar numa fase</b> → <b>entra nela</b>, com trilha para voltar</li>
+      <li><b>Duplo clique</b> → abre o painel da atividade (mesmo do Backlog)</li>
+      <li><b>+ 24 fases</b> → traz o resto dos agrupadores daquele pai</li>
+      <li><b>Nível 3 ▾</b> → abre a árvore até o nível escolhido</li>
+      <li><b>− 100% +</b> → zoom, com o valor à vista; clicar no número volta ao enquadramento</li>
+      <li><b>⤢ Ajustar</b> → enquadra a árvore inteira e recentraliza</li>
+      <li><b>Arrastar o fundo</b> → move o desenho</li>
+      <li><b>⭳ SVG · ⎙ Imprimir</b> → vetorial, A3 paisagem</li>
     </ul>
     <div class="okbox">
       <b>Só leitura na primeira versão.</b> Arrastar para reorganizar move uma subárvore inteira e renumera dezenas de códigos em cascata — fácil de disparar sem querer com o zoom afastado. Toda mudança de estrutura continua no Backlog, onde os controles e a permissão já estão resolvidos. Arrastar entra depois, se fizer falta.
@@ -270,7 +277,7 @@
         <b>Segmento dentro do Backlog, como no mockup?</b> Foi o que assumi: mesma aba, mesma busca, mesmos filtros — só troca o desenho. A alternativa é aba própria ao lado de Kanban e Cronograma, o que separaria a EAP da lista que a alimenta.
       </li>
       <li>
-        <b>Os órfãos aparecem em vermelho tracejado, como no mockup?</b> São 90, em 6 projetos. Mostrá-los assim expõe o problema — o que eu acho certo —, mas deixa a tela feia justamente nos projetos maiores. A alternativa é escondê-los atrás de um aviso do tipo "90 itens fora da árvore".
+        <b>Os itens fora da árvore aparecem em vermelho tracejado.</b> Eram 90 pela regra que escrevi primeiro — mas 80 deles TÊM FILHOS, ou seja, são fases legítimas com código herdado da importação. A regra passou a exigir também não ter filhos, e sobraram <b>10 casos reais</b> na base inteira. Nesse volume, destacar não polui.
       </li>
       <li>
         <b>Sabendo que só 3 projetos têm hierarquia real, ainda quer a tela agora?</b> Faz sentido — ela pode ser o que faz as pessoas usarem a EAP. Mas se a prioridade for outra, é melhor saber antes de eu construir.

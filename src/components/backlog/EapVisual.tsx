@@ -46,7 +46,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Maximize2, Printer, Download, ChevronLeft,
+  Maximize2, Printer, Download, ChevronLeft, Plus, Minus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resolveEapKind, type EapKind } from "@/lib/eapModel";
@@ -102,6 +102,17 @@ const agrupa = (k: EapKind) => k === "projeto" || k === "fase" || k === "entrega
  * barato.
  */
 const LARGURA_MAX = 6;
+
+/**
+ * Limites do zoom, em fonte única — os botões e a roda do mouse precisam
+ * concordar, e antes cada um carregava seu próprio número.
+ *
+ * O piso é 0,6 porque o título tem 11px: abaixo disso o texto passa dos ~6px e
+ * deixa de ser legível. Quem precisa ver o conjunto usa o corte de largura ou
+ * a trilha, não o zoom — foi assim que a árvore de 6.000px virou 1.360px.
+ */
+const ZOOM_MIN = 0.6;
+const ZOOM_MAX = 3;
 
 // Caixa: agrupador é mais alto porque leva a barra de progresso.
 const W = 168;
@@ -381,6 +392,17 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
     return { x: minX - pad, y: -pad, w: maxX - minX + pad * 2, h: maxY + pad * 2 };
   }, [layout]);
 
+  /**
+   * "Ajustar" = zoom 1 + pan zerado.
+   *
+   * Não é um cálculo de enquadramento: o `viewBox` já é a caixa envolvente
+   * inteira, então zoom 1 JÁ mostra a árvore toda. Isso é possível porque o
+   * corte de largura garante que ela cabe — antes dele, "caber" significava
+   * comprimir 6.000px em 1.400px, com a fonte indo a 2,6px.
+   *
+   * Por isso o percentual ao lado não mede "quanto do real": mede quanto se
+   * aproximou a partir do enquadramento completo.
+   */
   const ajustar = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
   useEffect(() => { ajustar(); }, [foco, ajustar]);
 
@@ -474,19 +496,20 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
 
   return (
     <div className={cn("flex flex-col", className)}>
-      {/* Controles de VISÃO. Espelham os que o Backlog já tem — agrupar,
-          expandir, recolher — e acrescentam o que só a árvore precisa. */}
-      <div className="flex items-center gap-2 flex-wrap pb-2 print:hidden">
-        {/**
-          * TRILHA COMPLETA, não um botão de voltar.
-          *
-          * Com o clique entrando na fase, descer vira o gesto comum — e com um
-          * botão só a pessoa perde a noção de onde está depois do segundo
-          * nível. A trilha mostra o caminho inteiro e deixa saltar direto para
-          * qualquer ponto dele, inclusive a raiz.
-          */}
-        {trilha.length > 0 && (
-          <div className="flex items-center gap-0.5 flex-wrap">
+      {/**
+        * TRILHA em LINHA PRÓPRIA, acima dos controles.
+        *
+        * Ela é a única coisa aqui que muda o tempo todo — um caminho de três
+        * níveis empurrava os botões para a segunda linha e os fazia dançar a
+        * cada clique. Separada, os controles ficam sempre no mesmo lugar.
+        *
+        * É trilha COMPLETA, não um botão de voltar: com o clique entrando na
+        * fase, descer vira o gesto comum, e com um botão só a pessoa perde a
+        * noção de onde está a partir do segundo nível. Aqui dá para saltar
+        * direto para qualquer ponto, inclusive a raiz.
+        */}
+      {trilha.length > 0 && (
+        <div className="flex items-center gap-0.5 flex-wrap pb-1.5 print:hidden">
             <Button
               size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs"
               onClick={() => setFoco(null)}
@@ -505,11 +528,16 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
                 </Button>
               </span>
             ))}
-            <span className="text-muted-foreground/50 text-xs">/</span>
-            <span className="text-xs font-semibold px-1 max-w-[160px] truncate">{exibida.title}</span>
-            <span className="w-px h-4 bg-border mx-1.5" />
-          </div>
-        )}
+          <span className="text-muted-foreground/50 text-xs">/</span>
+          <span className="text-xs font-semibold px-1 max-w-[160px] truncate">{exibida.title}</span>
+        </div>
+      )}
+
+      {/* Controles de VISÃO, agrupados por função: o que a árvore MOSTRA
+          (nível), o TAMANHO dela (zoom, ajustar), e o que SAI dela (SVG,
+          imprimir) — este último empurrado para a direita, porque exportar é
+          o fim do trabalho, não parte de olhar. */}
+      <div className="flex items-center gap-2 flex-wrap pb-2 print:hidden">
         <Select value={String(nivelMax)} onValueChange={(v) => setNivelMax(Number(v))}>
           <SelectTrigger className="h-7 w-[112px] text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -520,6 +548,46 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
             ))}
           </SelectContent>
         </Select>
+        <span className="w-px h-5 bg-border" />
+        {/**
+          * ZOOM VISÍVEL, não só Ctrl+roda.
+          *
+          * O zoom existia desde o começo, mas escondido num atalho — quem não
+          * conhecesse o gesto não tinha como aproximar, e nada na tela dizia em
+          * que nível o desenho estava. Um controle que ninguém encontra é o
+          * mesmo que não existir.
+          *
+          * O percentual no meio não é enfeite: é o que responde "o que estou
+          * vendo é o tamanho real?". Clicar nele volta a 100%.
+          */}
+        <div className="inline-flex items-center rounded-md border border-border overflow-hidden">
+          <button
+            type="button"
+            title="Afastar"
+            className="px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+            disabled={zoom <= ZOOM_MIN + 0.001}
+            onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z - 0.2))}
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            title="Voltar ao tamanho real"
+            onClick={() => setZoom(1)}
+            className="px-1.5 py-1 text-[11px] font-mono text-muted-foreground hover:bg-muted hover:text-foreground transition-colors min-w-[46px]"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            title="Aproximar"
+            className="px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+            disabled={zoom >= ZOOM_MAX - 0.001}
+            onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z + 0.2))}
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
         <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={ajustar}>
           <Maximize2 className="w-3.5 h-3.5" /> Ajustar
         </Button>
@@ -569,7 +637,7 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
              * texto ainda passa dos ~6px, e quem precisa ver o conjunto usa o
              * corte de largura ou a trilha — não o zoom.
              */
-            setZoom((z) => Math.min(3, Math.max(0.6, z * (e.deltaY < 0 ? 1.12 : 0.89))));
+            setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * (e.deltaY < 0 ? 1.12 : 0.89))));
           }}
         >
           {/* A orientação é resolvida nas COORDENADAS de cada nó (o layout do
@@ -788,7 +856,7 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
           <span className="w-2.5 h-2.5 rounded-sm bg-destructive/10 border border-dashed border-destructive" />
           Fora da árvore
         </span>
-        <span className="ml-auto">Clique na fase entra nela · duplo clique abre · Ctrl+roda dá zoom</span>
+        <span className="ml-auto">Clique na fase entra nela · duplo clique abre · arraste move · Ctrl+roda dá zoom</span>
       </div>
     </div>
   );
