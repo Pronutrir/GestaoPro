@@ -315,3 +315,38 @@
 .rolagem-visivel::-webkit-scrollbar-thumb:hover {
   background-color: hsl(var(--muted-foreground) / 0.65);
 }
+
+/* ==========================================================================
+   IMPRESSÃO DA EAP VISUAL
+   ==========================================================================
+   A EAP existe para ser APRESENTADA — numa reunião, num comitê. Imprimir não
+   é extra aqui, é metade do propósito da tela.
+
+   Paisagem por padrão: a árvore cresce para o lado (agrupadores na
+   horizontal), então retrato desperdiça o eixo que importa.
+
+   Nada de biblioteca de PDF. O mesmo raciocínio já registrado em
+   ProjectDocuments: html2canvas/jspdf "pesa centenas de KB e reimplementa mal
+   a paginação, quebra de tabela e fonte que o navegador já resolve". E aqui
+   há um motivo a mais: o desenho é SVG, que é vetorial — o navegador imprime
+   em qualquer tamanho de papel sem borrar, coisa que rasterizar para canvas
+   destruiria.
+
+   `.eap-impressao` é marcada no container da árvore e libera altura e rolagem
+   no papel — na tela a árvore vive numa caixa rolável, e imprimir aquela
+   fatia sairia com metade do desenho cortada. */
+@media print {
+  .eap-impressao {
+    /* Sem altura fixa nem rolagem: no papel a árvore inteira precisa sair,
+       não a fatia que cabia na tela. */
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+  .eap-impressao svg {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+}

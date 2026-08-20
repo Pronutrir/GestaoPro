@@ -1,0 +1,305 @@
+<title>EAP visual</title>
+<style>
+  :root{
+    --bg:#f7f8fa;--surface:#ffffff;--surface-2:#f1f2f5;--border:#e2e4ea;--border-strong:#cfd2db;
+    --ink:#1c1f26;--ink-2:#565b66;--ink-3:#868b96;--accent:#5b5bd6;--accent-soft:#ecebfb;
+    --ok:#17915b;--ok-soft:#e2f4ea;--warn:#b3730a;--warn-soft:#fbeed6;--bad:#cc3340;--bad-soft:#fbe4e6;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}}
+  :root[data-theme="dark"]{--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  h1{font-size:30px;line-height:1.15;margin:6px 0 10px;letter-spacing:-.01em;text-wrap:balance}
+  .lede{color:var(--ink-2);font-size:15px;max-width:66ch}
+  section{margin-top:46px}
+  .sec-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:16px}
+  .sec-num{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent)}
+  .sec-head h2{font-size:20px;margin:0;letter-spacing:-.01em}
+  .sec-sub{color:var(--ink-2);font-size:14px;margin:0 0 18px;max-width:72ch}
+  .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+  @media(max-width:780px){.stat{grid-template-columns:1fr 1fr}}
+  .stat div{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface)}
+  .stat .v{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1.1}
+  .stat .v.bad{color:var(--bad)} .stat .v.warn{color:var(--warn)}
+  .stat .l{font-size:11.5px;color:var(--ink-3);margin-top:4px}
+  .note{margin-top:20px;border-left:3px solid var(--accent);background:var(--accent-soft);padding:14px 16px;border-radius:0 8px 8px 0;font-size:13.5px}
+  .badbox{margin-top:16px;border:1px solid var(--bad);background:var(--bad-soft);border-radius:10px;padding:14px 16px;font-size:13.5px}
+  .badbox b{color:var(--bad)}
+  .okbox{margin-top:16px;border:1px solid var(--ok);background:var(--ok-soft);border-radius:10px;padding:14px 16px;font-size:13.5px}
+  .okbox b{color:var(--ok)}
+  .warnbox{margin-top:16px;border:1px solid var(--warn);background:var(--warn-soft);border-radius:10px;padding:14px 16px;font-size:13.5px}
+  .warnbox b{color:var(--warn)}
+  .scroll{overflow-x:auto}
+  table.cmp{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;min-width:620px}
+  table.cmp th,table.cmp td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  table.cmp th{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  table.cmp td:first-child{font-weight:500;white-space:nowrap}
+  .y{color:var(--ok);font-weight:600}.n{color:var(--bad);font-weight:600}.m{color:var(--warn);font-weight:600}
+  .cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:16px}
+  @media(max-width:820px){.cards{grid-template-columns:1fr}}
+  .opt{border:1px solid var(--border);border-radius:12px;padding:18px;background:var(--surface);display:flex;flex-direction:column}
+  .opt.rec{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
+  .opt .tag{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:2px 8px;border-radius:999px;align-self:flex-start;margin-bottom:10px}
+  .tag.light{background:var(--surface-2);color:var(--ink-3)}.tag.rec{background:var(--ok-soft);color:var(--ok);font-weight:700}
+  .opt h3{font-size:15.5px;margin:0 0 4px}
+  .opt .where{font-size:12px;color:var(--ink-3);margin-bottom:10px;font-family:var(--mono)}
+  .opt p{font-size:13px;color:var(--ink-2);margin:0 0 12px}
+  .opt ul{margin:0;padding-left:0;list-style:none;font-size:12.5px}
+  .opt li{padding:3px 0 3px 18px;position:relative;color:var(--ink-2)}
+  .opt li.y::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .opt li.n::before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:700}
+  .verdict{margin-top:auto;padding-top:12px;font-size:12px;color:var(--ink-3);border-top:1px solid var(--border)}
+  .fase{border:1px solid var(--border);border-radius:12px;padding:16px 18px;background:var(--surface);margin-bottom:12px}
+  .fase h3{margin:0 0 6px;font-size:15px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .fase .num{font-family:var(--mono);font-size:10px;font-weight:700;background:var(--accent-soft);color:var(--accent);padding:3px 8px;border-radius:999px}
+  .fase p{margin:0 0 8px;font-size:13px;color:var(--ink-2)}
+  .fase ul{margin:0;padding-left:17px;font-size:12.5px;color:var(--ink-2)}.fase li{margin-bottom:3px}
+  .fase .cost{font-size:11.5px;color:var(--ink-3);font-family:var(--mono);margin-top:8px}
+  code.inl{font-family:var(--mono);font-size:12px;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+  .q{margin-top:46px;border:1px solid var(--border);border-radius:12px;padding:22px 24px;background:var(--surface)}
+  .q h2{font-size:17px;margin:0 0 10px}.q ol{margin:0;padding-left:18px;font-size:14px}.q li{margin-bottom:12px}.q b{color:var(--accent)}
+  .mock{border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);padding:18px;margin-top:14px;overflow-x:auto}
+  .cap{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:12px}
+  svg{display:block;max-width:100%;height:auto}
+  .lg{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:11.5px;color:var(--ink-2)}
+  .lg span{display:inline-flex;align-items:center;gap:5px}
+  .sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">GestãoPro · Backlog · Proposta</div>
+    <h1>EAP visual: a árvore que o código já tem, desenhada</h1>
+    <p class="lede">A EAP existe e está correta — o modelo de 3 papéis, os códigos 1.2.3, a árvore por <code class="inl">parent_id</code>. O que falta é o <b>desenho</b>: a estrutura só aparece como lista indentada, e é impossível apresentar a decomposição de um projeto numa reunião a partir dela.</p>
+  </header>
+
+  <div class="stat">
+    <div><div class="v">1.554</div><div class="l">atividades vivas</div></div>
+    <div><div class="v">7</div><div class="l">níveis de profundidade máxima</div></div>
+    <div><div class="v warn">51</div><div class="l">irmãos sob um mesmo pai (pior caso)</div></div>
+    <div><div class="v">16</div><div class="l">atividades no projeto mediano</div></div>
+  </div>
+
+  <div class="note">
+    <b>O número que decide o desenho é o 51.</b> Uma EAP clássica — organograma de cima para baixo, filhos lado a lado — cresce em largura conforme o número de <i>folhas</i>, não de níveis. Com 51 irmãos num nível e 413 atividades no maior projeto, o diagrama teria dezenas de milhares de pixels de largura. Desenhar a EAP "do jeito do livro" simplesmente não cabe na sua base.
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Como o mercado resolve</h2></div>
+    <p class="sec-sub">Primeiro achado: <b>quase ninguém tem EAP visual</b>. É diferencial, não item de paridade.</p>
+    <div class="scroll">
+    <table class="cmp">
+      <tr><th>Ferramenta</th><th>Tem EAP visual?</th><th>Observação</th></tr>
+      <tr><td><b>WBS Schedule Pro</b></td><td class="y">Sim — é a referência</td><td>Ferramenta dedicada; define o idioma do setor</td></tr>
+      <tr><td><b>ClickUp</b></td><td class="y">Mind Maps</td><td>Editável; arrastar reposiciona a tarefa de verdade</td></tr>
+      <tr><td><b>MS Project</b></td><td class="n">Não nativamente</td><td>Só exportando para Visio ou comprando add-in</td></tr>
+      <tr><td><b>Jira</b></td><td class="n">Não</td><td>Advanced Roadmaps é linha do tempo, não árvore</td></tr>
+      <tr><td><b>Asana · monday · Smartsheet · Wrike</b></td><td class="n">Nenhum</td><td>Lista indentada, Gantt, timeline</td></tr>
+      <tr><td><b>Lucidchart · Miro · Creately</b></td><td class="m">Desenho livre</td><td>Bonito, mas desconectado dos dados</td></tr>
+    </table>
+    </div>
+
+    <div class="okbox">
+      <b>O achado que resolve o problema dos 51 irmãos.</b> O WBS Schedule Pro — referência da categoria — <b>não escolhe um layout</b>. O estilo padrão dele, chamado <i>"WBS Chart Style"</i>, exibe <b>agrupadores na horizontal e folhas na vertical</b>, abaixo do pai.
+      <br><br>
+      É a regra exata que sua base precisa: o eixo horizontal passa a crescer com o número de <b>fases</b> (poucas, limitadas), e o vertical absorve as <b>atividades</b> (muitas, ilimitadas — e rolar para baixo é de graça). E ela encaixa direto no <code class="inl">lib/eapModel.ts</code>, que já distingue agrupador de folha.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>O desenho proposto</h2></div>
+    <p class="sec-sub">Mesma árvore, três formas de organizá-la. A diferença aparece quando um pai tem muitos filhos.</p>
+
+    <div class="mock">
+      <div class="cap">A · Organograma clássico — não cabe</div>
+      <svg viewBox="0 0 700 150" width="700">
+        <rect x="290" y="8" width="120" height="30" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+        <text x="350" y="27" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="600">1. Fase</text>
+        <path d="M350,38 V52 M60,52 H640 M60,52 V66 M180,52 V66 M300,52 V66 M420,52 V66 M540,52 V66 M640,52 V66" stroke="var(--border-strong)" fill="none"/>
+        <g font-size="9.5" fill="var(--ink-2)">
+          <rect x="15" y="66" width="90" height="26" rx="5" fill="var(--surface-2)" stroke="var(--border)"/><text x="60" y="83" text-anchor="middle">1.1</text>
+          <rect x="135" y="66" width="90" height="26" rx="5" fill="var(--surface-2)" stroke="var(--border)"/><text x="180" y="83" text-anchor="middle">1.2</text>
+          <rect x="255" y="66" width="90" height="26" rx="5" fill="var(--surface-2)" stroke="var(--border)"/><text x="300" y="83" text-anchor="middle">1.3</text>
+          <rect x="375" y="66" width="90" height="26" rx="5" fill="var(--surface-2)" stroke="var(--border)"/><text x="420" y="83" text-anchor="middle">1.4</text>
+          <rect x="495" y="66" width="90" height="26" rx="5" fill="var(--surface-2)" stroke="var(--border)"/><text x="540" y="83" text-anchor="middle">1.5</text>
+          <text x="640" y="83" text-anchor="middle" fill="var(--bad)" font-size="14" font-weight="700">→ … 51</text>
+        </g>
+        <text x="350" y="120" text-anchor="middle" font-size="11" fill="var(--bad)" font-weight="600">largura cresce com o número de folhas — dezenas de milhares de pixels</text>
+      </svg>
+    </div>
+
+    <div class="mock">
+      <div class="cap">B · Híbrido “WBS Chart Style” — <b style="color:var(--ok)">recomendado</b></div>
+      <svg viewBox="0 0 700 290" width="700">
+        <!-- raiz -->
+        <rect x="20" y="10" width="150" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+        <text x="32" y="25" font-size="8.5" font-family="var(--mono)" fill="var(--accent)">1</text>
+        <text x="32" y="37" font-size="11" fill="var(--accent)" font-weight="600">Revitalização Tasy</text>
+        <!-- conectores horizontais entre fases -->
+        <path d="M95,44 V58 M95,58 H510 M95,58 V72 M300,58 V72 M510,58 V72" stroke="var(--border-strong)" fill="none"/>
+        <!-- fases (agrupadores) na HORIZONTAL -->
+        <g>
+          <rect x="20" y="72" width="150" height="34" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+          <text x="32" y="87" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">1.2</text>
+          <text x="32" y="99" font-size="10.5" fill="var(--ink)" font-weight="600">Cadastros</text>
+          <rect x="118" y="90" width="44" height="4" rx="2" fill="var(--border)"/>
+          <rect x="118" y="90" width="9" height="4" rx="2" fill="var(--ok)"/>
+        </g>
+        <g>
+          <rect x="225" y="72" width="150" height="34" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+          <text x="237" y="87" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">1.3</text>
+          <text x="237" y="99" font-size="10.5" fill="var(--ink)" font-weight="600">Agendas</text>
+          <rect x="323" y="90" width="44" height="4" rx="2" fill="var(--border)"/>
+          <rect x="323" y="90" width="22" height="4" rx="2" fill="var(--ok)"/>
+        </g>
+        <g>
+          <rect x="435" y="72" width="150" height="34" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+          <text x="447" y="87" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">1.4</text>
+          <text x="447" y="99" font-size="10.5" fill="var(--ink)" font-weight="600">Faturamento</text>
+          <text x="533" y="99" font-size="9" fill="var(--ink-3)">12 itens</text>
+        </g>
+        <!-- folhas na VERTICAL sob 1.2 -->
+        <path d="M40,106 V132 M40,132 H56 M40,150 H56 M40,168 H56 M40,186 H56" stroke="var(--border)" fill="none"/>
+        <path d="M40,106 V186" stroke="var(--border)" fill="none"/>
+        <g font-size="9.5" fill="var(--ink-2)">
+          <rect x="56" y="122" width="114" height="20" rx="4" fill="var(--surface)" stroke="var(--border)"/><text x="63" y="136">1.2.1 Empresa</text>
+          <rect x="56" y="140" width="114" height="20" rx="4" fill="var(--surface)" stroke="var(--border)"/><text x="63" y="154">1.2.2 P. Jurídica</text>
+          <rect x="56" y="158" width="114" height="20" rx="4" fill="var(--surface)" stroke="var(--border)"/><text x="63" y="172">1.2.3 Estrutura</text>
+          <rect x="56" y="176" width="114" height="20" rx="4" fill="var(--surface)" stroke="var(--border)"/><text x="63" y="190">1.2.4 Tributos</text>
+        </g>
+        <!-- folhas sob 1.3, incluindo marco (losango) -->
+        <path d="M245,106 V186 M245,132 H261 M245,150 H261 M245,168 H261 M245,186 H261" stroke="var(--border)" fill="none"/>
+        <g font-size="9.5" fill="var(--ink-2)">
+          <rect x="261" y="122" width="114" height="20" rx="4" fill="var(--surface)" stroke="var(--border)"/><text x="268" y="136">1.3.1 Treinamento</text>
+          <rect x="261" y="140" width="114" height="20" rx="4" fill="var(--surface)" stroke="var(--border)"/><text x="268" y="154">1.3.2 Serviços</text>
+          <rect x="261" y="158" width="114" height="20" rx="4" fill="var(--surface)" stroke="var(--border)"/><text x="268" y="172">1.3.3 Consulta</text>
+          <path d="M271,196 l9,-9 9,9 -9,9 z" fill="var(--warn-soft)" stroke="var(--warn)"/>
+          <text x="294" y="200" fill="var(--warn)">Marco 2</text>
+        </g>
+        <!-- colapsado -->
+        <path d="M455,106 V126" stroke="var(--border)" fill="none"/>
+        <g>
+          <rect x="455" y="126" width="80" height="20" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-dasharray="3 2"/>
+          <text x="495" y="140" text-anchor="middle" font-size="9" fill="var(--accent)" font-weight="600">+ 12 ocultas</text>
+        </g>
+        <text x="350" y="240" text-anchor="middle" font-size="11" fill="var(--ok)" font-weight="600">largura cresce só com o número de FASES — as atividades descem</text>
+        <text x="350" y="258" text-anchor="middle" font-size="10.5" fill="var(--ink-3)">o mesmo projeto de 413 atividades cabe numa tela</text>
+      </svg>
+      <div class="lg">
+        <span><span class="sw" style="background:var(--accent-soft);border:1px solid var(--accent)"></span> Projeto</span>
+        <span><span class="sw" style="background:var(--surface-2);border:1px solid var(--border-strong)"></span> Fase / Entrega (agrupador)</span>
+        <span><span class="sw" style="background:var(--surface);border:1px solid var(--border)"></span> Atividade (folha)</span>
+        <span><span class="sw" style="background:var(--warn-soft);border:1px solid var(--warn);transform:rotate(45deg)"></span> Marco (losango)</span>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>O losango do marco não é enfeite.</b> É o glifo universal de milestone em gestão de projetos — um marco desenhado como retângulo lê errado para qualquer gestor. O modelo já sabe quem é marco (<code class="inl">eapModel.ts</code>), e marco não recebe código EAP por decisão do próprio modelo, então o espaço do código fica livre para o rótulo.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Como construir</h2></div>
+    <p class="sec-sub">A decisão técnica é: biblioteca de grafos ou SVG próprio?</p>
+    <div class="scroll">
+    <table class="cmp">
+      <tr><th>Opção</th><th>Peso (gzip)</th><th>Veredito</th></tr>
+      <tr><td><b>d3-hierarchy</b> + SVG próprio</td><td class="y">5,8 KB · 0 dependências</td><td class="y">Recomendado</td></tr>
+      <tr><td>@dagrejs/dagre</td><td>15,8 KB</td><td class="m">Resolve grafos; EAP é árvore</td></tr>
+      <tr><td>@xyflow/react (React Flow)</td><td>59,8 KB + CSS</td><td class="n">Renderiza cada nó como DOM; 413 nós pesam</td></tr>
+      <tr><td>elkjs</td><td class="n">437 KB</td><td class="n">Java transpilado, roda em Worker</td></tr>
+      <tr><td>mermaid</td><td class="n">178 KB (+~1,7 MB)</td><td class="n">Fora de questão</td></tr>
+    </table>
+    </div>
+
+    <div class="okbox">
+      <b>Recomendo SVG próprio + <code class="inl">d3-hierarchy</code> (5,8 KB).</b> O algoritmo de árvore arrumada (Reingold–Tilford) é ciência resolvida, e <code class="inl">d3.tree()</code> é <b>aritmética pura</b> — não toca no DOM, roda dentro de um <code class="inl">useMemo</code>. Ele devolve as coordenadas; nós desenhamos <code class="inl">&lt;rect&gt;</code> e <code class="inl">&lt;path&gt;</code> com Tailwind, como o Cronograma <b>já faz</b> para as setas de dependência.
+      <br><br>
+      Bônus: o layout é agnóstico de orientação — trocar vertical por horizontal é reinterpretar x/y. O <b>botão de girar a árvore sai de graça</b>.
+    </div>
+
+    <div class="note">
+      <b>E a impressão, que numa EAP não é opcional.</b> SVG é vetorial: escala para qualquer papel sem borrar. E o projeto já tem o padrão — o TAP e os Documentos exportam por <code class="inl">window.print()</code> com CSS de impressão, e o comentário no código diz o porquê: biblioteca de PDF "pesa centenas de KB e reimplementa mal a paginação que o navegador já resolve". Mesmo caminho aqui, com <code class="inl">@page { size: A3 landscape }</code>.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>O que a EAP visual vai revelar</h2></div>
+    <p class="sec-sub">Um efeito colateral que vale por si: o desenho expõe problemas de estrutura que a lista esconde.</p>
+    <div class="badbox">
+      <b>90 itens têm código de subitem mas nenhum pai.</b> São coisas como <code class="inl">1.3.4</code> e <code class="inl">1.1.1</code> com <code class="inl">parent_id</code> vazio — o código diz "sou neto", a árvore diz "sou raiz". Estão em 6 projetos, sendo 38 no pior deles.
+      <br><br>
+      Na lista indentada isso passa despercebido: o item aparece no topo e ninguém estranha. Numa EAP <b>desenhada</b>, ele vira uma caixa solta ao lado da raiz, sem linha ligando a nada — impossível de ignorar.
+      <br><br>
+      Conferi se dava para religar automaticamente pelo código: <b>não dá</b>. Nenhum dos 90 tem um pai correspondente na base — os níveis intermediários nunca foram criados. É estrutura achatada, não vínculo perdido. A EAP visual mostra o problema; corrigir é decisão de quem conhece o projeto.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>Plano em 4 fases</h2></div>
+
+    <div class="fase">
+      <h3><span class="num">FASE 1</span> A árvore desenhada, só leitura</h3>
+      <p>Nova aba no Backlog, ao lado do seletor de agrupamento que já existe. O layout híbrido, os três papéis com formas distintas, colapsar/expandir por nó.</p>
+      <ul>
+        <li>Extrair a montagem da árvore de <code class="inl">BacklogSection</code> para módulo compartilhado — a lógica já existe lá, incluindo a promoção de órfãos</li>
+        <li><code class="inl">d3-hierarchy</code> com <code class="inl">nodeSize</code> e <code class="inl">separation</code> próprios; a regra de papel decide horizontal ou vertical</li>
+        <li>Abre no <b>nível 3</b>, não expandida: com 7 níveis, tudo aberto é ilegível</li>
+      </ul>
+      <div class="cost">1 dependência (5,8 KB) + 1 componente · risco baixo</div>
+    </div>
+
+    <div class="fase">
+      <h3><span class="num">FASE 2</span> Navegar em projeto grande</h3>
+      <p>Zoom, arraste e — o mais importante — <b>foco</b>: clicar numa fase e ver só aquela subárvore, com trilha para voltar. É a resposta real ao projeto de 413 atividades, melhor que qualquer zoom.</p>
+      <ul>
+        <li>Pan/zoom por <code class="inl">viewBox</code>; botão "ajustar à tela"</li>
+        <li>Modo foco + trilha (breadcrumb) a partir do código EAP</li>
+        <li>Alternar orientação (vertical ↔ horizontal) — sai de graça do d3</li>
+      </ul>
+      <div class="cost">só front · risco baixo</div>
+    </div>
+
+    <div class="fase">
+      <h3><span class="num">FASE 3</span> Apresentar e imprimir</h3>
+      <p>É para isso que a EAP visual existe: mostrar a decomposição numa reunião.</p>
+      <ul>
+        <li>CSS de impressão + <code class="inl">@page</code> A3 paisagem, no padrão do TAP</li>
+        <li>Baixar como <b>.svg</b> (XMLSerializer) e <b>.png</b> (canvas) — sem biblioteca</li>
+        <li>Densidade: Compacto (código + nome) · Normal (+ progresso) · Detalhado (+ responsável, GUT, prazo)</li>
+      </ul>
+      <div class="cost">só front · risco baixo</div>
+    </div>
+
+    <div class="fase">
+      <h3><span class="num">FASE 4</span> Reestruturar arrastando <span style="font-family:var(--mono);font-size:10px;background:var(--warn-soft);color:var(--warn);padding:3px 8px;border-radius:999px;">opcional</span></h3>
+      <p>Arrastar um nó para outro pai. <b>Deliberadamente por último</b> — e talvez nunca.</p>
+      <div class="warnbox" style="margin-top:6px;">
+        <b>Por que não na Fase 1:</b> arrastar na EAP move uma <b>subárvore inteira</b>, com renumeração em cascata de dezenas de <code class="inl">wbs_code</code>. É operação muito mais pesada que o arraste da lista, e fácil de disparar sem querer com o zoom afastado. Some a isso a lição da semana: tela e RLS são lados independentes, e um editor que falha em silêncio ao salvar é pior que não ter editor. As peças existem (<code class="inl">eapCanMoveInto</code>, <code class="inl">eapRenumerar</code>, <code class="inl">@dnd-kit</code>) — o que falta é a leitura estar provada antes.
+      </div>
+      <div class="cost">só depois das fases 1–3</div>
+    </div>
+  </section>
+
+  <div class="warnbox">
+    <b>Uma ressalva honesta.</b> O projeto de 413 atividades vai ser visualmente grande por melhor que seja o layout. O híbrido, o nível 3 por padrão e o modo foco o tornam <b>navegável</b> — mas uma EAP de 413 nós toda aberta não é legível em uma tela, e imprimi-la exige A2/A3. Isso é próprio de EAP (o WBS Pro suporta plotter por essa razão), não defeito da abordagem. É no projeto mediano, de 16 atividades, que esta tela vai brilhar.
+  </div>
+
+  <div class="q">
+    <h2>Três decisões</h2>
+    <ol>
+      <li>
+        <b>Onde ela entra?</b> Recomendo <b>aba nova dentro do Backlog</b>, junto do seletor de agrupamento — a EAP é a mesma informação da lista, vista de outro jeito. As alternativas seriam aba de primeiro nível do projeto (ao lado de Kanban e Cronograma) ou uma seção do TAP.
+      </li>
+      <li>
+        <b>Começo pela Fase 1 apenas, ou 1 a 3 de uma vez?</b> As fases 2 e 3 são baratas e é o conjunto que torna a tela apresentável numa reunião. A 1 sozinha já é útil no projeto mediano.
+      </li>
+      <li>
+        <b>O que fazer com os 90 órfãos?</b> A EAP visual vai expô-los. Posso (a) só mostrá-los destacados e deixar a correção manual; ou (b) preparar um relatório por projeto, para alguém que conheça o escopo religar. Religar automático está descartado — não há pai a que religar.
+      </li>
+    </ol>
+  </div>
+</div>

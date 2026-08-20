@@ -10,7 +10,7 @@ import {
   ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
   ChevronsUpDown, ChevronsDownUp, Diamond, EyeOff,
   Rows3, MoreHorizontal, Pencil, Package, IndentIncrease, SlidersHorizontal, Search,
-  User, Flag, Calendar as CalendarIcon, Link2, X,
+  User, Flag, Calendar as CalendarIcon, Link2, X, Network,
 } from "lucide-react";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
@@ -42,6 +42,7 @@ import {
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
 import { resolveEapKind, type EapKind } from "@/lib/eapModel";
+import { EapVisual } from "@/components/backlog/EapVisual";
 import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
 import {
   avaliarProntidao, resumirProntidao, principaisCarencias,
@@ -126,6 +127,9 @@ interface BacklogSectionProps {
    *  filtros. Vêm da página porque dependem de permissão e de diálogos que
    *  vivem lá — mas pertencem visualmente a esta linha, não a uma acima. */
   acoes?: React.ReactNode;
+  /** Nome do projeto — vira a caixa-raiz da EAP visual. Opcional: sem ele a
+   *  árvore ainda desenha, com um rótulo genérico na raiz. */
+  projectTitle?: string;
 }
 
 export const BacklogSection = ({
@@ -135,6 +139,7 @@ export const BacklogSection = ({
   statusFilter = "all", onStatusFilterChange,
   priorityFilter = "all", onPriorityFilterChange,
   search = "", onSearchChange, acoes,
+  projectTitle,
 }: BacklogSectionProps) => {
   const { toast } = useToast();
   const appConfirm = useAppConfirm();
@@ -206,6 +211,29 @@ export const BacklogSection = ({
   const changeGroupBy = (v: GroupBy) => {
     setGroupBy(v);
     try { localStorage.setItem(groupByKey, v); } catch { /* quota */ }
+  };
+  /**
+   * Lista ou EAP — a MESMA informação, desenhada de dois jeitos.
+   *
+   * A EAP visual não é uma tela nova: é o modo de exibição desta aqui. A busca,
+   * os filtros e o recorte de itens continuam valendo — o que muda é só o
+   * desenho da hierarquia. Por isso mora aqui e não numa aba de primeiro nível.
+   *
+   * Persistido por projeto, como o agrupamento: escolher visão é hábito de
+   * trabalho, não decisão a repetir a cada acesso.
+   */
+  type ModoExibicao = "lista" | "eap";
+  const modoKey = `backlog-modo:${projectId}`;
+  const [modo, setModo] = useState<ModoExibicao>("lista");
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(modoKey);
+      if (v === "eap" || v === "lista") setModo(v);
+    } catch { /* quota */ }
+  }, [modoKey]);
+  const changeModo = (v: ModoExibicao) => {
+    setModo(v);
+    try { localStorage.setItem(modoKey, v); } catch { /* quota */ }
   };
   // Chaves de grupos colapsados no modo "raia" (plano), separado do da árvore.
   const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
@@ -2524,8 +2552,12 @@ export const BacklogSection = ({
         </div>
       )}
 
-      {/* Barra de visão: legenda de contexto (esq.) + controles (dir.) */}
-      {backlogActs.length > 0 && (
+      {/* Barra de visão: legenda de contexto (esq.) + controles (dir.)
+          Aparece também com a lista VAZIA quando o modo é EAP — o segmento
+          Lista/EAP mora aqui, e escondê-lo deixaria a pessoa presa: um filtro
+          que zera a lista tiraria o único caminho de volta, e o modo é
+          lembrado no localStorage, então recarregar não resolveria. */}
+      {(backlogActs.length > 0 || modo === "eap") && (
         <div className="flex items-center justify-between gap-3 flex-wrap px-0.5">
           {/* Legenda de contexto — total + quebra por tipo */}
           <p className="text-[13px] text-muted-foreground flex items-center gap-2 flex-wrap">
@@ -2791,7 +2823,35 @@ export const BacklogSection = ({
                 controles de VISÃO — agrupar, expandir, recolher —, que não
                 recortam a lista, apenas reorganizam o que sobrou dela. */}
 
-            {/* Agrupar em raias — mesmo modelo do Kanban */}
+            {/* LISTA ↔ EAP. A lista responde "o que falta fazer"; a EAP
+                responde "como o projeto se decompõe". São perguntas
+                diferentes sobre os mesmos itens, e é por isso que dividem
+                busca e filtros em vez de virarem telas separadas. */}
+            <div className="inline-flex rounded-md border border-border overflow-hidden">
+              {([
+                { id: "lista" as const, label: "Lista", Icon: Rows3 },
+                { id: "eap" as const, label: "EAP", Icon: Network },
+              ]).map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => changeModo(id)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] transition-colors",
+                    modo === id
+                      ? "bg-primary text-primary-foreground font-medium"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Agrupar em raias — mesmo modelo do Kanban. Só faz sentido na
+                lista: a EAP é sempre a árvore da decomposição. */}
+            {modo === "lista" && (
             <Select value={groupBy} onValueChange={(v) => changeGroupBy(v as GroupBy)}>
               <SelectTrigger className="h-7 w-[136px] text-[13px] gap-1.5">
                 <Rows3 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -2805,6 +2865,9 @@ export const BacklogSection = ({
                 <SelectItem value="type">Tipo</SelectItem>
               </SelectContent>
             </Select>
+            )}
+            {modo === "lista" && (
+            <>
             <Button
               size="icon" variant="ghost"
               className="h-7 w-7 text-muted-foreground"
@@ -2833,6 +2896,8 @@ export const BacklogSection = ({
             >
               <ChevronsDownUp className="w-4 h-4" />
             </Button>
+            </>
+            )}
             {/* O menu "⋯" saiu: tinha um item só — "Selecionar em lote" —, que
                 virou a caixa ao lado de "Tarefa" no cabeçalho da tabela. Um
                 dropdown para uma ação escondia justamente o que precisava ser
@@ -2841,12 +2906,54 @@ export const BacklogSection = ({
         </div>
       )}
 
+      {/* EAP VISUAL — os mesmos `backlogActs`, desenhados como árvore.
+          Recebe a lista JÁ FILTRADA de propósito: busca e filtros continuam
+          valendo, e recortar o backlog recorta a árvore junto. */}
+      {modo === "eap" && (
+        <EapVisual
+          projectTitle={projectTitle || "Projeto"}
+          items={backlogActs.map((a) => ({
+            id: a.id,
+            title: a.title,
+            wbs_code: (a as { wbs_code?: string | null }).wbs_code ?? null,
+            parent_id: a.parent_id ?? null,
+            is_milestone: a.is_milestone ?? null,
+            item_type: a.item_type ?? null,
+            // O progresso do agrupador é a média dos filhos — a mesma conta que
+            // a lista mostra, vinda da fonte única em activityProgress.
+            /**
+             * Percentual do agrupador = proporção de filhos concluídos.
+             *
+             * É a mesma regra que `activityProgress` aplica a agrupador ("não
+             * é trabalho, é caixa: vale a média dos filhos"), mas calculada a
+             * partir do `status`, que o Backlog já tem em mãos — sem depender
+             * das colunas do quadro, que esta tela não carrega.
+             *
+             * Folha não recebe barra: um número em cada caixa polui a árvore
+             * sem dizer nada que o próprio quadro não diga melhor.
+             */
+            progresso: (() => {
+              const filhos = childrenByParent.get(a.id) ?? [];
+              if (filhos.length === 0) return null;
+              const vivos = filhos.filter((f) => !f.is_milestone);
+              if (vivos.length === 0) return null;
+              const feitos = vivos.filter((f) => f.status === "completed").length;
+              return Math.round((feitos / vivos.length) * 100);
+            })(),
+          }))}
+          onSelect={(id) => {
+            const alvo = backlogActs.find((x) => x.id === id);
+            if (alvo) onEditActivity?.(alvo as never);
+          }}
+        />
+      )}
+
       {/* Phase groups — tabela única com cabeçalho de colunas no topo */}
       {/* Sem rolagem lateral: as colunas são elásticas (minmax em BACKLOG_COLS)
           e encolhem até caber. Antes as larguras eram fixas e somavam ~760px,
           então a coluna de AÇÕES — a última — saía da tela e o botão de
           arquivar ficava inalcançável. */}
-      <div ref={tableRef} className="rounded-lg border border-border bg-card overflow-hidden">
+      <div ref={tableRef} className={cn("rounded-lg border border-border bg-card overflow-hidden", modo === "eap" && "hidden")}>
         {/* Sem botão de criar fase aqui: a entrada do backlog é "Nova
             Atividade" (ou importar a EAP, que já cria as fases). Fase avulsa
             criada antes de existir qualquer tarefa só produzia um agrupador

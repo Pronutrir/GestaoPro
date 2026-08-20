@@ -1980,6 +1980,7 @@ export default function ProjectDetailsPage() {
                 projectId={id!}
                 activities={backlogFilteredActivities}
                 phases={phases}
+                projectTitle={project?.title}
                 onEditActivity={(activity) => openEditActivity(activity as any)}
                 onDeleteActivity={handleDeleteActivity}
                 onToggleActivity={handleToggleActivity}
