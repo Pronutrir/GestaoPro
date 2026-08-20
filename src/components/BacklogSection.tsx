@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { resolveEapKind, type EapKind } from "@/lib/eapModel";
+import { eapIsFaseLevel, eapLevel, resolveEapKind, type EapKind } from "@/lib/eapModel";
 import { EapVisual } from "@/components/backlog/EapVisual";
 import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
 import {
@@ -665,10 +665,20 @@ export const BacklogSection = ({
        * `activities` (14/08/2026), a fase migrada TEM `phase_id` — aponta para
        * a fase de origem — e ficava presa dentro da própria faixa.
        *
-       * `!a.parent_id` é o teste certo: quem não tem pai é topo da árvore,
-       * venha de onde vier. A Entrega continua no lugar, porque ela tem pai.
+       * `!a.parent_id` NÃO basta. O comentário anterior supunha que "a Entrega
+       * continua no lugar, porque ela tem pai" — e não tem: na Revitalização
+       * Tasy as entregas 1.2.2, 1.2.3 e 1.2.4 são agrupadores de topo, sem
+       * `parent_id`. Elas viravam card de fase virtual e roubavam a faixa da
+       * fase 1.2, que sumia da lista embora existisse em `phases`.
+       *
+       * O que define a atividade-fase é o CÓDIGO no nível da fase (1.1, 1.2),
+       * não a ausência de pai. Sem código, vale o teste antigo — é o
+       * comportamento das bases sem numeração.
        */
-      if (isPhaseLikeActivity(a) && !a.parent_id) virtualPhaseActs.push(a);
+      if (isPhaseLikeActivity(a) && !a.parent_id) {
+        const nivel = eapLevel((a as { wbs_code?: string | null }).wbs_code);
+        if (nivel === null || eapIsFaseLevel(nivel)) virtualPhaseActs.push(a);
+      }
       else filtered.push(a);
     }
     topLevelByPhase.set(key, filtered);
@@ -3047,7 +3057,30 @@ export const BacklogSection = ({
             atividade-fase existe, ela manda, e traz junto o que a faixa nunca
             teve: coluna, percentual e a seleção em lote. */}
         {groupBy === "phase" && phases
-          .filter((p) => !backlogActs.some((a) => a.item_type === "fase" && a.phase_id === p.id && !a.parent_id))
+          /**
+           * A FAIXA SÓ CEDE O LUGAR PARA A PRÓPRIA FASE, não para o que está
+           * dentro dela.
+           *
+           * O teste era `item_type === 'fase' && !parent_id` — qualquer
+           * agrupador de topo dentro da fase satisfazia isso, e a faixa
+           * desaparecia. Na Revitalização Tasy a fase "1.2 2ª. Fase - Cadastros
+           * e funções essenciais" sumiu porque três ENTREGAS suas (1.2.2, 1.2.3
+           * e 1.2.4) são agrupadores sem pai. A pré-visualização da importação
+           * mostrava a fase 1.2; a lista, não.
+           *
+           * O que caracteriza a atividade-fase que substitui a faixa é o
+           * CÓDIGO no nível da fase (1.1, 1.2 — `eapIsFaseLevel`), não o fato
+           * de agrupar. Uma entrega tem código mais fundo e continua sendo
+           * desenhada DENTRO da faixa, que é onde ela pertence.
+           *
+           * Sem código não dá para decidir pelo nível; aí vale o teste antigo,
+           * que é o comportamento das bases sem numeração.
+           */
+          .filter((p) => !backlogActs.some((a) => {
+            if (a.item_type !== "fase" || a.phase_id !== p.id || a.parent_id) return false;
+            const nivel = eapLevel((a as { wbs_code?: string | null }).wbs_code);
+            return nivel === null || eapIsFaseLevel(nivel);
+          }))
           .map((p) => renderPhaseGroup(p.id, p.title))}
 
         {/* Atividades-fase (item_type='fase') em qualquer nível top-level viram cards de fase virtuais */}
