@@ -58,6 +58,8 @@ export interface EapNodeInput {
   parent_id?: string | null;
   is_milestone?: boolean | null;
   item_type?: string | null;
+  /** A fase a que o item pertence — o vínculo é COLUNA, não `parent_id`. */
+  phase_id?: string | null;
   /** 0–100. Já calculado por quem chama (o Backlog conhece as colunas). */
   progresso?: number | null;
 }
@@ -65,6 +67,19 @@ export interface EapNodeInput {
 interface Props {
   projectTitle: string;
   items: EapNodeInput[];
+  /**
+   * As FASES do projeto, da tabela `phases`.
+   *
+   * Elas são o nível que faltava. A EAP montava a árvore só por `parent_id` e
+   * desenhava as entregas soltas na raiz — mas na Revitalização Tasy há 4
+   * fases ("1.2 Fase de Cadastros e Funções Essenciais" etc.) que agrupam as
+   * 30 entregas, e o vínculo está em `activities.phase_id`, não em
+   * `parent_id`. A lista do Backlog sempre desenhou essa faixa; a árvore não.
+   *
+   * Sem elas o diagrama mentia sobre a estrutura: mostrava entregas como se
+   * fossem o primeiro nível do projeto.
+   */
+  phases?: { id: string; title: string; display_order?: number | null }[];
   /** Clique num nó — abre a atividade no painel que já existe. */
   onSelect?: (id: string) => void;
   className?: string;
@@ -88,6 +103,24 @@ interface Node {
 }
 
 const RAIZ_ID = "__raiz__";
+
+/**
+ * Progresso de uma fase = média do progresso dos filhos que têm progresso.
+ *
+ * A fase não é linha de `activities`: não tem coluna no quadro nem status
+ * próprio. O número dela só pode vir do que está dentro — é a mesma regra que
+ * `activityProgress` aplica a agrupador ("não é trabalho, é caixa").
+ *
+ * Devolve null quando nenhum filho tem número, em vez de 0: uma barra zerada
+ * afirma "nada feito", e "não sei" é diferente disso.
+ */
+function mediaConcluidos(filhos: { progresso: number | null }[]): number | null {
+  const comNumero = filhos.filter((f) => typeof f.progresso === "number");
+  if (comNumero.length === 0) return null;
+  return Math.round(
+    comNumero.reduce((s, f) => s + (f.progresso as number), 0) / comNumero.length,
+  );
+}
 
 /** Agrupador ramifica na horizontal; folha desce na vertical. */
 const agrupa = (k: EapKind) => k === "projeto" || k === "fase" || k === "entrega";
@@ -126,7 +159,7 @@ const H_FOLHA = 22;
 const GAP_X = 32;
 const GAP_Y = 6;
 
-export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
+export function EapVisual({ projectTitle, items, phases, onSelect, className }: Props) {
   const [nivelMax, setNivelMax] = useState(3);
   /** Pais cujo "+N fases" foi aberto — mostram todos os agrupadores. */
   const [larguraAberta, setLarguraAberta] = useState<Set<string>>(new Set());
@@ -242,7 +275,53 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
     // Uma construção só: `todosFilhos` e `filhos` precisam ser a MESMA lista
     // de objetos. Construir duas vezes geraria duas árvores com ids iguais mas
     // identidades diferentes, e o corte por nível compararia coisas distintas.
-    const filhosDaRaiz = topo.map((t) => construir(t, 1, new Set()));
+    const construidos = topo.map((t) => construir(t, 1, new Set()));
+
+    /**
+     * AS FASES ENTRAM AQUI, entre o projeto e o resto.
+     *
+     * O vínculo com a fase é `activities.phase_id` — uma COLUNA, não
+     * `parent_id`. Montando a árvore só por `parent_id`, as entregas ficavam
+     * penduradas direto no projeto e o diagrama afirmava que elas eram o
+     * primeiro nível. Não são: na Revitalização Tasy, 4 fases agrupam as 30
+     * entregas, e a lista do Backlog sempre mostrou essa faixa.
+     *
+     * Fase que não recebeu nada não é desenhada: uma caixa vazia no meio da
+     * árvore só ocupa espaço e sugere trabalho que não existe.
+     *
+     * Quem não tem `phase_id` continua pendurado direto na raiz — é o caso
+     * legítimo de item fora de qualquer fase, e escondê-lo seria pior.
+     */
+    const phaseDe = new Map(items.map((i) => [i.id, i.phase_id ?? null]));
+    const usados = new Set<string>();
+    const nosDeFase: Node[] = [];
+
+    for (const f of [...(phases ?? [])].sort(
+      (a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999),
+    )) {
+      const dentro = construidos.filter((n) => phaseDe.get(n.id) === f.id);
+      if (dentro.length === 0) continue;
+      dentro.forEach((n) => usados.add(n.id));
+      // O código da fase costuma vir no próprio título ("1.2 Fase de …"), que
+      // é como a lista a exibe. Separá-lo aqui evita repetir "1.2" duas vezes
+      // na caixa e deixa o título legível no espaço que há.
+      const m = /^\s*([\d.]+)\s+(.*)$/.exec(f.title);
+      nosDeFase.push({
+        id: `fase:${f.id}`,
+        title: (m ? m[2] : f.title) || f.title,
+        code: m ? m[1] : null,
+        kind: "fase",
+        progresso: mediaConcluidos(dentro),
+        todosFilhos: dentro,
+        filhos: dentro,
+        orfao: false,
+        nivel: 1,
+      });
+    }
+
+    const semFase = construidos.filter((n) => !usados.has(n.id));
+    const filhosDaRaiz = [...nosDeFase, ...semFase];
+
     return {
       id: RAIZ_ID,
       title: projectTitle,
@@ -254,7 +333,7 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
       orfao: false,
       nivel: 0,
     };
-  }, [items, projectTitle]);
+  }, [items, projectTitle, phases]);
 
   /** Subárvore em foco, ou a raiz. A trilha de volta vem do caminho até ela. */
   const { exibida, trilha } = useMemo(() => {
