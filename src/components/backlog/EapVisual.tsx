@@ -200,7 +200,32 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
         id: it.id,
         title: it.title || "—",
         code,
-        kind: resolveEapKind(it, filhos.length > 0),
+        /**
+         * O PAPEL SEGUE O BACKLOG, não uma leitura própria do código.
+         *
+         * `resolveEapKind` decide pelo NÍVEL do `wbs_code`, assumindo a
+         * convenção nova (projeto no nível 1, fase no 2). Só que a base está
+         * majoritariamente na convenção ANTIGA — projeto fora da numeração,
+         * onde `1.2.3` é Fase 1 › Entrega 2 › Atividade 3. Conferido em
+         * 20/08/2026: dos 8 projetos com código EAP, NENHUM tem a raiz única de
+         * nível 1 que a convenção nova exige.
+         *
+         * O resultado era a EAP contradizer a lista ao lado: o Backlog mostra
+         * 30 fases na Revitalização Tasy (por `item_type='fase'`), e a EAP
+         * chamava as mesmas 30 de entrega, porque os códigos são de nível 3.
+         * Duas telas, o mesmo dado, respostas diferentes — foi o relato.
+         *
+         * Quem manda é `item_type`, a MESMA regra do Backlog
+         * (`isPhaseLikeActivity`). É também o que o usuário escolheu de fato,
+         * enquanto o nível do código depende de qual convenção o projeto
+         * seguiu — e a base tem as duas.
+         *
+         * `resolveEapKind` continua valendo para quem NÃO é fase: separa
+         * atividade de marco e reconhece agrupador por ter filhos.
+         */
+        kind: (it.item_type || "").trim().toLowerCase() === "fase"
+          ? "fase"
+          : resolveEapKind(it, filhos.length > 0),
         progresso: it.progresso ?? null,
         todosFilhos: filhos,
         filhos,
