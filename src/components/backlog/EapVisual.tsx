@@ -201,31 +201,24 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
         title: it.title || "—",
         code,
         /**
-         * O PAPEL SEGUE O BACKLOG, não uma leitura própria do código.
+         * MESMA função que a lista usa — `resolveEapKind`.
          *
-         * `resolveEapKind` decide pelo NÍVEL do `wbs_code`, assumindo a
-         * convenção nova (projeto no nível 1, fase no 2). Só que a base está
-         * majoritariamente na convenção ANTIGA — projeto fora da numeração,
-         * onde `1.2.3` é Fase 1 › Entrega 2 › Atividade 3. Conferido em
-         * 20/08/2026: dos 8 projetos com código EAP, NENHUM tem a raiz única de
-         * nível 1 que a convenção nova exige.
+         * Eu tinha trocado por `item_type === "fase"`, achando que era assim
+         * que a lista decidia. Errado: `isPhaseLikeActivity` (item_type) só
+         * escolhe QUEM vira card de agrupador; o PAPEL desenhado na linha vem
+         * de `resolveEapKind` (BacklogSection, no cálculo de `groupKind`), que
+         * é o que faz a lista mostrar Layers para Fase e Package para Entrega.
          *
-         * O resultado era a EAP contradizer a lista ao lado: o Backlog mostra
-         * 30 fases na Revitalização Tasy (por `item_type='fase'`), e a EAP
-         * chamava as mesmas 30 de entrega, porque os códigos são de nível 3.
-         * Duas telas, o mesmo dado, respostas diferentes — foi o relato.
+         * A troca fez a EAP chamar de "Fase" os mesmos itens que a lista
+         * marcava como Entrega — 1.3.1 "Treinamento Agendas" e 1.2.2 "Cadastros
+         * e Funções Gerais" entre eles. Ou seja: eu criei a divergência que
+         * queria corrigir, na direção oposta.
          *
-         * Quem manda é `item_type`, a MESMA regra do Backlog
-         * (`isPhaseLikeActivity`). É também o que o usuário escolheu de fato,
-         * enquanto o nível do código depende de qual convenção o projeto
-         * seguiu — e a base tem as duas.
-         *
-         * `resolveEapKind` continua valendo para quem NÃO é fase: separa
-         * atividade de marco e reconhece agrupador por ter filhos.
+         * A regra é uma só, e é a do modelo: o NÍVEL do código manda. Se a
+         * numeração de um projeto estiver na convenção errada, o conserto é
+         * renumerar (botão no menu do Backlog) — não cada tela inventar a sua.
          */
-        kind: (it.item_type || "").trim().toLowerCase() === "fase"
-          ? "fase"
-          : resolveEapKind(it, filhos.length > 0),
+        kind: resolveEapKind(it, filhos.length > 0),
         progresso: it.progresso ?? null,
         todosFilhos: filhos,
         filhos,

@@ -219,22 +219,24 @@ export const BacklogSection = ({
    * os filtros e o recorte de itens continuam valendo — o que muda é só o
    * desenho da hierarquia. Por isso mora aqui e não numa aba de primeiro nível.
    *
-   * Persistido por projeto, como o agrupamento: escolher visão é hábito de
-   * trabalho, não decisão a repetir a cada acesso.
+   * NÃO É PERSISTIDO, diferente do agrupamento. O Backlog abre SEMPRE em Lista:
+   * é onde se trabalha — marcar, editar, arrastar, filtrar. A EAP é para
+   * conferir a estrutura ou apresentar, uma consulta pontual.
+   *
+   * Salvar a escolha faria quem entrasse uma vez na EAP reencontrá-la dias
+   * depois, sem lembrar por quê, numa tela que não deixa mexer em nada. E a
+   * volta nem sempre era óbvia: um filtro que esvaziasse a lista escondia o
+   * próprio seletor. Abrir sempre no mesmo lugar vale mais que lembrar a última
+   * escolha, quando os dois modos servem a propósitos tão diferentes.
    */
   type ModoExibicao = "lista" | "eap";
-  const modoKey = `backlog-modo:${projectId}`;
   const [modo, setModo] = useState<ModoExibicao>("lista");
+  const changeModo = (v: ModoExibicao) => setModo(v);
+  // Limpa a chave que a versão anterior gravava. Ela já não é lida, mas ficaria
+  // no navegador de quem usou a EAP — lixo que ninguém mais explica.
   useEffect(() => {
-    try {
-      const v = localStorage.getItem(modoKey);
-      if (v === "eap" || v === "lista") setModo(v);
-    } catch { /* quota */ }
-  }, [modoKey]);
-  const changeModo = (v: ModoExibicao) => {
-    setModo(v);
-    try { localStorage.setItem(modoKey, v); } catch { /* quota */ }
-  };
+    try { localStorage.removeItem(`backlog-modo:${projectId}`); } catch { /* quota */ }
+  }, [projectId]);
   // Chaves de grupos colapsados no modo "raia" (plano), separado do da árvore.
   const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
   const toggleLane = (id: string) =>
@@ -2554,9 +2556,9 @@ export const BacklogSection = ({
 
       {/* Barra de visão: legenda de contexto (esq.) + controles (dir.)
           Aparece também com a lista VAZIA quando o modo é EAP — o segmento
-          Lista/EAP mora aqui, e escondê-lo deixaria a pessoa presa: um filtro
-          que zera a lista tiraria o único caminho de volta, e o modo é
-          lembrado no localStorage, então recarregar não resolveria. */}
+          Lista/EAP mora aqui, e escondê-lo deixaria a pessoa sem caminho de
+          volta se um filtro zerasse a lista. Recarregar resolve (a tela abre
+          sempre em Lista), mas exigir isso seria dizer que a saída é sair. */}
       {(backlogActs.length > 0 || modo === "eap") && (
         <div className="flex items-center justify-between gap-3 flex-wrap px-0.5">
           {/* Legenda de contexto — total + quebra por tipo */}
