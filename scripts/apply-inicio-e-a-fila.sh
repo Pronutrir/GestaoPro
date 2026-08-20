@@ -33,7 +33,7 @@ WITH g AS (
              AND lower(coalesce(sf.categoria,'')) NOT IN ('a_iniciar','backlog')
          ) AS iniciados
     FROM public.activities a
-    JOIN public.activities f ON f.parent_activity_id = a.id AND f.is_trashed = false
+    JOIN public.activities f ON f.parent_id = a.id AND f.is_trashed = false
     LEFT JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
    WHERE a.is_trashed = false
    GROUP BY a.id, a.project_id, a.workflow_stage_id
@@ -59,7 +59,7 @@ WITH g AS (
              AND lower(coalesce(sf.categoria,'')) NOT IN ('a_iniciar','backlog')
          ) AS iniciados
     FROM public.activities a
-    JOIN public.activities f ON f.parent_activity_id = a.id AND f.is_trashed = false
+    JOIN public.activities f ON f.parent_id = a.id AND f.is_trashed = false
     LEFT JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
    WHERE a.is_trashed = false
    GROUP BY a.id, a.project_id, a.workflow_stage_id
@@ -76,3 +76,19 @@ SELECT p.id AS projeto,
        coalesce(lower(s.categoria::text),'(nenhuma)') AS inicio_resolve_para
   FROM (SELECT DISTINCT project_id AS id FROM public.workflow_stages LIMIT 5) p
   LEFT JOIN public.workflow_stages s ON s.id = public.stage_do_papel(p.id, 'inicio');"
+
+echo "── A trigger recalcula o pai de verdade? (nao pode citar parent_activity_id) ──"
+$PSQL -c "
+SELECT p.proname,
+       (pg_get_functiondef(p.oid) LIKE '%parent_activity_id%') AS ainda_quebrada
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+ WHERE n.nspname = 'public'
+   AND p.proname IN ('recalcular_coluna_do_pai','tg_filho_recalcula_pai');"
+
+echo "── Colunas ouvidas pelo trigger ──"
+$PSQL -c "
+SELECT tgname,
+       pg_get_triggerdef(oid) LIKE '%parent_id%' AND
+       pg_get_triggerdef(oid) NOT LIKE '%parent_activity_id%' AS ok
+  FROM pg_trigger
+ WHERE tgname = 'trg_filho_recalcula_pai';"

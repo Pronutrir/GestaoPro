@@ -81,6 +81,127 @@ $$;
 COMMENT ON FUNCTION public.stage_do_papel(uuid, text) IS
   'Coluna que cumpre um papel (inicio/andamento/concluida) no projeto. Para "inicio" prefere a FILA (Backlog), que e onde fica o que nao comecou; para "andamento" e "concluida" prefere colunas visiveis no quadro.';
 
+-- ── A TRIGGER APONTAVA PARA UMA COLUNA QUE NAO EXISTE ─────────────────────
+--
+-- A 20260818140000 escreveu `parent_activity_id` em toda parte. A coluna de
+-- pai em `public.activities` chama-se `parent_id` -- e so ela existe: o nome
+-- `parent_activity_id` nao aparece em nenhuma outra migration, nem nos tipos
+-- gerados, nem no front. A 20260819110000 ja usava `parent_id`, mas so
+-- redefiniu `stage_do_papel`; as funcoes da trigger ficaram como estavam.
+--
+-- Uma funcao plpgsql so resolve nomes de coluna em tempo de EXECUCAO, entao
+-- `CREATE FUNCTION` passa e o erro aparece na primeira insercao. As duas sao
+-- reescritas aqui com o nome certo, junto com o trigger (a lista de colunas
+-- ouvidas tambem citava o nome inexistente).
+--
+-- Idempotente: se algum ambiente ja estiver correto, o resultado e o mesmo.
+
+CREATE OR REPLACE FUNCTION public.recalcular_coluna_do_pai(p_pai uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_projeto     uuid;
+  v_marco       boolean;
+  v_atual       uuid;
+  n_filhos      int;
+  n_concluidos  int;
+  n_iniciados   int;
+  v_alvo        uuid;
+BEGIN
+  IF p_pai IS NULL THEN RETURN; END IF;
+
+  SELECT a.project_id, a.is_milestone, a.workflow_stage_id
+    INTO v_projeto, v_marco, v_atual
+    FROM public.activities a
+   WHERE a.id = p_pai AND a.is_trashed = false;
+
+  -- Pai inexistente, na lixeira, ou marco: não se mexe. Marco é binário e não
+  -- agrupa; filho nele é dado inconsistente e não deve mover nada.
+  IF v_projeto IS NULL OR v_marco IS TRUE THEN RETURN; END IF;
+
+  -- Filhos que contam: vivos e NÃO cancelados.
+  SELECT count(*),
+         count(*) FILTER (WHERE sf.is_final = true
+                             OR lower(coalesce(sf.categoria, '')) = 'concluida'),
+         -- INICIADO exige uma coluna DE VERDADE: filho sem `workflow_stage_id`
+         -- faz o LEFT JOIN devolver NULL, e sem esta guarda um pai com filhos
+         -- sequer começados seria empurrado para "Em Andamento".
+         count(*) FILTER (WHERE sf.id IS NOT NULL
+                             AND sf.is_final IS DISTINCT FROM true
+                             AND lower(coalesce(sf.categoria, '')) NOT IN ('a_iniciar', 'backlog')
+                             AND NOT (sf.categoria IS NULL AND sf.display_order = 0))
+    INTO n_filhos, n_concluidos, n_iniciados
+    FROM public.activities f
+    LEFT JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
+   WHERE f.parent_id = p_pai
+     AND f.is_trashed = false
+     AND lower(coalesce(sf.categoria, '')) IS DISTINCT FROM 'cancelada';
+
+  -- Sem filhos que contem (folha, ou todos cancelados): o pai volta a
+  -- responder pela própria coluna.
+  IF n_filhos = 0 THEN RETURN; END IF;
+
+  IF n_concluidos = n_filhos THEN
+    v_alvo := public.stage_do_papel(v_projeto, 'concluida');
+  ELSIF n_iniciados = 0 THEN
+    v_alvo := public.stage_do_papel(v_projeto, 'inicio');
+  ELSE
+    v_alvo := public.stage_do_papel(v_projeto, 'andamento');
+  END IF;
+
+  -- Quadro sem coluna para o papel: não force.
+  IF v_alvo IS NULL THEN RETURN; END IF;
+
+  -- O WHERE compara os TRÊS campos em vez de sair cedo quando a coluna já
+  -- está certa: existe base com a coluna correta e o `status` errado. É também
+  -- o que impede a recursão de virar cascata — o UPDATE casa ZERO linhas
+  -- quando nada mudou, então o trigger não redispara.
+  UPDATE public.activities a
+     SET workflow_stage_id = v_alvo,
+         status = CASE WHEN n_concluidos = n_filhos THEN 'completed' ELSE 'pending' END,
+         completed_at = CASE WHEN n_concluidos = n_filhos
+                             THEN COALESCE(a.completed_at, now())
+                             ELSE NULL END
+   WHERE a.id = p_pai
+     AND (a.workflow_stage_id IS DISTINCT FROM v_alvo
+          OR a.status IS DISTINCT FROM
+             CASE WHEN n_concluidos = n_filhos THEN 'completed' ELSE 'pending' END);
+END $$;
+
+CREATE OR REPLACE FUNCTION public.tg_filho_recalcula_pai()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    PERFORM public.recalcular_coluna_do_pai(OLD.parent_id);
+    RETURN OLD;
+  END IF;
+
+  PERFORM public.recalcular_coluna_do_pai(NEW.parent_id);
+
+  -- Reparenting: o pai ANTIGO também perdeu um filho e precisa recalcular.
+  IF TG_OP = 'UPDATE'
+     AND OLD.parent_id IS DISTINCT FROM NEW.parent_id THEN
+    PERFORM public.recalcular_coluna_do_pai(OLD.parent_id);
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_filho_recalcula_pai ON public.activities;
+
+CREATE TRIGGER trg_filho_recalcula_pai
+AFTER INSERT OR DELETE OR UPDATE OF workflow_stage_id, is_trashed, parent_id
+ON public.activities
+FOR EACH ROW
+EXECUTE FUNCTION public.tg_filho_recalcula_pai();
+
 -- ── BACKFILL: devolve para a fila quem foi empurrado ───────────────────────
 --
 -- So AGRUPADOR (tem filho vivo), so quando NENHUM filho comecou, e so quando
@@ -96,7 +217,7 @@ WITH agrupador AS (
          ) AS iniciados
     FROM public.activities a
     JOIN public.activities f
-      ON f.parent_activity_id = a.id AND f.is_trashed = false
+      ON f.parent_id = a.id AND f.is_trashed = false
     LEFT JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
    WHERE a.is_trashed = false
      AND lower(coalesce(sf.categoria, '')) IS DISTINCT FROM 'cancelada'
