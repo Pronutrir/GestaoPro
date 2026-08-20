@@ -1,7 +1,8 @@
 // Tipos, constantes e helpers compartilhados do Kanban.
 // Fonte de medidas visuais: lib/kanbanTokens (a imagem aprovada).
 import {
-  parseWorkflowCategory, categoryFromLegacyFlags, type WorkflowCategory,
+  parseWorkflowCategory, suggestCategoryFromTitle,
+  type WorkflowCategory,
 } from "@/lib/workflowCategory";
 
 export const formatHours = (hours: number): string => {
@@ -223,6 +224,30 @@ export const MIN_COLUMN_WIDTH = 272;
 // Nunca reintroduzir tabelas de densidade aqui — ver o comentário no token.
 
 /**
+ * É a coluna de BACKLOG? Fonte única da pergunta.
+ *
+ * Não basta ler `categoria`: essa coluna pode chegar nula (backfill pendente,
+ * ambiente sem a migration, linha antiga). O fallback é o NOME, e só ele.
+ *
+ * Deliberadamente NÃO se usa `categoryFromLegacyFlags` aqui, apesar de ser a
+ * leitura padrão em todo o resto: lá dentro, `display_order === 0` devolve
+ * "backlog". Em projeto novo quem ocupa a posição 0 é "Não iniciado"
+ * (`categoria = 'a_iniciar'`, e a coluna de ENTRADA) — bastaria a categoria
+ * chegar nula uma vez para o quadro perder justamente a coluna onde a tarefa
+ * nasce. Esconder a fila é o objetivo; esconder a entrada seria um desastre.
+ *
+ * Errar para o lado de MOSTRAR é o certo: uma coluna a mais no quadro é ruído,
+ * uma coluna a menos é trabalho invisível.
+ */
+export const ehBacklog = (s: {
+  categoria?: WorkflowCategory; title?: string | null;
+}): boolean => {
+  const cat = parseWorkflowCategory(s.categoria);
+  if (cat) return cat === "backlog";
+  return suggestCategoryFromTitle(s.title || "") === "backlog";
+};
+
+/**
  * A coluna de ENTRADA — onde a atividade nasce: criação rápida, importação de
  * EAP e reabertura sem destino melhor. Uma por projeto, e ela não se exclui.
  *
@@ -236,8 +261,18 @@ export const MIN_COLUMN_WIDTH = 272;
  * a leitura antiga. As duas convivem de propósito: nenhum quadro fica sem
  * entrada por causa da ordem de deploy.
  */
-export const ehColunaDeEntrada = (s: { display_order: number; is_entry_point?: boolean }) =>
-  s.is_entry_point === true || (s.is_entry_point === undefined && s.display_order === 0);
+export const ehColunaDeEntrada = (s: {
+  display_order: number; is_entry_point?: boolean;
+  categoria?: WorkflowCategory; title?: string | null;
+}) => {
+  /* A FILA NÃO É ENTRADA. Sem esta guarda, em projeto antigo (onde
+     `is_entry_point` chega indefinido e vale `display_order === 0`, posição do
+     Backlog) a coluna de entrada seria justamente a que o quadro não desenha:
+     toda tarefa nova nasceria invisível. A entrada tem de ser uma coluna que o
+     quadro mostra — quem cria precisa ver onde caiu. */
+  if (ehBacklog(s)) return false;
+  return s.is_entry_point === true || (s.is_entry_point === undefined && s.display_order === 0);
+};
 
 /**
  * O que o QUADRO desenha. Fonte única — antes cada tela repetia o filtro, e
@@ -245,22 +280,32 @@ export const ehColunaDeEntrada = (s: { display_order: number; is_entry_point?: b
  * outro, e o agente de IA tinha uma terceira cópia (`isVisibleKanbanStage`, em
  * api/ai/agent/route.ts).
  *
- * QUEM MANDA É `is_visible` — o interruptor "No quadro", inclusive para o
- * Backlog.
+ * DUAS REGRAS, nesta ordem:
  *
- * Antes a categoria `backlog` era excluída aqui, incondicionalmente, e o
- * interruptor não tinha efeito nenhum sobre ela: a pessoa ligava e a coluna
- * continuava fora. Um controle que aceita o clique e ignora é pior do que não
- * existir — mente sobre o próprio estado.
+ * 1. A categoria `backlog` NUNCA entra no quadro. Não é preferência de
+ *    projeto: Kanban é fluxo ("onde está cada coisa") e Backlog é fila ("o que
+ *    existe, e o que vem primeiro"). São telas distintas, e a fila tem a sua
+ *    própria — completa, com responsável e prazo à vista. Misturar enche o
+ *    quadro com uma lista que só cresce: o problema do Trello, que Jira e Azure
+ *    DevOps evitam separando as telas.
  *
- * A separação Kanban × Backlog continua valendo, mas onde ela pertence: no
- * PADRÃO. O Backlog nasce com `is_visible = false` (o quadro diz "onde está
- * cada coisa", a fila diz "o que vem primeiro"; misturar enche o quadro com uma
- * lista que só cresce — o problema do Trello, que Jira e Azure evitam separando
- * as telas). Quem quiser a fila no quadro liga o interruptor e assume a escolha.
+ * 2. Entre as demais, quem manda é `is_visible` — o interruptor "No quadro".
+ *
+ * Já se tentou duas vezes tratar isto como preferência por projeto, e as duas
+ * falharam pelo mesmo motivo: a decisão passava a depender de `is_visible` no
+ * banco, então valia só onde alguma migration tivesse rodado. Nos projetos
+ * antigos — e em qualquer ambiente com a migration pendente — o Backlog voltava
+ * a ser coluna do quadro sem ninguém ter pedido. Regra de produto pertence ao
+ * código, onde vale em todo lugar no mesmo instante.
+ *
+ * Como o interruptor não decide mais nada aqui, ele não é oferecido para o
+ * Backlog na tela de colunas (`GerenciarColunas`): um controle que aceita o
+ * clique e ignora mente sobre o próprio estado.
  */
-export const colunasDoQuadro = <T extends { is_visible?: boolean }>(stages: T[]): T[] =>
-  stages.filter((s) => s.is_visible !== false);
+export const colunasDoQuadro = <T extends {
+  is_visible?: boolean; categoria?: WorkflowCategory; title?: string | null;
+}>(stages: T[]): T[] =>
+  stages.filter((s) => !ehBacklog(s) && s.is_visible !== false);
 
 /** Colunas escondidas por decisão do projeto (`is_visible = false`). */
 /**
@@ -277,13 +322,9 @@ export const colunasDoQuadro = <T extends { is_visible?: boolean }>(stages: T[])
  * trabalho dentro — aí ninguém vê aquele status em lugar nenhum.
  */
 export const colunasOcultas = <T extends {
-  is_visible?: boolean; display_order?: number; categoria?: WorkflowCategory; is_final?: boolean; is_blocked?: boolean;
+  is_visible?: boolean; categoria?: WorkflowCategory; title?: string | null;
 }>(stages: T[]): T[] =>
-  stages.filter((s) => {
-    if (s.is_visible !== false) return false;
-    const cat = parseWorkflowCategory(s.categoria) ?? categoryFromLegacyFlags(s as never);
-    return cat !== "backlog";
-  });
+  stages.filter((s) => s.is_visible === false && !ehBacklog(s));
 
 export interface WorkflowStage {
   id: string;

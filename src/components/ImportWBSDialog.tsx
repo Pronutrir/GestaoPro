@@ -12,6 +12,7 @@ import {
   type ColValues,
 } from "@/lib/wbsColumns";
 import { eapRoleForImport, eapToPersisted, eapIsFaseLevel, eapCodeToPersist, eapRootCode, type EapKind } from "@/lib/eapModel";
+import { ehBacklog } from "@/components/kanban/shared";
 
 /* ------------------------------------------------------------------ */
 /*  Modelo interno: cada nó da árvore importada com seu papel EAP.      */
@@ -822,16 +823,20 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
        * backlog para o kanban." É a regra, e ela é do produto, não do código:
        * o Kanban mede fluxo, a fila mede intenção.
        *
-       * A coluna de backlog é a de `categoria = 'backlog'`; `display_order = 0`
-       * é o fallback para as bases onde a categoria ainda não foi preenchida.
-       * Se o projeto não tiver backlog nenhum, cai na primeira coluna — nascer
-       * em algum lugar é melhor que nascer em lugar nenhum.
+       * `ehBacklog` é a MESMA leitura que o quadro usa para excluir a coluna
+       * (categoria, com o nome como fallback quando ela chega nula). Ter as
+       * duas telas perguntando igual é o que garante que o destino da
+       * importação seja exatamente o que o Kanban não desenha.
+       *
+       * NÃO usar `display_order === 0` como fallback: em projeto novo essa
+       * posição é do "Não iniciado" (`a_iniciar`, a coluna de ENTRADA), e a EAP
+       * inteira cairia no quadro — o bug que se está corrigindo.
+       *
+       * Sem coluna de backlog no projeto, `null` deixa a atividade SEM coluna:
+       * ela aparece na aba Backlog (que lista tudo) e fica fora do quadro, que
+       * é o comportamento desejado. Cair na primeira coluna seria pior.
        */
-      const backlogStageId =
-        stagesData.find((s) => String(s.categoria) === "backlog")?.id
-        ?? stagesData.find((s) => s.display_order === 0)?.id
-        ?? stagesData[0]?.id
-        ?? null;
+      const backlogStageId = stagesData.find((s) => ehBacklog(s as never))?.id ?? null;
       // Item com data real vai direto para a coluna certa: quem já terminou não
       // deve nascer no Backlog. `is_final` marca a coluna de conclusão; a de
       // andamento é a do meio (display_order 2 no fluxo padrão).

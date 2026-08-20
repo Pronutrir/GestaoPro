@@ -39,6 +39,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { ehBacklog } from "@/components/kanban/shared";
 
 /** Date -> "YYYY-MM-DD" pelo fuso LOCAL (toISOString à noite em UTC-3 já é o dia seguinte). */
 const localYmd = (d: Date) =>
@@ -1786,7 +1787,13 @@ export const EditActivityDialog = ({
                             {/* A tarefa JÁ ESTÁ numa coluna oculta: some do
                                 quadro sem nenhum sinal. Avisar aqui é o mínimo
                                 — é o estado em que a pessoa mais precisa saber. */}
-                            {workflowStages.find(s => s.id === currentStageId)?.is_visible === false && (
+                            {(() => {
+                              const atual = workflowStages.find(s => s.id === currentStageId);
+                              // Estar na fila é estado normal, não anomalia:
+                              // sem esta guarda toda atividade do Backlog abria
+                              // com um alerta âmbar dizendo que sumiu do quadro.
+                              return !!atual && atual.is_visible === false && !ehBacklog(atual);
+                            })() && (
                               <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-warning"
                                     title="Esta coluna está oculta no quadro: a tarefa não aparece no Kanban.">
                                 <EyeOff className="w-3 h-3" /> oculta
@@ -1845,11 +1852,18 @@ export const EditActivityDialog = ({
                             >
                               <span className="w-2 h-2 rounded-full shrink-0" style={{ background: stage.color }} />
                               <span className="truncate">{stage.title}</span>
-                              {/* A coluna existe no fluxo mas não aparece no
-                                  quadro: mover a tarefa para cá faz ela sumir
-                                  do Kanban de todo mundo. Escolher às cegas era
-                                  o problema — a marca aqui é o aviso. */}
-                              {stage.is_visible === false && (
+                              {/* O BACKLOG não é "oculto": ele fica fora do
+                                  quadro por definição, e o que está nele
+                                  aparece inteiro na aba Backlog. Marcá-lo de
+                                  âmbar diria que algo está errado quando é o
+                                  funcionamento normal — mandar para a fila é
+                                  uma escolha legítima, não um risco. */}
+                              {ehBacklog(stage) ? (
+                                <span className="ml-auto shrink-0 text-[10px] text-muted-foreground"
+                                      title="Volta para a fila do projeto: sai do quadro e fica na aba Backlog.">
+                                  fila
+                                </span>
+                              ) : stage.is_visible === false && (
                                 <span className="ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] text-warning"
                                       title="Esta coluna está oculta no quadro: a tarefa não aparecerá no Kanban.">
                                   <EyeOff className="w-3 h-3" /> oculta

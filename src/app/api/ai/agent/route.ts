@@ -93,9 +93,14 @@ function normalizeStageName(value: string): string {
  * cosmético: pedir "mova para o Backlog" respondia "Coluna Backlog não
  * encontrada", porque ela nem entrava na lista de destinos possíveis.
  *
- * A coluna de entrada aparece no quadro desde 12/08/2026 (ver `colunasDoQuadro`
- * em components/kanban/shared) — aqui a regra acompanha. Duplicada de propósito:
- * esta rota roda no servidor e não importa componente de UI.
+ * ATENÇÃO: esta lista é de DESTINOS, não do que o quadro desenha, e por isso
+ * ela NÃO acompanha `colunasDoQuadro` (que desde 20/08/2026 exclui a categoria
+ * `backlog` sempre — Kanban é fluxo, Backlog é fila, telas separadas).
+ *
+ * Mover para o Backlog é uma ordem legítima: é assim que um item volta para a
+ * fila. Copiar a exclusão do quadro para cá reintroduziria exatamente o bug
+ * descrito acima — "Coluna Backlog não encontrada". Uma coluna pode ser destino
+ * válido sem ser coluna do quadro; são perguntas diferentes.
  */
 function isVisibleKanbanStage(stage: { display_order?: number | null; is_visible?: boolean | null }): boolean {
   return stage.is_visible !== false;

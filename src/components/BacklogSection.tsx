@@ -44,6 +44,7 @@ import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from
 import { eapIsFaseLevel, eapLevel, resolveEapKind, type EapKind } from "@/lib/eapModel";
 import { EapVisual } from "@/components/backlog/EapVisual";
 import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
+import { ehBacklog } from "@/components/kanban/shared";
 import {
   avaliarProntidao, resumirProntidao, principaisCarencias,
   PRONTIDAO_LABELS, PRONTIDAO_LABELS_LONGOS,
@@ -404,8 +405,11 @@ export const BacklogSection = ({
         .eq("project_id", projectId)
         .order("display_order");
       if (data) {
-        const backlog = data.find((s) => s.display_order === 0);
-        setBacklogStageId(backlog?.id ?? null);
+        // `ehBacklog` (categoria, com o nome de fallback) e NÃO
+        // `display_order === 0`: em projeto novo a posição 0 é do "Não
+        // iniciado" — a coluna de ENTRADA do quadro. Pela regra antiga, item
+        // criado aqui nascia no Kanban em vez de ficar na fila.
+        setBacklogStageId(data.find((s) => ehBacklog(s as never))?.id ?? null);
         setAllStages(data);
       }
     };
