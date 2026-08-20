@@ -2324,11 +2324,14 @@ export type Database = {
       }
       workflow_stages: {
         Row: {
+          categoria: string | null
           color: string
+          contributes_to_progress: boolean | null
           created_at: string
           display_order: number
           id: string
           is_blocked: boolean
+          is_entry_point: boolean | null
           is_exception: boolean
           is_final: boolean
           is_visible: boolean

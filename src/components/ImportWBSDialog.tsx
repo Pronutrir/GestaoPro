@@ -296,6 +296,17 @@ const parseFlexible = (text: string): ResultadoParse => {
             anexadaEm: `${prev.code} ${prev.title}`.trim(),
           });
         } else if (prev) {
+          /**
+           * O vizinho de cima AGRUPA? Decide a âncora, logo abaixo.
+           *
+           * Agrupa quem tem alguma linha posterior cujo código começa com o
+           * dele mais um ponto — "1.1" agrupa porque existe "1.1.1". É a mesma
+           * leitura que o resto do parser faz da numeração, sem depender de
+           * flag nenhuma no texto colado.
+           */
+          const prevAgrupa = !!prev.code && raws.some(
+            (o) => o.explicitCode && o.explicitCode.startsWith(`${prev.code}.`),
+          );
           // LINHA COMPLETA SEM NUMERAÇÃO: entra ONDE FOI COLADA, sem código.
           //
           // Marco se escreve assim — "Marco M1 — TAP aprovado" solto entre as
@@ -314,7 +325,46 @@ const parseFlexible = (text: string): ResultadoParse => {
             title: r.title,
             depth: prev.depth,     // mesmo nível do irmão de cima
             role: "atividade",     // aplicarPapeis decide; o título declara marco
-            parentCode: prev.parentCode,
+            /**
+             * A ÂNCORA É O VIZINHO DE CIMA, não o pai dele.
+             *
+             * Herdar `prev.parentCode` funciona quando o vizinho é uma folha
+             * ("1.1.3 Tasy Native" → âncora "1.1", a fase certa). Mas quando o
+             * vizinho é um AGRUPADOR — o "1 PROJETO" no topo do texto, ou uma
+             * fase —, o `parentCode` dele é o nível de cima ou `null`, e a
+             * fase se perde: `findPhaseId` recebe string vazia e devolve null.
+             *
+             * Foi o que aconteceu na Revitalização Tasy: dos 4 marcos colados,
+             * só o Milestone 6 ficou com fase. Os outros três, colados logo
+             * abaixo de agrupadores, nasceram em "Sem fase".
+             *
+             * Quando o vizinho tem código próprio E agrupa, é DENTRO dele que
+             * o marco foi colado — então o código dele é a âncora. Senão,
+             * mantém o `parentCode`, que é o comportamento que já funcionava.
+             */
+            /**
+             * A ÂNCORA DEPENDE DO QUE É O VIZINHO DE CIMA.
+             *
+             * Se ele AGRUPA — uma fase, uma entrega, o "1 PROJETO" —, a linha
+             * foi colada DENTRO dele, e a âncora é o código DELE. Herdar o
+             * `parentCode` mandaria o marco para o nível de cima: colado sob a
+             * fase "1.1", ele procuraria a fase "1", que não existe, e nascia
+             * sem fase nenhuma.
+             *
+             * Se o vizinho é uma FOLHA ("1.1.3 Tasy Native"), o marco é irmão
+             * dele, e a âncora é o pai — `parentCode`, como antes.
+             *
+             * Medido na Revitalização Tasy: dos 4 marcos, só o Milestone 6
+             * ficou com fase; os outros três estavam colados logo abaixo de uma
+             * fase e caíram em "Sem fase".
+             *
+             * `prev.code` sem `parentCode` cobre o vizinho sem código (marco
+             * abaixo de marco): aí a âncora do primeiro já foi resolvida e vale
+             * para o segundo.
+             */
+            parentCode: prevAgrupa
+              ? (prev.code || prev.parentCode || null)
+              : (prev.parentCode ?? prev.code ?? null),
             codigoExplicito: false,
             ordemNoTexto: r.numero, // preserva o lugar na ordenação por código
           });
@@ -732,7 +782,21 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
 
       // O agrupador no nível da Fase vai para a tabela `phases`; todo o resto
       // vira linha em `activities`.
-      const ehFase = (n: TreeNode) => n.role === "fase" && eapIsFaseLevel(n.depth);
+      /**
+       * FASE PRECISA DE CÓDIGO PRÓPRIO.
+       *
+       * `eapIsFaseLevel(n.depth)` sozinho não basta: uma linha SEM numeração
+       * herda o `depth` do vizinho de cima, e se esse vizinho é uma fase (ou um
+       * marco colado sob ela), a linha herda depth 2 — o nível da fase — e ia
+       * parar na tabela `phases`.
+       *
+       * Foi o que aconteceu com "Inicio do teste Piloto", uma linha solta entre
+       * a fase 1.4 e o item 1.4.1: virou uma quinta fase, com o espaço do
+       * título e tudo. Fase é estrutura da EAP e tem numeração; o que não tem
+       * número é conteúdo, e conteúdo vive em `activities`.
+       */
+      const ehFase = (n: TreeNode) =>
+        n.role === "fase" && eapIsFaseLevel(n.depth) && !!n.code;
       const phases = importaveis.filter(ehFase);
       const nonPhase = importaveis.filter((n) => !ehFase(n));
 
@@ -744,10 +808,38 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
       // Coluna "Backlog" do fluxo (display_order 0): itens importados nascem lá,
       // como os criados manualmente — assim seguem o mesmo fluxo (Kanban/status).
       const { data: stagesData } = await supabase
-        .from("workflow_stages").select("id, display_order")
+        .from("workflow_stages").select("id, display_order, is_visible, categoria, is_entry_point")
         .eq("project_id", projectId).order("display_order", { ascending: true });
+      /**
+       * O item importado nasce numa coluna VISÍVEL no quadro.
+       *
+       * Era `display_order === 0` — a coluna "Backlog". Só que o Backlog saiu
+       * do quadro por decisão de produto (`is_visible = false`, ver
+       * `colunasDoQuadro`): o Kanban é fluxo, o Backlog é fila. Importar 134
+       * itens mandava todos para uma coluna que o quadro não desenha, e o
+       * Kanban abria praticamente vazio enquanto a lista mostrava "Backlog" em
+       * cada linha. Medido na Revitalização Tasy: 116 de 149 atividades
+       * pararam lá.
+       *
+       * A ordem de preferência segue o que cada campo significa:
+       *   1. a coluna marcada como ENTRADA (`is_entry_point`) — existe para
+       *      isto, e é onde a tarefa nova cai;
+       *   2. a primeira `a_iniciar` visível ("Não iniciado" no padrão);
+       *   3. qualquer visível que não seja final;
+       *   4. o que houver — projeto sem coluna visível é caso degenerado, e
+       *      nascer em algum lugar é melhor que nascer em lugar nenhum.
+       */
+      // `as any[]`: os tipos gerados de `workflow_stages` não conhecem
+      // `categoria` nem `is_entry_point` (colunas de migrations recentes), e o
+      // resto do arquivo já usa o mesmo escape para as colunas novas.
+      const visiveis = stagesData.filter((s) => s.is_visible !== false);
       const backlogStageId =
-        stagesData?.find((s) => s.display_order === 0)?.id ?? stagesData?.[0]?.id ?? null;
+        visiveis.find((s) => s.is_entry_point)?.id
+        ?? visiveis.find((s) => String(s.categoria) === "a_iniciar")?.id
+        ?? visiveis.find((s) => String(s.categoria) !== "concluida")?.id
+        ?? visiveis[0]?.id
+        ?? stagesData?.[0]?.id
+        ?? null;
       // Item com data real vai direto para a coluna certa: quem já terminou não
       // deve nascer no Backlog. `is_final` marca a coluna de conclusão; a de
       // andamento é a do meio (display_order 2 no fluxo padrão).
@@ -966,7 +1058,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           wbs_code: eapCodeToPersist(persisted, node.code),
           item_type: persisted.item_type,
           is_milestone: persisted.is_milestone,
-          // Nasce no Backlog — igual a criação manual (segue o fluxo).
+          // Nasce na coluna de ENTRADA do quadro — visível, ao contrário do
+          // Backlog, que saiu do Kanban por decisão de produto.
           workflow_stage_id: backlogStageId,
           status: "pending",
         };
