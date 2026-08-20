@@ -45,6 +45,13 @@
 -- Só sobe filho que está numa coluna INVISÍVEL. Quem já está em coluna do
 -- quadro fica onde está: pode ter sido movido de propósito, e sobrescrever
 -- isso apagaria decisão de alguém.
+--
+-- Guard: desliga os triggers de negócio durante o UPDATE. (1) o trigger de
+-- projeto concluído abortaria se um filho caísse em projeto fechado; (2) o
+-- rollup trg_filho_recalcula_pai (leva 8) dispararia no sentido INVERSO ao
+-- movimento explícito desta migration. Religado logo após.
+SET session_replication_role = replica;
+
 UPDATE public.activities f
    SET workflow_stage_id = p.workflow_stage_id
   FROM public.activities p
@@ -60,6 +67,9 @@ UPDATE public.activities f
       WHERE sf.id = f.workflow_stage_id AND sf.is_visible = false
    )
    AND f.workflow_stage_id IS DISTINCT FROM p.workflow_stage_id;
+
+-- Religa os triggers de negócio.
+SET session_replication_role = origin;
 
 NOTIFY pgrst, 'reload schema';
 
