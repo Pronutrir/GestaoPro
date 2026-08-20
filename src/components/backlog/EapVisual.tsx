@@ -49,7 +49,7 @@ import {
   Maximize2, Printer, Download, ChevronLeft, Plus, Minus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { resolveEapKind, type EapKind } from "@/lib/eapModel";
+import { EAP_LABELS, resolveEapKind, type EapKind } from "@/lib/eapModel";
 
 export interface EapNodeInput {
   id: string;
@@ -733,11 +733,33 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
                     onClick={(e) => { e.stopPropagation(); if (!ehProjeto) setFoco(d.id); }}
                     onDoubleClick={(e) => { e.stopPropagation(); if (!ehProjeto) onSelect?.(d.id); }}
                   >
+                    {/**
+                      * FASE e ENTREGA deixam de ter a mesma caixa.
+                      *
+                      * As duas eram desenhadas cinza idêntico, e a legenda
+                      * dizia "Fase / Entrega" junto — então uma entrega (o que
+                      * o PMBOK chama de pacote de trabalho) era indistinguível
+                      * de uma fase. Foi o relato: "1.3.1 não é fase, é pacote".
+                      *
+                      * O papel já vinha certo de `resolveEapKind` — o nível do
+                      * código manda, e 1.3.1 é nível 3, logo entrega. O que
+                      * faltava era o DESENHO refletir isso.
+                      *
+                      * `lib/eapModel` explica por que a distinção importa: sem
+                      * ela "a EAP fica achatada — a entrega deixa de estar
+                      * dentro da fase e vira outra fase ao lado dela". Era
+                      * exatamente o que a tela mostrava.
+                      *
+                      * FASE tem borda escura e fundo sólido (é etapa do ciclo
+                      * de vida); ENTREGA é mais leve e recuada (está dentro de
+                      * uma fase). A hierarquia se lê pelo peso, sem legenda.
+                      */}
                     <rect
                       x={px} y={py} width={W} height={H_GRUPO} rx={7}
                       className={cn(
-                        "stroke-[1.4]",
-                        ehProjeto ? "fill-primary/10 stroke-primary" : "fill-muted stroke-border",
+                        ehProjeto && "fill-primary/10 stroke-primary stroke-[1.4]",
+                        !ehProjeto && d.kind === "fase" && "fill-muted stroke-foreground/40 stroke-[1.6]",
+                        !ehProjeto && d.kind !== "fase" && "fill-background stroke-border stroke-[1.2]",
                         d.orfao && "fill-destructive/10 stroke-destructive",
                       )}
                       strokeDasharray={d.orfao ? "4 3" : undefined}
@@ -746,6 +768,18 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
                       <text x={px + 12} y={py + 16} className="fill-muted-foreground"
                         style={{ fontSize: 8.5, fontFamily: "var(--font-mono, monospace)" }}>
                         {d.code}
+                      </text>
+                    )}
+                    {/* O PAPEL, escrito. A cor sozinha exige decorar a legenda,
+                        e num diagrama impresso em preto e branco ela some. */}
+                    {!ehProjeto && (
+                      <text x={px + W - 12} y={py + 16} textAnchor="end"
+                        className={cn(
+                          "uppercase",
+                          d.kind === "fase" ? "fill-foreground/55" : "fill-muted-foreground/70",
+                        )}
+                        style={{ fontSize: 7.5, letterSpacing: "0.06em", fontWeight: 700 }}>
+                        {EAP_LABELS[d.kind]}
                       </text>
                     )}
                     <text x={px + 12} y={py + (d.code ? 29 : 25)}
@@ -890,10 +924,17 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
           <span className="w-2.5 h-2.5 rounded-sm bg-primary/10 border border-primary" /> Projeto
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-muted border border-border" /> Fase / Entrega
+          <span className="w-2.5 h-2.5 rounded-sm bg-muted border-[1.5px] border-foreground/40" /> Fase
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-background border border-border" /> Atividade
+          <span className="w-2.5 h-2.5 rounded-sm bg-background border border-border" /> Entrega
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          {/* Barra deitada e menor: no desenho, atividade é a caixa estreita
+              que desce empilhada, enquanto entrega é a caixa larga que fica na
+              fileira. O swatch imita essa diferença de forma — sem isso os
+              dois seriam quadrados iguais na legenda. */}
+          <span className="w-3.5 h-2 rounded-[2px] bg-background border border-border" /> Atividade
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 bg-warning/20 border border-warning rotate-45" /> Marco
