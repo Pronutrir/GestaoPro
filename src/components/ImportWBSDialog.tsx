@@ -838,11 +838,17 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
        */
       const backlogStageId = stagesData.find((s) => ehBacklog(s as never))?.id ?? null;
       // Item com data real vai direto para a coluna certa: quem já terminou não
-      // deve nascer no Backlog. `is_final` marca a coluna de conclusão; a de
-      // andamento é a do meio (display_order 2 no fluxo padrão).
+      // deve nascer no Backlog.
+      //
+      // A de andamento sai da CATEGORIA, não de `display_order === 2`: essa
+      // posição é "Pendências" no fluxo padrão (0 Não iniciado, 1 Em Andamento,
+      // 2 Pendências, 3 Concluída), então o item com início real ia parar em
+      // Pendências — marcado como impedimento sem nada o impedir.
       const finalStageId = (stagesData as any[])?.find((s) => s.is_final)?.id
+        ?? (stagesData as any[])?.find((s) => String(s.categoria) === "concluida")?.id
         ?? (stagesData as any[])?.slice(-1)[0]?.id ?? null;
-      const emAndamentoStageId = (stagesData as any[])?.find((s) => s.display_order === 2)?.id ?? null;
+      const emAndamentoStageId =
+        (stagesData as any[])?.find((s) => String(s.categoria) === "andamento")?.id ?? null;
 
       // Responsável: casa por nome ou e-mail, tolerante a acento e caixa — os
       // campos de pessoa no sistema são texto livre, não FK.
