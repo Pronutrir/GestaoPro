@@ -1,0 +1,305 @@
+<title>EAP visual — correções</title>
+<style>
+  :root{
+    --bg:#f7f8fa;--surface:#ffffff;--surface-2:#f1f2f5;--border:#e2e4ea;--border-strong:#cfd2db;
+    --ink:#1c1f26;--ink-2:#565b66;--ink-3:#868b96;--accent:#5b5bd6;--accent-soft:#ecebfb;
+    --ok:#17915b;--ok-soft:#e2f4ea;--warn:#b3730a;--warn-soft:#fbeed6;--bad:#cc3340;--bad-soft:#fbe4e6;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}}
+  :root[data-theme="dark"]{--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  h1{font-size:29px;line-height:1.15;margin:6px 0 10px;letter-spacing:-.01em;text-wrap:balance}
+  .lede{color:var(--ink-2);font-size:15px;max-width:66ch}
+  section{margin-top:44px}
+  .sec-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:16px}
+  .sec-num{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent)}
+  .sec-head h2{font-size:20px;margin:0;letter-spacing:-.01em}
+  .sec-sub{color:var(--ink-2);font-size:14px;margin:0 0 16px;max-width:72ch}
+  .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+  @media(max-width:780px){.stat{grid-template-columns:1fr 1fr}}
+  .stat div{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface)}
+  .stat .v{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1.1}
+  .stat .v.bad{color:var(--bad)}.stat .v.ok{color:var(--ok)}
+  .stat .l{font-size:11.5px;color:var(--ink-3);margin-top:4px}
+  .note{margin-top:18px;border-left:3px solid var(--accent);background:var(--accent-soft);padding:14px 16px;border-radius:0 8px 8px 0;font-size:13.5px}
+  .badbox{margin-top:16px;border:1px solid var(--bad);background:var(--bad-soft);border-radius:10px;padding:14px 16px;font-size:13.5px}
+  .badbox b{color:var(--bad)}
+  .okbox{margin-top:16px;border:1px solid var(--ok);background:var(--ok-soft);border-radius:10px;padding:14px 16px;font-size:13.5px}
+  .okbox b{color:var(--ok)}
+  .warnbox{margin-top:16px;border:1px solid var(--warn);background:var(--warn-soft);border-radius:10px;padding:14px 16px;font-size:13.5px}
+  .warnbox b{color:var(--warn)}
+  .scroll{overflow-x:auto}
+  table.cmp{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px;min-width:560px}
+  table.cmp th,table.cmp td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  table.cmp th{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  table.cmp td:first-child{font-weight:500;white-space:nowrap}
+  table.cmp tr.hi td{background:var(--ok-soft)}
+  .y{color:var(--ok);font-weight:600}.n{color:var(--bad);font-weight:600}.m{color:var(--warn);font-weight:600}
+  .fase{border:1px solid var(--border);border-radius:12px;padding:16px 18px;background:var(--surface);margin-bottom:12px}
+  .fase.rec{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
+  .fase h3{margin:0 0 6px;font-size:15px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .fase .num{font-family:var(--mono);font-size:10px;font-weight:700;background:var(--accent-soft);color:var(--accent);padding:3px 8px;border-radius:999px}
+  .fase .num.ok{background:var(--ok-soft);color:var(--ok)}
+  .fase p{margin:0 0 8px;font-size:13px;color:var(--ink-2)}
+  .fase ul{margin:0;padding-left:17px;font-size:12.5px;color:var(--ink-2)}.fase li{margin-bottom:3px}
+  .fase .cost{font-size:11.5px;color:var(--ink-3);font-family:var(--mono);margin-top:8px}
+  code.inl{font-family:var(--mono);font-size:12px;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+  .q{margin-top:44px;border:1px solid var(--border);border-radius:12px;padding:22px 24px;background:var(--surface)}
+  .q h2{font-size:17px;margin:0 0 10px}.q ol{margin:0;padding-left:18px;font-size:14px}.q li{margin-bottom:12px}.q b{color:var(--accent)}
+  .mock{border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);padding:16px;margin-top:14px;overflow-x:auto}
+  .cap{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:10px}
+  svg{display:block}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">GestãoPro · EAP visual · Correções</div>
+    <h1>Três defeitos no que eu entreguei — e o que faltou medir</h1>
+    <p class="lede">Seu print não mostra "está pequeno". Mostra <b>três problemas distintos</b>, sendo que o mais visível — quase tudo em vermelho — é um erro meu de regra, não de escala.</p>
+  </header>
+
+  <div class="badbox">
+    <b>Antes de qualquer proposta: um erro que eu preciso reconhecer.</b> Eu disse que a EAP visual iria "expor os 90 órfãos" e tratei isso como qualidade da tela. Mas minha regra marcava como órfão <b>qualquer item com código de subitem sem <code class="inl">parent_id</code></b> — e na Revitalização Tasy <b>30 dos 38 assim marcados TÊM FILHOS</b>. São fases legítimas de nível 1, com código herdado da importação. Pintei o projeto quase inteiro de vermelho e chamei de diagnóstico.
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Os três defeitos</h2></div>
+
+    <div class="stat">
+      <div><div class="v bad">30</div><div class="l">"órfãos" que na verdade têm filhos</div></div>
+      <div><div class="v bad">6000px</div><div class="l">largura do desenho</div></div>
+      <div><div class="v bad">2,6px</div><div class="l">tamanho da fonte para caber na tela</div></div>
+      <div><div class="v">4 de 23</div><div class="l">projetos que não cabem hoje</div></div>
+    </div>
+
+    <div class="scroll">
+    <table class="cmp">
+      <tr><th>#</th><th>O que se vê</th><th>Causa real</th></tr>
+      <tr>
+        <td><b>1</b></td>
+        <td>Quase tudo vermelho tracejado</td>
+        <td>Minha regra de órfão olhava só o <code class="inl">parent_id</code>, ignorando se o item tem filhos. Fase de nível 1 com código <code class="inl">1.2.3</code> caía na regra.</td>
+      </tr>
+      <tr>
+        <td><b>2</b></td>
+        <td>Fileira imensa de caixas soltas</td>
+        <td>São 30 agrupadores no nível 1, todos lado a lado. <b>Nada no código limita a LARGURA</b> — o seletor "Nível" corta profundidade, e a largura passa livre.</td>
+      </tr>
+      <tr>
+        <td><b>3</b></td>
+        <td>Desenho minúsculo no centro</td>
+        <td>30 × 200px = 6000px. O SVG tem <code class="inl">width: 100%</code>, então a tela sempre comprime tudo. Não existe "tamanho natural".</td>
+      </tr>
+    </table>
+    </div>
+
+    <div class="warnbox">
+      <b>O defeito de fundo é o nº 2, e ele é conceitual.</b> Eu limitei a profundidade da árvore (o seletor "Nível 3") e esqueci a largura. Numa EAP, quem estoura a tela é a <b>largura</b> — foi exatamente o argumento que usei para escolher o layout híbrido, e depois deixei o caso de 30 irmãos passar sem limite. O seletor "Nível 1" produz o mesmo 6000px que o "Nível 5".
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>A conta que decide a correção</h2></div>
+    <p class="sec-sub">Medi a legibilidade em função de quantos agrupadores cabem por linha, para a Revitalização Tasy (30 no nível 1).</p>
+    <div class="scroll">
+    <table class="cmp">
+      <tr><th>Por linha</th><th>Largura</th><th>Zoom p/ caber</th><th>Fonte do título</th><th></th></tr>
+      <tr><td><b>30</b> (hoje)</td><td>6000px</td><td class="n">23%</td><td class="n">2,6px</td><td class="n">ilegível</td></tr>
+      <tr><td>12</td><td>2400px</td><td class="m">58%</td><td class="m">6,4px</td><td class="m">ruim</td></tr>
+      <tr><td>8</td><td>1600px</td><td>88%</td><td>9,6px</td><td class="m">no limite</td></tr>
+      <tr class="hi"><td><b>6</b></td><td>1200px</td><td class="y">100%</td><td class="y">11px</td><td class="y">legível</td></tr>
+    </table>
+    </div>
+    <div class="note">
+      O consenso de acessibilidade trata <b>10px como o piso do "texto pequeno"</b>. Meu título tem 11px e as folhas 9,5px — ou seja, <b>a 100% de zoom eu já estou no limite</b>. Não há margem para encolher: qualquer zoom abaixo de ~90% cruza a linha do ilegível. O piso de zoom que programei é <b>20%</b>.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>O que o mercado faz</h2></div>
+    <p class="sec-sub">Este é um problema conhecido — organograma de CEO com 30 subordinados diretos é o mesmo caso.</p>
+    <div class="scroll">
+    <table class="cmp">
+      <tr><th>Estratégia</th><th>Quem usa</th><th>Vale aqui?</th></tr>
+      <tr>
+        <td><b>Limitar irmãos</b> com "+N mais"</td>
+        <td>yFiles, dabeng/OrgChart (setas de paginação)</td>
+        <td class="y">Sim — mata o 6000px direto</td>
+      </tr>
+      <tr>
+        <td><b>Foco na subárvore</b> + trilha</td>
+        <td><b>WBS Schedule Pro</b> — é a resposta principal dele</td>
+        <td class="y">Sim — já está construído, mal priorizado</td>
+      </tr>
+      <tr>
+        <td><b>Zoom semântico</b> (muda o que desenha, não o tamanho)</td>
+        <td>Literatura de diagramas (Frisch &amp; Dachselt)</td>
+        <td class="y">Sim — impede a fonte de 2,6px existir</td>
+      </tr>
+      <tr>
+        <td>Filhos em <b>duas linhas</b> (<i>DoubleLayer</i>)</td>
+        <td>yFiles, GoJS, Lucidchart</td>
+        <td class="m">Ganho real, mas mexe nas constantes</td>
+      </tr>
+      <tr>
+        <td>Árvore <b>indentada</b> abaixo do nível 2</td>
+        <td>Recomendação clássica de EAP mista</td>
+        <td class="m">Boa, mas é outra tela</td>
+      </tr>
+      <tr>
+        <td><b>Minimapa</b></td>
+        <td>Miro, Lucidchart</td>
+        <td class="n">Não — 30 borrões indistintos</td>
+      </tr>
+    </table>
+    </div>
+    <div class="okbox">
+      <b>O achado mais útil:</b> o WBS Schedule Pro — a ferramenta de referência — trata "<b>Focus</b>" como a resposta oficial para gráfico largo demais: trabalhar numa seção escondendo o resto. E publica um tutorial inteiro sobre "<b>condensar gráficos largos para ficarem mais estreitos e altos</b>". Ou seja: o caminho não é fazer caber, é <b>não mostrar tudo de uma vez</b>.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>O plano</h2></div>
+    <p class="sec-sub">Em ordem de impacto. As três primeiras resolvem o seu print.</p>
+
+    <div class="fase rec">
+      <h3><span class="num ok">1</span> Corrigir a regra do órfão <span style="font-family:var(--mono);font-size:10px;background:var(--bad-soft);color:var(--bad);padding:3px 8px;border-radius:999px;">erro meu</span></h3>
+      <p>Órfão passa a ser quem tem código de subitem, não tem pai <b>e não tem filhos</b>. Quem agrupa é fase de nível 1 — mesmo que o código diga outra coisa.</p>
+      <ul>
+        <li>Na Revitalização Tasy: de 38 vermelhos para <b>8</b></li>
+        <li>Um aviso discreto no topo conta quantos são, em vez de gritar na árvore</li>
+      </ul>
+      <div class="cost">1 linha + o aviso · risco nenhum</div>
+    </div>
+
+    <div class="fase rec">
+      <h3><span class="num ok">2</span> Limitar a LARGURA, não só a profundidade</h3>
+      <p>No máximo <b>6 agrupadores por pai</b>; o restante vira um nó "<b>+24 fases</b>" que expande no lugar. É a mesma peça do "▸ N ocultas" que já existe para as folhas — só nunca foi aplicada aos agrupadores.</p>
+      <ul>
+        <li>6000px → <b>1200px</b>, e a fonte volta aos 11px legíveis</li>
+        <li>O seletor "Nível" passa a valer de fato: hoje "Nível 1" desenha o mesmo que "Nível 5"</li>
+      </ul>
+      <div class="cost">estende a função de poda · risco baixo</div>
+    </div>
+
+    <div class="fase rec">
+      <h3><span class="num ok">3</span> Foco como navegação principal</h3>
+      <p>Hoje o clique abre a atividade e o <b>duplo</b> clique foca — invertido para um projeto largo. Passa a: clique numa fase entra nela; abrir a atividade fica no botão do painel. A trilha vira barra fixa, não um botão que aparece.</p>
+      <ul>
+        <li>É o que o WBS Schedule Pro faz, e o código já tem <code class="inl">foco</code> e <code class="inl">trilha</code></li>
+        <li>Abre no nível 1: a visão geral são as fases, não tudo</li>
+      </ul>
+      <div class="cost">só reordenar o que existe · risco baixo</div>
+    </div>
+
+    <div class="fase">
+      <h3><span class="num">4</span> Zoom semântico, com piso de legibilidade</h3>
+      <p>Abaixo de ~90% o desenho <b>muda</b> em vez de encolher — o texto nunca fica ilegível porque simplesmente deixa de ser desenhado.</p>
+      <ul>
+        <li><b>≥ 90%</b> — caixa completa: código, título, barra e percentual</li>
+        <li><b>50–90%</b> — sai o código e o número; ficam título e barra</li>
+        <li><b>&lt; 50%</b> — só a barra colorida e a contagem ("12 atividades")</li>
+      </ul>
+      <div class="cost">só render · risco baixo</div>
+    </div>
+
+    <div class="fase">
+      <h3><span class="num">5</span> Filhos em duas linhas <span style="font-family:var(--mono);font-size:10px;background:var(--warn-soft);color:var(--warn);padding:3px 8px;border-radius:999px;">depois</span></h3>
+      <p>Distribuir os filhos em duas fileiras escalonadas em vez de uma — o <i>DoubleLayer</i> do yFiles. Corta a largura pela metade de novo.</p>
+      <div class="warnbox" style="margin-top:6px;">
+        <b>Por que fica para depois:</b> as constantes deste desenho não são simétricas — o espaço entre irmãos vem da largura da caixa, e o entre níveis da altura mais a pilha de folhas. Foi exatamente isso que quebrou o botão de girar que tive de remover. Uma segunda fileira precisa somar uma faixa inteira de altura, não só deslocar em Y, ou as linhas colidem com as pilhas. Só vale se as fases 1–3 não bastarem.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>Antes e depois</h2></div>
+    <div class="mock">
+      <div class="cap">Hoje — 30 agrupadores, 6000px, zoom 23%</div>
+      <svg viewBox="0 0 900 120" width="900">
+        <rect x="430" y="8" width="40" height="10" rx="2" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width=".6"/>
+        <path d="M450,18 V26 M20,26 H880 M20,26 V34" stroke="var(--border-strong)" stroke-width=".6" fill="none"/>
+        <g fill="var(--bad-soft)" stroke="var(--bad)" stroke-width=".5" stroke-dasharray="2 1.5">
+          <rect x="14" y="34" width="26" height="9" rx="1.5"/><rect x="43" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="72" y="34" width="26" height="9" rx="1.5"/><rect x="101" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="130" y="34" width="26" height="9" rx="1.5"/><rect x="159" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="188" y="34" width="26" height="9" rx="1.5"/><rect x="217" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="246" y="34" width="26" height="9" rx="1.5"/><rect x="275" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="304" y="34" width="26" height="9" rx="1.5"/><rect x="333" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="362" y="34" width="26" height="9" rx="1.5"/><rect x="391" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="420" y="34" width="26" height="9" rx="1.5"/><rect x="449" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="478" y="34" width="26" height="9" rx="1.5"/><rect x="507" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="536" y="34" width="26" height="9" rx="1.5"/><rect x="565" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="594" y="34" width="26" height="9" rx="1.5"/><rect x="623" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="652" y="34" width="26" height="9" rx="1.5"/><rect x="681" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="710" y="34" width="26" height="9" rx="1.5"/><rect x="739" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="768" y="34" width="26" height="9" rx="1.5"/><rect x="797" y="34" width="26" height="9" rx="1.5"/>
+          <rect x="826" y="34" width="26" height="9" rx="1.5"/><rect x="855" y="34" width="26" height="9" rx="1.5"/>
+        </g>
+        <text x="450" y="70" text-anchor="middle" font-size="11" fill="var(--bad)" font-weight="600">todos vermelhos · fonte de 2,6px · nada legível</text>
+      </svg>
+    </div>
+
+    <div class="mock">
+      <div class="cap">Proposto — 6 por linha, "+24 fases", zoom 100%</div>
+      <svg viewBox="0 0 900 260" width="900">
+        <rect x="20" y="10" width="150" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"/>
+        <text x="32" y="32" font-size="11.5" fill="var(--accent)" font-weight="700">Revitalização Tasy</text>
+        <path d="M95,44 V58 M95,58 H795 M95,58 V72 M235,58 V72 M375,58 V72 M515,58 V72 M655,58 V72 M795,58 V72" stroke="var(--border-strong)" stroke-width="1.2" fill="none"/>
+        <g font-size="10">
+          <rect x="20" y="72" width="150" height="38" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)" stroke-width="1.3"/>
+          <text x="30" y="87" font-size="8" font-family="var(--mono)" fill="var(--ink-3)">1.2.3</text>
+          <text x="30" y="99" font-size="10.5" fill="var(--ink)" font-weight="600">Cargas</text>
+          <rect x="30" y="103" width="100" height="3.5" rx="2" fill="var(--border)"/><rect x="30" y="103" width="30" height="3.5" rx="2" fill="var(--ok)"/>
+
+          <rect x="160" y="72" width="150" height="38" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)" stroke-width="1.3"/>
+          <text x="170" y="87" font-size="8" font-family="var(--mono)" fill="var(--ink-3)">1.2.6</text>
+          <text x="170" y="99" font-size="10.5" fill="var(--ink)" font-weight="600">Gerenciador</text>
+          <rect x="170" y="103" width="100" height="3.5" rx="2" fill="var(--border)"/>
+
+          <rect x="300" y="72" width="150" height="38" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)" stroke-width="1.3"/>
+          <text x="310" y="87" font-size="8" font-family="var(--mono)" fill="var(--ink-3)">1.3.6</text>
+          <text x="310" y="99" font-size="10.5" fill="var(--ink)" font-weight="600">Tr. Contabilidade</text>
+          <rect x="310" y="103" width="100" height="3.5" rx="2" fill="var(--border)"/>
+
+          <rect x="440" y="72" width="150" height="38" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)" stroke-width="1.3"/>
+          <text x="450" y="87" font-size="8" font-family="var(--mono)" fill="var(--ink-3)">1.3.8</text>
+          <text x="450" y="99" font-size="10.5" fill="var(--ink)" font-weight="600">Tr. Recepção</text>
+          <rect x="450" y="103" width="100" height="3.5" rx="2" fill="var(--border)"/>
+
+          <rect x="580" y="72" width="150" height="38" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)" stroke-width="1.3"/>
+          <text x="590" y="87" font-size="8" font-family="var(--mono)" fill="var(--ink-3)">1.3.15</text>
+          <text x="590" y="99" font-size="10.5" fill="var(--ink)" font-weight="600">Tr. Farmácia</text>
+          <rect x="590" y="103" width="100" height="3.5" rx="2" fill="var(--border)"/>
+
+          <rect x="720" y="72" width="150" height="38" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-dasharray="4 3" stroke-width="1.3"/>
+          <text x="795" y="96" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="700">▸ +24 fases</text>
+        </g>
+        <!-- folhas sob a primeira -->
+        <path d="M38,110 V186 M38,130 H54 M38,152 H54 M38,174 H54" stroke="var(--border)" fill="none"/>
+        <g font-size="9.5" fill="var(--ink-2)">
+          <rect x="54" y="120" width="110" height="20" rx="4" fill="var(--surface)" stroke="var(--border)"/><text x="61" y="134">Carga inicial</text>
+          <rect x="54" y="142" width="110" height="20" rx="4" fill="var(--surface)" stroke="var(--border)"/><text x="61" y="156">Conferência</text>
+          <rect x="54" y="164" width="110" height="20" rx="4" fill="var(--surface)" stroke="var(--border)"/><text x="61" y="178">Validação</text>
+        </g>
+        <text x="450" y="230" text-anchor="middle" font-size="11" fill="var(--ok)" font-weight="600">1200px · fonte 11px · clique numa fase entra nela</text>
+      </svg>
+    </div>
+  </section>
+
+  <div class="q">
+    <h2>Duas decisões</h2>
+    <ol>
+      <li>
+        <b>Quantos agrupadores por linha?</b> Recomendo <b>6</b> — é o que devolve 100% de zoom e fonte de 11px numa tela de 1400px. Com 8 ainda dá (9,6px), e mostra mais de uma vez. Acima disso volta a ficar ruim.
+      </li>
+      <li>
+        <b>Faço as fases 1 a 4, ou só 1 a 3?</b> As três primeiras resolvem o seu print. A quarta (zoom semântico) é o que impede o problema de voltar quando alguém afastar o zoom — recomendo incluir, é barata.
+      </li>
+    </ol>
+  </div>
+</div>

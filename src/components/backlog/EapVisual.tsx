@@ -83,12 +83,25 @@ interface Node {
   /** Código diz que tem pai, mas `parent_id` está vazio. */
   orfao: boolean;
   nivel: number;
+  /** Agrupadores que o corte de largura deixou de fora — vira "+N fases". */
+  gruposOcultos?: number;
 }
 
 const RAIZ_ID = "__raiz__";
 
 /** Agrupador ramifica na horizontal; folha desce na vertical. */
 const agrupa = (k: EapKind) => k === "projeto" || k === "fase" || k === "entrega";
+
+/**
+ * Quantos agrupadores por pai antes de virar "+N fases".
+ *
+ * Seis é o que devolve zoom 100% e o título em 11px numa tela de ~1.400px:
+ * 6 × (168 + 32) = 1.200px. Com oito o desenho ainda cabe, mas exige 88% de
+ * zoom e leva a fonte a 9,6px — abaixo dos 10px que se considera o piso do
+ * texto legível. As folhas não entram nesta conta: elas descem, e descer é
+ * barato.
+ */
+const LARGURA_MAX = 6;
 
 // Caixa: agrupador é mais alto porque leva a barra de progresso.
 const W = 168;
@@ -100,6 +113,8 @@ const GAP_Y = 6;
 export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
   const [nivelMax, setNivelMax] = useState(3);
   const [colapsados, setColapsados] = useState<Set<string>>(new Set());
+  /** Pais cujo "+N fases" foi aberto — mostram todos os agrupadores. */
+  const [larguraAberta, setLarguraAberta] = useState<Set<string>>(new Set());
   const [foco, setFoco] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -173,7 +188,20 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
         progresso: it.progresso ?? null,
         todosFilhos: filhos,
         filhos,
-        orfao: !!code && code.includes(".") && !it.parent_id,
+        /**
+         * ÓRFÃO É QUEM ESTÁ SOLTO — e agrupador não está.
+         *
+         * A regra olhava só o código e o `parent_id`: qualquer item com código
+         * de subitem (1.3.4) sem pai era pintado de vermelho. Na Revitalização
+         * Tasy isso marcou 38 caixas, e 30 delas TÊM FILHOS — são fases de
+         * nível 1 cujo código veio da importação e nunca foi renumerado. A tela
+         * ficava quase toda vermelha, e o alerta deixava de significar algo.
+         *
+         * Quem agrupa é a raiz de um ramo, esteja o código como estiver. O
+         * alerta fica para a folha realmente solta: código dizendo que pertence
+         * a algo, sem pai e sem nada embaixo. Na mesma base, 8 casos.
+         */
+        orfao: !!code && code.includes(".") && !it.parent_id && filhos.length === 0,
         nivel,
       };
     };
@@ -213,15 +241,46 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
     return alvo ? { exibida: alvo, trilha: [...caminho] } : { exibida: raiz, trilha: [] };
   }, [raiz, foco]);
 
-  /** Aplica corte por nível e por colapso manual. */
+  /**
+   * Corte por nível, por colapso manual — e por LARGURA.
+   *
+   * O corte por largura faltava, e era o defeito de fundo: `nivelMax` limita a
+   * PROFUNDIDADE, e numa EAP quem estoura a tela é a LARGURA. Um projeto com
+   * 30 agrupadores no nível 1 desenhava 6.000px (30 × 200) tanto em "Nível 1"
+   * quanto em "Nível 5" — o seletor não mudava nada, e para caber numa tela de
+   * 1.400px o zoom ia a 23%, com a fonte do título em 2,6px.
+   *
+   * Agora cada pai mostra no máximo `LARGURA_MAX` agrupadores; o resto vira um
+   * nó "+N fases" que expande no lugar. É a mesma peça do "▸ N ocultas" que já
+   * existia para as folhas e nunca tinha sido aplicada aos agrupadores.
+   *
+   * Só AGRUPADOR é limitado. Folha empilha na vertical, e vertical é barato —
+   * rolar para baixo não custa legibilidade nenhuma.
+   *
+   * Medido: 6 por linha devolve 1.200px, zoom 100% e os 11px do título. Com 8
+   * ainda dá (9,6px), mas 10px é o piso do que se considera legível.
+   */
   const podada = useMemo(() => {
     const base = exibida.nivel;
     const podar = (n: Node): Node => {
       const fechado = colapsados.has(n.id) || (n.nivel - base) >= nivelMax;
-      return { ...n, filhos: fechado ? [] : n.filhos.map(podar) };
+      if (fechado) return { ...n, filhos: [] };
+
+      const expandido = larguraAberta.has(n.id);
+      const grupos = n.filhos.filter((f) => agrupa(f.kind));
+      const folhas = n.filhos.filter((f) => !agrupa(f.kind));
+      const gruposVisiveis = expandido ? grupos : grupos.slice(0, LARGURA_MAX);
+
+      return {
+        ...n,
+        // Folhas primeiro na lista não importa — a renderização separa por
+        // papel. O que importa é o conjunto podado.
+        filhos: [...gruposVisiveis, ...folhas].map(podar),
+        gruposOcultos: grupos.length - gruposVisiveis.length,
+      };
     };
     return podar(exibida);
-  }, [exibida, colapsados, nivelMax]);
+  }, [exibida, colapsados, nivelMax, larguraAberta]);
 
   /**
    * LAYOUT HÍBRIDO.
@@ -307,7 +366,10 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
     let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const n of layout) {
       minX = Math.min(minX, n.x - W / 2);
-      maxX = Math.max(maxX, n.x + W / 2);
+      // O "+N fases" fica à DIREITA do pai, fora da caixa dele — sem somá-lo
+      // aqui, o botão que revela o resto da árvore nasceria cortado na borda.
+      const extra = (n.data.gruposOcultos ?? 0) > 0 ? GAP_X + (W - 40) : 0;
+      maxX = Math.max(maxX, n.x + W / 2 + extra);
       const folhas = n.data.filhos.filter((f) => !agrupa(f.kind)).length;
       const oculto = n.data.todosFilhos.length > n.data.filhos.length ? 1 : 0;
       maxY = Math.max(maxY, n.y + H_GRUPO + (folhas + oculto) * (H_FOLHA + GAP_Y) + 20);
@@ -415,14 +477,38 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
       {/* Controles de VISÃO. Espelham os que o Backlog já tem — agrupar,
           expandir, recolher — e acrescentam o que só a árvore precisa. */}
       <div className="flex items-center gap-2 flex-wrap pb-2 print:hidden">
+        {/**
+          * TRILHA COMPLETA, não um botão de voltar.
+          *
+          * Com o clique entrando na fase, descer vira o gesto comum — e com um
+          * botão só a pessoa perde a noção de onde está depois do segundo
+          * nível. A trilha mostra o caminho inteiro e deixa saltar direto para
+          * qualquer ponto dele, inclusive a raiz.
+          */}
         {trilha.length > 0 && (
-          <Button
-            size="sm" variant="ghost" className="h-7 gap-1 text-xs"
-            onClick={() => setFoco(trilha.length > 1 ? trilha[trilha.length - 1].id : null)}
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            {trilha[trilha.length - 1]?.title ?? "Tudo"}
-          </Button>
+          <div className="flex items-center gap-0.5 flex-wrap">
+            <Button
+              size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs"
+              onClick={() => setFoco(null)}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              {projectTitle}
+            </Button>
+            {trilha.slice(1).map((t) => (
+              <span key={t.id} className="flex items-center gap-0.5">
+                <span className="text-muted-foreground/50 text-xs">/</span>
+                <Button
+                  size="sm" variant="ghost" className="h-7 px-2 text-xs max-w-[140px] truncate"
+                  onClick={() => setFoco(t.id)}
+                >
+                  {t.title}
+                </Button>
+              </span>
+            ))}
+            <span className="text-muted-foreground/50 text-xs">/</span>
+            <span className="text-xs font-semibold px-1 max-w-[160px] truncate">{exibida.title}</span>
+            <span className="w-px h-4 bg-border mx-1.5" />
+          </div>
         )}
         <Select value={String(nivelMax)} onValueChange={(v) => setNivelMax(Number(v))}>
           <SelectTrigger className="h-7 w-[112px] text-xs"><SelectValue /></SelectTrigger>
@@ -475,7 +561,15 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
             // rolagem da página, que é o gesto mais comum aqui.
             if (!e.ctrlKey && !e.metaKey) return;
             e.preventDefault();
-            setZoom((z) => Math.min(3, Math.max(0.2, z * (e.deltaY < 0 ? 1.12 : 0.89))));
+            /**
+             * Piso em 0,6 — antes era 0,2, abaixo da legibilidade.
+             *
+             * O título tem 11px e as folhas 9,5px: a 0,2 isso vira 2,2px e
+             * 1,9px, que não é texto, é textura. O piso vai até onde o menor
+             * texto ainda passa dos ~6px, e quem precisa ver o conjunto usa o
+             * corte de largura ou a trilha — não o zoom.
+             */
+            setZoom((z) => Math.min(3, Math.max(0.6, z * (e.deltaY < 0 ? 1.12 : 0.89))));
           }}
         >
           {/* A orientação é resolvida nas COORDENADAS de cada nó (o layout do
@@ -524,8 +618,22 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
                   {/* AGRUPADOR */}
                   <g
                     className="cursor-pointer"
-                    onClick={(e) => { e.stopPropagation(); if (!ehProjeto) onSelect?.(d.id); }}
-                    onDoubleClick={(e) => { e.stopPropagation(); if (!ehProjeto) setFoco(d.id); }}
+                    /**
+                     * CLIQUE ENTRA NA FASE; duplo clique abre a atividade.
+                     *
+                     * Estava invertido — o clique abria o painel e o duplo
+                     * focava. Num projeto largo, navegar a árvore é o gesto
+                     * que se repete dezenas de vezes, e abrir a atividade é o
+                     * eventual; o gesto mais fácil tem que servir ao mais
+                     * frequente. É o que o WBS Schedule Pro faz: "Focus" é a
+                     * resposta dele para gráfico largo demais.
+                     *
+                     * Vale só para AGRUPADOR. Folha não tem no que entrar,
+                     * então lá o clique abre direto (ver a renderização das
+                     * folhas, mais abaixo).
+                     */
+                    onClick={(e) => { e.stopPropagation(); if (!ehProjeto) setFoco(d.id); }}
+                    onDoubleClick={(e) => { e.stopPropagation(); if (!ehProjeto) onSelect?.(d.id); }}
                   >
                     <rect
                       x={px} y={py} width={W} height={H_GRUPO} rx={7}
@@ -616,6 +724,29 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
                       </text>
                     </g>
                   )}
+
+                  {/* "+N fases" — os agrupadores que o corte de LARGURA deixou
+                      de fora. Fica no eixo dos agrupadores (à direita do
+                      último), não na pilha de folhas: é irmão deles, e pô-lo
+                      embaixo sugeriria que está dentro do pai.
+                      Sem isto, um pai com 30 fases desenhava 6.000px. */}
+                  {(d.gruposOcultos ?? 0) > 0 && (
+                    <g className="cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLarguraAberta((prev) => new Set(prev).add(d.id));
+                      }}>
+                      <rect
+                        x={px + W / 2 + GAP_X} y={py + 4}
+                        width={W - 40} height={H_GRUPO - 8} rx={7}
+                        className="fill-primary/10 stroke-primary" strokeDasharray="4 3" strokeWidth={1.3} />
+                      <text
+                        x={px + W / 2 + GAP_X + (W - 40) / 2} y={py + H_GRUPO / 2 + 4}
+                        textAnchor="middle" className="fill-primary font-semibold" style={{ fontSize: 11 }}>
+                        + {d.gruposOcultos} {d.gruposOcultos === 1 ? "fase" : "fases"}
+                      </text>
+                    </g>
+                  )}
                 </g>
               );
             })}
@@ -657,7 +788,7 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
           <span className="w-2.5 h-2.5 rounded-sm bg-destructive/10 border border-dashed border-destructive" />
           Fora da árvore
         </span>
-        <span className="ml-auto">Clique abre · duplo clique foca · Ctrl+roda dá zoom</span>
+        <span className="ml-auto">Clique na fase entra nela · duplo clique abre · Ctrl+roda dá zoom</span>
       </div>
     </div>
   );
