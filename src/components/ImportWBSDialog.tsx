@@ -798,15 +798,40 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
        */
       const phaseIdMap: Record<string, string> = {};
       {
-        const { data: jaExistem } = await supabase
+        /**
+         * O SELECT PEDIA UMA COLUNA QUE `phases` NÃO TEM.
+         *
+         * `wbs_code` existe em `activities`, não em `phases` — o próprio
+         * arquivo já registra isso algumas linhas acima ("phases NÃO tem
+         * wbs_code em todos os ambientes"), e mesmo assim o select o pedia.
+         * O PostgREST recusa a consulta INTEIRA nesse caso
+         * ("column phases.wbs_code does not exist"), e o erro era descartado:
+         * `jaExistem` ficava vazio, o mapa nunca se populava e NENHUMA fase
+         * era reaproveitada.
+         *
+         * Efeito: toda importação recriava as fases do projeto. A Revitalização
+         * Tasy tem 17 fases cadastradas, 13 delas vazias — duplicatas de
+         * importações sucessivas, inclusive quatro criadas e abandonadas na
+         * mesma execução de hoje.
+         *
+         * O código sempre veio do prefixo do título ("1.1 Fase de…" → "1.1"),
+         * que é como ele aparece nessas bases. Pedir a coluna não acrescentava
+         * nada e derrubava o resto.
+         */
+        const { data: jaExistem, error: erroFases } = await supabase
           .from("phases")
-          .select("id, title, wbs_code")
+          .select("id, title")
           .eq("project_id", projectId)
           .eq("is_trashed", false);
 
+        if (erroFases) {
+          // Sem o mapa, a importação duplicaria as fases em silêncio. Melhor
+          // dizer que vai acontecer do que descobrir depois no Backlog.
+          droppedCols.add("reaproveitamento de fases existentes");
+        }
+
         for (const f of ((jaExistem as any[]) || [])) {
           const codigo =
-            (f.wbs_code || "").trim() ||
             // Prefixo numérico do título: "1 Iniciação", "1. Iniciação",
             // "1.0 — Fundação". Sem match, a fase fica fora do mapa e o
             // comportamento é o de antes — nunca pior.
