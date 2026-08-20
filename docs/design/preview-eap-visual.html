@@ -1,0 +1,287 @@
+<title>EAP visual na tela</title>
+<style>
+  :root{
+    --bg:#f7f8fa;--surface:#ffffff;--surface-2:#f1f2f5;--border:#e2e4ea;--border-strong:#cfd2db;
+    --ink:#1c1f26;--ink-2:#565b66;--ink-3:#868b96;--accent:#5b5bd6;--accent-soft:#ecebfb;
+    --ok:#17915b;--ok-soft:#e2f4ea;--warn:#b3730a;--warn-soft:#fbeed6;--bad:#cc3340;--bad-soft:#fbe4e6;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}}
+  :root[data-theme="dark"]{--bg:#141619;--surface:#1c1f24;--surface-2:#23262c;--border:#2e323a;--border-strong:#3b4048;--ink:#e7e9ee;--ink-2:#a6abb5;--ink-3:#757b86;--accent:#8b8bf0;--accent-soft:#262640;--ok:#43c98a;--ok-soft:#16301f;--warn:#e0a44a;--warn-soft:#302716;--bad:#f0737f;--bad-soft:#331a1d;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:36px 20px 70px}
+  .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  h1{font-size:27px;margin:6px 0 8px;letter-spacing:-.01em}
+  .lede{color:var(--ink-2);font-size:14.5px;max-width:64ch}
+  section{margin-top:40px}
+  .sec-head{display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:14px}
+  .sec-num{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent)}
+  .sec-head h2{font-size:19px;margin:0;letter-spacing:-.01em}
+  .sec-sub{color:var(--ink-2);font-size:13.5px;margin:0 0 14px;max-width:70ch}
+  .note{margin-top:16px;border-left:3px solid var(--accent);background:var(--accent-soft);padding:13px 15px;border-radius:0 8px 8px 0;font-size:13px}
+  .warnbox{margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);border-radius:9px;padding:13px 15px;font-size:13px}
+  .warnbox b{color:var(--warn)}
+  .okbox{margin-top:14px;border:1px solid var(--ok);background:var(--ok-soft);border-radius:9px;padding:13px 15px;font-size:13px}
+  .okbox b{color:var(--ok)}
+  .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px}
+  @media(max-width:760px){.stat{grid-template-columns:1fr 1fr}}
+  .stat div{border:1px solid var(--border);border-radius:10px;padding:11px 13px;background:var(--surface)}
+  .stat .v{font-family:var(--mono);font-size:21px;font-weight:700;line-height:1.1}
+  .stat .v.ok{color:var(--ok)}.stat .v.warn{color:var(--warn)}
+  .stat .l{font-size:11px;color:var(--ink-3);margin-top:3px}
+
+  /* ---- chrome do app ---- */
+  .app{border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);overflow:hidden;margin-top:14px}
+  .appbar{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+  .appbar .t{font-size:13.5px;font-weight:600}
+  .appbar .m{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+  .tabs{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .tab{padding:8px 13px;font-size:12.5px;color:var(--ink-3);border-bottom:2px solid transparent;display:flex;align-items:center;gap:6px}
+  .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+  .tab .ic{font-size:12px}
+  .toolbar{display:flex;align-items:center;gap:7px;padding:9px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap;background:var(--surface)}
+  .ctl{border:1px solid var(--border-strong);border-radius:7px;padding:4px 9px;font-size:11.5px;background:var(--surface);display:inline-flex;align-items:center;gap:6px;color:var(--ink-2)}
+  .ctl.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+  .ctl .cv{font-family:var(--mono);font-size:9px;color:var(--ink-3)}
+  .seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:7px;overflow:hidden}
+  .seg span{padding:4px 10px;font-size:11.5px;color:var(--ink-3)}
+  .seg span.on{background:var(--accent);color:#fff;font-weight:600}
+  .canvas{padding:16px 12px;background:var(--bg);overflow-x:auto}
+  svg{display:block}
+  .lg{display:flex;gap:14px;flex-wrap:wrap;padding:9px 12px;border-top:1px solid var(--border);font-size:11px;color:var(--ink-2);background:var(--surface)}
+  .lg span{display:inline-flex;align-items:center;gap:5px}
+  .sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .cap{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin:18px 0 0}
+  .q{margin-top:40px;border:1px solid var(--border);border-radius:12px;padding:20px 22px;background:var(--surface)}
+  .q h2{font-size:16.5px;margin:0 0 10px}.q ol{margin:0;padding-left:18px;font-size:13.5px}.q li{margin-bottom:11px}.q b{color:var(--accent)}
+  code.inl{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+  ul.pts{margin:10px 0 0;padding-left:0;list-style:none;font-size:12.5px}
+  ul.pts li{padding:3px 0 3px 17px;position:relative;color:var(--ink-2)}
+  ul.pts li::before{content:"→";position:absolute;left:0;color:var(--accent);font-weight:700}
+</style>
+
+<div class="wrap">
+  <div class="kicker">GestãoPro · Backlog · Como fica na tela</div>
+  <h1>A EAP visual dentro do sistema</h1>
+  <p class="lede">Mesma aba Backlog, mesma barra de controles, mesmos dados. Muda o segmento <b>Lista&nbsp;↔&nbsp;EAP</b> — e a estrutura que hoje só existe como indentação vira desenho.</p>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Onde entra</h2></div>
+    <p class="sec-sub">Não é aba nova de primeiro nível. É um <b>modo de exibição</b> do Backlog, ao lado dos controles de visão que já existem lá — agrupar, expandir, recolher.</p>
+
+    <div class="app">
+      <div class="appbar">
+        <span style="font-size:11px;color:var(--ink-3);font-family:var(--mono)">▣</span>
+        <span class="t">Revitalização Tasy</span>
+        <span class="m">Felipe Cavalcanti · 31/01/2027</span>
+      </div>
+      <div class="tabs">
+        <span class="tab"><span class="ic">▥</span> Kanban</span>
+        <span class="tab on"><span class="ic">▤</span> Backlog</span>
+        <span class="tab"><span class="ic">☰</span> Cronograma</span>
+        <span class="tab"><span class="ic">▢</span> Documentos</span>
+        <span class="tab"><span class="ic">◷</span> Reuniões</span>
+      </div>
+      <div class="toolbar">
+        <span class="ctl" style="width:150px;color:var(--ink-3)">⌕ Buscar tarefa…</span>
+        <span class="ctl">⚑ Filtros</span>
+        <span style="width:1px;height:18px;background:var(--border);margin:0 2px"></span>
+        <!-- ESTE é o controle novo -->
+        <span class="seg">
+          <span>☰ Lista</span>
+          <span class="on">⑂ EAP</span>
+        </span>
+        <span class="ctl">Nível 3 <span class="cv">▾</span></span>
+        <span style="width:1px;height:18px;background:var(--border);margin:0 2px"></span>
+        <span class="seg" style="border-radius:7px">
+          <span style="padding:4px 7px">−</span>
+          <span style="padding:4px 6px;font-family:var(--mono);font-size:10.5px">100%</span>
+          <span style="padding:4px 7px">+</span>
+        </span>
+        <span class="ctl">⤢ Ajustar</span>
+        <span style="margin-left:auto"></span>
+        <span class="ctl">⭳ SVG</span>
+        <span class="ctl">⎙ Imprimir</span>
+      </div>
+      <div class="canvas">
+        <svg viewBox="0 0 940 420" width="940">
+          <!-- RAIZ -->
+          <rect x="16" y="14" width="168" height="40" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="28" y="30" font-size="8.5" font-family="var(--mono)" fill="var(--accent)">1</text>
+          <text x="28" y="44" font-size="12" fill="var(--accent)" font-weight="700">Revitalização Tasy</text>
+
+          <!-- barramento horizontal para as FASES -->
+          <path d="M100,54 V70 M100,70 H700 M100,70 V86 M300,70 V86 M500,70 V86 M700,70 V86"
+                stroke="var(--border-strong)" fill="none" stroke-width="1.2"/>
+
+          <!-- FASE 1.2 -->
+          <g>
+            <rect x="16" y="86" width="168" height="42" rx="7" fill="var(--surface-2)" stroke="var(--border-strong)" stroke-width="1.4"/>
+            <text x="28" y="102" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">1.2</text>
+            <text x="28" y="115" font-size="11" fill="var(--ink)" font-weight="600">Cadastros e Funções</text>
+            <rect x="28" y="120" width="120" height="4" rx="2" fill="var(--border)"/>
+            <rect x="28" y="120" width="24" height="4" rx="2" fill="var(--ok)"/>
+            <text x="156" y="124" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">20%</text>
+          </g>
+          <!-- folhas de 1.2, VERTICAIS -->
+          <path d="M34,128 V300" stroke="var(--border)" fill="none"/>
+          <g font-size="10" fill="var(--ink-2)">
+            <path d="M34,150 H50 M34,178 H50 M34,206 H50 M34,234 H50 M34,262 H50 M34,290 H50" stroke="var(--border)" fill="none"/>
+            <rect x="50" y="139" width="134" height="22" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="58" y="154"><tspan font-family="var(--mono)" font-size="8" fill="var(--ink-3)">1.2.1</tspan> Empresa</text>
+            <rect x="50" y="167" width="134" height="22" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="58" y="182"><tspan font-family="var(--mono)" font-size="8" fill="var(--ink-3)">1.2.2</tspan> P. Jurídica</text>
+            <rect x="50" y="195" width="134" height="22" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="58" y="210"><tspan font-family="var(--mono)" font-size="8" fill="var(--ink-3)">1.2.3</tspan> Estrutura</text>
+            <rect x="50" y="223" width="134" height="22" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="58" y="238"><tspan font-family="var(--mono)" font-size="8" fill="var(--ink-3)">1.2.4</tspan> Tributos</text>
+            <rect x="50" y="251" width="134" height="22" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="58" y="266"><tspan font-family="var(--mono)" font-size="8" fill="var(--ink-3)">1.2.5</tspan> Médico</text>
+            <rect x="50" y="279" width="134" height="22" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="58" y="294"><tspan font-family="var(--mono)" font-size="8" fill="var(--ink-3)">1.2.6</tspan> Materiais</text>
+          </g>
+
+          <!-- FASE 1.3 -->
+          <g>
+            <rect x="216" y="86" width="168" height="42" rx="7" fill="var(--surface-2)" stroke="var(--border-strong)" stroke-width="1.4"/>
+            <text x="228" y="102" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">1.3</text>
+            <text x="228" y="115" font-size="11" fill="var(--ink)" font-weight="600">Agendas</text>
+            <rect x="228" y="120" width="120" height="4" rx="2" fill="var(--border)"/>
+            <rect x="228" y="120" width="6" height="4" rx="2" fill="var(--ok)"/>
+            <text x="356" y="124" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">5%</text>
+          </g>
+          <path d="M234,128 V244" stroke="var(--border)" fill="none"/>
+          <g font-size="10" fill="var(--ink-2)">
+            <path d="M234,150 H250 M234,178 H250 M234,206 H250 M234,236 H250" stroke="var(--border)" fill="none"/>
+            <!-- agrupador aninhado: tem filhos, entao e caixa cinza -->
+            <rect x="250" y="139" width="134" height="22" rx="5" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+            <text x="258" y="154"><tspan font-family="var(--mono)" font-size="8" fill="var(--ink-3)">1.3.1</tspan> Treinamento</text>
+            <text x="366" y="154" font-size="8" fill="var(--accent)" font-weight="700">+2</text>
+            <rect x="250" y="167" width="134" height="22" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="258" y="182"><tspan font-family="var(--mono)" font-size="8" fill="var(--ink-3)">1.3.2</tspan> Serviços</text>
+            <rect x="250" y="195" width="134" height="22" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="258" y="210"><tspan font-family="var(--mono)" font-size="8" fill="var(--ink-3)">1.3.4</tspan> Requisição</text>
+            <!-- MARCO: losango -->
+            <path d="M254,236 l8,-8 8,8 -8,8 z" fill="var(--warn-soft)" stroke="var(--warn)" stroke-width="1.3"/>
+            <text x="276" y="240" font-size="10" fill="var(--warn)" font-weight="600">Marco 2 — Cadastros</text>
+          </g>
+
+          <!-- FASE 1.4 colapsada -->
+          <g>
+            <rect x="416" y="86" width="168" height="42" rx="7" fill="var(--surface-2)" stroke="var(--border-strong)" stroke-width="1.4"/>
+            <text x="428" y="102" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">1.4</text>
+            <text x="428" y="115" font-size="11" fill="var(--ink)" font-weight="600">Faturamento</text>
+            <rect x="428" y="120" width="120" height="4" rx="2" fill="var(--border)"/>
+            <text x="556" y="124" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">0%</text>
+          </g>
+          <path d="M434,128 V146" stroke="var(--border)" fill="none"/>
+          <g>
+            <rect x="434" y="146" width="104" height="22" rx="11" fill="var(--accent-soft)" stroke="var(--accent)" stroke-dasharray="3 2"/>
+            <text x="486" y="161" text-anchor="middle" font-size="10" fill="var(--accent)" font-weight="600">▸ 12 ocultas</text>
+          </g>
+
+          <!-- FASE 1.5 -->
+          <g>
+            <rect x="616" y="86" width="168" height="42" rx="7" fill="var(--surface-2)" stroke="var(--border-strong)" stroke-width="1.4"/>
+            <text x="628" y="102" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">1.5</text>
+            <text x="628" y="115" font-size="11" fill="var(--ink)" font-weight="600">Teste Piloto</text>
+            <rect x="628" y="120" width="120" height="4" rx="2" fill="var(--border)"/>
+            <text x="756" y="124" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">0%</text>
+          </g>
+          <path d="M634,128 V174" stroke="var(--border)" fill="none"/>
+          <g font-size="10" fill="var(--ink-2)">
+            <path d="M634,150 H650 M634,174 H650" stroke="var(--border)" fill="none"/>
+            <rect x="650" y="139" width="134" height="22" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="658" y="154"><tspan font-family="var(--mono)" font-size="8" fill="var(--ink-3)">1.5.1</tspan> Vídeos</text>
+            <path d="M654,174 l8,-8 8,8 -8,8 z" fill="var(--warn-soft)" stroke="var(--warn)" stroke-width="1.3"/>
+            <text x="676" y="178" font-size="10" fill="var(--warn)" font-weight="600">Marco 5 — Piloto</text>
+          </g>
+
+          <!-- O RESTO DAS FASES, atras de um clique: e o que impede a arvore
+               de crescer 6.000px numa fileira so -->
+          <g>
+            <rect x="820" y="86" width="120" height="42" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-dasharray="4 3" stroke-width="1.3"/>
+            <text x="880" y="112" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="700">+ 24 fases</text>
+          </g>
+
+          <text x="470" y="380" text-anchor="middle" font-size="11" fill="var(--ink-3)">
+6 fases por vez · atividades descem · marcos são losangos
+          </text>
+        </svg>
+      </div>
+      <div class="lg">
+        <span><span class="sw" style="background:var(--accent-soft);border:1px solid var(--accent)"></span> Projeto</span>
+        <span><span class="sw" style="background:var(--surface-2);border:1px solid var(--border-strong)"></span> Fase / Entrega</span>
+        <span><span class="sw" style="background:var(--surface);border:1px solid var(--border)"></span> Atividade</span>
+        <span><span class="sw" style="background:var(--warn-soft);border:1px solid var(--warn);transform:rotate(45deg)"></span> Marco</span>
+<span><span class="sw" style="background:var(--accent-soft);border:1px dashed var(--accent)"></span> Mais fases (clique)</span>
+        <span><span class="sw" style="background:var(--bad-soft);border:1px dashed var(--bad)"></span> Fora da árvore</span>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>Tudo nessa barra já existe</b>, exceto o segmento <b>Lista ↔ EAP</b> e os controles de nível, ajuste e impressão. O "Fase ▾" é o seletor de agrupamento que já está lá hoje; a busca e os filtros são os mesmos.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>O que muda em cada projeto</h2></div>
+    <p class="sec-sub">Fui olhar como sua base está de fato estruturada — e o resultado muda a expectativa sobre esta tela.</p>
+
+    <div class="stat">
+      <div><div class="v">33</div><div class="l">projetos com atividade</div></div>
+      <div><div class="v warn">10</div><div class="l">totalmente PLANOS (nenhum pai)</div></div>
+      <div><div class="v">20</div><div class="l">com 1 nível de aninhamento</div></div>
+      <div><div class="v ok">3</div><div class="l">com 3+ níveis — EAP de verdade</div></div>
+    </div>
+
+    <div class="warnbox">
+      <b>Sendo honesto sobre o alcance:</b> só <b>3 dos 33 projetos</b> têm hierarquia profunda o bastante para uma EAP visual impressionar. Vinte têm um único nível de aninhamento — a árvore desenhada vai parecer uma fileira de caixas com filhos pendurados. E dez são <b>completamente planos</b>: para eles, a EAP visual mostra uma linha de caixas soltas, e não acrescenta nada sobre a lista.
+      <br><br>
+      Isso não é argumento contra a tela — é o retrato de que <b>a EAP quase não está sendo usada como estrutura</b>. A tela pode ser justamente o que torna a decomposição visível o suficiente para as pessoas passarem a usá-la. Mas vale saber disso antes, e não depois.
+    </div>
+
+    <p class="cap">Como fica um projeto plano (10 dos 33)</p>
+    <div class="app">
+      <div class="canvas">
+        <svg viewBox="0 0 900 150" width="900">
+          <rect x="16" y="14" width="150" height="34" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="28" y="36" font-size="11.5" fill="var(--accent)" font-weight="700">Projeto BI Camadas</text>
+          <path d="M91,48 V64 M91,64 H795 M91,64 V80 M267,64 V80 M443,64 V80 M619,64 V80 M795,64 V80" stroke="var(--border-strong)" fill="none" stroke-width="1.2"/>
+          <g font-size="10" fill="var(--ink-2)">
+            <rect x="16" y="80" width="150" height="26" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="26" y="97">Extração RAW</text>
+            <rect x="192" y="80" width="150" height="26" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="202" y="97">Extração SILVER</text>
+            <rect x="368" y="80" width="150" height="26" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="378" y="97">Extração GOLD</text>
+            <rect x="544" y="80" width="150" height="26" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="554" y="97">Scripts</text>
+            <rect x="720" y="80" width="150" height="26" rx="5" fill="var(--surface)" stroke="var(--border)"/><text x="730" y="97">Validação</text>
+          </g>
+          <text x="450" y="135" text-anchor="middle" font-size="10.5" fill="var(--ink-3)">sem fases, a EAP é uma fileira — a lista já dizia o mesmo</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>O que se pode fazer na tela</h2></div>
+    <ul class="pts">
+      <li><b>Clicar numa fase</b> → <b>entra nela</b>, com trilha para voltar</li>
+      <li><b>Duplo clique</b> → abre o painel da atividade (mesmo do Backlog)</li>
+      <li><b>+ 24 fases</b> → traz o resto dos agrupadores daquele pai</li>
+      <li><b>Nível 3 ▾</b> → abre a árvore até o nível escolhido</li>
+      <li><b>− 100% +</b> → zoom, com o valor à vista; clicar no número volta ao enquadramento</li>
+      <li><b>⤢ Ajustar</b> → enquadra a árvore inteira e recentraliza</li>
+      <li><b>Arrastar o fundo</b> → move o desenho</li>
+      <li><b>⭳ SVG · ⎙ Imprimir</b> → vetorial, A3 paisagem</li>
+    </ul>
+    <div class="okbox">
+      <b>Só leitura na primeira versão.</b> Arrastar para reorganizar move uma subárvore inteira e renumera dezenas de códigos em cascata — fácil de disparar sem querer com o zoom afastado. Toda mudança de estrutura continua no Backlog, onde os controles e a permissão já estão resolvidos. Arrastar entra depois, se fizer falta.
+    </div>
+  </section>
+
+  <div class="q">
+    <h2>O que eu preciso decidir com você</h2>
+    <ol>
+      <li>
+        <b>Segmento dentro do Backlog, como no mockup?</b> Foi o que assumi: mesma aba, mesma busca, mesmos filtros — só troca o desenho. A alternativa é aba própria ao lado de Kanban e Cronograma, o que separaria a EAP da lista que a alimenta.
+      </li>
+      <li>
+        <b>Os itens fora da árvore aparecem em vermelho tracejado.</b> Eram 90 pela regra que escrevi primeiro — mas 80 deles TÊM FILHOS, ou seja, são fases legítimas com código herdado da importação. A regra passou a exigir também não ter filhos, e sobraram <b>10 casos reais</b> na base inteira. Nesse volume, destacar não polui.
+      </li>
+      <li>
+        <b>Sabendo que só 3 projetos têm hierarquia real, ainda quer a tela agora?</b> Faz sentido — ela pode ser o que faz as pessoas usarem a EAP. Mas se a prioridade for outra, é melhor saber antes de eu construir.
+      </li>
+    </ol>
+  </div>
+</div>

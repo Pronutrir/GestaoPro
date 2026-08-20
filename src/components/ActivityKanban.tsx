@@ -1474,12 +1474,29 @@ export const ActivityKanban = ({
       // esta coluna — contá-lo impediria o pai de subir para sempre.
       const irmaos = (filhosDe.get(pai.id) ?? []).filter((f) => !f.is_milestone);
       if (irmaos.length === 0) break;
-      // A coluna do item recém-movido ainda não voltou do banco, então o valor
-      // dele vem do argumento — não de `activities`, que está desatualizado.
-      const todosLa = irmaos.every((f) =>
-        (f.id === activityId ? stageId : f.workflow_stage_id) === stageId,
-      );
-      if (!todosLa || pai.workflow_stage_id === stageId) break;
+      /**
+       * A coluna de cada irmão vem de TRÊS fontes, nesta ordem:
+       *
+       *   1. o argumento, para o item recém-movido — sua gravação ainda não
+       *      voltou do banco;
+       *   2. `optimisticMoves`, para os irmãos movidos AGORA, no mesmo lote;
+       *   3. `activities`, para o resto.
+       *
+       * A fonte 2 faltava, e era o defeito: mover um pacote de 10 subatividades
+       * chama esta função uma vez por filho, e cada chamada via os outros nove
+       * ainda na coluna ANTIGA — `activities` só é recarregado no fim, por
+       * `onDataChanged`. `todosLa` dava falso em todas as dez, e o pacote ficava
+       * para trás enquanto os filhos iam.
+       *
+       * Ao ARRASTAR o pacote isso não aparecia: aquele caminho passa pelo
+       * diálogo "Levar os N junto", que move o pai explicitamente. Só o
+       * caminho inverso — mover os filhos — dependia desta conta, e é por isso
+       * que o sintoma era assimétrico: ia junto na ida, ficava na volta.
+       */
+      const colunaDe = (f: Activity) =>
+        f.id === activityId ? stageId : (optimisticMoves[f.id] || f.workflow_stage_id);
+      const todosLa = irmaos.every((f) => colunaDe(f) === stageId);
+      if (!todosLa || (optimisticMoves[pai.id] || pai.workflow_stage_id) === stageId) break;
       if (!canMutateActivity(pai)) break;
       subiram.push(pai.id);
       atual = pai;
@@ -1510,7 +1527,10 @@ export const ActivityKanban = ({
         : `${subiram.length} agrupadores acompanharam`,
       description: `${nomes.join(", ")} — todos os itens de dentro chegaram aqui.`,
     });
-  }, [activities, canMutateActivity, toast]);
+    // `optimisticMoves` entra nas dependências porque a conta de "todos os
+    // irmãos chegaram" agora o consulta: sem ele a função ficaria com um
+    // retrato velho e voltaria a ignorar os filhos movidos no mesmo lote.
+  }, [activities, canMutateActivity, optimisticMoves, toast]);
 
   /**
    * Move o card para QUALQUER coluna do quadro. Generaliza o antigo

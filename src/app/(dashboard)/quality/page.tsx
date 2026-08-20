@@ -14,6 +14,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ProjectColumn } from "@/components/ProjectColumn";
 import { AddProjectDialog } from "@/components/AddProjectDialog";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
+import { podeGerenciarProjeto } from "@/lib/projectManage";
 import { PipelineSkeleton } from "@/components/SkeletonScreens";
 import { Input } from "@/components/ui/input";
 import { useProjectAccess } from "@/hooks/useProjectAccess";
@@ -36,7 +37,7 @@ const QualityManagement = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { filterProjects, loading: authLoading } = useProjectAccess();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user: authUser, profile: authProfile } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -190,7 +191,7 @@ const QualityManagement = () => {
           </DndContext>
         )}
 
-        <EditProjectDialog project={editingProject} open={editDialogOpen} onOpenChange={setEditDialogOpen} onProjectUpdated={fetchProjects} />
+        <EditProjectDialog project={editingProject} open={editDialogOpen} onOpenChange={setEditDialogOpen} onProjectUpdated={fetchProjects} podeGerenciarEquipe={podeGerenciarProjeto(editingProject, { isAdmin, id: authUser?.id, email: authUser?.email ?? authProfile?.email, fullName: authProfile?.full_name, profileId: authProfile?.id })} />
       </div>
     
   );

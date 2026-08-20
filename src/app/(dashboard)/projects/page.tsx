@@ -33,6 +33,7 @@ import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { buildAvatarLookupMap } from '@/lib/avatarLookup';
 import { selectInChunks } from '@/lib/chunkedIn';
 import { ProjectsTable } from '@/components/ProjectsTable';
+import { podeGerenciarProjeto } from '@/lib/projectManage';
 
 interface Project {
   id: string; title: string; description: string | null; status: string; priority: string;
@@ -109,7 +110,7 @@ function ProjectsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { filterProjects, loading: authLoading } = useProjectAccess();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user: authUser, profile: authProfile } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
   const [metrics, setMetrics] = useState<Record<string, ProjectMetrics>>({});
@@ -552,6 +553,13 @@ function ProjectsContent() {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         onProjectUpdated={fetchProjects}
+        podeGerenciarEquipe={podeGerenciarProjeto(editingProject, {
+          isAdmin,
+          id: authUser?.id,
+          email: authUser?.email ?? authProfile?.email,
+          fullName: authProfile?.full_name,
+          profileId: authProfile?.id,
+        })}
       />
     </div>
   );

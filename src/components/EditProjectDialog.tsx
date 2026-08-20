@@ -112,11 +112,31 @@ interface Project {
   root_cause?: string | null;
 }
 
+/** Sentinela de saída limpa do bloco de equipe — ver `podeGerenciarEquipe`. */
+const SEM_EQUIPE = Symbol("sem-permissao-de-equipe");
+
 interface EditProjectDialogProps {
   project: Project | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onProjectUpdated: () => void;
+  /**
+   * Quem pode mexer na EQUIPE — admin, líder ou gestor do projeto.
+   *
+   * É o espelho de `can_manage_project_v2`, que as policies de
+   * `project_members` exigem. Sem este controle a seção ficava editável para
+   * qualquer membro com `can_edit`: a pessoa trocava a permissão dos colegas,
+   * salvava, lia "Projeto atualizado!" e nada tinha mudado — o erro do banco
+   * era engolido pelo try/catch da sincronização de equipe.
+   *
+   * Só a EQUIPE é travada. O resto da ficha (datas, orçamento, descrição)
+   * continua editável por quem tem `can_edit`, que é o que o botão de editar
+   * sempre concedeu — bloquear tudo tiraria acesso que hoje funciona.
+   *
+   * Padrão `true` para não travar as telas que ainda não passam o prop; quem
+   * de fato decide é a RLS, e ela não mudou.
+   */
+  podeGerenciarEquipe?: boolean;
 }
 
 export const EditProjectDialog = ({
@@ -124,6 +144,7 @@ export const EditProjectDialog = ({
   open,
   onOpenChange,
   onProjectUpdated,
+  podeGerenciarEquipe = true,
 }: EditProjectDialogProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -454,7 +475,22 @@ export const EditProjectDialog = ({
       // Sincroniza equipe (project_members)
       let teamSyncError: string | null = null;
       let notifySyncError: string | null = null;
+      /**
+       * Quem não gerencia não SINCRONIZA a equipe.
+       *
+       * Desabilitar os campos acima não basta: o estado `team` continua vindo
+       * do banco e seria reenviado inteiro a cada salvamento. A RLS recusaria
+       * — mas o erro cai no `teamSyncError` e o toast de sucesso sai mesmo
+       * assim, que é justamente o silêncio que este bloco evita.
+       *
+       * Pular é seguro: sem os controles, `team` não pode ter sido alterado.
+       */
       try {
+        if (!podeGerenciarEquipe) {
+          // Sai antes de qualquer escrita. Não é erro: é o caminho normal de
+          // quem só editou datas ou descrição.
+          throw SEM_EQUIPE;
+        }
         const { data: existingMembers, error: existingMembersError } = await supabase
           .from("project_members")
           .select("id, user_id")
@@ -601,7 +637,11 @@ export const EditProjectDialog = ({
           );
         }
       } catch (teamErr: any) {
-        teamSyncError = teamErr?.message || "Falha ao sincronizar equipe.";
+        // `SEM_EQUIPE` é saída limpa, não falha: quem não gerencia a equipe
+        // pulou o bloco de propósito e não deve ver aviso nenhum.
+        if (teamErr !== SEM_EQUIPE) {
+          teamSyncError = teamErr?.message || "Falha ao sincronizar equipe.";
+        }
       }
 
       toast({
@@ -881,8 +921,23 @@ export const EditProjectDialog = ({
             <div className="grid gap-2 rounded-lg border border-dashed border-border p-3">
               <Label className="text-sm font-semibold">Equipe do Projeto</Label>
               <p className="text-[11px] text-muted-foreground -mt-1">
-                Adicione ou remova membros. Novos membros recebem um convite ao salvar.
+                {podeGerenciarEquipe
+                  ? "Adicione ou remova membros. Novos membros recebem um convite ao salvar."
+                  : "Somente o gestor ou o líder do projeto altera a equipe."}
               </p>
+              {/* O aviso vem ANTES da lista, não depois de tentar salvar: a
+                  pessoa precisa saber que não adianta mexer aqui antes de
+                  mexer. Sem ele os campos ficariam desabilitados sem motivo
+                  visível, que é a versão silenciosa do mesmo problema. */}
+              {!podeGerenciarEquipe && (
+                <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-2">
+                  <Lock className="w-3.5 h-3.5 text-warning shrink-0 mt-px" />
+                  <p className="text-[11px] text-foreground/80 leading-relaxed">
+                    Você vê a equipe, mas não pode alterá-la. Peça ao gestor ou ao líder
+                    para incluir alguém ou mudar uma permissão.
+                  </p>
+                </div>
+              )}
 
               {/* Líder e Gestor: membros por CARGO, com acesso total. Aparecem
                   aqui para o time ficar visível num lugar só; para trocá-los,
@@ -935,14 +990,19 @@ export const EditProjectDialog = ({
                           {/* O X de remover não serve aqui (deixaria o projeto
                               sem responsável em silêncio) — mas sem nada a linha
                               parecia travada. "Trocar" leva ao campo do cargo. */}
-                          <button
-                            type="button"
-                            onClick={() => focusRoleField(roles[0] as "Líder" | "Gestor")}
-                            title={`Trocar o ${roles.join(" / ")} no campo acima`}
-                            className="text-[10px] font-medium text-primary hover:underline shrink-0 px-1"
-                          >
-                            Trocar
-                          </button>
+                          {/* "Trocar" leva ao campo de cargo lá em cima — que
+                              também só o gestor/líder pode mexer. Some junto,
+                              senão levaria a pessoa a um campo inerte. */}
+                          {podeGerenciarEquipe && (
+                            <button
+                              type="button"
+                              onClick={() => focusRoleField(roles[0] as "Líder" | "Gestor")}
+                              title={`Trocar o ${roles.join(" / ")} no campo acima`}
+                              className="text-[10px] font-medium text-primary hover:underline shrink-0 px-1"
+                            >
+                              Trocar
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -1017,6 +1077,7 @@ export const EditProjectDialog = ({
                       <Select
                         value={m.papel}
                         onValueChange={(v) => definirPapel(m.id, v as PapelId)}
+                        disabled={!podeGerenciarEquipe}
                       >
                         <SelectTrigger className="h-7 w-[178px] text-[12px] shrink-0">
                           {/* O gatilho mostra só o NOME. A descrição não pode
@@ -1046,23 +1107,27 @@ export const EditProjectDialog = ({
                         </SelectContent>
                       </Select>
 
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        title="Remover da equipe"
-                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setTeam((prev) => prev.filter((x) => x.id !== m.id))}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </Button>
+                      {podeGerenciarEquipe && (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          title="Remover da equipe"
+                          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setTeam((prev) => prev.filter((x) => x.id !== m.id))}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                     </div>
                     );
                   })}
                 </div>
               )}
 
-              <div className="pt-3 border-t border-border/60">
+              {/* O campo de adicionar SOME para quem não gerencia — deixá-lo
+                  ali, mesmo inerte, convidaria a um gesto que não vai gravar. */}
+              <div className={cn("pt-3 border-t border-border/60", !podeGerenciarEquipe && "hidden")}>
                 <PersonCombobox
                   variant="add"
                   people={profiles.filter(
