@@ -805,40 +805,32 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         .eq("project_id", projectId).order("display_order", { ascending: false }).limit(1);
       let phaseOrder = (existingPhases?.[0]?.display_order ?? 0) + 1;
 
-      // Coluna "Backlog" do fluxo (display_order 0): itens importados nascem lá,
-      // como os criados manualmente — assim seguem o mesmo fluxo (Kanban/status).
       const { data: stagesData } = await supabase
         .from("workflow_stages").select("id, display_order, is_visible, categoria, is_entry_point")
         .eq("project_id", projectId).order("display_order", { ascending: true });
       /**
-       * O item importado nasce numa coluna VISÍVEL no quadro.
+       * O ITEM IMPORTADO NASCE NO BACKLOG.
        *
-       * Era `display_order === 0` — a coluna "Backlog". Só que o Backlog saiu
-       * do quadro por decisão de produto (`is_visible = false`, ver
-       * `colunasDoQuadro`): o Kanban é fluxo, o Backlog é fila. Importar 134
-       * itens mandava todos para uma coluna que o quadro não desenha, e o
-       * Kanban abria praticamente vazio enquanto a lista mostrava "Backlog" em
-       * cada linha. Medido na Revitalização Tasy: 116 de 149 atividades
-       * pararam lá.
+       * Eu havia mudado isto para a primeira coluna VISÍVEL, lendo o sintoma
+       * ("o Kanban abre vazio") como se o destino estivesse errado. Estava
+       * invertido: o Backlog é EXATAMENTE onde a EAP recém-importada deve
+       * ficar. Ela é planejamento — 134 itens que ninguém começou —, e despejar
+       * isso no quadro entope as colunas com trabalho que não está em curso.
        *
-       * A ordem de preferência segue o que cada campo significa:
-       *   1. a coluna marcada como ENTRADA (`is_entry_point`) — existe para
-       *      isto, e é onde a tarefa nova cai;
-       *   2. a primeira `a_iniciar` visível ("Não iniciado" no padrão);
-       *   3. qualquer visível que não seja final;
-       *   4. o que houver — projeto sem coluna visível é caso degenerado, e
-       *      nascer em algum lugar é melhor que nascer em lugar nenhum.
+       * "Backlog é backlog, onde ficam as atividades para depois trazer para o
+       * kanban. A entrada seria determinada pelo usuário quando trouxer do
+       * backlog para o kanban." É a regra, e ela é do produto, não do código:
+       * o Kanban mede fluxo, a fila mede intenção.
+       *
+       * A coluna de backlog é a de `categoria = 'backlog'`; `display_order = 0`
+       * é o fallback para as bases onde a categoria ainda não foi preenchida.
+       * Se o projeto não tiver backlog nenhum, cai na primeira coluna — nascer
+       * em algum lugar é melhor que nascer em lugar nenhum.
        */
-      // `as any[]`: os tipos gerados de `workflow_stages` não conhecem
-      // `categoria` nem `is_entry_point` (colunas de migrations recentes), e o
-      // resto do arquivo já usa o mesmo escape para as colunas novas.
-      const visiveis = stagesData.filter((s) => s.is_visible !== false);
       const backlogStageId =
-        visiveis.find((s) => s.is_entry_point)?.id
-        ?? visiveis.find((s) => String(s.categoria) === "a_iniciar")?.id
-        ?? visiveis.find((s) => String(s.categoria) !== "concluida")?.id
-        ?? visiveis[0]?.id
-        ?? stagesData?.[0]?.id
+        stagesData.find((s) => String(s.categoria) === "backlog")?.id
+        ?? stagesData.find((s) => s.display_order === 0)?.id
+        ?? stagesData[0]?.id
         ?? null;
       // Item com data real vai direto para a coluna certa: quem já terminou não
       // deve nascer no Backlog. `is_final` marca a coluna de conclusão; a de
@@ -1058,8 +1050,8 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           wbs_code: eapCodeToPersist(persisted, node.code),
           item_type: persisted.item_type,
           is_milestone: persisted.is_milestone,
-          // Nasce na coluna de ENTRADA do quadro — visível, ao contrário do
-          // Backlog, que saiu do Kanban por decisão de produto.
+          // Nasce no BACKLOG: EAP importada é planejamento, não trabalho em
+          // curso. Quem decide o que entra no quadro é o usuário.
           workflow_stage_id: backlogStageId,
           status: "pending",
         };
