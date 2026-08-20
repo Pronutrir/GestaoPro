@@ -98,8 +98,13 @@ const agrupa = (k: EapKind) => k === "projeto" || k === "fase" || k === "entrega
  * Seis é o que devolve zoom 100% e o título em 11px numa tela de ~1.400px:
  * 6 × (168 + 32) = 1.200px. Com oito o desenho ainda cabe, mas exige 88% de
  * zoom e leva a fonte a 9,6px — abaixo dos 10px que se considera o piso do
- * texto legível. As folhas não entram nesta conta: elas descem, e descer é
- * barato.
+ * texto legível.
+ *
+ * O MESMO teto vale para a pilha de FOLHAS. Eu havia escrito aqui que "folhas
+ * descem, e descer é barato" — é barato numa fase, não na raiz: a Revitalização
+ * Tasy tem 12 itens pendurados direto no projeto, e os 336px de pilha
+ * empurravam todas as fases para fora da primeira tela. O que se via ao abrir
+ * era uma coluna de marcos, não a estrutura.
  */
 const LARGURA_MAX = 6;
 
@@ -281,12 +286,24 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
       const grupos = n.filhos.filter((f) => agrupa(f.kind));
       const folhas = n.filhos.filter((f) => !agrupa(f.kind));
       const gruposVisiveis = expandido ? grupos : grupos.slice(0, LARGURA_MAX);
+      /**
+       * A PILHA DE FOLHAS TAMBÉM PRECISA DE TETO.
+       *
+       * Eu tinha escrito que "folha desce, e descer é barato". É barato numa
+       * fase — não na RAIZ. Na Revitalização Tasy há 12 itens pendurados
+       * direto no projeto (4 marcos e 8 atividades soltas): 336px de pilha
+       * ANTES da primeira fase, que empurrava todas elas para fora da tela.
+       * O que se via ao abrir era uma coluna de marcos, não a estrutura.
+       *
+       * O teto é o mesmo dos agrupadores, e reusa o "▸ N ocultas" que já
+       * existia. Quem quiser a lista inteira tem a aba Lista ao lado.
+       */
+      const folhasVisiveis = expandido ? folhas : folhas.slice(0, LARGURA_MAX);
 
       return {
         ...n,
-        // Folhas primeiro na lista não importa — a renderização separa por
-        // papel. O que importa é o conjunto podado.
-        filhos: [...gruposVisiveis, ...folhas].map(podar),
+        // A ordem aqui não importa — a renderização separa por papel.
+        filhos: [...gruposVisiveis, ...folhasVisiveis].map(podar),
         gruposOcultos: grupos.length - gruposVisiveis.length,
       };
     };
@@ -328,7 +345,9 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
     const alturaCom = (n: Node) => {
       const originais = filhosVisiveis.get(n.id) ?? [];
       const folhas = originais.filter((f) => !agrupa(f.kind)).length;
-      const oculto = n.todosFilhos.length > originais.length ? 1 : 0;
+      // Conta FOLHA oculta: é ela que ocupa mais uma linha na pilha. O
+      // agrupador cortado pela largura vai para o lado, não para baixo.
+      const oculto = n.todosFilhos.filter((f) => !agrupa(f.kind)).length > folhas ? 1 : 0;
       return H_GRUPO + (folhas + oculto) * (H_FOLHA + GAP_Y) + 40;
     };
     tree<Node>()
@@ -379,10 +398,15 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
       minX = Math.min(minX, n.x - W / 2);
       // O "+N fases" fica à DIREITA do pai, fora da caixa dele — sem somá-lo
       // aqui, o botão que revela o resto da árvore nasceria cortado na borda.
-      const extra = (n.data.gruposOcultos ?? 0) > 0 ? GAP_X + (W - 40) : 0;
-      maxX = Math.max(maxX, n.x + W / 2 + extra);
+      maxX = Math.max(maxX, n.x + W / 2);
+      // O "+N fases" fica à direita do ÚLTIMO FILHO (não do pai): sem somá-lo
+      // aqui, o botão que revela o resto da árvore nasceria fora da moldura.
+      if ((n.data.gruposOcultos ?? 0) > 0 && n.children?.length) {
+        const ultimo = n.children[n.children.length - 1];
+        maxX = Math.max(maxX, ultimo.x + W / 2 + GAP_X + (W - 40));
+      }
       const folhas = n.data.filhos.filter((f) => !agrupa(f.kind)).length;
-      const oculto = n.data.todosFilhos.length > n.data.filhos.length ? 1 : 0;
+      const oculto = n.data.todosFilhos.filter((f) => !agrupa(f.kind)).length > folhas ? 1 : 0;
       maxY = Math.max(maxY, n.y + H_GRUPO + (folhas + oculto) * (H_FOLHA + GAP_Y) + 20);
     }
     const pad = 40;
@@ -665,7 +689,13 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
               const py = n.y;
               const d = n.data;
               const folhas = d.filhos.filter((f) => !agrupa(f.kind));
-              const ocultos = d.todosFilhos.length - d.filhos.length;
+              /**
+               * Conta só as FOLHAS que sobraram — `todosFilhos.length -
+               * filhos.length` misturaria os agrupadores cortados pela largura,
+               * que já têm o próprio "+N fases". O mesmo item apareceria nos
+               * dois contadores.
+               */
+              const ocultos = d.todosFilhos.filter((f) => !agrupa(f.kind)).length - folhas.length;
               /**
                * Só a RAIZ SINTÉTICA recebe o tratamento de projeto.
                *
@@ -798,23 +828,39 @@ export function EapVisual({ projectTitle, items, onSelect, className }: Props) {
                       último), não na pilha de folhas: é irmão deles, e pô-lo
                       embaixo sugeriria que está dentro do pai.
                       Sem isto, um pai com 30 fases desenhava 6.000px. */}
-                  {(d.gruposOcultos ?? 0) > 0 && (
-                    <g className="cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setLarguraAberta((prev) => new Set(prev).add(d.id));
-                      }}>
-                      <rect
-                        x={px + W / 2 + GAP_X} y={py + 4}
-                        width={W - 40} height={H_GRUPO - 8} rx={7}
-                        className="fill-primary/10 stroke-primary" strokeDasharray="4 3" strokeWidth={1.3} />
-                      <text
-                        x={px + W / 2 + GAP_X + (W - 40) / 2} y={py + H_GRUPO / 2 + 4}
-                        textAnchor="middle" className="fill-primary font-semibold" style={{ fontSize: 11 }}>
-                        + {d.gruposOcultos} {d.gruposOcultos === 1 ? "fase" : "fases"}
-                      </text>
-                    </g>
-                  )}
+                  {/**
+                    * "+N fases" ao lado do ÚLTIMO FILHO, não do pai.
+                    *
+                    * Estava ancorado em `px` — a caixa do próprio pai — e o pai
+                    * fica CENTRADO sobre os filhos, não à esquerda deles. Na
+                    * raiz o resultado era o botão sobrepondo o nome do projeto,
+                    * enquanto as fases apareciam bem mais abaixo.
+                    *
+                    * Ancorar no último filho põe o botão onde ele significa
+                    * algo: no fim da fileira que ele continua.
+                    */}
+                  {(d.gruposOcultos ?? 0) > 0 && n.children && n.children.length > 0 && (() => {
+                    const ultimo = n.children[n.children.length - 1];
+                    const bx = ultimo.x + W / 2 + GAP_X;
+                    const by = ultimo.y + 4;
+                    return (
+                      <g className="cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLarguraAberta((prev) => new Set(prev).add(d.id));
+                        }}>
+                        <rect
+                          x={bx} y={by}
+                          width={W - 40} height={H_GRUPO - 8} rx={7}
+                          className="fill-primary/10 stroke-primary" strokeDasharray="4 3" strokeWidth={1.3} />
+                        <text
+                          x={bx + (W - 40) / 2} y={by + (H_GRUPO - 8) / 2 + 4}
+                          textAnchor="middle" className="fill-primary font-semibold" style={{ fontSize: 11 }}>
+                          + {d.gruposOcultos} {d.gruposOcultos === 1 ? "fase" : "fases"}
+                        </text>
+                      </g>
+                    );
+                  })()}
                 </g>
               );
             })}
