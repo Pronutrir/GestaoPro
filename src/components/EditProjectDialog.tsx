@@ -592,15 +592,17 @@ export const EditProjectDialog = ({
           // (NotificationBell → respond_project_invite_v2). Fica junto do
           // insert dos novos membros — sem ela, o membro ficaria "aguardando"
           // para sempre, sem nunca saber que foi convidado.
-          const { error: notificationError } = await supabase.from("notifications").insert(
-            newOnes.map((m) => ({
-              project_id: project.id,
-              target_user_id: m.user_id,
-              type: "project_invite",
-              title: `Convite para o projeto: ${formData.title}`,
-              message: `Você foi convidado(a) para participar de "${formData.title}". Aceite ou recuse por aqui.`,
-            }))
-          );
+          // Mesma RPC do AddProjectDialog, e pelo mesmo motivo: o convidado
+          // entra 'pending' na linha acima e ainda não passa na política de
+          // `notifications`, que exige membro ACEITO. Aqui o sintoma era mais
+          // raro — quem edita costuma já ser membro aceito do projeto —, mas a
+          // regra é a mesma e as duas telas têm de concordar.
+          const { error: notificationError } = await supabase.rpc("enviar_convites_do_projeto", {
+            _project_id: project.id,
+            _user_ids: newOnes.map((m) => m.user_id),
+            _titulo: `Convite para o projeto: ${formData.title}`,
+            _mensagem: `Você foi convidado(a) para participar de "${formData.title}". Aceite ou recuse por aqui.`,
+          });
           if (notificationError) {
             notifySyncError = notificationError.message || "Falha ao enviar notificações.";
           }
