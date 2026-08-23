@@ -2413,6 +2413,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      enviar_convites_do_projeto: {
+        Args: {
+          _project_id: string
+          _user_ids: string[]
+          _titulo: string
+          _mensagem: string
+        }
+        Returns: number
+      }
     }
     Enums: {
       app_role: "admin" | "user" | "gestor"

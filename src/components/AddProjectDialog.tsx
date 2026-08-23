@@ -321,15 +321,31 @@ export const AddProjectDialog = ({ onProjectAdded, defaultCategory }: AddProject
             return;
           }
 
-          const { error: notifErr } = await supabase.from("notifications").insert(
-            teamSnapshot.map((m) => ({
-              project_id: createdProjectId,
-              target_user_id: m.user_id,
-              type: "project_invite",
-              title: `Convite para o projeto: ${createdProjectTitle}`,
-              message: `Você foi convidado(a) para participar de "${createdProjectTitle}". Aceite ou recuse por aqui.`,
-            })),
-          );
+          /**
+           * O CONVITE NASCE POR RPC, não por INSERT direto.
+           *
+           * A política de `notifications` exige vínculo com o projeto, e o
+           * vínculo é conferido por `is_project_member_v2`, que só conta
+           * membro ACEITO. O convidado acabou de entrar como 'pending' na
+           * linha acima — então, no instante deste insert, ele ainda não é
+           * membro aos olhos da política, e a linha era recusada:
+           * "new row violates row-level security policy".
+           *
+           * Não era corrida entre requisições nem caso de borda: é a ordem
+           * normal do fluxo, e derrubava o convite de TODO projeto criado com
+           * equipe. Sem a notificação a pessoa fica "aguardando" para sempre,
+           * porque o aceite só existe por ela.
+           *
+           * `enviar_convites_do_projeto` é SECURITY DEFINER e confere QUEM
+           * CONVIDA (`can_manage_project_v2`) em vez de quem é convidado — a
+           * pergunta certa. A política da tabela fica intacta.
+           */
+          const { error: notifErr } = await supabase.rpc("enviar_convites_do_projeto", {
+            _project_id: createdProjectId,
+            _user_ids: rows.map((r) => r.user_id),
+            _titulo: `Convite para o projeto: ${createdProjectTitle}`,
+            _mensagem: `Você foi convidado(a) para participar de "${createdProjectTitle}". Aceite ou recuse por aqui.`,
+          });
 
           if (notifErr) {
             console.warn("Erro ao criar notificações de convite:", notifErr.message);

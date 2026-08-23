@@ -44,6 +44,7 @@ import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from
 import { eapIsFaseLevel, eapLevel, resolveEapKind, type EapKind } from "@/lib/eapModel";
 import { EapVisual } from "@/components/backlog/EapVisual";
 import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
+import { ehBacklog } from "@/components/kanban/shared";
 import {
   avaliarProntidao, resumirProntidao, principaisCarencias,
   PRONTIDAO_LABELS, PRONTIDAO_LABELS_LONGOS,
@@ -404,8 +405,11 @@ export const BacklogSection = ({
         .eq("project_id", projectId)
         .order("display_order");
       if (data) {
-        const backlog = data.find((s) => s.display_order === 0);
-        setBacklogStageId(backlog?.id ?? null);
+        // `ehBacklog` (categoria, com o nome de fallback) e NÃO
+        // `display_order === 0`: em projeto novo a posição 0 é do "Não
+        // iniciado" — a coluna de ENTRADA do quadro. Pela regra antiga, item
+        // criado aqui nascia no Kanban em vez de ficar na fila.
+        setBacklogStageId(data.find((s) => ehBacklog(s as never))?.id ?? null);
         setAllStages(data);
       }
     };
@@ -621,6 +625,10 @@ export const BacklogSection = ({
   // tela. Para evitar isso, um item cujo parent_id não está no conjunto visível
   // é promovido a raiz.
   const visibleIds = new Set(backlogActs.map((a) => a.id));
+  /* As fases que a tela REALMENTE desenha. `phases` já chega sem as arquivadas
+     (a consulta filtra `is_trashed = false`), então isto é exatamente o
+     conjunto de grupos possíveis — o resto vira "Sem fase". */
+  const phaseIds = new Set(phases.map((p) => p.id));
   const childrenByParent = new Map<string, Activity[]>();
   const topLevelByPhase = new Map<string | "none", Activity[]>();
   backlogActs.forEach((a) => {
@@ -630,10 +638,27 @@ export const BacklogSection = ({
       arr.push(a);
       childrenByParent.set(a.parent_id, arr);
     } else {
-      const key = a.phase_id || "none";
-      const arr = topLevelByPhase.get(key) || [];
+      /**
+       * FASE ÓRFÃ CAI EM "SEM FASE" — mesma proteção que a linha acima dá ao
+       * `parent_id`, que faltava aqui.
+       *
+       * A lista é desenhada POR FASE: só existem os grupos de `phases`, os das
+       * atividades-fase e o "none". Uma tarefa cujo `phase_id` não está em
+       * nenhum deles ia para um grupo que ninguém renderiza — some da tela sem
+       * aviso, embora continue contada no cabeçalho ("56 atividades" com uma
+       * linha visível) e no filtro.
+       *
+       * Acontece o tempo todo: `phases` é buscada com `is_trashed = false`,
+       * mas as atividades da fase arquivada continuam vindo com o vínculo
+       * intacto. Também cobre vínculo para fase de outro projeto ou apagada.
+       *
+       * Aparecer no lugar errado é ruim; sumir é pior — em "Sem fase" a pessoa
+       * vê o que tem e pode reatribuir.
+       */
+      const fase = a.phase_id && phaseIds.has(a.phase_id) ? a.phase_id : "none";
+      const arr = topLevelByPhase.get(fase) || [];
       arr.push(a);
-      topLevelByPhase.set(key, arr);
+      topLevelByPhase.set(fase, arr);
     }
   });
   // Sort children/top-level by display_order

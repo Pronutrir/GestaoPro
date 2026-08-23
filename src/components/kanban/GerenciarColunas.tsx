@@ -43,7 +43,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
-import { STAGE_PRESET_COLORS, ehColunaDeEntrada, type WorkflowStage } from "./shared";
+import { STAGE_PRESET_COLORS, ehColunaDeEntrada, ehBacklog, type WorkflowStage } from "./shared";
 import { percentualAutomaticoDaColuna } from "@/lib/activityProgress";
 import {
   WORKFLOW_CATEGORIES, WORKFLOW_CATEGORY_META, parseWorkflowCategory,
@@ -136,8 +136,12 @@ function LinhaArrastavel({
   // O valor pode mudar por fora (desfazer um arrasto, por exemplo).
   useEffect(() => { setProgressoTexto(String(linha.progress_percent ?? "")); }, [linha.progress_percent]);
 
+  const ehFila = ehBacklog(linha);
   const oculta = !linha.is_visible;
-  const presas = oculta && contagem > 0;
+  /* A fila nunca conta como "tarefa presa": ela sai do quadro por decisão de
+     produto e o que está nela aparece inteiro na aba Backlog. Sem esta guarda
+     o aviso âmbar ficaria aceso para sempre, num projeto sem nada de errado. */
+  const presas = oculta && contagem > 0 && !ehFila;
 
   return (
     <div
@@ -347,6 +351,19 @@ function LinhaArrastavel({
           "aparece ou não" melhor que marcado/desmarcado. O aviso de tarefa
           presa nasce embaixo, na hora em que se desliga. */}
       <div className="justify-self-center flex flex-col items-center gap-1">
+        {ehFila ? (
+          /* O BACKLOG NUNCA VAI AO QUADRO — regra de produto, não preferência
+             (ver `colunasDoQuadro`). Antes havia um interruptor aqui: ele
+             aceitava o clique e a coluna continuava fora, mentindo sobre o
+             próprio estado. Um rótulo que explica o porquê vale mais que um
+             controle inerte. */
+          <span
+            className="text-[10px] text-muted-foreground whitespace-nowrap"
+            title="Backlog é a fila do projeto e tem tela própria, com a EAP inteira. O quadro mostra o fluxo — onde cada item está."
+          >
+            Tela própria
+          </span>
+        ) : (
         <button
           type="button"
           role="switch"
@@ -366,6 +383,7 @@ function LinhaArrastavel({
             )}
           />
         </button>
+        )}
         {presas && (
           <span
             className="flex items-center gap-0.5 text-[10px] text-warning bg-warning/10 px-1.5 py-px rounded whitespace-nowrap"
@@ -503,7 +521,11 @@ export function GerenciarColunas({
   }, [linhas, excluidas, originais, ordemAtual, ordemOriginal, idDaEntrada, entradaOriginal]);
 
   const semNome = linhas.some((l) => !l.title.trim());
-  const ocultasComTarefa = linhas.filter((l) => !l.is_visible && (contagem.get(l.id) ?? 0) > 0);
+  // Mesma guarda de `presas`: a fila sai do quadro de propósito, e o que está
+  // nela está à vista na aba Backlog. Ver `colunasOcultas` em kanban/shared.
+  const ocultasComTarefa = linhas.filter(
+    (l) => !l.is_visible && (contagem.get(l.id) ?? 0) > 0 && !ehBacklog(l),
+  );
 
   /**
    * Linhas cuja categoria a pessoa escolheu à mão. A sugestão automática pelo

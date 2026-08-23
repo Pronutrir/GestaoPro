@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { CharterFlowPanel, type CharterStatus } from "@/components/charter/CharterFlowPanel";
 import { OrigemDemanda } from "@/components/charter/OrigemDemanda";
 import {
-  FileText, Save, ClipboardList, CheckCircle2, Ban, FileDown, Sparkles,
+  FileText, Save, ClipboardList, CheckCircle2, Ban, FileDown, Sparkles, Flag, History,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -21,8 +21,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { BaselineBlock } from "@/components/BaselineBlock";
 import { cn } from "@/lib/utils";
+import { resolveEapKind } from "@/lib/eapModel";
+import { formatarDataBR } from "@/lib/dataLocal";
 import {
-  sugerirCampos, sugerirAprovadores, entregasDaEap, orcamentoAutorizado,
+  sugerirCampos, sugerirAprovadores, orcamentoAutorizado,
   completude as completudeEssencial,
   ORIGEM_LABEL, ORIGEM_DETALHE,
   type Sugestao, type FontePremissa, type FonteBaseline,
@@ -61,6 +63,18 @@ const AutoTextarea = ({
 
 interface Phase { id: string; title: string }
 interface Risk { id: string; description: string; probability: string; impact: string; status: string }
+/** Item da EAP lido para as seções de marcos e entregas — nunca escrito daqui. */
+interface EapItem {
+  id: string; title: string; wbs_code: string | null; end_date: string | null;
+  is_milestone: boolean; item_type: string | null; parent_id: string | null; status: string | null;
+}
+/** Um ato registrado do TAP. `snapshot` é o documento como estava na hora. */
+interface CharterVersao {
+  id: string; version: number; event: string;
+  actor_name: string | null; detail: string | null;
+  content_hash: string | null; created_at: string;
+  snapshot: Record<string, unknown> | null;
+}
 interface MemberRow {
   id: string;
   user_id: string;
@@ -279,6 +293,10 @@ const SECAO_NOMES: Record<number, string> = {
   // A matriz RACI entra no índice porque tem contagem própria (quantos membros
   // já têm papel). Aprovações (9) continua fora: não é campo a preencher, é
   // assinatura — e assinatura não se mede em "3 de 4".
+  //
+  // Histórico (10) também fica fora, e pela mesma razão: é o registro do que
+  // já aconteceu, não trabalho pendente. Um chip "0 de 0" ao lado dele diria
+  // que falta preencher algo que ninguém preenche.
   8: "RACI",
 };
 
@@ -335,6 +353,12 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [risks, setRisks] = useState<Risk[]>([]);
+  /** Itens da EAP — só para LER marcos e entregas. Ver `fetchRelations`. */
+  const [eapItens, setEapItens] = useState<EapItem[]>([]);
+  /** Atos registrados do TAP (envio, aprovação, recusa, reabertura). */
+  const [versoes, setVersoes] = useState<CharterVersao[]>([]);
+  /** Qual versão está aberta na seção de histórico (id) — null = nenhuma. */
+  const [versaoAberta, setVersaoAberta] = useState<string | null>(null);
   /** Fontes do autopreenchimento — ver lib/charterAutofill. */
   const [premissas, setPremissas] = useState<FontePremissa[]>([]);
   const [baseline, setBaseline] = useState<FonteBaseline | null>(null);
@@ -462,6 +486,35 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
 
   /** Completude por seção — alimenta a barra do topo e o "3 de 4" de cada
    *  cabeçalho. Conta o que EXISTE, nunca bloqueia. */
+  /**
+   * MARCOS E ENTREGAS, lidos da EAP.
+   *
+   * `resolveEapKind` é a fonte única do papel de cada item — a mesma que a
+   * lista, o Kanban e o importador usam. Reimplementar a regra aqui produziria
+   * uma quinta cópia, e o histórico deste projeto mostra onde isso termina: as
+   * telas discordando sobre o papel do mesmo item.
+   *
+   * ENTREGA só de primeiro nível dentro da fase. O TAP resume o que o projeto
+   * vai produzir; descer a EAP inteira transformaria a seção numa segunda
+   * lista de tarefas, que já tem tela própria.
+   */
+  const { marcos, entregas } = useMemo(() => {
+    const comFilho = new Set(eapItens.filter((i) => i.parent_id).map((i) => i.parent_id as string));
+    const ms: EapItem[] = [];
+    const es: EapItem[] = [];
+    for (const it of eapItens) {
+      const kind = resolveEapKind(it, comFilho.has(it.id));
+      if (kind === "marco") ms.push(it);
+      else if (kind === "entrega" && !it.parent_id) es.push(it);
+    }
+    const porCodigo = (a: EapItem, b: EapItem) =>
+      (a.wbs_code || "￿").localeCompare(b.wbs_code || "￿", undefined, { numeric: true });
+    // Marco é data: ordena por quando acontece, e o sem data vai para o fim.
+    ms.sort((a, b) => (a.end_date || "￿").localeCompare(b.end_date || "￿") || porCodigo(a, b));
+    es.sort(porCodigo);
+    return { marcos: ms, entregas: es };
+  }, [eapItens]);
+
   const completude = useMemo(() => {
     const secoes = [
       { n: 2, campos: [data.code, data.sponsor, data.authority, data.start_date || project.start_date] },
@@ -599,7 +652,35 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
     const base = await sb.from("budget_baselines")
       .select("baseline_total, version").eq("project_id", projectId).eq("is_active", true).limit(1)
       .then((x: any) => ({ data: x?.data?.[0] ?? null }), () => ({ data: null }));
+    /* MARCOS E ENTREGAS — leitura da EAP, não cadastro novo.
+       Marcos e entregas estão nas quatro fontes de referência do TAP (PMBOK,
+       PRINCE2, ISO 21502 e os templates de mercado) e eram o que faltava aqui.
+       Mas os dois JÁ EXISTEM como papéis de primeira classe em lib/eapModel:
+       o marco tem `is_milestone` e data, e a entrega é agrupador de nível 3+.
+       Criar campo de texto para redigitá-los faria o TAP discordar da EAP no
+       dia seguinte — como acontecia com as premissas antes de virarem tabela.
+       Somente leitura, portanto. */
+    const eap = await sb.from("activities")
+      .select("id, title, wbs_code, end_date, is_milestone, item_type, parent_id, status")
+      .eq("project_id", projectId).eq("is_trashed", false)
+      .order("wbs_code", { ascending: true })
+      .then((x: any) => x, () => ({ data: null }));
+
+    /* HISTÓRICO DE VERSÕES — o dado era gravado e nunca lido.
+       `project_charter_versions` recebe uma cópia integral do TAP a cada ato
+       de circulação e assinatura (quatro pontos de escrita em
+       api/charter/flow), e NENHUMA tela lia. Num documento que trava depois de
+       aprovado, poder abrir o que foi assinado é a própria razão de versionar:
+       sem isso a trava protege um conteúdo que ninguém consegue conferir. */
+    const vers = await sb.from("project_charter_versions")
+      .select("id, version, event, actor_name, detail, content_hash, created_at, snapshot")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .then((x: any) => x, () => ({ data: null }));
+
     if (r.data) setRisks(r.data);
+    setEapItens(Array.isArray(eap?.data) ? eap.data : []);
+    setVersoes(Array.isArray(vers?.data) ? vers.data : []);
     // Tabela ausente no ambiente não pode derrubar o TAP: as duas são opcionais
     // e o autopreenchimento simplesmente não oferece o que não conseguiu ler.
     setPremissas(prem.data ? (prem.data as any[]).map((p) => ({ description: p.description })) : []);
@@ -759,6 +840,50 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
       const [y, m, day] = d.split("T")[0].split("-").map(Number);
       return format(new Date(y, m - 1, day), "dd/MM/yyyy", { locale: ptBR });
     } catch { return "—"; }
+  };
+
+  /* Os atos do TAP, como o banco os grava (coluna `event`). */
+  const eventoLabel = (e: string) =>
+    ({ enviado: "Enviado", aprovado: "Aprovado", recusado: "Recusado", reaberto: "Reaberto" }[e] || e);
+  const eventoBadge = (e: string) =>
+    ({
+      aprovado: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+      recusado: "bg-destructive/15 text-destructive border-destructive/30",
+      reaberto: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+    }[e] || "bg-muted text-muted-foreground border-border");
+
+  /**
+   * O que MOSTRAR de uma versão guardada.
+   *
+   * O snapshot é o `charter_data` inteiro — dezenas de chaves, várias vazias.
+   * Despejar tudo daria um bloco ilegível, e mostrar JSON cru num documento
+   * formal seria pior ainda. Estes são os campos pelos quais alguém compara
+   * duas versões: o que mudou no objetivo, no escopo, no prazo, no dinheiro.
+   */
+  const resumoDaVersao = (snap: Record<string, unknown> | null) => {
+    if (!snap) return [{ rotulo: "Conteúdo", valor: "não registrado" }];
+    const ler = (k: string) => {
+      const v = snap[k];
+      if (v == null || v === "") return null;
+      return typeof v === "string" ? v : String(v);
+    };
+    const campos: { rotulo: string; chave: string }[] = [
+      { rotulo: "Objetivo", chave: "objective" },
+      { rotulo: "Escopo", chave: "scope" },
+      { rotulo: "Fora do escopo", chave: "out_of_scope" },
+      { rotulo: "Justificativa", chave: "justification" },
+      { rotulo: "Premissas", chave: "assumptions" },
+      { rotulo: "Restrições", chave: "constraints" },
+    ];
+    const linhas = campos
+      .map((c) => ({ rotulo: c.rotulo, valor: ler(c.chave) }))
+      .filter((l): l is { rotulo: string; valor: string } => l.valor !== null)
+      .map((l) => ({
+        rotulo: l.rotulo,
+        // Corta o texto longo: é um resumo para comparar, não o documento.
+        valor: l.valor.length > 180 ? `${l.valor.slice(0, 180)}…` : l.valor,
+      }));
+    return linhas.length > 0 ? linhas : [{ rotulo: "Conteúdo", valor: "sem campos preenchidos" }];
   };
 
   const probLabel = (p: string) => ({ low: "Baixa", medium: "Média", high: "Alta" }[p] || p);
@@ -1363,6 +1488,96 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
             </div>
           </div>
         )}
+
+        {/* ENTREGAS E MARCOS — leitura da EAP, nunca cadastro.
+            Estavam nas quatro fontes de referência do TAP e faltavam aqui. Os
+            dois já existem na EAP com papel próprio (lib/eapModel), então o
+            TAP LÊ em vez de pedir que sejam redigitados: um campo de texto
+            aqui discordaria da EAP no dia seguinte — foi o que aconteceu com
+            as premissas antes de virarem tabela.
+            Some quando a EAP está vazia: seção permanentemente vazia é ruído
+            num documento que se imprime. */}
+        {entregas.length > 0 && (
+          <div className="pt-2 border-t border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Entregas Principais <span className="font-normal normal-case tracking-normal">· da EAP</span>
+            </p>
+            <div className="space-y-1.5">
+              {entregas.map((e) => (
+                <div key={e.id} className="flex items-start gap-2 text-sm p-2 rounded border border-border bg-muted/20">
+                  {e.wbs_code && (
+                    <span className="font-mono text-xs text-muted-foreground flex-shrink-0 pt-0.5">{e.wbs_code}</span>
+                  )}
+                  <span className="flex-1">{e.title}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* CAMPOS DE VERSÕES ANTIGAS — resgate, não recurso novo.
+            `deliverables`, `success_criteria` e `approval_requirements` foram
+            gravados por versões anteriores do TAP e nenhuma tela os exibia: o
+            `charter_data` cru é preservado ao salvar (ver `rawCharterRef`), então
+            o conteúdo estava lá, invisível. Some para quem nunca preencheu.
+            Só LEITURA de propósito: dar campo de edição a eles é decidir que
+            voltam ao documento, e essa decisão depende de medir quantos
+            projetos os usam — o que a VM fora do ar não permite hoje. */}
+        {(() => {
+          const antigos: { rotulo: string; valor: string }[] = [];
+          const raw = rawCharterRef.current as Record<string, unknown>;
+          const ler = (k: string) => {
+            const v = raw?.[k];
+            return typeof v === "string" && v.trim() ? v.trim() : null;
+          };
+          const mapa: [string, string][] = [
+            ["deliverables", "Entregas (registrado)"],
+            ["success_criteria", "Critérios de sucesso"],
+            ["approval_requirements", "Requisitos de aprovação"],
+          ];
+          for (const [chave, rotulo] of mapa) {
+            const v = ler(chave);
+            if (v) antigos.push({ rotulo, valor: v });
+          }
+          if (antigos.length === 0) return null;
+          return (
+            <div className="pt-2 border-t border-border">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                Registrado em versão anterior
+              </p>
+              <div className="space-y-1.5">
+                {antigos.map((a) => (
+                  <div key={a.rotulo} className="text-sm p-2 rounded border border-border bg-muted/20">
+                    <p className="text-xs text-muted-foreground mb-0.5">{a.rotulo}</p>
+                    <p className="whitespace-pre-wrap">{a.valor}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {marcos.length > 0 && (
+          <div className="pt-2 border-t border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Marcos <span className="font-normal normal-case tracking-normal">· da EAP</span>
+            </p>
+            <div className="space-y-1.5">
+              {marcos.map((m) => (
+                <div key={m.id} className="flex items-start gap-2 text-sm p-2 rounded border border-border bg-muted/20">
+                  <Flag className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="flex-1">{m.title}</span>
+                  {/* `end_date` é coluna `date`: formatada por lib/dataLocal, nunca
+                      por `new Date()` — que a leria como UTC e mostraria o dia
+                      anterior no fuso do Brasil. */}
+                  <span className="text-xs text-muted-foreground flex-shrink-0 tabular-nums pt-0.5">
+                    {m.end_date ? formatarDataBR(m.end_date) : "sem data"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </SectionBlock>
 
       {/* 8. MATRIZ RACI — veio da ficha da equipe.
@@ -1549,6 +1764,82 @@ export const ProjectCharter = ({ projectId, project, phases, members, onMembersC
           </Button>
         )}
       </SectionBlock>
+
+      {/* 10. HISTÓRICO — o dado era gravado e nunca lido.
+          `project_charter_versions` recebe uma cópia integral do TAP a cada
+          ato (envio, aprovação, recusa, reabertura), em quatro pontos de
+          api/charter/flow, e NENHUMA tela lia. Num documento que TRAVA depois
+          de aprovado, poder abrir o que foi assinado é a própria razão de
+          versionar — sem isto a trava protegia um conteúdo que ninguém
+          conseguia conferir.
+          Some quando não há ato nenhum: num TAP em rascunho a seção só diria
+          "nada aconteceu ainda", que a própria ausência já diz. */}
+      {versoes.length > 0 && (
+        <SectionBlock n={10} title="Histórico de Versões" editing={editing}>
+          <div className="space-y-1.5">
+            {versoes.map((v) => {
+              const aberta = versaoAberta === v.id;
+              return (
+                <div key={v.id} className="rounded border border-border bg-muted/20 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setVersaoAberta(aberta ? null : v.id)}
+                    className="w-full flex items-center gap-2 p-2 text-sm text-left hover:bg-muted/40 transition-colors print:hidden"
+                  >
+                    <History className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    <Badge className={`${eventoBadge(v.event)} text-xs flex-shrink-0`}>
+                      {eventoLabel(v.event)}
+                    </Badge>
+                    <span className="font-mono text-xs text-muted-foreground flex-shrink-0">v{v.version}</span>
+                    <span className="flex-1 truncate">{v.actor_name || "—"}</span>
+                    <span className="text-xs text-muted-foreground flex-shrink-0 tabular-nums">
+                      {/* `created_at` é timestamptz: instante real, então aqui
+                          `new Date` é correto — ao contrário de `end_date`. */}
+                      {new Date(v.created_at).toLocaleDateString("pt-BR")}
+                    </span>
+                  </button>
+
+                  {/* Cabeçalho da impressão: o botão some no PDF, mas o ato
+                      registrado é justamente o que dá valor ao documento. */}
+                  <div className="hidden print:flex items-center gap-2 p-2 text-sm">
+                    <span className="font-mono text-xs">v{v.version}</span>
+                    <span className="font-semibold">{eventoLabel(v.event)}</span>
+                    <span>{v.actor_name || "—"}</span>
+                    <span className="text-xs">{new Date(v.created_at).toLocaleDateString("pt-BR")}</span>
+                  </div>
+
+                  {(aberta || v.detail) && (
+                    <div className="px-2 pb-2 space-y-1.5 text-sm">
+                      {v.detail && <p className="text-muted-foreground">{v.detail}</p>}
+                      {aberta && (
+                        <>
+                          {v.content_hash && (
+                            <p className="text-xs text-muted-foreground">
+                              {/* A prova de que a versão não mudou depois. Só os
+                                  12 primeiros: o hash inteiro ocupa a linha e
+                                  ninguém confere 64 caracteres a olho. */}
+                              Impressão digital:{" "}
+                              <span className="font-mono">{v.content_hash.slice(0, 12)}…</span>
+                            </p>
+                          )}
+                          <div className="rounded border border-border bg-background p-2 space-y-1">
+                            {resumoDaVersao(v.snapshot).map((linha) => (
+                              <div key={linha.rotulo} className="flex gap-2 text-xs">
+                                <span className="text-muted-foreground w-28 flex-shrink-0">{linha.rotulo}</span>
+                                <span className="flex-1">{linha.valor}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </SectionBlock>
+      )}
 
       </div>{/* fim da camada 2 */}
       </Card>{/* fim da lista de seções */}

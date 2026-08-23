@@ -46,6 +46,21 @@
 -- quadro fica onde está: pode ter sido movido de propósito, e sobrescrever
 -- isso apagaria decisão de alguém.
 --
+-- ── A FILA NÃO CONTA COMO "PERDIDO" (20/08/2026) ──────────────────────────
+--
+-- Escrito quando o Backlog era uma coluna do quadro escondida por
+-- `is_visible`: ali, filho no Backlog com o pai no quadro era mesmo um item
+-- perdido numa gaveta.
+--
+-- O Backlog deixou de ser preferência de projeto e virou regra de produto no
+-- código (`colunasDoQuadro`): ele está SEMPRE invisível. Sem a guarda abaixo,
+-- `is_visible = false` passaria a significar "está na fila", e este UPDATE
+-- arrastaria para o quadro toda EAP importada cujo pai já estivesse lá —
+-- exatamente o que se está corrigindo.
+--
+-- Estar na fila é estado legítimo, não extravio. O que continua sendo defeito
+-- é o filho numa coluna do QUADRO que alguém ocultou: essa sim é gaveta.
+--
 -- Guard: desliga os triggers de negócio durante o UPDATE. (1) o trigger de
 -- projeto concluído abortaria se um filho caísse em projeto fechado; (2) o
 -- rollup trg_filho_recalcula_pai (leva 8) dispararia no sentido INVERSO ao
@@ -61,10 +76,12 @@ UPDATE public.activities f
    AND p.is_trashed = false
    -- pai DENTRO do quadro
    AND sp.is_visible IS DISTINCT FROM false
-   -- filho FORA dele
+   -- filho FORA dele, E NÃO por estar na fila
    AND EXISTS (
      SELECT 1 FROM public.workflow_stages sf
-      WHERE sf.id = f.workflow_stage_id AND sf.is_visible = false
+      WHERE sf.id = f.workflow_stage_id
+        AND sf.is_visible = false
+        AND lower(coalesce(sf.categoria::text, '')) IS DISTINCT FROM 'backlog'
    )
    AND f.workflow_stage_id IS DISTINCT FROM p.workflow_stage_id;
 
@@ -85,7 +102,11 @@ BEGIN
     JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
    WHERE f.is_trashed = false AND p.is_trashed = false
      AND sp.is_visible IS DISTINCT FROM false
-     AND sf.is_visible = false;
+     AND sf.is_visible = false
+     -- Mesma guarda do UPDATE: filho na FILA não é filho perdido. Sem isto a
+     -- verificação acusaria como defeito o estado normal da EAP importada e
+     -- abortaria a migration inteira.
+     AND lower(coalesce(sf.categoria::text, '')) IS DISTINCT FROM 'backlog';
 
   IF filhos_perdidos > 0 THEN
     RAISE EXCEPTION 'ainda ha % filho(s) fora do quadro com o pai dentro', filhos_perdidos;
