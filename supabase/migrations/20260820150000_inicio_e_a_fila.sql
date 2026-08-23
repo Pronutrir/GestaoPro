@@ -52,12 +52,12 @@ AS $$
    WHERE s.project_id = p_project_id
      AND CASE p_papel
            WHEN 'concluida' THEN
-             (lower(coalesce(s.categoria, '')) = 'concluida' OR s.is_final = true)
+             (lower(coalesce(s.categoria::text, '')) = 'concluida' OR s.is_final = true)
            WHEN 'inicio' THEN
-             (lower(coalesce(s.categoria, '')) IN ('a_iniciar', 'backlog')
+             (lower(coalesce(s.categoria::text, '')) IN ('a_iniciar', 'backlog')
               OR (s.categoria IS NULL AND s.display_order = 0))
            WHEN 'andamento' THEN
-             (lower(coalesce(s.categoria, '')) IN ('andamento', 'revisao')
+             (lower(coalesce(s.categoria::text, '')) IN ('andamento', 'revisao')
               OR (s.categoria IS NULL
                   AND s.is_final IS DISTINCT FROM true
                   AND s.display_order > 0
@@ -67,7 +67,7 @@ AS $$
      -- 'inicio': A FILA PRIMEIRO. Nada comecou -- o lugar e o Backlog, nao o
      -- quadro. Nos outros papeis a expressao e constante e nao altera a ordem.
      CASE WHEN p_papel = 'inicio'
-               AND lower(coalesce(s.categoria, '')) = 'backlog'
+               AND lower(coalesce(s.categoria::text, '')) = 'backlog'
           THEN 0 ELSE 1 END,
      -- Visivel primeiro nos DEMAIS papeis: trabalho em curso ou concluido
      -- pertence ao quadro. Para 'inicio' o criterio acima ja decidiu.
@@ -125,20 +125,20 @@ BEGIN
   -- Filhos que contam: vivos e NÃO cancelados.
   SELECT count(*),
          count(*) FILTER (WHERE sf.is_final = true
-                             OR lower(coalesce(sf.categoria, '')) = 'concluida'),
+                             OR lower(coalesce(sf.categoria::text, '')) = 'concluida'),
          -- INICIADO exige uma coluna DE VERDADE: filho sem `workflow_stage_id`
          -- faz o LEFT JOIN devolver NULL, e sem esta guarda um pai com filhos
          -- sequer começados seria empurrado para "Em Andamento".
          count(*) FILTER (WHERE sf.id IS NOT NULL
                              AND sf.is_final IS DISTINCT FROM true
-                             AND lower(coalesce(sf.categoria, '')) NOT IN ('a_iniciar', 'backlog')
+                             AND lower(coalesce(sf.categoria::text, '')) NOT IN ('a_iniciar', 'backlog')
                              AND NOT (sf.categoria IS NULL AND sf.display_order = 0))
     INTO n_filhos, n_concluidos, n_iniciados
     FROM public.activities f
     LEFT JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
    WHERE f.parent_id = p_pai
      AND f.is_trashed = false
-     AND lower(coalesce(sf.categoria, '')) IS DISTINCT FROM 'cancelada';
+     AND lower(coalesce(sf.categoria::text, '')) IS DISTINCT FROM 'cancelada';
 
   -- Sem filhos que contem (folha, ou todos cancelados): o pai volta a
   -- responder pela própria coluna.
@@ -207,12 +207,19 @@ EXECUTE FUNCTION public.tg_filho_recalcula_pai();
 -- So AGRUPADOR (tem filho vivo), so quando NENHUM filho comecou, e so quando
 -- o projeto tem coluna de backlog. Nao encosta em folha: a folha em "Nao
 -- iniciado" pode ter sido posta ali por alguem, de proposito.
+--
+-- Guard: o UPDATE muta activities. Sem ele (1) o trigger de projeto concluido
+-- abortaria se um agrupador caisse em projeto fechado; (2) o rollup
+-- trg_filho_recalcula_pai (leva 8) dispararia a cada linha e brigaria com o
+-- movimento explicito. Religado logo apos.
+SET session_replication_role = replica;
+
 WITH agrupador AS (
   SELECT a.id, a.project_id,
          count(*) FILTER (
            WHERE sf.id IS NOT NULL
              AND sf.is_final IS DISTINCT FROM true
-             AND lower(coalesce(sf.categoria, '')) NOT IN ('a_iniciar', 'backlog')
+             AND lower(coalesce(sf.categoria::text, '')) NOT IN ('a_iniciar', 'backlog')
              AND NOT (sf.categoria IS NULL AND sf.display_order = 0)
          ) AS iniciados
     FROM public.activities a
@@ -220,13 +227,13 @@ WITH agrupador AS (
       ON f.parent_id = a.id AND f.is_trashed = false
     LEFT JOIN public.workflow_stages sf ON sf.id = f.workflow_stage_id
    WHERE a.is_trashed = false
-     AND lower(coalesce(sf.categoria, '')) IS DISTINCT FROM 'cancelada'
+     AND lower(coalesce(sf.categoria::text, '')) IS DISTINCT FROM 'cancelada'
    GROUP BY a.id, a.project_id
 ),
 fila AS (
   SELECT DISTINCT ON (project_id) project_id, id
     FROM public.workflow_stages
-   WHERE lower(coalesce(categoria, '')) = 'backlog'
+   WHERE lower(coalesce(categoria::text, '')) = 'backlog'
    ORDER BY project_id, display_order
 )
 UPDATE public.activities a
@@ -238,5 +245,8 @@ UPDATE public.activities a
  WHERE a.id = g.id
    AND g.iniciados = 0
    AND a.workflow_stage_id IS DISTINCT FROM fila.id;
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 NOTIFY pgrst, 'reload schema';
