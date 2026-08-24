@@ -700,10 +700,24 @@ export const BacklogSection = ({
        * não a ausência de pai. Sem código, vale o teste antigo — é o
        * comportamento das bases sem numeração.
        */
-      if (isPhaseLikeActivity(a) && !a.parent_id) {
-        const nivel = eapLevel((a as { wbs_code?: string | null }).wbs_code);
-        if (nivel === null || eapIsFaseLevel(nivel)) virtualPhaseActs.push(a);
-      }
+      /**
+       * O ITEM SOME QUANDO NENHUM DOS DOIS RAMOS O RECEBE.
+       *
+       * Era um `if` externo (`item_type === 'fase' && !parent_id`) com o teste
+       * de nível DENTRO. Um agrupador de nível 3 entrava no `if`, falhava no
+       * teste interno e não caía no `else`: sumia da lista inteira.
+       *
+       * Foi o relato de "importei e ficou só fase e marco". Depois que o nível
+       * 3 passou a ser pacote por posição (`item_type = 'fase'`), TODO pacote
+       * de topo caiu nesse buraco — 23 dos 25 itens do projeto.
+       *
+       * Agora a condição é uma só, e quem não vira fase virtual continua no
+       * grupo, como sempre deveria.
+       */
+      const nivel = eapLevel((a as { wbs_code?: string | null }).wbs_code);
+      const ehFaseVirtual =
+        isPhaseLikeActivity(a) && !a.parent_id && (nivel === null || eapIsFaseLevel(nivel));
+      if (ehFaseVirtual) virtualPhaseActs.push(a);
       else filtered.push(a);
     }
     topLevelByPhase.set(key, filtered);
