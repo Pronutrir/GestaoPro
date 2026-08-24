@@ -1782,9 +1782,25 @@ export const ActivityKanban = ({
       const stageId = optimisticMoves[a.id] || a.workflow_stage_id;
       if (stageId && map[stageId]) {
         map[stageId].push(a);
-      } else if (stages.length > 0) {
-        map[stages[0].id].push(a);
       }
+      /**
+       * SEM COLUNA NÃO É A PRIMEIRA COLUNA.
+       *
+       * Era `map[stages[0].id].push(a)`: quem não tinha `workflow_stage_id`
+       * aparecia na coluna de entrada como se alguém a tivesse posto lá.
+       *
+       * É o relato de "importo no Backlog e a EAP vai para Não iniciado". Em
+       * projeto SEM coluna de fila — 5 dos 48 — a importação grava
+       * `workflow_stage_id = null` de propósito: sem Backlog, deixar o item
+       * fora de qualquer coluna é o que o mantém na aba Backlog (que lista
+       * tudo) e fora do quadro. Aí o quadro o adotava assim mesmo, e o
+       * trabalho reaparecia em "Não iniciado" sem ninguém ter movido nada.
+       *
+       * Agora o card simplesmente não é desenhado. A atividade continua
+       * inteira na aba Backlog, com o selo de status vazio, e entra no quadro
+       * quando alguém a mover — que é a regra: a entrada no fluxo é decisão do
+       * usuário, não efeito colateral de um campo nulo.
+       */
     });
 
     // Filtro por coluna SUBSTITUI o geral: se a coluna tem filtro próprio,
@@ -2272,13 +2288,20 @@ export const ActivityKanban = ({
   };
 
   const handleCreateActivity = async (stageId: string, title: string, phaseId: string | null, displayOrder: number | null) => {
-    // Regra: toda atividade nova nasce no Backlog (display_order 0).
-    // O usuário moverá manualmente para a coluna desejada do Kanban.
-    const backlogStage =
-      stages.find(s => /backlog/i.test(s.title)) ||
-      stages.find(s => s.display_order === 0) ||
-      stages[0];
-    const targetStageId = backlogStage?.id ?? stageId;
+    /**
+     * Card criado NA COLUNA nasce NA COLUNA.
+     *
+     * Era: procura o Backlog e manda tudo para lá, com `display_order === 0`
+     * como atalho. Dois problemas. O primeiro é o mesmo dos outros pontos já
+     * corrigidos: em projeto novo a posição 0 é "Não iniciado", então o
+     * "Backlog" encontrado podia ser a coluna de entrada do quadro.
+     *
+     * O segundo é de produto: aqui a pessoa clicou "+" DENTRO de uma coluna
+     * específica do quadro. Mandar o card para a fila desfaz o gesto — ela vê
+     * o card sumir da coluna onde acabou de criá-lo. Quem quer criar na fila
+     * usa a aba Backlog, que é a tela da fila.
+     */
+    const targetStageId = stageId;
     // Card novo entra no FIM da coluna, não no topo. Com ordem manual, "no
     // topo" seria furar a fila que alguém montou — e o comportamento anterior
     // (ordem por atualização) já colocava todo card novo em primeiro por
