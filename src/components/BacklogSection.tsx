@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { EAP_FASE_LEVEL, eapIsFaseLevel, eapLevel, resolveEapKind, type EapKind } from "@/lib/eapModel";
+import { EAP_FASE_LEVEL, eapIsFaseLevel, eapLevel, eapRootCode, resolveEapKind, type EapKind } from "@/lib/eapModel";
 import { EapVisual } from "@/components/backlog/EapVisual";
 import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
 import { ehBacklog } from "@/components/kanban/shared";
@@ -700,10 +700,24 @@ export const BacklogSection = ({
        * não a ausência de pai. Sem código, vale o teste antigo — é o
        * comportamento das bases sem numeração.
        */
-      if (isPhaseLikeActivity(a) && !a.parent_id) {
-        const nivel = eapLevel((a as { wbs_code?: string | null }).wbs_code);
-        if (nivel === null || eapIsFaseLevel(nivel)) virtualPhaseActs.push(a);
-      }
+      /**
+       * O ITEM SOME QUANDO NENHUM DOS DOIS RAMOS O RECEBE.
+       *
+       * Era um `if` externo (`item_type === 'fase' && !parent_id`) com o teste
+       * de nível DENTRO. Um agrupador de nível 3 entrava no `if`, falhava no
+       * teste interno e não caía no `else`: sumia da lista inteira.
+       *
+       * Foi o relato de "importei e ficou só fase e marco". Depois que o nível
+       * 3 passou a ser pacote por posição (`item_type = 'fase'`), TODO pacote
+       * de topo caiu nesse buraco — 23 dos 25 itens do projeto.
+       *
+       * Agora a condição é uma só, e quem não vira fase virtual continua no
+       * grupo, como sempre deveria.
+       */
+      const nivel = eapLevel((a as { wbs_code?: string | null }).wbs_code);
+      const ehFaseVirtual =
+        isPhaseLikeActivity(a) && !a.parent_id && (nivel === null || eapIsFaseLevel(nivel));
+      if (ehFaseVirtual) virtualPhaseActs.push(a);
       else filtered.push(a);
     }
     topLevelByPhase.set(key, filtered);
@@ -1403,6 +1417,62 @@ export const BacklogSection = ({
     }
     setQuickAddTitle("");
     // mantém o input aberto para criação contínua
+    onDataChanged();
+  };
+
+  /**
+   * CRIAR FASE — como atividade de nível 2, não como linha em `phases`.
+   *
+   * Criar fase existiu até 31/07 e foi removido (commit 65213ab) com um motivo
+   * que já não vale: "fase avulsa só produzia um agrupador vazio que depois não
+   * dava para remover". Foi o PRÓPRIO commit que adicionou o arquivar fase — a
+   * razão de remover deixou de existir no mesmo instante.
+   *
+   * Religar o `CreatePhaseDialog` antigo seria pior que não ter: ele grava só
+   * em `phases`, sem código EAP, e a fase resultante não se move nem abre a
+   * ficha completa — que é exatamente o defeito relatado. Aqui ela nasce em
+   * `activities`, o mesmo formato que 60 fases da base já têm.
+   *
+   * O CÓDIGO é o próximo livre no nível da fase: com 1.1 e 1.2 ocupados, sugere
+   * 1.3. Sem código a fase não teria nível, e sem nível ela não recua nem
+   * ordena — voltaria a ser um item solto.
+   */
+  const proximoCodigoDeFase = (): string => {
+    const raiz = eapRootCode() ?? "1";
+    const usados = new Set(
+      activities
+        .filter((a) => !a.is_trashed)
+        .map((a) => (a as { wbs_code?: string | null }).wbs_code)
+        .filter((c): c is string => !!c && eapIsFaseLevel(eapLevel(c))),
+    );
+    for (let i = 1; i <= 999; i++) {
+      const candidato = `${raiz}.${i}`;
+      if (!usados.has(candidato)) return candidato;
+    }
+    return `${raiz}.999`;
+  };
+
+  const criarFase = async () => {
+    const codigo = proximoCodigoDeFase();
+    const { error } = await supabase.from("activities").insert({
+      project_id: projectId,
+      title: `Nova fase ${codigo}`,
+      wbs_code: codigo,
+      // `item_type: 'fase'` + código de nível 2 é o que faz `resolveEapKind`
+      // devolver "fase" — a mesma leitura que a lista, o quadro e a importação
+      // usam. Sem `parent_id`: a fase é de topo por definição.
+      item_type: "fase",
+      parent_id: null,
+      phase_id: null,
+      workflow_stage_id: backlogStageId,
+      status: "pending",
+      priority: "pendente",
+    } as never);
+    if (error) {
+      toast({ title: "Erro ao criar fase", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: `Fase ${codigo} criada`, description: "Dê um nome a ela e adicione as tarefas." });
     onDataChanged();
   };
 
@@ -2938,6 +3008,24 @@ export const BacklogSection = ({
                 </button>
               ))}
             </div>
+
+            {/* CRIAR FASE. Ficou sem gesto nenhum desde 31/07 — a única forma
+                de ter fase era importar uma EAP. Fica ao lado do modo de
+                exibição, não junto de "Nova Atividade": aquele grupo vem da
+                página e trata do item comum; este é estrutura da EAP.
+                Só no modo Fase — nas outras raias não há fase a criar. */}
+            {groupBy === "phase" && isAdmin && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1.5 text-[13px]"
+                onClick={criarFase}
+                title="Cria uma fase de nível 2, já com o próximo código EAP livre"
+              >
+                <Layers className="w-3.5 h-3.5" /> Fase
+              </Button>
+            )}
 
             {/* Agrupar em raias — mesmo modelo do Kanban. Só faz sentido na
                 lista: a EAP é sempre a árvore da decomposição. */}
