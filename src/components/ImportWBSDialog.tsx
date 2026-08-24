@@ -84,6 +84,67 @@ const fmtDia = (iso?: string) => {
  * marco era declarada aqui dentro e a tela não conseguia explicar ao usuário
  * uma regra que só o parser conhecia.
  */
+/**
+ * COMPLETA OS DEGRAUS QUE FALTAM NA NUMERAÇÃO.
+ *
+ * O vínculo pai/filho é derivado do código: o pai de "1.2.2.1" é "1.2.2". Se
+ * esse pai não veio na planilha, o mapa `código → id` não o encontra e o filho
+ * nasce solto, com `parent_id` nulo.
+ *
+ * Não é caso raro. Medido em 24/08/2026: 46 órfãos no nível 3 e ZERO no nível
+ * 4. A assimetria diz exatamente onde está o buraco — o nível 4 sempre acha o
+ * pai porque o nível 3 vem na planilha; o nível 3 não acha porque a FASE
+ * costuma ficar de fora. Em EAP de terceiros ela é cabeçalho formatado, não
+ * linha numerada.
+ *
+ * Aqui os degraus ausentes viram nós de verdade, e a árvore fecha sozinha. O
+ * título é o código — quem completar depois sabe o que preencher, e inventar
+ * um nome seria pior que admitir que ele não veio.
+ *
+ * NÃO recusa a importação quando falta um degrau: isso transferiria para a
+ * pessoa um trabalho que o sistema consegue fazer, e recusaria o insumo normal.
+ *
+ * Roda ANTES de `aplicarPapeis`, porque criar um ancestral muda quem tem
+ * filhos — e o papel de cada item depende disso.
+ */
+const completarAncestrais = (nodes: TreeNode[]) => {
+  const existentes = new Set(nodes.map((n) => n.code).filter(Boolean));
+  const criados: TreeNode[] = [];
+
+  for (const n of nodes) {
+    // Só numeração pontuada define ancestral. Marco sem código e item de lista
+    // sem número não têm degrau a completar.
+    if (!n.code || !/^\d+(\.\d+)*$/.test(n.code)) continue;
+    const partes = n.code.split(".");
+    // Sobe até a raiz criando o que faltar. Da raiz para baixo, para o pai de
+    // cada degrau novo já existir quando ele for criado.
+    for (let i = 1; i < partes.length; i++) {
+      const codigo = partes.slice(0, i).join(".");
+      if (existentes.has(codigo)) continue;
+      existentes.add(codigo);
+      criados.push({
+        code: codigo,
+        // MESMO FORMATO do parser de EAP colada (`(sem título) 1.1`): a prévia
+        // já reconhece esse prefixo e desenha o selo "criada automaticamente",
+        // e três memoizações contam por ele. Inventar outra marca aqui criaria
+        // duas convenções para a mesma coisa.
+        title: `(sem título) ${codigo}`,
+        depth: i,
+        role: "atividade", // `aplicarPapeis` decide pelo nível, logo abaixo.
+        parentCode: i > 1 ? partes.slice(0, i - 1).join(".") : null,
+        // Sem `vals`: o degrau não veio da planilha, então não tem data, hora
+        // nem custo. Importa para a coluna — `statusPorDatas` devolve
+        // "pending" e nenhum desvio de coluna roda, então ele nasce na FILA
+        // como o resto da EAP.
+        codigoExplicito: true,
+      });
+    }
+  }
+
+  if (criados.length > 0) nodes.push(...criados);
+  return criados.length;
+};
+
 const aplicarPapeis = (nodes: TreeNode[]) => {
   const temFilhos = new Set(nodes.map((n) => n.parentCode).filter(Boolean) as string[]);
   for (const n of nodes) {
@@ -225,6 +286,7 @@ const parseFlexible = (text: string): ResultadoParse => {
         vals,
       });
     }
+    completarAncestrais(nodes);
     aplicarPapeis(nodes);
     nodes.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
     return { nodes, descartadas };
@@ -479,6 +541,10 @@ const parseFlexible = (text: string): ResultadoParse => {
   // Antes o papel vinha da função ("tem filho → Fase"), o que fazia
   // "1 / 1.1 / 1.1.1" virar Fase, Fase, Atividade. A leitura da EAP é
   // "1. Fase / 1.1 Entrega / 1.1.1 Atividade": o nível é que decide.
+  // `completarAncestrais` NÃO é chamada aqui: este parser já fecha a árvore
+  // acima, no bloco "Pai ausente" — chamar de novo seria trabalho repetido
+  // (idempotente, mas repetido). Quem precisava dela era o parser de PLANILHA,
+  // que não tinha essa etapa e por isso produziu os 46 órfãos de nível 3.
   aplicarPapeis(nodes);
 
   return { nodes, descartadas };
