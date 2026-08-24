@@ -38,6 +38,14 @@
 --
 -- A coluna e a FILA do projeto: a fase e agrupador, nao trabalho, e o lugar
 -- dela e onde esta o conteudo que ela agrupa.
+--
+-- Guard: o INSERT e o UPDATE abaixo mutam activities. Sem ele o trigger de
+-- projeto concluido abortaria (INSERT tambem dispara), o rollup da leva 8
+-- dispararia no UPDATE de parent_id, e criar item_type='fase' poderia esbarrar
+-- nos triggers de integridade da EAP. E backfill de estrutura; desliga-se os
+-- triggers durante ele. Religado apos o passo 2.
+SET session_replication_role = replica;
+
 WITH fase_com_codigo AS (
   SELECT p.id, p.project_id, p.display_order,
          substring(btrim(p.title) FROM '^([0-9]+(\.[0-9]+)*)')        AS codigo,
@@ -98,5 +106,8 @@ UPDATE public.activities filho
    -- E o filho tem de estar ABAIXO dele: so pendura quem e mais fundo.
    AND filho.wbs_code IS NOT NULL
    AND filho.wbs_code LIKE pai.wbs_code || '.%';
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 NOTIFY pgrst, 'reload schema';
