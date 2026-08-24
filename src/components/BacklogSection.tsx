@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { buildAvatarLookupMap, getAvatarInitials, resolveAvatarFromLookup } from "@/lib/avatarLookup";
-import { eapIsFaseLevel, eapLevel, resolveEapKind, type EapKind } from "@/lib/eapModel";
+import { EAP_FASE_LEVEL, eapIsFaseLevel, eapLevel, resolveEapKind, type EapKind } from "@/lib/eapModel";
 import { EapVisual } from "@/components/backlog/EapVisual";
 import { parseWorkflowCategory, categoryFromLegacyFlags } from "@/lib/workflowCategory";
 import { ehBacklog } from "@/components/kanban/shared";
@@ -1556,6 +1556,36 @@ export const BacklogSection = ({
     </div>
   );
 
+  /**
+   * O RECUO VEM DO CÓDIGO EAP, não do vínculo de pai.
+   *
+   * `depth` conta saltos de `parent_id`, e na EAP importada isso não descreve
+   * a hierarquia: pacote de topo (1.1.1, 1.2.1) chega com `parent_id` nulo,
+   * então `depth = 0` — a mesma margem de uma atividade de nível 4 dentro de
+   * outro pacote. A lista mostrava dois níveis de uma estrutura de quatro.
+   *
+   * O código sabe onde o item está: `eapLevel("1.1.1")` é 3. A fase (nível 2)
+   * é a régua — ela desenha a própria faixa, então o que está sob ela começa
+   * em zero e cresce dali.
+   *
+   * `depth` continua valendo como FALLBACK para item sem código (criado à mão
+   * no Kanban ou no Backlog): ali não há nível a ler, e o vínculo de pai é a
+   * única hierarquia que existe.
+   *
+   * TETO de 4 níveis: além disso o título perde a tela em largura estreita, e
+   * o código continua dizendo a profundidade real de quem quiser conferir.
+   */
+  const recuoDaLinha = (a: Activity, depth: number, flat: boolean): number => {
+    // Raia plana (agrupar por responsável, prioridade…): não há árvore para
+    // representar — todos os itens são irmãos naquela dimensão.
+    if (flat) return 0;
+    const nivel = eapLevel((a as { wbs_code?: string | null }).wbs_code);
+    if (nivel === null) return depth * 18;
+    // Nível 2 é a fase, que já tem faixa própria: o conteúdo dela começa em 0.
+    const passos = Math.max(0, nivel - (EAP_FASE_LEVEL + 1));
+    return Math.min(passos, 4) * 18;
+  };
+
   const renderActivityRow = (activity: Activity, depth: number = 0, flat: boolean = false) => {
     const isSelected = selectedIds.has(activity.id);
     const gutLevel = normalizeGut(activity.priority);
@@ -1708,7 +1738,21 @@ export const BacklogSection = ({
               O recuo por profundidade vive AQUI, dentro da coluna do título:
               assim a hierarquia continua legível sem deslocar as demais
               colunas, que permanecem alinhadas com o cabeçalho. */}
-          <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: depth * 18 }}>
+          {/* `gap-0` no contêiner e `gap-2` só no conteúdo: com o gap no pai, as
+              guias herdariam 8px de folga entre si e o recuo deixaria de ser
+              múltiplo exato de 18px — os fios não alinhariam entre linhas. */}
+          <div className="flex items-center gap-0 min-w-0">
+            {/* GUIAS: uma linha fina por nível de recuo, em vez de espaço vazio.
+                Só o padding deixava o olho contar margens para saber a que
+                pacote a atividade pertence; a guia liga visualmente o filho ao
+                bloco acima. `self-stretch` + offsets negativos fazem os traços
+                se encontrarem entre linhas vizinhas, formando um fio contínuo. */}
+            {Array.from({ length: recuoDaLinha(activity, depth, flat) / 18 }).map((_, i) => (
+              <span key={i} aria-hidden className="relative w-[18px] shrink-0 self-stretch">
+                <span className="absolute left-[8px] -top-2 -bottom-2 border-l border-border" />
+              </span>
+            ))}
+            <span className="flex items-center gap-2 min-w-0">
             {/* INDICADOR, não menu. Era um dropdown para trocar o tipo aqui na
                 linha, mas o papel na EAP não é escolha avulsa: vem do nível do
                 código e de o item ter filhos ou não. Oferecer a troca solta
@@ -1741,8 +1785,13 @@ export const BacklogSection = ({
               />
             ) : (
               <span className="min-w-0 flex items-center gap-2">
+                {/* `tabular-nums` + largura mínima: "1.2.2.10" e "1.1.1" têm
+                    contagens de dígitos diferentes, e sem isso a coluna de
+                    códigos serrilhava — cada linha começando o título num
+                    ponto. Alinhado à direita, o nível fica legível pelo
+                    comprimento do próprio número. */}
                 {!!(activity as any).wbs_code && (
-                  <span className="inline-flex items-center h-[18px] px-1.5 rounded border border-border bg-muted/50 text-[10.5px] font-mono text-muted-foreground shrink-0" title="Código EAP">
+                  <span className="inline-flex items-center justify-end h-[18px] px-1.5 rounded border border-border bg-muted/50 text-[10.5px] font-mono tabular-nums text-muted-foreground shrink-0 min-w-[3.6rem]" title="Código EAP">
                     {(activity as any).wbs_code}
                   </span>
                 )}
@@ -1784,6 +1833,7 @@ export const BacklogSection = ({
                 )}
               </span>
             )}
+            </span>
           </div>
 
           {/* colunas selecionáveis, na ordem de BACKLOG_COLS */}
@@ -2188,8 +2238,11 @@ export const BacklogSection = ({
           {/* Código EAP: estava gravado e não era exibido nesta linha — só nas
               de atividade. "1.1 Formalização" aparecia como "Formalização", e a
               posição do item na EAP sumia justo onde a hierarquia é lida. */}
+          {/* Mesma caixa das linhas comuns (`min-w` + `tabular-nums`): sem
+              isso o código da faixa começava num ponto e o das linhas de
+              baixo em outro, quebrando a coluna logo no topo do grupo. */}
           {!!(phaseAct as any).wbs_code && (
-            <span className="inline-flex items-center h-[18px] px-1.5 rounded border border-border bg-background/60 text-[10.5px] font-mono text-muted-foreground shrink-0" title="Código EAP">
+            <span className="inline-flex items-center justify-end h-[18px] px-1.5 rounded border border-border bg-background/60 text-[10.5px] font-mono tabular-nums text-muted-foreground shrink-0 min-w-[3.6rem]" title="Código EAP">
               {(phaseAct as any).wbs_code}
             </span>
           )}
