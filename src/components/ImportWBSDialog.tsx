@@ -1008,6 +1008,9 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
           if (!phaseIdMap[chave]) phaseIdMap[chave] = f.id;
         }
       }
+      // Declarado ANTES do laço de fases: a atividade-fase criada ali dentro se
+      // registra aqui, para os pacotes de nível 3 acharem o pai.
+      const codeIdMap: Record<string, string> = {};
 
       for (const phase of phases) {
         // A planilha trouxe uma fase que JÁ EXISTE: reaproveita em vez de criar
@@ -1060,9 +1063,51 @@ export const ImportWBSDialog = ({ projectId, onDataChanged }: ImportWBSDialogPro
         }
         if (res.error) throw res.error;
         phaseIdMap[phase.code] = res.data.id;
+
+        /**
+         * A FASE TAMBÉM VIRA ATIVIDADE.
+         *
+         * A migração começou em 14/08 — 60 fases da base já existem nas duas
+         * tabelas, e a lista sabe lidar com isso (a faixa de `phases` cede o
+         * lugar quando a atividade-fase existe). O que ficou pela metade foi
+         * ESTE ponto: a importação continuava criando só o registro em
+         * `phases`, e por isso cada EAP importada produzia fases que não se
+         * movem e abrem uma ficha de 7 campos.
+         *
+         * Sem o par em `activities`, o pacote de nível 3 também não tem pai:
+         * `parent_id` só aponta para `activities`. Eram 91 órfãos na base.
+         *
+         * Falhar aqui NÃO derruba a importação: a fase em `phases` já foi
+         * criada e o vínculo por `phase_id` continua valendo — é o
+         * comportamento de antes desta linha existir. O aviso registra o que
+         * não veio, em vez de perder a EAP inteira por causa do extra.
+         */
+        const { data: idAtividadeFase, error: erroAtividadeFase } = await supabase.from("activities").insert({
+          project_id: projectId,
+          title: phase.title,
+          wbs_code: phase.code,
+          item_type: "fase",
+          is_milestone: false,
+          parent_id: null,
+          phase_id: res.data.id,
+          // A FILA, como todo o resto da EAP importada. Sem coluna de backlog
+          // no projeto fica nulo, e o item aparece na aba e fora do quadro.
+          workflow_stage_id: backlogStageId,
+          status: "pending",
+          priority: "pendente",
+        } as never).select("id").single();
+        if (erroAtividadeFase) {
+          droppedCols.add("a fase como item da EAP");
+        } else if (idAtividadeFase?.id) {
+          /* REGISTRA NO MAPA para os filhos a encontrarem. A fase não passa
+             pelo laço que preenche `codeIdMap` (ela é filtrada em `nonPhase`),
+             então sem esta linha o pacote de nível 3 procuraria o pai "1.1",
+             não acharia, e nasceria órfão — que é o defeito que esta mudança
+             veio corrigir. */
+          codeIdMap[phase.code] = idAtividadeFase.id;
+        }
       }
 
-      const codeIdMap: Record<string, string> = {};
       const phaseOrderCounter: Record<string, number> = {};
       /**
        * A fase de um item é a do ancestral mais próximo que exista no mapa.
