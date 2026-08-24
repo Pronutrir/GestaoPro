@@ -170,9 +170,30 @@ export const EAP_FASE_LEVEL = 2;
 export const EAP_PROJECT_LEVEL: number | null =
   EAP_FASE_LEVEL > 1 ? EAP_FASE_LEVEL - 1 : null;
 
+/**
+ * O nível do PACOTE DE TRABALHO — logo abaixo da Fase.
+ *
+ * Existe pelo mesmo motivo de `EAP_PROJECT_LEVEL`: o modelo adotado para todos
+ * os projetos é posicional, e cada nível tem um papel fixo —
+ *
+ *   1  Projeto (escopo total)
+ *   2  Fase (macrofase / ciclo de vida)
+ *   3  Pacote de trabalho
+ *   4+ Atividade
+ *
+ * Derivado de `EAP_FASE_LEVEL` para que trocar a convenção continue sendo a
+ * troca de UM número.
+ */
+export const EAP_PACOTE_LEVEL = EAP_FASE_LEVEL + 1;
+
 /** Este nível é o da Fase? */
 export function eapIsFaseLevel(level: number | null | undefined): boolean {
   return level === EAP_FASE_LEVEL;
+}
+
+/** Este nível é o do Pacote de Trabalho? */
+export function eapIsPacoteLevel(level: number | null | undefined): boolean {
+  return level === EAP_PACOTE_LEVEL;
 }
 
 /** Este nível é o do projeto (a raiz que não é trabalho)? */
@@ -263,6 +284,10 @@ export function resolveEapKind(item: EapItemLike, hasChildren = false): EapKind 
     // com uma fase só era importada como TRÊS fases — o projeto e as duas fases
     // de verdade, todos com o mesmo rótulo.
     if (eapIsProjectLevel(level)) return "projeto";
+    // PACOTE É POSIÇÃO — ver `eapRoleForImport`. O nível 3 é pacote de
+    // trabalho tenha ou não conteúdo; decidir por `agrupa` fazia o item mudar
+    // de papel na tela ao ganhar a primeira sub-atividade.
+    if (eapIsPacoteLevel(level)) return "entrega";
     return agrupa ? "entrega" : "atividade";
   }
 
@@ -394,6 +419,26 @@ export function eapRoleForImport(opts: {
   // diferentes na importação e no Backlog.
   if (eapIsProjectLevel(opts.depth)) return "projeto";
   if (eapIsFaseLevel(opts.depth)) return "fase";
+  /**
+   * PACOTE É POSIÇÃO, NÃO CONTEÚDO (24/08/2026).
+   *
+   * Era `if (opts.hasChildren) return "entrega"`, e o nível 3 sem filhos caía
+   * em "atividade". O efeito no relato: importando a mesma EAP, 1.2.2 e 1.2.3
+   * viravam pacote (têm filhos) enquanto 1.1.1, 1.1.2 e 1.2.1 viravam
+   * atividade solta — a estrutura chegava diferente da que a prévia mostrava.
+   *
+   * O modelo adotado é posicional, e o nível 2 já era decidido assim. Manter o
+   * nível 3 decidido por conteúdo dava DOIS significados à mesma posição da
+   * EAP, conforme alguém tivesse detalhado ou não — e a estrutura mudava
+   * sozinha ao criar a primeira sub-atividade.
+   *
+   * Marco continua vencendo: quem escreve "Milestone 1" está declarando um
+   * ponto no tempo, não uma caixa a preencher.
+   */
+  if (eapIsPacoteLevel(opts.depth)) {
+    if (!opts.hasChildren && eapTitleDeclaresMilestone(opts.title)) return "marco";
+    return "entrega";
+  }
   if (opts.hasChildren) return "entrega";
   if (eapTitleDeclaresMilestone(opts.title)) return "marco";
   return "atividade";
