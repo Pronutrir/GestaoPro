@@ -107,7 +107,11 @@ export const PAPEIS_PROJETO: PapelProjeto[] = [
   {
     id: "editar_minhas",
     nome: "Editar apenas as minhas",
-    hint: "vê todas as atividades. Edita só onde é responsável ou participante",
+    /* "vê o projeto inteiro" e não "vê todas as atividades": a segunda frase
+       sugeria um contraste com alguém que NÃO vê, e o contraste é outro —
+       quem entra só por atividade (sem vínculo de equipe) é que tem a visão
+       recortada. Membro da equipe, mesmo com este papel, vê tudo. */
+    hint: "vê o projeto inteiro. Edita só onde é responsável ou participante",
     rank: 2,
     perms: { can_create: false, can_edit: false, can_delete: false, can_move: false, can_edit_own: true },
   },

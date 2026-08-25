@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardSkeleton } from '@/components/SkeletonScreens';
 import { useProjectAccess } from '@/hooks/useProjectAccess';
@@ -42,6 +42,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { MinhasPendencias } from '@/components/MinhasPendencias';
 import { cn } from '@/lib/utils';
 import { diasAte, estaAtrasado, formatarDataBR } from '@/lib/dataLocal';
+import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from '@/lib/identityMatch';
 
 interface Project {
   id: string;
@@ -63,6 +64,8 @@ interface Activity {
   status: string;
   project_id: string;
   assigned_to: string | null;
+  /** Equipe da atividade — participante conta como "minha", igual ao responsável. */
+  participants?: string[] | null;
   start_date: string | null;
   end_date: string | null;
   completed_at: string | null;
@@ -129,13 +132,21 @@ const STATUS_CARD_STYLES = {
 
 export function OverviewPage() {
   const router = useRouter();
-  const { filterProjects, loading: authLoading } = useProjectAccess();
-  // user/profile saíram junto com o alternador "Minhas": eram usados só para
-  // descobrir quais atividades pertenciam à pessoa.
-  const { isAdmin } = useAuth();
-  // Padrão: só o que é meu. Quem coordena troca para o portfólio inteiro num
-  // clique — o contrário (abrir no todo e ter de filtrar) faz a tela abrir
-  // sempre com números que não são acionáveis por quem está olhando.
+  const { filterProjects, loading: authLoading, projetosSoPorAtividade } = useProjectAccess();
+  /* `user` e `profile` voltaram: saíram com o alternador "Minhas" de antes, e
+     agora são necessários de novo — para saber o que é da pessoa, tanto no
+     recorte obrigatório (projetos de acesso só por atividade) quanto no filtro
+     opcional. */
+  const { user, profile, isAdmin } = useAuth();
+  /**
+   * FILTRO "SÓ AS MINHAS" — desligado por padrão.
+   *
+   * Havia um alternador que abria em "Minhas": o painel nascia filtrado sem
+   * dizer, e um número menor que o real passava por número real. Foi removido
+   * por isso, e a decisão estava certa — o defeito era o padrão, não o filtro.
+   * Ele volta desligado: quem quiser recortar liga, e sabe que ligou.
+   */
+  const [soMinhas, setSoMinhas] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
@@ -167,7 +178,7 @@ export function OverviewPage() {
         supabase
           .from('activities')
           .select(
-            'id, title, status, project_id, assigned_to, start_date, end_date, completed_at, created_at, hours, cost, priority, priority_score, is_trashed',
+            'id, title, status, project_id, assigned_to, participants, start_date, end_date, completed_at, created_at, hours, cost, priority, priority_score, is_trashed',
           )
           .in('project_id', projectIds),
         supabase
@@ -254,7 +265,33 @@ export function OverviewPage() {
   // o Dashboard nascia filtrado sem dizer, e um número menor que o real passa
   // por número real. Quem quer ver só o seu tem o filtro "Apenas minhas
   // tarefas" no Kanban, onde o recorte é por tarefa, não por painel inteiro.
-  const escopo = activities;
+  /**
+   * DUAS CAMADAS, e elas respondem a perguntas diferentes.
+   *
+   * A primeira é OBRIGATÓRIA: em projeto onde a pessoa entra só pelo vínculo
+   * de atividade, as telas mostram apenas as dela — e o painel tem de contar o
+   * mesmo. Medido em 25/08: alguém com 7 atividades em projetos que somam 145
+   * via "10 atrasadas", das quais 9 não conseguia abrir. Um número que não se
+   * pode investigar não é indicador. São 13 pessoas nessa situação.
+   *
+   * A segunda é ESCOLHA: o interruptor "Só as minhas", para quem vê tudo e
+   * quer recortar. Desligado por padrão — ver o comentário no estado.
+   */
+  const ehMinha = useCallback((a: Activity) => {
+    const eu = buildUserCandidates([
+      profile?.full_name, profile?.email, user?.email, profile?.id, user?.id,
+    ]);
+    return matchesIdentity(a.assigned_to, eu)
+      || (Array.isArray((a as { participants?: string[] | null }).participants)
+          && anyMatchesIdentity((a as { participants?: string[] | null }).participants!, eu));
+  }, [profile?.full_name, profile?.email, profile?.id, user?.email, user?.id]);
+
+  const escopo = useMemo(() => {
+    const comRecorte = activities.filter(
+      (a) => !projetosSoPorAtividade.has(a.project_id) || ehMinha(a),
+    );
+    return soMinhas ? comRecorte.filter(ehMinha) : comRecorte;
+  }, [activities, projetosSoPorAtividade, soMinhas, ehMinha]);
 
   const overdueActivities = escopo.filter(
     (activity) => activity.status !== 'completed' && estaAtrasado(activity.end_date),
@@ -290,8 +327,25 @@ export function OverviewPage() {
     <>
       <main className="space-y-6 px-4 py-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+          <div className="flex items-center justify-between gap-3 flex-wrap w-full">
             <h2 className="mb-2 text-3xl font-bold text-foreground">Dashboard Geral</h2>
+            {/* SÓ AS MINHAS — desligado por padrão, e o rótulo diz o estado em
+                vez de esconder: o alternador antigo abria filtrado, e um
+                número menor que o real passava por número real. */}
+            <Button
+              type="button"
+              variant={soMinhas ? 'default' : 'outline'}
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={() => setSoMinhas((v) => !v)}
+              aria-pressed={soMinhas}
+              title={soMinhas
+                ? 'Mostrando só o que é seu — clique para ver todos os projetos'
+                : 'Ver só as atividades em que você é responsável ou participante'}
+            >
+              <ListTodo className="w-3.5 h-3.5" />
+              {soMinhas ? 'Só as minhas' : 'Todas'}
+            </Button>
           </div>
         </div>
 
