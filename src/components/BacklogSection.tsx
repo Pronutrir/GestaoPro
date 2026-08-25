@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PersonCombobox } from "@/components/PersonCombobox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
-  ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen,
+  ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen, CircleDashed,
   ChevronsUpDown, ChevronsDownUp, Diamond, EyeOff,
   Rows3, MoreHorizontal, Pencil, Package, IndentIncrease, SlidersHorizontal, Search,
   User, Flag, Calendar as CalendarIcon, Link2, X, Network,
@@ -1882,15 +1882,25 @@ export const BacklogSection = ({
                     aparência de uma tarefa pronta — e só abrindo dava para
                     saber. Medido: 406 das 471 avaliáveis estão incompletas.
                     Concluídas e agrupadores não recebem chip (não se avaliam). */}
+                {/* ÍCONE, NÃO CHIP VERMELHO (25/08/2026).
+                    Era "falta responsável · prazo +3" em vermelho, e a medição
+                    explica por que incomodava: 2.135 das 2.798 atividades vivas
+                    não têm responsável, 2.177 não têm prazo. O alerta aparecia
+                    em TRÊS DE CADA QUATRO linhas — e um alerta que marca a
+                    maioria deixa de alertar: vira o padrão visual da tela.
+                    Pior, consumia a coluna de prioridade e empurrava o título.
+                    A informação não se perde: as colunas RESPONSÁVEL e PRAZO já
+                    dizem "Sem responsável" e "—", o contador do topo mede, e o
+                    filtro "Incompletas" continua servindo. O que sai é o
+                    alarme. Numa EAP recém-importada estar incompleta é o estado
+                    normal do planejamento, não um defeito a denunciar. */}
                 {prontidao.avaliavel && !prontidao.pronta && (
                   <span
-                    className="shrink-0 inline-flex items-center h-[17px] px-1.5 rounded text-[10px] font-medium border border-destructive/40 bg-destructive/5 text-destructive"
+                    className="shrink-0 inline-flex items-center justify-center w-4 h-4 rounded text-muted-foreground/50 hover:text-muted-foreground transition-colors"
                     title={`Falta preencher: ${prontidao.faltando.map((r) => PRONTIDAO_LABELS[r]).join(", ")}. Clique na tarefa para completar.`}
+                    aria-label={`Incompleta — falta ${prontidao.faltando.map((r) => PRONTIDAO_LABELS[r]).join(", ")}`}
                   >
-                    {/* No máximo dois rótulos: a lista completa vai no tooltip,
-                        senão o chip fica maior que o título da tarefa. */}
-                    falta {prontidao.faltando.slice(0, 2).map((r) => PRONTIDAO_LABELS[r]).join(" · ")}
-                    {prontidao.faltando.length > 2 && ` +${prontidao.faltando.length - 2}`}
+                    <CircleDashed className="w-3.5 h-3.5" />
                   </span>
                 )}
                 {hasDeps && (
@@ -3247,6 +3257,26 @@ export const BacklogSection = ({
             const nivel = eapLevel((a as { wbs_code?: string | null }).wbs_code);
             return nivel === null || eapIsFaseLevel(nivel);
           }))
+          /**
+           * COM FILTRO ATIVO, A FASE VAZIA NÃO APARECE.
+           *
+           * `phases` vem por prop, direto da página, e NÃO passa pelo filtro —
+           * só o conteúdo passa. Buscando "Cadastros de transações", a lista
+           * achava 1 item e desenhava as 4 fases: uma com o resultado e três
+           * dizendo "Nenhuma tarefa visível com os filtros atuais".
+           *
+           * Três faixas anunciando o próprio vazio é ruído — quem buscou quer
+           * o que casou, não o índice do projeto inteiro.
+           *
+           * SEM filtro a fase vazia CONTINUA visível: ali ela é a estrutura da
+           * EAP, e o "+ Tarefa" dela é o caminho para preenchê-la. Some só
+           * enquanto há um recorte, e volta quando ele sai.
+           */
+          .filter((p) => {
+            if (!hasActiveFilters) return true;
+            const dentro = topLevelByPhase.get(p.id) || [];
+            return dentro.length > 0 || virtualPhaseActs.some((v) => v.phase_id === p.id);
+          })
           .map((p) => renderPhaseGroup(p.id, p.title))}
 
         {/* Atividades-fase (item_type='fase') em qualquer nível top-level viram cards de fase virtuais */}

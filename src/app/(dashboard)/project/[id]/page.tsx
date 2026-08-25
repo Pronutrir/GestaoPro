@@ -1047,24 +1047,60 @@ export default function ProjectDetailsPage() {
       /**
        * VISIBILIDADE E EDIÇÃO SÃO EIXOS INDEPENDENTES.
        *
-       * Aqui a tela filtrava a lista para quem não é da equipe: mostrava só as
-       * atividades da pessoa e escondia as fases que não continham nenhuma
-       * delas. Quem tem uma atividade num projeto de 40 via um projeto de uma
-       * atividade — e não havia nada dizendo que a visão era parcial.
+       * Em 18/08 eu TIREI este filtro, argumentando que visibilidade e edição
+       * são eixos independentes — a regra do monday ("todos continuam vendo
+       * todos os itens") e a separação `Browse Projects` / `Edit Issues` do
+       * Jira. O aviso âmbar no topo foi criado no mesmo commit para explicar
+       * que a pessoa vê tudo e edita só o que é dela.
        *
-       * Isso confundia duas perguntas diferentes: "posso mexer nisto?" e "sei
-       * que isto existe?". O acesso por atividade restringe a PRIMEIRA
-       * (`canMutateActivity` já cuida disso, e a RLS também); não deveria
-       * responder à segunda. É a regra que o monday publica ("todos continuam
-       * vendo todos os itens" mesmo com a edição restrita) e a razão de o Jira
-       * separar `Browse Projects` de `Edit Issues`.
+       * ESTAVA ERRADO PARA ESTE PRODUTO, e o relato de 25/08 mostrou por quê:
+       * alguém incluído em 3 atividades abria um projeto de 166. O aviso
+       * explica o que está acontecendo, mas não resolve — ela ainda precisa
+       * caçar as três dela no meio do resto. Ver tudo só ajuda quando o "tudo"
+       * cabe na tela; num projeto grande vira ruído.
        *
-       * A RLS acompanha: `can_view_project_work_v2` (20260818150000) passou a
-       * reconhecer o vínculo por atividade na LEITURA. Sem ela esta mudança não
-       * teria efeito — o banco devolveria a lista curta de qualquer jeito.
+       * O filtro volta: a lista mostra as atividades em que a pessoa é
+       * responsável ou participante, e as fases que as contêm.
+       *
+       * A RLS não precisa mudar. `can_view_project_work_v2` (20260818150000)
+       * continua permitindo a leitura ampla — o recorte é de TELA, e é assim
+       * que deve ser: o banco autoriza, a interface foca. Se um dia a pessoa
+       * precisar do contexto inteiro, dar um interruptor "ver o projeto todo"
+       * é mudança de render, sem tocar em permissão.
        */
-      setPhases(phasesData || []);
-      setActivities(activitiesData || []);
+      // Mesma lista de identidades usada em `canMutateActivity` e no fetch de
+      // permissão: nome, e-mail e id — o vínculo é por texto livre, e a mesma
+      // pessoa aparece em formas diferentes conforme quem digitou.
+      const identidades = buildUserCandidates([
+        profile?.full_name,
+        profile?.email,
+        currentUser?.email,
+        profile?.id,
+        currentUser?.id,
+      ]);
+
+      const visibleActivities = activityScopedAccess
+        ? (activitiesData || []).filter((activity: any) => (
+            matchesIdentity(activity.assigned_to, identidades) ||
+            (Array.isArray(activity.participants)
+              && anyMatchesIdentity(activity.participants, identidades))
+          ))
+        : (activitiesData || []);
+
+      // A fase só aparece se contiver alguma atividade visível: uma faixa vazia
+      // anunciaria trabalho que a pessoa não pode ver, sem lhe dizer nada.
+      const visiblePhaseIds = new Set(
+        visibleActivities
+          .map((activity: any) => activity.phase_id)
+          .filter((phaseId: string | null | undefined): phaseId is string => Boolean(phaseId)),
+      );
+
+      setPhases(
+        activityScopedAccess
+          ? (phasesData || []).filter((phase) => visiblePhaseIds.has(phase.id))
+          : (phasesData || []),
+      );
+      setActivities(visibleActivities);
 
       // Build consumed-minutes map for kanban cards
       const map: Record<string, number> = {};
@@ -1418,13 +1454,86 @@ export default function ProjectDetailsPage() {
   };
 
   const backlogFilteredActivities = useMemo(
-    () =>
-      activities.filter((a: any) => {
-        if (listSearch && !a.title?.toLowerCase().includes(listSearch.toLowerCase())) return false;
+    () => {
+      const passa = (a: any) => {
+        /**
+         * A BUSCA OLHA O CÓDIGO EAP TAMBÉM.
+         *
+         * Era só o título. Numa EAP de centenas de linhas, o código é o
+         * identificador mais direto que existe — quem procura "1.2.2" sabe
+         * exatamente o que quer, e digitava para não achar nada.
+         */
+        if (listSearch) {
+          const q = listSearch.toLowerCase();
+          const alvo = `${a.title ?? ""} ${a.wbs_code ?? ""}`.toLowerCase();
+          if (!alvo.includes(q)) return false;
+        }
         if (listStatusFilter !== "all" && a.status !== listStatusFilter) return false;
         if (listPriorityFilter !== "all" && a.priority !== listPriorityFilter) return false;
         return true;
-      }),
+      };
+
+      const vivas = activities as any[];
+      const aprovados = vivas.filter(passa);
+      // Nada filtrado: devolve tudo, sem pagar o custo de montar os mapas.
+      if (aprovados.length === vivas.length) return vivas;
+
+      /**
+       * O FILTRO PRESERVA A CADEIA — ANCESTRAIS E DESCENDENTES.
+       *
+       * Era um `filter` seco: quem não passava saía, e com ele saía o galho
+       * inteiro. Foi o relato de "1.2.1.9 é um pacote e dentro dele há uma
+       * atividade, porém não aparece" — o pacote passava no filtro, a
+       * atividade dentro dele não, e a lista mostrava um agrupador vazio.
+       *
+       * O filtro de prontidão (em BacklogSection) já fazia isso pelos
+       * ancestrais. Aqui faltavam os dois lados:
+       *
+       *   ANCESTRAIS — a atividade que casa com a busca precisa do pai para
+       *   ser desenhada; sem ele vira órfã e some, embora tenha passado.
+       *
+       *   DESCENDENTES — um agrupador que casa com a busca é a caixa, não o
+       *   conteúdo: trazer "1.2.1.9" sem o que está dentro exibe uma caixa
+       *   fechada e vazia, que é pior que não achar nada.
+       */
+      const porId = new Map(vivas.map((a) => [a.id, a]));
+      const filhosDe = new Map<string, any[]>();
+      for (const a of vivas) {
+        if (!a.parent_id) continue;
+        const arr = filhosDe.get(a.parent_id) || [];
+        arr.push(a);
+        filhosDe.set(a.parent_id, arr);
+      }
+
+      const manter = new Set<string>(aprovados.map((a) => a.id));
+
+      // Sobe: cada aprovado arrasta seus ancestrais.
+      for (const a of aprovados) {
+        let atual = a;
+        const visto = new Set<string>([a.id]);
+        while (atual?.parent_id && !visto.has(atual.parent_id)) {
+          visto.add(atual.parent_id);
+          manter.add(atual.parent_id);
+          atual = porId.get(atual.parent_id);
+        }
+      }
+
+      // Desce: cada aprovado arrasta o que está dentro dele. Fila em vez de
+      // recursão — EAP profunda não deve estourar a pilha.
+      const fila = [...aprovados.map((a) => a.id)];
+      const jaVisto = new Set<string>(fila);
+      while (fila.length > 0) {
+        const id = fila.pop() as string;
+        for (const f of filhosDe.get(id) || []) {
+          if (jaVisto.has(f.id)) continue;
+          jaVisto.add(f.id);
+          manter.add(f.id);
+          fila.push(f.id);
+        }
+      }
+
+      return vivas.filter((a) => manter.has(a.id));
+    },
     [activities, listSearch, listStatusFilter, listPriorityFilter]
   );
 
@@ -1463,11 +1572,15 @@ export default function ProjectDetailsPage() {
             <div className="flex items-start gap-2.5 rounded-lg border border-warning/40 bg-warning/10 px-3.5 py-2.5">
               <Info className="w-4 h-4 text-warning shrink-0 mt-0.5" />
               <p className="text-xs text-foreground/80 leading-relaxed">
+                {/* O texto acompanha o que a tela FAZ. Dizia "vê tudo o que
+                    acontece aqui" enquanto a lista mostrava o projeto inteiro;
+                    com o recorte de volta, essa frase seria falsa — e um aviso
+                    que descreve errado o próprio estado é pior que nenhum. */}
                 <span className="font-semibold text-warning">Você participa deste projeto por atividade.</span>{" "}
-                Vê tudo o que acontece aqui, mas só edita as atividades em que é responsável ou participante.
+                Esta é a sua parte dele: as atividades em que você é responsável ou participante.
                 {project?.manager?.trim() || project?.owner?.trim()
-                  ? ` Para editar o restante, peça a ${(project?.manager?.trim() || project?.owner?.trim())} para incluir você na equipe.`
-                  : " Para editar o restante, peça ao líder do projeto para incluir você na equipe."}
+                  ? ` Para ver e editar o projeto inteiro, peça a ${(project?.manager?.trim() || project?.owner?.trim())} para incluir você na equipe.`
+                  : " Para ver e editar o projeto inteiro, peça ao líder do projeto para incluir você na equipe."}
               </p>
             </div>
           )}

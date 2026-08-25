@@ -727,7 +727,16 @@ export const ActivityKanban = ({
     }
     const q = normalize(search.trim());
     if (q) {
-      const hay = normalize([a.title, a.assigned_to || "", (a.tags || []).join(" ")].join(" "));
+      /* `wbs_code` na busca: o código é o identificador do item na EAP, e
+         procurar por "1.2.2" é mais direto que lembrar o título. O card já o
+         exibe — não achar pelo que está escrito nele é o tipo de lacuna que
+         faz a busca parecer quebrada. */
+      const hay = normalize([
+        a.title,
+        (a as { wbs_code?: string | null }).wbs_code || "",
+        a.assigned_to || "",
+        (a.tags || []).join(" "),
+      ].join(" "));
       if (!hay.includes(q)) return false;
     }
     return true;
