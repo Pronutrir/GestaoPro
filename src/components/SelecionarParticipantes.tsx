@@ -177,8 +177,6 @@ export const SelecionarParticipantes = ({
     );
   };
 
-  const recorteAtivo = !!setor || !!busca.trim();
-
   return (
     <div className="rounded-md border border-border overflow-hidden">
       {/* HERDAR DO PAI — botão, não automático. Herança automática decidiria
@@ -208,110 +206,82 @@ export const SelecionarParticipantes = ({
         />
       </div>
 
-      {/* SETORES em faixa própria, com rolagem lateral: os 8 cabem sem quebrar
-          linha nem empurrar a lista para baixo. */}
-      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border overflow-x-auto">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground shrink-0 pr-1">
-          Setor
-        </span>
-        <button
-          type="button"
-          onClick={() => setSetor(null)}
-          aria-pressed={setor === null}
-          className={cn(
-            "shrink-0 inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full border text-xs transition-colors",
-            setor === null
-              ? "bg-primary border-primary text-primary-foreground font-semibold"
-              : "border-border text-muted-foreground hover:border-primary/50",
-          )}
-        >
-          Todos
-          <span className="text-[10px] tabular-nums opacity-75">{pessoas.length}</span>
-        </button>
-        {porSetor.map(([nome, qtd]) => (
+      {/* SETOR EM LISTA, NÃO EM FAIXA.
+          Era uma tira horizontal de chips com rolagem lateral. Não coube: o
+          painel vive dentro do diálogo da atividade, que reserva 400px fixos
+          para a conversa à direita — sobra pouca largura, e oito setores viram
+          uma barra de rolagem que esconde metade das opções.
+          Vertical resolve: os oito ficam à vista de uma vez, cada um com a
+          contagem, e a seleção é um clique sem procurar. */}
+      <div className="flex items-stretch">
+        <div className="w-[132px] shrink-0 border-r border-border max-h-[260px] overflow-y-auto">
           <button
-            key={nome}
             type="button"
-            onClick={() => setSetor(setor === nome ? null : nome)}
-            aria-pressed={setor === nome}
+            onClick={() => setSetor(null)}
             className={cn(
-              "shrink-0 inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full border text-xs whitespace-nowrap transition-colors",
-              setor === nome
-                ? "bg-primary border-primary text-primary-foreground font-semibold"
-                : "border-border text-muted-foreground hover:border-primary/50",
+              "w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left text-xs border-b border-border/60 transition-colors",
+              setor === null
+                ? "bg-primary/10 text-primary font-semibold"
+                : "text-muted-foreground hover:bg-muted/50",
             )}
           >
-            {nome}
-            <span className="text-[10px] tabular-nums opacity-75">{qtd}</span>
+            <span className="truncate flex-1">Todos</span>
+            <span className="text-[10px] tabular-nums opacity-70">{pessoas.length}</span>
           </button>
-        ))}
-      </div>
+          {porSetor.map(([nome, qtd]) => (
+            <button
+              key={nome}
+              type="button"
+              onClick={() => setSetor(setor === nome ? null : nome)}
+              className={cn(
+                "w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left text-xs border-b border-border/60 last:border-b-0 transition-colors",
+                setor === nome
+                  ? "bg-primary/10 text-primary font-semibold"
+                  : "text-muted-foreground hover:bg-muted/50",
+              )}
+              title={nome}
+            >
+              <span className="truncate flex-1">{nome}</span>
+              <span className="text-[10px] tabular-nums opacity-70">{qtd}</span>
+            </button>
+          ))}
+        </div>
 
-      {/* Ação do setor escolhido: é o "marcar todas" na medida do grupo. */}
-      {setor && (() => {
-        const doSetor = pessoas.filter(
-          (p) => (p.sector?.trim() || SEM_SETOR) === setor && p.full_name,
-        );
-        const livres = doSetor.filter((p) => !incluidos.has(norm(p.full_name!)));
-        const todasOn = livres.length > 0 && livres.every((p) => sel.has(p.full_name!));
-        return (
-          <div className="flex items-center gap-2.5 flex-wrap px-3 py-2 border-b border-border bg-muted/40 text-xs text-muted-foreground">
-            <span>
-              <strong className="text-foreground font-semibold">{setor}</strong> ·{" "}
-              {livres.length} {livres.length === 1 ? "pessoa disponível" : "pessoas disponíveis"}
-            </span>
-            {livres.length > 0 && (
-              <Button
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* A ação do setor escolhido fica ao lado dele, não numa faixa
+              própria: menos uma linha empurrando a lista para baixo. */}
+          {setor && (() => {
+            const doSetor = pessoas.filter(
+              (p) => (p.sector?.trim() || SEM_SETOR) === setor && p.full_name,
+            );
+            const livres = doSetor.filter((p) => !incluidos.has(norm(p.full_name!)));
+            const todasOn = livres.length > 0 && livres.every((p) => sel.has(p.full_name!));
+            if (livres.length === 0) return null;
+            return (
+              <button
                 type="button"
-                size="sm"
-                variant="outline"
-                className="h-6 text-[11px] px-2"
                 onClick={() => alternarGrupo(doSetor)}
+                className="shrink-0 px-3 py-1.5 text-left text-[11px] font-medium text-primary border-b border-border hover:bg-muted/50 transition-colors"
               >
-                {todasOn ? "Desmarcar todas" : "Marcar todas"}
-              </Button>
-            )}
-          </div>
-        );
-      })()}
+                {todasOn ? "Desmarcar" : `Marcar`} {livres.length} de {setor}
+              </button>
+            );
+          })()}
 
-      <div className="max-h-[240px] overflow-y-auto">
+          <div className="max-h-[260px] overflow-y-auto">
         {visiveis.length === 0 ? (
           <p className="px-3 py-6 text-center text-xs text-muted-foreground italic">
             Ninguém encontrado com esse filtro.
           </p>
-        ) : recorteAtivo ? (
-          // Com recorte, lista plana: o cabeçalho de grupo seria redundante.
-          visiveis.map(linhaPessoa)
         ) : (
-          // Sem recorte, agrupa por setor — dá para varrer os 8 sem clicar em
-          // nada, e cada grupo tem a própria ação de marcar.
-          porSetor.map(([nomeSetor]) => {
-            const doGrupo = visiveis.filter(
-              (p) => (p.sector?.trim() || SEM_SETOR) === nomeSetor,
-            );
-            if (doGrupo.length === 0) return null;
-            const livres = doGrupo.filter((p) => !incluidos.has(norm(p.full_name!)));
-            const todasOn = livres.length > 0 && livres.every((p) => sel.has(p.full_name!));
-            return (
-              <div key={nomeSetor}>
-                <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-1.5 bg-muted/70 backdrop-blur border-b border-border text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  <span>{nomeSetor} · {doGrupo.length}</span>
-                  {livres.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => alternarGrupo(doGrupo)}
-                      className="ml-auto text-primary hover:underline uppercase tracking-wider"
-                    >
-                      {todasOn ? "desmarcar" : `marcar ${livres.length}`}
-                    </button>
-                  )}
-                </div>
-                {doGrupo.map(linhaPessoa)}
-              </div>
-            );
-          })
+          /* LISTA PLANA, sempre. Antes ela se agrupava por setor quando não
+             havia filtro — com a coluna de setores ao lado, o cabeçalho de
+             grupo repetiria a mesma informação e comeria altura num painel que
+             já é curto. A pessoa vê o setor na própria linha. */
+          visiveis.map(linhaPessoa)
         )}
+          </div>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap px-3 py-2 border-t border-border bg-muted/40">
