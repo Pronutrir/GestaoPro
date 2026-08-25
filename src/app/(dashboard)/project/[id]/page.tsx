@@ -57,6 +57,7 @@ import { selectInChunks, mutateInChunks } from "@/lib/chunkedIn";
 import { useChangeRequestBlocks } from "@/hooks/useChangeRequestBlocks";
 import { useAppConfirm } from "@/components/AppConfirmProvider";
 import { anyMatchesIdentity, buildUserCandidates, matchesIdentity } from "@/lib/identityMatch";
+import { podeMutarAtividade } from "@/lib/activityAccess";
 import { podeGerenciarProjeto } from "@/lib/projectManage";
 import { buildAvatarLookupMap } from "@/lib/avatarLookup";
 import { eapShouldDemote, isSyntheticPhaseRow } from "@/lib/eapModel";
@@ -281,59 +282,25 @@ export default function ProjectDetailsPage() {
     [currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project],
   );
 
+  /**
+   * A REGRA MORA EM `lib/activityAccess` — aqui só se monta o argumento.
+   *
+   * Esta função e a do ActivityKanban tinham corpos DIFERENTES: a de lá não
+   * reconhecia líder nem gestor do projeto, então a mesma pessoa via o botão
+   * numa tela e não via na outra. Cada uma foi corrigida numa data, por um
+   * sintoma. Agora as duas chamam a mesma fonte, que espelha a RLS.
+   */
   const canMutateActivity = useCallback((activity?: Activity | null) => {
-    if (!activity) return false;
-    if (isRealAdmin) return true;
-    if (!currentUser?.id) return false;
-    if (!!activity.created_by && activity.created_by === currentUser.id) return true;
-
-    /**
-     * PERMISSÃO DA EQUIPE — faltava exatamente esta linha.
-     *
-     * Esta função testava admin, criador, líder/gestor e responsável, e parava.
-     * Nunca consultava `can_edit`/`can_move`: um membro da equipe com permissão
-     * de editar, que não fosse nenhum daqueles, era barrado pela TELA em quatro
-     * caminhos — abrir para editar, concluir/reabrir, arquivar e reordenar.
-     *
-     * O banco liberava. Depois de 20260818120000, `can_update_activity_v2`
-     * devolve `true` para esse caso (conferido com dados reais). Era o mesmo
-     * defeito de 18/08 espelhado: antes a tela permitia e a RLS recusava; aqui
-     * a RLS permite e a tela recusa. Os dois lados de novo divergindo, com o
-     * front sendo o mais restritivo desta vez.
-     *
-     * `canEdit`/`canMove` já vêm de `project_members` (via `userPerms`) e são
-     * exatamente o que o ActivityKanban usa na sua própria versão desta função,
-     * que estava certa — as duas existem lado a lado com regras diferentes.
-     */
-    if (canEdit || canMove) return true;
-
-    const identityCandidates = buildUserCandidates([
-      profile?.full_name,
-      profile?.email,
-      currentUser.email,
-      profile?.id,
-      currentUser.id,
-    ]);
-
-    // Líder/Gestor DESTE projeto específico tem o mesmo acesso que o RLS já
-    // concede (is_project_leader_v2) — nível de acesso GLOBAL (Gestor/
-    // Coordenador) sozinho não basta mais: o banco nunca reconheceu isso para
-    // mutar atividade de outra pessoa, e a tela não deve prometer o que o
-    // banco recusa.
-    if (matchesIdentity(project?.owner, identityCandidates) || matchesIdentity(project?.manager, identityCandidates)) {
-      return true;
-    }
-
-    /**
-     * Responsável OU participante — a RLS (`is_activity_actor_v2`) reconhece os
-     * dois, e aqui só o responsável era testado. Quem colabora numa atividade
-     * sem ser o responsável levava recusa da tela numa edição que o banco
-     * aceitaria.
-     */
-    if (matchesIdentity(activity.assigned_to, identityCandidates)) return true;
-    return Array.isArray(activity.participants)
-      && anyMatchesIdentity(activity.participants, identityCandidates);
-  }, [canEdit, canMove, currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project?.owner, project?.manager]);
+    return podeMutarAtividade(activity, project, {
+      isAdmin: isRealAdmin,
+      id: currentUser?.id,
+      email: currentUser?.email || profile?.email,
+      fullName: profile?.full_name,
+      profileId: profile?.id,
+      canEdit,
+      canMove,
+    });
+  }, [canEdit, canMove, currentUser?.email, currentUser?.id, isRealAdmin, profile?.email, profile?.full_name, profile?.id, project]);
 
   // Helper que abre o EditActivityDialog respeitando bloqueios escopados
   const openEditActivity = useCallback((
