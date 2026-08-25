@@ -1763,6 +1763,27 @@ export const ActivityKanban = ({
     return map;
   }, [activities]);
 
+  /**
+   * MARCO NAO ENTRA NO QUADRO - nem como cartao, nem como filho aninhado.
+   *
+   * `activitiesByStage` ja tirava o marco das colunas (ver `semMarcos` abaixo),
+   * mas a coluna recebia a lista INTEIRA em `activities` e reconstruia a
+   * hierarquia a partir dela (`childrenByParent`). O marco voltava por essa
+   * porta: aparecia recuado sob a fase, como filho externo, com o selo da
+   * coluna onde o banco diz que ele esta.
+   *
+   * Era o relatado - tres NF-e de prefeitura sob "Treinamento Integracoes",
+   * em cartoes que nao se arrastam nem se editam ali. Nao era bloqueio de
+   * permissao: e um item que a regua das colunas nao mede.
+   *
+   * Filtrar aqui, uma vez, mantem a regra num lugar so: quem desenha o quadro
+   * nunca ve marco. O lugar dele segue sendo o Backlog e o Cronograma.
+   */
+  const activitiesSemMarcos = useMemo(
+    () => activities.filter((a) => !a.is_milestone),
+    [activities],
+  );
+
   const activitiesByStage = useMemo(() => {
     const map: Record<string, Activity[]> = {};
     stages.forEach((s) => (map[s.id] = []));
@@ -3406,7 +3427,7 @@ export const ActivityKanban = ({
                 }
                 stage={stage}
                 stageActivities={stageActivities}
-                activities={activities}
+                activities={activitiesSemMarcos}
                 phases={phases}
                 widthPct={widthPct}
                 isLast={idx === visibleStages.length - 1}
