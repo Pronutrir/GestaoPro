@@ -3247,6 +3247,26 @@ export const BacklogSection = ({
             const nivel = eapLevel((a as { wbs_code?: string | null }).wbs_code);
             return nivel === null || eapIsFaseLevel(nivel);
           }))
+          /**
+           * COM FILTRO ATIVO, A FASE VAZIA NÃO APARECE.
+           *
+           * `phases` vem por prop, direto da página, e NÃO passa pelo filtro —
+           * só o conteúdo passa. Buscando "Cadastros de transações", a lista
+           * achava 1 item e desenhava as 4 fases: uma com o resultado e três
+           * dizendo "Nenhuma tarefa visível com os filtros atuais".
+           *
+           * Três faixas anunciando o próprio vazio é ruído — quem buscou quer
+           * o que casou, não o índice do projeto inteiro.
+           *
+           * SEM filtro a fase vazia CONTINUA visível: ali ela é a estrutura da
+           * EAP, e o "+ Tarefa" dela é o caminho para preenchê-la. Some só
+           * enquanto há um recorte, e volta quando ele sai.
+           */
+          .filter((p) => {
+            if (!hasActiveFilters) return true;
+            const dentro = topLevelByPhase.get(p.id) || [];
+            return dentro.length > 0 || virtualPhaseActs.some((v) => v.phase_id === p.id);
+          })
           .map((p) => renderPhaseGroup(p.id, p.title))}
 
         {/* Atividades-fase (item_type='fase') em qualquer nível top-level viram cards de fase virtuais */}
