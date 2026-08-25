@@ -119,7 +119,7 @@ DO $$
 DECLARE
   def text;
 BEGIN
-  SELECT pg_get_functiondef(oid) INTO def
+  SELECT pg_get_functiondef(p.oid) INTO def
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public' AND p.proname = 'create_default_workflow_stages';
 
