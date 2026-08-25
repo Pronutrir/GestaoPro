@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { podeMutarAtividade } from "@/lib/activityAccess";
 import { DateField } from "@/components/ui/date-field";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card } from "@/components/ui/card";
@@ -981,22 +982,29 @@ export const ActivityKanban = ({
     });
   }, [projectOwner, toast]);
 
+  /**
+   * A REGRA MORA EM `lib/activityAccess` — esta versão era a INCOMPLETA.
+   *
+   * Era `isAdmin || canEdit || canMove || isMineActivity`, sem reconhecer o
+   * líder nem o gestor do projeto — que a versão da página do projeto
+   * reconhecia. Quem lidera um projeto sem constar na equipe (6 pessoas na
+   * base) via o botão numa tela e não via na outra.
+   *
+   * `projectOwner` já chega resolvido como `manager || owner` (ver a página),
+   * e vai nos dois campos porque aqui não há como distinguir os dois — para
+   * esta decisão eles valem igual, exatamente como em `is_project_leader_v2`.
+   */
   const canMutateActivity = useCallback((a?: Activity | null) => {
-    if (!a) return false;
-    if (isAdmin) return true;
-    // NÍVEL PROJETO: mexe em qualquer atividade.
-    if (canEdit || canMove) return true;
-    /**
-     * NÍVEL TAREFA: só nas suas.
-     *
-     * `isMineActivity` já resolve os três casos — criador, responsável e
-     * PARTICIPANTE — e ainda traduz UUID para nome, que é como
-     * `assigned_to` chega em parte da base. A regra daqui repetia dois deles
-     * e esquecia o participante: 8 pessoas colaboram em atividades sem ser
-     * responsáveis, e não passariam.
-     */
-    return isMineActivity(a);
-  }, [isAdmin, canEdit, canMove, isMineActivity]);
+    return podeMutarAtividade(a, { owner: projectOwner, manager: projectOwner }, {
+      isAdmin,
+      id: myId,
+      email: user?.email || profile?.email,
+      fullName: profile?.full_name,
+      profileId: profile?.id,
+      canEdit,
+      canMove,
+    });
+  }, [isAdmin, canEdit, canMove, projectOwner, myId, user?.email, profile?.email, profile?.full_name, profile?.id]);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);
@@ -1762,6 +1770,27 @@ export const ActivityKanban = ({
     activities.forEach((a) => walk(a));
     return map;
   }, [activities]);
+
+  /**
+   * MARCO NAO ENTRA NO QUADRO - nem como cartao, nem como filho aninhado.
+   *
+   * `activitiesByStage` ja tirava o marco das colunas (ver `semMarcos` abaixo),
+   * mas a coluna recebia a lista INTEIRA em `activities` e reconstruia a
+   * hierarquia a partir dela (`childrenByParent`). O marco voltava por essa
+   * porta: aparecia recuado sob a fase, como filho externo, com o selo da
+   * coluna onde o banco diz que ele esta.
+   *
+   * Era o relatado - tres NF-e de prefeitura sob "Treinamento Integracoes",
+   * em cartoes que nao se arrastam nem se editam ali. Nao era bloqueio de
+   * permissao: e um item que a regua das colunas nao mede.
+   *
+   * Filtrar aqui, uma vez, mantem a regra num lugar so: quem desenha o quadro
+   * nunca ve marco. O lugar dele segue sendo o Backlog e o Cronograma.
+   */
+  const activitiesSemMarcos = useMemo(
+    () => activities.filter((a) => !a.is_milestone),
+    [activities],
+  );
 
   const activitiesByStage = useMemo(() => {
     const map: Record<string, Activity[]> = {};
@@ -3406,7 +3435,7 @@ export const ActivityKanban = ({
                 }
                 stage={stage}
                 stageActivities={stageActivities}
-                activities={activities}
+                activities={activitiesSemMarcos}
                 phases={phases}
                 widthPct={widthPct}
                 isLast={idx === visibleStages.length - 1}
