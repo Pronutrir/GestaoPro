@@ -15,6 +15,12 @@ const inflightByUser = new Map<string, Promise<Set<string>>>();
 export const useProjectAccess = () => {
   const { user, isAdmin, isGestor, canManage, profile, loading } = useAuth();
   const [memberProjectIds, setMemberProjectIds] = useState<Set<string>>(new Set());
+  /**
+   * Projetos onde o acesso vem SÓ do vínculo por atividade — sem ser membro,
+   * dono, líder ou gestor. Nesses, as telas mostram apenas as atividades da
+   * pessoa, e o Dashboard precisa contar o mesmo escopo.
+   */
+  const [projetosSoPorAtividade, setProjetosSoPorAtividade] = useState<Set<string>>(new Set());
   const [membershipsLoading, setMembershipsLoading] = useState(true);
   const lastRefreshRef = useRef(0);
 
@@ -80,15 +86,30 @@ export const useProjectAccess = () => {
           const vivos = new Set<string>((projectsRes.data || []).map((p: any) => p.id));
 
           const ids = new Set<string>();
+          /**
+           * Projetos onde o acesso vem SÓ do vínculo por atividade.
+           *
+           * O hook já distinguia isso internamente — só não devolvia. E a falta
+           * aparecia no Dashboard: quem participa de 7 atividades em projetos
+           * que somam 145 via os KPIs contarem as 145, incluindo atrasadas que
+           * não consegue abrir. Medido em 25/08: 13 pessoas nessa situação.
+           *
+           * Membro, dono, líder e gestor NÃO entram aqui: eles enxergam o
+           * projeto inteiro nas telas, e o painel deve concordar.
+           */
+          const amplos = new Set<string>();
           (membersRes.data || []).forEach((m: any) => {
             const status = (m.invitation_status || "accepted").toLowerCase();
-            if (status !== "declined" && vivos.has(m.project_id)) ids.add(m.project_id);
+            if (status !== "declined" && vivos.has(m.project_id)) {
+              ids.add(m.project_id);
+              amplos.add(m.project_id);
+            }
           });
 
           if (candidates.length > 0) {
             (projectsRes.data || []).forEach((p: any) => {
               const ownerMatch = matchesIdentity(p.owner, candidates);
-              if (ownerMatch) ids.add(p.id);
+              if (ownerMatch) { ids.add(p.id); amplos.add(p.id); }
             });
 
             (activitiesRes.data || []).forEach((a: any) => {
@@ -191,6 +212,8 @@ export const useProjectAccess = () => {
   return {
     filterProjects,
     accessibleProjectIds: memberProjectIds,
+    /** Ver o estado homônimo — o Dashboard usa para recortar os KPIs. */
+    projetosSoPorAtividade,
     isAdmin,
     isGestor,
     canManage,
