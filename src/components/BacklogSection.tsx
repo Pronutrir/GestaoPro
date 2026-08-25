@@ -466,8 +466,41 @@ export const BacklogSection = ({
       .eq("is_trashed", true);
   };
 
+  /**
+   * SUCESSO SEM ESCRITA NAO E SUCESSO.
+   *
+   * Estes quatro caminhos gravavam sem olhar o retorno: a RLS recusava, o
+   *  vinha preenchido e a tela anunciava "restaurada!" do mesmo jeito.
+   * Um UPDATE/DELETE que nao casa nenhuma linha tambem nao e erro no
+   * PostgREST, entao ler so o  nao basta -- por isso .
+   */
+  /**
+   * SUCESSO SEM ESCRITA NÃO É SUCESSO.
+   *
+   * Os quatro caminhos da lixeira gravavam sem olhar o retorno: a RLS recusava,
+   * o `error` vinha preenchido, e a tela anunciava "excluída permanentemente!"
+   * do mesmo jeito. `handlePermanentDelete` e `handleEmptyTrash` sequer
+   * checavam permissão — qualquer um que enxergasse a lixeira via o botão.
+   *
+   * Ler só o `error` não basta: no PostgREST, um UPDATE/DELETE que não casa
+   * nenhuma linha volta SEM erro. Por isso `count: "exact"` — zero linha
+   * afetada é uma recusa silenciosa da RLS, e precisa aparecer como recusa.
+   *
+   * Ver a memória do projeto: "erro do banco chega como silêncio".
+   */
   const handleRestore = async (activityId: string) => {
-    await (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any) as any).eq("id", activityId);
+    const { error, count } = await (supabase
+      .from("activities")
+      .update({ is_trashed: false, trashed_at: null } as never, { count: "exact" }))
+      .eq("id", activityId);
+    if (error || !count) {
+      toast({
+        title: "Não foi possível restaurar",
+        description: error?.message || "Você não tem permissão para restaurar esta atividade.",
+        variant: "destructive",
+      });
+      return;
+    }
     await restaurarFaseDe(activityId);
     toast({ title: "Atividade restaurada!" });
     fetchTrashedActivities();
@@ -475,9 +508,29 @@ export const BacklogSection = ({
   };
   const handlePermanentDelete = async () => {
     if (!permanentDeleteId) return;
-    await supabase.from("activities").delete().eq("id", permanentDeleteId);
-    toast({ title: "Atividade excluída permanentemente!" });
+    if (!isAdmin) {
+      toast({
+        title: "Sem permissão",
+        description: "Só quem gerencia o projeto exclui definitivamente.",
+        variant: "destructive",
+      });
+      setPermanentDeleteId(null);
+      return;
+    }
+    const { error, count } = await (supabase
+      .from("activities")
+      .delete({ count: "exact" }) as any)
+      .eq("id", permanentDeleteId);
     setPermanentDeleteId(null);
+    if (error || !count) {
+      toast({
+        title: "Não foi possível excluir",
+        description: error?.message || "O banco recusou a exclusão desta atividade.",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Atividade excluída permanentemente!" });
     fetchTrashedActivities();
   };
   const handleRestoreAll = async () => {
@@ -490,7 +543,19 @@ export const BacklogSection = ({
     // As fases das tarefas restauradas voltam junto — mesma razão de
     // `restaurarFaseDe`, aplicada ao lote inteiro de uma vez.
     const fases = [...new Set(trashedActivities.map((a) => a.phase_id).filter(Boolean))] as string[];
-    await (supabase.from("activities").update({ is_trashed: false, trashed_at: null } as any).eq("project_id", projectId) as any).eq("is_trashed", true);
+    const { error: erroRestaurar, count } = await (supabase
+      .from("activities")
+      .update({ is_trashed: false, trashed_at: null } as any, { count: "exact" })
+      .eq("project_id", projectId) as any)
+      .eq("is_trashed", true);
+    if (erroRestaurar || !count) {
+      toast({
+        title: "Não foi possível restaurar",
+        description: erroRestaurar?.message || "Você não tem permissão para restaurar estas atividades.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (fases.length > 0) {
       await mutateInChunks(fases, (batch) =>
         supabase
@@ -505,6 +570,14 @@ export const BacklogSection = ({
     onDataChanged();
   };
   const handleEmptyTrash = async () => {
+    if (!isAdmin) {
+      toast({
+        title: "Sem permissão",
+        description: "Só quem gerencia o projeto esvazia a lixeira.",
+        variant: "destructive",
+      });
+      return;
+    }
     const ok = await appConfirm({
       title: "Esvaziar lixeira",
       description: `Excluir PERMANENTEMENTE todas as ${trashedActivities.length} atividades? Esta ação é irreversível.`,
@@ -512,7 +585,19 @@ export const BacklogSection = ({
       destructive: true,
     });
     if (!ok) return;
-    await (supabase.from("activities").delete().eq("project_id", projectId) as any).eq("is_trashed", true);
+    const { error, count } = await (supabase
+      .from("activities")
+      .delete({ count: "exact" })
+      .eq("project_id", projectId) as any)
+      .eq("is_trashed", true);
+    if (error || !count) {
+      toast({
+        title: "Não foi possível esvaziar",
+        description: error?.message || "O banco recusou a exclusão destas atividades.",
+        variant: "destructive",
+      });
+      return;
+    }
     toast({ title: "Lixeira esvaziada!" });
     fetchTrashedActivities();
   };
