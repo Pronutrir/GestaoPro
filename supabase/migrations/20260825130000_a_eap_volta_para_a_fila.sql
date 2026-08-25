@@ -45,6 +45,10 @@
 --
 -- Rodar NA VM: PGPASSWORD=... ./scripts/apply-a-eap-volta-para-a-fila.sh
 
+-- Guard: o UPDATE muta activities (686 itens). Trigger de projeto concluido +
+-- rollup da leva 8 (UPDATE de workflow_stage_id). Religado apos.
+SET session_replication_role = replica;
+
 WITH fila AS (
   -- Uma fila por projeto. `DISTINCT ON` com ordem estavel: se houver mais de
   -- uma coluna de backlog (nao deveria), vence a de menor display_order.
@@ -63,6 +67,9 @@ UPDATE public.activities a
    AND a.status = 'pending'
    AND a.wbs_code IS NOT NULL
    AND a.wbs_code ~ '^[0-9]+(\.[0-9]+)*$';
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 NOTIFY pgrst, 'reload schema';
 

@@ -88,6 +88,11 @@ $$;
 -- da 20260824120000, que o script executa em seguida), o UPDATE so encontra
 -- destino nos projetos que ja a tem -- e e por isso que o script roda as duas
 -- na ordem certa.
+--
+-- Guard: o UPDATE muta activities. Trigger de projeto concluido + rollup da
+-- leva 8 (UPDATE de workflow_stage_id). Religado apos.
+SET session_replication_role = replica;
+
 WITH fila AS (
   SELECT DISTINCT ON (project_id) project_id, id
     FROM public.workflow_stages
@@ -103,6 +108,9 @@ UPDATE public.activities a
    AND lower(coalesce(atual.categoria::text, '')) = 'a_iniciar'
    AND a.status = 'pending'
    AND a.wbs_code ~ '^[0-9]+(\.[0-9]+)*$';
+
+-- Religa os triggers de negocio.
+SET session_replication_role = origin;
 
 NOTIFY pgrst, 'reload schema';
 
