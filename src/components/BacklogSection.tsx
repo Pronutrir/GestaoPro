@@ -1028,10 +1028,43 @@ export const BacklogSection = ({
      * IGNORA a própria coluna — ver `isGrouper` em activityProgress. Mover a
      * caixa não move o conteúdo, e o número não mente.
      */
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) {
+    const idsBrutos = Array.from(selectedIds);
+    if (idsBrutos.length === 0) {
       setIsMoving(false);
       toast({ title: "Nenhuma tarefa selecionada", variant: "destructive" });
+      return;
+    }
+
+    /**
+     * PERMISSÃO ANTES DE TENTAR.
+     *
+     * Relato de 25/08: "fiz isso no backlog e permitiu, porém não foi para o
+     * kanban". Permitiu na tela e a RLS recusou no banco — e o PostgREST não
+     * chama isso de erro: um UPDATE que não casa linha nenhuma volta com
+     * sucesso e zero linhas. O `if (!error)` passava, e a tela anunciava um
+     * movimento que não aconteceu.
+     *
+     * O Kanban já barrava (`canMutateActivity`); aqui o gesto ia direto para o
+     * banco. Duas telas, o mesmo gesto, comportamentos diferentes.
+     *
+     * MOVE O QUE PODE e nomeia o resto: recusar as cinco por causa de duas
+     * obrigaria a refazer a seleção para conseguir mover as próprias.
+     */
+    const semPermissao = ehMinha
+      ? idsBrutos.filter((id) => {
+          const a = activities.find((x) => x.id === id);
+          return a ? !ehMinha(a) : false;
+        })
+      : [];
+    const ids = idsBrutos.filter((id) => !semPermissao.includes(id));
+
+    if (ids.length === 0) {
+      setIsMoving(false);
+      toast({
+        title: "Você não pode mover essas tarefas",
+        description: "Só é possível mover as atividades em que você é responsável ou participante.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -1152,6 +1185,37 @@ export const BacklogSection = ({
      * gravado: quem conclui são as tarefas.
      */
     const subiram: string[] = [];
+    /**
+     * SUCESSO SEM ESCRITA NÃO É SUCESSO.
+     *
+     * Um UPDATE recusado pela RLS não vem como erro: o PostgREST devolve
+     * sucesso com ZERO linhas afetadas, e o `!error` acima passa. Foi assim
+     * que a tela anunciou um movimento que o banco recusou.
+     *
+     * O gate de permissão acima cobre o caso conhecido. Esta checagem cobre os
+     * que ele não previr — política nova, papel alterado no meio da sessão,
+     * qualquer recusa que a tela não anteveja. Relê as linhas e confere se
+     * chegaram ao destino; se nenhuma chegou, diz a verdade em vez de comemorar.
+     */
+    if (!error && !errorCaixas && ids.length > 0) {
+      const { data: conferencia } = await supabase
+        .from("activities")
+        .select("id")
+        .in("id", ids.slice(0, 50))
+        .eq("workflow_stage_id", targetStageId);
+      if (Array.isArray(conferencia) && conferencia.length === 0) {
+        setIsMoving(false);
+        setMoveDialogOpen(false);
+        toast({
+          title: "Nada foi movido",
+          description: "O banco recusou a operação. Você provavelmente não tem permissão sobre essas atividades.",
+          variant: "destructive",
+        });
+        onDataChanged();
+        return;
+      }
+    }
+
     if (!error && !errorCaixas) {
       const movidos = new Set(ids);
       const canceladaIds = new Set(
@@ -1224,6 +1288,11 @@ export const BacklogSection = ({
         // "Concluída" e ver o agrupador sem o status parece falha da operação.
         caixas.length > 0 && ehFinal
           ? `${caixas.length} fase(s)/entrega(s) mudaram de coluna; a conclusão é das tarefas de dentro.`
+          : null,
+        // O que ficou de fora por permissão: silenciar seria o defeito de
+        // antes — a tela anunciando um movimento que não aconteceu.
+        semPermissao.length > 0
+          ? `${semPermissao.length} não ${semPermissao.length === 1 ? "foi" : "foram"}: você não é responsável nem participante.`
           : null,
       ].filter(Boolean).join(" ") || undefined,
     });
