@@ -1418,13 +1418,86 @@ export default function ProjectDetailsPage() {
   };
 
   const backlogFilteredActivities = useMemo(
-    () =>
-      activities.filter((a: any) => {
-        if (listSearch && !a.title?.toLowerCase().includes(listSearch.toLowerCase())) return false;
+    () => {
+      const passa = (a: any) => {
+        /**
+         * A BUSCA OLHA O CÓDIGO EAP TAMBÉM.
+         *
+         * Era só o título. Numa EAP de centenas de linhas, o código é o
+         * identificador mais direto que existe — quem procura "1.2.2" sabe
+         * exatamente o que quer, e digitava para não achar nada.
+         */
+        if (listSearch) {
+          const q = listSearch.toLowerCase();
+          const alvo = `${a.title ?? ""} ${a.wbs_code ?? ""}`.toLowerCase();
+          if (!alvo.includes(q)) return false;
+        }
         if (listStatusFilter !== "all" && a.status !== listStatusFilter) return false;
         if (listPriorityFilter !== "all" && a.priority !== listPriorityFilter) return false;
         return true;
-      }),
+      };
+
+      const vivas = activities as any[];
+      const aprovados = vivas.filter(passa);
+      // Nada filtrado: devolve tudo, sem pagar o custo de montar os mapas.
+      if (aprovados.length === vivas.length) return vivas;
+
+      /**
+       * O FILTRO PRESERVA A CADEIA — ANCESTRAIS E DESCENDENTES.
+       *
+       * Era um `filter` seco: quem não passava saía, e com ele saía o galho
+       * inteiro. Foi o relato de "1.2.1.9 é um pacote e dentro dele há uma
+       * atividade, porém não aparece" — o pacote passava no filtro, a
+       * atividade dentro dele não, e a lista mostrava um agrupador vazio.
+       *
+       * O filtro de prontidão (em BacklogSection) já fazia isso pelos
+       * ancestrais. Aqui faltavam os dois lados:
+       *
+       *   ANCESTRAIS — a atividade que casa com a busca precisa do pai para
+       *   ser desenhada; sem ele vira órfã e some, embora tenha passado.
+       *
+       *   DESCENDENTES — um agrupador que casa com a busca é a caixa, não o
+       *   conteúdo: trazer "1.2.1.9" sem o que está dentro exibe uma caixa
+       *   fechada e vazia, que é pior que não achar nada.
+       */
+      const porId = new Map(vivas.map((a) => [a.id, a]));
+      const filhosDe = new Map<string, any[]>();
+      for (const a of vivas) {
+        if (!a.parent_id) continue;
+        const arr = filhosDe.get(a.parent_id) || [];
+        arr.push(a);
+        filhosDe.set(a.parent_id, arr);
+      }
+
+      const manter = new Set<string>(aprovados.map((a) => a.id));
+
+      // Sobe: cada aprovado arrasta seus ancestrais.
+      for (const a of aprovados) {
+        let atual = a;
+        const visto = new Set<string>([a.id]);
+        while (atual?.parent_id && !visto.has(atual.parent_id)) {
+          visto.add(atual.parent_id);
+          manter.add(atual.parent_id);
+          atual = porId.get(atual.parent_id);
+        }
+      }
+
+      // Desce: cada aprovado arrasta o que está dentro dele. Fila em vez de
+      // recursão — EAP profunda não deve estourar a pilha.
+      const fila = [...aprovados.map((a) => a.id)];
+      const jaVisto = new Set<string>(fila);
+      while (fila.length > 0) {
+        const id = fila.pop() as string;
+        for (const f of filhosDe.get(id) || []) {
+          if (jaVisto.has(f.id)) continue;
+          jaVisto.add(f.id);
+          manter.add(f.id);
+          fila.push(f.id);
+        }
+      }
+
+      return vivas.filter((a) => manter.has(a.id));
+    },
     [activities, listSearch, listStatusFilter, listPriorityFilter]
   );
 
