@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PersonCombobox } from "@/components/PersonCombobox";
 import {
   CheckCircle2, Circle, Trash2, Inbox, ArrowRight, RotateCcw,
-  ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen, CircleDashed,
+  ChevronDown, ChevronUp, ChevronRight, Plus, Layers, FolderOpen, CircleDashed, UserCheck,
   ChevronsUpDown, ChevronsDownUp, Diamond, EyeOff,
   Rows3, MoreHorizontal, Pencil, Package, IndentIncrease, SlidersHorizontal, Search,
   User, Flag, Calendar as CalendarIcon, Link2, X, Network,
@@ -113,6 +113,14 @@ interface BacklogSectionProps {
    *  tooltip em vez de sumir — some sem explicação vira "não consigo excluir". */
   deleteBlockedReason?: string;
   hasActiveFilters?: boolean;
+  /**
+   * A atividade é da pessoa (responsável ou participante)?
+   *
+   * `undefined` quando ela edita tudo — aí não há distinção a fazer, e nem o
+   * filtro nem a marca aparecem. Vem da página, que é onde vivem as
+   * identidades (nome, e-mail, id) para casar com o texto livre dos campos.
+   */
+  ehMinha?: (a: Activity) => boolean;
   /** Filtros que viviam na barra da página e passaram para o painel "Filtros".
    *  Ficam LÁ porque recortam `activities` antes de chegar aqui; o painel é só
    *  onde se mexe neles, junto dos demais. */
@@ -136,7 +144,7 @@ interface BacklogSectionProps {
 export const BacklogSection = ({
   projectId, activities, phases,
   onEditActivity, onDeleteActivity, onToggleActivity,
-  onDataChanged, isAdmin = false, deleteBlockedReason, hasActiveFilters,
+  onDataChanged, isAdmin = false, deleteBlockedReason, hasActiveFilters, ehMinha,
   statusFilter = "all", onStatusFilterChange,
   priorityFilter = "all", onPriorityFilterChange,
   search = "", onSearchChange, acoes,
@@ -163,6 +171,18 @@ export const BacklogSection = ({
    * ver só o que ainda não começou.
    */
   const [mostrarTudo, setMostrarTudo] = useState(true);
+  /**
+   * FILTRO "MINHAS" — mesmo padrão do `onlyMine` no Kanban.
+   *
+   * Quem edita só as suas via 166 atividades sem saber quais 3 podia tocar.
+   * O interruptor recorta para o que ela edita; desligado, a marca na linha
+   * continua distinguindo. Só existe quando `ehMinha` vem — para quem edita
+   * tudo a distinção não faz sentido.
+   *
+   * Começa DESLIGADO: abrir já filtrado esconderia o projeto sem avisar, que
+   * é o mesmo erro do recorte silencioso que corrigimos em 25/08.
+   */
+  const [soMinhas, setSoMinhas] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [targetStageId, setTargetStageId] = useState<string>("");
@@ -585,7 +605,27 @@ export const BacklogSection = ({
 
   const backlogActs = (() => {
     const semLixeira = activities.filter((a) => !a.is_trashed);
-    const vivas = mostrarTudo ? semLixeira : soAFila(semLixeira);
+    let vivas = mostrarTudo ? semLixeira : soAFila(semLixeira);
+
+    /* FILTRO "MINHAS" — preserva os ancestrais, como todos os outros filtros
+       desta tela. Sem isso a atividade que casa vira órfã e some, embora tenha
+       passado: a lista é desenhada por fase, e sem o pai não há onde pendurar. */
+    if (soMinhas && ehMinha) {
+      const minhas = vivas.filter(ehMinha);
+      const porId = new Map(vivas.map((a) => [a.id, a]));
+      const manter = new Set(minhas.map((a) => a.id));
+      for (const a of minhas) {
+        let atual: Activity | undefined = a;
+        const visto = new Set<string>([a.id]);
+        while (atual?.parent_id && !visto.has(atual.parent_id)) {
+          visto.add(atual.parent_id);
+          manter.add(atual.parent_id);
+          atual = porId.get(atual.parent_id);
+        }
+      }
+      vivas = vivas.filter((a) => manter.has(a.id));
+    }
+
     if (prontidaoFilter === "all") return vivas;
 
     // Quem tem filhos não é avaliado (horas e datas são rollup), mas precisa
@@ -1749,6 +1789,14 @@ export const BacklogSection = ({
           // a linha aperta sem ficar apertada — cabem ~15% mais tarefas na tela.
           className={`grid items-center gap-2 border-b px-3 py-1.5 hover:bg-muted/40 transition-colors cursor-pointer group ${
             isSelected ? "bg-primary/5" : ""
+          } ${
+            /* MARCA DO QUE É SEU — uma barra fina na borda esquerda, só para
+               quem edita um subconjunto. Sem cor de alarme e sem ocupar
+               coluna: a linha já é disputada, e a informação aqui é "isto é
+               seu", não "isto está errado".
+               Só com o filtro DESLIGADO: ligado, todas as linhas seriam suas e
+               a barra viraria enfeite em todas. */
+            !soMinhas && ehMinha?.(activity) ? "border-l-2 border-l-primary" : ""
           }`}
           // O recuo de profundidade NÃO vai aqui: padding na linha encolhe a
           // área do grid e empurra TODAS as colunas para a direita, tanto mais
@@ -3024,6 +3072,25 @@ export const BacklogSection = ({
                 exibição, não junto de "Nova Atividade": aquele grupo vem da
                 página e trata do item comum; este é estrutura da EAP.
                 Só no modo Fase — nas outras raias não há fase a criar. */}
+            {/* SÓ AS MINHAS — mesmo gesto do `onlyMine` no Kanban. Aparece só
+                para quem edita um subconjunto: quem edita tudo não tem o que
+                distinguir. */}
+            {ehMinha && (
+              <Button
+                type="button"
+                variant={soMinhas ? "default" : "outline"}
+                size="sm"
+                className="h-7 gap-1.5 text-[13px]"
+                onClick={() => setSoMinhas((v) => !v)}
+                aria-pressed={soMinhas}
+                title={soMinhas
+                  ? "Mostrando só as atividades que você pode editar"
+                  : "Ver só as atividades em que você é responsável ou participante"}
+              >
+                <UserCheck className="w-3.5 h-3.5" /> Minhas
+              </Button>
+            )}
+
             {groupBy === "phase" && isAdmin && (
               <Button
                 type="button"

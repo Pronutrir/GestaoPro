@@ -2099,6 +2099,37 @@ export default function ProjectDetailsPage() {
                 onToggleActivity={handleToggleActivity}
                 onDataChanged={fetchProjectData}
                 isAdmin={canDelete}
+                /**
+                 * QUAL ATIVIDADE É DELA — para o filtro "minhas" e a marca na
+                 * linha.
+                 *
+                 * Quem é da equipe com "Editar apenas as minhas" vê o projeto
+                 * inteiro e edita 3 de 166 — sem nada dizendo QUAIS 3. Ela
+                 * descobria tentando.
+                 *
+                 * Vem da página porque só aqui existem as identidades da
+                 * pessoa (nome, e-mail, id): os campos são texto livre, e a
+                 * mesma pessoa aparece em formas diferentes conforme quem
+                 * digitou.
+                 *
+                 * `undefined` para quem edita tudo — aí a distinção não existe
+                 * e o filtro nem aparece.
+                 */
+                ehMinha={
+                  canEdit || canMove || isRealAdmin
+                    ? undefined
+                    : (a: { assigned_to?: string | null; participants?: string[] | null }) => {
+                        const eu = buildUserCandidates([
+                          profile?.full_name,
+                          profile?.email,
+                          currentUser?.email,
+                          profile?.id,
+                          currentUser?.id,
+                        ]);
+                        return matchesIdentity(a.assigned_to, eu)
+                          || (Array.isArray(a.participants) && anyMatchesIdentity(a.participants, eu));
+                      }
+                }
                 statusFilter={listStatusFilter}
                 onStatusFilterChange={setListStatusFilter}
                 priorityFilter={listPriorityFilter}
