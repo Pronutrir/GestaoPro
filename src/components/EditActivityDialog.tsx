@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DateChip } from "@/components/DateChip";
 import { PersonCombobox } from "@/components/PersonCombobox";
+import { SelecionarParticipantes } from "@/components/SelecionarParticipantes";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
@@ -516,6 +517,19 @@ export const EditActivityDialog = ({
   const [members, setMembers] = useState<PersonOption[]>([]);
   const memberAvatarMap = useMemo(() => buildAvatarLookupMap(members), [members]);
   const [allProfiles, setAllProfiles] = useState<PersonOption[]>([]);
+  /** O painel de inclusão está aberto? Ver `SelecionarParticipantes`. */
+  const [painelParticipantes, setPainelParticipantes] = useState(false);
+  /**
+   * Equipe do agrupador pai, para o atalho de herdar.
+   *
+   * Medido em 25/08/2026: dos 10 pacotes cujos filhos têm participantes, NOVE
+   * têm exatamente a mesma equipe em todos eles — as mesmas pessoas, digitadas
+   * uma a uma em cada filho. O maior grupo tem 16 filhos.
+   *
+   * Vazio quando não há pai, o pai não tem equipe, ou a busca falha: a faixa
+   * some e o painel funciona igual. É atalho, não dependência.
+   */
+  const [equipeDoPai, setEquipeDoPai] = useState<{ nomes: string[]; rotulo?: string }>({ nomes: [] });
   const [workflowStages, setWorkflowStages] = useState<{ id: string; title: string; color: string; display_order: number; is_final: boolean; is_visible?: boolean }[]>([]);
   const [currentStageId, setCurrentStageId] = useState("");
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false);
@@ -716,6 +730,30 @@ export const EditActivityDialog = ({
     supabase.from("profiles").select("id, full_name, sector, role_title, email, avatar_url").eq("is_active", true).then(({ data }) => {
       if (data) setAllProfiles(normalizePersonOptions(data));
     });
+
+    /* A EQUIPE DO PAI, para o atalho de herdar no painel de participantes.
+       Falha em silêncio de propósito: sem ela a faixa some e o painel segue
+       funcionando — é atalho, não dependência. */
+    const paiId = (createMode ? draftActivity : activity)?.parent_id
+      ?? (activity as { parent_id?: string | null } | null)?.parent_id
+      ?? null;
+    if (paiId) {
+      supabase
+        .from("activities")
+        .select("title, wbs_code, participants")
+        .eq("id", paiId)
+        .maybeSingle()
+        .then(({ data }) => {
+          const p = data as { title?: string; wbs_code?: string | null; participants?: string[] | null } | null;
+          const nomes = Array.isArray(p?.participants) ? p!.participants!.filter(Boolean) : [];
+          setEquipeDoPai({
+            nomes,
+            rotulo: p ? [p.wbs_code, p.title].filter(Boolean).join(" ") : undefined,
+          });
+        }, () => setEquipeDoPai({ nomes: [] }));
+    } else {
+      setEquipeDoPai({ nomes: [] });
+    }
 
     // Resolve creator's full name from email
     const act = createMode ? draftActivity : activity;
@@ -2779,22 +2817,40 @@ export const EditActivityDialog = ({
                   <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <Users className="w-4 h-4 text-primary" /> Equipe do Projeto
                   </Label>
+                  {/* UM PAINEL, não uma linha por pessoa.
+                      Antes cada clique criava uma linha VAZIA com um seletor
+                      dentro: duas pessoas, dois cliques, duas buscas. O painel
+                      abre uma vez e inclui quantas forem. */}
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     className="h-8 gap-1"
-                    onClick={() => {
-                      if (formData.participants.includes("")) return;
-                      setFormData({
-                        ...formData,
-                        participants: [...formData.participants, ""],
-                      });
-                    }}
+                    onClick={() => setPainelParticipantes((v) => !v)}
                   >
-                    <Plus className="w-3.5 h-3.5" /> Incluir participante
+                    <Plus className="w-3.5 h-3.5" />
+                    {painelParticipantes ? "Fechar" : "Incluir participantes"}
                   </Button>
                 </div>
+
+                {painelParticipantes && (
+                  <SelecionarParticipantes
+                    pessoas={allProfiles}
+                    jaIncluidos={formData.participants.filter(Boolean)}
+                    /* A equipe do agrupador pai — 9 de 10 pacotes da base têm a
+                       mesma equipe em todos os filhos, e ela era digitada uma a
+                       uma em cada um. */
+                    equipeDoPai={equipeDoPai.nomes}
+                    rotuloDoPai={equipeDoPai.rotulo}
+                    onCancelar={() => setPainelParticipantes(false)}
+                    onIncluir={(nomes) => {
+                      const atuais = formData.participants.filter(Boolean);
+                      const novos = nomes.filter((n) => !atuais.includes(n));
+                      setFormData({ ...formData, participants: [...atuais, ...novos] });
+                      setPainelParticipantes(false);
+                    }}
+                  />
+                )}
 
                 <div className="rounded-md border border-border overflow-hidden">
                   <div className="grid grid-cols-[1fr_36px] items-center bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
