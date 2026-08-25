@@ -649,8 +649,36 @@ export function SortableColumn({
     const allChildren = childrenByParent.get(activity.id) || [];
     const inlineChildren = allChildren.filter((child) => stageActivityIds.has(child.id));
     const externalChildren = allChildren.filter((child) => !stageActivityIds.has(child.id));
-    const subActivityStatusSummary =
-      descendantSummaryById.get(activity.id) || { completed: 0, pending: 0 };
+    /**
+     * NO ESPELHO, O RESUMO É DO QUE ESTÁ AQUI — não do agrupador inteiro.
+     *
+     * Relato de 25/08: "movi as minhas atividades para o andamento, foram
+     * todas as que não estou participando". Não foram — o cartão do pai é um
+     * ESPELHO (`isMirrorParent`), e o dado no banco confirma que ele continua
+     * no Backlog. Mas ele trazia "24 subatividades · 100 abertas", o resumo do
+     * agrupador todo, e a leitura natural é que as 100 vieram junto.
+     *
+     * O espelho existe para dizer DE ONDE saiu o que está nesta coluna. Então
+     * o resumo dele conta o que está nesta coluna, e nada mais. O cartão real,
+     * na coluna onde de fato mora, continua somando tudo — lá o número é
+     * legítimo.
+     */
+    const ehEspelho =
+      !stageActivityIds.has(activity.id)
+      && inlineChildren.length > 0
+      && !(activity.workflow_stage_id
+           ? colunasDoQuadro(allStages).some((s) => s.id === activity.workflow_stage_id)
+           : false);
+    const subActivityStatusSummary = ehEspelho
+      ? inlineChildren.reduce(
+          (acc, c) => {
+            if ((c.status || "").toLowerCase() === "completed") acc.completed += 1;
+            else acc.pending += 1;
+            return acc;
+          },
+          { completed: 0, pending: 0 },
+        )
+      : descendantSummaryById.get(activity.id) || { completed: 0, pending: 0 };
     // Progresso do pai: uma fonte só (computeActivityProgress), passando os
     // filhos diretos. Antes aqui havia um cálculo próprio — média do % dos
     // descendentes — que dava número diferente do card no fluxo principal e
@@ -698,11 +726,9 @@ export function SortableColumn({
      * de ser visível — pai numa coluna oculta não tem cartão em tela nenhuma,
      * e aí o espelho volta a ser a única pista de onde o filho saiu.
      */
-    const estaNoQuadro = activity.workflow_stage_id
-      ? colunasDoQuadro(allStages).some((s) => s.id === activity.workflow_stage_id)
-      : false;
-    const isMirrorParent =
-      !stageActivityIds.has(activity.id) && inlineChildren.length > 0 && !estaNoQuadro;
+    // Mesma condição de `ehEspelho`, calculada acima — o resumo do cartão
+    // depende dela, e duplicar o teste é como as duas metades divergem.
+    const isMirrorParent = ehEspelho;
     const parentAct = activity.parent_id ? activities.find((p) => p.id === activity.parent_id) : null;
     const parentBreadcrumb = parentAct && parentAct.workflow_stage_id !== activity.workflow_stage_id
       ? { id: parentAct.id, title: parentAct.title, wbsCode: parentAct.wbs_code }
