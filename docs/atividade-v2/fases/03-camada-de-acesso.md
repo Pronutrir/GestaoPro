@@ -91,3 +91,44 @@ com a RLS.
 
 No fixture, perfil **Visualizador** esta com `canComment = false` (o `canWrite = false` de hoje
 anula tudo). Se a intencao for que ele comente, mude no fixture **antes** de escrever o codigo.
+
+## Acrescentado pela onda Projeto v2 — e é MAIOR do que parecia
+
+As **listas que atravessam projetos** — Pendências, Cronograma global, Visão Geral e qualquer
+relatório — precisam consumir esta mesma camada e o mesmo `escopoDeLeitura`.
+
+**Conferido em 26/08/2026: o furo existe, e a causa NÃO é a consulta.**
+
+`app/(dashboard)/pendencias/page.tsx:95` seleciona `activities` sem filtro, confiando na RLS.
+Isso seria correto — mas a policy de SELECT usa `can_view_project_work_v2`, que devolve `true`
+para quem tem **qualquer** atividade no projeto:
+
+```sql
+SELECT can_view_project_v2(...) OR tem_atividade_no_projeto_v2(...)
+```
+
+Ou seja: quem entra só por atribuição recebe **todas as atividades do projeto**, irmãs
+inclusive. Dentro do projeto isso ficava disfarçado porque `isActivityScoped` zera a escrita —
+a restrição é de edição, não de leitura.
+
+**Corrigir só nas consultas não resolve.** A porta é a policy; a tela é a maçaneta. E a
+próxima tela que listar entre projetos (a P11, biblioteca) nasceria com o mesmo furo.
+
+A correção é migration, e virou a fase **P00** do Projeto v2 —
+`docs/projeto-v2/fases/P00-visibilidade-entre-projetos.md`. A função que ela consome,
+`eh_descendente_de_atividade_do_ator`, **já está escrita** na migration `20260826120000`
+(fase 02), esperando a policy usá-la.
+
+Acrescente ao prompt desta fase:
+
+```
+Aponte TODA consulta que lista itens de mais de um projeto (Pendências,
+Cronograma global, Visão Geral, relatórios) e faça cada uma passar pela
+camada de acesso e pelo escopo de leitura. Escreva um teste por consulta:
+um usuário que no projeto só enxerga a própria atividade não pode ver as
+irmãs por nenhuma dessas telas.
+
+Mas saiba que o teste SÓ PASSA depois da P00 — enquanto a policy conceder o
+projeto inteiro, o filtro no cliente é cosmético: quem chamar a API direto
+continua vendo tudo.
+```
