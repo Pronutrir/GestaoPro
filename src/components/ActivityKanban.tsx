@@ -189,6 +189,7 @@ export const ActivityKanban = ({
   projectOwner,
   canEdit = false,
   canMove = false,
+  canEditOwn = true,
   projectLocked = false,
   isQualityProject = false,
   onOpenCreateTask,
@@ -1003,8 +1004,9 @@ export const ActivityKanban = ({
       profileId: profile?.id,
       canEdit,
       canMove,
+      canEditOwn,
     });
-  }, [isAdmin, canEdit, canMove, projectOwner, myId, user?.email, profile?.email, profile?.full_name, profile?.id]);
+  }, [isAdmin, canEdit, canMove, canEditOwn, projectOwner, myId, user?.email, profile?.email, profile?.full_name, profile?.id]);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const resizingRef = useRef<{ stageId: string; startX: number; startWidth: number } | null>(null);

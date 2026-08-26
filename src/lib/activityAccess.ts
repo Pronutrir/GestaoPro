@@ -63,6 +63,22 @@ export interface UsuarioParaAcesso {
   canEdit?: boolean;
   /** de `project_members.can_move`. */
   canMove?: boolean;
+  /**
+   * de `project_members.can_edit_own` — edita as atividades em que ATUA
+   * (responsável, participante ou criador).
+   *
+   * É a ÚNICA coluna que separa o papel "Editar apenas as minhas" (true) do
+   * "Visualizar e comentar" (false); as outras quatro são `false` nos dois.
+   * Escolher entre esses dois papéis na tela sempre gravou o valor certo — só
+   * que ninguém lia: nem o front, nem a RLS. Os dois papéis se comportavam
+   * igual, e "Visualizar e comentar" editava assim mesmo.
+   *
+   * `undefined` conta como `true`: é o comportamento que o sistema sempre teve,
+   * e a coluna nasceu com DEFAULT true justamente para não tirar acesso de
+   * ninguém na migration de 18/08. Quem não é membro da equipe chega aqui com
+   * `undefined` e seu acesso vem do vínculo, como antes.
+   */
+  canEditOwn?: boolean;
 }
 
 /**
@@ -93,13 +109,28 @@ export function podeMutarAtividade(
   ]);
   if (candidatos.length === 0 && !usuario.id) return false;
 
-  // 4a. Criador da atividade — comparação por id, que é FK de verdade aqui.
-  if (usuario.id && atividade.created_by && atividade.created_by === usuario.id) return true;
-
-  // 2. Líder ou gestor DESTE projeto.
+  // 2. Líder ou gestor DESTE projeto. ANTES da via do ator, de propósito:
+  //    quem lidera não depende de `can_edit_own`, que é permissão de MEMBRO.
   if (projeto && (matchesIdentity(projeto.owner, candidatos) || matchesIdentity(projeto.manager, candidatos))) {
     return true;
   }
+
+  /**
+   * 4. VIA DO ATOR — e é aqui, e só aqui, que `can_edit_own` manda.
+   *
+   * O papel "Visualizar e comentar" grava `can_edit_own = false` para dizer
+   * "não edita NEM as dela". Sem este teste, os quatro `false` das outras
+   * colunas caíam direto na via do ator e a pessoa editava assim mesmo — os
+   * papéis "Editar apenas as minhas" e "Visualizar e comentar" ficavam
+   * indistinguíveis, que era o defeito relatado.
+   *
+   * Não afeta quem tem `can_edit`/`can_move`: esses já retornaram `true` lá em
+   * cima, e a coluna nunca foi um teto sobre eles.
+   */
+  if (usuario.canEditOwn === false) return false;
+
+  // 4a. Criador da atividade — comparação por id, que é FK de verdade aqui.
+  if (usuario.id && atividade.created_by && atividade.created_by === usuario.id) return true;
 
   // 4b. Responsável OU participante — a RLS reconhece os dois.
   if (matchesIdentity(atividade.assigned_to, candidatos)) return true;
