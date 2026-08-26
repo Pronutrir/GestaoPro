@@ -214,3 +214,38 @@ implícitas — primeiro alvo)**, `activityProgress.ts:157-173,215-426`, `projec
 **Fase 08 (feed):** `ActivityRegistro.tsx:71-82,868-889`, `AuditLogPanel.tsx:76-78`
 
 **Bug isolado, pode ser corrigido a qualquer momento:** `useProjectAccess.ts:23,100-113,216`
+
+---
+
+## ATUALIZAÇÃO — 26/08/2026: dois achados corrigidos
+
+**1. As escritas implícitas de `hours` e `cost` — RESOLVIDO** (commit `5e05895`)
+
+Eram **dois** caminhos, não um: o `useEffect` que gravava ao abrir o diálogo, e o payload do
+salvar explícito (`hasSubActivities ? subCostTotal : ...`), que levava a soma junto de
+**qualquer** edição — trocar o título do pai bastava para encolher o total.
+
+Os dois foram fechados. Com filhas, as colunas viram `undefined` e não vão no request
+(o cliente serializa com `JSON.stringify`, conferido em `postgrest-js/dist/index.mjs:264`).
+
+A regra de **exibição** continua: pai com filhas mostra a soma. O que saiu foi a gravação.
+
+Guarda: `scripts/verificar-rollup-nao-persiste.cjs` (8 casos), que falha se o defeito voltar.
+
+> **O que isso muda para a fase 09:** o dano parou, mas a derivação correta ainda não existe.
+> O número exibido continua sendo do que o cliente carregou — certo para quem enxerga tudo,
+> parcial para quem enxerga uma fatia. A fase 09 segue necessária; deixou de ser urgente.
+
+**2. `ehAtividadeDaPessoa` era código morto — RESOLVIDO** (commit `84ca29c`)
+
+A página passou a consumi-la no lugar da closure inline. Junto veio uma correção de
+comportamento: `created_by` agora conta.
+
+Isso importava porque `ehMinha` é **gate de permissão** no mover em lote
+(`BacklogSection.tsx:1138`): o front recusava mover atividade que a própria pessoa criou,
+enquanto a RLS aceita (`is_activity_actor_v2` testa `created_by`). Front mais restritivo que
+o banco — a mesma classe de divergência, no sentido inverso.
+
+**Restam duas cópias** de "é minha": `isMineActivity` no Kanban (que resolve UUID→nome via
+`profilesMap`, o que a fonte única ainda não faz) e a via do ator dentro de
+`podeMutarAtividade`. Unificar é trabalho da **fase 03**, com o fixture de 108 casos.
