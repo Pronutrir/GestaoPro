@@ -432,3 +432,72 @@ export const PROGRESS_FLAG_COLORS: Record<number, string> = {
   75: "bg-violet-500",
   100: "bg-emerald-500",
 };
+
+/**
+ * O PROGRESSO DO PAI, PREFERINDO O NÚMERO DO SERVIDOR.
+ *
+ * ============================================================================
+ * POR QUE ISTO EXISTE, JÁ QUE `computeActivityProgress` "funciona"
+ *
+ * Ele funciona para quem enxerga o projeto inteiro. Para quem enxerga uma
+ * FATIA, não: a média é calculada sobre as filhas que a RLS deixou passar.
+ * Quem vê 1 de 8 filhas tem a barra do pai medindo aquela filha só — está
+ * certa por acidente, e o erro é invisível porque o número é plausível.
+ *
+ * `derived_progress` é derivado por trigger `SECURITY DEFINER` sobre TODAS as
+ * filhas, independente do que o ator enxerga. É o motivo da fase 09.
+ *
+ * A MESMA RÉGUA NOS DOIS LADOS. A migration 20260826190000 copiou para
+ * `derivar_do_pai()` os pesos exatos daqui: crédito parcial por posição de
+ * coluna, um nível, média simples, `Math.round`. Conferido contra o código
+ * real em 582 pais: **zero barra muda de valor**. Se algum dia divergir, o
+ * script `scripts/medicoes/conferir-progresso-servidor.cjs` acusa.
+ *
+ * O QUE NÃO VEM DO SERVIDOR: `paused`, `label`, `subs` e `divergente`. O banco
+ * não tem esses estados — "Pausada", "Em espera", "concluída com 3 em aberto"
+ * são leitura de tela. Por isso esta função não substitui a outra: ela roda a
+ * de sempre e TROCA SÓ O NÚMERO.
+ *
+ * SEM FALLBACK SILENCIOSO: `derived_progress` nulo num pai com filhas devolve
+ * `percent: null`. Cair no número do cliente seria voltar a medir a fatia,
+ * sem ninguém perceber — que é exatamente o defeito que a fase 09 corrige.
+ * ============================================================================
+ */
+export function progressoDoPai(
+  atividade: {
+    workflow_stage_id?: string | null;
+    last_progress_stage_id?: string | null;
+    is_milestone?: boolean | null;
+    derived_progress?: number | string | null;
+    derived_children?: number | null;
+  },
+  stages: ProgressStageLike[] | null | undefined,
+  subActivities?: SubActivityLike[] | null,
+  isGrouper?: boolean | null,
+): ActivityProgress {
+  const base = computeActivityProgress(
+    atividade.workflow_stage_id,
+    stages,
+    atividade.last_progress_stage_id,
+    subActivities,
+    atividade.is_milestone,
+    isGrouper,
+  );
+
+  const ehPai = (atividade.derived_children ?? 0) > 0;
+  if (!ehPai) return base;
+
+  // Pausada/em espera vence o número: é estado, não percentual, e o servidor
+  // não o representa. Mesma precedência que a função de origem já aplica.
+  if (base.paused) return base;
+
+  const derivado = atividade.derived_progress;
+  if (derivado === null || derivado === undefined) {
+    return { ...base, percent: null };
+  }
+
+  const n = typeof derivado === "number" ? derivado : Number(derivado);
+  if (!Number.isFinite(n)) return { ...base, percent: null };
+
+  return { ...base, percent: clampPercent(n) };
+}

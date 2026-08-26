@@ -88,6 +88,24 @@ export function avaliarProntidao(
 
   const faltando: RequisitoProntidao[] = [];
 
+  // ── O MARCO SÓ DEVE A DATA ───────────────────────────────────────────────
+  //
+  // Marco é ponto no tempo: não tem responsável, esforço, custo nem GUT — e
+  // "não tem" é diferente de "está vazio". Cobrar esses campos dele é cobrar o
+  // que ele não pode ter: a pendência nunca fecha, e o item fica para sempre na
+  // lista de incompletos poluindo a fila de quem usa o filtro para trabalhar.
+  //
+  // Medido em 26/08/2026: dos 53 marcos vivos, 42 estavam sem responsável e
+  // eram contados como incompletos por isso.
+  //
+  // Data ELE TEM, e é o campo dele — marco sem data é lacuna de verdade, então
+  // continua sendo cobrada (é também por isso que o chip "Sem data" vale para
+  // marco enquanto "Sem responsável" e "Sem prioridade" não valem).
+  if (tarefa.is_milestone) {
+    if (semTexto(tarefa.end_date)) faltando.push("prazo");
+    return { pronta: faltando.length === 0, faltando, avaliavel: true };
+  }
+
   if (semTexto(tarefa.assigned_to)) faltando.push("responsavel");
   if (semTexto(tarefa.end_date)) faltando.push("prazo");
 
@@ -98,10 +116,8 @@ export function avaliarProntidao(
     (!semTexto(tarefa.priority) && (tarefa.priority || "").toLowerCase() !== "pendente");
   if (!prioridadeDefinida) faltando.push("prioridade");
 
-  if (!tarefa.is_milestone) {
-    if (semNumero(tarefa.hours)) faltando.push("estimativa");
-    if (semTexto(tarefa.description)) faltando.push("descricao");
-  }
+  if (semNumero(tarefa.hours)) faltando.push("estimativa");
+  if (semTexto(tarefa.description)) faltando.push("descricao");
 
   return { pronta: faltando.length === 0, faltando, avaliavel: true };
 }

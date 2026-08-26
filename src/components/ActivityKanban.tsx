@@ -98,6 +98,7 @@ import { getBlockedDays, formatBlockedDays } from "@/lib/blockedTime";
 import { KANBAN_TOKENS } from "@/lib/kanbanTokens";
 import {
   computeActivityProgress,
+  progressoDoPai,
   type ActivityProgress,
   type SubActivityLike,
 } from "@/lib/activityProgress";
@@ -1736,40 +1737,61 @@ export const ActivityKanban = ({
     });
     const map = new Map<string, HoursStat>();
 
-    // Rollup recursivo: um nó com filhos agrega planejado/consumido de TODA a
-    // subárvore (fase → pacote → atividade), não só dos filhos diretos. Sem isso,
-    // as horas de um neto não sobem para a fase. Folhas usam as próprias horas.
-    const walk = (a: Activity, seen = new Set<string>()): HoursStat => {
-      if (map.has(a.id)) return map.get(a.id)!;
-      if (seen.has(a.id)) return { planned: 0, consumed: 0, hasSubs: false };
+    // ── PLANEJADO: vem do servidor. CONSUMIDO: continua aqui. ──────────────
+    //
+    // O planejado do pai era somado recursivamente NESTE arquivo, sobre a lista
+    // que chegou ao cliente. O problema nunca foi a aritmética: **o cliente não
+    // tem a árvore inteira**, só a fatia que a RLS deixou passar. Quem enxerga
+    // 1 de 8 filhas somava 1 e exibia como total do pai.
+    //
+    // Agora `derived_hours` responde — derivado por trigger SECURITY DEFINER
+    // sobre todas as filhas (migration 20260826130000), profundidade inclusa: o
+    // pai soma as filhas diretas e cada filha já carrega a própria subárvore.
+    //
+    // Conferido antes de trocar, em 581 pais reais: o número não muda para
+    // ninguém (docs/medicoes/antes-da-fase09-26-08-2026.md).
+    //
+    // SEM FALLBACK SILENCIOSO: `derived_hours` nulo num pai vira `planned:
+    // null`, e a tela mostra ausência. Voltar a somar aqui devolveria o mesmo
+    // número errado que a fase 09 veio corrigir — e sem ninguém perceber.
+    //
+    // O CONSUMIDO fica no cliente: o servidor não deriva "consumido", e não há
+    // coluna para ler. Ele soma a subárvore visível e carrega a mesma ressalva
+    // de sempre — por isso a recursão continua abaixo, só para ele.
+    const consumidoDaSubarvore = (a: Activity, seen = new Set<string>()): number => {
+      if (seen.has(a.id)) return 0;
       const nextSeen = new Set(seen);
       nextSeen.add(a.id);
-
       const kids = childrenMap.get(a.id) || [];
       if (kids.length > 0) {
-        let planned = 0;
-        let consumed = 0;
-        kids.forEach((c) => {
-          const sub = walk(c, nextSeen);
-          planned += sub.planned;
-          consumed += sub.consumed;
-        });
-        const stat: HoursStat = { planned, consumed, hasSubs: true };
-        map.set(a.id, stat);
-        return stat;
+        return kids.reduce((soma, c) => soma + consumidoDaSubarvore(c, nextSeen), 0);
       }
-
-      const ownH = toHoursNumber(a.hours);
-      const stat: HoursStat = {
-        planned: ownH,
-        consumed: a.status === "completed" ? ownH : 0,
-        hasSubs: false,
-      };
-      map.set(a.id, stat);
-      return stat;
+      return a.status === "completed" ? toHoursNumber(a.hours) : 0;
     };
 
-    activities.forEach((a) => walk(a));
+    activities.forEach((a) => {
+      const ehPai = (a.derived_children ?? 0) > 0 || (childrenMap.get(a.id) || []).length > 0;
+
+      if (!ehPai) {
+        // Folha: o valor é o dela. Marco não tem esforço.
+        const ownH = a.is_milestone ? 0 : toHoursNumber(a.hours);
+        map.set(a.id, {
+          planned: ownH,
+          consumed: a.status === "completed" ? ownH : 0,
+          hasSubs: false,
+        });
+        return;
+      }
+
+      const derivado = a.derived_hours;
+      map.set(a.id, {
+        planned:
+          derivado === null || derivado === undefined ? null : toHoursNumber(derivado),
+        consumed: consumidoDaSubarvore(a),
+        hasSubs: true,
+      });
+    });
+
     return map;
   }, [activities]);
 
@@ -3398,7 +3420,7 @@ export const ActivityKanban = ({
                       }}
                       isQualityProject={isQualityProject}
                       subActivityCount={subActivityCounts.get(activity.id) || 0}
-                      progress={computeActivityProgress(activity.workflow_stage_id, stages, activity.last_progress_stage_id, filhosPorPai.get(activity.id), activity.is_milestone, ehAgrupador(activity))}
+                      progress={progressoDoPai(activity, stages, filhosPorPai.get(activity.id), ehAgrupador(activity))}
                       cardFields={cardFields}
                       hoursStat={hoursStatsByActivity.get(activity.id)}
                       profilesMap={profilesMap}
@@ -3810,7 +3832,7 @@ export const ActivityKanban = ({
               onDelete={() => {}}
               onToggle={() => {}}
               hasStory={storyLinkedActivities.has(activeActivity.id)}
-              progress={computeActivityProgress(activeActivity.workflow_stage_id, stages, activeActivity.last_progress_stage_id, filhosPorPai.get(activeActivity.id), activeActivity.is_milestone, ehAgrupador(activeActivity))}
+              progress={progressoDoPai(activeActivity, stages, filhosPorPai.get(activeActivity.id), ehAgrupador(activeActivity))}
               cardFields={cardFields}
               profilesMap={profilesMap}
               profileAvatarMap={profileAvatarMap}

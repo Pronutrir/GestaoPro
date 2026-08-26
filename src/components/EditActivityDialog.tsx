@@ -2405,26 +2405,44 @@ export const EditActivityDialog = ({
   
                 </FieldBand>
   
-                {/* ---- FAIXA 2: QUEM E QUANDO (líder, prioridade, prazo) ---- */}
+                {/* ---- FAIXA 2: QUEM E QUANDO (responsável, prioridade, prazo) ---- */}
                 <FieldBand step={2} title="Quem e quando">
-                  {/* Líder — exibe TODOS os usuários cadastrados, opcional */}
-                  <PropertyRow iconClassName="text-primary" icon={<User className="w-3.5 h-3.5" />} label="Líder">
-                    <div className="w-full">
-                      <PersonCombobox
-                        people={allProfiles}
-                        value={allProfiles.find((m) => m.full_name === formData.assigned_to)?.id ?? null}
-                        placeholder="Sem líder"
-                        onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
-                        onClear={() => setFormData({ ...formData, assigned_to: "" })}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                  </PropertyRow>
+                  {/* RESPONSÁVEL, não "Líder".
+                      O campo sempre gravou `assigned_to`, e o vocabulário do
+                      produto chama isso de Responsável: quem responde pela
+                      entrega, no máximo um por atividade. "Líder" era um terceiro
+                      nome para a mesma coisa — e `lider_id` nunca existiu no
+                      banco (docs/atividade-v2/DIVERGENCIAS.md item 1).
+                      Quem executa junto são os Participantes, na aba própria. */}
+                  {/* Marco não tem responsável — ninguém "executa" um ponto no
+                      tempo. Mesma regra de horas, custo, GUT e código EAP. */}
+                  {!formData.is_milestone && (
+                    <PropertyRow iconClassName="text-primary" icon={<User className="w-3.5 h-3.5" />} label="Responsável">
+                      <div className="w-full">
+                        <PersonCombobox
+                          people={allProfiles}
+                          value={allProfiles.find((m) => m.full_name === formData.assigned_to)?.id ?? null}
+                          placeholder="Sem responsável"
+                          onSelect={(p) => setFormData({ ...formData, assigned_to: p.full_name })}
+                          onClear={() => setFormData({ ...formData, assigned_to: "" })}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </PropertyRow>
+                  )}
   
                   {/* Prioridade — método GUT.
                       Colapsa em meia coluna quando "Pendente" (chip discreto); ao
-                      definir G×U×T, expande para linha inteira com o badge completo. */}
-                  {(() => {
+                      definir G×U×T, expande para linha inteira com o badge completo.
+
+                      MARCO NÃO TEM GUT, e a ausência é diferente do vazio: num
+                      marco "sem prioridade" não é lacuna a preencher, é "não se
+                      aplica" — marco é ponto no tempo, não trabalho que se
+                      prioriza. Pelo mesmo motivo horas, custo e código EAP já
+                      somem acima. Mostrar o campo convidaria a preencher algo
+                      que nada lê, e ainda faria o marco aparecer no filtro
+                      "Sem prioridade" para sempre — pendência que nunca fecha. */}
+                  {!formData.is_milestone && (() => {
                     // Cor do ícone do rótulo = cor do nível GUT (dá vida à informação).
                     const gutLevel = gutLabel(gutScore(formData.gravity, formData.urgency, formData.tendency));
                     const gutIconColor: Record<GutLevel, string> = {
@@ -2929,7 +2947,7 @@ export const EditActivityDialog = ({
                               pessoas cresce e rolar até achar um nome não é
                               caminho. Ele busca por nome, setor E função, com o
                               trecho encontrado destacado — é o mesmo controle já
-                              usado no campo "Líder" logo acima, então o gesto é
+                              usado no campo "Responsável" logo acima, então o gesto é
                               o mesmo nos dois lugares.
 
                               O combobox trabalha com `id` e a lista guarda

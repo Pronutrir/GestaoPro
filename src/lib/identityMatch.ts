@@ -105,9 +105,67 @@ const candidatesShareTokens = (a: IdentityCandidate, b: IdentityCandidate, minOv
 };
 
 /**
+ * NOMES QUE PERTENCEM A MAIS DE UMA PESSOA — a permissão não os aceita.
+ *
+ * Medido em 26/08/2026: existem DOIS perfis ativos chamados "Williame Correia
+ * de Lima", ids diferentes, os dois ativos e os dois editando. Como `owner`,
+ * `manager`, `assigned_to` e `participants` guardam NOME, os dois casavam com
+ * as mesmas 450 atividades e com os mesmos 2 projetos — cada um recebendo o
+ * acesso do outro.
+ *
+ * A comparação aqui é tolerante de propósito (nome curto × nome longo), o que
+ * torna homônimo indistinguível por construção: nenhuma heurística de string
+ * separa duas pessoas com o mesmo nome. A única saída correta é **não
+ * conceder** e deixar a via do identificador decidir.
+ *
+ * Errar para "ninguém" é visível — a pessoa reclama que perdeu acesso. Errar
+ * para "os dois" é invisível, e é escalação de privilégio.
+ *
+ * Espelha `nome_e_ambiguo` na migration 20260826180000. Quem popula este
+ * conjunto é a página, a partir de `profiles` — o mesmo lugar de onde vêm as
+ * identidades.
+ */
+let nomesAmbiguos: Set<string> = new Set();
+
+/** Registra os nomes que pertencem a mais de um perfil. Idempotente. */
+export const definirNomesAmbiguos = (nomes: Array<string | null | undefined>): void => {
+  nomesAmbiguos = new Set(
+    nomes.map((n) => normalizeIdentity(n)).filter((n) => n.length > 0),
+  );
+};
+
+/** Os nomes ambíguos registrados — para a tela poder avisar. */
+export const obterNomesAmbiguos = (): string[] => Array.from(nomesAmbiguos);
+
+/**
+ * Deriva os nomes ambíguos de uma lista de perfis: os `full_name` que
+ * aparecem mais de uma vez. É a mesma pergunta que `nome_e_ambiguo` faz no
+ * banco, feita sobre a lista que a página já carregou.
+ */
+export const nomesRepetidosEm = (
+  perfis: Array<{ full_name?: string | null }>,
+): string[] => {
+  const contagem = new Map<string, number>();
+  for (const p of perfis) {
+    const n = normalizeIdentity(p.full_name);
+    if (!n) continue;
+    contagem.set(n, (contagem.get(n) ?? 0) + 1);
+  }
+  return Array.from(contagem.entries()).filter(([, q]) => q > 1).map(([n]) => n);
+};
+
+/** O texto é um nome que pertence a mais de uma pessoa? */
+export const ehNomeAmbiguo = (value: string | null | undefined): boolean => {
+  const n = normalizeIdentity(value);
+  return n.length > 0 && nomesAmbiguos.has(n);
+};
+
+/**
  * True when `value` plausibly identifies the same person as one of the
  * `candidates`. Comparison is case/diacritics-insensitive and tolerant to
  * short vs. long forms of the name.
+ *
+ * Devolve `false` para nome ambíguo, sempre — ver `definirNomesAmbiguos`.
  */
 export const matchesIdentity = (
   value: string | null | undefined,
@@ -115,6 +173,34 @@ export const matchesIdentity = (
 ): boolean => {
   const target = buildCandidate(value);
   if (!target || candidates.length === 0) return false;
+
+  // Nome de mais de uma pessoa não identifica ninguém. Antes de qualquer
+  // comparação: a tolerância abaixo casaria com os dois homônimos.
+  if (nomesAmbiguos.has(target.normalized)) return false;
+
+  /**
+   * E-MAIL É EXATO OU NÃO É NADA.
+   *
+   * O valor comparado é um e-mail (tem "@"), e e-mail identifica uma pessoa
+   * só — não existe homonímia em endereço. Mas a comparação tolerante abaixo
+   * é por TOKEN, e `williame_lima@hotmail.com` divide em
+   * ["williame", "lima", "hotmail"], que compartilha dois tokens com o nome
+   * "Williame Correia de Lima" — o do OUTRO perfil.
+   *
+   * Isto foi encontrado pelo próprio teste desta mudança: o e-mail de um
+   * homônimo casava com o outro, que é o mesmo furo por outra porta. Com dois
+   * endereços diferentes, a tolerância deixava de distinguir exatamente onde
+   * havia informação para distinguir.
+   *
+   * Então: e-mail casa por igualdade normalizada (com o endereço inteiro ou
+   * com a parte local registrada em `buildUserCandidates`) e para por aí.
+   */
+  if (target.normalized.includes("@")) {
+    const local = target.normalized.split("@")[0];
+    return candidates.some(
+      (c) => c.normalized === target.normalized || c.normalized === local,
+    );
+  }
 
   for (const candidate of candidates) {
     if (candidate.normalized === target.normalized) return true;

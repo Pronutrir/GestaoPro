@@ -868,7 +868,21 @@ function KanbanCardBase({
                       📖 {storyCount && storyCount > 1 ? `${storyCount} Histórias` : "História"}
                     </Badge>
                   )}
-                  {cardFields.hours && hoursStat && (hoursStat.planned > 0 || hoursStat.consumed > 0) ? (
+                  {/* HORAS — ausência é ausência, nunca o número antigo.
+                      `planned: null` num pai significa que o servidor ainda não
+                      derivou aquele nó. Cair no `activity.hours` do pai (o ramo
+                      final daqui) mostraria as horas PRÓPRIAS dele como se
+                      fossem o total da subárvore — silenciosamente. Por isso o
+                      pai sem derivação diz "—" e explica no title. */}
+                  {cardFields.hours && hoursStat && hoursStat.planned === null ? (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] px-1.5 py-0 text-muted-foreground"
+                      title="As horas das subatividades ainda não foram somadas pelo servidor."
+                    >
+                      —
+                    </Badge>
+                  ) : cardFields.hours && hoursStat && hoursStat.planned !== null && (hoursStat.planned > 0 || hoursStat.consumed > 0) ? (
                     <Badge
                       variant="secondary"
                       className={`text-[10px] px-1.5 py-0 ${
@@ -880,13 +894,13 @@ function KanbanCardBase({
                       }`}
                       title={
                         hoursStat.hasSubs
-                          ? "Consumido automático nas subatividades / planejado"
+                          ? "Consumido automático nas subatividades / planejado (somado no servidor)"
                           : "Consumido automático / planejado"
                       }
                     >
                       {formatHours(hoursStat.consumed) || "0h"}/{formatHours(hoursStat.planned) || "0h"}
                     </Badge>
-                  ) : cardFields.hours && toHoursNumber(activity.hours) > 0 ? (
+                  ) : cardFields.hours && !hoursStat && toHoursNumber(activity.hours) > 0 ? (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                       {formatHours(toHoursNumber(activity.hours))}
                     </Badge>

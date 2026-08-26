@@ -50,3 +50,56 @@ abrir, e um usuario restrito nao ve no feed nenhuma linha de atividade que ele n
 
 Uma fase com 30 filhas gera muito evento. O agrupamento por autor/minuto nao e enfeite -
 sem ele o feed vira ruido no primeiro projeto grande.
+
+---
+
+## ESTADO EM 26/08/2026 — o que subiu, e o que NÃO subiu
+
+### Subiu: o contador, sobre o que já existe
+
+O sino conta duas fontes reais, sem tabela nova:
+
+- `activity_comments` — a conversa da atividade
+- `audit_log` — o histórico de mudanças
+
+Com as três decisões que evitam o ruído: não conta o que a própria pessoa escreveu, devolve
+zero quando nunca houve visita, e marca a visita ao **sair**, não ao entrar. 11 verificações
+em `scripts/verificar-sino-do-feed.cjs`.
+
+Também subiu o item que era defeito: o histórico parou de mostrar `Etapa: <uuid> → <uuid>` e
+`Status: pending → completed` (commit `07bb759`).
+
+### NÃO subiu: o item 3 — o feed que junta pai e filhas
+
+**Isto não é um extra que ficou de fora.** Foi pedido textualmente na primeira conversa:
+
+> *"todo o histórico da atividade e as regras entrelaçadas entre a atividade principal e suas
+> subatividades"*
+
+E os canvas de mockup mostraram isso. Então fica como **pendência declarada**, não como algo
+que sumiu da lista.
+
+**O que falta, concretamente:** agregar no feed do pai os eventos das subatividades,
+prefixados com o código EAP da filha e clicáveis. Hoje o Registro lê só a própria atividade
+(`activityId`), e a agregação exigiria consultar a subárvore.
+
+**Por que pede uma tabela.** As duas fontes atuais não servem para agregar:
+
+- `audit_log` guarda `record_id` por linha — dá para consultar por lista de ids, mas a lista
+  cresce com a subárvore e esbarra no teto de ~3,7 KB da URL do proxy (usar `chunkedIn`);
+- não há um lugar único que responda "o que aconteceu nesta subárvore, em ordem de tempo",
+  com tipo de evento e autor já resolvidos.
+
+Uma tabela `activity_events` — que **não existe** (conferido: zero ocorrências em `src/` e nas
+210 migrations) — resolveria as duas coisas, e é o desenho que o prompt original pressupõe.
+
+**E a restrição que ela precisa respeitar:** o feed agregado é uma porta de leitura. Quem entra
+por atribuição não enxerga as irmãs, e o feed não pode ser o caminho lateral — nem como "alguém
+alterou algo". O filtro tem de ser no **banco**, pelo mesmo `escopoDeLeitura` da P00. É a mesma
+razão pela qual a `activity_breadcrumb` não carrega feed.
+
+### Ao anunciar
+
+Diga as duas metades: **"contador de conversa e histórico"** — que é verdade e funciona — e
+**"o feed que junta pai e filhas ainda não"**. Anunciar só a primeira deixaria a impressão de
+que o pedido foi atendido.

@@ -1,10 +1,10 @@
 'use client';
 import { useEffect, useMemo, useState, useCallback, Fragment, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { resolveEapKind, phaseIdFromSyntheticRow, isSyntheticPhaseRow, EAP_LABELS } from "@/lib/eapModel";
+import { resolveEapKind, eapCanGroup, phaseIdFromSyntheticRow, isSyntheticPhaseRow, EAP_LABELS } from "@/lib/eapModel";
 import { EditPhaseDialog } from "@/components/EditPhaseDialog";
 import { supabase } from "@/integrations/supabase/client";
-import { computeActivityProgress } from "@/lib/activityProgress";
+import { computeActivityProgress, progressoDoPai } from "@/lib/activityProgress";
 import {
   resolveActivityState, isActivityOverdue, ACTIVITY_STATE_LABEL, type ActivityState,
 } from "@/lib/activityState";
@@ -293,6 +293,8 @@ export function ProjectCronogramaPanel({
   const [projectDeadlines, setProjectDeadlines] = useState<Record<string, string | null>>({});
   const [mode, setMode] = useState<CronogramaMode>(defaultMode);
   const [stages, setStages] = useState<Array<{ id: string; title: string; color: string; is_final: boolean; is_blocked: boolean; display_order: number; project_id: string; categoria?: string | null }>>([]);
+  /** activity_id -> user_id do responsavel, de activity_assignees. */
+  const [responsavelPorAtividade, setResponsavelPorAtividade] = useState<Map<string, string>>(new Map());
   const [stageFilter, setStageFilter] = useState<Set<string> | null>(null); // null = todas
   // Filtro interno de projetos (usado principalmente no Cronograma Geral).
   // null = todos os projetos carregados
@@ -495,15 +497,35 @@ export function ProjectCronogramaPanel({
       .select("*")
       .in("project_id", scopedProjectIds);
 
-    const [{ data: acts }, { data: phs }, { data: profs }, { data: stgs }] = await Promise.all([
+    /**
+     * QUEM É O RESPONSÁVEL — POR IDENTIFICADOR.
+     *
+     * `assigned_to` guarda NOME em 657 das 667 atividades (medido em 26/08), e
+     * há dois perfis ativos chamados "Williame Correia de Lima". Pelo texto os
+     * dois são a mesma pessoa; por `user_id`, não.
+     *
+     * O cast existe porque `activity_assignees` é mais nova que os tipos
+     * gerados — mesmo padrão já usado para `categoria` acima.
+     */
+    const respQ = (supabase
+      .from("activity_assignees" as never)
+      .select("activity_id, user_id, papel")
+      .eq("papel" as never, "responsavel" as never)) as unknown as
+      Promise<{ data: { activity_id: string; user_id: string }[] | null }>;
+
+    const [{ data: acts }, { data: phs }, { data: profs }, { data: stgs }, { data: resps }] = await Promise.all([
       actsQ,
       supabase.from("phases").select("*").in("project_id", scopedProjectIds).eq("is_trashed", false).order("display_order", { ascending: true }),
       supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url"),
       stagesQ,
+      respQ,
     ]);
     setActivities(acts || []);
     setPhases(phs || []);
     setStages(stgs || []);
+    setResponsavelPorAtividade(
+      new Map((resps || []).map((l) => [l.activity_id, l.user_id])),
+    );
     const map: Record<string, { name: string; sector: string; avatar?: string }> = {};
     (profs || []).forEach((p: any) => {
       map[p.id] = {
@@ -806,7 +828,26 @@ export function ProjectCronogramaPanel({
     [profiles]
   );
 
-  const resolveResponsible = useCallback((assignedTo: string | null | undefined) => {
+  /**
+   * O nome do responsável.
+   *
+   * `activityId` é opcional e vem SEGUNDO de propósito: os pontos que já
+   * passavam só o texto continuam compilando, e quem passa o id ganha a via do
+   * identificador — `activity_assignees`, que tem `user_id` com FK.
+   *
+   * Por que importa: `assigned_to` guarda NOME em 657 das 667 atividades, e
+   * existem dois perfis ativos chamados "Williame Correia de Lima". Pelo texto
+   * os dois são a mesma pessoa; pela tabela, não.
+   */
+  const resolveResponsible = useCallback((
+    assignedTo: string | null | undefined,
+    activityId?: string,
+  ) => {
+    const doTabela = activityId ? responsavelPorAtividade.get(activityId) : undefined;
+    if (doTabela) {
+      const p = profiles[doTabela]?.name;
+      if (p) return p;
+    }
     const raw = (assignedTo || "").trim();
     if (!raw) return "—";
     const mapped = profiles[raw]?.name;
@@ -814,7 +855,7 @@ export function ProjectCronogramaPanel({
     // Compatibilidade com registros antigos onde assigned_to foi salvo como nome.
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) return "—";
     return raw;
-  }, [profiles]);
+  }, [profiles, responsavelPorAtividade]);
 
   /**
    * Pai efetivo de uma atividade: `parent_id` quando existe, senão a FASE.
@@ -905,44 +946,64 @@ export function ProjectCronogramaPanel({
     return m;
   }, [activities, activityById]);
 
-  const descendantProgressById = useMemo(() => {
-    const memo = new Map<string, { sum: number; count: number }>();
+  /**
+   * PROGRESSO DO PAI — a mesma régua do Kanban, e só ela.
+   *
+   * Esta função era uma QUARTA fórmula de progresso, e discordava das outras
+   * em dois pontos:
+   *
+   *  1. **Achatava a árvore.** Somava todo descendente no mesmo saco — neto
+   *     pesava igual a filho. Uma fase com um ramo fundo era dominada por
+   *     aquele ramo: 1 filha com 9 netos dava à filha 10% do peso, não 100%.
+   *     O Kanban sempre mediu pelas filhas DIRETAS, cada uma respondendo pela
+   *     própria subárvore.
+   *
+   *  2. **Não passava as subatividades** para `computeActivityProgress`, então
+   *     cada filha era pontuada só pela coluna dela, ignorando o próprio
+   *     avanço interno — justamente o que o parâmetro `subActivities` existe
+   *     para corrigir (medido em 03/08: 703 de 1.317 atividades são filhas, e
+   *     o cálculo as ignorava).
+   *
+   * Resultado: o mesmo pai exibia percentuais diferentes no Cronograma e no
+   * Kanban, e nenhuma tela estava "errada" — eram réguas distintas.
+   *
+   * Agora as duas chamam `computeActivityProgress` com as filhas diretas. A
+   * fonte é uma só; quando a régua mudar, muda nos dois lugares.
+   *
+   * NÃO usa `derived_progress` do servidor: medido em 26/08, a régua do banco
+   * é binária (completed ? 100 : 0) e derrubaria 74 das 581 barras em até 66
+   * pontos. Ver docs/medicoes/progresso-tela-x-servidor-26-08-2026.md.
+   */
+  const progressoDoPaiById = useMemo(() => {
+    const memo = new Map<string, number | null>();
     const stagesByProjectLocal = new Map<string, typeof stages>();
     stages.forEach((s) => {
       if (!stagesByProjectLocal.has(s.project_id)) stagesByProjectLocal.set(s.project_id, [] as any);
       (stagesByProjectLocal.get(s.project_id) as any).push(s);
     });
 
-    const walk = (id: string, seen = new Set<string>()): { sum: number; count: number } => {
-      if (memo.has(id)) return memo.get(id)!;
-      if (seen.has(id)) return { sum: 0, count: 0 };
-
-      const nextSeen = new Set(seen);
-      nextSeen.add(id);
-
-      const children = childrenByParent.get(id) || [];
-      let sum = 0;
-      let count = 0;
-
-      children.forEach((child) => {
-        const projStages = stagesByProjectLocal.get(child.project_id) || [];
-        const info = computeActivityProgress(child.workflow_stage_id, projStages as any, child.last_progress_stage_id);
-        const pct = info.paused ? 0 : (info.percent ?? 0);
-        sum += pct;
-        count += 1;
-
-        const deep = walk(child.id, nextSeen);
-        sum += deep.sum;
-        count += deep.count;
-      });
-
-      const result = { sum, count };
-      memo.set(id, result);
-      return result;
-    };
-
     activities.forEach((a) => {
-      memo.set(a.id, walk(a.id));
+      const filhas = childrenByParent.get(a.id) || [];
+      if (filhas.length === 0) {
+        memo.set(a.id, null);
+        return;
+      }
+      const projStages = stagesByProjectLocal.get(a.project_id) || [];
+      // `progressoDoPai` roda a régua de sempre e TROCA SÓ O NÚMERO por
+      // `derived_progress` quando o servidor o derivou — o mesmo valor, mas
+      // calculado sobre TODAS as filhas, não sobre a fatia que a RLS deixou
+      // passar. Conferido em 582 pais: zero barra muda para quem enxerga o
+      // projeto inteiro; a correção aparece só para quem enxerga uma fatia.
+      const info = progressoDoPai(
+        a as any,
+        projStages as any,
+        filhas as any,
+        // Agrupador (Fase/Entrega/Pacote): a coluna onde a caixa está é
+        // ignorada — ela vale a média das filhas. Mesma fonte que o Kanban usa
+        // (lib/eapModel), para as duas telas não divergirem na classificação.
+        eapCanGroup(resolveEapKind(a as any, filhas.length > 0)),
+      );
+      memo.set(a.id, info.paused ? null : info.percent);
     });
 
     return memo;
@@ -1025,16 +1086,21 @@ export function ProjectCronogramaPanel({
   }, [stages]);
 
   const progressFor = useCallback((a: any): number => {
-    const deep = descendantProgressById.get(a.id);
-    const totalSubs = deep?.count || 0;
-    if (totalSubs > 0) {
-      return Math.max(0, Math.min(100, Math.round((deep!.sum / totalSubs))));
+    // Pai: a régua já foi aplicada em `progressoDoPaiById`, com as filhas
+    // diretas e a mesma fórmula do Kanban. `null` ali é pai pausado — devolve
+    // 0 na barra por falta de representação para "pausado" neste retorno, mas
+    // sem recalcular por baixo (era o que achatava a árvore).
+    const doPai = progressoDoPaiById.get(a.id);
+    if (doPai !== undefined && doPai !== null) {
+      return Math.max(0, Math.min(100, Math.round(doPai)));
     }
+    if (doPai === null && (childrenByParent.get(a.id) || []).length > 0) return 0;
+
     const projStages = stagesByProject.get(a.project_id) || [];
     const info = computeActivityProgress(a.workflow_stage_id, projStages as any, a.last_progress_stage_id);
     if (info.paused) return 0;
     return info.percent ?? 0;
-  }, [stagesByProject, descendantProgressById]);
+  }, [stagesByProject, progressoDoPaiById, childrenByParent]);
 
   /**
    * Linhas finais aplicadas ao Cronograma (tabela e Gantt).
@@ -2260,7 +2326,7 @@ export function ProjectCronogramaPanel({
               const dur = workDays(a.start_date, a.end_date);
               const progress = progressFor(a);
               const preds = predsOf(a.id);
-              const responsible = resolveResponsible(a.assigned_to);
+              const responsible = resolveResponsible(a.assigned_to, a.id);
               const depth = depthById.get(a.id) ?? 0;
               const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
               const stageColor = stageInfo?.color;
@@ -2593,7 +2659,7 @@ export function ProjectCronogramaPanel({
                 const id = indexById.get(a.id);
                 const isCritical = criticalSet.has(a.id);
                 const noDates = !a.start_date || !a.end_date;
-                const responsible = resolveResponsible(a.assigned_to);
+                const responsible = resolveResponsible(a.assigned_to, a.id);
                 const projTitle = projectsMap[a.project_id];
                 const depth = depthById.get(a.id) ?? 0;
                 // Agrupador = Fase/Entrega (cobre 'fase', 'pacote' legado e itens
@@ -2908,7 +2974,7 @@ export function ProjectCronogramaPanel({
                   const isCompleted = stageInfo?.is_final || a.status === "completed";
                   const isOverdue = isOverdueByRule(a, !!isCompleted);
                   const progress = progressFor(a);
-                  const responsible = resolveResponsible(a.assigned_to);
+                  const responsible = resolveResponsible(a.assigned_to, a.id);
                   // Agrupador = Fase/Entrega (cobre 'fase', 'pacote' legado, filhos).
                   const isPhase =
                     !a.is_milestone &&

@@ -392,6 +392,24 @@ export interface Activity {
   is_blocked?: boolean | null;
   blocked_reason?: string | null;
   created_by?: string | null;
+
+  // ── Derivado no servidor (migration 20260826130000) ────────────────────
+  // Preenchido por trigger SECURITY DEFINER sobre TODAS as filhas, não sobre a
+  // fatia que a RLS deixou passar. `undefined` = a consulta não pediu a coluna;
+  // `null` = o servidor ainda não derivou aquele nó. Nos dois casos a tela
+  // mostra ausência — nunca soma no cliente para preencher o buraco.
+  /** Soma das horas das filhas vivas. Marco não entra. */
+  derived_hours?: number | string | null;
+  /** Soma do custo das filhas vivas. Marco não entra. */
+  derived_cost?: number | string | null;
+  /** Início mais cedo entre as filhas — marco INCLUÍDO (a fase vai até ele). */
+  derived_start?: string | null;
+  /** Término mais tarde entre as filhas — marco INCLUÍDO. */
+  derived_end?: string | null;
+  /** 0–100 ponderado por horas. Marco pesa zero. */
+  derived_progress?: number | string | null;
+  /** Filhas diretas VIVAS. 0/ausente = é folha. */
+  derived_children?: number | null;
 }
 
 // Filtro por coluna (Frente B): mesmos campos do filtro geral, exceto
@@ -454,7 +472,19 @@ export interface ActivityKanbanProps {
 }
 
 export type HoursStat = {
-  planned: number;
+  /**
+   * Horas planejadas. Em pai, vem de `derived_hours` — derivado no banco sobre
+   * TODAS as filhas, não sobre a fatia que a RLS deixou passar.
+   *
+   * `null` = o servidor não derivou (trigger ainda não rodou naquele pai). A
+   * tela mostra ausência, NUNCA volta a somar no cliente: um número somado da
+   * fatia visível está certo por acidente, e só para quem enxerga tudo.
+   */
+  planned: number | null;
+  /**
+   * Horas consumidas. Continua no cliente — o servidor não deriva "consumido",
+   * e inventar a coluna agora seria fase 09 fazendo o que não prometeu.
+   */
   consumed: number;
   hasSubs: boolean;
 };

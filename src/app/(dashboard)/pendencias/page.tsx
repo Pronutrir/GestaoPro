@@ -68,6 +68,8 @@ export default function PendenciasPage() {
   const { user, isAdmin, canManage } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [nomes, setNomes] = useState<Record<string, string>>({});
+  /** activity_id -> user_id do responsavel, de activity_assignees. */
+  const [responsavelPorAtividade, setResponsavelPorAtividade] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState<Aba>("minhas");
   const [filtro, setFiltro] = useState<Filtro>(null);
@@ -87,7 +89,7 @@ export default function PendenciasPage() {
   useEffect(() => {
     const carregar = async () => {
       try {
-        const [actRes, stgRes, profRes] = await Promise.all([
+        const [actRes, stgRes, profRes, respRes] = await Promise.all([
           // O is_trashed de baixo é o da ATIVIDADE. Uma atividade viva dentro de
           // um projeto descartado continua vindo — por isso o projeto entra na
           // seleção com o próprio is_trashed e é filtrado logo abaixo.
@@ -100,6 +102,24 @@ export default function PendenciasPage() {
           supabase.from("workflow_stages").select("id, is_final, categoria") as unknown as
             Promise<{ data: { id: string; is_final: boolean | null; categoria: string | null }[] | null }>,
           supabase.from("profiles").select("id, full_name, email"),
+          /**
+           * QUEM É O RESPONSÁVEL — POR IDENTIFICADOR.
+           *
+           * `activities.assigned_to` guarda NOME em 657 das 667 atividades
+           * (medido em 26/08/2026; só 10 guardam uuid). A aba "Minhas" compara
+           * com `user.id`, então ela enxergava **1,5%** do que deveria.
+           *
+           * `activity_assignees` tem `user_id` com FK de verdade, e resolve
+           * também o homônimo: dois perfis com o mesmo nome são duas linhas
+           * diferentes aqui, enquanto no texto são indistinguíveis.
+           *
+           * O cast existe porque a tabela é mais nova que os tipos gerados —
+           * mesmo padrão já usado acima para `workflow_stages.categoria`.
+           */
+          (supabase.from("activity_assignees" as never)
+            .select("activity_id, user_id, papel")
+            .eq("papel" as never, "responsavel" as never)) as unknown as
+            Promise<{ data: { activity_id: string; user_id: string }[] | null }>,
         ]);
         if (actRes.error) throw actRes.error;
 
@@ -117,6 +137,10 @@ export default function PendenciasPage() {
           mapa[p.id] = p.full_name || p.email || "Sem nome";
         });
         setNomes(mapa);
+
+        const porAtividade = new Map<string, string>();
+        (respRes?.data ?? []).forEach((l) => porAtividade.set(l.activity_id, l.user_id));
+        setResponsavelPorAtividade(porAtividade);
 
         // Título e estado do projeto: as outras fontes não os carregam, e uma
         // pendência de reunião precisa saber a que projeto pertence.
@@ -178,8 +202,8 @@ export default function PendenciasPage() {
 
   /** As três fontes viram uma lista só — daqui para baixo nada sabe de onde veio. */
   const todasPendencias = useMemo<PendenciaUnificada[]>(
-    () => [...rows.map((r) => atividadeParaPendencia(r, deReuniao)), ...outras],
-    [rows, outras, deReuniao],
+    () => [...rows.map((r) => atividadeParaPendencia(r, deReuniao, responsavelPorAtividade)), ...outras],
+    [rows, outras, deReuniao, responsavelPorAtividade],
   );
 
   // Se o colaborador não tem nada seu, abrir numa aba vazia parece tela quebrada.

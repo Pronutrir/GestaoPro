@@ -14,6 +14,12 @@
 
 export type FaixaAtraso = "critico" | "atencao" | "recente";
 
+/**
+ * `assigned_to` é TEXT e parte da base guarda uuid ali. Só esse caso vira
+ * `responsavelId` — nome nunca, porque a aba "Minhas" compara com `user.id`.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export interface PendenciaLike {
   id: string;
   title: string;
@@ -215,15 +221,36 @@ export interface LicaoLike {
 export function atividadeParaPendencia(
   a: PendenciaLike & { projects?: { title?: string | null } | null },
   vindasDeReuniao?: Set<string>,
+  /**
+   * `activity_id -> user_id do responsável`, vindo de `activity_assignees`.
+   *
+   * Sem isto, `responsavelId` recebia `a.assigned_to` **direto** — e essa
+   * coluna guarda NOME, não id. A aba "Minhas" compara com `user.id`, então
+   * só casava quando o texto por acaso era um uuid.
+   *
+   * MEDIDO EM 26/08/2026: das 667 atividades com responsável, **10** guardam
+   * uuid e **657 guardam nome**. A aba "Minhas" enxergava 1,5% do que deveria.
+   */
+  responsavelPorAtividade?: Map<string, string>,
 ): PendenciaUnificada {
+  const doTabela = responsavelPorAtividade?.get(a.id) ?? null;
+  const texto = (a.assigned_to ?? "").trim();
+  const pareceUuid = UUID_RE.test(texto);
+
   return {
     id: a.id,
     origem: origemDe(a, vindasDeReuniao),
     titulo: a.title,
     projectId: a.project_id,
     projetoTitulo: a.projects?.title ?? "Projeto",
-    responsavelId: a.assigned_to,
-    responsavelTexto: null,
+    // A tabela responde por identificador; o texto só entra quando JÁ é uuid.
+    // Nome nunca vira `responsavelId` — comparar nome com `user.id` é o que
+    // fazia a aba não casar.
+    responsavelId: doTabela ?? (pareceUuid ? texto : null),
+    // O nome sobrevive aqui: "sem-dono" testa os dois, então uma atividade com
+    // responsável por nome não é contada como órfã enquanto a tabela não
+    // responde por ela.
+    responsavelTexto: !doTabela && texto && !pareceUuid ? texto : null,
     prazo: a.end_date,
     bloqueada: a.is_blocked === true,
     href: `/project/${a.project_id}`,
