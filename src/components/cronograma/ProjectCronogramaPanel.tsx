@@ -293,6 +293,8 @@ export function ProjectCronogramaPanel({
   const [projectDeadlines, setProjectDeadlines] = useState<Record<string, string | null>>({});
   const [mode, setMode] = useState<CronogramaMode>(defaultMode);
   const [stages, setStages] = useState<Array<{ id: string; title: string; color: string; is_final: boolean; is_blocked: boolean; display_order: number; project_id: string; categoria?: string | null }>>([]);
+  /** activity_id -> user_id do responsavel, de activity_assignees. */
+  const [responsavelPorAtividade, setResponsavelPorAtividade] = useState<Map<string, string>>(new Map());
   const [stageFilter, setStageFilter] = useState<Set<string> | null>(null); // null = todas
   // Filtro interno de projetos (usado principalmente no Cronograma Geral).
   // null = todos os projetos carregados
@@ -495,15 +497,35 @@ export function ProjectCronogramaPanel({
       .select("*")
       .in("project_id", scopedProjectIds);
 
-    const [{ data: acts }, { data: phs }, { data: profs }, { data: stgs }] = await Promise.all([
+    /**
+     * QUEM É O RESPONSÁVEL — POR IDENTIFICADOR.
+     *
+     * `assigned_to` guarda NOME em 657 das 667 atividades (medido em 26/08), e
+     * há dois perfis ativos chamados "Williame Correia de Lima". Pelo texto os
+     * dois são a mesma pessoa; por `user_id`, não.
+     *
+     * O cast existe porque `activity_assignees` é mais nova que os tipos
+     * gerados — mesmo padrão já usado para `categoria` acima.
+     */
+    const respQ = (supabase
+      .from("activity_assignees" as never)
+      .select("activity_id, user_id, papel")
+      .eq("papel" as never, "responsavel" as never)) as unknown as
+      Promise<{ data: { activity_id: string; user_id: string }[] | null }>;
+
+    const [{ data: acts }, { data: phs }, { data: profs }, { data: stgs }, { data: resps }] = await Promise.all([
       actsQ,
       supabase.from("phases").select("*").in("project_id", scopedProjectIds).eq("is_trashed", false).order("display_order", { ascending: true }),
       supabase.from("profiles").select("id, full_name, sector, role_title, avatar_url"),
       stagesQ,
+      respQ,
     ]);
     setActivities(acts || []);
     setPhases(phs || []);
     setStages(stgs || []);
+    setResponsavelPorAtividade(
+      new Map((resps || []).map((l) => [l.activity_id, l.user_id])),
+    );
     const map: Record<string, { name: string; sector: string; avatar?: string }> = {};
     (profs || []).forEach((p: any) => {
       map[p.id] = {
@@ -806,7 +828,26 @@ export function ProjectCronogramaPanel({
     [profiles]
   );
 
-  const resolveResponsible = useCallback((assignedTo: string | null | undefined) => {
+  /**
+   * O nome do responsável.
+   *
+   * `activityId` é opcional e vem SEGUNDO de propósito: os pontos que já
+   * passavam só o texto continuam compilando, e quem passa o id ganha a via do
+   * identificador — `activity_assignees`, que tem `user_id` com FK.
+   *
+   * Por que importa: `assigned_to` guarda NOME em 657 das 667 atividades, e
+   * existem dois perfis ativos chamados "Williame Correia de Lima". Pelo texto
+   * os dois são a mesma pessoa; pela tabela, não.
+   */
+  const resolveResponsible = useCallback((
+    assignedTo: string | null | undefined,
+    activityId?: string,
+  ) => {
+    const doTabela = activityId ? responsavelPorAtividade.get(activityId) : undefined;
+    if (doTabela) {
+      const p = profiles[doTabela]?.name;
+      if (p) return p;
+    }
     const raw = (assignedTo || "").trim();
     if (!raw) return "—";
     const mapped = profiles[raw]?.name;
@@ -814,7 +855,7 @@ export function ProjectCronogramaPanel({
     // Compatibilidade com registros antigos onde assigned_to foi salvo como nome.
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) return "—";
     return raw;
-  }, [profiles]);
+  }, [profiles, responsavelPorAtividade]);
 
   /**
    * Pai efetivo de uma atividade: `parent_id` quando existe, senão a FASE.
@@ -2285,7 +2326,7 @@ export function ProjectCronogramaPanel({
               const dur = workDays(a.start_date, a.end_date);
               const progress = progressFor(a);
               const preds = predsOf(a.id);
-              const responsible = resolveResponsible(a.assigned_to);
+              const responsible = resolveResponsible(a.assigned_to, a.id);
               const depth = depthById.get(a.id) ?? 0;
               const stageInfo = a.workflow_stage_id ? stageById.get(a.workflow_stage_id) : undefined;
               const stageColor = stageInfo?.color;
@@ -2618,7 +2659,7 @@ export function ProjectCronogramaPanel({
                 const id = indexById.get(a.id);
                 const isCritical = criticalSet.has(a.id);
                 const noDates = !a.start_date || !a.end_date;
-                const responsible = resolveResponsible(a.assigned_to);
+                const responsible = resolveResponsible(a.assigned_to, a.id);
                 const projTitle = projectsMap[a.project_id];
                 const depth = depthById.get(a.id) ?? 0;
                 // Agrupador = Fase/Entrega (cobre 'fase', 'pacote' legado e itens
@@ -2933,7 +2974,7 @@ export function ProjectCronogramaPanel({
                   const isCompleted = stageInfo?.is_final || a.status === "completed";
                   const isOverdue = isOverdueByRule(a, !!isCompleted);
                   const progress = progressFor(a);
-                  const responsible = resolveResponsible(a.assigned_to);
+                  const responsible = resolveResponsible(a.assigned_to, a.id);
                   // Agrupador = Fase/Entrega (cobre 'fase', 'pacote' legado, filhos).
                   const isPhase =
                     !a.is_milestone &&

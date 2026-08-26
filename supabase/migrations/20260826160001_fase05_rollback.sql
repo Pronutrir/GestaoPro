@@ -14,15 +14,17 @@
 -- colateral, e outras coisas podem ter passado a usa-la.
 
 DROP TRIGGER IF EXISTS trg_assigned_to_para_tabela ON public.activities;
+DROP TRIGGER IF EXISTS trg_participants_para_tabela ON public.activities;
 DROP TRIGGER IF EXISTS trg_tabela_para_assigned_to ON public.activity_assignees;
 
 DROP FUNCTION IF EXISTS public.tg_assigned_to_para_tabela();
+DROP FUNCTION IF EXISTS public.tg_participants_para_tabela();
 DROP FUNCTION IF EXISTS public.tg_tabela_para_assigned_to();
 
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname IN
-      ('trg_assigned_to_para_tabela','trg_tabela_para_assigned_to')) THEN
+      ('trg_assigned_to_para_tabela','trg_participants_para_tabela','trg_tabela_para_assigned_to')) THEN
     RAISE EXCEPTION 'os triggers de sincronia ainda existem';
   END IF;
   RAISE NOTICE 'sincronia desligada. activities.assigned_to volta a ser fonte unica.';

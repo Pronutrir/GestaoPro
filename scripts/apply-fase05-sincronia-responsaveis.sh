@@ -108,13 +108,25 @@ SELECT
     AS nao_resolvem_o_nome;"
 
 echo ""
-echo "Os dois triggers estão de pé?"
+echo "Os TRÊS triggers estão de pé?"
 $PSQL -c "
 SELECT tgname,
        CASE WHEN tgenabled = 'O' THEN 'ativo' ELSE 'DESABILITADO' END AS estado
   FROM pg_trigger
- WHERE tgname IN ('trg_assigned_to_para_tabela','trg_tabela_para_assigned_to')
+ WHERE tgname IN ('trg_assigned_to_para_tabela',
+                  'trg_participants_para_tabela',
+                  'trg_tabela_para_assigned_to')
  ORDER BY tgname;"
+
+echo ""
+echo "E os participantes, que também passaram a sincronizar:"
+$PSQL -c "
+SELECT
+  (SELECT count(*) FROM public.activities
+    WHERE participants IS NOT NULL AND cardinality(participants) > 0 AND is_trashed = false)
+    AS atividades_com_participante,
+  (SELECT count(*) FROM public.activity_assignees WHERE papel = 'participante')
+    AS linhas_participante;"
 
 echo ""
 echo "TESTE VIVO — atribua alguém a uma atividade pela tela e confira:"
