@@ -115,6 +115,14 @@ SELECT DISTINCT a.id, pr.id, 'participante', a.created_by
     ON (pr.full_name IS NOT NULL AND lower(trim(p.nome)) = lower(trim(pr.full_name)))
     OR lower(trim(p.nome)) = lower(trim(pr.id::text))
  WHERE a.is_trashed = false
+   -- Idempotencia: pula quem ja e assignee desta atividade. Sem isto, num 2o
+   -- run o BEFORE INSERT do trigger de equipe (criado apos este backfill)
+   -- dispara para linhas que o ON CONFLICT so descartaria depois, e rejeita
+   -- os participantes grandfathered que nao estao formalmente na equipe.
+   AND NOT EXISTS (
+     SELECT 1 FROM public.activity_assignees aa
+      WHERE aa.activity_id = a.id AND aa.user_id = pr.id
+   )
 ON CONFLICT (activity_id, user_id) DO NOTHING;
 
 -- ───────────────────────────────────────────────────────────────────────────
