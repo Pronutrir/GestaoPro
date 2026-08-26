@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { History, Plus, Pencil, Trash2 } from "lucide-react";
+import { FIELD_LABELS, fmtValor } from "@/components/ActivityRegistro";
 
 interface AuditEntry {
   id: string;
@@ -76,15 +77,24 @@ export const AuditLogPanel = ({ recordId, tableName }: Props) => {
                   {e.changed_fields.map(f => {
                     const oldVal = e.old_data?.[f];
                     const newVal = e.new_data?.[f];
-                    const fmt = (v: any) => {
-                      if (v === null || v === undefined || v === "") return "—";
-                      if (Array.isArray(v)) return v.length === 0 ? "—" : v.join(", ");
-                      if (typeof v === "object") return JSON.stringify(v);
-                      return String(v);
-                    };
+                    /**
+                     * A MESMA função do Registro, não uma cópia.
+                     *
+                     * Havia aqui um `fmt` inline idêntico ao de lá — e era por
+                     * isso que o defeito do UUID sobrevivia: corrigir um
+                     * componente deixava o outro mostrando o identificador cru.
+                     *
+                     * `nomesPorId` fica vazio neste painel (ele lista várias
+                     * tabelas, não só as colunas de um projeto), então UUID
+                     * vira "—". É melhor que o identificador: quem lê o
+                     * histórico não tem o que fazer com ele, e o campo ao lado
+                     * já diz o que mudou.
+                     */
+                    const fmt = (v: any) => fmtValor(v, f);
                     return (
                       <div key={f} className="text-xs bg-muted/30 rounded p-2 space-y-1">
-                        <div className="font-semibold text-foreground">{f}</div>
+                        {/* O rotulo, nao o nome da coluna: "Etapa", nao "workflow_stage_id". */}
+                        <div className="font-semibold text-foreground">{FIELD_LABELS[f] ?? f}</div>
                         <div className="flex items-start gap-2">
                           <span className="text-[10px] uppercase font-bold text-destructive min-w-[40px]">antes</span>
                           <span className="text-destructive line-through break-words flex-1">{fmt(oldVal)}</span>
