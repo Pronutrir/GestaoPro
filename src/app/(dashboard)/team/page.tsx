@@ -46,6 +46,13 @@ interface TimeEntry {
 interface ProjectMemberProfile {
   full_name: string;
   project_ids: Set<string>;
+  /**
+   * O perfil, quando se sabe qual é. Vazio para as linhas que entram só pelo
+   * NOME — dono/gestor de projeto, que são texto livre.
+   */
+  user_id?: string;
+  /** Diferencia homônimos: aparece na linha quando o nome se repete. */
+  email?: string | null;
 }
 
 type SummaryFilter = "members" | "assigned" | "unassigned" | "hours" | "planned" | null;
@@ -143,30 +150,57 @@ const TeamView = () => {
           if (profile.email) nextMemberLookup[profile.email] = fullName;
           nextMemberLookup[normalizeIdentity(fullName)] = fullName;
         });
-        const nameToProjects = new Map<string, Set<string>>();
-        
+        /**
+         * UMA LINHA POR PERFIL, não por nome.
+         *
+         * Isto agrupava por `full_name`, e com dois perfis homônimos as duas
+         * pessoas viravam UMA linha com a UNIÃO dos projetos das duas — um
+         * número errado, não só um rótulo confuso. Medido em 26/08: os dois
+         * "Williame Correia de Lima" são membros de 1 e de 18 projetos; a tela
+         * mostrava uma pessoa só, com 18.
+         *
+         * `project_members.user_id` é identificador, então a chave certa
+         * sempre esteve disponível aqui.
+         */
+        const porPerfil = new Map<string, Set<string>>();
         filteredMembers.forEach(m => {
-          const name = profileMap.get(m.user_id)?.trim();
-          if (!name) return;
-          if (!nameToProjects.has(name)) nameToProjects.set(name, new Set());
-          nameToProjects.get(name)!.add(m.project_id);
+          if (!m.user_id || !profileMap.get(m.user_id)?.trim()) return;
+          if (!porPerfil.has(m.user_id)) porPerfil.set(m.user_id, new Set());
+          porPerfil.get(m.user_id)!.add(m.project_id);
         });
-        
-        nameToProjects.forEach((pIds, name) => {
-          memberProfiles.push({ full_name: name, project_ids: pIds });
+
+        const emailPorId = new Map(profiles.map(p => [p.id, p.email]));
+        porPerfil.forEach((pIds, userId) => {
+          memberProfiles.push({
+            full_name: profileMap.get(userId)!.trim(),
+            project_ids: pIds,
+            user_id: userId,
+            email: emailPorId.get(userId) ?? null,
+          });
         });
 
       }
     }
 
-    // Also include project owners
+    /**
+     * Donos de projeto — e aqui só existe o NOME.
+     *
+     * `projects.owner` é texto livre, então não há como saber a qual perfil um
+     * nome pertence quando dois têm o mesmo. Com homônimo, o projeto entra em
+     * TODAS as linhas daquele nome: dizer "um dos dois é dono, não sei qual" é
+     * mais honesto que atribuir ao primeiro da lista e apresentar um palpite
+     * como fato.
+     *
+     * Some quando `projects.owner_id` estiver preenchido — a conversão
+     * (migration 20260826200000) já criou a coluna.
+     */
     filteredProjects.forEach(p => {
       const owner = p.owner?.trim();
       if (owner) {
         nextMemberLookup[normalizeIdentity(owner)] = owner;
-        const existing = memberProfiles.find(mp => mp.full_name === owner);
-        if (existing) {
-          existing.project_ids.add(p.id);
+        const doNome = memberProfiles.filter(mp => mp.full_name === owner);
+        if (doNome.length > 0) {
+          doNome.forEach(mp => mp.project_ids.add(p.id));
         } else {
           memberProfiles.push({ full_name: owner, project_ids: new Set([p.id]) });
         }
@@ -184,14 +218,36 @@ const TeamView = () => {
       overdueTasks: number; highPriority: number;
       hoursEstimated: number; hoursTracked: number;
       projects: Set<string>;
+      /** Os perfis por trás deste nome. Mais de um = homônimo. */
+      perfis: { id: string; email: string | null }[];
     }>();
 
-    // Seed with all project members/owners first
+    /**
+     * UMA LINHA POR NOME — aqui, de propósito, e é diferente de `allMemberNames`.
+     *
+     * Os números desta tela (tarefas, horas, atrasadas) vêm de `assigned_to` e
+     * `participants`, que guardam NOME. Com dois perfis homônimos não há como
+     * dizer qual das duas pessoas fez qual tarefa: a informação não existe no
+     * dado.
+     *
+     * Então a linha fica uma só, somando o trabalho do nome — e **se anuncia**
+     * como sendo de dois perfis (`homonimo` abaixo). Separar em duas linhas
+     * exigiria repartir tarefas por um critério que não temos, e duas linhas
+     * com números inventados seriam piores que uma linha honesta.
+     *
+     * Quando a conversão para identificador alcançar `assigned_to` (migration
+     * 20260826200000 + desempate), esta tela pode passar a separar de verdade.
+     */
     allMemberNames.forEach(mp => {
       if (!members.has(mp.full_name)) {
-        members.set(mp.full_name, { name: mp.full_name, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, projects: new Set(mp.project_ids) });
+        members.set(mp.full_name, { name: mp.full_name, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, projects: new Set(mp.project_ids), perfis: mp.user_id ? [{ id: mp.user_id, email: mp.email ?? null }] : [] });
       } else {
-        mp.project_ids.forEach(pid => members.get(mp.full_name)!.projects.add(pid));
+        const atual = members.get(mp.full_name)!;
+        mp.project_ids.forEach(pid => atual.projects.add(pid));
+        // Guarda o segundo perfil: é o que faz a linha saber que é homônima.
+        if (mp.user_id && !atual.perfis.some(p => p.id === mp.user_id)) {
+          atual.perfis.push({ id: mp.user_id, email: mp.email ?? null });
+        }
       }
     });
 
@@ -214,7 +270,7 @@ const TeamView = () => {
         const trimmed = name?.trim();
         if (!trimmed) return;
         if (!members.has(trimmed)) {
-          members.set(trimmed, { name: trimmed, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, projects: new Set() });
+          members.set(trimmed, { name: trimmed, totalTasks: 0, completedTasks: 0, overdueTasks: 0, highPriority: 0, hoursEstimated: 0, hoursTracked: 0, projects: new Set(), perfis: [] });
         }
         const m = members.get(trimmed)!;
         m.totalTasks++;
@@ -273,6 +329,8 @@ const TeamView = () => {
               hoursEstimated: 0,
               hoursTracked: 0,
               projects: new Set(activity.project_id ? [activity.project_id] : []),
+              // Veio de assigned_to/participants: só há o NOME, não o perfil.
+              perfis: [],
             });
           }
         }
@@ -303,6 +361,8 @@ const TeamView = () => {
             hoursEstimated: 0,
             hoursTracked: 0,
             projects: new Set(activity.project_id ? [activity.project_id] : []),
+            // Veio de assigned_to/participants: só há o NOME, não o perfil.
+            perfis: [],
           });
         }
 
@@ -327,6 +387,8 @@ const TeamView = () => {
           hoursEstimated: 0,
           hoursTracked: 0,
           projects: new Set(entry.project_id ? [entry.project_id] : []),
+          // Veio de time_entries.user_name: só há o NOME, não o perfil.
+          perfis: [],
         });
       }
 
@@ -492,7 +554,23 @@ const TeamView = () => {
                           })()}
                           <AvatarFallback className="text-[10px] font-bold text-primary bg-primary/10">{getAvatarInitials(m.name)}</AvatarFallback>
                         </Avatar>
-                        <span className="text-sm font-medium">{m.name}</span>
+                        <span className="text-sm font-medium flex items-center gap-1.5">
+                          {m.name}
+                          {/* DOIS PERFIS, UMA LINHA — e a linha diz isso.
+                              Os números vêm de `assigned_to`, que guarda nome:
+                              não há como saber qual das duas pessoas fez qual
+                              tarefa. Somar as duas e avisar é honesto; separar
+                              em duas linhas exigiria repartir por um critério
+                              que não existe no dado. */}
+                          {m.perfis.length > 1 && (
+                            <span
+                              className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400"
+                              title={`Dois perfis com este nome (${m.perfis.map(p => p.email ?? p.id.slice(0, 8)).join(", ")}). Os números somam o trabalho dos dois.`}
+                            >
+                              2 perfis
+                            </span>
+                          )}
+                        </span>
                       </div>
                       <span className="text-xs text-muted-foreground">{m.totalTasks} tarefa(s) · {m.projects.size} projeto(s)</span>
                     </div>

@@ -25,6 +25,12 @@ export interface PessoaSelecionavel {
   full_name: string | null;
   sector?: string | null;
   role_title?: string | null;
+  /**
+   * Diferencia homônimos. Dois perfis de mesmo nome só se distinguem por aqui
+   * — e os dois "Williame Correia de Lima" são do MESMO setor, então setor e
+   * cargo não resolvem.
+   */
+  email?: string | null;
 }
 
 interface Props {
@@ -115,9 +121,10 @@ export const SelecionarParticipantes = ({
       if (!p.full_name) return false;
       if (setor && (p.sector?.trim() || SEM_SETOR) !== setor) return false;
       if (!q) return true;
-      // Nome, setor e função — a mesma leitura do PersonCombobox, para quem
-      // digita "Financeiro" achar as pessoas do Financeiro.
-      return norm([p.full_name, p.sector || "", p.role_title || ""].join(" ")).includes(q);
+      // Nome, setor, função e e-mail — a mesma leitura do PersonCombobox, para
+      // quem digita "Financeiro" achar as pessoas do Financeiro. O e-mail entra
+      // porque, com homônimos, é a única coisa que separa um do outro.
+      return norm([p.full_name, p.sector || "", p.role_title || "", p.email || ""].join(" ")).includes(q);
     });
   }, [pessoas, setor, busca]);
 
@@ -156,6 +163,21 @@ export const SelecionarParticipantes = ({
     onIncluir([...sel]);
   };
 
+  /**
+   * Nomes que se repetem NA LISTA.
+   *
+   * Vem de `pessoas`, não de um catálogo global: é entre estes que a pessoa
+   * escolhe, e avisar sobre ambiguidade que ela não está vendo é ruído.
+   */
+  const homonimos = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const p of pessoas) {
+      const n = norm(p.full_name || "");
+      if (n) c.set(n, (c.get(n) ?? 0) + 1);
+    }
+    return new Set([...c].filter(([, q]) => q > 1).map(([n]) => n));
+  }, [pessoas]);
+
   const linhaPessoa = (p: PessoaSelecionavel) => {
     const nome = p.full_name!;
     const ja = incluidos.has(norm(nome));
@@ -192,9 +214,30 @@ export const SelecionarParticipantes = ({
           {iniciais(nome)}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm text-foreground truncate">{nome}</span>
-          <span className="block text-xs text-muted-foreground truncate">
-            {[p.sector, p.role_title].filter(Boolean).join(" · ") || "—"}
+          <span className="block text-sm text-foreground truncate">
+            {nome}
+            {/* HOMÔNIMO — e aqui o aviso é mais forte que uma marca visual.
+                Esta lista seleciona POR NOME (`sel` é um conjunto de nomes),
+                então dois perfis de mesmo nome são, para ela, a mesma pessoa:
+                marcar um marca os dois. Enquanto a seleção não migrar para
+                identificador, o certo é dizer isso em voz alta em vez de
+                deixar a pessoa achar que escolheu um dos dois. */}
+            {homonimos.has(norm(nome)) && (
+              <span
+                className="ml-1.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400"
+                title="Há mais de um perfil com este nome. A seleção aqui é por nome, então alcança os dois."
+              >
+                2 perfis
+              </span>
+            )}
+          </span>
+          <span className={cn(
+            "block text-xs truncate",
+            homonimos.has(norm(nome)) ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
+          )}>
+            {homonimos.has(norm(nome)) && p.email
+              ? p.email
+              : [p.sector, p.role_title].filter(Boolean).join(" · ") || "—"}
           </span>
         </span>
         {ja && (
